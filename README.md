@@ -18,6 +18,10 @@ pnpm install
 pnpm tauri dev
 ```
 
+## Project Planning
+
+Codex handoff notes, roadmap, and next milestone plans are in [docs/codex-handoffs](docs/codex-handoffs).
+
 ## License
 
 [MIT](LICENSE)
