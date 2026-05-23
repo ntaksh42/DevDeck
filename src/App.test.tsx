@@ -103,6 +103,7 @@ describe("App", () => {
 
     expect(await screen.findByText("Organizations")).toBeTruthy();
     expect(screen.getByText("https://dev.azure.com/contoso")).toBeTruthy();
+    expect(screen.getByText("PAT")).toBeTruthy();
     expect(screen.getByText("Test User")).toBeTruthy();
   });
 
@@ -127,6 +128,34 @@ describe("App", () => {
         input: {
           organization: "contoso",
           pat: "secret-pat",
+        },
+      });
+    });
+  });
+
+  it("submits Azure CLI organization setup to the backend", async () => {
+    invokeMock
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce({
+        ...organization,
+        authProvider: "azure_cli",
+        credentialKey: "azdodeck:org:contoso:azure-cli",
+      })
+      .mockResolvedValueOnce([]);
+
+    renderApp();
+
+    fireEvent.change(await screen.findByPlaceholderText("contoso"), {
+      target: { value: "contoso" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect with Azure CLI" }),
+    );
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("add_azure_cli_organization", {
+        input: {
+          organization: "contoso",
         },
       });
     });

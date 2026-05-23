@@ -80,6 +80,10 @@ export type AddPatOrganizationInput = {
   pat: string;
 };
 
+export type AddAzureCliOrganizationInput = {
+  organization: string;
+};
+
 export type SearchPullRequestsInput = {
   organizationId?: string;
   query?: string;
@@ -111,6 +115,13 @@ export async function addPatOrganization(
   input: AddPatOrganizationInput,
 ): Promise<Organization> {
   const result = await invokeCommand("add_pat_organization", { input });
+  return organizationSchema.parse(result);
+}
+
+export async function addAzureCliOrganization(
+  input: AddAzureCliOrganizationInput,
+): Promise<Organization> {
+  const result = await invokeCommand("add_azure_cli_organization", { input });
   return organizationSchema.parse(result);
 }
 
@@ -170,6 +181,19 @@ async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
         id: input?.organization || demoOrganization.id,
         name: input?.organization || demoOrganization.name,
         baseUrl: `https://dev.azure.com/${input?.organization || demoOrganization.name}`,
+      };
+    }
+    case "add_azure_cli_organization": {
+      const input = (
+        args as { input?: AddAzureCliOrganizationInput } | undefined
+      )?.input;
+      return {
+        ...demoOrganization,
+        id: input?.organization || demoOrganization.id,
+        name: input?.organization || demoOrganization.name,
+        baseUrl: `https://dev.azure.com/${input?.organization || demoOrganization.name}`,
+        authProvider: "azure_cli",
+        credentialKey: `azdodeck:org:${input?.organization || demoOrganization.name}:azure-cli`,
       };
     }
     case "search_pull_requests":

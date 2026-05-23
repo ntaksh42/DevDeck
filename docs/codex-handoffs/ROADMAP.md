@@ -78,7 +78,7 @@ Expected scope:
 
 ### M6 - Auth And Reliability Hardening
 
-Status: Next.
+Status: In progress.
 
 Add Azure CLI authentication provider, retry/backoff, throttling behavior, logging, and better diagnostics.
 

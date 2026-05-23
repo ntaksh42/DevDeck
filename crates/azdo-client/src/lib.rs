@@ -5,7 +5,7 @@ pub mod git;
 pub mod identity;
 pub mod work_items;
 
-pub use auth::{AdoCredentialProvider, PatProvider};
+pub use auth::{AdoCredentialProvider, AzureCliProvider, PatProvider};
 pub use client::{AdoClient, RetryPolicy};
 pub use error::{AdoError, Result};
 pub use git::{

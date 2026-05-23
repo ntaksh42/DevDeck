@@ -1,9 +1,8 @@
-use std::sync::Arc;
-
-use azdo_client::{AdoClient, PatProvider, WorkItem};
+use azdo_client::WorkItem;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::auth::client_for_organization;
 use crate::db::{AppDatabase, Organization};
 use crate::error::{AppError, Result};
 use crate::secrets::SecretStore;
@@ -54,18 +53,10 @@ impl WorkItemService {
 
     pub async fn search(&self, input: SearchWorkItemsInput) -> Result<Vec<WorkItemSummary>> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
-        if organization.auth_provider != "pat" {
-            return Err(AppError::InvalidInput(format!(
-                "unsupported auth provider: {}",
-                organization.auth_provider
-            )));
-        }
-
-        let pat = self.secrets.get_pat(&organization.credential_key)?;
         let query = input.query.unwrap_or_default();
         let state = normalize_optional_filter(input.state);
         let work_item_type = normalize_optional_filter(input.work_item_type);
-        let client = AdoClient::new(&organization.name, Arc::new(PatProvider::new(pat)))?;
+        let client = client_for_organization(&organization, &self.secrets)?;
 
         let mut results = Vec::new();
         for project in client.list_projects().await? {

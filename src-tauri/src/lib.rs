@@ -1,3 +1,4 @@
+mod auth;
 mod commits;
 mod db;
 mod error;
@@ -9,7 +10,7 @@ mod work_items;
 use commits::{CommitService, CommitSummary, SearchCommitsInput};
 use db::{AppDatabase, Organization};
 use error::Result;
-use orgs::{AddPatOrganizationInput, OrganizationService};
+use orgs::{AddAzureCliOrganizationInput, AddPatOrganizationInput, OrganizationService};
 use prs::{PullRequestService, PullRequestSummary, SearchPullRequestsInput};
 use secrets::SecretStore;
 use tauri::{Manager, State};
@@ -34,6 +35,14 @@ async fn add_pat_organization(
     state: State<'_, AppState>,
 ) -> Result<Organization> {
     state.organizations.add_pat_organization(input).await
+}
+
+#[tauri::command]
+async fn add_azure_cli_organization(
+    input: AddAzureCliOrganizationInput,
+    state: State<'_, AppState>,
+) -> Result<Organization> {
+    state.organizations.add_azure_cli_organization(input).await
 }
 
 #[tauri::command]
@@ -79,6 +88,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_organizations,
             add_pat_organization,
+            add_azure_cli_organization,
             search_pull_requests,
             search_work_items,
             search_commits

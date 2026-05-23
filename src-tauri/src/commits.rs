@@ -1,8 +1,7 @@
-use std::sync::Arc;
-
-use azdo_client::{AdoClient, CommitSearchCriteria, GitCommitRef, PatProvider};
+use azdo_client::{CommitSearchCriteria, GitCommitRef};
 use serde::{Deserialize, Serialize};
 
+use crate::auth::client_for_organization;
 use crate::db::{AppDatabase, Organization};
 use crate::error::{AppError, Result};
 use crate::secrets::SecretStore;
@@ -48,15 +47,7 @@ impl CommitService {
 
     pub async fn search(&self, input: SearchCommitsInput) -> Result<Vec<CommitSummary>> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
-        if organization.auth_provider != "pat" {
-            return Err(AppError::InvalidInput(format!(
-                "unsupported auth provider: {}",
-                organization.auth_provider
-            )));
-        }
-
-        let pat = self.secrets.get_pat(&organization.credential_key)?;
-        let client = AdoClient::new(&organization.name, Arc::new(PatProvider::new(pat)))?;
+        let client = client_for_organization(&organization, &self.secrets)?;
         let query = input.query.unwrap_or_default().trim().to_ascii_lowercase();
 
         let mut results = Vec::new();

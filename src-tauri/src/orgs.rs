@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use azdo_client::{AdoClient, PatProvider};
+use azdo_client::{AdoClient, AzureCliProvider, PatProvider};
 use serde::Deserialize;
 
 use crate::db::{AppDatabase, Organization, OrganizationDraft};
@@ -12,6 +12,12 @@ use crate::secrets::SecretStore;
 pub struct AddPatOrganizationInput {
     pub organization: String,
     pub pat: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddAzureCliOrganizationInput {
+    pub organization: String,
 }
 
 #[derive(Debug, Clone)]
@@ -57,6 +63,29 @@ impl OrganizationService {
                 .provider_display_name,
         })
     }
+
+    pub async fn add_azure_cli_organization(
+        &self,
+        input: AddAzureCliOrganizationInput,
+    ) -> Result<Organization> {
+        let organization = normalize_organization(&input.organization)?;
+        let client = AdoClient::new(&organization, Arc::new(AzureCliProvider::new()))?;
+        let connection_data = client.connection_data().await?;
+        let credential_key = azure_cli_credential_key(&organization);
+
+        self.db.upsert_organization(OrganizationDraft {
+            id: organization.clone(),
+            name: organization.clone(),
+            display_name: Some(organization.clone()),
+            base_url: format!("https://dev.azure.com/{organization}"),
+            auth_provider: "azure_cli".to_string(),
+            credential_key,
+            authenticated_user_id: Some(connection_data.authenticated_user.id),
+            authenticated_user_display_name: connection_data
+                .authenticated_user
+                .provider_display_name,
+        })
+    }
 }
 
 fn normalize_organization(value: &str) -> Result<String> {
@@ -91,6 +120,10 @@ fn credential_key(organization: &str) -> String {
     format!("azdodeck:org:{organization}:pat")
 }
 
+fn azure_cli_credential_key(organization: &str) -> String {
+    format!("azdodeck:org:{organization}:azure-cli")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -115,6 +148,10 @@ mod tests {
         assert_eq!(
             credential_key("contoso"),
             "azdodeck:org:contoso:pat".to_string()
+        );
+        assert_eq!(
+            azure_cli_credential_key("contoso"),
+            "azdodeck:org:contoso:azure-cli".to_string()
         );
     }
 }

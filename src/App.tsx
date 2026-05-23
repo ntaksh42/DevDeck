@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Route, Routes } from "react-router-dom";
 import {
+  addAzureCliOrganization,
   addPatOrganization,
   commandErrorMessage,
   listOrganizations,
@@ -762,12 +763,18 @@ function OrganizationSettings({
           {organizations.map((organization) => (
             <div
               key={organization.id}
-              className="grid gap-4 px-5 py-4 md:grid-cols-[1fr_auto]"
+              className="grid gap-4 px-5 py-4 md:grid-cols-[1fr_auto_auto]"
             >
               <div>
                 <p className="font-medium">{organization.name}</p>
                 <p className="text-sm text-muted-foreground">
                   {organization.baseUrl}
+                </p>
+              </div>
+              <div className="text-left text-sm md:text-right">
+                <p className="text-muted-foreground">Auth</p>
+                <p className="font-medium">
+                  {formatAuthProvider(organization.authProvider)}
                 </p>
               </div>
               <div className="text-left text-sm md:text-right">
@@ -791,26 +798,47 @@ function SetupPanel({ compact = false }: { compact?: boolean }) {
   const [showPat, setShowPat] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  const mutation = useMutation({
+  function onOrganizationConnected() {
+    setOrganization("");
+    setPat("");
+    setValidationError(null);
+    void queryClient.invalidateQueries({ queryKey: ["organizations"] });
+  }
+
+  const patMutation = useMutation({
     mutationFn: addPatOrganization,
-    onSuccess: () => {
-      setOrganization("");
-      setPat("");
-      setValidationError(null);
-      void queryClient.invalidateQueries({ queryKey: ["organizations"] });
-    },
+    onSuccess: onOrganizationConnected,
+  });
+
+  const azureCliMutation = useMutation({
+    mutationFn: addAzureCliOrganization,
+    onSuccess: onOrganizationConnected,
   });
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    mutation.reset();
+    patMutation.reset();
+    azureCliMutation.reset();
     if (!organization.trim() || !pat.trim()) {
       setValidationError("Organization and PAT are required.");
       return;
     }
     setValidationError(null);
-    mutation.mutate({ organization, pat });
+    patMutation.mutate({ organization, pat });
   }
+
+  function onConnectAzureCli() {
+    patMutation.reset();
+    azureCliMutation.reset();
+    if (!organization.trim()) {
+      setValidationError("Organization is required.");
+      return;
+    }
+    setValidationError(null);
+    azureCliMutation.mutate({ organization });
+  }
+
+  const isConnecting = patMutation.isPending || azureCliMutation.isPending;
 
   return (
     <div className="rounded-md border border-border bg-white">
@@ -871,28 +899,47 @@ function SetupPanel({ compact = false }: { compact?: boolean }) {
           </p>
         ) : null}
 
-        {mutation.isError ? (
+        {patMutation.isError ? (
           <p role="alert" className="text-sm text-destructive">
-            {commandErrorMessage(mutation.error)}
+            {commandErrorMessage(patMutation.error)}
           </p>
         ) : null}
 
-        {mutation.isSuccess ? (
+        {azureCliMutation.isError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {commandErrorMessage(azureCliMutation.error)}
+          </p>
+        ) : null}
+
+        {patMutation.isSuccess || azureCliMutation.isSuccess ? (
           <p className="text-sm text-green-700">Organization connected.</p>
         ) : null}
 
-        <div>
+        <div className="flex flex-wrap gap-3">
           <button
             type="submit"
-            disabled={mutation.isPending}
+            disabled={isConnecting}
             className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {mutation.isPending ? (
+            {patMutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
             ) : (
               <Plus className="h-4 w-4" aria-hidden="true" />
             )}
             Connect
+          </button>
+          <button
+            type="button"
+            disabled={isConnecting}
+            onClick={onConnectAzureCli}
+            className="inline-flex h-10 items-center gap-2 rounded-md border border-border px-4 text-sm font-medium text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {azureCliMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Building2 className="h-4 w-4" aria-hidden="true" />
+            )}
+            Connect with Azure CLI
           </button>
         </div>
       </form>
@@ -905,6 +952,10 @@ function formatDate(value: string): string {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function formatAuthProvider(value: string): string {
+  return value === "azure_cli" ? "Azure CLI" : value.toUpperCase();
 }
 
 function App() {
