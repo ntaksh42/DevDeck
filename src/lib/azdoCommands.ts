@@ -74,29 +74,122 @@ export type SearchWorkItemsInput = {
 };
 
 export async function listOrganizations(): Promise<Organization[]> {
-  const result = await invoke("list_organizations");
+  const result = await invokeCommand("list_organizations");
   return organizationsSchema.parse(result);
 }
 
 export async function addPatOrganization(
   input: AddPatOrganizationInput,
 ): Promise<Organization> {
-  const result = await invoke("add_pat_organization", { input });
+  const result = await invokeCommand("add_pat_organization", { input });
   return organizationSchema.parse(result);
 }
 
 export async function searchPullRequests(
   input: SearchPullRequestsInput,
 ): Promise<PullRequestSummary[]> {
-  const result = await invoke("search_pull_requests", { input });
+  const result = await invokeCommand("search_pull_requests", { input });
   return pullRequestSummariesSchema.parse(result);
 }
 
 export async function searchWorkItems(
   input: SearchWorkItemsInput,
 ): Promise<WorkItemSummary[]> {
-  const result = await invoke("search_work_items", { input });
+  const result = await invokeCommand("search_work_items", { input });
   return workItemSummariesSchema.parse(result);
+}
+
+async function invokeCommand(command: string, args?: unknown): Promise<unknown> {
+  if (isTauriRuntime()) {
+    return invoke(command, args as Record<string, unknown> | undefined);
+  }
+
+  return demoInvoke(command, args);
+}
+
+function isTauriRuntime(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    "__TAURI_INTERNALS__" in window &&
+    typeof (window as Window & { __TAURI_INTERNALS__?: unknown })
+      .__TAURI_INTERNALS__ === "object"
+  );
+}
+
+const demoOrganization: Organization = {
+  id: "contoso",
+  name: "contoso",
+  displayName: "Contoso",
+  baseUrl: "https://dev.azure.com/contoso",
+  authProvider: "pat",
+  credentialKey: "azdodeck:org:contoso:pat",
+  authenticatedUserId: "demo-user",
+  authenticatedUserDisplayName: "Demo User",
+  createdAt: "2026-05-24T00:00:00Z",
+  updatedAt: "2026-05-24T00:00:00Z",
+};
+
+async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
+  await new Promise((resolve) => window.setTimeout(resolve, 100));
+
+  switch (command) {
+    case "list_organizations":
+      return [demoOrganization];
+    case "add_pat_organization": {
+      const input = (args as { input?: AddPatOrganizationInput } | undefined)
+        ?.input;
+      return {
+        ...demoOrganization,
+        id: input?.organization || demoOrganization.id,
+        name: input?.organization || demoOrganization.name,
+        baseUrl: `https://dev.azure.com/${input?.organization || demoOrganization.name}`,
+      };
+    }
+    case "search_pull_requests":
+      return demoPullRequests();
+    case "search_work_items":
+      return demoWorkItems();
+    default:
+      throw new Error(`Unsupported demo command: ${command}`);
+  }
+}
+
+function demoPullRequests(): PullRequestSummary[] {
+  return [
+    {
+      organizationId: "contoso",
+      projectId: "platform",
+      projectName: "Platform",
+      repositoryId: "azdo-dashboard",
+      repositoryName: "azdo-dashboard",
+      pullRequestId: 42,
+      title: "Add pull request search dashboard",
+      status: "active",
+      createdBy: "Demo User",
+      creationDate: "2026-05-24T00:00:00Z",
+      sourceRefName: "feature/pr-search",
+      targetRefName: "main",
+      webUrl:
+        "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/pullrequest/42",
+    },
+  ];
+}
+
+function demoWorkItems(): WorkItemSummary[] {
+  return [
+    {
+      organizationId: "contoso",
+      projectId: "platform",
+      projectName: "Platform",
+      id: 123,
+      title: "Validate onboarding with PAT credentials",
+      workItemType: "Task",
+      state: "Active",
+      assignedTo: "Demo User",
+      changedDate: "2026-05-24T00:00:00Z",
+      webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/123",
+    },
+  ];
 }
 
 export function commandErrorMessage(error: unknown): string {

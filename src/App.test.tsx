@@ -53,9 +53,15 @@ function renderApp() {
 describe("App", () => {
   beforeEach(() => {
     invokeMock.mockReset();
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      configurable: true,
+      value: {},
+    });
   });
 
   afterEach(() => {
+    delete (window as Window & { __TAURI_INTERNALS__?: unknown })
+      .__TAURI_INTERNALS__;
     cleanup();
   });
 
@@ -200,5 +206,22 @@ describe("App", () => {
     });
     expect(await screen.findByText("Fix save workflow")).toBeTruthy();
     expect(screen.getByText("Test User")).toBeTruthy();
+  });
+
+  it("runs in browser preview mode without Tauri internals", async () => {
+    delete (window as Window & { __TAURI_INTERNALS__?: unknown })
+      .__TAURI_INTERNALS__;
+
+    renderApp();
+
+    expect(
+      await screen.findByText("Run a search to load pull requests."),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(
+      await screen.findByText("Add pull request search dashboard"),
+    ).toBeTruthy();
+    expect(invokeMock).not.toHaveBeenCalled();
   });
 });
