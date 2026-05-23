@@ -1,0 +1,20 @@
+[package]
+name = "azdo-client"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Azure DevOps REST client for AzDoDeck"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
+url = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+wiremock = "0.6"
+pretty_assertions = "1"
