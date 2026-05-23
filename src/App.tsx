@@ -5,6 +5,7 @@ import {
   Eye,
   EyeOff,
   GitPullRequest,
+  ListChecks,
   Loader2,
   Plus,
   Search,
@@ -16,15 +17,17 @@ import {
   commandErrorMessage,
   listOrganizations,
   searchPullRequests,
+  searchWorkItems,
   type Organization,
   type PullRequestSummary,
   type SearchPullRequestsInput,
+  type WorkItemSummary,
 } from "@/lib/azdoCommands";
 
-type View = "dashboard" | "settings";
+type View = "pullRequests" | "workItems" | "settings";
 
 function AppShell() {
-  const [view, setView] = useState<View>("dashboard");
+  const [view, setView] = useState<View>("pullRequests");
   const organizationsQuery = useQuery({
     queryKey: ["organizations"],
     queryFn: listOrganizations,
@@ -47,11 +50,18 @@ function AppShell() {
         </div>
         <nav className="space-y-1 p-3">
           <NavButton
-            active={activeView === "dashboard"}
+            active={activeView === "pullRequests"}
             disabled={organizations.length === 0}
             icon={<GitPullRequest className="h-4 w-4" aria-hidden="true" />}
             label="Pull Requests"
-            onClick={() => setView("dashboard")}
+            onClick={() => setView("pullRequests")}
+          />
+          <NavButton
+            active={activeView === "workItems"}
+            disabled={organizations.length === 0}
+            icon={<ListChecks className="h-4 w-4" aria-hidden="true" />}
+            label="Work Items"
+            onClick={() => setView("workItems")}
           />
           <NavButton
             active={activeView === "settings"}
@@ -66,12 +76,18 @@ function AppShell() {
         <header className="flex h-16 items-center justify-between border-b border-border bg-white px-5 lg:px-8">
           <div>
             <h1 className="text-lg font-semibold">
-              {activeView === "dashboard" ? "Pull Requests" : "Settings"}
+              {activeView === "pullRequests"
+                ? "Pull Requests"
+                : activeView === "workItems"
+                  ? "Work Items"
+                  : "Settings"}
             </h1>
             <p className="text-sm text-muted-foreground">
-              {activeView === "dashboard"
+              {activeView === "pullRequests"
                 ? "Search Azure DevOps pull requests across projects and repositories"
-                : "Local Azure DevOps organization setup"}
+                : activeView === "workItems"
+                  ? "Search Azure DevOps work items across projects"
+                  : "Local Azure DevOps organization setup"}
             </p>
           </div>
         </header>
@@ -81,8 +97,10 @@ function AppShell() {
             <LoadingState />
           ) : organizationsQuery.isError ? (
             <ErrorState message={commandErrorMessage(organizationsQuery.error)} />
-          ) : activeView === "dashboard" ? (
+          ) : activeView === "pullRequests" ? (
             <PullRequestSearch organizations={organizations} />
+          ) : activeView === "workItems" ? (
+            <WorkItemSearch organizations={organizations} />
           ) : organizations.length === 0 ? (
             <SetupPanel />
           ) : (
@@ -90,6 +108,195 @@ function AppShell() {
           )}
         </section>
       </main>
+    </div>
+  );
+}
+
+function WorkItemSearch({ organizations }: { organizations: Organization[] }) {
+  const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
+  const [query, setQuery] = useState("");
+  const [state, setState] = useState("all");
+  const [workItemType, setWorkItemType] = useState("");
+
+  const mutation = useMutation({
+    mutationFn: searchWorkItems,
+  });
+
+  const selectedOrganizationId = organizationId || organizations[0]?.id || "";
+  const results = mutation.data ?? [];
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    mutation.mutate({
+      organizationId: selectedOrganizationId,
+      query,
+      state,
+      workItemType,
+    });
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-md border border-border bg-white">
+        <form className="grid gap-4 p-5" onSubmit={onSubmit}>
+          <div className="grid gap-4 lg:grid-cols-[1fr_180px_150px_160px_auto]">
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Search</span>
+              <div className="flex h-10 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
+                <Search className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="title text"
+                  className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+                />
+              </div>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Organization</span>
+              <select
+                value={selectedOrganizationId}
+                onChange={(event) => setOrganizationId(event.target.value)}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              >
+                {organizations.map((organization) => (
+                  <option key={organization.id} value={organization.id}>
+                    {organization.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">State</span>
+              <select
+                value={state}
+                onChange={(event) => setState(event.target.value)}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="all">All</option>
+                <option value="New">New</option>
+                <option value="Active">Active</option>
+                <option value="Resolved">Resolved</option>
+                <option value="Closed">Closed</option>
+              </select>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Type</span>
+              <input
+                value={workItemType}
+                onChange={(event) => setWorkItemType(event.target.value)}
+                placeholder="Bug, Task"
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </label>
+
+            <div className="flex items-end">
+              <button
+                type="submit"
+                disabled={mutation.isPending || !selectedOrganizationId}
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
+              >
+                {mutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Search className="h-4 w-4" aria-hidden="true" />
+                )}
+                Search
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      {mutation.isError ? (
+        <ErrorState message={commandErrorMessage(mutation.error)} />
+      ) : null}
+
+      <WorkItemResults loading={mutation.isPending} results={results} searched={mutation.isSuccess} />
+    </div>
+  );
+}
+
+function WorkItemResults({
+  loading,
+  results,
+  searched,
+}: {
+  loading: boolean;
+  results: WorkItemSummary[];
+  searched: boolean;
+}) {
+  const countLabel = useMemo(() => {
+    if (loading) {
+      return "Searching";
+    }
+    if (!searched) {
+      return "Ready";
+    }
+    return `${results.length} work item${results.length === 1 ? "" : "s"}`;
+  }, [loading, results.length, searched]);
+
+  return (
+    <div className="overflow-hidden rounded-md border border-border bg-white">
+      <div className="flex items-center justify-between border-b border-border px-5 py-4">
+        <h2 className="text-base font-semibold">Results</h2>
+        <span className="text-sm text-muted-foreground">{countLabel}</span>
+      </div>
+      {!searched && !loading ? (
+        <div className="px-5 py-10 text-center text-sm text-muted-foreground">
+          Run a search to load work items.
+        </div>
+      ) : results.length === 0 && !loading ? (
+        <div className="px-5 py-10 text-center text-sm text-muted-foreground">
+          No work items matched.
+        </div>
+      ) : (
+        <div className="divide-y divide-border">
+          {results.map((workItem) => (
+            <WorkItemRow key={`${workItem.projectId}:${workItem.id}`} workItem={workItem} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WorkItemRow({ workItem }: { workItem: WorkItemSummary }) {
+  return (
+    <div className="grid gap-3 px-5 py-4 lg:grid-cols-[1fr_auto]">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-md bg-secondary px-2 py-1 text-xs font-medium">
+            #{workItem.id}
+          </span>
+          {workItem.workItemType ? (
+            <span className="rounded-md border border-border px-2 py-1 text-xs font-medium">
+              {workItem.workItemType}
+            </span>
+          ) : null}
+          {workItem.state ? (
+            <span className="rounded-md border border-border px-2 py-1 text-xs font-medium">
+              {workItem.state}
+            </span>
+          ) : null}
+          {workItem.changedDate ? (
+            <span className="text-xs text-muted-foreground">
+              {formatDate(workItem.changedDate)}
+            </span>
+          ) : null}
+        </div>
+        <p className="mt-2 font-medium">{workItem.title}</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {workItem.projectName}
+        </p>
+      </div>
+      <div className="text-left text-sm lg:text-right">
+        <p className="text-muted-foreground">Assigned to</p>
+        <p className="font-medium">{workItem.assignedTo ?? "Unassigned"}</p>
+      </div>
     </div>
   );
 }

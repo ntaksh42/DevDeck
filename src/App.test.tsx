@@ -160,4 +160,45 @@ describe("App", () => {
     expect(await screen.findByText("Add pull request search")).toBeTruthy();
     expect(screen.getByText("Platform / azdo-dashboard")).toBeTruthy();
   });
+
+  it("searches work items and renders results", async () => {
+    invokeMock
+      .mockResolvedValueOnce([organization])
+      .mockResolvedValueOnce([
+        {
+          organizationId: "contoso",
+          projectId: "project-1",
+          projectName: "Platform",
+          id: 123,
+          title: "Fix save workflow",
+          workItemType: "Bug",
+          state: "Active",
+          assignedTo: "Test User",
+          changedDate: "2026-05-24T00:00:00Z",
+          webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/123",
+        },
+      ]);
+
+    renderApp();
+
+    await screen.findByText("Run a search to load pull requests.");
+    fireEvent.click(screen.getByRole("button", { name: "Work Items" }));
+    fireEvent.change(await screen.findByPlaceholderText("title text"), {
+      target: { value: "save" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("search_work_items", {
+        input: {
+          organizationId: "contoso",
+          query: "save",
+          state: "all",
+          workItemType: "",
+        },
+      });
+    });
+    expect(await screen.findByText("Fix save workflow")).toBeTruthy();
+    expect(screen.getByText("Test User")).toBeTruthy();
+  });
 });

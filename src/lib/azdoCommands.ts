@@ -38,6 +38,23 @@ const pullRequestSummariesSchema = z.array(pullRequestSummarySchema);
 
 export type PullRequestSummary = z.infer<typeof pullRequestSummarySchema>;
 
+const workItemSummarySchema = z.object({
+  organizationId: z.string(),
+  projectId: z.string(),
+  projectName: z.string(),
+  id: z.number(),
+  title: z.string(),
+  workItemType: z.string().nullable(),
+  state: z.string().nullable(),
+  assignedTo: z.string().nullable(),
+  changedDate: z.string().nullable(),
+  webUrl: z.string().nullable(),
+});
+
+const workItemSummariesSchema = z.array(workItemSummarySchema);
+
+export type WorkItemSummary = z.infer<typeof workItemSummarySchema>;
+
 export type AddPatOrganizationInput = {
   organization: string;
   pat: string;
@@ -47,6 +64,13 @@ export type SearchPullRequestsInput = {
   organizationId?: string;
   query?: string;
   status?: "active" | "completed" | "abandoned" | "all";
+};
+
+export type SearchWorkItemsInput = {
+  organizationId?: string;
+  query?: string;
+  state?: string;
+  workItemType?: string;
 };
 
 export async function listOrganizations(): Promise<Organization[]> {
@@ -66,6 +90,13 @@ export async function searchPullRequests(
 ): Promise<PullRequestSummary[]> {
   const result = await invoke("search_pull_requests", { input });
   return pullRequestSummariesSchema.parse(result);
+}
+
+export async function searchWorkItems(
+  input: SearchWorkItemsInput,
+): Promise<WorkItemSummary[]> {
+  const result = await invoke("search_work_items", { input });
+  return workItemSummariesSchema.parse(result);
 }
 
 export function commandErrorMessage(error: unknown): string {

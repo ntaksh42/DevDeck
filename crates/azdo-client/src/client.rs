@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use reqwest::StatusCode;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use url::Url;
 
 use crate::auth::AdoCredentialProvider;
@@ -51,6 +52,50 @@ impl AdoClient {
             .get(url)
             .query(query)
             .header("Authorization", &auth)
+            .send()
+            .await?;
+
+        let status = resp.status();
+        if status == StatusCode::UNAUTHORIZED {
+            return Err(AdoError::Unauthorized);
+        }
+        if status == StatusCode::TOO_MANY_REQUESTS {
+            let retry = resp
+                .headers()
+                .get("Retry-After")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(60);
+            return Err(AdoError::RateLimited(Duration::from_secs(retry)));
+        }
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(AdoError::Api {
+                status: status.as_u16(),
+                body,
+            });
+        }
+        Ok(resp.json().await?)
+    }
+
+    pub(crate) async fn post_json<B: Serialize + ?Sized, T: DeserializeOwned>(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        body: &B,
+    ) -> Result<T> {
+        let url = self
+            .base_url
+            .join(path)
+            .map_err(|e| AdoError::Auth(e.to_string()))?;
+        let auth = self.auth.auth_header_value().await?;
+
+        let resp = self
+            .http
+            .post(url)
+            .query(query)
+            .header("Authorization", &auth)
+            .json(body)
             .send()
             .await?;
 

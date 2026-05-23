@@ -52,7 +52,7 @@ Expected scope:
 
 ### M4 - Work Item Search
 
-Status: Next.
+Status: Done.
 
 Add WIQL-backed work item search and a work item result view.
 
@@ -65,7 +65,7 @@ Expected scope:
 
 ### M5 - Commit Search
 
-Status: Planned.
+Status: Next.
 
 Add commit search across repositories with author, date range, branch, and message filters.
 

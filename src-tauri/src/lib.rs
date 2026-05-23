@@ -3,6 +3,7 @@ mod error;
 mod orgs;
 mod prs;
 mod secrets;
+mod work_items;
 
 use db::{AppDatabase, Organization};
 use error::Result;
@@ -10,11 +11,13 @@ use orgs::{AddPatOrganizationInput, OrganizationService};
 use prs::{PullRequestService, PullRequestSummary, SearchPullRequestsInput};
 use secrets::SecretStore;
 use tauri::{Manager, State};
+use work_items::{SearchWorkItemsInput, WorkItemService, WorkItemSummary};
 
 #[derive(Clone)]
 struct AppState {
     organizations: OrganizationService,
     pull_requests: PullRequestService,
+    work_items: WorkItemService,
 }
 
 #[tauri::command]
@@ -38,6 +41,14 @@ async fn search_pull_requests(
     state.pull_requests.search(input).await
 }
 
+#[tauri::command]
+async fn search_work_items(
+    input: SearchWorkItemsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<WorkItemSummary>> {
+    state.work_items.search(input).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -48,14 +59,16 @@ pub fn run() {
             db.initialize()?;
             app.manage(AppState {
                 organizations: OrganizationService::new(db.clone(), SecretStore),
-                pull_requests: PullRequestService::new(db, SecretStore),
+                pull_requests: PullRequestService::new(db.clone(), SecretStore),
+                work_items: WorkItemService::new(db, SecretStore),
             });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             list_organizations,
             add_pat_organization,
-            search_pull_requests
+            search_pull_requests,
+            search_work_items
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

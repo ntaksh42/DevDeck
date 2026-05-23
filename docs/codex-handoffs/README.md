@@ -12,8 +12,9 @@ This folder is the working handoff area for future Codex sessions.
   - [M1](M1_codex-handoff.md): Azure DevOps REST client core, PAT auth, `connectionData`, wiremock tests.
   - [M2](M2_codex-handoff.md): local configuration, SQLite migrations, secure PAT storage, organization setup UI.
   - [M3](M3_codex-handoff.md): pull request search across projects and repositories.
+  - [M4](M4_codex-handoff.md): work item search with WIQL and batch field loading.
 - Next milestone:
-  - M4: work item search.
+  - M5: commit search.
 
 ## How To Resume
 
