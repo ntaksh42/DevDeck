@@ -1,3 +1,4 @@
+mod commits;
 mod db;
 mod error;
 mod orgs;
@@ -5,6 +6,7 @@ mod prs;
 mod secrets;
 mod work_items;
 
+use commits::{CommitService, CommitSummary, SearchCommitsInput};
 use db::{AppDatabase, Organization};
 use error::Result;
 use orgs::{AddPatOrganizationInput, OrganizationService};
@@ -18,6 +20,7 @@ struct AppState {
     organizations: OrganizationService,
     pull_requests: PullRequestService,
     work_items: WorkItemService,
+    commits: CommitService,
 }
 
 #[tauri::command]
@@ -49,6 +52,14 @@ async fn search_work_items(
     state.work_items.search(input).await
 }
 
+#[tauri::command]
+async fn search_commits(
+    input: SearchCommitsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<CommitSummary>> {
+    state.commits.search(input).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -60,7 +71,8 @@ pub fn run() {
             app.manage(AppState {
                 organizations: OrganizationService::new(db.clone(), SecretStore),
                 pull_requests: PullRequestService::new(db.clone(), SecretStore),
-                work_items: WorkItemService::new(db, SecretStore),
+                work_items: WorkItemService::new(db.clone(), SecretStore),
+                commits: CommitService::new(db, SecretStore),
             });
             Ok(())
         })
@@ -68,7 +80,8 @@ pub fn run() {
             list_organizations,
             add_pat_organization,
             search_pull_requests,
-            search_work_items
+            search_work_items,
+            search_commits
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

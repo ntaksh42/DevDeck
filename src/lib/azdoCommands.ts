@@ -55,6 +55,25 @@ const workItemSummariesSchema = z.array(workItemSummarySchema);
 
 export type WorkItemSummary = z.infer<typeof workItemSummarySchema>;
 
+const commitSummarySchema = z.object({
+  organizationId: z.string(),
+  projectId: z.string(),
+  projectName: z.string(),
+  repositoryId: z.string(),
+  repositoryName: z.string(),
+  commitId: z.string(),
+  shortCommitId: z.string(),
+  comment: z.string(),
+  authorName: z.string().nullable(),
+  authorEmail: z.string().nullable(),
+  authorDate: z.string().nullable(),
+  webUrl: z.string().nullable(),
+});
+
+const commitSummariesSchema = z.array(commitSummarySchema);
+
+export type CommitSummary = z.infer<typeof commitSummarySchema>;
+
 export type AddPatOrganizationInput = {
   organization: string;
   pat: string;
@@ -71,6 +90,15 @@ export type SearchWorkItemsInput = {
   query?: string;
   state?: string;
   workItemType?: string;
+};
+
+export type SearchCommitsInput = {
+  organizationId?: string;
+  query?: string;
+  author?: string;
+  branch?: string;
+  fromDate?: string;
+  toDate?: string;
 };
 
 export async function listOrganizations(): Promise<Organization[]> {
@@ -97,6 +125,13 @@ export async function searchWorkItems(
 ): Promise<WorkItemSummary[]> {
   const result = await invokeCommand("search_work_items", { input });
   return workItemSummariesSchema.parse(result);
+}
+
+export async function searchCommits(
+  input: SearchCommitsInput,
+): Promise<CommitSummary[]> {
+  const result = await invokeCommand("search_commits", { input });
+  return commitSummariesSchema.parse(result);
 }
 
 async function invokeCommand(command: string, args?: unknown): Promise<unknown> {
@@ -149,6 +184,8 @@ async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
       return demoPullRequests();
     case "search_work_items":
       return demoWorkItems();
+    case "search_commits":
+      return demoCommits();
     default:
       throw new Error(`Unsupported demo command: ${command}`);
   }
@@ -188,6 +225,26 @@ function demoWorkItems(): WorkItemSummary[] {
       assignedTo: "Demo User",
       changedDate: "2026-05-24T00:00:00Z",
       webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/123",
+    },
+  ];
+}
+
+function demoCommits(): CommitSummary[] {
+  return [
+    {
+      organizationId: "contoso",
+      projectId: "platform",
+      projectName: "Platform",
+      repositoryId: "azdo-dashboard",
+      repositoryName: "azdo-dashboard",
+      commitId: "abcdef1234567890abcdef1234567890abcdef12",
+      shortCommitId: "abcdef12",
+      comment: "Add commit search dashboard",
+      authorName: "Demo User",
+      authorEmail: "demo@example.com",
+      authorDate: "2026-05-24T00:00:00Z",
+      webUrl:
+        "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/commit/abcdef1234567890abcdef1234567890abcdef12",
     },
   ];
 }

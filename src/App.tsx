@@ -2,6 +2,7 @@ import { FormEvent, ReactNode, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Building2,
+  GitCommitHorizontal,
   Eye,
   EyeOff,
   GitPullRequest,
@@ -16,15 +17,17 @@ import {
   addPatOrganization,
   commandErrorMessage,
   listOrganizations,
+  searchCommits,
   searchPullRequests,
   searchWorkItems,
+  type CommitSummary,
   type Organization,
   type PullRequestSummary,
   type SearchPullRequestsInput,
   type WorkItemSummary,
 } from "@/lib/azdoCommands";
 
-type View = "pullRequests" | "workItems" | "settings";
+type View = "pullRequests" | "workItems" | "commits" | "settings";
 
 function AppShell() {
   const [view, setView] = useState<View>("pullRequests");
@@ -64,6 +67,13 @@ function AppShell() {
             onClick={() => setView("workItems")}
           />
           <NavButton
+            active={activeView === "commits"}
+            disabled={organizations.length === 0}
+            icon={<GitCommitHorizontal className="h-4 w-4" aria-hidden="true" />}
+            label="Commits"
+            onClick={() => setView("commits")}
+          />
+          <NavButton
             active={activeView === "settings"}
             icon={<Settings className="h-4 w-4" aria-hidden="true" />}
             label="Settings"
@@ -80,6 +90,8 @@ function AppShell() {
                 ? "Pull Requests"
                 : activeView === "workItems"
                   ? "Work Items"
+                  : activeView === "commits"
+                    ? "Commits"
                   : "Settings"}
             </h1>
             <p className="text-sm text-muted-foreground">
@@ -87,6 +99,8 @@ function AppShell() {
                 ? "Search Azure DevOps pull requests across projects and repositories"
                 : activeView === "workItems"
                   ? "Search Azure DevOps work items across projects"
+                  : activeView === "commits"
+                    ? "Search Azure DevOps commits across repositories"
                   : "Local Azure DevOps organization setup"}
             </p>
           </div>
@@ -101,6 +115,8 @@ function AppShell() {
             <PullRequestSearch organizations={organizations} />
           ) : activeView === "workItems" ? (
             <WorkItemSearch organizations={organizations} />
+          ) : activeView === "commits" ? (
+            <CommitSearch organizations={organizations} />
           ) : organizations.length === 0 ? (
             <SetupPanel />
           ) : (
@@ -108,6 +124,183 @@ function AppShell() {
           )}
         </section>
       </main>
+    </div>
+  );
+}
+
+function CommitSearch({ organizations }: { organizations: Organization[] }) {
+  const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
+  const [query, setQuery] = useState("");
+  const [author, setAuthor] = useState("");
+  const [branch, setBranch] = useState("");
+
+  const mutation = useMutation({
+    mutationFn: searchCommits,
+  });
+
+  const selectedOrganizationId = organizationId || organizations[0]?.id || "";
+  const results = mutation.data ?? [];
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    mutation.mutate({
+      organizationId: selectedOrganizationId,
+      query,
+      author,
+      branch,
+    });
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-md border border-border bg-white">
+        <form className="grid gap-4 p-5" onSubmit={onSubmit}>
+          <div className="grid gap-4 lg:grid-cols-[1fr_180px_170px_160px_auto]">
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Search</span>
+              <div className="flex h-10 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
+                <Search className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="message, author, repository, SHA"
+                  className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+                />
+              </div>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Organization</span>
+              <select
+                value={selectedOrganizationId}
+                onChange={(event) => setOrganizationId(event.target.value)}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              >
+                {organizations.map((organization) => (
+                  <option key={organization.id} value={organization.id}>
+                    {organization.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Author</span>
+              <input
+                value={author}
+                onChange={(event) => setAuthor(event.target.value)}
+                placeholder="email or name"
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Branch</span>
+              <input
+                value={branch}
+                onChange={(event) => setBranch(event.target.value)}
+                placeholder="main"
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </label>
+
+            <div className="flex items-end">
+              <button
+                type="submit"
+                disabled={mutation.isPending || !selectedOrganizationId}
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
+              >
+                {mutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Search className="h-4 w-4" aria-hidden="true" />
+                )}
+                Search
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      {mutation.isError ? (
+        <ErrorState message={commandErrorMessage(mutation.error)} />
+      ) : null}
+
+      <CommitResults loading={mutation.isPending} results={results} searched={mutation.isSuccess} />
+    </div>
+  );
+}
+
+function CommitResults({
+  loading,
+  results,
+  searched,
+}: {
+  loading: boolean;
+  results: CommitSummary[];
+  searched: boolean;
+}) {
+  const countLabel = useMemo(() => {
+    if (loading) {
+      return "Searching";
+    }
+    if (!searched) {
+      return "Ready";
+    }
+    return `${results.length} commit${results.length === 1 ? "" : "s"}`;
+  }, [loading, results.length, searched]);
+
+  return (
+    <div className="overflow-hidden rounded-md border border-border bg-white">
+      <div className="flex items-center justify-between border-b border-border px-5 py-4">
+        <h2 className="text-base font-semibold">Results</h2>
+        <span className="text-sm text-muted-foreground">{countLabel}</span>
+      </div>
+      {!searched && !loading ? (
+        <div className="px-5 py-10 text-center text-sm text-muted-foreground">
+          Run a search to load commits.
+        </div>
+      ) : results.length === 0 && !loading ? (
+        <div className="px-5 py-10 text-center text-sm text-muted-foreground">
+          No commits matched.
+        </div>
+      ) : (
+        <div className="divide-y divide-border">
+          {results.map((commit) => (
+            <CommitRow key={`${commit.repositoryId}:${commit.commitId}`} commit={commit} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CommitRow({ commit }: { commit: CommitSummary }) {
+  return (
+    <div className="grid gap-3 px-5 py-4 lg:grid-cols-[1fr_auto]">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-md bg-secondary px-2 py-1 font-mono text-xs font-medium">
+            {commit.shortCommitId}
+          </span>
+          {commit.authorDate ? (
+            <span className="text-xs text-muted-foreground">
+              {formatDate(commit.authorDate)}
+            </span>
+          ) : null}
+        </div>
+        <p className="mt-2 font-medium">{commit.comment}</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {commit.projectName} / {commit.repositoryName}
+        </p>
+      </div>
+      <div className="text-left text-sm lg:text-right">
+        <p className="text-muted-foreground">Author</p>
+        <p className="font-medium">{commit.authorName ?? "Unknown"}</p>
+        {commit.authorEmail ? (
+          <p className="text-muted-foreground">{commit.authorEmail}</p>
+        ) : null}
+      </div>
     </div>
   );
 }

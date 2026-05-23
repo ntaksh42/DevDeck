@@ -65,7 +65,7 @@ Expected scope:
 
 ### M5 - Commit Search
 
-Status: Next.
+Status: Done.
 
 Add commit search across repositories with author, date range, branch, and message filters.
 
@@ -78,7 +78,7 @@ Expected scope:
 
 ### M6 - Auth And Reliability Hardening
 
-Status: Planned.
+Status: Next.
 
 Add Azure CLI authentication provider, retry/backoff, throttling behavior, logging, and better diagnostics.
 

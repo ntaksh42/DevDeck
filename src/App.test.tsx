@@ -208,6 +208,53 @@ describe("App", () => {
     expect(screen.getByText("Test User")).toBeTruthy();
   });
 
+  it("searches commits and renders results", async () => {
+    invokeMock
+      .mockResolvedValueOnce([organization])
+      .mockResolvedValueOnce([
+        {
+          organizationId: "contoso",
+          projectId: "project-1",
+          projectName: "Platform",
+          repositoryId: "repo-1",
+          repositoryName: "azdo-dashboard",
+          commitId: "abcdef1234567890abcdef1234567890abcdef12",
+          shortCommitId: "abcdef12",
+          comment: "Add commit search",
+          authorName: "Test User",
+          authorEmail: "test@example.com",
+          authorDate: "2026-05-24T00:00:00Z",
+          webUrl:
+            "https://dev.azure.com/contoso/project/_git/repo/commit/abcdef1234567890abcdef1234567890abcdef12",
+        },
+      ]);
+
+    renderApp();
+
+    await screen.findByText("Run a search to load pull requests.");
+    fireEvent.click(screen.getByRole("button", { name: "Commits" }));
+    fireEvent.change(
+      await screen.findByPlaceholderText("message, author, repository, SHA"),
+      {
+        target: { value: "commit" },
+      },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("search_commits", {
+        input: {
+          organizationId: "contoso",
+          query: "commit",
+          author: "",
+          branch: "",
+        },
+      });
+    });
+    expect(await screen.findByText("Add commit search")).toBeTruthy();
+    expect(screen.getByText("abcdef12")).toBeTruthy();
+  });
+
   it("runs in browser preview mode without Tauri internals", async () => {
     delete (window as Window & { __TAURI_INTERNALS__?: unknown })
       .__TAURI_INTERNALS__;

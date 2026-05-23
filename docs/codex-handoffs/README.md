@@ -13,8 +13,9 @@ This folder is the working handoff area for future Codex sessions.
   - [M2](M2_codex-handoff.md): local configuration, SQLite migrations, secure PAT storage, organization setup UI.
   - [M3](M3_codex-handoff.md): pull request search across projects and repositories.
   - [M4](M4_codex-handoff.md): work item search with WIQL and batch field loading.
+  - [M5](M5_codex-handoff.md): commit search across projects and repositories.
 - Next milestone:
-  - M5: commit search.
+  - M6: auth and reliability hardening.
 
 ## How To Resume
 

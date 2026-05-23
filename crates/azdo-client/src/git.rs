@@ -43,6 +43,25 @@ pub struct GitPullRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GitCommitRef {
+    pub commit_id: String,
+    pub comment: Option<String>,
+    pub author: Option<GitUserDate>,
+    pub committer: Option<GitUserDate>,
+    pub remote_url: Option<String>,
+    pub url: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitUserDate {
+    pub name: Option<String>,
+    pub email: Option<String>,
+    pub date: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct IdentityRef {
     pub display_name: Option<String>,
     pub unique_name: Option<String>,
@@ -91,6 +110,51 @@ impl AdoClient {
             .await?;
         Ok(response.value)
     }
+
+    pub async fn list_commits(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        criteria: CommitSearchCriteria,
+    ) -> Result<Vec<GitCommitRef>> {
+        let path = format!("{project_id}/_apis/git/repositories/{repository_id}/commits");
+        let mut query = vec![
+            ("api-version", "7.1".to_string()),
+            ("$top", criteria.top.unwrap_or(50).to_string()),
+        ];
+        if let Some(author) = criteria.author.filter(|value| !value.trim().is_empty()) {
+            query.push(("searchCriteria.author", author));
+        }
+        if let Some(branch) = criteria.branch.filter(|value| !value.trim().is_empty()) {
+            query.push((
+                "searchCriteria.itemVersion.versionType",
+                "branch".to_string(),
+            ));
+            query.push(("searchCriteria.itemVersion.version", branch));
+        }
+        if let Some(from_date) = criteria.from_date.filter(|value| !value.trim().is_empty()) {
+            query.push(("searchCriteria.fromDate", from_date));
+        }
+        if let Some(to_date) = criteria.to_date.filter(|value| !value.trim().is_empty()) {
+            query.push(("searchCriteria.toDate", to_date));
+        }
+
+        let query_refs: Vec<(&str, &str)> = query
+            .iter()
+            .map(|(key, value)| (*key, value.as_str()))
+            .collect();
+        let response: ListResponse<GitCommitRef> = self.get_json(&path, &query_refs).await?;
+        Ok(response.value)
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct CommitSearchCriteria {
+    pub author: Option<String>,
+    pub branch: Option<String>,
+    pub from_date: Option<String>,
+    pub to_date: Option<String>,
+    pub top: Option<u32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -190,6 +254,54 @@ mod tests {
         assert_eq!(
             prs[0].links.as_ref().unwrap().web.as_ref().unwrap().href,
             "https://dev.azure.com/testorg/project/_git/repo/pullrequest/42"
+        );
+    }
+
+    #[tokio::test]
+    async fn list_commits_uses_search_criteria() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/git/repositories/repo-1/commits"))
+            .and(query_param("api-version", "7.1"))
+            .and(query_param("$top", "25"))
+            .and(query_param("searchCriteria.author", "test@example.com"))
+            .and(query_param("searchCriteria.itemVersion.version", "main"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 1,
+                "value": [{
+                    "commitId": "abc123",
+                    "comment": "Add commit search",
+                    "author": {
+                        "name": "Test User",
+                        "email": "test@example.com",
+                        "date": "2026-05-24T00:00:00Z"
+                    },
+                    "remoteUrl": "https://dev.azure.com/testorg/project/_git/repo/commit/abc123"
+                }]
+            })))
+            .mount(&server)
+            .await;
+
+        let commits = test_client(&server)
+            .await
+            .list_commits(
+                "project-1",
+                "repo-1",
+                CommitSearchCriteria {
+                    author: Some("test@example.com".to_string()),
+                    branch: Some("main".to_string()),
+                    from_date: None,
+                    to_date: None,
+                    top: Some(25),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(commits.len(), 1);
+        assert_eq!(commits[0].commit_id, "abc123");
+        assert_eq!(
+            commits[0].author.as_ref().unwrap().name.as_deref(),
+            Some("Test User")
         );
     }
 }

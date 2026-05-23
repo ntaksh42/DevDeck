@@ -8,6 +8,9 @@ pub mod work_items;
 pub use auth::{AdoCredentialProvider, PatProvider};
 pub use client::AdoClient;
 pub use error::{AdoError, Result};
-pub use git::{GitPullRequest, GitRepository, IdentityRef, PullRequestStatus, TeamProject};
+pub use git::{
+    CommitSearchCriteria, GitCommitRef, GitPullRequest, GitRepository, GitUserDate, IdentityRef,
+    PullRequestStatus, TeamProject,
+};
 pub use identity::{AuthenticatedUser, ConnectionData};
 pub use work_items::{WorkItem, WorkItemReference};
