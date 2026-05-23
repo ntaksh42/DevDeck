@@ -1,18 +1,68 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use reqwest::header::HeaderMap;
 use reqwest::StatusCode;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use tokio::time::sleep;
 use url::Url;
 
 use crate::auth::AdoCredentialProvider;
 use crate::error::{AdoError, Result};
 
+#[derive(Debug, Clone, Copy)]
+pub struct RetryPolicy {
+    pub max_attempts: usize,
+    pub base_delay: Duration,
+    pub max_delay: Duration,
+    pub retry_after_cap: Duration,
+}
+
+impl RetryPolicy {
+    pub fn no_retries() -> Self {
+        Self {
+            max_attempts: 1,
+            base_delay: Duration::ZERO,
+            max_delay: Duration::ZERO,
+            retry_after_cap: Duration::ZERO,
+        }
+    }
+
+    fn attempts(self) -> usize {
+        self.max_attempts.max(1)
+    }
+
+    fn backoff_delay(self, attempt: usize) -> Duration {
+        let multiplier = 1_u32
+            .checked_shl(attempt.saturating_sub(1) as u32)
+            .unwrap_or(u32::MAX);
+        self.base_delay
+            .saturating_mul(multiplier)
+            .min(self.max_delay)
+    }
+
+    fn capped_retry_after(self, retry_after: Duration) -> Duration {
+        retry_after.min(self.retry_after_cap)
+    }
+}
+
+impl Default for RetryPolicy {
+    fn default() -> Self {
+        Self {
+            max_attempts: 3,
+            base_delay: Duration::from_millis(250),
+            max_delay: Duration::from_secs(2),
+            retry_after_cap: Duration::from_secs(5),
+        }
+    }
+}
+
 pub struct AdoClient {
     http: reqwest::Client,
     base_url: Url,
     auth: Arc<dyn AdoCredentialProvider>,
+    retry_policy: RetryPolicy,
 }
 
 impl AdoClient {
@@ -28,11 +78,17 @@ impl AdoClient {
             http,
             base_url,
             auth,
+            retry_policy: RetryPolicy::default(),
         })
     }
 
     pub fn with_base_url(mut self, url: Url) -> Self {
         self.base_url = url;
+        self
+    }
+
+    pub fn with_retry_policy(mut self, retry_policy: RetryPolicy) -> Self {
+        self.retry_policy = retry_policy;
         self
     }
 
@@ -45,37 +101,71 @@ impl AdoClient {
             .base_url
             .join(path)
             .map_err(|e| AdoError::Auth(e.to_string()))?;
-        let auth = self.auth.auth_header_value().await?;
 
-        let resp = self
-            .http
-            .get(url)
-            .query(query)
-            .header("Authorization", &auth)
-            .send()
-            .await?;
+        for attempt in 1..=self.retry_policy.attempts() {
+            let auth = self.auth.auth_header_value().await?;
+            let response = self
+                .http
+                .get(url.clone())
+                .query(query)
+                .header("Authorization", &auth)
+                .send()
+                .await;
 
-        let status = resp.status();
-        if status == StatusCode::UNAUTHORIZED {
-            return Err(AdoError::Unauthorized);
+            match response {
+                Ok(resp) => {
+                    let status = resp.status();
+                    if status.is_success() {
+                        return Ok(resp.json().await?);
+                    }
+                    if status == StatusCode::UNAUTHORIZED {
+                        return Err(AdoError::Unauthorized);
+                    }
+
+                    let retry_after = parse_retry_after(resp.headers());
+                    if self.should_retry_status(status, attempt) {
+                        let delay = self.retry_delay(attempt, retry_after);
+                        tracing::warn!(
+                            method = "GET",
+                            path,
+                            attempt,
+                            status = status.as_u16(),
+                            delay_ms = delay.as_millis(),
+                            "retrying Azure DevOps request after response"
+                        );
+                        sleep(delay).await;
+                        continue;
+                    }
+
+                    if status == StatusCode::TOO_MANY_REQUESTS {
+                        return Err(AdoError::RateLimited(
+                            retry_after.unwrap_or(Duration::from_secs(60)),
+                        ));
+                    }
+
+                    let body = resp.text().await.unwrap_or_default();
+                    return Err(AdoError::Api {
+                        status: status.as_u16(),
+                        body,
+                    });
+                }
+                Err(error) if self.should_retry_error(&error, attempt) => {
+                    let delay = self.retry_policy.backoff_delay(attempt);
+                    tracing::warn!(
+                        method = "GET",
+                        path,
+                        attempt,
+                        delay_ms = delay.as_millis(),
+                        error = %error,
+                        "retrying Azure DevOps request after network error"
+                    );
+                    sleep(delay).await;
+                }
+                Err(error) => return Err(AdoError::Network(error)),
+            }
         }
-        if status == StatusCode::TOO_MANY_REQUESTS {
-            let retry = resp
-                .headers()
-                .get("Retry-After")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(60);
-            return Err(AdoError::RateLimited(Duration::from_secs(retry)));
-        }
-        if !status.is_success() {
-            let body = resp.text().await.unwrap_or_default();
-            return Err(AdoError::Api {
-                status: status.as_u16(),
-                body,
-            });
-        }
-        Ok(resp.json().await?)
+
+        unreachable!("retry policy always has at least one attempt")
     }
 
     pub(crate) async fn post_json<B: Serialize + ?Sized, T: DeserializeOwned>(
@@ -88,39 +178,96 @@ impl AdoClient {
             .base_url
             .join(path)
             .map_err(|e| AdoError::Auth(e.to_string()))?;
-        let auth = self.auth.auth_header_value().await?;
 
-        let resp = self
-            .http
-            .post(url)
-            .query(query)
-            .header("Authorization", &auth)
-            .json(body)
-            .send()
-            .await?;
+        for attempt in 1..=self.retry_policy.attempts() {
+            let auth = self.auth.auth_header_value().await?;
+            let response = self
+                .http
+                .post(url.clone())
+                .query(query)
+                .header("Authorization", &auth)
+                .json(body)
+                .send()
+                .await;
 
-        let status = resp.status();
-        if status == StatusCode::UNAUTHORIZED {
-            return Err(AdoError::Unauthorized);
+            match response {
+                Ok(resp) => {
+                    let status = resp.status();
+                    if status.is_success() {
+                        return Ok(resp.json().await?);
+                    }
+                    if status == StatusCode::UNAUTHORIZED {
+                        return Err(AdoError::Unauthorized);
+                    }
+
+                    let retry_after = parse_retry_after(resp.headers());
+                    if self.should_retry_status(status, attempt) {
+                        let delay = self.retry_delay(attempt, retry_after);
+                        tracing::warn!(
+                            method = "POST",
+                            path,
+                            attempt,
+                            status = status.as_u16(),
+                            delay_ms = delay.as_millis(),
+                            "retrying Azure DevOps request after response"
+                        );
+                        sleep(delay).await;
+                        continue;
+                    }
+
+                    if status == StatusCode::TOO_MANY_REQUESTS {
+                        return Err(AdoError::RateLimited(
+                            retry_after.unwrap_or(Duration::from_secs(60)),
+                        ));
+                    }
+
+                    let body = resp.text().await.unwrap_or_default();
+                    return Err(AdoError::Api {
+                        status: status.as_u16(),
+                        body,
+                    });
+                }
+                Err(error) if self.should_retry_error(&error, attempt) => {
+                    let delay = self.retry_policy.backoff_delay(attempt);
+                    tracing::warn!(
+                        method = "POST",
+                        path,
+                        attempt,
+                        delay_ms = delay.as_millis(),
+                        error = %error,
+                        "retrying Azure DevOps request after network error"
+                    );
+                    sleep(delay).await;
+                }
+                Err(error) => return Err(AdoError::Network(error)),
+            }
         }
-        if status == StatusCode::TOO_MANY_REQUESTS {
-            let retry = resp
-                .headers()
-                .get("Retry-After")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(60);
-            return Err(AdoError::RateLimited(Duration::from_secs(retry)));
-        }
-        if !status.is_success() {
-            let body = resp.text().await.unwrap_or_default();
-            return Err(AdoError::Api {
-                status: status.as_u16(),
-                body,
-            });
-        }
-        Ok(resp.json().await?)
+
+        unreachable!("retry policy always has at least one attempt")
     }
+
+    fn should_retry_status(&self, status: StatusCode, attempt: usize) -> bool {
+        attempt < self.retry_policy.attempts()
+            && (status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error())
+    }
+
+    fn should_retry_error(&self, error: &reqwest::Error, attempt: usize) -> bool {
+        attempt < self.retry_policy.attempts() && (error.is_connect() || error.is_timeout())
+    }
+
+    fn retry_delay(&self, attempt: usize, retry_after: Option<Duration>) -> Duration {
+        retry_after
+            .map(|delay| self.retry_policy.capped_retry_after(delay))
+            .unwrap_or_else(|| self.retry_policy.backoff_delay(attempt))
+    }
+}
+
+fn parse_retry_after(headers: &HeaderMap) -> Option<Duration> {
+    headers
+        .get("Retry-After")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<u64>().ok())
+        .map(Duration::from_secs)
 }
 
 #[cfg(test)]
@@ -136,6 +283,20 @@ mod tests {
         AdoClient::new("testorg", Arc::new(PatProvider::new("test-pat")))
             .unwrap()
             .with_base_url(base_url)
+            .with_retry_policy(RetryPolicy::no_retries())
+    }
+
+    async fn retrying_test_client(server: &MockServer) -> AdoClient {
+        let base_url = Url::parse(&format!("{}/", server.uri())).unwrap();
+        AdoClient::new("testorg", Arc::new(PatProvider::new("test-pat")))
+            .unwrap()
+            .with_base_url(base_url)
+            .with_retry_policy(RetryPolicy {
+                max_attempts: 2,
+                base_delay: Duration::ZERO,
+                max_delay: Duration::ZERO,
+                retry_after_cap: Duration::ZERO,
+            })
     }
 
     #[tokio::test]
@@ -215,5 +376,65 @@ mod tests {
             }
             other => panic!("expected Api error, got {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn retries_get_after_transient_500() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/_apis/connectionData"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("try again"))
+            .up_to_n_times(1)
+            .with_priority(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/_apis/connectionData"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "authenticatedUser": {
+                    "id": "user-after-retry",
+                    "providerDisplayName": "Retried User"
+                }
+            })))
+            .with_priority(2)
+            .mount(&server)
+            .await;
+
+        let client = retrying_test_client(&server).await;
+        let data = client.connection_data().await.unwrap();
+
+        assert_eq!(data.authenticated_user.id, "user-after-retry");
+    }
+
+    #[tokio::test]
+    async fn retries_post_after_rate_limit() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/project-1/_apis/wit/wiql"))
+            .respond_with(ResponseTemplate::new(429).insert_header("Retry-After", "30"))
+            .up_to_n_times(1)
+            .with_priority(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/project-1/_apis/wit/wiql"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "workItems": []
+            })))
+            .with_priority(2)
+            .mount(&server)
+            .await;
+
+        let client = retrying_test_client(&server).await;
+        let value: serde_json::Value = client
+            .post_json(
+                "project-1/_apis/wit/wiql",
+                &[("api-version", "7.1")],
+                &serde_json::json!({ "query": "SELECT [System.Id] FROM WorkItems" }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(value["workItems"], serde_json::json!([]));
     }
 }

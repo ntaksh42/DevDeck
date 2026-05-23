@@ -6,7 +6,7 @@ pub mod identity;
 pub mod work_items;
 
 pub use auth::{AdoCredentialProvider, PatProvider};
-pub use client::AdoClient;
+pub use client::{AdoClient, RetryPolicy};
 pub use error::{AdoError, Result};
 pub use git::{
     CommitSearchCriteria, GitCommitRef, GitPullRequest, GitRepository, GitUserDate, IdentityRef,
