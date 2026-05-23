@@ -85,6 +85,11 @@ impl CommitService {
 
         results.sort_by(|a, b| b.author_date.cmp(&a.author_date));
         results.truncate(100);
+        tracing::info!(
+            organization = %organization.name,
+            count = results.len(),
+            "commit search completed"
+        );
         Ok(results)
     }
 

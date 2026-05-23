@@ -16,7 +16,7 @@ This folder is the working handoff area for future Codex sessions.
   - [M5](M5_codex-handoff.md): commit search across projects and repositories.
   - [M5 Result Actions](M5_result-actions_codex-handoff.md): open Azure DevOps web URLs from result rows.
 - Next milestone:
-  - M6: auth and reliability hardening. Retry/backoff is implemented in [M6 Retry](M6_retry-handoff.md), and Azure CLI auth is implemented in [M6 Azure CLI Auth](M6_azure-cli-auth-handoff.md). Diagnostics and traversal scaling remain next.
+  - M6: auth and reliability hardening. Retry/backoff is implemented in [M6 Retry](M6_retry-handoff.md), Azure CLI auth is implemented in [M6 Azure CLI Auth](M6_azure-cli-auth-handoff.md), and backend tracing is implemented in [M6 Tracing](M6_tracing-handoff.md). Traversal scaling remains next.
 
 ## How To Resume
 

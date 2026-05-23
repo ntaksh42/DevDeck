@@ -74,6 +74,11 @@ impl PullRequestService {
 
         results.sort_by(|a, b| b.creation_date.cmp(&a.creation_date));
         results.truncate(100);
+        tracing::info!(
+            organization = %organization.name,
+            count = results.len(),
+            "pull request search completed"
+        );
         Ok(results)
     }
 

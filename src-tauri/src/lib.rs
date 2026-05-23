@@ -25,11 +25,13 @@ struct AppState {
 }
 
 #[tauri::command]
+#[tracing::instrument(skip(state))]
 fn list_organizations(state: State<'_, AppState>) -> Result<Vec<Organization>> {
     state.organizations.list()
 }
 
 #[tauri::command]
+#[tracing::instrument(skip(state, input), fields(organization = %input.organization.trim()))]
 async fn add_pat_organization(
     input: AddPatOrganizationInput,
     state: State<'_, AppState>,
@@ -38,6 +40,7 @@ async fn add_pat_organization(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip(state), fields(organization = %input.organization.trim()))]
 async fn add_azure_cli_organization(
     input: AddAzureCliOrganizationInput,
     state: State<'_, AppState>,
@@ -46,6 +49,7 @@ async fn add_azure_cli_organization(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn search_pull_requests(
     input: SearchPullRequestsInput,
     state: State<'_, AppState>,
@@ -54,6 +58,7 @@ async fn search_pull_requests(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn search_work_items(
     input: SearchWorkItemsInput,
     state: State<'_, AppState>,
@@ -62,6 +67,7 @@ async fn search_work_items(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn search_commits(
     input: SearchCommitsInput,
     state: State<'_, AppState>,

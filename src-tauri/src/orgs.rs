@@ -45,6 +45,11 @@ impl OrganizationService {
             return Err(AppError::InvalidInput("PAT is required".to_string()));
         }
 
+        tracing::info!(
+            organization = %organization,
+            auth_provider = "pat",
+            "validating Azure DevOps organization"
+        );
         let client = AdoClient::new(&organization, Arc::new(PatProvider::new(pat)))?;
         let connection_data = client.connection_data().await?;
         let credential_key = credential_key(&organization);
@@ -69,6 +74,11 @@ impl OrganizationService {
         input: AddAzureCliOrganizationInput,
     ) -> Result<Organization> {
         let organization = normalize_organization(&input.organization)?;
+        tracing::info!(
+            organization = %organization,
+            auth_provider = "azure_cli",
+            "validating Azure DevOps organization"
+        );
         let client = AdoClient::new(&organization, Arc::new(AzureCliProvider::new()))?;
         let connection_data = client.connection_data().await?;
         let credential_key = azure_cli_credential_key(&organization);

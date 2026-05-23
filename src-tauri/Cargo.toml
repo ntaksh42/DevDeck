@@ -23,6 +23,7 @@ thiserror = { workspace = true }
 rusqlite = { version = "0.32", features = ["bundled"] }
 keyring = { version = "3", features = ["windows-native"] }
 azdo-client = { path = "../crates/azdo-client" }
+tracing = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"

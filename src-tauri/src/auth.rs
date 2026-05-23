@@ -11,6 +11,11 @@ pub fn client_for_organization(
     secrets: &SecretStore,
 ) -> Result<AdoClient> {
     let provider = organization.auth_provider.as_str();
+    tracing::debug!(
+        organization = %organization.name,
+        auth_provider = provider,
+        "creating Azure DevOps client"
+    );
     let auth: Arc<dyn azdo_client::AdoCredentialProvider> = match provider {
         "pat" => Arc::new(PatProvider::new(
             secrets.get_pat(&organization.credential_key)?,

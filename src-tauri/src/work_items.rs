@@ -82,6 +82,11 @@ impl WorkItemService {
 
         results.sort_by(|a, b| b.changed_date.cmp(&a.changed_date));
         results.truncate(100);
+        tracing::info!(
+            organization = %organization.name,
+            count = results.len(),
+            "work item search completed"
+        );
         Ok(results)
     }
 
