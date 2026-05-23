@@ -74,7 +74,7 @@ Expected scope:
 - Azure DevOps Git commits endpoint integration.
 - Repository discovery or explicit repository selection.
 - Cache schema for commit metadata.
-- Frontend result list with copy/open actions.
+- Frontend result list with open actions.
 
 ### M6 - Auth And Reliability Hardening
 

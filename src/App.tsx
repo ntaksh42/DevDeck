@@ -2,6 +2,7 @@ import { FormEvent, ReactNode, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Building2,
+  ExternalLink,
   GitCommitHorizontal,
   Eye,
   EyeOff,
@@ -26,6 +27,7 @@ import {
   type SearchPullRequestsInput,
   type WorkItemSummary,
 } from "@/lib/azdoCommands";
+import { openExternalUrl } from "@/lib/openExternal";
 
 type View = "pullRequests" | "workItems" | "commits" | "settings";
 
@@ -300,6 +302,7 @@ function CommitRow({ commit }: { commit: CommitSummary }) {
         {commit.authorEmail ? (
           <p className="text-muted-foreground">{commit.authorEmail}</p>
         ) : null}
+        <OpenInAzureDevOpsButton url={commit.webUrl} />
       </div>
     </div>
   );
@@ -489,6 +492,7 @@ function WorkItemRow({ workItem }: { workItem: WorkItemSummary }) {
       <div className="text-left text-sm lg:text-right">
         <p className="text-muted-foreground">Assigned to</p>
         <p className="font-medium">{workItem.assignedTo ?? "Unassigned"}</p>
+        <OpenInAzureDevOpsButton url={workItem.webUrl} />
       </div>
     </div>
   );
@@ -715,8 +719,30 @@ function PullRequestRow({
       <div className="text-left text-sm lg:text-right">
         <p className="text-muted-foreground">Created by</p>
         <p className="font-medium">{pullRequest.createdBy ?? "Unknown"}</p>
+        <OpenInAzureDevOpsButton url={pullRequest.webUrl} />
       </div>
     </div>
+  );
+}
+
+function OpenInAzureDevOpsButton({ url }: { url: string | null }) {
+  if (!url) {
+    return null;
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void openExternalUrl(url);
+      }}
+      className="mt-3 inline-flex h-8 items-center justify-center gap-2 rounded-md border border-border px-3 text-xs font-medium text-foreground hover:bg-secondary"
+      aria-label="Open in Azure DevOps"
+      title="Open in Azure DevOps"
+    >
+      <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+      Open
+    </button>
   );
 }
 

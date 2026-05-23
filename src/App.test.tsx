@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 
 const invokeMock = vi.fn();
+const openUrlMock = vi.fn();
 
 const organization = {
   id: "contoso",
@@ -27,6 +28,10 @@ const organization = {
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (command: string, args?: unknown) => invokeMock(command, args),
+}));
+
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  openUrl: (url: string | URL) => openUrlMock(url),
 }));
 
 function renderApp() {
@@ -53,6 +58,7 @@ function renderApp() {
 describe("App", () => {
   beforeEach(() => {
     invokeMock.mockReset();
+    openUrlMock.mockReset();
     Object.defineProperty(window, "__TAURI_INTERNALS__", {
       configurable: true,
       value: {},
@@ -165,6 +171,14 @@ describe("App", () => {
     });
     expect(await screen.findByText("Add pull request search")).toBeTruthy();
     expect(screen.getByText("Platform / azdo-dashboard")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open in Azure DevOps" }));
+
+    await waitFor(() => {
+      expect(openUrlMock).toHaveBeenCalledWith(
+        "https://dev.azure.com/contoso/project/_git/repo/pullrequest/42",
+      );
+    });
   });
 
   it("searches work items and renders results", async () => {
@@ -206,6 +220,14 @@ describe("App", () => {
     });
     expect(await screen.findByText("Fix save workflow")).toBeTruthy();
     expect(screen.getByText("Test User")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open in Azure DevOps" }));
+
+    await waitFor(() => {
+      expect(openUrlMock).toHaveBeenCalledWith(
+        "https://dev.azure.com/contoso/project/_workitems/edit/123",
+      );
+    });
   });
 
   it("searches commits and renders results", async () => {
@@ -253,11 +275,22 @@ describe("App", () => {
     });
     expect(await screen.findByText("Add commit search")).toBeTruthy();
     expect(screen.getByText("abcdef12")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open in Azure DevOps" }));
+
+    await waitFor(() => {
+      expect(openUrlMock).toHaveBeenCalledWith(
+        "https://dev.azure.com/contoso/project/_git/repo/commit/abcdef1234567890abcdef1234567890abcdef12",
+      );
+    });
   });
 
   it("runs in browser preview mode without Tauri internals", async () => {
     delete (window as Window & { __TAURI_INTERNALS__?: unknown })
       .__TAURI_INTERNALS__;
+    const windowOpenSpy = vi
+      .spyOn(window, "open")
+      .mockImplementation(() => null);
 
     renderApp();
 
@@ -269,6 +302,15 @@ describe("App", () => {
     expect(
       await screen.findByText("Add pull request search dashboard"),
     ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Open in Azure DevOps" }));
+
+    expect(windowOpenSpy).toHaveBeenCalledWith(
+      "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/pullrequest/42",
+      "_blank",
+      "noopener,noreferrer",
+    );
     expect(invokeMock).not.toHaveBeenCalled();
+    expect(openUrlMock).not.toHaveBeenCalled();
+    windowOpenSpy.mockRestore();
   });
 });

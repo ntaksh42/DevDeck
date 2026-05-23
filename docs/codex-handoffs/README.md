@@ -14,6 +14,7 @@ This folder is the working handoff area for future Codex sessions.
   - [M3](M3_codex-handoff.md): pull request search across projects and repositories.
   - [M4](M4_codex-handoff.md): work item search with WIQL and batch field loading.
   - [M5](M5_codex-handoff.md): commit search across projects and repositories.
+  - [M5 Result Actions](M5_result-actions_codex-handoff.md): open Azure DevOps web URLs from result rows.
 - Next milestone:
   - M6: auth and reliability hardening.
 

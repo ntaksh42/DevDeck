@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod";
+import { isTauriRuntime } from "@/lib/runtime";
 
 const organizationSchema = z.object({
   id: z.string(),
@@ -140,15 +141,6 @@ async function invokeCommand(command: string, args?: unknown): Promise<unknown> 
   }
 
   return demoInvoke(command, args);
-}
-
-function isTauriRuntime(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    "__TAURI_INTERNALS__" in window &&
-    typeof (window as Window & { __TAURI_INTERNALS__?: unknown })
-      .__TAURI_INTERNALS__ === "object"
-  );
 }
 
 const demoOrganization: Organization = {
