@@ -2,6 +2,8 @@ import { FormEvent, ReactNode, forwardRef, useEffect, useMemo, useRef, useState 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Building2,
+  ChevronDown,
+  ChevronUp,
   ExternalLink,
   GitCommitHorizontal,
   Eye,
@@ -705,6 +707,105 @@ const ReviewPrRow = forwardRef<
 ReviewPrRow.displayName = "ReviewPrRow";
 
 type VoteFilter = "noVote" | "approved" | "waitingAuthor" | "all";
+type SortKey =
+  | "pullRequestId"
+  | "repositoryName"
+  | "title"
+  | "createdBy"
+  | "creationDate"
+  | "targetRefName"
+  | "myIsRequired"
+  | "myVote";
+type SortDirection = "asc" | "desc";
+type SortState = {
+  key: SortKey;
+  direction: SortDirection;
+};
+
+const sortLabels: Record<SortKey, string> = {
+  pullRequestId: "PR#",
+  repositoryName: "Repository",
+  title: "Title",
+  createdBy: "Author",
+  creationDate: "Created",
+  targetRefName: "Target",
+  myIsRequired: "Role",
+  myVote: "My Vote",
+};
+
+function defaultSortDirection(key: SortKey): SortDirection {
+  return key === "creationDate" ? "desc" : "asc";
+}
+
+function compareStrings(a: string | null | undefined, b: string | null | undefined): number {
+  return (a ?? "").localeCompare(b ?? "", undefined, { sensitivity: "base" });
+}
+
+function compareReviewPrs(
+  a: ReviewPullRequestSummary,
+  b: ReviewPullRequestSummary,
+  key: SortKey,
+): number {
+  switch (key) {
+    case "pullRequestId":
+      return a.pullRequestId - b.pullRequestId;
+    case "repositoryName":
+      return compareStrings(a.repositoryName, b.repositoryName);
+    case "title":
+      return compareStrings(a.title, b.title);
+    case "createdBy":
+      return compareStrings(a.createdBy, b.createdBy);
+    case "creationDate":
+      return new Date(a.creationDate).getTime() - new Date(b.creationDate).getTime();
+    case "targetRefName":
+      return compareStrings(a.targetRefName, b.targetRefName);
+    case "myIsRequired":
+      return Number(a.myIsRequired) - Number(b.myIsRequired);
+    case "myVote":
+      return a.myVote - b.myVote;
+  }
+}
+
+function SortHeaderButton({
+  column,
+  sort,
+  onSort,
+}: {
+  column: SortKey;
+  sort: SortState;
+  onSort: (column: SortKey) => void;
+}) {
+  const active = sort.key === column;
+  const label = sortLabels[column];
+
+  return (
+    <div
+      role="columnheader"
+      aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
+      className="min-w-0"
+    >
+      <button
+        type="button"
+        aria-label={`Sort by ${label}`}
+        onClick={() => onSort(column)}
+        className={`flex w-full min-w-0 items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring ${
+          active ? "text-foreground" : ""
+        }`}
+      >
+        <span className="truncate">{label}</span>
+        {active ? (
+          sort.direction === "asc" ? (
+            <ChevronUp className="h-3 w-3 shrink-0" aria-hidden="true" />
+          ) : (
+            <ChevronDown className="h-3 w-3 shrink-0" aria-hidden="true" />
+          )
+        ) : (
+          <span className="h-3 w-3 shrink-0" aria-hidden="true" />
+        )}
+      </button>
+    </div>
+  );
+}
 
 function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
   const organizationId = organizations[0]?.id ?? "";
@@ -719,6 +820,7 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
   const [voteFilter, setVoteFilter] = useState<VoteFilter>("noVote");
   const [showDrafts, setShowDrafts] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [sort, setSort] = useState<SortState>({ key: "creationDate", direction: "desc" });
   const containerRef = useRef<HTMLDivElement | null>(null);
   const filterInputRef = useRef<HTMLInputElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -743,6 +845,17 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
     });
   }, [allPrs, textFilter, voteFilter, showDrafts]);
 
+  const sortedPrs = useMemo(() => {
+    return filtered
+      .map((pr, index) => ({ pr, index }))
+      .sort((a, b) => {
+        const result = compareReviewPrs(a.pr, b.pr, sort.key);
+        const directed = sort.direction === "asc" ? result : -result;
+        return directed || a.index - b.index;
+      })
+      .map(({ pr }) => pr);
+  }, [filtered, sort]);
+
   const visiblePrs = allPrs.filter((pr) => showDrafts || !pr.isDraft);
   const noVoteCount = visiblePrs.filter((pr) => pr.myVote === 0).length;
   const isFiltered = !!textFilter || voteFilter !== "all";
@@ -752,8 +865,8 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
   }, []);
 
   useEffect(() => {
-    setSelectedIndex((index) => Math.min(index, Math.max(filtered.length - 1, 0)));
-  }, [filtered.length]);
+    setSelectedIndex((index) => Math.min(index, Math.max(sortedPrs.length - 1, 0)));
+  }, [sortedPrs.length]);
 
   function applyVoteFilter(value: VoteFilter) {
     setVoteFilter(value);
@@ -765,7 +878,7 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
   }
 
   function moveSelection(index: number) {
-    const next = Math.max(0, Math.min(index, filtered.length - 1));
+    const next = Math.max(0, Math.min(index, sortedPrs.length - 1));
     setSelectedIndex(next);
     focusRow(next);
   }
@@ -794,14 +907,17 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
       return;
     }
 
-    if (buttonTarget) {
-      if (buttonTarget.closest('[role="tablist"]') && e.key === "ArrowRight") {
-        e.preventDefault();
-        moveVoteFilter(1);
-      } else if (buttonTarget.closest('[role="tablist"]') && e.key === "ArrowLeft") {
-        e.preventDefault();
-        moveVoteFilter(-1);
-      }
+    if (buttonTarget?.closest('[role="tablist"]') && e.key === "ArrowRight") {
+      e.preventDefault();
+      moveVoteFilter(1);
+      return;
+    }
+    if (buttonTarget?.closest('[role="tablist"]') && e.key === "ArrowLeft") {
+      e.preventDefault();
+      moveVoteFilter(-1);
+      return;
+    }
+    if (buttonTarget && (e.key === "Enter" || e.key === " ")) {
       return;
     }
 
@@ -859,7 +975,7 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
       moveVoteFilter(-1);
       return;
     }
-    if (filtered.length === 0) return;
+    if (sortedPrs.length === 0) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
       moveSelection(selectedIndex + 1);
@@ -871,7 +987,7 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
       moveSelection(0);
     } else if (e.key === "End") {
       e.preventDefault();
-      moveSelection(filtered.length - 1);
+      moveSelection(sortedPrs.length - 1);
     } else if (e.key === "PageDown") {
       e.preventDefault();
       moveSelection(selectedIndex + 10);
@@ -880,9 +996,19 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
       moveSelection(selectedIndex - 10);
     } else if (e.key === "Enter") {
       e.preventDefault();
-      const pr = filtered[selectedIndex];
+      const pr = sortedPrs[selectedIndex];
       if (pr?.webUrl) openExternalUrl(pr.webUrl);
     }
+  }
+
+  function applySort(column: SortKey) {
+    setSort((current) => {
+      if (current.key !== column) {
+        return { key: column, direction: defaultSortDirection(column) };
+      }
+      return { key: column, direction: current.direction === "asc" ? "desc" : "asc" };
+    });
+    setSelectedIndex(0);
   }
 
   const voteFilterOptions: { value: VoteFilter; label: string }[] = [
@@ -991,27 +1117,27 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
           className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
           style={{ gridTemplateColumns: COLS }}
         >
-          <span>PR#</span>
-          <span>Repository</span>
-          <span>Title</span>
-          <span>Author</span>
-          <span>Created</span>
-          <span>Target</span>
-          <span>Role</span>
-          <span>My Vote</span>
+          <SortHeaderButton column="pullRequestId" sort={sort} onSort={applySort} />
+          <SortHeaderButton column="repositoryName" sort={sort} onSort={applySort} />
+          <SortHeaderButton column="title" sort={sort} onSort={applySort} />
+          <SortHeaderButton column="createdBy" sort={sort} onSort={applySort} />
+          <SortHeaderButton column="creationDate" sort={sort} onSort={applySort} />
+          <SortHeaderButton column="targetRefName" sort={sort} onSort={applySort} />
+          <SortHeaderButton column="myIsRequired" sort={sort} onSort={applySort} />
+          <SortHeaderButton column="myVote" sort={sort} onSort={applySort} />
         </div>
 
         {query.isLoading ? (
           <LoadingState />
         ) : query.isError ? (
           <ErrorState message={commandErrorMessage(query.error)} />
-        ) : filtered.length === 0 ? (
+        ) : sortedPrs.length === 0 ? (
           <div className="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
             {allPrs.length === 0 ? "No pull requests assigned to you." : "No results match the current filter."}
           </div>
         ) : (
           <div role="grid" aria-label="My review pull requests">
-            {filtered.map((pr, i) => (
+            {sortedPrs.map((pr, i) => (
               <ReviewPrRow
                 key={`${pr.organizationId}-${pr.pullRequestId}`}
                 ref={(el) => { rowRefs.current[i] = el; }}
@@ -1029,7 +1155,7 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
             {visiblePrs.length} 件中{" "}
             <span className="font-medium text-foreground">{noVoteCount}</span> 件が未投票
           </span>
-          {isFiltered && <span>フィルタ適用中: {filtered.length} 件表示</span>}
+          {isFiltered && <span>フィルタ適用中: {sortedPrs.length} 件表示</span>}
         </div>
       </div>
     </div>

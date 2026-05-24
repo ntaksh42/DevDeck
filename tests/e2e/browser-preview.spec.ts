@@ -19,6 +19,12 @@ test.describe("browser preview", () => {
     await expect(main.getByText(/件中 2 件が未投票/)).toBeVisible();
     await expect(main.getByRole("tab", { name: "Rejected" })).toHaveCount(0);
 
+    const reviewGrid = main.getByRole("grid", { name: "My review pull requests" });
+    await main.getByRole("button", { name: "Sort by PR#" }).click();
+    await expect(reviewGrid.getByRole("row").first()).toContainText("#98");
+    await main.getByRole("button", { name: "Sort by PR#" }).click();
+    await expect(reviewGrid.getByRole("row").first()).toContainText("#101");
+
     await page.keyboard.press("3");
     await expect(main.getByText("Fix crash on back press during payment flow")).toBeVisible();
     await expect(main.getByText("Upgrade EKS cluster to 1.29")).toHaveCount(0);

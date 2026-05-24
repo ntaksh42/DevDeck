@@ -403,6 +403,68 @@ describe("App", () => {
     });
   });
 
+  it("sorts my review rows by grid headers", async () => {
+    invokeMock
+      .mockResolvedValueOnce([organization])
+      .mockResolvedValueOnce([
+        {
+          organizationId: "contoso",
+          projectId: "platform",
+          projectName: "Platform",
+          repositoryId: "api",
+          repositoryName: "api",
+          pullRequestId: 2,
+          title: "Second PR",
+          createdBy: "Bob",
+          creationDate: "2026-05-24T00:00:00Z",
+          targetRefName: "main",
+          webUrl: "https://dev.azure.com/contoso/Platform/_git/api/pullrequest/2",
+          myVote: 0,
+          myVoteLabel: "No Vote",
+          myIsRequired: true,
+          isDraft: false,
+        },
+        {
+          organizationId: "contoso",
+          projectId: "platform",
+          projectName: "Platform",
+          repositoryId: "web",
+          repositoryName: "web",
+          pullRequestId: 1,
+          title: "First PR",
+          createdBy: "Alice",
+          creationDate: "2026-05-23T00:00:00Z",
+          targetRefName: "develop",
+          webUrl: "https://dev.azure.com/contoso/Platform/_git/web/pullrequest/1",
+          myVote: 0,
+          myVoteLabel: "No Vote",
+          myIsRequired: false,
+          isDraft: false,
+        },
+      ]);
+
+    renderApp();
+    const main = within(await screen.findByRole("main"));
+
+    await main.findByText("Run a search to load pull requests.");
+    fireEvent.keyDown(window, { key: "2", altKey: true });
+    const grid = within(await main.findByRole("grid", { name: "My review pull requests" }));
+
+    expect(grid.getAllByRole("row")[0].textContent).toContain("#2");
+
+    fireEvent.click(main.getByRole("button", { name: "Sort by PR#" }));
+    expect(grid.getAllByRole("row")[0].textContent).toContain("#1");
+    expect(main.getByRole("columnheader", { name: "PR#" }).getAttribute("aria-sort")).toBe(
+      "ascending",
+    );
+
+    fireEvent.click(main.getByRole("button", { name: "Sort by PR#" }));
+    expect(grid.getAllByRole("row")[0].textContent).toContain("#2");
+    expect(main.getByRole("columnheader", { name: "PR#" }).getAttribute("aria-sort")).toBe(
+      "descending",
+    );
+  });
+
   it("navigates top-level sections with keyboard shortcuts", async () => {
     invokeMock.mockResolvedValueOnce([organization]);
 
