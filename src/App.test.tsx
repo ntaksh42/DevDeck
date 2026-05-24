@@ -581,6 +581,57 @@ describe("App", () => {
     expect(await main.findByRole("heading", { name: "Organizations" })).toBeTruthy();
   });
 
+  it("resizes navigation and review preview panes from keyboard handles", async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve({ reviewResultFolderPath: null });
+      }
+      if (command === "get_review_result_preview") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([
+          {
+            organizationId: "contoso",
+            projectId: "platform",
+            projectName: "Platform",
+            repositoryId: "api",
+            repositoryName: "api",
+            pullRequestId: 101,
+            title: "Needs review",
+            createdBy: "Alice",
+            creationDate: "2026-05-24T00:00:00Z",
+            targetRefName: "main",
+            webUrl: null,
+            myVote: 0,
+            myVoteLabel: "No Vote",
+            myIsRequired: true,
+            isDraft: false,
+          },
+        ]);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+
+    await screen.findByText("Run a search to load pull requests.");
+    const navResize = screen.getByRole("separator", { name: "Resize navigation" });
+    expect(navResize.getAttribute("aria-valuenow")).toBe("256");
+    fireEvent.keyDown(navResize, { key: "ArrowRight" });
+    expect(navResize.getAttribute("aria-valuenow")).toBe("272");
+
+    fireEvent.keyDown(window, { key: "2", altKey: true });
+    expect(await screen.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
+    const previewResize = screen.getByRole("separator", { name: "Resize review preview" });
+    expect(previewResize.getAttribute("aria-valuenow")).toBe("420");
+    fireEvent.keyDown(previewResize, { key: "ArrowLeft" });
+    expect(previewResize.getAttribute("aria-valuenow")).toBe("436");
+  });
+
   it("runs in browser preview mode without Tauri internals", async () => {
     delete (window as Window & { __TAURI_INTERNALS__?: unknown })
       .__TAURI_INTERNALS__;

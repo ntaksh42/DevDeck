@@ -19,6 +19,8 @@ test.describe("browser preview", () => {
     await expect(main.getByText(/件中 2 件が未投票/)).toBeVisible();
     await expect(main.getByRole("tab", { name: "Rejected" })).toHaveCount(0);
     await expect(main.getByText("review-PR101.html", { exact: true })).toBeVisible();
+    await expect(page.getByRole("separator", { name: "Resize navigation" })).toBeVisible();
+    await expect(main.getByRole("separator", { name: "Resize review preview" })).toBeVisible();
 
     const reviewGrid = main.getByRole("grid", { name: "My review pull requests" });
     await main.getByRole("button", { name: "Sort by PR#" }).click();

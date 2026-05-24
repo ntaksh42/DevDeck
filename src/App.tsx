@@ -1,4 +1,14 @@
-import { FormEvent, ReactNode, forwardRef, useEffect, useMemo, useRef, useState } from "react";
+import {
+  CSSProperties,
+  FormEvent,
+  PointerEvent as ReactPointerEvent,
+  ReactNode,
+  forwardRef,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Building2,
@@ -7,6 +17,7 @@ import {
   ExternalLink,
   FileText,
   GitCommitHorizontal,
+  GripVertical,
   Eye,
   EyeOff,
   GitPullRequest,
@@ -49,8 +60,41 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return !!element?.closest("input, textarea, select, [contenteditable='true']");
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function beginHorizontalResize(
+  event: ReactPointerEvent,
+  options: {
+    value: number;
+    min: number;
+    max: number;
+    direction: 1 | -1;
+    onChange: (value: number) => void;
+  },
+) {
+  event.preventDefault();
+  const startX = event.clientX;
+  const startValue = options.value;
+
+  function onPointerMove(moveEvent: PointerEvent) {
+    const delta = (moveEvent.clientX - startX) * options.direction;
+    options.onChange(clamp(startValue + delta, options.min, options.max));
+  }
+
+  function onPointerUp() {
+    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener("pointerup", onPointerUp);
+  }
+
+  window.addEventListener("pointermove", onPointerMove);
+  window.addEventListener("pointerup", onPointerUp);
+}
+
 function AppShell() {
   const [view, setView] = useState<View>("pullRequestSearch");
+  const [sidebarWidth, setSidebarWidth] = useState(256);
   const organizationsQuery = useQuery({
     queryKey: ["organizations"],
     queryFn: listOrganizations,
@@ -96,7 +140,10 @@ function AppShell() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-border bg-white lg:block">
+      <aside
+        className="fixed inset-y-0 left-0 hidden border-r border-border bg-white lg:block"
+        style={{ width: sidebarWidth }}
+      >
         <div className="flex h-16 items-center gap-3 border-b border-border px-5">
           <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <Building2 className="h-5 w-5" aria-hidden="true" />
@@ -152,9 +199,18 @@ function AppShell() {
             onClick={() => setView("settings")}
           />
         </nav>
+        <ResizeHandle
+          ariaLabel="Resize navigation"
+          className="absolute inset-y-0 right-[-5px] hidden lg:flex"
+          direction={1}
+          max={420}
+          min={220}
+          onChange={setSidebarWidth}
+          value={sidebarWidth}
+        />
       </aside>
 
-      <main className="lg:pl-64">
+      <main className="lg:pl-[var(--sidebar-width)]" style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}>
         <header className="flex h-16 items-center justify-between border-b border-border bg-white px-5 lg:px-8">
           <div>
             <h1 className="text-lg font-semibold">
@@ -182,7 +238,7 @@ function AppShell() {
           </div>
         </header>
 
-        <section className="mx-auto max-w-[1500px] px-5 py-8 lg:px-8">
+        <section className="w-full px-5 py-8 lg:px-8">
           {organizationsQuery.isLoading ? (
             <LoadingState />
           ) : organizationsQuery.isError ? (
@@ -827,6 +883,7 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
   const [showDrafts, setShowDrafts] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [sort, setSort] = useState<SortState>({ key: "creationDate", direction: "desc" });
+  const [previewWidth, setPreviewWidth] = useState(420);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const filterInputRef = useRef<HTMLInputElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -1127,7 +1184,10 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
         </button>
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div
+        className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_8px_minmax(280px,var(--review-preview-width))]"
+        style={{ "--review-preview-width": `${previewWidth}px` } as CSSProperties}
+      >
         {/* Grid */}
         <div className="min-w-0 overflow-hidden rounded-md border border-border bg-white">
           <div className="overflow-x-auto">
@@ -1181,6 +1241,16 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
             {isFiltered && <span>フィルタ適用中: {sortedPrs.length} 件表示</span>}
           </div>
         </div>
+
+        <ResizeHandle
+          ariaLabel="Resize review preview"
+          className="hidden xl:flex"
+          direction={-1}
+          max={820}
+          min={280}
+          onChange={setPreviewWidth}
+          value={previewWidth}
+        />
 
         <ReviewResultPreviewPanel
           selectedPr={selectedPr}
@@ -1269,6 +1339,61 @@ function PreviewEmptyState({ message }: { message: string }) {
   return (
     <div className="flex flex-1 items-center justify-center px-4 text-center text-sm text-muted-foreground">
       {message}
+    </div>
+  );
+}
+
+function ResizeHandle({
+  ariaLabel,
+  className,
+  direction,
+  max,
+  min,
+  onChange,
+  value,
+}: {
+  ariaLabel: string;
+  className?: string;
+  direction: 1 | -1;
+  max: number;
+  min: number;
+  onChange: (value: number) => void;
+  value: number;
+}) {
+  function nudge(delta: number) {
+    onChange(clamp(value + delta * direction, min, max));
+  }
+
+  return (
+    <div
+      role="separator"
+      aria-label={ariaLabel}
+      aria-orientation="vertical"
+      aria-valuemin={min}
+      aria-valuemax={max}
+      aria-valuenow={Math.round(value)}
+      tabIndex={0}
+      onPointerDown={(event) =>
+        beginHorizontalResize(event, { value, min, max, direction, onChange })
+      }
+      onKeyDown={(event) => {
+        if (event.key === "ArrowLeft") {
+          event.preventDefault();
+          nudge(-16);
+        } else if (event.key === "ArrowRight") {
+          event.preventDefault();
+          nudge(16);
+        } else if (event.key === "Home") {
+          event.preventDefault();
+          onChange(direction === 1 ? min : max);
+        } else if (event.key === "End") {
+          event.preventDefault();
+          onChange(direction === 1 ? max : min);
+        }
+      }}
+      className={`z-20 w-2 cursor-col-resize items-center justify-center text-muted-foreground outline-none hover:bg-secondary focus:bg-secondary focus:ring-2 focus:ring-ring ${className ?? ""}`}
+    >
+      <GripVertical className="h-4 w-4" aria-hidden="true" />
     </div>
   );
 }
