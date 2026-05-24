@@ -164,7 +164,7 @@ function AppShell() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <aside
-        className="fixed inset-y-0 left-0 hidden border-r border-border bg-white lg:block"
+        className="fixed inset-y-0 left-0 hidden flex-col border-r border-border bg-white lg:flex"
         style={{ width: sidebarWidth }}
       >
         <div className="flex h-16 items-center gap-3 border-b border-border px-5">
@@ -176,51 +176,55 @@ function AppShell() {
             <p className="text-xs text-muted-foreground">Azure DevOps</p>
           </div>
         </div>
-        <nav className="space-y-1 p-3">
-          {/* Pull Requests section */}
-          <NavSection
-            icon={<GitPullRequest className="h-4 w-4" aria-hidden="true" />}
-            label="Pull Requests"
-            disabled={organizations.length === 0}
-          >
-            <NavSubItem
-              active={activeView === "pullRequestSearch"}
+        <nav className="flex flex-1 flex-col p-3">
+          <div className="space-y-1">
+            {/* Pull Requests section */}
+            <NavSection
+              icon={<GitPullRequest className="h-4 w-4" aria-hidden="true" />}
+              label="Pull Requests"
               disabled={organizations.length === 0}
-              label="Search"
-              shortcut="Alt+1"
-              onClick={() => setView("pullRequestSearch")}
-            />
-            <NavSubItem
-              active={activeView === "myReviews"}
+            >
+              <NavSubItem
+                active={activeView === "pullRequestSearch"}
+                disabled={organizations.length === 0}
+                label="Search"
+                shortcut="Alt+1"
+                onClick={() => setView("pullRequestSearch")}
+              />
+              <NavSubItem
+                active={activeView === "myReviews"}
+                disabled={organizations.length === 0}
+                label="My Reviews"
+                shortcut="Alt+2"
+                onClick={() => setView("myReviews")}
+              />
+            </NavSection>
+            <NavButton
+              active={activeView === "workItems"}
               disabled={organizations.length === 0}
-              label="My Reviews"
-              shortcut="Alt+2"
-              onClick={() => setView("myReviews")}
+              icon={<ListChecks className="h-4 w-4" aria-hidden="true" />}
+              label="Work Items"
+              shortcut="Alt+3"
+              onClick={() => setView("workItems")}
             />
-          </NavSection>
-          <NavButton
-            active={activeView === "workItems"}
-            disabled={organizations.length === 0}
-            icon={<ListChecks className="h-4 w-4" aria-hidden="true" />}
-            label="Work Items"
-            shortcut="Alt+3"
-            onClick={() => setView("workItems")}
-          />
-          <NavButton
-            active={activeView === "commits"}
-            disabled={organizations.length === 0}
-            icon={<GitCommitHorizontal className="h-4 w-4" aria-hidden="true" />}
-            label="Commits"
-            shortcut="Alt+4"
-            onClick={() => setView("commits")}
-          />
-          <NavButton
-            active={activeView === "settings"}
-            icon={<Settings className="h-4 w-4" aria-hidden="true" />}
-            label="Settings"
-            shortcut="Alt+5"
-            onClick={() => setView("settings")}
-          />
+            <NavButton
+              active={activeView === "commits"}
+              disabled={organizations.length === 0}
+              icon={<GitCommitHorizontal className="h-4 w-4" aria-hidden="true" />}
+              label="Commits"
+              shortcut="Alt+4"
+              onClick={() => setView("commits")}
+            />
+          </div>
+          <div className="mt-auto border-t border-border pt-3">
+            <NavButton
+              active={activeView === "settings"}
+              icon={<Settings className="h-4 w-4" aria-hidden="true" />}
+              label="Settings"
+              shortcut="Alt+5"
+              onClick={() => setView("settings")}
+            />
+          </div>
         </nav>
         <ResizeHandle
           ariaLabel="Resize navigation"
