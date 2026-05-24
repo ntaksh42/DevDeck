@@ -17,12 +17,17 @@ test.describe("browser preview", () => {
     await expect(main.getByRole("grid", { name: "My review pull requests" })).toBeVisible();
     await expect(main.getByText("Add rate limiting middleware to all endpoints")).toBeVisible();
     await expect(main.getByText(/件中 2 件が未投票/)).toBeVisible();
+    await expect(main.getByRole("tab", { name: "Rejected" })).toHaveCount(0);
+
+    await page.keyboard.press("3");
+    await expect(main.getByText("Fix crash on back press during payment flow")).toBeVisible();
+    await expect(main.getByText("Upgrade EKS cluster to 1.29")).toHaveCount(0);
+    await page.keyboard.press("4");
 
     await main.getByPlaceholder("Filter by repo, title, author…").fill("auth");
     await expect(main.getByText("Migrate token signing to RS256")).toBeVisible();
     await expect(main.getByText("Add rate limiting middleware to all endpoints")).toHaveCount(0);
 
-    await main.getByRole("button", { name: "All" }).click();
     await main.getByPlaceholder("Filter by repo, title, author…").fill("");
     await main.getByLabel("Show Drafts").check();
     await expect(main.getByText("Draft", { exact: true })).toBeVisible();

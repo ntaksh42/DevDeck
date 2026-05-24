@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, forwardRef, useMemo, useRef, useState } from "react";
+import { FormEvent, ReactNode, forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Building2,
@@ -36,6 +36,11 @@ import { openExternalUrl } from "@/lib/openExternal";
 
 type View = "pullRequestSearch" | "myReviews" | "workItems" | "commits" | "settings";
 
+function isEditableTarget(target: EventTarget | null): boolean {
+  const element = target instanceof HTMLElement ? target : null;
+  return !!element?.closest("input, textarea, select, [contenteditable='true']");
+}
+
 function AppShell() {
   const [view, setView] = useState<View>("pullRequestSearch");
   const organizationsQuery = useQuery({
@@ -45,6 +50,41 @@ function AppShell() {
 
   const organizations = organizationsQuery.data ?? [];
   const activeView = organizations.length === 0 ? "settings" : view;
+
+  useEffect(() => {
+    function onGlobalKeyDown(event: KeyboardEvent) {
+      if (
+        event.defaultPrevented ||
+        !event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey
+      ) {
+        return;
+      }
+
+      const nextViewByKey: Record<string, View> =
+        organizations.length === 0
+          ? { "5": "settings" }
+          : {
+              "1": "pullRequestSearch",
+              "2": "myReviews",
+              "3": "workItems",
+              "4": "commits",
+              "5": "settings",
+            };
+      const nextView = nextViewByKey[event.key];
+      if (!nextView) {
+        return;
+      }
+
+      event.preventDefault();
+      setView(nextView);
+    }
+
+    window.addEventListener("keydown", onGlobalKeyDown);
+    return () => window.removeEventListener("keydown", onGlobalKeyDown);
+  }, [organizations.length]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -69,12 +109,14 @@ function AppShell() {
               active={activeView === "pullRequestSearch"}
               disabled={organizations.length === 0}
               label="Search"
+              shortcut="Alt+1"
               onClick={() => setView("pullRequestSearch")}
             />
             <NavSubItem
               active={activeView === "myReviews"}
               disabled={organizations.length === 0}
               label="My Reviews"
+              shortcut="Alt+2"
               onClick={() => setView("myReviews")}
             />
           </NavSection>
@@ -83,6 +125,7 @@ function AppShell() {
             disabled={organizations.length === 0}
             icon={<ListChecks className="h-4 w-4" aria-hidden="true" />}
             label="Work Items"
+            shortcut="Alt+3"
             onClick={() => setView("workItems")}
           />
           <NavButton
@@ -90,12 +133,14 @@ function AppShell() {
             disabled={organizations.length === 0}
             icon={<GitCommitHorizontal className="h-4 w-4" aria-hidden="true" />}
             label="Commits"
+            shortcut="Alt+4"
             onClick={() => setView("commits")}
           />
           <NavButton
             active={activeView === "settings"}
             icon={<Settings className="h-4 w-4" aria-hidden="true" />}
             label="Settings"
+            shortcut="Alt+5"
             onClick={() => setView("settings")}
           />
         </nav>
@@ -189,6 +234,7 @@ function CommitSearch({ organizations }: { organizations: Organization[] }) {
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="message, author, repository, SHA"
+                  autoFocus
                   className="min-w-0 flex-1 bg-transparent text-sm outline-none"
                 />
               </div>
@@ -367,6 +413,7 @@ function WorkItemSearch({ organizations }: { organizations: Organization[] }) {
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="title text"
+                  autoFocus
                   className="min-w-0 flex-1 bg-transparent text-sm outline-none"
                 />
               </div>
@@ -578,11 +625,14 @@ const ReviewPrRow = forwardRef<
   return (
     <div
       ref={ref}
-      tabIndex={0}
+      tabIndex={selected ? 0 : -1}
       role="row"
       aria-selected={selected}
       onClick={onSelect}
       onKeyDown={(e) => {
+        if ((e.target as HTMLElement).closest("button")) {
+          return;
+        }
         if (e.key === "Enter" && pr.webUrl) {
           e.stopPropagation();
           openExternalUrl(pr.webUrl);
@@ -654,7 +704,7 @@ const ReviewPrRow = forwardRef<
 });
 ReviewPrRow.displayName = "ReviewPrRow";
 
-type VoteFilter = "noVote" | "approved" | "rejected" | "all";
+type VoteFilter = "noVote" | "approved" | "waitingAuthor" | "all";
 
 function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
   const organizationId = organizations[0]?.id ?? "";
@@ -669,6 +719,8 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
   const [voteFilter, setVoteFilter] = useState<VoteFilter>("noVote");
   const [showDrafts, setShowDrafts] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const filterInputRef = useRef<HTMLInputElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const allPrs = query.data ?? [];
@@ -686,7 +738,7 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
         return false;
       if (voteFilter === "noVote" && pr.myVote !== 0) return false;
       if (voteFilter === "approved" && pr.myVote !== 10 && pr.myVote !== 5) return false;
-      if (voteFilter === "rejected" && pr.myVote !== -10 && pr.myVote !== -5) return false;
+      if (voteFilter === "waitingAuthor" && pr.myVote !== -5) return false;
       return true;
     });
   }, [allPrs, textFilter, voteFilter, showDrafts]);
@@ -695,43 +747,167 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
   const noVoteCount = visiblePrs.filter((pr) => pr.myVote === 0).length;
   const isFiltered = !!textFilter || voteFilter !== "all";
 
+  useEffect(() => {
+    containerRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    setSelectedIndex((index) => Math.min(index, Math.max(filtered.length - 1, 0)));
+  }, [filtered.length]);
+
+  function applyVoteFilter(value: VoteFilter) {
+    setVoteFilter(value);
+    setSelectedIndex(0);
+  }
+
+  function focusRow(index: number) {
+    rowRefs.current[index]?.focus();
+  }
+
+  function moveSelection(index: number) {
+    const next = Math.max(0, Math.min(index, filtered.length - 1));
+    setSelectedIndex(next);
+    focusRow(next);
+  }
+
+  function moveVoteFilter(delta: number) {
+    const currentIndex = voteFilterOptions.findIndex((option) => option.value === voteFilter);
+    const nextIndex = (currentIndex + delta + voteFilterOptions.length) % voteFilterOptions.length;
+    applyVoteFilter(voteFilterOptions[nextIndex].value);
+  }
+
   function handleKeyDown(e: React.KeyboardEvent) {
+    const editable = isEditableTarget(e.target);
+    const targetElement = e.target instanceof HTMLElement ? e.target : null;
+    const buttonTarget = targetElement?.closest("button");
+
+    if (editable) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setTextFilter("");
+        setSelectedIndex(0);
+        (e.target as HTMLElement).blur();
+      } else if (e.key === "ArrowDown" && filtered.length > 0) {
+        e.preventDefault();
+        moveSelection(selectedIndex);
+      }
+      return;
+    }
+
+    if (buttonTarget) {
+      if (buttonTarget.closest('[role="tablist"]') && e.key === "ArrowRight") {
+        e.preventDefault();
+        moveVoteFilter(1);
+      } else if (buttonTarget.closest('[role="tablist"]') && e.key === "ArrowLeft") {
+        e.preventDefault();
+        moveVoteFilter(-1);
+      }
+      return;
+    }
+
+    if (e.key === "/") {
+      e.preventDefault();
+      filterInputRef.current?.focus();
+      filterInputRef.current?.select();
+      return;
+    }
+    if (e.key === "1") {
+      e.preventDefault();
+      applyVoteFilter("noVote");
+      return;
+    }
+    if (e.key === "2") {
+      e.preventDefault();
+      applyVoteFilter("approved");
+      return;
+    }
+    if (e.key === "3") {
+      e.preventDefault();
+      applyVoteFilter("waitingAuthor");
+      return;
+    }
+    if (e.key === "4") {
+      e.preventDefault();
+      applyVoteFilter("all");
+      return;
+    }
+    if (e.key === "d" || e.key === "D") {
+      e.preventDefault();
+      setShowDrafts((value) => !value);
+      setSelectedIndex(0);
+      return;
+    }
+    if (e.key === "r" || e.key === "R") {
+      e.preventDefault();
+      void query.refetch();
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      setTextFilter("");
+      setVoteFilter("noVote");
+      setSelectedIndex(0);
+      return;
+    }
+    if (e.key === "ArrowRight") {
+      e.preventDefault();
+      moveVoteFilter(1);
+      return;
+    }
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      moveVoteFilter(-1);
+      return;
+    }
     if (filtered.length === 0) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      const next = Math.min(selectedIndex + 1, filtered.length - 1);
-      setSelectedIndex(next);
-      rowRefs.current[next]?.focus();
+      moveSelection(selectedIndex + 1);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      const prev = Math.max(selectedIndex - 1, 0);
-      setSelectedIndex(prev);
-      rowRefs.current[prev]?.focus();
+      moveSelection(selectedIndex - 1);
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      moveSelection(0);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      moveSelection(filtered.length - 1);
+    } else if (e.key === "PageDown") {
+      e.preventDefault();
+      moveSelection(selectedIndex + 10);
+    } else if (e.key === "PageUp") {
+      e.preventDefault();
+      moveSelection(selectedIndex - 10);
     } else if (e.key === "Enter") {
+      e.preventDefault();
       const pr = filtered[selectedIndex];
       if (pr?.webUrl) openExternalUrl(pr.webUrl);
-    } else if (e.key === "r" || e.key === "R") {
-      query.refetch();
     }
   }
 
   const voteFilterOptions: { value: VoteFilter; label: string }[] = [
     { value: "noVote", label: "No Vote" },
     { value: "approved", label: "Approved" },
-    { value: "rejected", label: "Rejected" },
+    { value: "waitingAuthor", label: "Waiting Author" },
     { value: "all", label: "All" },
   ];
 
   const COLS = "64px minmax(160px,1.5fr) minmax(200px,3fr) 112px 64px 96px 80px 112px";
 
   return (
-    <div className="space-y-2" onKeyDown={handleKeyDown}>
+    <div
+      ref={containerRef}
+      className="space-y-2 outline-none"
+      tabIndex={-1}
+      onKeyDown={handleKeyDown}
+    >
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-white px-3 py-2">
         {/* Text search */}
         <div className="flex h-8 flex-1 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
           <Search className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
           <input
+            ref={filterInputRef}
             type="text"
             placeholder="Filter by repo, title, author…"
             value={textFilter}
@@ -754,15 +930,21 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
         </div>
 
         {/* Vote filter tabs */}
-        <div className="flex items-center gap-0.5 rounded-md border border-border bg-gray-50 p-0.5">
+        <div
+          className="flex items-center gap-0.5 rounded-md border border-border bg-gray-50 p-0.5"
+          role="tablist"
+          aria-label="Vote filter"
+        >
           {voteFilterOptions.map((opt) => (
             <button
               key={opt.value}
               type="button"
               onClick={() => {
-                setVoteFilter(opt.value);
-                setSelectedIndex(0);
+                applyVoteFilter(opt.value);
               }}
+              role="tab"
+              aria-selected={voteFilter === opt.value}
+              aria-pressed={voteFilter === opt.value}
               className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
                 voteFilter === opt.value
                   ? "bg-white text-foreground shadow-sm"
@@ -791,7 +973,7 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
         {/* Refresh button */}
         <button
           type="button"
-          onClick={() => query.refetch()}
+          onClick={() => void query.refetch()}
           disabled={query.isFetching}
           className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-white px-2.5 text-xs font-medium text-muted-foreground hover:bg-secondary disabled:opacity-50"
           aria-label="Refresh"
@@ -850,10 +1032,6 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
           {isFiltered && <span>フィルタ適用中: {filtered.length} 件表示</span>}
         </div>
       </div>
-
-      <p className="text-xs text-muted-foreground">
-        ↑↓ navigate · Enter open in browser · R refresh
-      </p>
     </div>
   );
 }
@@ -864,12 +1042,14 @@ function NavButton({
   disabled = false,
   icon,
   label,
+  shortcut,
   onClick,
 }: {
   active: boolean;
   disabled?: boolean;
   icon: ReactNode;
   label: string;
+  shortcut?: string;
   onClick: () => void;
 }) {
   return (
@@ -877,6 +1057,7 @@ function NavButton({
       type="button"
       disabled={disabled}
       onClick={onClick}
+      aria-keyshortcuts={shortcut}
       className={`flex h-10 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-medium ${
         active ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-secondary"
       } disabled:cursor-not-allowed disabled:opacity-50`}
@@ -915,11 +1096,13 @@ function NavSubItem({
   active,
   disabled = false,
   label,
+  shortcut,
   onClick,
 }: {
   active: boolean;
   disabled?: boolean;
   label: string;
+  shortcut?: string;
   onClick: () => void;
 }) {
   return (
@@ -927,6 +1110,7 @@ function NavSubItem({
       type="button"
       disabled={disabled}
       onClick={onClick}
+      aria-keyshortcuts={shortcut}
       className={`flex h-8 w-full items-center rounded-md px-2 text-left text-sm ${
         active ? "bg-secondary font-medium text-foreground" : "text-muted-foreground hover:bg-secondary"
       } disabled:cursor-not-allowed disabled:opacity-50`}
@@ -993,6 +1177,7 @@ function PullRequestSearch({
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="title, author, repository, branch"
+                  autoFocus
                   className="min-w-0 flex-1 bg-transparent text-sm outline-none"
                 />
               </div>
@@ -1275,6 +1460,7 @@ function SetupPanel({ compact = false }: { compact?: boolean }) {
             value={organization}
             onChange={(event) => setOrganization(event.target.value)}
             placeholder="contoso"
+            autoFocus={!compact}
             className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none ring-offset-background focus:ring-2 focus:ring-ring"
           />
         </label>

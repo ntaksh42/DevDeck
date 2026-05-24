@@ -318,6 +318,110 @@ describe("App", () => {
     });
   });
 
+  it("filters my reviews by waiting author and opens the selected row by keyboard", async () => {
+    invokeMock
+      .mockResolvedValueOnce([organization])
+      .mockResolvedValueOnce([
+        {
+          organizationId: "contoso",
+          projectId: "platform",
+          projectName: "Platform",
+          repositoryId: "api",
+          repositoryName: "api",
+          pullRequestId: 101,
+          title: "Needs review",
+          createdBy: "Alice",
+          creationDate: "2026-05-24T00:00:00Z",
+          targetRefName: "main",
+          webUrl: "https://dev.azure.com/contoso/Platform/_git/api/pullrequest/101",
+          myVote: 0,
+          myVoteLabel: "No Vote",
+          myIsRequired: true,
+          isDraft: false,
+        },
+        {
+          organizationId: "contoso",
+          projectId: "platform",
+          projectName: "Platform",
+          repositoryId: "api",
+          repositoryName: "api",
+          pullRequestId: 102,
+          title: "Waiting on author",
+          createdBy: "Bob",
+          creationDate: "2026-05-23T00:00:00Z",
+          targetRefName: "main",
+          webUrl: "https://dev.azure.com/contoso/Platform/_git/api/pullrequest/102",
+          myVote: -5,
+          myVoteLabel: "Waiting for Author",
+          myIsRequired: false,
+          isDraft: false,
+        },
+        {
+          organizationId: "contoso",
+          projectId: "platform",
+          projectName: "Platform",
+          repositoryId: "api",
+          repositoryName: "api",
+          pullRequestId: 103,
+          title: "Rejected legacy path",
+          createdBy: "Carol",
+          creationDate: "2026-05-22T00:00:00Z",
+          targetRefName: "main",
+          webUrl: "https://dev.azure.com/contoso/Platform/_git/api/pullrequest/103",
+          myVote: -10,
+          myVoteLabel: "Rejected",
+          myIsRequired: false,
+          isDraft: false,
+        },
+      ]);
+
+    renderApp();
+    const main = within(await screen.findByRole("main"));
+
+    await main.findByText("Run a search to load pull requests.");
+    fireEvent.keyDown(window, { key: "2", altKey: true });
+    expect(await main.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
+    expect(await main.findByText("Needs review")).toBeTruthy();
+    expect(main.queryByRole("tab", { name: "Rejected" })).toBeNull();
+
+    fireEvent.keyDown(main.getByRole("grid", { name: "My review pull requests" }), {
+      key: "3",
+    });
+
+    expect(await main.findByText("Waiting on author")).toBeTruthy();
+    expect(main.queryByText("Needs review")).toBeNull();
+    expect(main.queryByText("Rejected legacy path")).toBeNull();
+
+    fireEvent.keyDown(main.getByRole("grid", { name: "My review pull requests" }), {
+      key: "Enter",
+    });
+
+    await waitFor(() => {
+      expect(openUrlMock).toHaveBeenCalledWith(
+        "https://dev.azure.com/contoso/Platform/_git/api/pullrequest/102",
+      );
+    });
+  });
+
+  it("navigates top-level sections with keyboard shortcuts", async () => {
+    invokeMock.mockResolvedValueOnce([organization]);
+
+    renderApp();
+    const main = within(await screen.findByRole("main"));
+
+    expect(await main.findByRole("heading", { name: "Pull Requests" })).toBeTruthy();
+    await main.findByText("Run a search to load pull requests.");
+
+    fireEvent.keyDown(window, { key: "3", altKey: true });
+    expect(await main.findByRole("heading", { name: "Work Items" })).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: "4", altKey: true });
+    expect(await main.findByRole("heading", { name: "Commits" })).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: "5", altKey: true });
+    expect(await main.findByRole("heading", { name: "Organizations" })).toBeTruthy();
+  });
+
   it("runs in browser preview mode without Tauri internals", async () => {
     delete (window as Window & { __TAURI_INTERNALS__?: unknown })
       .__TAURI_INTERNALS__;
