@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useMemo, useState } from "react";
+import { FormEvent, ReactNode, forwardRef, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Building2,
@@ -10,14 +10,17 @@ import {
   ListChecks,
   Loader2,
   Plus,
+  RefreshCw,
   Search,
   Settings,
+  X,
 } from "lucide-react";
 import { Route, Routes } from "react-router-dom";
 import {
   addAzureCliOrganization,
   addPatOrganization,
   commandErrorMessage,
+  listMyReviewPullRequests,
   listOrganizations,
   searchCommits,
   searchPullRequests,
@@ -25,15 +28,16 @@ import {
   type CommitSummary,
   type Organization,
   type PullRequestSummary,
+  type ReviewPullRequestSummary,
   type SearchPullRequestsInput,
   type WorkItemSummary,
 } from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
 
-type View = "pullRequests" | "workItems" | "commits" | "settings";
+type View = "pullRequestSearch" | "myReviews" | "workItems" | "commits" | "settings";
 
 function AppShell() {
-  const [view, setView] = useState<View>("pullRequests");
+  const [view, setView] = useState<View>("pullRequestSearch");
   const organizationsQuery = useQuery({
     queryKey: ["organizations"],
     queryFn: listOrganizations,
@@ -55,13 +59,25 @@ function AppShell() {
           </div>
         </div>
         <nav className="space-y-1 p-3">
-          <NavButton
-            active={activeView === "pullRequests"}
-            disabled={organizations.length === 0}
+          {/* Pull Requests section */}
+          <NavSection
             icon={<GitPullRequest className="h-4 w-4" aria-hidden="true" />}
             label="Pull Requests"
-            onClick={() => setView("pullRequests")}
-          />
+            disabled={organizations.length === 0}
+          >
+            <NavSubItem
+              active={activeView === "pullRequestSearch"}
+              disabled={organizations.length === 0}
+              label="Search"
+              onClick={() => setView("pullRequestSearch")}
+            />
+            <NavSubItem
+              active={activeView === "myReviews"}
+              disabled={organizations.length === 0}
+              label="My Reviews"
+              onClick={() => setView("myReviews")}
+            />
+          </NavSection>
           <NavButton
             active={activeView === "workItems"}
             disabled={organizations.length === 0}
@@ -89,22 +105,26 @@ function AppShell() {
         <header className="flex h-16 items-center justify-between border-b border-border bg-white px-5 lg:px-8">
           <div>
             <h1 className="text-lg font-semibold">
-              {activeView === "pullRequests"
+              {activeView === "pullRequestSearch"
                 ? "Pull Requests"
-                : activeView === "workItems"
-                  ? "Work Items"
-                  : activeView === "commits"
-                    ? "Commits"
-                  : "Settings"}
+                : activeView === "myReviews"
+                  ? "My Reviews"
+                  : activeView === "workItems"
+                    ? "Work Items"
+                    : activeView === "commits"
+                      ? "Commits"
+                    : "Settings"}
             </h1>
             <p className="text-sm text-muted-foreground">
-              {activeView === "pullRequests"
+              {activeView === "pullRequestSearch"
                 ? "Search Azure DevOps pull requests across projects and repositories"
-                : activeView === "workItems"
-                  ? "Search Azure DevOps work items across projects"
-                  : activeView === "commits"
-                    ? "Search Azure DevOps commits across repositories"
-                  : "Local Azure DevOps organization setup"}
+                : activeView === "myReviews"
+                  ? "Pull requests assigned to you for review"
+                  : activeView === "workItems"
+                    ? "Search Azure DevOps work items across projects"
+                    : activeView === "commits"
+                      ? "Search Azure DevOps commits across repositories"
+                    : "Local Azure DevOps organization setup"}
             </p>
           </div>
         </header>
@@ -114,8 +134,10 @@ function AppShell() {
             <LoadingState />
           ) : organizationsQuery.isError ? (
             <ErrorState message={commandErrorMessage(organizationsQuery.error)} />
-          ) : activeView === "pullRequests" ? (
+          ) : activeView === "pullRequestSearch" ? (
             <PullRequestSearch organizations={organizations} />
+          ) : activeView === "myReviews" ? (
+            <MyReviewsGrid organizations={organizations} />
           ) : activeView === "workItems" ? (
             <WorkItemSearch organizations={organizations} />
           ) : activeView === "commits" ? (
@@ -499,6 +521,344 @@ function WorkItemRow({ workItem }: { workItem: WorkItemSummary }) {
   );
 }
 
+function formatRelativeDate(isoString: string): string {
+  const now = Date.now();
+  const then = new Date(isoString).getTime();
+  const diffMs = now - then;
+  const mins = Math.floor(diffMs / 60_000);
+  if (mins < 60) return mins <= 1 ? "just now" : `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(months / 12)}y ago`;
+}
+
+type VoteValue = -10 | -5 | 0 | 5 | 10 | number;
+
+function VoteBadge({ vote, label }: { vote: VoteValue; label: string }) {
+  const colors: Record<number, string> = {
+    10: "bg-green-100 text-green-800 border-green-200",
+    5: "bg-teal-100 text-teal-800 border-teal-200",
+    0: "bg-gray-100 text-gray-600 border-gray-200",
+    [-5]: "bg-yellow-100 text-yellow-800 border-yellow-200",
+    [-10]: "bg-red-100 text-red-800 border-red-200",
+  };
+  const cls = colors[vote] ?? "bg-gray-100 text-gray-600 border-gray-200";
+  return (
+    <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-medium ${cls}`}>
+      {label}
+    </span>
+  );
+}
+
+function RequiredBadge({ required }: { required: boolean }) {
+  return required ? (
+    <span className="inline-flex items-center rounded border border-blue-200 bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-800">
+      Required
+    </span>
+  ) : (
+    <span className="inline-flex items-center rounded border border-gray-200 bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-500">
+      Optional
+    </span>
+  );
+}
+
+const ReviewPrRow = forwardRef<
+  HTMLDivElement,
+  {
+    pr: ReviewPullRequestSummary;
+    selected: boolean;
+    onSelect: () => void;
+  }
+>(({ pr, selected, onSelect }, ref) => {
+  const isStale = Math.floor((Date.now() - new Date(pr.creationDate).getTime()) / 86_400_000) >= 3;
+  return (
+    <div
+      ref={ref}
+      tabIndex={0}
+      role="row"
+      aria-selected={selected}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && pr.webUrl) {
+          e.stopPropagation();
+          openExternalUrl(pr.webUrl);
+        }
+      }}
+      className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1.5 text-sm outline-none
+        focus:ring-2 focus:ring-inset focus:ring-ring
+        ${selected && isStale ? "bg-orange-100 dark:bg-orange-900/30"
+          : selected ? "bg-secondary"
+          : isStale ? "bg-orange-50 dark:bg-orange-950/20 hover:bg-orange-100/70"
+          : "hover:bg-muted/50"}`}
+      style={{ gridTemplateColumns: "64px minmax(160px,1.5fr) minmax(200px,3fr) 112px 64px 96px 80px 112px" }}
+    >
+      {/* PR# */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          if (pr.webUrl) openExternalUrl(pr.webUrl);
+        }}
+        className="truncate text-left font-mono text-xs text-primary hover:underline"
+        title={`PR #${pr.pullRequestId}`}
+      >
+        #{pr.pullRequestId}
+      </button>
+
+      {/* Repository */}
+      <span className="truncate text-sm text-foreground" title={pr.repositoryName}>
+        {pr.repositoryName}
+      </span>
+
+      {/* Title + Draft badge */}
+      <div className="flex min-w-0 items-center gap-1.5">
+        {pr.isDraft && (
+          <span className="inline-flex shrink-0 items-center rounded border border-gray-300 bg-gray-50 px-1.5 py-0.5 text-xs text-gray-500">
+            Draft
+          </span>
+        )}
+        <span className="truncate font-medium text-foreground" title={pr.title}>
+          {pr.title}
+        </span>
+      </div>
+
+      {/* Author */}
+      <span className="truncate text-sm text-muted-foreground" title={pr.createdBy ?? "Unknown"}>
+        {pr.createdBy ?? "Unknown"}
+      </span>
+
+      {/* Created */}
+      <span
+        className={`text-xs ${isStale ? "font-medium text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`}
+        title={new Date(pr.creationDate).toLocaleString()}
+      >
+        {formatRelativeDate(pr.creationDate)}
+      </span>
+
+      {/* Target branch */}
+      <span className="truncate text-xs text-muted-foreground" title={pr.targetRefName}>
+        {pr.targetRefName}
+      </span>
+
+      {/* Required / Optional */}
+      <RequiredBadge required={pr.myIsRequired} />
+
+      {/* Vote */}
+      <VoteBadge vote={pr.myVote} label={pr.myVoteLabel} />
+    </div>
+  );
+});
+ReviewPrRow.displayName = "ReviewPrRow";
+
+type VoteFilter = "noVote" | "approved" | "rejected" | "all";
+
+function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
+  const organizationId = organizations[0]?.id ?? "";
+
+  const query = useQuery({
+    queryKey: ["myReviews", organizationId],
+    queryFn: () => listMyReviewPullRequests({ organizationId }),
+    enabled: !!organizationId,
+  });
+
+  const [textFilter, setTextFilter] = useState("");
+  const [voteFilter, setVoteFilter] = useState<VoteFilter>("noVote");
+  const [showDrafts, setShowDrafts] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  const allPrs = query.data ?? [];
+
+  const filtered = useMemo(() => {
+    const lower = textFilter.toLowerCase();
+    return allPrs.filter((pr) => {
+      if (!showDrafts && pr.isDraft) return false;
+      if (
+        lower &&
+        !pr.repositoryName.toLowerCase().includes(lower) &&
+        !pr.title.toLowerCase().includes(lower) &&
+        !(pr.createdBy ?? "").toLowerCase().includes(lower)
+      )
+        return false;
+      if (voteFilter === "noVote" && pr.myVote !== 0) return false;
+      if (voteFilter === "approved" && pr.myVote !== 10 && pr.myVote !== 5) return false;
+      if (voteFilter === "rejected" && pr.myVote !== -10 && pr.myVote !== -5) return false;
+      return true;
+    });
+  }, [allPrs, textFilter, voteFilter, showDrafts]);
+
+  const visiblePrs = allPrs.filter((pr) => showDrafts || !pr.isDraft);
+  const noVoteCount = visiblePrs.filter((pr) => pr.myVote === 0).length;
+  const isFiltered = !!textFilter || voteFilter !== "all";
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (filtered.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const next = Math.min(selectedIndex + 1, filtered.length - 1);
+      setSelectedIndex(next);
+      rowRefs.current[next]?.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const prev = Math.max(selectedIndex - 1, 0);
+      setSelectedIndex(prev);
+      rowRefs.current[prev]?.focus();
+    } else if (e.key === "Enter") {
+      const pr = filtered[selectedIndex];
+      if (pr?.webUrl) openExternalUrl(pr.webUrl);
+    } else if (e.key === "r" || e.key === "R") {
+      query.refetch();
+    }
+  }
+
+  const voteFilterOptions: { value: VoteFilter; label: string }[] = [
+    { value: "noVote", label: "No Vote" },
+    { value: "approved", label: "Approved" },
+    { value: "rejected", label: "Rejected" },
+    { value: "all", label: "All" },
+  ];
+
+  const COLS = "64px minmax(160px,1.5fr) minmax(200px,3fr) 112px 64px 96px 80px 112px";
+
+  return (
+    <div className="space-y-2" onKeyDown={handleKeyDown}>
+      {/* Filter bar */}
+      <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-white px-3 py-2">
+        {/* Text search */}
+        <div className="flex h-8 flex-1 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
+          <Search className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <input
+            type="text"
+            placeholder="Filter by repo, title, author…"
+            value={textFilter}
+            onChange={(e) => {
+              setTextFilter(e.target.value);
+              setSelectedIndex(0);
+            }}
+            className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          />
+          {textFilter && (
+            <button
+              type="button"
+              onClick={() => setTextFilter("")}
+              className="ml-1 rounded text-muted-foreground hover:text-foreground"
+              aria-label="Clear filter"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Vote filter tabs */}
+        <div className="flex items-center gap-0.5 rounded-md border border-border bg-gray-50 p-0.5">
+          {voteFilterOptions.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => {
+                setVoteFilter(opt.value);
+                setSelectedIndex(0);
+              }}
+              className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+                voteFilter === opt.value
+                  ? "bg-white text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Draft checkbox */}
+        <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={showDrafts}
+            onChange={(e) => {
+              setShowDrafts(e.target.checked);
+              setSelectedIndex(0);
+            }}
+            className="h-3.5 w-3.5 rounded border-gray-300"
+          />
+          Show Drafts
+        </label>
+
+        {/* Refresh button */}
+        <button
+          type="button"
+          onClick={() => query.refetch()}
+          disabled={query.isFetching}
+          className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-white px-2.5 text-xs font-medium text-muted-foreground hover:bg-secondary disabled:opacity-50"
+          aria-label="Refresh"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${query.isFetching ? "animate-spin" : ""}`} aria-hidden="true" />
+          Refresh
+        </button>
+      </div>
+
+      {/* Grid */}
+      <div className="overflow-hidden rounded-md border border-border bg-white">
+        {/* Column headers */}
+        <div
+          role="row"
+          className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+          style={{ gridTemplateColumns: COLS }}
+        >
+          <span>PR#</span>
+          <span>Repository</span>
+          <span>Title</span>
+          <span>Author</span>
+          <span>Created</span>
+          <span>Target</span>
+          <span>Role</span>
+          <span>My Vote</span>
+        </div>
+
+        {query.isLoading ? (
+          <LoadingState />
+        ) : query.isError ? (
+          <ErrorState message={commandErrorMessage(query.error)} />
+        ) : filtered.length === 0 ? (
+          <div className="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
+            {allPrs.length === 0 ? "No pull requests assigned to you." : "No results match the current filter."}
+          </div>
+        ) : (
+          <div role="grid" aria-label="My review pull requests">
+            {filtered.map((pr, i) => (
+              <ReviewPrRow
+                key={`${pr.organizationId}-${pr.pullRequestId}`}
+                ref={(el) => { rowRefs.current[i] = el; }}
+                pr={pr}
+                selected={i === selectedIndex}
+                onSelect={() => setSelectedIndex(i)}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Status bar */}
+        <div className="flex items-center justify-between border-t border-border px-2 py-1 text-xs text-muted-foreground">
+          <span>
+            {visiblePrs.length} 件中{" "}
+            <span className="font-medium text-foreground">{noVoteCount}</span> 件が未投票
+          </span>
+          {isFiltered && <span>フィルタ適用中: {filtered.length} 件表示</span>}
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        ↑↓ navigate · Enter open in browser · R refresh
+      </p>
+    </div>
+  );
+}
+
+
 function NavButton({
   active,
   disabled = false,
@@ -526,6 +886,56 @@ function NavButton({
     </button>
   );
 }
+
+function NavSection({
+  icon,
+  label,
+  disabled = false,
+  children,
+}: {
+  icon: ReactNode;
+  label: string;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className={disabled ? "opacity-50" : ""}>
+      <div className="flex h-10 items-center gap-3 px-3 text-sm font-semibold text-foreground">
+        {icon}
+        {label}
+      </div>
+      <div className="ml-3 space-y-0.5 border-l border-border pl-4">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function NavSubItem({
+  active,
+  disabled = false,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  disabled?: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={`flex h-8 w-full items-center rounded-md px-2 text-left text-sm ${
+        active ? "bg-secondary font-medium text-foreground" : "text-muted-foreground hover:bg-secondary"
+      } disabled:cursor-not-allowed disabled:opacity-50`}
+    >
+      {label}
+    </button>
+  );
+}
+
 
 function LoadingState() {
   return (

@@ -10,7 +10,7 @@ pub use client::{AdoClient, RetryPolicy};
 pub use error::{AdoError, Result};
 pub use git::{
     CommitSearchCriteria, GitCommitRef, GitPullRequest, GitRepository, GitUserDate, IdentityRef,
-    PullRequestStatus, TeamProject,
+    IdentityRefWithVote, PullRequestStatus, TeamProject,
 };
 pub use identity::{AuthenticatedUser, ConnectionData};
 pub use work_items::{WorkItem, WorkItemReference};

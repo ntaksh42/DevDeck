@@ -8,6 +8,32 @@ use crate::secrets::SecretStore;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ListMyReviewPullRequestsInput {
+    pub organization_id: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewPullRequestSummary {
+    pub organization_id: String,
+    pub project_id: String,
+    pub project_name: String,
+    pub repository_id: String,
+    pub repository_name: String,
+    pub pull_request_id: i64,
+    pub title: String,
+    pub created_by: Option<String>,
+    pub creation_date: String,
+    pub target_ref_name: String,
+    pub web_url: Option<String>,
+    pub my_vote: i32,
+    pub my_vote_label: String,
+    pub my_is_required: bool,
+    pub is_draft: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchPullRequestsInput {
     pub organization_id: Option<String>,
     pub query: Option<String>,
@@ -41,6 +67,79 @@ pub struct PullRequestService {
 impl PullRequestService {
     pub fn new(db: AppDatabase, secrets: SecretStore) -> Self {
         Self { db, secrets }
+    }
+
+    pub async fn list_my_reviews(
+        &self,
+        input: ListMyReviewPullRequestsInput,
+    ) -> Result<Vec<ReviewPullRequestSummary>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let user_id = organization.authenticated_user_id.clone().ok_or_else(|| {
+            AppError::InvalidInput(
+                "authenticated user ID not available; re-add the organization".to_string(),
+            )
+        })?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+
+        let mut results = Vec::new();
+        for project in client.list_projects().await? {
+            let prs = client
+                .list_pull_requests_by_reviewer(&project.id, &user_id, 200)
+                .await?;
+            for pr in prs {
+                let Some(repo) = &pr.repository else { continue };
+                let repo_id = repo.id.clone();
+                let repo_name = repo.name.clone();
+                let (proj_id, proj_name) = repo
+                    .project
+                    .as_ref()
+                    .map(|p| (p.id.clone(), p.name.clone()))
+                    .unwrap_or_else(|| (project.id.clone(), project.name.clone()));
+
+                let reviewer = pr
+                    .reviewers
+                    .as_deref()
+                    .unwrap_or(&[])
+                    .iter()
+                    .find(|r| r.id.as_deref() == Some(&user_id));
+                let (my_vote, my_is_required) = reviewer
+                    .map(|r| (r.vote, r.is_required))
+                    .unwrap_or((0, false));
+
+                let web_url = format!(
+                    "{}/{}/_git/{}/pullrequest/{}",
+                    organization.base_url, proj_name, repo_name, pr.pull_request_id,
+                );
+                results.push(ReviewPullRequestSummary {
+                    organization_id: organization.id.clone(),
+                    project_id: proj_id,
+                    project_name: proj_name,
+                    repository_id: repo_id,
+                    repository_name: repo_name,
+                    pull_request_id: pr.pull_request_id,
+                    title: pr.title.clone(),
+                    created_by: pr
+                        .created_by
+                        .as_ref()
+                        .and_then(|u| u.display_name.clone().or(u.unique_name.clone())),
+                    creation_date: pr.creation_date.to_rfc3339(),
+                    target_ref_name: short_ref(&pr.target_ref_name),
+                    web_url: Some(web_url),
+                    my_vote,
+                    my_vote_label: vote_label(my_vote).to_string(),
+                    my_is_required,
+                    is_draft: pr.is_draft.unwrap_or(false),
+                });
+            }
+        }
+
+        results.sort_by(|a, b| b.creation_date.cmp(&a.creation_date));
+        tracing::info!(
+            organization = %organization.name,
+            count = results.len(),
+            "my review pull requests fetched"
+        );
+        Ok(results)
     }
 
     pub async fn search(&self, input: SearchPullRequestsInput) -> Result<Vec<PullRequestSummary>> {
@@ -150,6 +249,17 @@ fn short_ref(value: &str) -> String {
         .strip_prefix("refs/heads/")
         .unwrap_or(value)
         .to_string()
+}
+
+fn vote_label(vote: i32) -> &'static str {
+    match vote {
+        10 => "Approved",
+        5 => "Approved w/ Suggestions",
+        0 => "No Vote",
+        -5 => "Waiting for Author",
+        -10 => "Rejected",
+        _ => "No Vote",
+    }
 }
 
 fn matches_query(summary: &PullRequestSummary, query: &str) -> bool {

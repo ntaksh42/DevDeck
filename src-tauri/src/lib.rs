@@ -11,7 +11,10 @@ use commits::{CommitService, CommitSummary, SearchCommitsInput};
 use db::{AppDatabase, Organization};
 use error::Result;
 use orgs::{AddAzureCliOrganizationInput, AddPatOrganizationInput, OrganizationService};
-use prs::{PullRequestService, PullRequestSummary, SearchPullRequestsInput};
+use prs::{
+    ListMyReviewPullRequestsInput, PullRequestService, PullRequestSummary,
+    ReviewPullRequestSummary, SearchPullRequestsInput,
+};
 use secrets::SecretStore;
 use tauri::{Manager, State};
 use work_items::{SearchWorkItemsInput, WorkItemService, WorkItemSummary};
@@ -59,6 +62,15 @@ async fn search_pull_requests(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn list_my_review_pull_requests(
+    input: ListMyReviewPullRequestsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<ReviewPullRequestSummary>> {
+    state.pull_requests.list_my_reviews(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn search_work_items(
     input: SearchWorkItemsInput,
     state: State<'_, AppState>,
@@ -96,6 +108,7 @@ pub fn run() {
             add_pat_organization,
             add_azure_cli_organization,
             search_pull_requests,
+            list_my_review_pull_requests,
             search_work_items,
             search_commits
         ])

@@ -429,7 +429,7 @@ mod tests {
         let value: serde_json::Value = client
             .post_json(
                 "project-1/_apis/wit/wiql",
-                &[("api-version", "7.1")],
+                &[("api-version", "7.1-preview")],
                 &serde_json::json!({ "query": "SELECT [System.Id] FROM WorkItems" }),
             )
             .await

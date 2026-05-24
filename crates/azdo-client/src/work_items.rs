@@ -57,7 +57,7 @@ impl AdoClient {
         let response: WiqlResponse = self
             .post_json(
                 &path,
-                &[("api-version", "7.1")],
+                &[("api-version", "7.1-preview")],
                 &WiqlRequest {
                     query: wiql.to_string(),
                 },
@@ -84,7 +84,7 @@ impl AdoClient {
         let response: crate::git::ListResponse<WorkItem> = self
             .post_json(
                 &path,
-                &[("api-version", "7.1")],
+                &[("api-version", "7.1-preview")],
                 &WorkItemsBatchRequest { ids, fields },
             )
             .await?;
@@ -115,7 +115,7 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path("/project-1/_apis/wit/wiql"))
-            .and(query_param("api-version", "7.1"))
+            .and(query_param("api-version", "7.1-preview"))
             .and(body_json(
                 serde_json::json!({ "query": "SELECT [System.Id] FROM WorkItems" }),
             ))
@@ -138,7 +138,7 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path("/project-1/_apis/wit/workitemsbatch"))
-            .and(query_param("api-version", "7.1"))
+            .and(query_param("api-version", "7.1-preview"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "count": 1,
                 "value": [{

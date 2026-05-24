@@ -39,6 +39,28 @@ const pullRequestSummariesSchema = z.array(pullRequestSummarySchema);
 
 export type PullRequestSummary = z.infer<typeof pullRequestSummarySchema>;
 
+const reviewPullRequestSummarySchema = z.object({
+  organizationId: z.string(),
+  projectId: z.string(),
+  projectName: z.string(),
+  repositoryId: z.string(),
+  repositoryName: z.string(),
+  pullRequestId: z.number(),
+  title: z.string(),
+  createdBy: z.string().nullable(),
+  creationDate: z.string(),
+  targetRefName: z.string(),
+  webUrl: z.string().nullable(),
+  myVote: z.number(),
+  myVoteLabel: z.string(),
+  myIsRequired: z.boolean(),
+  isDraft: z.boolean(),
+});
+
+const reviewPullRequestSummariesSchema = z.array(reviewPullRequestSummarySchema);
+
+export type ReviewPullRequestSummary = z.infer<typeof reviewPullRequestSummarySchema>;
+
 const workItemSummarySchema = z.object({
   organizationId: z.string(),
   projectId: z.string(),
@@ -90,6 +112,10 @@ export type SearchPullRequestsInput = {
   status?: "active" | "completed" | "abandoned" | "all";
 };
 
+export type ListMyReviewPullRequestsInput = {
+  organizationId?: string;
+};
+
 export type SearchWorkItemsInput = {
   organizationId?: string;
   query?: string;
@@ -130,6 +156,13 @@ export async function searchPullRequests(
 ): Promise<PullRequestSummary[]> {
   const result = await invokeCommand("search_pull_requests", { input });
   return pullRequestSummariesSchema.parse(result);
+}
+
+export async function listMyReviewPullRequests(
+  input: ListMyReviewPullRequestsInput,
+): Promise<ReviewPullRequestSummary[]> {
+  const result = await invokeCommand("list_my_review_pull_requests", { input });
+  return reviewPullRequestSummariesSchema.parse(result);
 }
 
 export async function searchWorkItems(
@@ -198,6 +231,8 @@ async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
     }
     case "search_pull_requests":
       return demoPullRequests();
+    case "list_my_review_pull_requests":
+      return demoReviewPullRequests();
     case "search_work_items":
       return demoWorkItems();
     case "search_commits":
@@ -241,6 +276,136 @@ function demoWorkItems(): WorkItemSummary[] {
       assignedTo: "Demo User",
       changedDate: "2026-05-24T00:00:00Z",
       webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/123",
+    },
+  ];
+}
+
+function demoReviewPullRequests(): ReviewPullRequestSummary[] {
+  const now = new Date("2026-05-24T08:00:00Z");
+  const ago = (ms: number) => new Date(now.getTime() - ms).toISOString();
+  const min = 60_000;
+  const hr = 3_600_000;
+  const day = 86_400_000;
+
+  return [
+    {
+      organizationId: "contoso",
+      projectId: "platform",
+      projectName: "Platform",
+      repositoryId: "api-gateway",
+      repositoryName: "api-gateway",
+      pullRequestId: 101,
+      title: "Add rate limiting middleware to all endpoints",
+      createdBy: "Alice Johnson",
+      creationDate: ago(2 * day),
+      targetRefName: "main",
+      webUrl: "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/101",
+      myVote: 0,
+      myVoteLabel: "No Vote",
+      myIsRequired: true,
+      isDraft: false,
+    },
+    {
+      organizationId: "contoso",
+      projectId: "platform",
+      projectName: "Platform",
+      repositoryId: "auth-service",
+      repositoryName: "auth-service",
+      pullRequestId: 98,
+      title: "Migrate token signing to RS256",
+      createdBy: "Bob Tanaka",
+      creationDate: ago(5 * day),
+      targetRefName: "main",
+      webUrl: "https://dev.azure.com/contoso/Platform/_git/auth-service/pullrequest/98",
+      myVote: 0,
+      myVoteLabel: "No Vote",
+      myIsRequired: true,
+      isDraft: false,
+    },
+    {
+      organizationId: "contoso",
+      projectId: "mobile",
+      projectName: "Mobile",
+      repositoryId: "ios-app",
+      repositoryName: "ios-app",
+      pullRequestId: 214,
+      title: "Dark mode support for settings screen",
+      createdBy: "Carol Wang",
+      creationDate: ago(1 * day),
+      targetRefName: "develop",
+      webUrl: "https://dev.azure.com/contoso/Mobile/_git/ios-app/pullrequest/214",
+      myVote: 5,
+      myVoteLabel: "Approved w/ Suggestions",
+      myIsRequired: false,
+      isDraft: false,
+    },
+    {
+      organizationId: "contoso",
+      projectId: "platform",
+      projectName: "Platform",
+      repositoryId: "api-gateway",
+      repositoryName: "api-gateway",
+      pullRequestId: 103,
+      title: "Refactor authentication flow with OAuth 2.0 PKCE",
+      createdBy: "Dave Kim",
+      creationDate: ago(30 * min),
+      targetRefName: "main",
+      webUrl: "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/103",
+      myVote: 0,
+      myVoteLabel: "No Vote",
+      myIsRequired: false,
+      isDraft: true,
+    },
+    {
+      organizationId: "contoso",
+      projectId: "infrastructure",
+      projectName: "Infrastructure",
+      repositoryId: "terraform-aws",
+      repositoryName: "terraform-aws",
+      pullRequestId: 55,
+      title: "Upgrade EKS cluster to 1.29",
+      createdBy: "Eve Nakamura",
+      creationDate: ago(8 * day),
+      targetRefName: "main",
+      webUrl: "https://dev.azure.com/contoso/Infrastructure/_git/terraform-aws/pullrequest/55",
+      myVote: -10,
+      myVoteLabel: "Rejected",
+      myIsRequired: true,
+      isDraft: false,
+    },
+    {
+      organizationId: "contoso",
+      projectId: "mobile",
+      projectName: "Mobile",
+      repositoryId: "android-app",
+      repositoryName: "android-app",
+      pullRequestId: 189,
+      title: "Fix crash on back press during payment flow",
+      createdBy: "Frank Lee",
+      creationDate: ago(3 * hr),
+      targetRefName: "main",
+      webUrl: "https://dev.azure.com/contoso/Mobile/_git/android-app/pullrequest/189",
+      myVote: -5,
+      myVoteLabel: "Waiting for Author",
+      myIsRequired: false,
+      isDraft: false,
+    },
+    {
+      organizationId: "contoso",
+      projectId: "platform",
+      projectName: "Platform",
+      repositoryId: "api-gateway",
+      repositoryName: "api-gateway",
+      pullRequestId: 99,
+      title: "Add OpenTelemetry tracing support",
+      createdBy: "Grace Chen",
+      creationDate: ago(12 * day),
+      targetRefName: "main",
+      webUrl: "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/99",
+      myVote: 10,
+      myVoteLabel: "Approved",
+      myIsRequired: false,
+      isDraft: false,
     },
   ];
 }

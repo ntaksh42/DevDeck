@@ -19,7 +19,7 @@ pub struct AuthenticatedUser {
 
 impl AdoClient {
     pub async fn connection_data(&self) -> Result<ConnectionData> {
-        self.get_json("_apis/connectionData", &[("api-version", "7.1")])
+        self.get_json("_apis/connectionData", &[("api-version", "7.1-preview")])
             .await
     }
 }
