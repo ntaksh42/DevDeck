@@ -55,6 +55,11 @@ import { openExternalUrl } from "@/lib/openExternal";
 
 type View = "pullRequestSearch" | "myReviews" | "workItems" | "commits" | "settings";
 
+const DEFAULT_SIDEBAR_WIDTH = 256;
+const DEFAULT_REVIEW_PREVIEW_WIDTH = 420;
+const SIDEBAR_WIDTH_STORAGE_KEY = "azdodeck:layout:sidebarWidth";
+const REVIEW_PREVIEW_WIDTH_STORAGE_KEY = "azdodeck:layout:reviewPreviewWidth";
+
 function isEditableTarget(target: EventTarget | null): boolean {
   const element = target instanceof HTMLElement ? target : null;
   return !!element?.closest("input, textarea, select, [contenteditable='true']");
@@ -62,6 +67,18 @@ function isEditableTarget(target: EventTarget | null): boolean {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function storedNumber(key: string, fallback: number, min: number, max: number): number {
+  const value = window.localStorage.getItem(key);
+  if (!value) {
+    return fallback;
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return clamp(parsed, min, max);
 }
 
 function beginHorizontalResize(
@@ -94,7 +111,9 @@ function beginHorizontalResize(
 
 function AppShell() {
   const [view, setView] = useState<View>("pullRequestSearch");
-  const [sidebarWidth, setSidebarWidth] = useState(256);
+  const [sidebarWidth, setSidebarWidth] = useState(() =>
+    storedNumber(SIDEBAR_WIDTH_STORAGE_KEY, DEFAULT_SIDEBAR_WIDTH, 220, 420),
+  );
   const organizationsQuery = useQuery({
     queryKey: ["organizations"],
     queryFn: listOrganizations,
@@ -102,6 +121,10 @@ function AppShell() {
 
   const organizations = organizationsQuery.data ?? [];
   const activeView = organizations.length === 0 ? "settings" : view;
+
+  useEffect(() => {
+    window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(sidebarWidth)));
+  }, [sidebarWidth]);
 
   useEffect(() => {
     function onGlobalKeyDown(event: KeyboardEvent) {
@@ -206,6 +229,7 @@ function AppShell() {
           max={420}
           min={220}
           onChange={setSidebarWidth}
+          onReset={() => setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)}
           value={sidebarWidth}
         />
       </aside>
@@ -883,7 +907,14 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
   const [showDrafts, setShowDrafts] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [sort, setSort] = useState<SortState>({ key: "creationDate", direction: "desc" });
-  const [previewWidth, setPreviewWidth] = useState(420);
+  const [previewWidth, setPreviewWidth] = useState(() =>
+    storedNumber(
+      REVIEW_PREVIEW_WIDTH_STORAGE_KEY,
+      DEFAULT_REVIEW_PREVIEW_WIDTH,
+      280,
+      820,
+    ),
+  );
   const containerRef = useRef<HTMLDivElement | null>(null);
   const filterInputRef = useRef<HTMLInputElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -938,6 +969,13 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
   useEffect(() => {
     containerRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      REVIEW_PREVIEW_WIDTH_STORAGE_KEY,
+      String(Math.round(previewWidth)),
+    );
+  }, [previewWidth]);
 
   useEffect(() => {
     setSelectedIndex((index) => Math.min(index, Math.max(sortedPrs.length - 1, 0)));
@@ -1249,6 +1287,7 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
           max={820}
           min={280}
           onChange={setPreviewWidth}
+          onReset={() => setPreviewWidth(DEFAULT_REVIEW_PREVIEW_WIDTH)}
           value={previewWidth}
         />
 
@@ -1350,6 +1389,7 @@ function ResizeHandle({
   max,
   min,
   onChange,
+  onReset,
   value,
 }: {
   ariaLabel: string;
@@ -1358,6 +1398,7 @@ function ResizeHandle({
   max: number;
   min: number;
   onChange: (value: number) => void;
+  onReset: () => void;
   value: number;
 }) {
   function nudge(delta: number) {
@@ -1376,6 +1417,7 @@ function ResizeHandle({
       onPointerDown={(event) =>
         beginHorizontalResize(event, { value, min, max, direction, onChange })
       }
+      onDoubleClick={onReset}
       onKeyDown={(event) => {
         if (event.key === "ArrowLeft") {
           event.preventDefault();
@@ -1389,6 +1431,9 @@ function ResizeHandle({
         } else if (event.key === "End") {
           event.preventDefault();
           onChange(direction === 1 ? max : min);
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          onReset();
         }
       }}
       className={`z-20 w-2 cursor-col-resize items-center justify-center text-muted-foreground outline-none hover:bg-secondary focus:bg-secondary focus:ring-2 focus:ring-ring ${className ?? ""}`}

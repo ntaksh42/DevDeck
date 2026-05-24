@@ -60,6 +60,7 @@ describe("App", () => {
   beforeEach(() => {
     invokeMock.mockReset();
     openUrlMock.mockReset();
+    window.localStorage.clear();
     invokeMock.mockImplementation((command: string) => {
       if (command === "get_app_settings") {
         return Promise.resolve({ reviewResultFolderPath: null });
@@ -623,6 +624,9 @@ describe("App", () => {
     expect(navResize.getAttribute("aria-valuenow")).toBe("256");
     fireEvent.keyDown(navResize, { key: "ArrowRight" });
     expect(navResize.getAttribute("aria-valuenow")).toBe("272");
+    expect(window.localStorage.getItem("azdodeck:layout:sidebarWidth")).toBe("272");
+    fireEvent.keyDown(navResize, { key: "Escape" });
+    expect(navResize.getAttribute("aria-valuenow")).toBe("256");
 
     fireEvent.keyDown(window, { key: "2", altKey: true });
     expect(await screen.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
@@ -630,6 +634,9 @@ describe("App", () => {
     expect(previewResize.getAttribute("aria-valuenow")).toBe("420");
     fireEvent.keyDown(previewResize, { key: "ArrowLeft" });
     expect(previewResize.getAttribute("aria-valuenow")).toBe("436");
+    expect(window.localStorage.getItem("azdodeck:layout:reviewPreviewWidth")).toBe("436");
+    fireEvent.doubleClick(previewResize);
+    expect(previewResize.getAttribute("aria-valuenow")).toBe("420");
   });
 
   it("runs in browser preview mode without Tauri internals", async () => {
