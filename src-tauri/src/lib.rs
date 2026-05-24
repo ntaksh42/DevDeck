@@ -5,10 +5,11 @@ mod error;
 mod orgs;
 mod prs;
 mod secrets;
+mod settings;
 mod work_items;
 
 use commits::{CommitService, CommitSummary, SearchCommitsInput};
-use db::{AppDatabase, Organization};
+use db::{AppDatabase, AppSettings, Organization};
 use error::Result;
 use orgs::{AddAzureCliOrganizationInput, AddPatOrganizationInput, OrganizationService};
 use prs::{
@@ -16,6 +17,9 @@ use prs::{
     ReviewPullRequestSummary, SearchPullRequestsInput,
 };
 use secrets::SecretStore;
+use settings::{
+    GetReviewResultPreviewInput, ReviewResultPreview, SettingsService, UpdateAppSettingsInput,
+};
 use tauri::{Manager, State};
 use work_items::{SearchWorkItemsInput, WorkItemService, WorkItemSummary};
 
@@ -25,12 +29,37 @@ struct AppState {
     pull_requests: PullRequestService,
     work_items: WorkItemService,
     commits: CommitService,
+    settings: SettingsService,
 }
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
 fn list_organizations(state: State<'_, AppState>) -> Result<Vec<Organization>> {
     state.organizations.list()
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+fn get_app_settings(state: State<'_, AppState>) -> Result<AppSettings> {
+    state.settings.get()
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state, input))]
+fn update_app_settings(
+    input: UpdateAppSettingsInput,
+    state: State<'_, AppState>,
+) -> Result<AppSettings> {
+    state.settings.update(input)
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+fn get_review_result_preview(
+    input: GetReviewResultPreviewInput,
+    state: State<'_, AppState>,
+) -> Result<Option<ReviewResultPreview>> {
+    state.settings.review_result_preview(input)
 }
 
 #[tauri::command]
@@ -99,12 +128,16 @@ pub fn run() {
                 organizations: OrganizationService::new(db.clone(), SecretStore),
                 pull_requests: PullRequestService::new(db.clone(), SecretStore),
                 work_items: WorkItemService::new(db.clone(), SecretStore),
-                commits: CommitService::new(db, SecretStore),
+                commits: CommitService::new(db.clone(), SecretStore),
+                settings: SettingsService::new(db),
             });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             list_organizations,
+            get_app_settings,
+            update_app_settings,
+            get_review_result_preview,
             add_pat_organization,
             add_azure_cli_organization,
             search_pull_requests,

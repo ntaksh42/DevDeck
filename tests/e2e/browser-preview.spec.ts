@@ -18,6 +18,7 @@ test.describe("browser preview", () => {
     await expect(main.getByText("Add rate limiting middleware to all endpoints")).toBeVisible();
     await expect(main.getByText(/件中 2 件が未投票/)).toBeVisible();
     await expect(main.getByRole("tab", { name: "Rejected" })).toHaveCount(0);
+    await expect(main.getByText("review-PR101.html", { exact: true })).toBeVisible();
 
     const reviewGrid = main.getByRole("grid", { name: "My review pull requests" });
     await main.getByRole("button", { name: "Sort by PR#" }).click();
@@ -50,6 +51,7 @@ test.describe("browser preview", () => {
 
     await page.getByRole("button", { name: "Settings" }).click();
     await expect(main.getByRole("heading", { name: "Organizations" })).toBeVisible();
+    await expect(main.getByRole("heading", { name: "Review result previews" })).toBeVisible();
     await expect(main.getByText("https://dev.azure.com/contoso")).toBeVisible();
   });
 });

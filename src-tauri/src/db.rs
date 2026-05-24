@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use chrono::Utc;
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, Result};
 
@@ -22,6 +22,12 @@ pub struct Organization {
     pub authenticated_user_display_name: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AppSettings {
+    pub review_result_folder_path: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -60,6 +66,16 @@ impl AppDatabase {
     pub fn upsert_organization(&self, draft: OrganizationDraft) -> Result<Organization> {
         let conn = self.open()?;
         upsert_organization(&conn, draft)
+    }
+
+    pub fn get_app_settings(&self) -> Result<AppSettings> {
+        let conn = self.open()?;
+        get_app_settings(&conn)
+    }
+
+    pub fn update_app_settings(&self, settings: AppSettings) -> Result<AppSettings> {
+        let conn = self.open()?;
+        update_app_settings(&conn, settings)
     }
 }
 
@@ -127,6 +143,52 @@ fn list_organizations(conn: &Connection) -> Result<Vec<Organization>> {
         organizations.push(row?);
     }
     Ok(organizations)
+}
+
+fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
+    Ok(AppSettings {
+        review_result_folder_path: get_setting(conn, "review_result_folder_path")?,
+    })
+}
+
+fn update_app_settings(conn: &Connection, settings: AppSettings) -> Result<AppSettings> {
+    set_setting(
+        conn,
+        "review_result_folder_path",
+        settings.review_result_folder_path.as_deref(),
+    )?;
+    get_app_settings(conn)
+}
+
+fn get_setting(conn: &Connection, key: &str) -> Result<Option<String>> {
+    Ok(conn
+        .query_row(
+            "SELECT value FROM app_settings WHERE key = ?1",
+            [key],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
+fn set_setting(conn: &Connection, key: &str, value: Option<&str>) -> Result<()> {
+    match value.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(value) => {
+            conn.execute(
+                r#"
+                INSERT INTO app_settings(key, value, updated_at)
+                VALUES (?1, ?2, ?3)
+                ON CONFLICT(key) DO UPDATE SET
+                    value = excluded.value,
+                    updated_at = excluded.updated_at
+                "#,
+                params![key, value, Utc::now().to_rfc3339()],
+            )?;
+        }
+        None => {
+            conn.execute("DELETE FROM app_settings WHERE key = ?1", [key])?;
+        }
+    }
+    Ok(())
 }
 
 fn upsert_organization(conn: &Connection, draft: OrganizationDraft) -> Result<Organization> {
@@ -265,5 +327,34 @@ mod tests {
             Some("Second User")
         );
         assert_eq!(list_organizations(&conn).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn app_settings_can_be_saved_and_cleared() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+
+        assert_eq!(get_app_settings(&conn).unwrap(), AppSettings::default());
+
+        let saved = update_app_settings(
+            &conn,
+            AppSettings {
+                review_result_folder_path: Some("C:/reports".to_string()),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            saved.review_result_folder_path.as_deref(),
+            Some("C:/reports")
+        );
+
+        let cleared = update_app_settings(
+            &conn,
+            AppSettings {
+                review_result_folder_path: Some("   ".to_string()),
+            },
+        )
+        .unwrap();
+        assert_eq!(cleared, AppSettings::default());
     }
 }

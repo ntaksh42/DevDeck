@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronUp,
   ExternalLink,
+  FileText,
   GitCommitHorizontal,
   Eye,
   EyeOff,
@@ -22,15 +23,20 @@ import {
   addAzureCliOrganization,
   addPatOrganization,
   commandErrorMessage,
+  getAppSettings,
+  getReviewResultPreview,
   listMyReviewPullRequests,
   listOrganizations,
   searchCommits,
   searchPullRequests,
   searchWorkItems,
+  updateAppSettings,
+  type AppSettings,
   type CommitSummary,
   type Organization,
   type PullRequestSummary,
   type ReviewPullRequestSummary,
+  type ReviewResultPreview,
   type SearchPullRequestsInput,
   type WorkItemSummary,
 } from "@/lib/azdoCommands";
@@ -176,7 +182,7 @@ function AppShell() {
           </div>
         </header>
 
-        <section className="mx-auto max-w-6xl px-5 py-8 lg:px-8">
+        <section className="mx-auto max-w-[1500px] px-5 py-8 lg:px-8">
           {organizationsQuery.isLoading ? (
             <LoadingState />
           ) : organizationsQuery.isError ? (
@@ -859,6 +865,18 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
   const visiblePrs = allPrs.filter((pr) => showDrafts || !pr.isDraft);
   const noVoteCount = visiblePrs.filter((pr) => pr.myVote === 0).length;
   const isFiltered = !!textFilter || voteFilter !== "all";
+  const selectedPr = sortedPrs[selectedIndex] ?? null;
+
+  const settingsQuery = useQuery({
+    queryKey: ["appSettings"],
+    queryFn: getAppSettings,
+  });
+
+  const previewQuery = useQuery({
+    queryKey: ["reviewResultPreview", selectedPr?.pullRequestId],
+    queryFn: () => getReviewResultPreview({ pullRequestId: selectedPr?.pullRequestId ?? 0 }),
+    enabled: !!selectedPr,
+  });
 
   useEffect(() => {
     containerRef.current?.focus();
@@ -1109,55 +1127,148 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
         </button>
       </div>
 
-      {/* Grid */}
-      <div className="overflow-hidden rounded-md border border-border bg-white">
-        {/* Column headers */}
-        <div
-          role="row"
-          className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-          style={{ gridTemplateColumns: COLS }}
-        >
-          <SortHeaderButton column="pullRequestId" sort={sort} onSort={applySort} />
-          <SortHeaderButton column="repositoryName" sort={sort} onSort={applySort} />
-          <SortHeaderButton column="title" sort={sort} onSort={applySort} />
-          <SortHeaderButton column="createdBy" sort={sort} onSort={applySort} />
-          <SortHeaderButton column="creationDate" sort={sort} onSort={applySort} />
-          <SortHeaderButton column="targetRefName" sort={sort} onSort={applySort} />
-          <SortHeaderButton column="myIsRequired" sort={sort} onSort={applySort} />
-          <SortHeaderButton column="myVote" sort={sort} onSort={applySort} />
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_420px]">
+        {/* Grid */}
+        <div className="min-w-0 overflow-hidden rounded-md border border-border bg-white">
+          <div className="overflow-x-auto">
+            <div className="min-w-[980px]">
+              {/* Column headers */}
+              <div
+                role="row"
+                className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                style={{ gridTemplateColumns: COLS }}
+              >
+                <SortHeaderButton column="pullRequestId" sort={sort} onSort={applySort} />
+                <SortHeaderButton column="repositoryName" sort={sort} onSort={applySort} />
+                <SortHeaderButton column="title" sort={sort} onSort={applySort} />
+                <SortHeaderButton column="createdBy" sort={sort} onSort={applySort} />
+                <SortHeaderButton column="creationDate" sort={sort} onSort={applySort} />
+                <SortHeaderButton column="targetRefName" sort={sort} onSort={applySort} />
+                <SortHeaderButton column="myIsRequired" sort={sort} onSort={applySort} />
+                <SortHeaderButton column="myVote" sort={sort} onSort={applySort} />
+              </div>
+
+              {query.isLoading ? (
+                <LoadingState />
+              ) : query.isError ? (
+                <ErrorState message={commandErrorMessage(query.error)} />
+              ) : sortedPrs.length === 0 ? (
+                <div className="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
+                  {allPrs.length === 0 ? "No pull requests assigned to you." : "No results match the current filter."}
+                </div>
+              ) : (
+                <div role="grid" aria-label="My review pull requests">
+                  {sortedPrs.map((pr, i) => (
+                    <ReviewPrRow
+                      key={`${pr.organizationId}-${pr.pullRequestId}`}
+                      ref={(el) => { rowRefs.current[i] = el; }}
+                      pr={pr}
+                      selected={i === selectedIndex}
+                      onSelect={() => setSelectedIndex(i)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Status bar */}
+          <div className="flex items-center justify-between border-t border-border px-2 py-1 text-xs text-muted-foreground">
+            <span>
+              {visiblePrs.length} 件中{" "}
+              <span className="font-medium text-foreground">{noVoteCount}</span> 件が未投票
+            </span>
+            {isFiltered && <span>フィルタ適用中: {sortedPrs.length} 件表示</span>}
+          </div>
         </div>
 
-        {query.isLoading ? (
-          <LoadingState />
-        ) : query.isError ? (
-          <ErrorState message={commandErrorMessage(query.error)} />
-        ) : sortedPrs.length === 0 ? (
-          <div className="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
-            {allPrs.length === 0 ? "No pull requests assigned to you." : "No results match the current filter."}
-          </div>
-        ) : (
-          <div role="grid" aria-label="My review pull requests">
-            {sortedPrs.map((pr, i) => (
-              <ReviewPrRow
-                key={`${pr.organizationId}-${pr.pullRequestId}`}
-                ref={(el) => { rowRefs.current[i] = el; }}
-                pr={pr}
-                selected={i === selectedIndex}
-                onSelect={() => setSelectedIndex(i)}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Status bar */}
-        <div className="flex items-center justify-between border-t border-border px-2 py-1 text-xs text-muted-foreground">
-          <span>
-            {visiblePrs.length} 件中{" "}
-            <span className="font-medium text-foreground">{noVoteCount}</span> 件が未投票
-          </span>
-          {isFiltered && <span>フィルタ適用中: {sortedPrs.length} 件表示</span>}
-        </div>
+        <ReviewResultPreviewPanel
+          selectedPr={selectedPr}
+          settings={settingsQuery.data ?? null}
+          settingsLoading={settingsQuery.isLoading}
+          preview={previewQuery.data ?? null}
+          previewLoading={previewQuery.isFetching}
+          previewError={previewQuery.isError ? commandErrorMessage(previewQuery.error) : null}
+        />
       </div>
+    </div>
+  );
+}
+
+function ReviewResultPreviewPanel({
+  selectedPr,
+  settings,
+  settingsLoading,
+  preview,
+  previewLoading,
+  previewError,
+}: {
+  selectedPr: ReviewPullRequestSummary | null;
+  settings: AppSettings | null;
+  settingsLoading: boolean;
+  preview: ReviewResultPreview | null;
+  previewLoading: boolean;
+  previewError: string | null;
+}) {
+  const hasFolder = !!settings?.reviewResultFolderPath;
+
+  return (
+    <aside className="flex min-h-[520px] flex-col overflow-hidden rounded-md border border-border bg-white">
+      <div className="flex items-center justify-between border-b border-border px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-semibold">Review Preview</h2>
+            <p className="truncate text-xs text-muted-foreground">
+              {selectedPr ? `PR${selectedPr.pullRequestId}` : "No PR selected"}
+            </p>
+          </div>
+        </div>
+        {previewLoading ? (
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
+        ) : null}
+      </div>
+
+      {settingsLoading ? (
+        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+          Loading
+        </div>
+      ) : !selectedPr ? (
+        <PreviewEmptyState message="Select a pull request." />
+      ) : !hasFolder ? (
+        <PreviewEmptyState message="Review result folder is not configured." />
+      ) : previewError ? (
+        <div className="m-3 rounded-md border border-destructive/30 bg-red-50 p-3 text-sm text-destructive">
+          {previewError}
+        </div>
+      ) : preview ? (
+        <>
+          <div className="border-b border-border px-3 py-2">
+            <p className="truncate text-xs font-medium" title={preview.fileName}>
+              {preview.fileName}
+            </p>
+            <p className="truncate text-xs text-muted-foreground" title={preview.filePath}>
+              {preview.filePath}
+            </p>
+          </div>
+          <iframe
+            title={`Review result preview for PR${preview.pullRequestId}`}
+            sandbox=""
+            srcDoc={preview.html}
+            className="min-h-0 flex-1 bg-white"
+          />
+        </>
+      ) : (
+        <PreviewEmptyState message={`No HTML file matched PR${selectedPr.pullRequestId}.`} />
+      )}
+    </aside>
+  );
+}
+
+function PreviewEmptyState({ message }: { message: string }) {
+  return (
+    <div className="flex flex-1 items-center justify-center px-4 text-center text-sm text-muted-foreground">
+      {message}
     </div>
   );
 }
@@ -1476,6 +1587,7 @@ function OrganizationSettings({
   return (
     <div className="space-y-6">
       <SetupPanel compact />
+      <ReviewResultFolderSettings />
       <div className="overflow-hidden rounded-md border border-border bg-white">
         <div className="border-b border-border px-5 py-4">
           <h2 className="text-base font-semibold">Organizations</h2>
@@ -1508,6 +1620,93 @@ function OrganizationSettings({
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ReviewResultFolderSettings() {
+  const queryClient = useQueryClient();
+  const settingsQuery = useQuery({
+    queryKey: ["appSettings"],
+    queryFn: getAppSettings,
+  });
+  const [folderPath, setFolderPath] = useState("");
+
+  useEffect(() => {
+    setFolderPath(settingsQuery.data?.reviewResultFolderPath ?? "");
+  }, [settingsQuery.data?.reviewResultFolderPath]);
+
+  const mutation = useMutation({
+    mutationFn: updateAppSettings,
+    onSuccess: (settings) => {
+      queryClient.setQueryData(["appSettings"], settings);
+      void queryClient.invalidateQueries({ queryKey: ["reviewResultPreview"] });
+    },
+  });
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    mutation.mutate({ reviewResultFolderPath: folderPath });
+  }
+
+  return (
+    <div className="rounded-md border border-border bg-white">
+      <div className="border-b border-border px-5 py-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
+            <FileText className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold">Review result previews</h2>
+            <p className="text-sm text-muted-foreground">
+              Local HTML files matched by PR number.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <form className="grid gap-4 p-5" onSubmit={onSubmit}>
+        <label className="grid gap-2">
+          <span className="text-sm font-medium">Folder path</span>
+          <input
+            value={folderPath}
+            onChange={(event) => setFolderPath(event.target.value)}
+            placeholder="C:\\reports\\azdo-reviews"
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+          />
+        </label>
+
+        {settingsQuery.isError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {commandErrorMessage(settingsQuery.error)}
+          </p>
+        ) : null}
+
+        {mutation.isError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {commandErrorMessage(mutation.error)}
+          </p>
+        ) : null}
+
+        {mutation.isSuccess ? (
+          <p className="text-sm text-green-700">Review result folder saved.</p>
+        ) : null}
+
+        <div>
+          <button
+            type="submit"
+            disabled={settingsQuery.isLoading || mutation.isPending}
+            className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {mutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <FileText className="h-4 w-4" aria-hidden="true" />
+            )}
+            Save
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

@@ -19,6 +19,21 @@ const organizationsSchema = z.array(organizationSchema);
 
 export type Organization = z.infer<typeof organizationSchema>;
 
+const appSettingsSchema = z.object({
+  reviewResultFolderPath: z.string().nullable(),
+});
+
+export type AppSettings = z.infer<typeof appSettingsSchema>;
+
+const reviewResultPreviewSchema = z.object({
+  pullRequestId: z.number(),
+  fileName: z.string(),
+  filePath: z.string(),
+  html: z.string(),
+});
+
+export type ReviewResultPreview = z.infer<typeof reviewResultPreviewSchema>;
+
 const pullRequestSummarySchema = z.object({
   organizationId: z.string(),
   projectId: z.string(),
@@ -106,6 +121,14 @@ export type AddAzureCliOrganizationInput = {
   organization: string;
 };
 
+export type UpdateAppSettingsInput = {
+  reviewResultFolderPath?: string | null;
+};
+
+export type GetReviewResultPreviewInput = {
+  pullRequestId: number;
+};
+
 export type SearchPullRequestsInput = {
   organizationId?: string;
   query?: string;
@@ -135,6 +158,25 @@ export type SearchCommitsInput = {
 export async function listOrganizations(): Promise<Organization[]> {
   const result = await invokeCommand("list_organizations");
   return organizationsSchema.parse(result);
+}
+
+export async function getAppSettings(): Promise<AppSettings> {
+  const result = await invokeCommand("get_app_settings");
+  return appSettingsSchema.parse(result);
+}
+
+export async function updateAppSettings(
+  input: UpdateAppSettingsInput,
+): Promise<AppSettings> {
+  const result = await invokeCommand("update_app_settings", { input });
+  return appSettingsSchema.parse(result);
+}
+
+export async function getReviewResultPreview(
+  input: GetReviewResultPreviewInput,
+): Promise<ReviewResultPreview | null> {
+  const result = await invokeCommand("get_review_result_preview", { input });
+  return reviewResultPreviewSchema.nullable().parse(result);
 }
 
 export async function addPatOrganization(
@@ -200,12 +242,32 @@ const demoOrganization: Organization = {
   updatedAt: "2026-05-24T00:00:00Z",
 };
 
+let demoSettings: AppSettings = {
+  reviewResultFolderPath: "C:\\reports\\azdo-reviews",
+};
+
 async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
   await new Promise((resolve) => window.setTimeout(resolve, 100));
 
   switch (command) {
     case "list_organizations":
       return [demoOrganization];
+    case "get_app_settings":
+      return demoSettings;
+    case "update_app_settings": {
+      const input = (args as { input?: UpdateAppSettingsInput } | undefined)
+        ?.input;
+      demoSettings = {
+        reviewResultFolderPath: input?.reviewResultFolderPath?.trim() || null,
+      };
+      return demoSettings;
+    }
+    case "get_review_result_preview": {
+      const input = (
+        args as { input?: GetReviewResultPreviewInput } | undefined
+      )?.input;
+      return demoReviewResultPreview(input?.pullRequestId);
+    }
     case "add_pat_organization": {
       const input = (args as { input?: AddPatOrganizationInput } | undefined)
         ?.input;
@@ -240,6 +302,44 @@ async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
     default:
       throw new Error(`Unsupported demo command: ${command}`);
   }
+}
+
+function demoReviewResultPreview(
+  pullRequestId: number | undefined,
+): ReviewResultPreview | null {
+  if (!demoSettings.reviewResultFolderPath || !pullRequestId) {
+    return null;
+  }
+  if (pullRequestId !== 101 && pullRequestId !== 189) {
+    return null;
+  }
+
+  const title =
+    pullRequestId === 101
+      ? "Rate limiting middleware review"
+      : "Android payment crash review";
+  return {
+    pullRequestId,
+    fileName: `review-PR${pullRequestId}.html`,
+    filePath: `${demoSettings.reviewResultFolderPath}\\review-PR${pullRequestId}.html`,
+    html: `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { color: #111827; font: 14px/1.5 system-ui, sans-serif; margin: 24px; }
+      h1 { font-size: 20px; margin: 0 0 12px; }
+      .status { background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 6px; padding: 10px 12px; }
+      code { background: #f3f4f6; border-radius: 4px; padding: 2px 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>${title}</h1>
+    <p class="status">Review result file matched by <code>PR${pullRequestId}</code>.</p>
+    <p>No blocking issues found in the generated review summary.</p>
+  </body>
+</html>`,
+  };
 }
 
 function demoPullRequests(): PullRequestSummary[] {

@@ -60,6 +60,15 @@ describe("App", () => {
   beforeEach(() => {
     invokeMock.mockReset();
     openUrlMock.mockReset();
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "get_app_settings") {
+        return Promise.resolve({ reviewResultFolderPath: null });
+      }
+      if (command === "get_review_result_preview") {
+        return Promise.resolve(null);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
     Object.defineProperty(window, "__TAURI_INTERNALS__", {
       configurable: true,
       value: {},
@@ -96,16 +105,67 @@ describe("App", () => {
   });
 
   it("shows configured organizations", async () => {
-    invokeMock.mockResolvedValueOnce([organization]);
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve({ reviewResultFolderPath: "C:\\reports" });
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
 
     renderApp();
 
+    await screen.findByText("Run a search to load pull requests.");
     fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
 
     expect(await screen.findByText("Organizations")).toBeTruthy();
     expect(screen.getByText("https://dev.azure.com/contoso")).toBeTruthy();
     expect(screen.getByText("PAT")).toBeTruthy();
     expect(screen.getByText("Test User")).toBeTruthy();
+    expect(await screen.findByDisplayValue("C:\\reports")).toBeTruthy();
+  });
+
+  it("saves review result folder settings", async () => {
+    invokeMock.mockImplementation((command: string, args?: unknown) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve({ reviewResultFolderPath: null });
+      }
+      if (command === "update_app_settings") {
+        return Promise.resolve(
+          (args as { input: { reviewResultFolderPath: string } }).input,
+        );
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+
+    await screen.findByText("Run a search to load pull requests.");
+    fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    expect(await screen.findByRole("heading", { name: "Review result previews" })).toBeTruthy();
+    await waitFor(() => {
+      expect((screen.getByLabelText("Folder path") as HTMLInputElement).value).toBe("");
+    });
+    const folderPathInput = screen.getByLabelText("Folder path");
+    fireEvent.change(folderPathInput, {
+      target: { value: "D:\\azdo-review-results" },
+    });
+    expect((folderPathInput as HTMLInputElement).value).toBe("D:\\azdo-review-results");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("update_app_settings", {
+        input: {
+          reviewResultFolderPath: "D:\\azdo-review-results",
+        },
+      });
+    });
+    expect(await screen.findByText("Review result folder saved.")).toBeTruthy();
   });
 
   it("submits organization setup to the backend", async () => {
@@ -319,9 +379,30 @@ describe("App", () => {
   });
 
   it("filters my reviews by waiting author and opens the selected row by keyboard", async () => {
-    invokeMock
-      .mockResolvedValueOnce([organization])
-      .mockResolvedValueOnce([
+    invokeMock.mockImplementation((command: string, args?: unknown) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve({ reviewResultFolderPath: "C:\\reports" });
+      }
+      if (command === "get_review_result_preview") {
+        const pullRequestId = (
+          args as { input?: { pullRequestId?: number } } | undefined
+        )?.input?.pullRequestId;
+        return Promise.resolve(
+          pullRequestId === 102
+            ? {
+                pullRequestId,
+                fileName: "review-PR102.html",
+                filePath: "C:\\reports\\review-PR102.html",
+                html: "<html><body>Waiting author preview</body></html>",
+              }
+            : null,
+        );
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([
         {
           organizationId: "contoso",
           projectId: "platform",
@@ -374,6 +455,9 @@ describe("App", () => {
           isDraft: false,
         },
       ]);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
 
     renderApp();
     const main = within(await screen.findByRole("main"));
@@ -391,6 +475,7 @@ describe("App", () => {
     expect(await main.findByText("Waiting on author")).toBeTruthy();
     expect(main.queryByText("Needs review")).toBeNull();
     expect(main.queryByText("Rejected legacy path")).toBeNull();
+    expect(await main.findByText("review-PR102.html")).toBeTruthy();
 
     fireEvent.keyDown(main.getByRole("grid", { name: "My review pull requests" }), {
       key: "Enter",
@@ -404,9 +489,18 @@ describe("App", () => {
   });
 
   it("sorts my review rows by grid headers", async () => {
-    invokeMock
-      .mockResolvedValueOnce([organization])
-      .mockResolvedValueOnce([
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve({ reviewResultFolderPath: null });
+      }
+      if (command === "get_review_result_preview") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([
         {
           organizationId: "contoso",
           projectId: "platform",
@@ -442,6 +536,9 @@ describe("App", () => {
           isDraft: false,
         },
       ]);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
 
     renderApp();
     const main = within(await screen.findByRole("main"));
