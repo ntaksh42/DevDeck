@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -183,11 +184,12 @@ describe("App", () => {
       ]);
 
     renderApp();
+    const main = within(await screen.findByRole("main"));
 
-    fireEvent.change(await screen.findByPlaceholderText("title, author, repository, branch"), {
+    fireEvent.change(await main.findByPlaceholderText("title, author, repository, branch"), {
       target: { value: "search" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.click(main.getByRole("button", { name: "Search" }));
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("search_pull_requests", {
@@ -229,13 +231,14 @@ describe("App", () => {
       ]);
 
     renderApp();
+    const main = within(await screen.findByRole("main"));
 
-    await screen.findByText("Run a search to load pull requests.");
+    await main.findByText("Run a search to load pull requests.");
     fireEvent.click(screen.getByRole("button", { name: "Work Items" }));
-    fireEvent.change(await screen.findByPlaceholderText("title text"), {
+    fireEvent.change(await main.findByPlaceholderText("title text"), {
       target: { value: "save" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.click(main.getByRole("button", { name: "Search" }));
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("search_work_items", {
@@ -281,16 +284,17 @@ describe("App", () => {
       ]);
 
     renderApp();
+    const main = within(await screen.findByRole("main"));
 
-    await screen.findByText("Run a search to load pull requests.");
+    await main.findByText("Run a search to load pull requests.");
     fireEvent.click(screen.getByRole("button", { name: "Commits" }));
     fireEvent.change(
-      await screen.findByPlaceholderText("message, author, repository, SHA"),
+      await main.findByPlaceholderText("message, author, repository, SHA"),
       {
         target: { value: "commit" },
       },
     );
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.click(main.getByRole("button", { name: "Search" }));
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("search_commits", {
@@ -322,11 +326,12 @@ describe("App", () => {
       .mockImplementation(() => null);
 
     renderApp();
+    const main = within(await screen.findByRole("main"));
 
     expect(
-      await screen.findByText("Run a search to load pull requests."),
+      await main.findByText("Run a search to load pull requests."),
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.click(main.getByRole("button", { name: "Search" }));
 
     expect(
       await screen.findByText("Add pull request search dashboard"),
