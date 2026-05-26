@@ -875,12 +875,19 @@ function WorkItemSearch({ organizations }: { organizations: Organization[] }) {
 
             <label className="grid gap-2">
               <span className="text-sm font-medium">Type</span>
-              <input
+              <select
                 value={workItemType}
                 onChange={(event) => setWorkItemType(event.target.value)}
-                placeholder="Bug, Task"
                 className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-              />
+              >
+                <option value="">Any</option>
+                <option value="Bug">Bug</option>
+                <option value="Epic">Epic</option>
+                <option value="Feature">Feature</option>
+                <option value="Task">Task</option>
+                <option value="User Story">User Story</option>
+                <option value="Test Case">Test Case</option>
+              </select>
             </label>
 
             <div className="flex items-end">
