@@ -161,6 +161,7 @@ export type SearchWorkItemsInput = {
   query?: string;
   state?: string;
   workItemType?: string;
+  projectId?: string;
 };
 
 export type ListMyWorkItemsInput = {
@@ -344,8 +345,10 @@ async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
     }
     case "list_my_review_pull_requests":
       return demoReviewPullRequests();
-    case "search_work_items":
-      return demoWorkItems();
+    case "search_work_items": {
+      const input = (args as { input?: SearchWorkItemsInput } | undefined)?.input;
+      return demoWorkItems(input);
+    }
     case "list_my_work_items":
       return demoMyWorkItems();
     case "search_commits": {
@@ -517,8 +520,8 @@ function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[]
   });
 }
 
-function demoWorkItems(): WorkItemSummary[] {
-  return [
+function demoWorkItems(input?: SearchWorkItemsInput): WorkItemSummary[] {
+  const all: WorkItemSummary[] = [
     {
       organizationId: "contoso",
       projectId: "platform",
@@ -528,10 +531,124 @@ function demoWorkItems(): WorkItemSummary[] {
       workItemType: "Task",
       state: "Active",
       assignedTo: "Demo User",
-      changedDate: "2026-05-24T00:00:00Z",
+      changedDate: "2026-05-27T08:00:00Z",
       webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/123",
     },
+    {
+      organizationId: "contoso",
+      projectId: "platform",
+      projectName: "Platform",
+      id: 118,
+      title: "Rate limiting middleware causes 429 cascade on retries",
+      workItemType: "Bug",
+      state: "Active",
+      assignedTo: "Alice Johnson",
+      changedDate: "2026-05-26T15:30:00Z",
+      webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/118",
+    },
+    {
+      organizationId: "contoso",
+      projectId: "platform",
+      projectName: "Platform",
+      id: 110,
+      title: "Migrate token signing to RS256",
+      workItemType: "User Story",
+      state: "Resolved",
+      assignedTo: "Bob Tanaka",
+      changedDate: "2026-05-25T09:00:00Z",
+      webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/110",
+    },
+    {
+      organizationId: "contoso",
+      projectId: "platform",
+      projectName: "Platform",
+      id: 95,
+      title: "Add OpenTelemetry span propagation to API gateway",
+      workItemType: "Feature",
+      state: "New",
+      assignedTo: "Grace Chen",
+      changedDate: "2026-05-24T11:00:00Z",
+      webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/95",
+    },
+    {
+      organizationId: "contoso",
+      projectId: "mobile",
+      projectName: "Mobile",
+      id: 187,
+      title: "Fix crash on launch for Android 14",
+      workItemType: "Bug",
+      state: "Active",
+      assignedTo: "Frank Lee",
+      changedDate: "2026-05-26T14:30:00Z",
+      webUrl: "https://dev.azure.com/contoso/Mobile/_workitems/edit/187",
+    },
+    {
+      organizationId: "contoso",
+      projectId: "mobile",
+      projectName: "Mobile",
+      id: 175,
+      title: "Add biometric auth for payment screen",
+      workItemType: "User Story",
+      state: "Active",
+      assignedTo: "Carol Wang",
+      changedDate: "2026-05-25T16:00:00Z",
+      webUrl: "https://dev.azure.com/contoso/Mobile/_workitems/edit/175",
+    },
+    {
+      organizationId: "contoso",
+      projectId: "mobile",
+      projectName: "Mobile",
+      id: 160,
+      title: "Dark mode support for all screens",
+      workItemType: "Feature",
+      state: "New",
+      assignedTo: null,
+      changedDate: "2026-05-23T08:00:00Z",
+      webUrl: "https://dev.azure.com/contoso/Mobile/_workitems/edit/160",
+    },
+    {
+      organizationId: "contoso",
+      projectId: "infrastructure",
+      projectName: "Infrastructure",
+      id: 51,
+      title: "Upgrade EKS cluster to 1.29",
+      workItemType: "Epic",
+      state: "Active",
+      assignedTo: "Eve Nakamura",
+      changedDate: "2026-05-27T07:00:00Z",
+      webUrl: "https://dev.azure.com/contoso/Infrastructure/_workitems/edit/51",
+    },
+    {
+      organizationId: "contoso",
+      projectId: "infrastructure",
+      projectName: "Infrastructure",
+      id: 44,
+      title: "Set up Datadog APM for production workloads",
+      workItemType: "Task",
+      state: "Closed",
+      assignedTo: "Eve Nakamura",
+      changedDate: "2026-05-20T12:00:00Z",
+      webUrl: "https://dev.azure.com/contoso/Infrastructure/_workitems/edit/44",
+    },
   ];
+
+  const query = input?.query?.trim().toLowerCase();
+  const stateFilter = input?.state && input.state !== "all" ? input.state : undefined;
+  const typeFilter = input?.workItemType?.trim() || undefined;
+
+  return all.filter((item) => {
+    if (input?.projectId && item.projectId !== input.projectId) return false;
+    if (stateFilter && item.state !== stateFilter) return false;
+    if (typeFilter && item.workItemType !== typeFilter) return false;
+    if (
+      query &&
+      ![item.title, item.projectName, item.workItemType ?? "", item.state ?? "", item.assignedTo ?? ""].some(
+        (v) => v.toLowerCase().includes(query),
+      )
+    )
+      return false;
+    return true;
+  });
 }
 
 function demoMyWorkItems(): WorkItemSummary[] {
@@ -545,8 +662,20 @@ function demoMyWorkItems(): WorkItemSummary[] {
       workItemType: "Task",
       state: "Active",
       assignedTo: "Demo User",
-      changedDate: "2026-05-25T08:00:00Z",
+      changedDate: "2026-05-27T08:00:00Z",
       webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/201",
+    },
+    {
+      organizationId: "contoso",
+      projectId: "platform",
+      projectName: "Platform",
+      id: 123,
+      title: "Validate onboarding with PAT credentials",
+      workItemType: "Task",
+      state: "Active",
+      assignedTo: "Demo User",
+      changedDate: "2026-05-26T10:00:00Z",
+      webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/123",
     },
     {
       organizationId: "contoso",
@@ -557,7 +686,7 @@ function demoMyWorkItems(): WorkItemSummary[] {
       workItemType: "Bug",
       state: "Active",
       assignedTo: "Demo User",
-      changedDate: "2026-05-24T14:30:00Z",
+      changedDate: "2026-05-25T14:30:00Z",
       webUrl: "https://dev.azure.com/contoso/Mobile/_workitems/edit/187",
     },
     {
@@ -569,8 +698,20 @@ function demoMyWorkItems(): WorkItemSummary[] {
       workItemType: "Task",
       state: "New",
       assignedTo: "Demo User",
-      changedDate: "2026-05-23T10:00:00Z",
+      changedDate: "2026-05-24T10:00:00Z",
       webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/155",
+    },
+    {
+      organizationId: "contoso",
+      projectId: "infrastructure",
+      projectName: "Infrastructure",
+      id: 51,
+      title: "Upgrade EKS cluster to 1.29",
+      workItemType: "Epic",
+      state: "Active",
+      assignedTo: "Demo User",
+      changedDate: "2026-05-23T07:00:00Z",
+      webUrl: "https://dev.azure.com/contoso/Infrastructure/_workitems/edit/51",
     },
   ];
 }
@@ -735,7 +876,7 @@ function demoCommitRepositories(): CommitRepositoryOption[] {
 }
 
 function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
-  const commits = [
+  const commits: CommitSummary[] = [
     {
       organizationId: "contoso",
       projectId: "platform",
@@ -744,12 +885,25 @@ function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
       repositoryName: "azdo-dashboard",
       commitId: "abcdef1234567890abcdef1234567890abcdef12",
       shortCommitId: "abcdef12",
-      comment: "Add commit search dashboard",
+      comment: "Add commit search dashboard with grid view and keyboard nav",
       authorName: "Demo User",
       authorEmail: "demo@example.com",
-      authorDate: "2026-05-24T00:00:00Z",
-      webUrl:
-        "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/commit/abcdef1234567890abcdef1234567890abcdef12",
+      authorDate: "2026-05-27T08:00:00Z",
+      webUrl: "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/commit/abcdef1234567890abcdef1234567890abcdef12",
+    },
+    {
+      organizationId: "contoso",
+      projectId: "platform",
+      projectName: "Platform",
+      repositoryId: "azdo-dashboard",
+      repositoryName: "azdo-dashboard",
+      commitId: "beef1234567890abcdef1234567890abcdef1234",
+      shortCommitId: "beef1234",
+      comment: "feat(ui): add per-column resize handles to MyReviewsGrid",
+      authorName: "Demo User",
+      authorEmail: "demo@example.com",
+      authorDate: "2026-05-26T14:30:00Z",
+      webUrl: "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/commit/beef1234567890abcdef1234567890abcdef1234",
     },
     {
       organizationId: "contoso",
@@ -759,12 +913,25 @@ function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
       repositoryName: "api-gateway",
       commitId: "1234567890abcdef1234567890abcdef12345678",
       shortCommitId: "12345678",
-      comment: "Tune request tracing middleware",
+      comment: "Tune request tracing middleware to reduce overhead",
       authorName: "Alice Johnson",
       authorEmail: "alice@example.com",
-      authorDate: "2026-05-23T09:30:00Z",
-      webUrl:
-        "https://dev.azure.com/contoso/Platform/_git/api-gateway/commit/1234567890abcdef1234567890abcdef12345678",
+      authorDate: "2026-05-26T09:30:00Z",
+      webUrl: "https://dev.azure.com/contoso/Platform/_git/api-gateway/commit/1234567890abcdef1234567890abcdef12345678",
+    },
+    {
+      organizationId: "contoso",
+      projectId: "platform",
+      projectName: "Platform",
+      repositoryId: "api-gateway",
+      repositoryName: "api-gateway",
+      commitId: "cafe5678901234567890abcdef1234567890cafe",
+      shortCommitId: "cafe5678",
+      comment: "fix: correct Retry-After header parsing for rate limiting",
+      authorName: "Bob Tanaka",
+      authorEmail: "bob@example.com",
+      authorDate: "2026-05-25T16:00:00Z",
+      webUrl: "https://dev.azure.com/contoso/Platform/_git/api-gateway/commit/cafe5678901234567890abcdef1234567890cafe",
     },
     {
       organizationId: "contoso",
@@ -774,12 +941,53 @@ function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
       repositoryName: "android-app",
       commitId: "fedcba9876543210fedcba9876543210fedcba98",
       shortCommitId: "fedcba98",
-      comment: "Fix payment flow back navigation",
+      comment: "Fix payment flow back navigation crash on Android 14",
       authorName: "Frank Lee",
       authorEmail: "frank@example.com",
-      authorDate: "2026-05-22T03:15:00Z",
-      webUrl:
-        "https://dev.azure.com/contoso/Mobile/_git/android-app/commit/fedcba9876543210fedcba9876543210fedcba98",
+      authorDate: "2026-05-25T03:15:00Z",
+      webUrl: "https://dev.azure.com/contoso/Mobile/_git/android-app/commit/fedcba9876543210fedcba9876543210fedcba98",
+    },
+    {
+      organizationId: "contoso",
+      projectId: "mobile",
+      projectName: "Mobile",
+      repositoryId: "android-app",
+      repositoryName: "android-app",
+      commitId: "dead1234567890abcdef1234567890abcdefdead",
+      shortCommitId: "dead1234",
+      comment: "Add biometric auth screen with fallback PIN entry",
+      authorName: "Carol Wang",
+      authorEmail: "carol@example.com",
+      authorDate: "2026-05-24T11:45:00Z",
+      webUrl: "https://dev.azure.com/contoso/Mobile/_git/android-app/commit/dead1234567890abcdef1234567890abcdefdead",
+    },
+    {
+      organizationId: "contoso",
+      projectId: "infrastructure",
+      projectName: "Infrastructure",
+      repositoryId: "terraform-aws",
+      repositoryName: "terraform-aws",
+      commitId: "f00d5678901234567890abcdef1234567890f00d",
+      shortCommitId: "f00d5678",
+      comment: "chore: bump EKS node group AMI to al2023-x86_64-1.29",
+      authorName: "Eve Nakamura",
+      authorEmail: "eve@example.com",
+      authorDate: "2026-05-23T07:00:00Z",
+      webUrl: "https://dev.azure.com/contoso/Infrastructure/_git/terraform-aws/commit/f00d5678901234567890abcdef1234567890f00d",
+    },
+    {
+      organizationId: "contoso",
+      projectId: "infrastructure",
+      projectName: "Infrastructure",
+      repositoryId: "terraform-aws",
+      repositoryName: "terraform-aws",
+      commitId: "babe1234567890abcdef1234567890abcdefbabe",
+      shortCommitId: "babe1234",
+      comment: "feat: add Datadog APM agent to ECS task definitions",
+      authorName: "Eve Nakamura",
+      authorEmail: "eve@example.com",
+      authorDate: "2026-05-21T13:20:00Z",
+      webUrl: "https://dev.azure.com/contoso/Infrastructure/_git/terraform-aws/commit/babe1234567890abcdef1234567890abcdefbabe",
     },
   ];
 
