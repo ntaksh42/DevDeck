@@ -25,6 +25,12 @@ pub struct SearchWorkItemsInput {
     pub work_item_type: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListMyWorkItemsInput {
+    pub organization_id: Option<String>,
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkItemSummary {
@@ -86,6 +92,42 @@ impl WorkItemService {
             organization = %organization.name,
             count = results.len(),
             "work item search completed"
+        );
+        Ok(results)
+    }
+
+    pub async fn list_my(&self, input: ListMyWorkItemsInput) -> Result<Vec<WorkItemSummary>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let wiql = "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project AND [System.AssignedTo] = @Me ORDER BY [System.ChangedDate] DESC";
+
+        let mut results = Vec::new();
+        for project in client.list_projects().await? {
+            let ids = client.query_work_item_ids(&project.id, wiql).await?;
+            let ids: Vec<i64> = ids.into_iter().take(100).collect();
+            let fields = WORK_ITEM_FIELDS
+                .iter()
+                .map(|field| field.to_string())
+                .collect();
+            let work_items = client
+                .get_work_items_batch(&project.id, ids, fields)
+                .await?;
+            for work_item in work_items {
+                results.push(summarize_work_item(
+                    &organization,
+                    &project.id,
+                    &project.name,
+                    work_item,
+                ));
+            }
+        }
+
+        results.sort_by(|a, b| b.changed_date.cmp(&a.changed_date));
+        results.truncate(100);
+        tracing::info!(
+            organization = %organization.name,
+            count = results.len(),
+            "my work items listed"
         );
         Ok(results)
     }
