@@ -112,6 +112,17 @@ const commitSummariesSchema = z.array(commitSummarySchema);
 
 export type CommitSummary = z.infer<typeof commitSummarySchema>;
 
+const commitRepositoryOptionSchema = z.object({
+  projectId: z.string(),
+  projectName: z.string(),
+  repositoryId: z.string(),
+  repositoryName: z.string(),
+});
+
+const commitRepositoryOptionsSchema = z.array(commitRepositoryOptionSchema);
+
+export type CommitRepositoryOption = z.infer<typeof commitRepositoryOptionSchema>;
+
 export type AddPatOrganizationInput = {
   organization: string;
   pat: string;
@@ -146,6 +157,7 @@ export type SearchWorkItemsInput = {
   workItemType?: string;
 };
 
+
 export type SearchCommitsInput = {
   organizationId?: string;
   query?: string;
@@ -153,6 +165,12 @@ export type SearchCommitsInput = {
   branch?: string;
   fromDate?: string;
   toDate?: string;
+  projectId?: string;
+  repositoryId?: string;
+};
+
+export type ListCommitRepositoriesInput = {
+  organizationId?: string;
 };
 
 export async function listOrganizations(): Promise<Organization[]> {
@@ -214,11 +232,19 @@ export async function searchWorkItems(
   return workItemSummariesSchema.parse(result);
 }
 
+
 export async function searchCommits(
   input: SearchCommitsInput,
 ): Promise<CommitSummary[]> {
   const result = await invokeCommand("search_commits", { input });
   return commitSummariesSchema.parse(result);
+}
+
+export async function listCommitRepositories(
+  input: ListCommitRepositoriesInput,
+): Promise<CommitRepositoryOption[]> {
+  const result = await invokeCommand("list_commit_repositories", { input });
+  return commitRepositoryOptionsSchema.parse(result);
 }
 
 async function invokeCommand(command: string, args?: unknown): Promise<unknown> {
@@ -297,8 +323,13 @@ async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
       return demoReviewPullRequests();
     case "search_work_items":
       return demoWorkItems();
-    case "search_commits":
-      return demoCommits();
+    case "search_commits": {
+      const input = (args as { input?: SearchCommitsInput } | undefined)
+        ?.input;
+      return demoCommits(input);
+    }
+    case "list_commit_repositories":
+      return demoCommitRepositories();
     default:
       throw new Error(`Unsupported demo command: ${command}`);
   }
@@ -510,8 +541,31 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
   ];
 }
 
-function demoCommits(): CommitSummary[] {
+function demoCommitRepositories(): CommitRepositoryOption[] {
   return [
+    {
+      projectId: "platform",
+      projectName: "Platform",
+      repositoryId: "azdo-dashboard",
+      repositoryName: "azdo-dashboard",
+    },
+    {
+      projectId: "platform",
+      projectName: "Platform",
+      repositoryId: "api-gateway",
+      repositoryName: "api-gateway",
+    },
+    {
+      projectId: "mobile",
+      projectName: "Mobile",
+      repositoryId: "android-app",
+      repositoryName: "android-app",
+    },
+  ];
+}
+
+function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
+  const commits = [
     {
       organizationId: "contoso",
       projectId: "platform",
@@ -527,7 +581,80 @@ function demoCommits(): CommitSummary[] {
       webUrl:
         "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/commit/abcdef1234567890abcdef1234567890abcdef12",
     },
+    {
+      organizationId: "contoso",
+      projectId: "platform",
+      projectName: "Platform",
+      repositoryId: "api-gateway",
+      repositoryName: "api-gateway",
+      commitId: "1234567890abcdef1234567890abcdef12345678",
+      shortCommitId: "12345678",
+      comment: "Tune request tracing middleware",
+      authorName: "Alice Johnson",
+      authorEmail: "alice@example.com",
+      authorDate: "2026-05-23T09:30:00Z",
+      webUrl:
+        "https://dev.azure.com/contoso/Platform/_git/api-gateway/commit/1234567890abcdef1234567890abcdef12345678",
+    },
+    {
+      organizationId: "contoso",
+      projectId: "mobile",
+      projectName: "Mobile",
+      repositoryId: "android-app",
+      repositoryName: "android-app",
+      commitId: "fedcba9876543210fedcba9876543210fedcba98",
+      shortCommitId: "fedcba98",
+      comment: "Fix payment flow back navigation",
+      authorName: "Frank Lee",
+      authorEmail: "frank@example.com",
+      authorDate: "2026-05-22T03:15:00Z",
+      webUrl:
+        "https://dev.azure.com/contoso/Mobile/_git/android-app/commit/fedcba9876543210fedcba9876543210fedcba98",
+    },
   ];
+
+  const query = input?.query?.trim().toLowerCase();
+  const author = input?.author?.trim().toLowerCase();
+  const fromDate = input?.fromDate ? new Date(`${input.fromDate}T00:00:00Z`) : null;
+  const toDate = input?.toDate ? new Date(`${input.toDate}T23:59:59Z`) : null;
+
+  return commits.filter((commit) => {
+    if (input?.projectId && commit.projectId !== input.projectId) {
+      return false;
+    }
+    if (input?.repositoryId && commit.repositoryId !== input.repositoryId) {
+      return false;
+    }
+    if (
+      query &&
+      ![
+        commit.comment,
+        commit.projectName,
+        commit.repositoryName,
+        commit.authorName ?? "",
+        commit.authorEmail ?? "",
+        commit.commitId,
+      ].some((value) => value.toLowerCase().includes(query))
+    ) {
+      return false;
+    }
+    if (
+      author &&
+      ![commit.authorName ?? "", commit.authorEmail ?? ""].some((value) =>
+        value.toLowerCase().includes(author),
+      )
+    ) {
+      return false;
+    }
+    const authorDate = commit.authorDate ? new Date(commit.authorDate) : null;
+    if (fromDate && authorDate && authorDate < fromDate) {
+      return false;
+    }
+    if (toDate && authorDate && authorDate > toDate) {
+      return false;
+    }
+    return true;
+  });
 }
 
 export function commandErrorMessage(error: unknown): string {

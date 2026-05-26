@@ -36,6 +36,7 @@ import {
   commandErrorMessage,
   getAppSettings,
   getReviewResultPreview,
+  listCommitRepositories,
   listMyReviewPullRequests,
   listOrganizations,
   searchCommits,
@@ -43,6 +44,7 @@ import {
   searchWorkItems,
   updateAppSettings,
   type AppSettings,
+  type CommitRepositoryOption,
   type CommitSummary,
   type Organization,
   type PullRequestSummary,
@@ -295,21 +297,59 @@ function CommitSearch({ organizations }: { organizations: Organization[] }) {
   const [query, setQuery] = useState("");
   const [author, setAuthor] = useState("");
   const [branch, setBranch] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [projectId, setProjectId] = useState("");
+  const [repositoryId, setRepositoryId] = useState("");
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const mutation = useMutation({
     mutationFn: searchCommits,
   });
 
   const selectedOrganizationId = organizationId || organizations[0]?.id || "";
+  const repositoriesQuery = useQuery({
+    queryKey: ["commitRepositories", selectedOrganizationId],
+    queryFn: () => listCommitRepositories({ organizationId: selectedOrganizationId }),
+    enabled: !!selectedOrganizationId,
+  });
+  const repositoryOptions = repositoriesQuery.data ?? [];
+  const projectOptions = useMemo(() => uniqueCommitProjects(repositoryOptions), [repositoryOptions]);
+  const filteredRepositoryOptions = useMemo(
+    () =>
+      projectId
+        ? repositoryOptions.filter((repository) => repository.projectId === projectId)
+        : repositoryOptions,
+    [projectId, repositoryOptions],
+  );
   const results = mutation.data ?? [];
+
+  useEffect(() => {
+    if (
+      repositoryId &&
+      !filteredRepositoryOptions.some((repository) => repository.repositoryId === repositoryId)
+    ) {
+      setRepositoryId("");
+    }
+  }, [filteredRepositoryOptions, repositoryId]);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    mutation.reset();
+    if (fromDate && toDate && fromDate > toDate) {
+      setValidationError("From date must be before or equal to To date.");
+      return;
+    }
+    setValidationError(null);
     mutation.mutate({
       organizationId: selectedOrganizationId,
       query,
       author,
       branch,
+      fromDate,
+      toDate,
+      projectId,
+      repositoryId,
     });
   }
 
@@ -317,7 +357,7 @@ function CommitSearch({ organizations }: { organizations: Organization[] }) {
     <div className="space-y-6">
       <div className="rounded-md border border-border bg-white">
         <form className="grid gap-4 p-5" onSubmit={onSubmit}>
-          <div className="grid gap-4 lg:grid-cols-[1fr_180px_170px_160px_auto]">
+          <div className="grid gap-4 xl:grid-cols-[minmax(240px,1fr)_180px_180px_170px_auto]">
             <label className="grid gap-2">
               <span className="text-sm font-medium">Search</span>
               <div className="flex h-10 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
@@ -336,7 +376,11 @@ function CommitSearch({ organizations }: { organizations: Organization[] }) {
               <span className="text-sm font-medium">Organization</span>
               <select
                 value={selectedOrganizationId}
-                onChange={(event) => setOrganizationId(event.target.value)}
+                onChange={(event) => {
+                  setOrganizationId(event.target.value);
+                  setProjectId("");
+                  setRepositoryId("");
+                }}
                 className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               >
                 {organizations.map((organization) => (
@@ -382,6 +426,86 @@ function CommitSearch({ organizations }: { organizations: Organization[] }) {
               </button>
             </div>
           </div>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[150px_150px_220px_240px_1fr]">
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">From</span>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(event) => setFromDate(event.target.value)}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">To</span>
+              <input
+                type="date"
+                value={toDate}
+                onChange={(event) => setToDate(event.target.value)}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Project</span>
+              <select
+                value={projectId}
+                disabled={repositoriesQuery.isLoading || repositoryOptions.length === 0}
+                onChange={(event) => {
+                  setProjectId(event.target.value);
+                  setRepositoryId("");
+                }}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <option value="">All projects</option>
+                {projectOptions.map((project) => (
+                  <option key={project.projectId} value={project.projectId}>
+                    {project.projectName}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Repository</span>
+              <select
+                value={repositoryId}
+                disabled={repositoriesQuery.isLoading || filteredRepositoryOptions.length === 0}
+                onChange={(event) => setRepositoryId(event.target.value)}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <option value="">All repositories</option>
+                {filteredRepositoryOptions.map((repository) => (
+                  <option
+                    key={`${repository.projectId}:${repository.repositoryId}`}
+                    value={repository.repositoryId}
+                  >
+                    {projectId
+                      ? repository.repositoryName
+                      : `${repository.projectName} / ${repository.repositoryName}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="flex items-end">
+              <p className="pb-2 text-xs text-muted-foreground">
+                {repositoriesQuery.isLoading
+                  ? "Loading project filters"
+                  : repositoriesQuery.isError
+                    ? "Project filters unavailable"
+                    : `${repositoryOptions.length} repositories available`}
+              </p>
+            </div>
+          </div>
+
+          {validationError ? (
+            <p role="alert" className="text-sm text-destructive">
+              {validationError}
+            </p>
+          ) : null}
         </form>
       </div>
 
@@ -394,6 +518,20 @@ function CommitSearch({ organizations }: { organizations: Organization[] }) {
   );
 }
 
+function uniqueCommitProjects(repositories: CommitRepositoryOption[]) {
+  const projects = new Map<string, { projectId: string; projectName: string }>();
+  for (const repository of repositories) {
+    projects.set(repository.projectId, {
+      projectId: repository.projectId,
+      projectName: repository.projectName,
+    });
+  }
+  return [...projects.values()].sort((a, b) => a.projectName.localeCompare(b.projectName));
+}
+
+type CommitSortKey = "date" | "repository" | "author";
+type CommitSortDirection = "ascending" | "descending";
+
 function CommitResults({
   loading,
   results,
@@ -403,6 +541,8 @@ function CommitResults({
   results: CommitSummary[];
   searched: boolean;
 }) {
+  const [sortKey, setSortKey] = useState<CommitSortKey>("date");
+  const [sortDirection, setSortDirection] = useState<CommitSortDirection>("descending");
   const countLabel = useMemo(() => {
     if (loading) {
       return "Searching";
@@ -412,12 +552,51 @@ function CommitResults({
     }
     return `${results.length} commit${results.length === 1 ? "" : "s"}`;
   }, [loading, results.length, searched]);
+  const sortedResults = useMemo(
+    () => sortCommits(results, sortKey, sortDirection),
+    [results, sortDirection, sortKey],
+  );
+
+  function toggleSort(nextSortKey: CommitSortKey) {
+    if (sortKey === nextSortKey) {
+      setSortDirection((direction) =>
+        direction === "ascending" ? "descending" : "ascending",
+      );
+      return;
+    }
+    setSortKey(nextSortKey);
+    setSortDirection(nextSortKey === "date" ? "descending" : "ascending");
+  }
 
   return (
     <div className="overflow-hidden rounded-md border border-border bg-white">
-      <div className="flex items-center justify-between border-b border-border px-5 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
         <h2 className="text-base font-semibold">Results</h2>
-        <span className="text-sm text-muted-foreground">{countLabel}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          {searched || loading ? (
+            <div className="flex rounded-md border border-border bg-background p-0.5">
+              <CommitSortButton
+                active={sortKey === "date"}
+                direction={sortDirection}
+                label="Date"
+                onClick={() => toggleSort("date")}
+              />
+              <CommitSortButton
+                active={sortKey === "repository"}
+                direction={sortDirection}
+                label="Repository"
+                onClick={() => toggleSort("repository")}
+              />
+              <CommitSortButton
+                active={sortKey === "author"}
+                direction={sortDirection}
+                label="Author"
+                onClick={() => toggleSort("author")}
+              />
+            </div>
+          ) : null}
+          <span className="text-sm text-muted-foreground">{countLabel}</span>
+        </div>
       </div>
       {!searched && !loading ? (
         <div className="px-5 py-10 text-center text-sm text-muted-foreground">
@@ -429,7 +608,7 @@ function CommitResults({
         </div>
       ) : (
         <div className="divide-y divide-border">
-          {results.map((commit) => (
+          {sortedResults.map((commit) => (
             <CommitRow key={`${commit.repositoryId}:${commit.commitId}`} commit={commit} />
           ))}
         </div>
@@ -438,31 +617,124 @@ function CommitResults({
   );
 }
 
-function CommitRow({ commit }: { commit: CommitSummary }) {
+function CommitSortButton({
+  active,
+  direction,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  direction: CommitSortDirection;
+  label: string;
+  onClick: () => void;
+}) {
   return (
-    <div className="grid gap-3 px-5 py-4 lg:grid-cols-[1fr_auto]">
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex h-7 items-center gap-1 rounded px-2 text-xs font-medium ${
+        active
+          ? "bg-secondary text-foreground"
+          : "text-muted-foreground hover:bg-secondary"
+      }`}
+      aria-label={`Sort commits by ${label}`}
+    >
+      {label}
+      {active ? (
+        direction === "ascending" ? (
+          <ChevronUp className="h-3 w-3" aria-hidden="true" />
+        ) : (
+          <ChevronDown className="h-3 w-3" aria-hidden="true" />
+        )
+      ) : null}
+    </button>
+  );
+}
+
+function sortCommits(
+  commits: CommitSummary[],
+  sortKey: CommitSortKey,
+  sortDirection: CommitSortDirection,
+): CommitSummary[] {
+  const direction = sortDirection === "ascending" ? 1 : -1;
+  return [...commits].sort((a, b) => {
+    const primary = compareCommitByKey(a, b, sortKey);
+    if (primary !== 0) {
+      return primary * direction;
+    }
+    return (
+      compareCommitStrings(a.repositoryName, b.repositoryName) ||
+      compareCommitStrings(a.commitId, b.commitId)
+    );
+  });
+}
+
+function compareCommitByKey(
+  a: CommitSummary,
+  b: CommitSummary,
+  sortKey: CommitSortKey,
+): number {
+  if (sortKey === "repository") {
+    return compareCommitStrings(
+      `${a.projectName}/${a.repositoryName}`,
+      `${b.projectName}/${b.repositoryName}`,
+    );
+  }
+  if (sortKey === "author") {
+    return compareCommitStrings(a.authorName ?? "", b.authorName ?? "");
+  }
+  return compareCommitStrings(a.authorDate ?? "", b.authorDate ?? "");
+}
+
+function compareCommitStrings(a: string, b: string): number {
+  return a.localeCompare(b);
+}
+
+function CommitRow({ commit }: { commit: CommitSummary }) {
+  const message = commit.comment.split(/\r?\n/, 1)[0] || "(no comment)";
+  const commitWebUrl = commit.webUrl;
+  return (
+    <div className="grid gap-3 px-5 py-3 lg:grid-cols-[minmax(0,1fr)_220px_auto]">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-md bg-secondary px-2 py-1 font-mono text-xs font-medium">
-            {commit.shortCommitId}
-          </span>
+          {commitWebUrl ? (
+            <button
+              type="button"
+              onClick={() => {
+                void openExternalUrl(commitWebUrl);
+              }}
+              className="rounded-md bg-secondary px-2 py-1 font-mono text-xs font-medium hover:bg-secondary/80"
+              aria-label={`Open commit ${commit.shortCommitId} in Azure DevOps`}
+              title="Open commit in Azure DevOps"
+            >
+              {commit.shortCommitId}
+            </button>
+          ) : (
+            <span className="rounded-md bg-secondary px-2 py-1 font-mono text-xs font-medium">
+              {commit.shortCommitId}
+            </span>
+          )}
           {commit.authorDate ? (
-            <span className="text-xs text-muted-foreground">
-              {formatDate(commit.authorDate)}
+            <span className="text-xs text-muted-foreground" title={formatDate(commit.authorDate)}>
+              {formatRelativeDate(commit.authorDate)}
             </span>
           ) : null}
         </div>
-        <p className="mt-2 font-medium">{commit.comment}</p>
+        <p className="mt-2 truncate font-medium" title={commit.comment}>
+          {message}
+        </p>
         <p className="mt-1 text-sm text-muted-foreground">
           {commit.projectName} / {commit.repositoryName}
         </p>
       </div>
-      <div className="text-left text-sm lg:text-right">
+      <div className="min-w-0 text-left text-sm lg:text-right">
         <p className="text-muted-foreground">Author</p>
-        <p className="font-medium">{commit.authorName ?? "Unknown"}</p>
+        <p className="truncate font-medium">{commit.authorName ?? "Unknown"}</p>
         {commit.authorEmail ? (
-          <p className="text-muted-foreground">{commit.authorEmail}</p>
+          <p className="truncate text-muted-foreground">{commit.authorEmail}</p>
         ) : null}
+      </div>
+      <div className="flex items-start lg:justify-end">
         <OpenInAzureDevOpsButton url={commit.webUrl} />
       </div>
     </div>

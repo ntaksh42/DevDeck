@@ -324,9 +324,22 @@ describe("App", () => {
   });
 
   it("searches commits and renders results", async () => {
-    invokeMock
-      .mockResolvedValueOnce([organization])
-      .mockResolvedValueOnce([
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "list_commit_repositories") {
+        return Promise.resolve([
+          {
+            projectId: "project-1",
+            projectName: "Platform",
+            repositoryId: "repo-1",
+            repositoryName: "azdo-dashboard",
+          },
+        ]);
+      }
+      if (command === "search_commits") {
+        return Promise.resolve([
         {
           organizationId: "contoso",
           projectId: "project-1",
@@ -342,7 +355,10 @@ describe("App", () => {
           webUrl:
             "https://dev.azure.com/contoso/project/_git/repo/commit/abcdef1234567890abcdef1234567890abcdef12",
         },
-      ]);
+        ]);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
 
     renderApp();
     const main = within(await screen.findByRole("main"));
@@ -355,6 +371,20 @@ describe("App", () => {
         target: { value: "commit" },
       },
     );
+    fireEvent.change(await main.findByLabelText("From"), {
+      target: { value: "2026-05-01" },
+    });
+    fireEvent.change(main.getByLabelText("To"), {
+      target: { value: "2026-05-24" },
+    });
+    await main.findByText("Platform");
+    fireEvent.change(await main.findByLabelText("Project"), {
+      target: { value: "project-1" },
+    });
+    await main.findByText("azdo-dashboard");
+    fireEvent.change(main.getByLabelText("Repository"), {
+      target: { value: "repo-1" },
+    });
     fireEvent.click(main.getByRole("button", { name: "Search" }));
 
     await waitFor(() => {
@@ -364,6 +394,10 @@ describe("App", () => {
           query: "commit",
           author: "",
           branch: "",
+          fromDate: "2026-05-01",
+          toDate: "2026-05-24",
+          projectId: "project-1",
+          repositoryId: "repo-1",
         },
       });
     });
@@ -377,6 +411,34 @@ describe("App", () => {
         "https://dev.azure.com/contoso/project/_git/repo/commit/abcdef1234567890abcdef1234567890abcdef12",
       );
     });
+  });
+
+  it("validates commit date range before searching", async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "list_commit_repositories") {
+        return Promise.resolve([]);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+    const main = within(await screen.findByRole("main"));
+
+    await main.findByText("Run a search to load pull requests.");
+    fireEvent.click(screen.getByRole("button", { name: "Commits" }));
+    fireEvent.change(await main.findByLabelText("From"), {
+      target: { value: "2026-05-25" },
+    });
+    fireEvent.change(main.getByLabelText("To"), {
+      target: { value: "2026-05-24" },
+    });
+    fireEvent.click(main.getByRole("button", { name: "Search" }));
+
+    expect(await main.findByText("From date must be before or equal to To date.")).toBeTruthy();
+    expect(invokeMock).not.toHaveBeenCalledWith("search_commits", expect.anything());
   });
 
   it("filters my reviews by waiting author and opens the selected row by keyboard", async () => {

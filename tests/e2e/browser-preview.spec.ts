@@ -48,6 +48,10 @@ test.describe("browser preview", () => {
 
     await page.getByRole("button", { name: "Commits" }).click();
     await main.getByPlaceholder("message, author, repository, SHA").fill("dashboard");
+    await expect(main.getByLabel("Project")).toBeVisible();
+    await expect(main.getByLabel("Repository")).toBeVisible();
+    await main.getByLabel("From", { exact: true }).fill("2026-05-01");
+    await main.getByLabel("To", { exact: true }).fill("2026-05-25");
     await main.getByRole("button", { name: "Search" }).click();
     await expect(main.getByText("Add commit search dashboard")).toBeVisible();
 
