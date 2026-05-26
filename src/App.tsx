@@ -21,6 +21,7 @@ import {
   Eye,
   EyeOff,
   GitPullRequest,
+  Keyboard,
   ListChecks,
   Loader2,
   Plus,
@@ -142,6 +143,7 @@ function beginHorizontalResize(
 
 function AppShell() {
   const [view, setView] = useState<View>("myReviews");
+  const [helpOpen, setHelpOpen] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(() =>
     storedNumber(SIDEBAR_WIDTH_STORAGE_KEY, DEFAULT_SIDEBAR_WIDTH, 220, 420),
   );
@@ -159,13 +161,22 @@ function AppShell() {
 
   useEffect(() => {
     function onGlobalKeyDown(event: KeyboardEvent) {
-      if (
-        event.defaultPrevented ||
-        !event.altKey ||
-        event.ctrlKey ||
-        event.metaKey ||
-        event.shiftKey
-      ) {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey) {
+        return;
+      }
+
+      if (event.key === "?" && !event.altKey && !isEditableTarget(event.target)) {
+        event.preventDefault();
+        setHelpOpen(true);
+        return;
+      }
+
+      if (event.key === "Escape" && !event.altKey) {
+        setHelpOpen(false);
+        return;
+      }
+
+      if (!event.altKey || event.shiftKey) {
         return;
       }
 
@@ -336,6 +347,7 @@ function AppShell() {
           )}
         </section>
       </main>
+      {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
     </div>
   );
 }
@@ -2077,6 +2089,65 @@ function ResizeHandle({
   );
 }
 
+
+function HelpDialog({ onClose }: { onClose: () => void }) {
+  const section = "text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 mt-4 first:mt-0";
+  const row = "flex items-center justify-between gap-8 py-0.5";
+  const kbd = "rounded bg-muted px-1.5 py-0.5 text-xs font-mono";
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      onClick={onClose}
+      aria-hidden="false"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="help-title"
+        className="relative w-full max-w-sm rounded-lg border border-border bg-white p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 id="help-title" className="flex items-center gap-2 text-base font-semibold">
+            <Keyboard className="h-4 w-4" aria-hidden="true" />
+            Keyboard Shortcuts
+          </h2>
+          <button
+            aria-label="Close keyboard shortcuts"
+            className="rounded p-1 text-muted-foreground hover:bg-muted"
+            onClick={onClose}
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="text-sm">
+          <p className={section}>Navigation</p>
+          <div className={row}><span>My Reviews</span><kbd className={kbd}>Alt+1</kbd></div>
+          <div className={row}><span>PR Search</span><kbd className={kbd}>Alt+2</kbd></div>
+          <div className={row}><span>My Work Items</span><kbd className={kbd}>Alt+3</kbd></div>
+          <div className={row}><span>WI Search</span><kbd className={kbd}>Alt+4</kbd></div>
+          <div className={row}><span>Commits</span><kbd className={kbd}>Alt+5</kbd></div>
+          <div className={row}><span>Settings</span><kbd className={kbd}>Alt+6</kbd></div>
+
+          <p className={section}>My Reviews</p>
+          <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>
+          <div className={row}><span>Filter: All / My / Approved / Rejected</span><kbd className={kbd}>1–4</kbd></div>
+          <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>Enter</kbd></div>
+          <div className={row}><span>Toggle details</span><kbd className={kbd}>D</kbd></div>
+          <div className={row}><span>Mark reviewed</span><kbd className={kbd}>R</kbd></div>
+          <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
+          <div className={row}><span>Move row</span><kbd className={kbd}>↑ ↓</kbd></div>
+
+          <p className={section}>General</p>
+          <div className={row}><span>Show this help</span><kbd className={kbd}>?</kbd></div>
+          <div className={row}><span>Close dialog</span><kbd className={kbd}>Esc</kbd></div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function NavButton({
   active,
