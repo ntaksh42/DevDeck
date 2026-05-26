@@ -38,6 +38,8 @@ pub struct SearchPullRequestsInput {
     pub organization_id: Option<String>,
     pub query: Option<String>,
     pub status: Option<String>,
+    pub project_id: Option<String>,
+    pub repository_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -146,12 +148,20 @@ impl PullRequestService {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let status = parse_status(input.status.as_deref())?;
         let query = input.query.unwrap_or_default().trim().to_ascii_lowercase();
+        let project_filter = normalize_optional(input.project_id);
+        let repository_filter = normalize_optional(input.repository_id);
         let client = client_for_organization(&organization, &self.secrets)?;
 
         let mut results = Vec::new();
         for project in client.list_projects().await? {
+            if !matches_optional_filter(&project.id, project_filter.as_deref()) {
+                continue;
+            }
             let repositories = client.list_repositories(&project.id).await?;
             for repository in repositories {
+                if !matches_optional_filter(&repository.id, repository_filter.as_deref()) {
+                    continue;
+                }
                 let pull_requests = client
                     .list_pull_requests(&project.id, &repository.id, status)
                     .await?;
@@ -262,6 +272,16 @@ fn vote_label(vote: i32) -> &'static str {
     }
 }
 
+fn normalize_optional(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn matches_optional_filter(value: &str, filter: Option<&str>) -> bool {
+    filter.is_none_or(|filter| filter == value)
+}
+
 fn matches_query(summary: &PullRequestSummary, query: &str) -> bool {
     if query.is_empty() {
         return true;
@@ -282,6 +302,16 @@ fn matches_query(summary: &PullRequestSummary, query: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn normalize_optional_trims_and_rejects_blank() {
+        assert_eq!(
+            normalize_optional(Some(" project-1 ".to_string())),
+            Some("project-1".to_string())
+        );
+        assert_eq!(normalize_optional(Some(" ".to_string())), None);
+        assert_eq!(normalize_optional(None), None);
+    }
 
     #[test]
     fn parse_status_defaults_to_active() {
