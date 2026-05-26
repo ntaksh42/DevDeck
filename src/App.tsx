@@ -11,6 +11,7 @@ import {
 } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   Building2,
   ChevronDown,
   ChevronUp,
@@ -28,6 +29,7 @@ import {
   Search,
   Settings,
   Trash2,
+  WifiOff,
   X,
 } from "lucide-react";
 import { Route, Routes } from "react-router-dom";
@@ -2495,10 +2497,61 @@ function LoadingState() {
   );
 }
 
+type ErrorKind = "auth" | "rateLimit" | "network" | "default";
+
+function classifyError(message: string): ErrorKind {
+  const lower = message.toLowerCase();
+  if (lower.includes("authentication failed") || lower.includes("secret storage") || lower.includes("status 401") || lower.includes("status 403")) {
+    return "auth";
+  }
+  if (lower.includes("rate limited") || lower.includes("status 429")) {
+    return "rateLimit";
+  }
+  if (lower.includes("network error") || lower.includes("connection") || lower.includes("timed out") || lower.includes("dns")) {
+    return "network";
+  }
+  return "default";
+}
+
 function ErrorState({ message }: { message: string }) {
+  const kind = classifyError(message);
+
+  const variants: Record<ErrorKind, { containerCls: string; textCls: string; icon: ReactNode; hint: string }> = {
+    auth: {
+      containerCls: "border-amber-200 bg-amber-50",
+      textCls: "text-amber-800",
+      icon: <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />,
+      hint: "Check your Personal Access Token in Settings — it may have expired.",
+    },
+    rateLimit: {
+      containerCls: "border-yellow-200 bg-yellow-50",
+      textCls: "text-yellow-800",
+      icon: <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-600" aria-hidden="true" />,
+      hint: "Azure DevOps rate limit reached. Wait a moment, then try again.",
+    },
+    network: {
+      containerCls: "border-gray-200 bg-gray-50",
+      textCls: "text-gray-700",
+      icon: <WifiOff className="h-4 w-4 shrink-0 text-gray-500" aria-hidden="true" />,
+      hint: "Check your internet connection and try again.",
+    },
+    default: {
+      containerCls: "border-destructive/30 bg-red-50",
+      textCls: "text-destructive",
+      icon: <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />,
+      hint: "",
+    },
+  };
+
+  const { containerCls, textCls, icon, hint } = variants[kind];
+
   return (
-    <div role="alert" className="rounded-md border border-destructive/30 bg-red-50 p-4">
-      <p className="text-sm font-medium text-destructive">{message}</p>
+    <div role="alert" className={`flex gap-3 rounded-md border p-4 ${containerCls}`}>
+      <div className="mt-0.5">{icon}</div>
+      <div>
+        <p className={`text-sm font-medium ${textCls}`}>{message}</p>
+        {hint && <p className={`mt-1 text-xs ${textCls} opacity-80`}>{hint}</p>}
+      </div>
     </div>
   );
 }
