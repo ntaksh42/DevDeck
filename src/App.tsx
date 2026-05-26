@@ -487,7 +487,7 @@ function CommitSearch({ organizations }: { organizations: Organization[] }) {
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[150px_150px_220px_240px_1fr]">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[150px_150px_auto_220px_240px_1fr]">
             <label className="grid gap-2">
               <span className="text-sm font-medium">From</span>
               <input
@@ -507,6 +507,30 @@ function CommitSearch({ organizations }: { organizations: Organization[] }) {
                 className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
             </label>
+
+            <div className="grid gap-2">
+              <span className="text-sm font-medium text-muted-foreground">Preset</span>
+              <div className="flex items-center gap-1">
+                {([7, 30, 90] as const).map((days) => (
+                  <button
+                    key={days}
+                    type="button"
+                    onClick={() => {
+                      const fmt = (d: Date) =>
+                        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                      const to = new Date();
+                      const from = new Date();
+                      from.setDate(from.getDate() - days);
+                      setFromDate(fmt(from));
+                      setToDate(fmt(to));
+                    }}
+                    className="inline-flex h-10 items-center rounded-md border border-input bg-background px-2.5 text-xs hover:bg-muted"
+                  >
+                    {days}d
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <label className="grid gap-2">
               <span className="text-sm font-medium">Project</span>
