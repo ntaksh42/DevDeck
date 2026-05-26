@@ -14,7 +14,6 @@ import {
   Building2,
   ChevronDown,
   ChevronUp,
-  ExternalLink,
   FileText,
   GitCommitHorizontal,
   GripVertical,
@@ -73,6 +72,14 @@ const DEFAULT_PR_SEARCH_COLUMN_WIDTHS = [72, 88, 340, 180, 140, 80, 180];
 const PR_SEARCH_COLUMN_MIN_WIDTHS = [56, 70, 200, 120, 100, 64, 120];
 const PR_SEARCH_COLUMN_MAX_WIDTHS = [120, 140, 720, 360, 280, 120, 360];
 const PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:prSearchGridColumnWidths";
+const DEFAULT_WI_COLUMN_WIDTHS = [72, 120, 100, 340, 160, 140, 100];
+const WI_COLUMN_MIN_WIDTHS = [56, 90, 80, 200, 120, 100, 80];
+const WI_COLUMN_MAX_WIDTHS = [120, 200, 180, 720, 300, 260, 160];
+const WI_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:wiSearchGridColumnWidths";
+const DEFAULT_COMMIT_COLUMN_WIDTHS = [88, 96, 360, 200, 180];
+const COMMIT_COLUMN_MIN_WIDTHS = [72, 80, 200, 140, 120];
+const COMMIT_COLUMN_MAX_WIDTHS = [140, 160, 720, 380, 340];
+const COMMIT_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:commitGridColumnWidths";
 
 function isEditableTarget(target: EventTarget | null): boolean {
   const element = target instanceof HTMLElement ? target : null;
@@ -619,8 +626,134 @@ function uniqueCommitProjects(repositories: CommitRepositoryOption[]) {
   return [...projects.values()].sort((a, b) => a.projectName.localeCompare(b.projectName));
 }
 
-type CommitSortKey = "date" | "repository" | "author";
-type CommitSortDirection = "ascending" | "descending";
+type CommitSortKey = "date" | "repository" | "author" | "comment";
+type CommitSortState = { key: CommitSortKey; direction: "asc" | "desc" };
+
+const commitSortLabels: Record<CommitSortKey, string> = {
+  date: "Date",
+  comment: "Message",
+  repository: "Repository",
+  author: "Author",
+};
+
+const COMMIT_GRID_KEYS: CommitSortKey[] = ["date", "comment", "repository", "author"];
+
+function defaultCommitSortDir(key: CommitSortKey): "asc" | "desc" {
+  return key === "date" ? "desc" : "asc";
+}
+
+function compareCommitsByKey(a: CommitSummary, b: CommitSummary, key: CommitSortKey): number {
+  switch (key) {
+    case "date":
+      return (a.authorDate ?? "").localeCompare(b.authorDate ?? "");
+    case "repository":
+      return `${a.projectName}/${a.repositoryName}`.localeCompare(`${b.projectName}/${b.repositoryName}`);
+    case "author":
+      return (a.authorName ?? "").localeCompare(b.authorName ?? "");
+    case "comment":
+      return a.comment.localeCompare(b.comment);
+  }
+}
+
+function CommitSortHeaderButton({
+  column,
+  sort,
+  onSort,
+  resizeHandle,
+}: {
+  column: CommitSortKey;
+  sort: CommitSortState;
+  onSort: (column: CommitSortKey) => void;
+  resizeHandle?: ReactNode;
+}) {
+  const active = sort.key === column;
+  const label = commitSortLabels[column];
+  return (
+    <div
+      role="columnheader"
+      aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
+      className="relative min-w-0"
+    >
+      <button
+        type="button"
+        aria-label={`Sort by ${label}`}
+        onClick={() => onSort(column)}
+        className={`flex w-full min-w-0 items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring ${
+          active ? "text-foreground" : ""
+        }`}
+      >
+        <span className="truncate">{label}</span>
+        {active ? (
+          sort.direction === "asc" ? (
+            <ChevronUp className="h-3 w-3 shrink-0" aria-hidden="true" />
+          ) : (
+            <ChevronDown className="h-3 w-3 shrink-0" aria-hidden="true" />
+          )
+        ) : (
+          <span className="h-3 w-3 shrink-0" aria-hidden="true" />
+        )}
+      </button>
+      {resizeHandle}
+    </div>
+  );
+}
+
+const CommitGridRow = forwardRef<
+  HTMLDivElement,
+  {
+    commit: CommitSummary;
+    selected: boolean;
+    columnTemplate: string;
+    onSelect: () => void;
+  }
+>(({ commit, selected, columnTemplate, onSelect }, ref) => {
+  const message = commit.comment.split(/\r?\n/, 1)[0] || "(no comment)";
+  return (
+    <div
+      ref={ref}
+      tabIndex={selected ? 0 : -1}
+      role="row"
+      aria-selected={selected}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if ((e.target as HTMLElement).closest("button")) return;
+        if (e.key === "Enter" && commit.webUrl) {
+          e.stopPropagation();
+          openExternalUrl(commit.webUrl);
+        }
+      }}
+      className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
+        selected ? "bg-secondary" : "hover:bg-muted/50"
+      }`}
+      style={{ gridTemplateColumns: columnTemplate }}
+    >
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); if (commit.webUrl) openExternalUrl(commit.webUrl); }}
+        className="truncate text-left font-mono text-xs text-primary hover:underline"
+        title={commit.commitId}
+      >
+        {commit.shortCommitId}
+      </button>
+      <span
+        className="text-xs text-muted-foreground"
+        title={commit.authorDate ? formatDate(commit.authorDate) : undefined}
+      >
+        {commit.authorDate ? formatRelativeDate(commit.authorDate) : "—"}
+      </span>
+      <span className="truncate font-medium text-foreground" title={commit.comment}>
+        {message}
+      </span>
+      <span className="truncate text-xs text-muted-foreground" title={`${commit.projectName} / ${commit.repositoryName}`}>
+        {commit.projectName} / {commit.repositoryName}
+      </span>
+      <span className="truncate text-xs text-muted-foreground" title={commit.authorName ?? undefined}>
+        {commit.authorName ?? "—"}
+      </span>
+    </div>
+  );
+});
+CommitGridRow.displayName = "CommitGridRow";
 
 function CommitResults({
   loading,
@@ -631,62 +764,88 @@ function CommitResults({
   results: CommitSummary[];
   searched: boolean;
 }) {
-  const [sortKey, setSortKey] = useState<CommitSortKey>("date");
-  const [sortDirection, setSortDirection] = useState<CommitSortDirection>("descending");
+  const [sort, setCommitSort] = useState<CommitSortState>({ key: "date", direction: "desc" });
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [columnWidths, setColumnWidths] = useState(() =>
+    storedNumbers(COMMIT_COLUMN_WIDTHS_STORAGE_KEY, DEFAULT_COMMIT_COLUMN_WIDTHS, COMMIT_COLUMN_MIN_WIDTHS, COMMIT_COLUMN_MAX_WIDTHS),
+  );
+  const [copyToast, setCopyToast] = useState<string | null>(null);
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  useEffect(() => {
+    localStorage.setItem(COMMIT_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
+  }, [columnWidths]);
+
+  const commitColTemplate = columnWidths.map((w) => `${w}px`).join(" ");
+
+  const sorted = useMemo(() => {
+    const dir = sort.direction === "asc" ? 1 : -1;
+    return [...results].sort((a, b) => {
+      const primary = compareCommitsByKey(a, b, sort.key);
+      if (primary !== 0) return primary * dir;
+      return `${a.repositoryId}:${a.commitId}`.localeCompare(`${b.repositoryId}:${b.commitId}`);
+    });
+  }, [results, sort]);
+
+  useEffect(() => {
+    setSelectedIndex((i) => Math.min(i, Math.max(sorted.length - 1, 0)));
+  }, [sorted.length]);
+
+  function applySort(key: CommitSortKey) {
+    setCommitSort((current) => {
+      if (current.key !== key) return { key, direction: defaultCommitSortDir(key) };
+      return { key, direction: current.direction === "asc" ? "desc" : "asc" };
+    });
+    setSelectedIndex(0);
+  }
+
+  function moveSelection(delta: number) {
+    setSelectedIndex((prev) => {
+      const next = clamp(prev + delta, 0, sorted.length - 1);
+      rowRefs.current[next]?.focus();
+      return next;
+    });
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (isEditableTarget(e.target)) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); moveSelection(1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); moveSelection(-1); }
+    else if (e.key === "Home") { e.preventDefault(); setSelectedIndex(0); rowRefs.current[0]?.focus(); }
+    else if (e.key === "End") {
+      e.preventDefault();
+      const last = sorted.length - 1;
+      setSelectedIndex(last);
+      rowRefs.current[last]?.focus();
+    }
+    else if (e.key === "PageDown") { e.preventDefault(); moveSelection(10); }
+    else if (e.key === "PageUp") { e.preventDefault(); moveSelection(-10); }
+    else if (e.key === "Enter") {
+      e.preventDefault();
+      const commit = sorted[selectedIndex];
+      if (commit?.webUrl) openExternalUrl(commit.webUrl);
+    } else if (e.key === "c" || e.key === "C") {
+      const commit = sorted[selectedIndex];
+      if (commit?.webUrl) {
+        void navigator.clipboard.writeText(commit.webUrl).then(() => {
+          setCopyToast("URL copied");
+          window.setTimeout(() => setCopyToast(null), 2000);
+        });
+      }
+    }
+  }
+
   const countLabel = useMemo(() => {
-    if (loading) {
-      return "Searching";
-    }
-    if (!searched) {
-      return "Ready";
-    }
+    if (loading) return "Searching";
+    if (!searched) return "Ready";
     return `${results.length} commit${results.length === 1 ? "" : "s"}`;
   }, [loading, results.length, searched]);
-  const sortedResults = useMemo(
-    () => sortCommits(results, sortKey, sortDirection),
-    [results, sortDirection, sortKey],
-  );
-
-  function toggleSort(nextSortKey: CommitSortKey) {
-    if (sortKey === nextSortKey) {
-      setSortDirection((direction) =>
-        direction === "ascending" ? "descending" : "ascending",
-      );
-      return;
-    }
-    setSortKey(nextSortKey);
-    setSortDirection(nextSortKey === "date" ? "descending" : "ascending");
-  }
 
   return (
     <div className="overflow-hidden rounded-md border border-border bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
+      <div className="flex items-center justify-between border-b border-border px-5 py-4">
         <h2 className="text-base font-semibold">Results</h2>
-        <div className="flex flex-wrap items-center gap-2">
-          {searched || loading ? (
-            <div className="flex rounded-md border border-border bg-background p-0.5">
-              <CommitSortButton
-                active={sortKey === "date"}
-                direction={sortDirection}
-                label="Date"
-                onClick={() => toggleSort("date")}
-              />
-              <CommitSortButton
-                active={sortKey === "repository"}
-                direction={sortDirection}
-                label="Repository"
-                onClick={() => toggleSort("repository")}
-              />
-              <CommitSortButton
-                active={sortKey === "author"}
-                direction={sortDirection}
-                label="Author"
-                onClick={() => toggleSort("author")}
-              />
-            </div>
-          ) : null}
-          <span className="text-sm text-muted-foreground">{countLabel}</span>
-        </div>
+        <span className="text-sm text-muted-foreground">{countLabel}</span>
       </div>
       {!searched && !loading ? (
         <div className="px-5 py-10 text-center text-sm text-muted-foreground">
@@ -697,160 +856,95 @@ function CommitResults({
           No commits matched.
         </div>
       ) : (
-        <div className="divide-y divide-border">
-          {sortedResults.map((commit) => (
-            <CommitRow key={`${commit.repositoryId}:${commit.commitId}`} commit={commit} />
-          ))}
+        <div role="grid" aria-label="Commit search results" className="overflow-x-auto" onKeyDown={handleKeyDown}>
+          <div className="min-w-[720px]">
+            <div
+              role="row"
+              className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+              style={{ gridTemplateColumns: commitColTemplate }}
+            >
+              <div role="columnheader" className="relative min-w-0 truncate px-1">
+                SHA
+                <ColumnResizeHandle columnIndex={0} widths={columnWidths} setWidths={setColumnWidths} min={COMMIT_COLUMN_MIN_WIDTHS[0]} max={COMMIT_COLUMN_MAX_WIDTHS[0]} />
+              </div>
+              {COMMIT_GRID_KEYS.map((col, i) => (
+                <CommitSortHeaderButton
+                  key={col}
+                  column={col}
+                  sort={sort}
+                  onSort={applySort}
+                  resizeHandle={
+                    i < COMMIT_GRID_KEYS.length - 1 ? (
+                      <ColumnResizeHandle
+                        columnIndex={i + 1}
+                        widths={columnWidths}
+                        setWidths={setColumnWidths}
+                        min={COMMIT_COLUMN_MIN_WIDTHS[i + 1]}
+                        max={COMMIT_COLUMN_MAX_WIDTHS[i + 1]}
+                      />
+                    ) : undefined
+                  }
+                />
+              ))}
+            </div>
+            {loading ? (
+              <div className="flex min-h-32 items-center justify-center">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden="true" />
+              </div>
+            ) : (
+              sorted.map((commit, index) => (
+                <CommitGridRow
+                  key={`${commit.repositoryId}:${commit.commitId}`}
+                  ref={(el) => { rowRefs.current[index] = el; }}
+                  commit={commit}
+                  selected={index === selectedIndex}
+                  columnTemplate={commitColTemplate}
+                  onSelect={() => setSelectedIndex(index)}
+                />
+              ))
+            )}
+          </div>
+        </div>
+      )}
+      {copyToast && (
+        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1.5 text-xs text-background shadow-lg">
+          {copyToast}
         </div>
       )}
     </div>
   );
 }
 
-function CommitSortButton({
-  active,
-  direction,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  direction: CommitSortDirection;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex h-7 items-center gap-1 rounded px-2 text-xs font-medium ${
-        active
-          ? "bg-secondary text-foreground"
-          : "text-muted-foreground hover:bg-secondary"
-      }`}
-      aria-label={`Sort commits by ${label}`}
-    >
-      {label}
-      {active ? (
-        direction === "ascending" ? (
-          <ChevronUp className="h-3 w-3" aria-hidden="true" />
-        ) : (
-          <ChevronDown className="h-3 w-3" aria-hidden="true" />
-        )
-      ) : null}
-    </button>
-  );
-}
-
-function sortCommits(
-  commits: CommitSummary[],
-  sortKey: CommitSortKey,
-  sortDirection: CommitSortDirection,
-): CommitSummary[] {
-  const direction = sortDirection === "ascending" ? 1 : -1;
-  return [...commits].sort((a, b) => {
-    const primary = compareCommitByKey(a, b, sortKey);
-    if (primary !== 0) {
-      return primary * direction;
-    }
-    return (
-      compareCommitStrings(a.repositoryName, b.repositoryName) ||
-      compareCommitStrings(a.commitId, b.commitId)
-    );
-  });
-}
-
-function compareCommitByKey(
-  a: CommitSummary,
-  b: CommitSummary,
-  sortKey: CommitSortKey,
-): number {
-  if (sortKey === "repository") {
-    return compareCommitStrings(
-      `${a.projectName}/${a.repositoryName}`,
-      `${b.projectName}/${b.repositoryName}`,
-    );
-  }
-  if (sortKey === "author") {
-    return compareCommitStrings(a.authorName ?? "", b.authorName ?? "");
-  }
-  return compareCommitStrings(a.authorDate ?? "", b.authorDate ?? "");
-}
-
-function compareCommitStrings(a: string, b: string): number {
-  return a.localeCompare(b);
-}
-
-function CommitRow({ commit }: { commit: CommitSummary }) {
-  const message = commit.comment.split(/\r?\n/, 1)[0] || "(no comment)";
-  const commitWebUrl = commit.webUrl;
-  return (
-    <div className="grid gap-3 px-5 py-3 lg:grid-cols-[minmax(0,1fr)_220px_auto]">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          {commitWebUrl ? (
-            <button
-              type="button"
-              onClick={() => {
-                void openExternalUrl(commitWebUrl);
-              }}
-              className="rounded-md bg-secondary px-2 py-1 font-mono text-xs font-medium hover:bg-secondary/80"
-              aria-label={`Open commit ${commit.shortCommitId} in Azure DevOps`}
-              title="Open commit in Azure DevOps"
-            >
-              {commit.shortCommitId}
-            </button>
-          ) : (
-            <span className="rounded-md bg-secondary px-2 py-1 font-mono text-xs font-medium">
-              {commit.shortCommitId}
-            </span>
-          )}
-          {commit.authorDate ? (
-            <span className="text-xs text-muted-foreground" title={formatDate(commit.authorDate)}>
-              {formatRelativeDate(commit.authorDate)}
-            </span>
-          ) : null}
-        </div>
-        <p className="mt-2 truncate font-medium" title={commit.comment}>
-          {message}
-        </p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {commit.projectName} / {commit.repositoryName}
-        </p>
-      </div>
-      <div className="min-w-0 text-left text-sm lg:text-right">
-        <p className="text-muted-foreground">Author</p>
-        <p className="truncate font-medium">{commit.authorName ?? "Unknown"}</p>
-        {commit.authorEmail ? (
-          <p className="truncate text-muted-foreground">{commit.authorEmail}</p>
-        ) : null}
-      </div>
-      <div className="flex items-start lg:justify-end">
-        <OpenInAzureDevOpsButton url={commit.webUrl} />
-      </div>
-    </div>
-  );
-}
-
 function WorkItemSearch({ organizations }: { organizations: Organization[] }) {
-  const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
+  const organizationId = organizations[0]?.id ?? "";
   const [query, setQuery] = useState("");
   const [state, setState] = useState("all");
   const [workItemType, setWorkItemType] = useState("");
+  const [projectId, setProjectId] = useState("");
 
-  const mutation = useMutation({
-    mutationFn: searchWorkItems,
+  const repositoriesQuery = useQuery({
+    queryKey: ["wiRepositories", organizationId],
+    queryFn: () => listCommitRepositories({ organizationId }),
+    enabled: !!organizationId,
   });
+  const allRepositories = repositoriesQuery.data ?? [];
+  const projects = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const repo of allRepositories) seen.set(repo.projectId, repo.projectName);
+    return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
+  }, [allRepositories]);
 
-  const selectedOrganizationId = organizationId || organizations[0]?.id || "";
+  const mutation = useMutation({ mutationFn: searchWorkItems });
   const results = mutation.data ?? [];
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     mutation.mutate({
-      organizationId: selectedOrganizationId,
+      organizationId,
       query,
       state,
       workItemType,
+      projectId: projectId || undefined,
     });
   }
 
@@ -858,7 +952,7 @@ function WorkItemSearch({ organizations }: { organizations: Organization[] }) {
     <div className="space-y-6">
       <div className="rounded-md border border-border bg-white">
         <form className="grid gap-4 p-5" onSubmit={onSubmit}>
-          <div className="grid gap-4 lg:grid-cols-[1fr_180px_150px_160px_auto]">
+          <div className="grid gap-4 lg:grid-cols-[1fr_160px_150px_160px_auto]">
             <label className="grid gap-2">
               <span className="text-sm font-medium">Search</span>
               <div className="flex h-10 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
@@ -866,7 +960,7 @@ function WorkItemSearch({ organizations }: { organizations: Organization[] }) {
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="title text"
+                  placeholder="title, type, assignee…"
                   autoFocus
                   className="min-w-0 flex-1 bg-transparent text-sm outline-none"
                 />
@@ -874,16 +968,16 @@ function WorkItemSearch({ organizations }: { organizations: Organization[] }) {
             </label>
 
             <label className="grid gap-2">
-              <span className="text-sm font-medium">Organization</span>
+              <span className="text-sm font-medium">Project</span>
               <select
-                value={selectedOrganizationId}
-                onChange={(event) => setOrganizationId(event.target.value)}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                value={projectId}
+                onChange={(event) => setProjectId(event.target.value)}
+                disabled={repositoriesQuery.isLoading}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
               >
-                {organizations.map((organization) => (
-                  <option key={organization.id} value={organization.id}>
-                    {organization.name}
-                  </option>
+                <option value="">All projects</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
             </label>
@@ -923,7 +1017,7 @@ function WorkItemSearch({ organizations }: { organizations: Organization[] }) {
             <div className="flex items-end">
               <button
                 type="submit"
-                disabled={mutation.isPending || !selectedOrganizationId}
+                disabled={mutation.isPending || !organizationId}
                 className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
               >
                 {mutation.isPending ? (
@@ -990,10 +1084,12 @@ function WiSortHeaderButton({
   column,
   sort,
   onSort,
+  resizeHandle,
 }: {
   column: WiSortKey;
   sort: WiSortState;
   onSort: (column: WiSortKey) => void;
+  resizeHandle?: ReactNode;
 }) {
   const active = sort.key === column;
   const label = wiSortLabels[column];
@@ -1001,7 +1097,7 @@ function WiSortHeaderButton({
     <div
       role="columnheader"
       aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
-      className="min-w-0"
+      className="relative min-w-0"
     >
       <button
         type="button"
@@ -1022,11 +1118,11 @@ function WiSortHeaderButton({
           <span className="h-3 w-3 shrink-0" aria-hidden="true" />
         )}
       </button>
+      {resizeHandle}
     </div>
   );
 }
 
-const WI_GRID_COL_TEMPLATE = "72px 120px 100px minmax(0,1fr) 160px 140px 100px";
 const WI_GRID_KEYS: WiSortKey[] = [
   "id",
   "workItemType",
@@ -1118,8 +1214,15 @@ function WorkItemsGrid({
 }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [sort, setWiSort] = useState<WiSortState>({ key: "changedDate", direction: "desc" });
+  const [columnWidths, setColumnWidths] = useState(() =>
+    storedNumbers(WI_COLUMN_WIDTHS_STORAGE_KEY, DEFAULT_WI_COLUMN_WIDTHS, WI_COLUMN_MIN_WIDTHS, WI_COLUMN_MAX_WIDTHS),
+  );
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  useEffect(() => {
+    localStorage.setItem(WI_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
+  }, [columnWidths]);
 
   const sorted = useMemo(
     () =>
@@ -1186,6 +1289,8 @@ function WorkItemsGrid({
     }
   }
 
+  const wiColTemplate = columnWidths.map((w) => `${w}px`).join(" ");
+
   return (
     <div ref={containerRef} className="outline-none" tabIndex={-1} onKeyDown={handleKeyDown}>
       <div className="overflow-hidden rounded-md border border-border bg-white">
@@ -1194,10 +1299,26 @@ function WorkItemsGrid({
             <div
               role="row"
               className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-              style={{ gridTemplateColumns: WI_GRID_COL_TEMPLATE }}
+              style={{ gridTemplateColumns: wiColTemplate }}
             >
-              {WI_GRID_KEYS.map((col) => (
-                <WiSortHeaderButton key={col} column={col} sort={sort} onSort={applyWiSort} />
+              {WI_GRID_KEYS.map((col, i) => (
+                <WiSortHeaderButton
+                  key={col}
+                  column={col}
+                  sort={sort}
+                  onSort={applyWiSort}
+                  resizeHandle={
+                    i < WI_GRID_KEYS.length - 1 ? (
+                      <ColumnResizeHandle
+                        columnIndex={i}
+                        widths={columnWidths}
+                        setWidths={setColumnWidths}
+                        min={WI_COLUMN_MIN_WIDTHS[i]}
+                        max={WI_COLUMN_MAX_WIDTHS[i]}
+                      />
+                    ) : undefined
+                  }
+                />
               ))}
             </div>
 
@@ -1221,7 +1342,7 @@ function WorkItemsGrid({
                     }}
                     item={item}
                     selected={i === selectedIndex}
-                    columnTemplate={WI_GRID_COL_TEMPLATE}
+                    columnTemplate={wiColTemplate}
                     onSelect={() => setSelectedIndex(i)}
                   />
                 ))}
@@ -2253,9 +2374,9 @@ function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
           <div className={row}><span>Move row</span><kbd className={kbd}>↑ ↓</kbd></div>
 
-          <p className={section}>PR Search</p>
+          <p className={section}>PR Search / WI Search / Commits</p>
           <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>Enter</kbd></div>
-          <div className={row}><span>Move row</span><kbd className={kbd}>↑ ↓</kbd></div>
+          <div className={row}><span>Move row</span><kbd className={kbd}>↑ ↓ Home End</kbd></div>
           <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
 
           <p className={section}>General</p>
@@ -2691,26 +2812,6 @@ const PrSearchRow = forwardRef<
 });
 PrSearchRow.displayName = "PrSearchRow";
 
-function OpenInAzureDevOpsButton({ url }: { url: string | null }) {
-  if (!url) {
-    return null;
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        void openExternalUrl(url);
-      }}
-      className="mt-3 inline-flex h-8 items-center justify-center gap-2 rounded-md border border-border px-3 text-xs font-medium text-foreground hover:bg-secondary"
-      aria-label="Open in Azure DevOps"
-      title="Open in Azure DevOps"
-    >
-      <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-      Open
-    </button>
-  );
-}
 
 function OrganizationSettings({
   organizations,
