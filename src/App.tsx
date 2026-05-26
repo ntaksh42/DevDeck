@@ -1567,6 +1567,7 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
       820,
     ),
   );
+  const [copyToast, setCopyToast] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const filterInputRef = useRef<HTMLInputElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -1723,6 +1724,17 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
       void query.refetch();
       return;
     }
+    if (e.key === "c" || e.key === "C") {
+      e.preventDefault();
+      const pr = sortedPrs[selectedIndex];
+      if (pr?.webUrl) {
+        void navigator.clipboard.writeText(pr.webUrl).then(
+          () => { setCopyToast("URL copied"); setTimeout(() => setCopyToast(null), 1500); },
+          () => { setCopyToast("Copy failed"); setTimeout(() => setCopyToast(null), 1500); },
+        );
+      }
+      return;
+    }
     if (e.key === "Escape") {
       e.preventDefault();
       setTextFilter("");
@@ -1792,6 +1804,15 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
       tabIndex={-1}
       onKeyDown={handleKeyDown}
     >
+      {copyToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-4 right-4 z-50 rounded-md bg-foreground px-3 py-2 text-sm text-background shadow-lg"
+        >
+          {copyToast}
+        </div>
+      )}
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-white px-3 py-2">
         {/* Text search */}
