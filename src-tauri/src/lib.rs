@@ -66,6 +66,12 @@ fn get_review_result_preview(
 }
 
 #[tauri::command]
+#[tracing::instrument(skip(state))]
+fn delete_organization(id: String, state: State<'_, AppState>) -> Result<()> {
+    state.organizations.delete(&id)
+}
+
+#[tauri::command]
 #[tracing::instrument(skip(state, input), fields(organization = %input.organization.trim()))]
 async fn add_pat_organization(
     input: AddPatOrganizationInput,
@@ -159,6 +165,7 @@ pub fn run() {
             get_app_settings,
             update_app_settings,
             get_review_result_preview,
+            delete_organization,
             add_pat_organization,
             add_azure_cli_organization,
             search_pull_requests,

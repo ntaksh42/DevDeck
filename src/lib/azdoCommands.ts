@@ -132,6 +132,10 @@ export type AddAzureCliOrganizationInput = {
   organization: string;
 };
 
+export type DeleteOrganizationInput = {
+  id: string;
+};
+
 export type UpdateAppSettingsInput = {
   reviewResultFolderPath?: string | null;
 };
@@ -212,6 +216,12 @@ export async function addAzureCliOrganization(
 ): Promise<Organization> {
   const result = await invokeCommand("add_azure_cli_organization", { input });
   return organizationSchema.parse(result);
+}
+
+export async function deleteOrganization(
+  input: DeleteOrganizationInput,
+): Promise<void> {
+  await invokeCommand("delete_organization", { id: input.id });
 }
 
 export async function searchPullRequests(
@@ -341,6 +351,8 @@ async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
     }
     case "list_commit_repositories":
       return demoCommitRepositories();
+    case "delete_organization":
+      return null;
     default:
       throw new Error(`Unsupported demo command: ${command}`);
   }

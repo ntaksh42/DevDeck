@@ -69,6 +69,15 @@ impl OrganizationService {
         })
     }
 
+    pub fn delete(&self, id: &str) -> Result<()> {
+        let org = self
+            .db
+            .get_organization(id)?
+            .ok_or_else(|| AppError::InvalidInput(format!("organization '{id}' not found")))?;
+        self.secrets.delete_credential(&org.credential_key)?;
+        self.db.delete_organization(id)
+    }
+
     pub async fn add_azure_cli_organization(
         &self,
         input: AddAzureCliOrganizationInput,

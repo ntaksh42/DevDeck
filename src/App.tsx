@@ -28,6 +28,7 @@ import {
   RefreshCw,
   Search,
   Settings,
+  Trash2,
   X,
 } from "lucide-react";
 import { Route, Routes } from "react-router-dom";
@@ -35,6 +36,7 @@ import {
   addAzureCliOrganization,
   addPatOrganization,
   commandErrorMessage,
+  deleteOrganization,
   getAppSettings,
   getReviewResultPreview,
   listCommitRepositories,
@@ -2511,6 +2513,19 @@ function OrganizationSettings({
 }: {
   organizations: Organization[];
 }) {
+  const queryClient = useQueryClient();
+  const deleteMutation = useMutation({
+    mutationFn: deleteOrganization,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["organizations"] });
+    },
+  });
+
+  function onDelete(org: Organization) {
+    if (!window.confirm(`Remove "${org.name}"? This cannot be undone.`)) return;
+    deleteMutation.mutate({ id: org.id });
+  }
+
   return (
     <div className="space-y-6">
       <SetupPanel compact />
@@ -2519,11 +2534,16 @@ function OrganizationSettings({
         <div className="border-b border-border px-5 py-4">
           <h2 className="text-base font-semibold">Organizations</h2>
         </div>
+        {deleteMutation.isError && (
+          <p className="px-5 py-2 text-sm text-destructive">
+            {commandErrorMessage(deleteMutation.error)}
+          </p>
+        )}
         <div className="divide-y divide-border">
           {organizations.map((organization) => (
             <div
               key={organization.id}
-              className="grid gap-4 px-5 py-4 md:grid-cols-[1fr_auto_auto]"
+              className="grid items-center gap-4 px-5 py-4 md:grid-cols-[1fr_auto_auto_auto]"
             >
               <div>
                 <p className="font-medium">{organization.name}</p>
@@ -2543,6 +2563,16 @@ function OrganizationSettings({
                   {organization.authenticatedUserDisplayName ?? "Unknown"}
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={() => onDelete(organization)}
+                disabled={deleteMutation.isPending}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                aria-label={`Remove ${organization.name}`}
+                title={`Remove ${organization.name}`}
+              >
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+              </button>
             </div>
           ))}
         </div>

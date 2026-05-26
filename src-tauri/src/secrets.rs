@@ -16,4 +16,11 @@ impl SecretStore {
     pub fn get_pat(&self, credential_key: &str) -> Result<String> {
         Ok(Entry::new(SERVICE_NAME, credential_key)?.get_password()?)
     }
+
+    pub fn delete_credential(&self, credential_key: &str) -> Result<()> {
+        match Entry::new(SERVICE_NAME, credential_key)?.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(e) => Err(e.into()),
+        }
+    }
 }

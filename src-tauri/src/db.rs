@@ -77,6 +77,11 @@ impl AppDatabase {
         let conn = self.open()?;
         update_app_settings(&conn, settings)
     }
+
+    pub fn delete_organization(&self, id: &str) -> Result<()> {
+        let conn = self.open()?;
+        delete_organization(&conn, id)
+    }
 }
 
 pub struct OrganizationDraft {
@@ -238,6 +243,11 @@ fn existing_created_at(conn: &Connection, id: &str) -> Result<Option<String>> {
             |row| row.get(0),
         )
         .optional()?)
+}
+
+fn delete_organization(conn: &Connection, id: &str) -> Result<()> {
+    conn.execute("DELETE FROM organizations WHERE id = ?1", [id])?;
+    Ok(())
 }
 
 fn get_organization(conn: &Connection, id: &str) -> Result<Option<Organization>> {
