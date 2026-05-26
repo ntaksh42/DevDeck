@@ -23,6 +23,7 @@ pub struct SearchWorkItemsInput {
     pub query: Option<String>,
     pub state: Option<String>,
     pub work_item_type: Option<String>,
+    pub project_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -62,10 +63,14 @@ impl WorkItemService {
         let query = input.query.unwrap_or_default();
         let state = normalize_optional_filter(input.state);
         let work_item_type = normalize_optional_filter(input.work_item_type);
+        let project_filter = normalize_optional_filter(input.project_id);
         let client = client_for_organization(&organization, &self.secrets)?;
 
         let mut results = Vec::new();
         for project in client.list_projects().await? {
+            if !matches_optional_filter(&project.id, project_filter.as_deref()) {
+                continue;
+            }
             let wiql = build_wiql(&query, state.as_deref(), work_item_type.as_deref());
             let ids = client.query_work_item_ids(&project.id, &wiql).await?;
             let ids: Vec<i64> = ids.into_iter().take(100).collect();
@@ -152,6 +157,10 @@ fn normalize_optional_filter(value: Option<String>) -> Option<String> {
     value
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty() && value != "all")
+}
+
+fn matches_optional_filter(value: &str, filter: Option<&str>) -> bool {
+    filter.is_none_or(|filter| filter == value)
 }
 
 fn build_wiql(query: &str, state: Option<&str>, work_item_type: Option<&str>) -> String {
@@ -247,6 +256,13 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn matches_optional_filter_allows_none_and_matching_value() {
+        assert!(matches_optional_filter("platform", None));
+        assert!(matches_optional_filter("platform", Some("platform")));
+        assert!(!matches_optional_filter("platform", Some("mobile")));
+    }
 
     #[test]
     fn build_wiql_escapes_filters() {
