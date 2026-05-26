@@ -38,6 +38,7 @@ import {
   getReviewResultPreview,
   listCommitRepositories,
   listMyReviewPullRequests,
+  listMyWorkItems,
   listOrganizations,
   searchCommits,
   searchPullRequests,
@@ -55,12 +56,16 @@ import {
 } from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
 
-type View = "pullRequestSearch" | "myReviews" | "workItems" | "commits" | "settings";
+type View = "pullRequestSearch" | "myReviews" | "workItems" | "myWorkItems" | "commits" | "settings";
 
 const DEFAULT_SIDEBAR_WIDTH = 256;
 const DEFAULT_REVIEW_PREVIEW_WIDTH = 420;
+const DEFAULT_PR_GRID_COLUMN_WIDTHS = [64, 220, 360, 112, 64, 112, 80, 112];
+const PR_GRID_COLUMN_MIN_WIDTHS = [56, 160, 220, 96, 56, 96, 72, 96];
+const PR_GRID_COLUMN_MAX_WIDTHS = [120, 520, 960, 240, 120, 240, 180, 240];
 const SIDEBAR_WIDTH_STORAGE_KEY = "azdodeck:layout:sidebarWidth";
 const REVIEW_PREVIEW_WIDTH_STORAGE_KEY = "azdodeck:layout:reviewPreviewWidth";
+const PR_GRID_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:myReviewsGridColumnWidths";
 
 function isEditableTarget(target: EventTarget | null): boolean {
   const element = target instanceof HTMLElement ? target : null;
@@ -81,6 +86,30 @@ function storedNumber(key: string, fallback: number, min: number, max: number): 
     return fallback;
   }
   return clamp(parsed, min, max);
+}
+
+function storedNumbers(key: string, fallback: number[], mins: number[], maxs: number[]): number[] {
+  const value = window.localStorage.getItem(key);
+  if (!value) {
+    return [...fallback];
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed) || parsed.length !== fallback.length) {
+      return [...fallback];
+    }
+
+    return fallback.map((defaultValue, index) => {
+      const parsedValue = Number(parsed[index]);
+      if (!Number.isFinite(parsedValue)) {
+        return defaultValue;
+      }
+      return clamp(parsedValue, mins[index], maxs[index]);
+    });
+  } catch {
+    return [...fallback];
+  }
 }
 
 function beginHorizontalResize(
@@ -112,7 +141,7 @@ function beginHorizontalResize(
 }
 
 function AppShell() {
-  const [view, setView] = useState<View>("pullRequestSearch");
+  const [view, setView] = useState<View>("myReviews");
   const [sidebarWidth, setSidebarWidth] = useState(() =>
     storedNumber(SIDEBAR_WIDTH_STORAGE_KEY, DEFAULT_SIDEBAR_WIDTH, 220, 420),
   );
@@ -142,13 +171,14 @@ function AppShell() {
 
       const nextViewByKey: Record<string, View> =
         organizations.length === 0
-          ? { "5": "settings" }
+          ? { "6": "settings" }
           : {
-              "1": "pullRequestSearch",
-              "2": "myReviews",
-              "3": "workItems",
-              "4": "commits",
-              "5": "settings",
+              "1": "myReviews",
+              "2": "pullRequestSearch",
+              "3": "myWorkItems",
+              "4": "workItems",
+              "5": "commits",
+              "6": "settings",
             };
       const nextView = nextViewByKey[event.key];
       if (!nextView) {
@@ -187,34 +217,46 @@ function AppShell() {
               disabled={organizations.length === 0}
             >
               <NavSubItem
-                active={activeView === "pullRequestSearch"}
-                disabled={organizations.length === 0}
-                label="Search"
-                shortcut="Alt+1"
-                onClick={() => setView("pullRequestSearch")}
-              />
-              <NavSubItem
                 active={activeView === "myReviews"}
                 disabled={organizations.length === 0}
                 label="My Reviews"
-                shortcut="Alt+2"
+                shortcut="Alt+1"
                 onClick={() => setView("myReviews")}
               />
+              <NavSubItem
+                active={activeView === "pullRequestSearch"}
+                disabled={organizations.length === 0}
+                label="Search"
+                shortcut="Alt+2"
+                onClick={() => setView("pullRequestSearch")}
+              />
             </NavSection>
-            <NavButton
-              active={activeView === "workItems"}
-              disabled={organizations.length === 0}
+            <NavSection
               icon={<ListChecks className="h-4 w-4" aria-hidden="true" />}
               label="Work Items"
-              shortcut="Alt+3"
-              onClick={() => setView("workItems")}
-            />
+              disabled={organizations.length === 0}
+            >
+              <NavSubItem
+                active={activeView === "myWorkItems"}
+                disabled={organizations.length === 0}
+                label="My Items"
+                shortcut="Alt+3"
+                onClick={() => setView("myWorkItems")}
+              />
+              <NavSubItem
+                active={activeView === "workItems"}
+                disabled={organizations.length === 0}
+                label="Search"
+                shortcut="Alt+4"
+                onClick={() => setView("workItems")}
+              />
+            </NavSection>
             <NavButton
               active={activeView === "commits"}
               disabled={organizations.length === 0}
               icon={<GitCommitHorizontal className="h-4 w-4" aria-hidden="true" />}
               label="Commits"
-              shortcut="Alt+4"
+              shortcut="Alt+5"
               onClick={() => setView("commits")}
             />
           </div>
@@ -223,7 +265,7 @@ function AppShell() {
               active={activeView === "settings"}
               icon={<Settings className="h-4 w-4" aria-hidden="true" />}
               label="Settings"
-              shortcut="Alt+5"
+              shortcut="Alt+6"
               onClick={() => setView("settings")}
             />
           </div>
@@ -250,9 +292,11 @@ function AppShell() {
                   ? "My Reviews"
                   : activeView === "workItems"
                     ? "Work Items"
-                    : activeView === "commits"
-                      ? "Commits"
-                    : "Settings"}
+                    : activeView === "myWorkItems"
+                      ? "My Work Items"
+                      : activeView === "commits"
+                        ? "Commits"
+                        : "Settings"}
             </h1>
             <p className="text-sm text-muted-foreground">
               {activeView === "pullRequestSearch"
@@ -261,9 +305,11 @@ function AppShell() {
                   ? "Pull requests assigned to you for review"
                   : activeView === "workItems"
                     ? "Search Azure DevOps work items across projects"
-                    : activeView === "commits"
-                      ? "Search Azure DevOps commits across repositories"
-                    : "Local Azure DevOps organization setup"}
+                    : activeView === "myWorkItems"
+                      ? "Work items assigned to you"
+                      : activeView === "commits"
+                        ? "Search Azure DevOps commits across repositories"
+                        : "Local Azure DevOps organization setup"}
             </p>
           </div>
         </header>
@@ -279,6 +325,8 @@ function AppShell() {
             <MyReviewsGrid organizations={organizations} />
           ) : activeView === "workItems" ? (
             <WorkItemSearch organizations={organizations} />
+          ) : activeView === "myWorkItems" ? (
+            <MyWorkItemsPanel organizations={organizations} />
           ) : activeView === "commits" ? (
             <CommitSearch organizations={organizations} />
           ) : organizations.length === 0 ? (
@@ -845,89 +893,389 @@ function WorkItemSearch({ organizations }: { organizations: Organization[] }) {
         <ErrorState message={commandErrorMessage(mutation.error)} />
       ) : null}
 
-      <WorkItemResults loading={mutation.isPending} results={results} searched={mutation.isSuccess} />
+      <WorkItemsGrid loading={mutation.isPending} results={results} searched={mutation.isSuccess} />
     </div>
   );
 }
 
-function WorkItemResults({
-  loading,
-  results,
-  searched,
+type WiSortKey =
+  | "id"
+  | "workItemType"
+  | "state"
+  | "title"
+  | "projectName"
+  | "assignedTo"
+  | "changedDate";
+type WiSortState = { key: WiSortKey; direction: SortDirection };
+
+const wiSortLabels: Record<WiSortKey, string> = {
+  id: "#",
+  workItemType: "Type",
+  state: "State",
+  title: "Title",
+  projectName: "Project",
+  assignedTo: "Assigned To",
+  changedDate: "Changed",
+};
+
+function compareWorkItems(a: WorkItemSummary, b: WorkItemSummary, key: WiSortKey): number {
+  switch (key) {
+    case "id":
+      return a.id - b.id;
+    case "workItemType":
+      return (a.workItemType ?? "￿").localeCompare(b.workItemType ?? "￿");
+    case "state":
+      return (a.state ?? "￿").localeCompare(b.state ?? "￿");
+    case "title":
+      return a.title.localeCompare(b.title);
+    case "projectName":
+      return a.projectName.localeCompare(b.projectName);
+    case "assignedTo":
+      return (a.assignedTo ?? "￿").localeCompare(b.assignedTo ?? "￿");
+    case "changedDate":
+      return (a.changedDate ?? "").localeCompare(b.changedDate ?? "");
+  }
+}
+
+function WiSortHeaderButton({
+  column,
+  sort,
+  onSort,
 }: {
-  loading: boolean;
-  results: WorkItemSummary[];
-  searched: boolean;
+  column: WiSortKey;
+  sort: WiSortState;
+  onSort: (column: WiSortKey) => void;
 }) {
-  const countLabel = useMemo(() => {
-    if (loading) {
-      return "Searching";
-    }
-    if (!searched) {
-      return "Ready";
-    }
-    return `${results.length} work item${results.length === 1 ? "" : "s"}`;
-  }, [loading, results.length, searched]);
-
+  const active = sort.key === column;
+  const label = wiSortLabels[column];
   return (
-    <div className="overflow-hidden rounded-md border border-border bg-white">
-      <div className="flex items-center justify-between border-b border-border px-5 py-4">
-        <h2 className="text-base font-semibold">Results</h2>
-        <span className="text-sm text-muted-foreground">{countLabel}</span>
-      </div>
-      {!searched && !loading ? (
-        <div className="px-5 py-10 text-center text-sm text-muted-foreground">
-          Run a search to load work items.
-        </div>
-      ) : results.length === 0 && !loading ? (
-        <div className="px-5 py-10 text-center text-sm text-muted-foreground">
-          No work items matched.
-        </div>
-      ) : (
-        <div className="divide-y divide-border">
-          {results.map((workItem) => (
-            <WorkItemRow key={`${workItem.projectId}:${workItem.id}`} workItem={workItem} />
-          ))}
-        </div>
-      )}
+    <div
+      role="columnheader"
+      aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
+      className="min-w-0"
+    >
+      <button
+        type="button"
+        aria-label={`Sort by ${label}`}
+        onClick={() => onSort(column)}
+        className={`flex w-full min-w-0 items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring ${
+          active ? "text-foreground" : ""
+        }`}
+      >
+        <span className="truncate">{label}</span>
+        {active ? (
+          sort.direction === "asc" ? (
+            <ChevronUp className="h-3 w-3 shrink-0" aria-hidden="true" />
+          ) : (
+            <ChevronDown className="h-3 w-3 shrink-0" aria-hidden="true" />
+          )
+        ) : (
+          <span className="h-3 w-3 shrink-0" aria-hidden="true" />
+        )}
+      </button>
     </div>
   );
 }
 
-function WorkItemRow({ workItem }: { workItem: WorkItemSummary }) {
+const WI_GRID_COL_TEMPLATE = "72px 120px 100px minmax(0,1fr) 160px 140px 100px";
+const WI_GRID_KEYS: WiSortKey[] = [
+  "id",
+  "workItemType",
+  "state",
+  "title",
+  "projectName",
+  "assignedTo",
+  "changedDate",
+];
+
+const WorkItemGridRow = forwardRef<
+  HTMLDivElement,
+  {
+    item: WorkItemSummary;
+    selected: boolean;
+    columnTemplate: string;
+    onSelect: () => void;
+  }
+>(({ item, selected, columnTemplate, onSelect }, ref) => (
+  <div
+    ref={ref}
+    tabIndex={selected ? 0 : -1}
+    role="row"
+    aria-selected={selected}
+    onClick={onSelect}
+    onKeyDown={(e) => {
+      if ((e.target as HTMLElement).closest("button")) return;
+      if (e.key === "Enter" && item.webUrl) {
+        e.stopPropagation();
+        openExternalUrl(item.webUrl);
+      }
+    }}
+    className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
+      selected ? "bg-secondary" : "hover:bg-muted/50"
+    }`}
+    style={{ gridTemplateColumns: columnTemplate }}
+  >
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        if (item.webUrl) openExternalUrl(item.webUrl);
+      }}
+      className="truncate text-left font-mono text-xs text-primary hover:underline"
+      title={`#${item.id}`}
+    >
+      #{item.id}
+    </button>
+    <span className="truncate text-xs text-muted-foreground" title={item.workItemType ?? undefined}>
+      {item.workItemType ?? "—"}
+    </span>
+    <span className="truncate text-xs" title={item.state ?? undefined}>
+      {item.state ?? "—"}
+    </span>
+    <span className="truncate font-medium text-foreground" title={item.title}>
+      {item.title}
+    </span>
+    <span className="truncate text-xs text-muted-foreground" title={item.projectName}>
+      {item.projectName}
+    </span>
+    <span
+      className="truncate text-xs text-muted-foreground"
+      title={item.assignedTo ?? "Unassigned"}
+    >
+      {item.assignedTo ?? "—"}
+    </span>
+    <span
+      className="text-xs text-muted-foreground"
+      title={item.changedDate ? new Date(item.changedDate).toLocaleString() : undefined}
+    >
+      {item.changedDate ? formatRelativeDate(item.changedDate) : "—"}
+    </span>
+  </div>
+));
+WorkItemGridRow.displayName = "WorkItemGridRow";
+
+function WorkItemsGrid({
+  results,
+  loading,
+  searched,
+  autoFocus = false,
+  emptyMessage,
+}: {
+  results: WorkItemSummary[];
+  loading: boolean;
+  searched: boolean;
+  autoFocus?: boolean;
+  emptyMessage?: string;
+}) {
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [sort, setWiSort] = useState<WiSortState>({ key: "changedDate", direction: "desc" });
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  const sorted = useMemo(
+    () =>
+      results
+        .map((item, index) => ({ item, index }))
+        .sort((a, b) => {
+          const result = compareWorkItems(a.item, b.item, sort.key);
+          const directed = sort.direction === "asc" ? result : -result;
+          return directed || a.index - b.index;
+        })
+        .map(({ item }) => item),
+    [results, sort],
+  );
+
+  useEffect(() => {
+    if (autoFocus) containerRef.current?.focus();
+  }, [autoFocus]);
+
+  useEffect(() => {
+    setSelectedIndex((i) => Math.min(i, Math.max(sorted.length - 1, 0)));
+  }, [sorted.length]);
+
+  function moveSelection(index: number) {
+    const next = Math.max(0, Math.min(index, sorted.length - 1));
+    setSelectedIndex(next);
+    rowRefs.current[next]?.focus();
+  }
+
+  function applyWiSort(column: WiSortKey) {
+    setWiSort((current) => {
+      if (current.key !== column) {
+        return { key: column, direction: column === "changedDate" ? "desc" : "asc" };
+      }
+      return { key: column, direction: current.direction === "asc" ? "desc" : "asc" };
+    });
+    setSelectedIndex(0);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (isEditableTarget(e.target)) return;
+    if (sorted.length === 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      moveSelection(selectedIndex + 1);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      moveSelection(selectedIndex - 1);
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      moveSelection(0);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      moveSelection(sorted.length - 1);
+    } else if (e.key === "PageDown") {
+      e.preventDefault();
+      moveSelection(selectedIndex + 10);
+    } else if (e.key === "PageUp") {
+      e.preventDefault();
+      moveSelection(selectedIndex - 10);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const item = sorted[selectedIndex];
+      if (item?.webUrl) openExternalUrl(item.webUrl);
+    }
+  }
+
   return (
-    <div className="grid gap-3 px-5 py-4 lg:grid-cols-[1fr_auto]">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-md bg-secondary px-2 py-1 text-xs font-medium">
-            #{workItem.id}
-          </span>
-          {workItem.workItemType ? (
-            <span className="rounded-md border border-border px-2 py-1 text-xs font-medium">
-              {workItem.workItemType}
-            </span>
-          ) : null}
-          {workItem.state ? (
-            <span className="rounded-md border border-border px-2 py-1 text-xs font-medium">
-              {workItem.state}
-            </span>
-          ) : null}
-          {workItem.changedDate ? (
-            <span className="text-xs text-muted-foreground">
-              {formatDate(workItem.changedDate)}
-            </span>
-          ) : null}
+    <div ref={containerRef} className="outline-none" tabIndex={-1} onKeyDown={handleKeyDown}>
+      <div className="overflow-hidden rounded-md border border-border bg-white">
+        <div className="overflow-x-auto">
+          <div className="min-w-[860px]">
+            <div
+              role="row"
+              className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+              style={{ gridTemplateColumns: WI_GRID_COL_TEMPLATE }}
+            >
+              {WI_GRID_KEYS.map((col) => (
+                <WiSortHeaderButton key={col} column={col} sort={sort} onSort={applyWiSort} />
+              ))}
+            </div>
+
+            {loading ? (
+              <LoadingState />
+            ) : !searched ? (
+              <div className="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
+                {emptyMessage ?? "Run a search to load work items."}
+              </div>
+            ) : sorted.length === 0 ? (
+              <div className="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
+                No work items matched.
+              </div>
+            ) : (
+              <div role="grid" aria-label="Work items">
+                {sorted.map((item, i) => (
+                  <WorkItemGridRow
+                    key={`${item.organizationId}:${item.projectId}:${item.id}`}
+                    ref={(el) => {
+                      rowRefs.current[i] = el;
+                    }}
+                    item={item}
+                    selected={i === selectedIndex}
+                    columnTemplate={WI_GRID_COL_TEMPLATE}
+                    onSelect={() => setSelectedIndex(i)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-        <p className="mt-2 font-medium">{workItem.title}</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {workItem.projectName}
-        </p>
+
+        <div className="flex items-center border-t border-border px-2 py-1 text-xs text-muted-foreground">
+          <span>
+            {loading
+              ? "Loading…"
+              : searched
+                ? `${sorted.length} item${sorted.length === 1 ? "" : "s"}`
+                : "Ready"}
+          </span>
+        </div>
       </div>
-      <div className="text-left text-sm lg:text-right">
-        <p className="text-muted-foreground">Assigned to</p>
-        <p className="font-medium">{workItem.assignedTo ?? "Unassigned"}</p>
-        <OpenInAzureDevOpsButton url={workItem.webUrl} />
+    </div>
+  );
+}
+
+function MyWorkItemsPanel({ organizations }: { organizations: Organization[] }) {
+  const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
+  const [filter, setFilter] = useState("");
+
+  const selectedOrganizationId = organizationId || organizations[0]?.id || "";
+
+  const query = useQuery({
+    queryKey: ["myWorkItems", selectedOrganizationId],
+    queryFn: () => listMyWorkItems({ organizationId: selectedOrganizationId }),
+    enabled: !!selectedOrganizationId,
+  });
+
+  const allResults = query.data ?? [];
+  const results = useMemo(() => {
+    const term = filter.trim().toLowerCase();
+    if (!term) return allResults;
+    return allResults.filter((item) => item.title.toLowerCase().includes(term));
+  }, [allResults, filter]);
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-md border border-border bg-white">
+        <div className="grid gap-4 p-5 lg:grid-cols-[1fr_180px_auto]">
+          <label className="grid gap-2">
+            <span className="text-sm font-medium">Filter</span>
+            <div className="flex h-10 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
+              <Search className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              <input
+                value={filter}
+                onChange={(event) => setFilter(event.target.value)}
+                placeholder="Filter by title"
+                className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+              />
+            </div>
+          </label>
+
+          {organizations.length > 1 ? (
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Organization</span>
+              <select
+                value={selectedOrganizationId}
+                onChange={(event) => setOrganizationId(event.target.value)}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              >
+                {organizations.map((organization) => (
+                  <option key={organization.id} value={organization.id}>
+                    {organization.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
+          <div className="flex items-end">
+            <button
+              type="button"
+              disabled={query.isFetching}
+              onClick={() => query.refetch()}
+              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
+            >
+              {query.isFetching ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              )}
+              Refresh
+            </button>
+          </div>
+        </div>
       </div>
+
+      {query.isError ? (
+        <ErrorState message={commandErrorMessage(query.error)} />
+      ) : null}
+
+      <WorkItemsGrid
+        loading={query.isFetching}
+        results={results}
+        searched={query.isSuccess || query.isFetching}
+        autoFocus
+      />
     </div>
   );
 }
@@ -982,9 +1330,10 @@ const ReviewPrRow = forwardRef<
   {
     pr: ReviewPullRequestSummary;
     selected: boolean;
+    columnTemplate: string;
     onSelect: () => void;
   }
->(({ pr, selected, onSelect }, ref) => {
+>(({ pr, selected, columnTemplate, onSelect }, ref) => {
   const isStale = Math.floor((Date.now() - new Date(pr.creationDate).getTime()) / 86_400_000) >= 3;
   return (
     <div
@@ -1008,7 +1357,7 @@ const ReviewPrRow = forwardRef<
           : selected ? "bg-secondary"
           : isStale ? "bg-orange-50 dark:bg-orange-950/20 hover:bg-orange-100/70"
           : "hover:bg-muted/50"}`}
-      style={{ gridTemplateColumns: "64px minmax(160px,1.5fr) minmax(200px,3fr) 112px 64px 96px 80px 112px" }}
+      style={{ gridTemplateColumns: columnTemplate }}
     >
       {/* PR# */}
       <button
@@ -1183,6 +1532,14 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
   const [showDrafts, setShowDrafts] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [sort, setSort] = useState<SortState>({ key: "creationDate", direction: "desc" });
+  const [columnWidths] = useState(() =>
+    storedNumbers(
+      PR_GRID_COLUMN_WIDTHS_STORAGE_KEY,
+      DEFAULT_PR_GRID_COLUMN_WIDTHS,
+      PR_GRID_COLUMN_MIN_WIDTHS,
+      PR_GRID_COLUMN_MAX_WIDTHS,
+    ),
+  );
   const [previewWidth, setPreviewWidth] = useState(() =>
     storedNumber(
       REVIEW_PREVIEW_WIDTH_STORAGE_KEY,
@@ -1407,7 +1764,7 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
     { value: "all", label: "All" },
   ];
 
-  const COLS = "64px minmax(160px,1.5fr) minmax(200px,3fr) 112px 64px 96px 80px 112px";
+  const COLS = columnWidths.map((width) => `${width}px`).join(" ");
 
   return (
     <div
@@ -1536,6 +1893,7 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
                     <ReviewPrRow
                       key={`${pr.organizationId}-${pr.pullRequestId}`}
                       ref={(el) => { rowRefs.current[i] = el; }}
+                      columnTemplate={COLS}
                       pr={pr}
                       selected={i === selectedIndex}
                       onSelect={() => setSelectedIndex(i)}

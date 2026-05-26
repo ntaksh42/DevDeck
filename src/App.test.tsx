@@ -113,12 +113,15 @@ describe("App", () => {
       if (command === "get_app_settings") {
         return Promise.resolve({ reviewResultFolderPath: "C:\\reports" });
       }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
       return Promise.reject(new Error(`Unhandled command: ${command}`));
     });
 
     renderApp();
 
-    await screen.findByText("Run a search to load pull requests.");
+    await screen.findByText("No pull requests assigned to you.");
     fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
 
     expect(await screen.findByText("Organizations")).toBeTruthy();
@@ -141,12 +144,15 @@ describe("App", () => {
           (args as { input: { reviewResultFolderPath: string } }).input,
         );
       }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
       return Promise.reject(new Error(`Unhandled command: ${command}`));
     });
 
     renderApp();
 
-    await screen.findByText("Run a search to load pull requests.");
+    await screen.findByText("No pull requests assigned to you.");
     fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
     expect(await screen.findByRole("heading", { name: "Review result previews" })).toBeTruthy();
     await waitFor(() => {
@@ -224,28 +230,40 @@ describe("App", () => {
   });
 
   it("searches pull requests and renders results", async () => {
-    invokeMock
-      .mockResolvedValueOnce([organization])
-      .mockResolvedValueOnce([
-        {
-          organizationId: "contoso",
-          projectId: "project-1",
-          projectName: "Platform",
-          repositoryId: "repo-1",
-          repositoryName: "azdo-dashboard",
-          pullRequestId: 42,
-          title: "Add pull request search",
-          status: "active",
-          createdBy: "Test User",
-          creationDate: "2026-05-24T00:00:00Z",
-          sourceRefName: "feature/pr-search",
-          targetRefName: "main",
-          webUrl: "https://dev.azure.com/contoso/project/_git/repo/pullrequest/42",
-        },
-      ]);
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
+      if (command === "search_pull_requests") {
+        return Promise.resolve([
+          {
+            organizationId: "contoso",
+            projectId: "project-1",
+            projectName: "Platform",
+            repositoryId: "repo-1",
+            repositoryName: "azdo-dashboard",
+            pullRequestId: 42,
+            title: "Add pull request search",
+            status: "active",
+            createdBy: "Test User",
+            creationDate: "2026-05-24T00:00:00Z",
+            sourceRefName: "feature/pr-search",
+            targetRefName: "main",
+            webUrl: "https://dev.azure.com/contoso/project/_git/repo/pullrequest/42",
+          },
+        ]);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
 
     renderApp();
     const main = within(await screen.findByRole("main"));
+
+    await screen.findByText("No pull requests assigned to you.");
+    fireEvent.keyDown(window, { key: "2", altKey: true });
 
     fireEvent.change(await main.findByPlaceholderText("title, author, repository, branch"), {
       target: { value: "search" },
@@ -274,28 +292,37 @@ describe("App", () => {
   });
 
   it("searches work items and renders results", async () => {
-    invokeMock
-      .mockResolvedValueOnce([organization])
-      .mockResolvedValueOnce([
-        {
-          organizationId: "contoso",
-          projectId: "project-1",
-          projectName: "Platform",
-          id: 123,
-          title: "Fix save workflow",
-          workItemType: "Bug",
-          state: "Active",
-          assignedTo: "Test User",
-          changedDate: "2026-05-24T00:00:00Z",
-          webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/123",
-        },
-      ]);
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
+      if (command === "search_work_items") {
+        return Promise.resolve([
+          {
+            organizationId: "contoso",
+            projectId: "project-1",
+            projectName: "Platform",
+            id: 123,
+            title: "Fix save workflow",
+            workItemType: "Bug",
+            state: "Active",
+            assignedTo: "Test User",
+            changedDate: "2026-05-24T00:00:00Z",
+            webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/123",
+          },
+        ]);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
 
     renderApp();
     const main = within(await screen.findByRole("main"));
 
-    await main.findByText("Run a search to load pull requests.");
-    fireEvent.click(screen.getByRole("button", { name: "Work Items" }));
+    await screen.findByText("No pull requests assigned to you.");
+    fireEvent.keyDown(window, { key: "4", altKey: true });
     fireEvent.change(await main.findByPlaceholderText("title text"), {
       target: { value: "save" },
     });
@@ -314,7 +341,7 @@ describe("App", () => {
     expect(await screen.findByText("Fix save workflow")).toBeTruthy();
     expect(screen.getByText("Test User")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Open in Azure DevOps" }));
+    fireEvent.click(screen.getByRole("button", { name: "#123" }));
 
     await waitFor(() => {
       expect(openUrlMock).toHaveBeenCalledWith(
@@ -328,6 +355,9 @@ describe("App", () => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
       }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
       if (command === "list_commit_repositories") {
         return Promise.resolve([
           {
@@ -340,21 +370,21 @@ describe("App", () => {
       }
       if (command === "search_commits") {
         return Promise.resolve([
-        {
-          organizationId: "contoso",
-          projectId: "project-1",
-          projectName: "Platform",
-          repositoryId: "repo-1",
-          repositoryName: "azdo-dashboard",
-          commitId: "abcdef1234567890abcdef1234567890abcdef12",
-          shortCommitId: "abcdef12",
-          comment: "Add commit search",
-          authorName: "Test User",
-          authorEmail: "test@example.com",
-          authorDate: "2026-05-24T00:00:00Z",
-          webUrl:
-            "https://dev.azure.com/contoso/project/_git/repo/commit/abcdef1234567890abcdef1234567890abcdef12",
-        },
+          {
+            organizationId: "contoso",
+            projectId: "project-1",
+            projectName: "Platform",
+            repositoryId: "repo-1",
+            repositoryName: "azdo-dashboard",
+            commitId: "abcdef1234567890abcdef1234567890abcdef12",
+            shortCommitId: "abcdef12",
+            comment: "Add commit search",
+            authorName: "Test User",
+            authorEmail: "test@example.com",
+            authorDate: "2026-05-24T00:00:00Z",
+            webUrl:
+              "https://dev.azure.com/contoso/project/_git/repo/commit/abcdef1234567890abcdef1234567890abcdef12",
+          },
         ]);
       }
       return Promise.reject(new Error(`Unhandled command: ${command}`));
@@ -363,7 +393,7 @@ describe("App", () => {
     renderApp();
     const main = within(await screen.findByRole("main"));
 
-    await main.findByText("Run a search to load pull requests.");
+    await screen.findByText("No pull requests assigned to you.");
     fireEvent.click(screen.getByRole("button", { name: "Commits" }));
     fireEvent.change(
       await main.findByPlaceholderText("message, author, repository, SHA"),
@@ -418,6 +448,9 @@ describe("App", () => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
       }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
       if (command === "list_commit_repositories") {
         return Promise.resolve([]);
       }
@@ -427,7 +460,7 @@ describe("App", () => {
     renderApp();
     const main = within(await screen.findByRole("main"));
 
-    await main.findByText("Run a search to load pull requests.");
+    await screen.findByText("No pull requests assigned to you.");
     fireEvent.click(screen.getByRole("button", { name: "Commits" }));
     fireEvent.change(await main.findByLabelText("From"), {
       target: { value: "2026-05-25" },
@@ -466,58 +499,58 @@ describe("App", () => {
       }
       if (command === "list_my_review_pull_requests") {
         return Promise.resolve([
-        {
-          organizationId: "contoso",
-          projectId: "platform",
-          projectName: "Platform",
-          repositoryId: "api",
-          repositoryName: "api",
-          pullRequestId: 101,
-          title: "Needs review",
-          createdBy: "Alice",
-          creationDate: "2026-05-24T00:00:00Z",
-          targetRefName: "main",
-          webUrl: "https://dev.azure.com/contoso/Platform/_git/api/pullrequest/101",
-          myVote: 0,
-          myVoteLabel: "No Vote",
-          myIsRequired: true,
-          isDraft: false,
-        },
-        {
-          organizationId: "contoso",
-          projectId: "platform",
-          projectName: "Platform",
-          repositoryId: "api",
-          repositoryName: "api",
-          pullRequestId: 102,
-          title: "Waiting on author",
-          createdBy: "Bob",
-          creationDate: "2026-05-23T00:00:00Z",
-          targetRefName: "main",
-          webUrl: "https://dev.azure.com/contoso/Platform/_git/api/pullrequest/102",
-          myVote: -5,
-          myVoteLabel: "Waiting for Author",
-          myIsRequired: false,
-          isDraft: false,
-        },
-        {
-          organizationId: "contoso",
-          projectId: "platform",
-          projectName: "Platform",
-          repositoryId: "api",
-          repositoryName: "api",
-          pullRequestId: 103,
-          title: "Rejected legacy path",
-          createdBy: "Carol",
-          creationDate: "2026-05-22T00:00:00Z",
-          targetRefName: "main",
-          webUrl: "https://dev.azure.com/contoso/Platform/_git/api/pullrequest/103",
-          myVote: -10,
-          myVoteLabel: "Rejected",
-          myIsRequired: false,
-          isDraft: false,
-        },
-      ]);
+          {
+            organizationId: "contoso",
+            projectId: "platform",
+            projectName: "Platform",
+            repositoryId: "api",
+            repositoryName: "api",
+            pullRequestId: 101,
+            title: "Needs review",
+            createdBy: "Alice",
+            creationDate: "2026-05-24T00:00:00Z",
+            targetRefName: "main",
+            webUrl: "https://dev.azure.com/contoso/Platform/_git/api/pullrequest/101",
+            myVote: 0,
+            myVoteLabel: "No Vote",
+            myIsRequired: true,
+            isDraft: false,
+          },
+          {
+            organizationId: "contoso",
+            projectId: "platform",
+            projectName: "Platform",
+            repositoryId: "api",
+            repositoryName: "api",
+            pullRequestId: 102,
+            title: "Waiting on author",
+            createdBy: "Bob",
+            creationDate: "2026-05-23T00:00:00Z",
+            targetRefName: "main",
+            webUrl: "https://dev.azure.com/contoso/Platform/_git/api/pullrequest/102",
+            myVote: -5,
+            myVoteLabel: "Waiting for Author",
+            myIsRequired: false,
+            isDraft: false,
+          },
+          {
+            organizationId: "contoso",
+            projectId: "platform",
+            projectName: "Platform",
+            repositoryId: "api",
+            repositoryName: "api",
+            pullRequestId: 103,
+            title: "Rejected legacy path",
+            createdBy: "Carol",
+            creationDate: "2026-05-22T00:00:00Z",
+            targetRefName: "main",
+            webUrl: "https://dev.azure.com/contoso/Platform/_git/api/pullrequest/103",
+            myVote: -10,
+            myVoteLabel: "Rejected",
+            myIsRequired: false,
+            isDraft: false,
+          },
+        ]);
       }
       return Promise.reject(new Error(`Unhandled command: ${command}`));
     });
@@ -525,8 +558,6 @@ describe("App", () => {
     renderApp();
     const main = within(await screen.findByRole("main"));
 
-    await main.findByText("Run a search to load pull requests.");
-    fireEvent.keyDown(window, { key: "2", altKey: true });
     expect(await main.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
     expect(await main.findByText("Needs review")).toBeTruthy();
     expect(main.queryByRole("tab", { name: "Rejected" })).toBeNull();
@@ -564,41 +595,41 @@ describe("App", () => {
       }
       if (command === "list_my_review_pull_requests") {
         return Promise.resolve([
-        {
-          organizationId: "contoso",
-          projectId: "platform",
-          projectName: "Platform",
-          repositoryId: "api",
-          repositoryName: "api",
-          pullRequestId: 2,
-          title: "Second PR",
-          createdBy: "Bob",
-          creationDate: "2026-05-24T00:00:00Z",
-          targetRefName: "main",
-          webUrl: "https://dev.azure.com/contoso/Platform/_git/api/pullrequest/2",
-          myVote: 0,
-          myVoteLabel: "No Vote",
-          myIsRequired: true,
-          isDraft: false,
-        },
-        {
-          organizationId: "contoso",
-          projectId: "platform",
-          projectName: "Platform",
-          repositoryId: "web",
-          repositoryName: "web",
-          pullRequestId: 1,
-          title: "First PR",
-          createdBy: "Alice",
-          creationDate: "2026-05-23T00:00:00Z",
-          targetRefName: "develop",
-          webUrl: "https://dev.azure.com/contoso/Platform/_git/web/pullrequest/1",
-          myVote: 0,
-          myVoteLabel: "No Vote",
-          myIsRequired: false,
-          isDraft: false,
-        },
-      ]);
+          {
+            organizationId: "contoso",
+            projectId: "platform",
+            projectName: "Platform",
+            repositoryId: "api",
+            repositoryName: "api",
+            pullRequestId: 2,
+            title: "Second PR",
+            createdBy: "Bob",
+            creationDate: "2026-05-24T00:00:00Z",
+            targetRefName: "main",
+            webUrl: "https://dev.azure.com/contoso/Platform/_git/api/pullrequest/2",
+            myVote: 0,
+            myVoteLabel: "No Vote",
+            myIsRequired: true,
+            isDraft: false,
+          },
+          {
+            organizationId: "contoso",
+            projectId: "platform",
+            projectName: "Platform",
+            repositoryId: "web",
+            repositoryName: "web",
+            pullRequestId: 1,
+            title: "First PR",
+            createdBy: "Alice",
+            creationDate: "2026-05-23T00:00:00Z",
+            targetRefName: "develop",
+            webUrl: "https://dev.azure.com/contoso/Platform/_git/web/pullrequest/1",
+            myVote: 0,
+            myVoteLabel: "No Vote",
+            myIsRequired: false,
+            isDraft: false,
+          },
+        ]);
       }
       return Promise.reject(new Error(`Unhandled command: ${command}`));
     });
@@ -606,8 +637,6 @@ describe("App", () => {
     renderApp();
     const main = within(await screen.findByRole("main"));
 
-    await main.findByText("Run a search to load pull requests.");
-    fireEvent.keyDown(window, { key: "2", altKey: true });
     const grid = within(await main.findByRole("grid", { name: "My review pull requests" }));
 
     expect(grid.getAllByRole("row")[0].textContent).toContain("#2");
@@ -626,21 +655,28 @@ describe("App", () => {
   });
 
   it("navigates top-level sections with keyboard shortcuts", async () => {
-    invokeMock.mockResolvedValueOnce([organization]);
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
 
     renderApp();
     const main = within(await screen.findByRole("main"));
 
-    expect(await main.findByRole("heading", { name: "Pull Requests" })).toBeTruthy();
-    await main.findByText("Run a search to load pull requests.");
-
-    fireEvent.keyDown(window, { key: "3", altKey: true });
-    expect(await main.findByRole("heading", { name: "Work Items" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: "4", altKey: true });
-    expect(await main.findByRole("heading", { name: "Commits" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "Work Items" })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: "5", altKey: true });
+    expect(await main.findByRole("heading", { name: "Commits" })).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: "6", altKey: true });
     expect(await main.findByRole("heading", { name: "Organizations" })).toBeTruthy();
   });
 
@@ -681,7 +717,7 @@ describe("App", () => {
 
     renderApp();
 
-    await screen.findByText("Run a search to load pull requests.");
+    await screen.findByText("Needs review");
     const navResize = screen.getByRole("separator", { name: "Resize navigation" });
     expect(navResize.getAttribute("aria-valuenow")).toBe("256");
     fireEvent.keyDown(navResize, { key: "ArrowRight" });
@@ -690,7 +726,6 @@ describe("App", () => {
     fireEvent.keyDown(navResize, { key: "Escape" });
     expect(navResize.getAttribute("aria-valuenow")).toBe("256");
 
-    fireEvent.keyDown(window, { key: "2", altKey: true });
     expect(await screen.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
     const previewResize = screen.getByRole("separator", { name: "Resize review preview" });
     expect(previewResize.getAttribute("aria-valuenow")).toBe("420");
@@ -710,6 +745,9 @@ describe("App", () => {
 
     renderApp();
     const main = within(await screen.findByRole("main"));
+
+    expect(await main.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
+    fireEvent.keyDown(window, { key: "2", altKey: true });
 
     expect(
       await main.findByText("Run a search to load pull requests."),

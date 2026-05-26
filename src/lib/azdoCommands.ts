@@ -157,6 +157,9 @@ export type SearchWorkItemsInput = {
   workItemType?: string;
 };
 
+export type ListMyWorkItemsInput = {
+  organizationId?: string;
+};
 
 export type SearchCommitsInput = {
   organizationId?: string;
@@ -232,6 +235,12 @@ export async function searchWorkItems(
   return workItemSummariesSchema.parse(result);
 }
 
+export async function listMyWorkItems(
+  input: ListMyWorkItemsInput,
+): Promise<WorkItemSummary[]> {
+  const result = await invokeCommand("list_my_work_items", { input });
+  return workItemSummariesSchema.parse(result);
+}
 
 export async function searchCommits(
   input: SearchCommitsInput,
@@ -323,6 +332,8 @@ async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
       return demoReviewPullRequests();
     case "search_work_items":
       return demoWorkItems();
+    case "list_my_work_items":
+      return demoMyWorkItems();
     case "search_commits": {
       const input = (args as { input?: SearchCommitsInput } | undefined)
         ?.input;
@@ -407,6 +418,47 @@ function demoWorkItems(): WorkItemSummary[] {
       assignedTo: "Demo User",
       changedDate: "2026-05-24T00:00:00Z",
       webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/123",
+    },
+  ];
+}
+
+function demoMyWorkItems(): WorkItemSummary[] {
+  return [
+    {
+      organizationId: "contoso",
+      projectId: "platform",
+      projectName: "Platform",
+      id: 201,
+      title: "Implement My Work Items panel",
+      workItemType: "Task",
+      state: "Active",
+      assignedTo: "Demo User",
+      changedDate: "2026-05-25T08:00:00Z",
+      webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/201",
+    },
+    {
+      organizationId: "contoso",
+      projectId: "mobile",
+      projectName: "Mobile",
+      id: 187,
+      title: "Fix crash on launch for Android 14",
+      workItemType: "Bug",
+      state: "Active",
+      assignedTo: "Demo User",
+      changedDate: "2026-05-24T14:30:00Z",
+      webUrl: "https://dev.azure.com/contoso/Mobile/_workitems/edit/187",
+    },
+    {
+      organizationId: "contoso",
+      projectId: "platform",
+      projectName: "Platform",
+      id: 155,
+      title: "Write ADR for auth middleware rewrite",
+      workItemType: "Task",
+      state: "New",
+      assignedTo: "Demo User",
+      changedDate: "2026-05-23T10:00:00Z",
+      webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/155",
     },
   ];
 }
