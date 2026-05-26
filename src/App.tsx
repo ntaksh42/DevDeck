@@ -1568,10 +1568,12 @@ function SortHeaderButton({
   column,
   sort,
   onSort,
+  resizeHandle,
 }: {
   column: SortKey;
   sort: SortState;
   onSort: (column: SortKey) => void;
+  resizeHandle?: ReactNode;
 }) {
   const active = sort.key === column;
   const label = sortLabels[column];
@@ -1580,7 +1582,7 @@ function SortHeaderButton({
     <div
       role="columnheader"
       aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
-      className="min-w-0"
+      className="relative min-w-0"
     >
       <button
         type="button"
@@ -1601,6 +1603,7 @@ function SortHeaderButton({
           <span className="h-3 w-3 shrink-0" aria-hidden="true" />
         )}
       </button>
+      {resizeHandle}
     </div>
   );
 }
@@ -1619,7 +1622,7 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
   const [showDrafts, setShowDrafts] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [sort, setSort] = useState<SortState>({ key: "creationDate", direction: "desc" });
-  const [columnWidths] = useState(() =>
+  const [columnWidths, setColumnWidths] = useState(() =>
     storedNumbers(
       PR_GRID_COLUMN_WIDTHS_STORAGE_KEY,
       DEFAULT_PR_GRID_COLUMN_WIDTHS,
@@ -1639,6 +1642,10 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const filterInputRef = useRef<HTMLInputElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  useEffect(() => {
+    localStorage.setItem(PR_GRID_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
+  }, [columnWidths]);
 
   const allPrs = query.data ?? [];
 
@@ -1977,13 +1984,23 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
                 className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                 style={{ gridTemplateColumns: COLS }}
               >
-                <SortHeaderButton column="pullRequestId" sort={sort} onSort={applySort} />
-                <SortHeaderButton column="repositoryName" sort={sort} onSort={applySort} />
-                <SortHeaderButton column="title" sort={sort} onSort={applySort} />
-                <SortHeaderButton column="createdBy" sort={sort} onSort={applySort} />
-                <SortHeaderButton column="creationDate" sort={sort} onSort={applySort} />
-                <SortHeaderButton column="targetRefName" sort={sort} onSort={applySort} />
-                <SortHeaderButton column="myIsRequired" sort={sort} onSort={applySort} />
+                {(["pullRequestId", "repositoryName", "title", "createdBy", "creationDate", "targetRefName", "myIsRequired"] as SortKey[]).map((col, i) => (
+                  <SortHeaderButton
+                    key={col}
+                    column={col}
+                    sort={sort}
+                    onSort={applySort}
+                    resizeHandle={
+                      <ColumnResizeHandle
+                        columnIndex={i}
+                        widths={columnWidths}
+                        setWidths={setColumnWidths}
+                        min={PR_GRID_COLUMN_MIN_WIDTHS[i]}
+                        max={PR_GRID_COLUMN_MAX_WIDTHS[i]}
+                      />
+                    }
+                  />
+                ))}
                 <SortHeaderButton column="myVote" sort={sort} onSort={applySort} />
               </div>
 
