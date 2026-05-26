@@ -148,6 +148,8 @@ export type SearchPullRequestsInput = {
   organizationId?: string;
   query?: string;
   status?: "active" | "completed" | "abandoned" | "all";
+  projectId?: string;
+  repositoryId?: string;
 };
 
 export type ListMyReviewPullRequestsInput = {
@@ -336,8 +338,10 @@ async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
         credentialKey: `azdodeck:org:${input?.organization || demoOrganization.name}:azure-cli`,
       };
     }
-    case "search_pull_requests":
-      return demoPullRequests();
+    case "search_pull_requests": {
+      const input = (args as { input?: SearchPullRequestsInput } | undefined)?.input;
+      return demoPullRequests(input);
+    }
     case "list_my_review_pull_requests":
       return demoReviewPullRequests();
     case "search_work_items":
@@ -396,8 +400,13 @@ function demoReviewResultPreview(
   };
 }
 
-function demoPullRequests(): PullRequestSummary[] {
-  return [
+function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[] {
+  const now = new Date("2026-05-27T08:00:00Z");
+  const ago = (ms: number) => new Date(now.getTime() - ms).toISOString();
+  const hr = 3_600_000;
+  const day = 86_400_000;
+
+  const all: PullRequestSummary[] = [
     {
       organizationId: "contoso",
       projectId: "platform",
@@ -408,13 +417,104 @@ function demoPullRequests(): PullRequestSummary[] {
       title: "Add pull request search dashboard",
       status: "active",
       createdBy: "Demo User",
-      creationDate: "2026-05-24T00:00:00Z",
+      creationDate: ago(2 * hr),
       sourceRefName: "feature/pr-search",
       targetRefName: "main",
-      webUrl:
-        "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/pullrequest/42",
+      webUrl: "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/pullrequest/42",
+    },
+    {
+      organizationId: "contoso",
+      projectId: "platform",
+      projectName: "Platform",
+      repositoryId: "api-gateway",
+      repositoryName: "api-gateway",
+      pullRequestId: 103,
+      title: "Refactor authentication flow with OAuth 2.0 PKCE",
+      status: "active",
+      createdBy: "Dave Kim",
+      creationDate: ago(1 * day),
+      sourceRefName: "feature/oauth-pkce",
+      targetRefName: "main",
+      webUrl: "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/103",
+    },
+    {
+      organizationId: "contoso",
+      projectId: "platform",
+      projectName: "Platform",
+      repositoryId: "api-gateway",
+      repositoryName: "api-gateway",
+      pullRequestId: 99,
+      title: "Add OpenTelemetry tracing support",
+      status: "completed",
+      createdBy: "Grace Chen",
+      creationDate: ago(5 * day),
+      sourceRefName: "feature/otel-tracing",
+      targetRefName: "main",
+      webUrl: "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/99",
+    },
+    {
+      organizationId: "contoso",
+      projectId: "mobile",
+      projectName: "Mobile",
+      repositoryId: "android-app",
+      repositoryName: "android-app",
+      pullRequestId: 189,
+      title: "Fix crash on back press during payment flow",
+      status: "active",
+      createdBy: "Frank Lee",
+      creationDate: ago(3 * hr),
+      sourceRefName: "fix/payment-back-crash",
+      targetRefName: "main",
+      webUrl: "https://dev.azure.com/contoso/Mobile/_git/android-app/pullrequest/189",
+    },
+    {
+      organizationId: "contoso",
+      projectId: "mobile",
+      projectName: "Mobile",
+      repositoryId: "android-app",
+      repositoryName: "android-app",
+      pullRequestId: 180,
+      title: "Add biometric auth for payment screen",
+      status: "active",
+      createdBy: "Carol Wang",
+      creationDate: ago(2 * day),
+      sourceRefName: "feature/biometric-auth",
+      targetRefName: "develop",
+      webUrl: "https://dev.azure.com/contoso/Mobile/_git/android-app/pullrequest/180",
+    },
+    {
+      organizationId: "contoso",
+      projectId: "infrastructure",
+      projectName: "Infrastructure",
+      repositoryId: "terraform-aws",
+      repositoryName: "terraform-aws",
+      pullRequestId: 55,
+      title: "Upgrade EKS cluster to 1.29",
+      status: "active",
+      createdBy: "Eve Nakamura",
+      creationDate: ago(8 * day),
+      sourceRefName: "infra/eks-1.29",
+      targetRefName: "main",
+      webUrl: "https://dev.azure.com/contoso/Infrastructure/_git/terraform-aws/pullrequest/55",
     },
   ];
+
+  const query = input?.query?.trim().toLowerCase();
+  const statusFilter = input?.status ?? "active";
+
+  return all.filter((pr) => {
+    if (input?.projectId && pr.projectId !== input.projectId) return false;
+    if (input?.repositoryId && pr.repositoryId !== input.repositoryId) return false;
+    if (statusFilter !== "all" && pr.status !== statusFilter) return false;
+    if (
+      query &&
+      ![pr.title, pr.projectName, pr.repositoryName, pr.createdBy ?? "", pr.sourceRefName, pr.targetRefName].some(
+        (v) => v.toLowerCase().includes(query),
+      )
+    )
+      return false;
+    return true;
+  });
 }
 
 function demoWorkItems(): WorkItemSummary[] {
@@ -624,6 +724,12 @@ function demoCommitRepositories(): CommitRepositoryOption[] {
       projectName: "Mobile",
       repositoryId: "android-app",
       repositoryName: "android-app",
+    },
+    {
+      projectId: "infrastructure",
+      projectName: "Infrastructure",
+      repositoryId: "terraform-aws",
+      repositoryName: "terraform-aws",
     },
   ];
 }
