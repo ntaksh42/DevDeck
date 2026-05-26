@@ -69,6 +69,10 @@ const PR_GRID_COLUMN_MAX_WIDTHS = [120, 520, 960, 240, 120, 240, 180, 240];
 const SIDEBAR_WIDTH_STORAGE_KEY = "azdodeck:layout:sidebarWidth";
 const REVIEW_PREVIEW_WIDTH_STORAGE_KEY = "azdodeck:layout:reviewPreviewWidth";
 const PR_GRID_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:myReviewsGridColumnWidths";
+const DEFAULT_PR_SEARCH_COLUMN_WIDTHS = [72, 88, 340, 180, 140, 80, 180];
+const PR_SEARCH_COLUMN_MIN_WIDTHS = [56, 70, 200, 120, 100, 64, 120];
+const PR_SEARCH_COLUMN_MAX_WIDTHS = [120, 140, 720, 360, 280, 120, 360];
+const PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:prSearchGridColumnWidths";
 
 function isEditableTarget(target: EventTarget | null): boolean {
   const element = target instanceof HTMLElement ? target : null;
@@ -1522,6 +1526,44 @@ function compareReviewPrs(
   }
 }
 
+function ColumnResizeHandle({
+  columnIndex,
+  widths,
+  setWidths,
+  min,
+  max,
+}: {
+  columnIndex: number;
+  widths: number[];
+  setWidths: React.Dispatch<React.SetStateAction<number[]>>;
+  min: number;
+  max: number;
+}) {
+  return (
+    <div
+      className="absolute right-0 top-0 bottom-0 z-10 w-1.5 cursor-col-resize hover:bg-primary/20 active:bg-primary/40"
+      onPointerDown={(e) => {
+        e.preventDefault();
+        const startX = e.clientX;
+        const startWidth = widths[columnIndex];
+        function onMove(ev: PointerEvent) {
+          setWidths((prev) => {
+            const next = [...prev];
+            next[columnIndex] = clamp(startWidth + (ev.clientX - startX), min, max);
+            return next;
+          });
+        }
+        function onUp() {
+          window.removeEventListener("pointermove", onMove);
+          window.removeEventListener("pointerup", onUp);
+        }
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", onUp);
+      }}
+    />
+  );
+}
+
 function SortHeaderButton({
   column,
   sort,
@@ -2194,6 +2236,11 @@ function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
           <div className={row}><span>Move row</span><kbd className={kbd}>↑ ↓</kbd></div>
 
+          <p className={section}>PR Search</p>
+          <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>Enter</kbd></div>
+          <div className={row}><span>Move row</span><kbd className={kbd}>↑ ↓</kbd></div>
+          <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
+
           <p className={section}>General</p>
           <div className={row}><span>Show this help</span><kbd className={kbd}>?</kbd></div>
           <div className={row}><span>Close dialog</span><kbd className={kbd}>Esc</kbd></div>
@@ -2309,24 +2356,46 @@ function PullRequestSearch({
 }: {
   organizations: Organization[];
 }) {
-  const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
+  const organizationId = organizations[0]?.id ?? "";
   const [query, setQuery] = useState("");
-  const [status, setStatus] =
-    useState<SearchPullRequestsInput["status"]>("active");
+  const [status, setStatus] = useState<SearchPullRequestsInput["status"]>("active");
+  const [projectId, setProjectId] = useState("");
+  const [repositoryId, setRepositoryId] = useState("");
 
-  const mutation = useMutation({
-    mutationFn: searchPullRequests,
+  const repositoriesQuery = useQuery({
+    queryKey: ["prRepositories", organizationId],
+    queryFn: () => listCommitRepositories({ organizationId }),
+    enabled: !!organizationId,
   });
+  const allRepositories = repositoriesQuery.data ?? [];
 
-  const selectedOrganizationId = organizationId || organizations[0]?.id || "";
+  const projects = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const repo of allRepositories) seen.set(repo.projectId, repo.projectName);
+    return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
+  }, [allRepositories]);
+
+  const filteredRepositories = useMemo(
+    () => (projectId ? allRepositories.filter((r) => r.projectId === projectId) : allRepositories),
+    [allRepositories, projectId],
+  );
+
+  function onProjectChange(newProjectId: string) {
+    setProjectId(newProjectId);
+    setRepositoryId("");
+  }
+
+  const mutation = useMutation({ mutationFn: searchPullRequests });
   const results = mutation.data ?? [];
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     mutation.mutate({
-      organizationId: selectedOrganizationId,
+      organizationId,
       query,
       status,
+      projectId: projectId || undefined,
+      repositoryId: repositoryId || undefined,
     });
   }
 
@@ -2334,15 +2403,15 @@ function PullRequestSearch({
     <div className="space-y-6">
       <div className="rounded-md border border-border bg-white">
         <form className="grid gap-4 p-5" onSubmit={onSubmit}>
-          <div className="grid gap-4 lg:grid-cols-[1fr_180px_160px_auto]">
+          <div className="grid gap-4 lg:grid-cols-[1fr_160px_200px_160px_auto]">
             <label className="grid gap-2">
               <span className="text-sm font-medium">Search</span>
               <div className="flex h-10 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
                 <Search className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
                 <input
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="title, author, repository, branch"
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="title, author, branch…"
                   autoFocus
                   className="min-w-0 flex-1 bg-transparent text-sm outline-none"
                 />
@@ -2350,16 +2419,31 @@ function PullRequestSearch({
             </label>
 
             <label className="grid gap-2">
-              <span className="text-sm font-medium">Organization</span>
+              <span className="text-sm font-medium">Project</span>
               <select
-                value={selectedOrganizationId}
-                onChange={(event) => setOrganizationId(event.target.value)}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                value={projectId}
+                onChange={(e) => onProjectChange(e.target.value)}
+                disabled={repositoriesQuery.isLoading}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
               >
-                {organizations.map((organization) => (
-                  <option key={organization.id} value={organization.id}>
-                    {organization.name}
-                  </option>
+                <option value="">All projects</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Repository</span>
+              <select
+                value={repositoryId}
+                onChange={(e) => setRepositoryId(e.target.value)}
+                disabled={repositoriesQuery.isLoading}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+              >
+                <option value="">All repositories</option>
+                {filteredRepositories.map((r) => (
+                  <option key={r.repositoryId} value={r.repositoryId}>{r.repositoryName}</option>
                 ))}
               </select>
             </label>
@@ -2368,9 +2452,7 @@ function PullRequestSearch({
               <span className="text-sm font-medium">Status</span>
               <select
                 value={status}
-                onChange={(event) =>
-                  setStatus(event.target.value as SearchPullRequestsInput["status"])
-                }
+                onChange={(e) => setStatus(e.target.value as SearchPullRequestsInput["status"])}
                 className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="active">Active</option>
@@ -2383,7 +2465,7 @@ function PullRequestSearch({
             <div className="flex items-end">
               <button
                 type="submit"
-                disabled={mutation.isPending || !selectedOrganizationId}
+                disabled={mutation.isPending || !organizationId}
                 className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
               >
                 {mutation.isPending ? (
@@ -2398,14 +2480,14 @@ function PullRequestSearch({
         </form>
       </div>
 
-      {mutation.isError ? (
-        <ErrorState message={commandErrorMessage(mutation.error)} />
-      ) : null}
+      {mutation.isError && <ErrorState message={commandErrorMessage(mutation.error)} />}
 
       <PullRequestResults loading={mutation.isPending} results={results} searched={mutation.isSuccess} />
     </div>
   );
 }
+
+const PR_SEARCH_HEADER_LABELS = ["PR#", "Status", "Title", "Repository", "Author", "Date", "Branch"];
 
 function PullRequestResults({
   loading,
@@ -2416,15 +2498,52 @@ function PullRequestResults({
   results: PullRequestSummary[];
   searched: boolean;
 }) {
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [columnWidths, setColumnWidths] = useState(() =>
+    storedNumbers(
+      PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY,
+      DEFAULT_PR_SEARCH_COLUMN_WIDTHS,
+      PR_SEARCH_COLUMN_MIN_WIDTHS,
+      PR_SEARCH_COLUMN_MAX_WIDTHS,
+    ),
+  );
+  const [copyToast, setCopyToast] = useState<string | null>(null);
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  useEffect(() => {
+    localStorage.setItem(PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
+  }, [columnWidths]);
+
+  const columnTemplate = columnWidths.map((w) => `${w}px`).join(" ");
+
   const countLabel = useMemo(() => {
-    if (loading) {
-      return "Searching";
-    }
-    if (!searched) {
-      return "Ready";
-    }
+    if (loading) return "Searching";
+    if (!searched) return "Ready";
     return `${results.length} pull request${results.length === 1 ? "" : "s"}`;
   }, [loading, results.length, searched]);
+
+  function moveSelection(delta: number) {
+    setSelectedIndex((prev) => {
+      const next = clamp(prev + delta, 0, results.length - 1);
+      rowRefs.current[next]?.focus();
+      return next;
+    });
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (isEditableTarget(e.target)) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); moveSelection(1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); moveSelection(-1); }
+    else if (e.key === "c" || e.key === "C") {
+      const pr = results[selectedIndex];
+      if (pr?.webUrl) {
+        void navigator.clipboard.writeText(pr.webUrl).then(() => {
+          setCopyToast("URL copied");
+          window.setTimeout(() => setCopyToast(null), 2000);
+        });
+      }
+    }
+  }
 
   return (
     <div className="overflow-hidden rounded-md border border-border bg-white">
@@ -2441,51 +2560,119 @@ function PullRequestResults({
           No pull requests matched.
         </div>
       ) : (
-        <div className="divide-y divide-border">
-          {results.map((pullRequest) => (
-            <PullRequestRow key={`${pullRequest.repositoryId}:${pullRequest.pullRequestId}`} pullRequest={pullRequest} />
-          ))}
+        <div role="grid" aria-label="Pull request search results" className="overflow-x-auto" onKeyDown={handleKeyDown}>
+          <div
+            role="row"
+            className="grid border-b border-border bg-muted/40 px-2 py-1 text-xs font-medium text-muted-foreground"
+            style={{ gridTemplateColumns: columnTemplate }}
+          >
+            {PR_SEARCH_HEADER_LABELS.map((label, i) => (
+              <div key={label} role="columnheader" className="relative min-w-0 truncate px-1">
+                {label}
+                {i < PR_SEARCH_HEADER_LABELS.length - 1 && (
+                  <ColumnResizeHandle
+                    columnIndex={i}
+                    widths={columnWidths}
+                    setWidths={setColumnWidths}
+                    min={PR_SEARCH_COLUMN_MIN_WIDTHS[i]}
+                    max={PR_SEARCH_COLUMN_MAX_WIDTHS[i]}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+          {loading ? (
+            <div className="flex min-h-32 items-center justify-center">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden="true" />
+            </div>
+          ) : (
+            results.map((pr, index) => (
+              <PrSearchRow
+                key={`${pr.repositoryId}:${pr.pullRequestId}`}
+                ref={(el) => { rowRefs.current[index] = el; }}
+                pr={pr}
+                selected={index === selectedIndex}
+                columnTemplate={columnTemplate}
+                onSelect={() => setSelectedIndex(index)}
+              />
+            ))
+          )}
+        </div>
+      )}
+      {copyToast && (
+        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1.5 text-xs text-background shadow-lg">
+          {copyToast}
         </div>
       )}
     </div>
   );
 }
 
-function PullRequestRow({
-  pullRequest,
-}: {
-  pullRequest: PullRequestSummary;
-}) {
+const PR_STATUS_COLORS: Record<string, string> = {
+  active: "bg-blue-50 text-blue-700 border-blue-200",
+  completed: "bg-green-50 text-green-700 border-green-200",
+  abandoned: "bg-gray-50 text-gray-500 border-gray-200",
+};
+
+const PrSearchRow = forwardRef<
+  HTMLDivElement,
+  {
+    pr: PullRequestSummary;
+    selected: boolean;
+    columnTemplate: string;
+    onSelect: () => void;
+  }
+>(({ pr, selected, columnTemplate, onSelect }, ref) => {
+  const statusColor = PR_STATUS_COLORS[pr.status] ?? "bg-secondary text-foreground border-border";
   return (
-    <div className="grid gap-3 px-5 py-4 lg:grid-cols-[1fr_auto]">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-md bg-secondary px-2 py-1 text-xs font-medium">
-            #{pullRequest.pullRequestId}
-          </span>
-          <span className="rounded-md border border-border px-2 py-1 text-xs font-medium capitalize">
-            {pullRequest.status}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {formatDate(pullRequest.creationDate)}
-          </span>
-        </div>
-        <p className="mt-2 font-medium">{pullRequest.title}</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {pullRequest.projectName} / {pullRequest.repositoryName}
-        </p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {pullRequest.sourceRefName} {"->"} {pullRequest.targetRefName}
-        </p>
-      </div>
-      <div className="text-left text-sm lg:text-right">
-        <p className="text-muted-foreground">Created by</p>
-        <p className="font-medium">{pullRequest.createdBy ?? "Unknown"}</p>
-        <OpenInAzureDevOpsButton url={pullRequest.webUrl} />
-      </div>
+    <div
+      ref={ref}
+      tabIndex={selected ? 0 : -1}
+      role="row"
+      aria-selected={selected}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if ((e.target as HTMLElement).closest("button")) return;
+        if (e.key === "Enter" && pr.webUrl) {
+          e.stopPropagation();
+          openExternalUrl(pr.webUrl);
+        }
+      }}
+      className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
+        selected ? "bg-secondary" : "hover:bg-muted/50"
+      }`}
+      style={{ gridTemplateColumns: columnTemplate }}
+    >
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); if (pr.webUrl) openExternalUrl(pr.webUrl); }}
+        className="truncate text-left font-mono text-xs text-primary hover:underline"
+        title={`PR #${pr.pullRequestId}`}
+      >
+        #{pr.pullRequestId}
+      </button>
+      <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-medium capitalize ${statusColor}`}>
+        {pr.status}
+      </span>
+      <span className="truncate font-medium text-foreground" title={pr.title}>
+        {pr.title}
+      </span>
+      <span className="truncate text-xs text-muted-foreground" title={`${pr.projectName} / ${pr.repositoryName}`}>
+        {pr.projectName} / {pr.repositoryName}
+      </span>
+      <span className="truncate text-sm text-muted-foreground" title={pr.createdBy ?? "Unknown"}>
+        {pr.createdBy ?? "Unknown"}
+      </span>
+      <span className="text-xs text-muted-foreground" title={formatDate(pr.creationDate)}>
+        {formatRelativeDate(pr.creationDate)}
+      </span>
+      <span className="truncate text-xs text-muted-foreground" title={`${pr.sourceRefName} → ${pr.targetRefName}`}>
+        {pr.sourceRefName} → {pr.targetRefName}
+      </span>
     </div>
   );
-}
+});
+PrSearchRow.displayName = "PrSearchRow";
 
 function OpenInAzureDevOpsButton({ url }: { url: string | null }) {
   if (!url) {
