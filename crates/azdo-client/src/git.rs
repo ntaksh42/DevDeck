@@ -163,6 +163,11 @@ impl AdoClient {
             query.push(("searchCriteria.author", author));
         }
         if let Some(branch) = criteria.branch.filter(|value| !value.trim().is_empty()) {
+            let branch = branch
+                .trim()
+                .strip_prefix("refs/heads/")
+                .unwrap_or(branch.trim())
+                .to_string();
             query.push((
                 "searchCriteria.itemVersion.versionType",
                 "branch".to_string(),
@@ -347,7 +352,16 @@ mod tests {
             .and(query_param("api-version", "7.1-preview"))
             .and(query_param("$top", "25"))
             .and(query_param("searchCriteria.author", "test@example.com"))
+            .and(query_param(
+                "searchCriteria.itemVersion.versionType",
+                "branch",
+            ))
             .and(query_param("searchCriteria.itemVersion.version", "main"))
+            .and(query_param(
+                "searchCriteria.fromDate",
+                "2026-05-01T00:00:00Z",
+            ))
+            .and(query_param("searchCriteria.toDate", "2026-05-24T23:59:59Z"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "count": 1,
                 "value": [{
@@ -371,9 +385,9 @@ mod tests {
                 "repo-1",
                 CommitSearchCriteria {
                     author: Some("test@example.com".to_string()),
-                    branch: Some("main".to_string()),
-                    from_date: None,
-                    to_date: None,
+                    branch: Some("refs/heads/main".to_string()),
+                    from_date: Some("2026-05-01T00:00:00Z".to_string()),
+                    to_date: Some("2026-05-24T23:59:59Z".to_string()),
                     top: Some(25),
                 },
             )

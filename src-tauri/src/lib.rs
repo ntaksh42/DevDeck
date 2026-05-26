@@ -8,7 +8,10 @@ mod secrets;
 mod settings;
 mod work_items;
 
-use commits::{CommitService, CommitSummary, SearchCommitsInput};
+use commits::{
+    CommitRepositoryOption, CommitService, CommitSummary, ListCommitRepositoriesInput,
+    SearchCommitsInput,
+};
 use db::{AppDatabase, AppSettings, Organization};
 use error::Result;
 use orgs::{AddAzureCliOrganizationInput, AddPatOrganizationInput, OrganizationService};
@@ -116,6 +119,15 @@ async fn search_commits(
     state.commits.search(input).await
 }
 
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn list_commit_repositories(
+    input: ListCommitRepositoriesInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<CommitRepositoryOption>> {
+    state.commits.list_repositories(input).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -143,7 +155,8 @@ pub fn run() {
             search_pull_requests,
             list_my_review_pull_requests,
             search_work_items,
-            search_commits
+            search_commits,
+            list_commit_repositories
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
