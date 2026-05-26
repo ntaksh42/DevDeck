@@ -1217,6 +1217,7 @@ function WorkItemsGrid({
   const [columnWidths, setColumnWidths] = useState(() =>
     storedNumbers(WI_COLUMN_WIDTHS_STORAGE_KEY, DEFAULT_WI_COLUMN_WIDTHS, WI_COLUMN_MIN_WIDTHS, WI_COLUMN_MAX_WIDTHS),
   );
+  const [copyToast, setCopyToast] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -1286,6 +1287,14 @@ function WorkItemsGrid({
       e.preventDefault();
       const item = sorted[selectedIndex];
       if (item?.webUrl) openExternalUrl(item.webUrl);
+    } else if (e.key === "c" || e.key === "C") {
+      const item = sorted[selectedIndex];
+      if (item?.webUrl) {
+        void navigator.clipboard.writeText(item.webUrl).then(() => {
+          setCopyToast("URL copied");
+          window.setTimeout(() => setCopyToast(null), 2000);
+        });
+      }
     }
   }
 
@@ -1293,6 +1302,11 @@ function WorkItemsGrid({
 
   return (
     <div ref={containerRef} className="outline-none" tabIndex={-1} onKeyDown={handleKeyDown}>
+      {copyToast && (
+        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1.5 text-xs text-background shadow-lg">
+          {copyToast}
+        </div>
+      )}
       <div className="overflow-hidden rounded-md border border-border bg-white">
         <div className="overflow-x-auto">
           <div className="min-w-[860px]">
