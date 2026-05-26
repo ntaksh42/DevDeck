@@ -918,7 +918,7 @@ function CommitResults({
 }
 
 function WorkItemSearch({ organizations }: { organizations: Organization[] }) {
-  const organizationId = organizations[0]?.id ?? "";
+  const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
   const [query, setQuery] = useState("");
   const [state, setState] = useState("all");
   const [workItemType, setWorkItemType] = useState("");
@@ -954,6 +954,20 @@ function WorkItemSearch({ organizations }: { organizations: Organization[] }) {
     <div className="space-y-6">
       <div className="rounded-md border border-border bg-white">
         <form className="grid gap-4 p-5" onSubmit={onSubmit}>
+          {organizations.length > 1 && (
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Organization</span>
+              <select
+                value={organizationId}
+                onChange={(e) => { setOrganizationId(e.target.value); setProjectId(""); }}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              >
+                {organizations.map((o) => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <div className="grid gap-4 lg:grid-cols-[1fr_160px_150px_160px_auto]">
             <label className="grid gap-2">
               <span className="text-sm font-medium">Search</span>
@@ -1746,7 +1760,7 @@ function SortHeaderButton({
 }
 
 function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
-  const organizationId = organizations[0]?.id ?? "";
+  const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
 
   const query = useQuery({
     queryKey: ["myReviews", organizationId],
@@ -2027,6 +2041,18 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
       )}
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-white px-3 py-2">
+        {organizations.length > 1 && (
+          <select
+            value={organizationId}
+            onChange={(e) => { setOrganizationId(e.target.value); setSelectedIndex(0); }}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
+            aria-label="Organization"
+          >
+            {organizations.map((o) => (
+              <option key={o.id} value={o.id}>{o.name}</option>
+            ))}
+          </select>
+        )}
         {/* Text search */}
         <div className="flex h-8 flex-1 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
           <Search className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -2561,7 +2587,7 @@ function PullRequestSearch({
 }: {
   organizations: Organization[];
 }) {
-  const organizationId = organizations[0]?.id ?? "";
+  const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<SearchPullRequestsInput["status"]>("active");
   const [projectId, setProjectId] = useState("");
@@ -2608,6 +2634,20 @@ function PullRequestSearch({
     <div className="space-y-6">
       <div className="rounded-md border border-border bg-white">
         <form className="grid gap-4 p-5" onSubmit={onSubmit}>
+          {organizations.length > 1 && (
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Organization</span>
+              <select
+                value={organizationId}
+                onChange={(e) => { setOrganizationId(e.target.value); setProjectId(""); setRepositoryId(""); }}
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              >
+                {organizations.map((o) => (
+                  <option key={o.id} value={o.id}>{o.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <div className="grid gap-4 lg:grid-cols-[1fr_160px_200px_160px_auto]">
             <label className="grid gap-2">
               <span className="text-sm font-medium">Search</span>
