@@ -4,6 +4,8 @@ All notable changes to AzDoDeck are documented here.
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-05-28
+
 ### Added
 - My Reviews view: grid with vote status, stale highlighting (>3 days), column resize, keyboard navigation (`↑↓ Home End PageUp/Down Enter C`), vote filter tabs (`1–4`), text filter (`/`), draft toggle (`D`), refresh (`R`)
 - Pull Request Search: filter by project, repository, and status; resizable grid; keyboard navigation; `C` to copy URL
@@ -19,7 +21,3 @@ All notable changes to AzDoDeck are documented here.
 
 ### Changed
 - Commit results displayed in resizable sortable grid (was card list)
-
-## [0.1.0] — planned
-
-Initial public release. See [GitHub Releases](../../releases) for installers.
