@@ -1,8 +1,9 @@
-use azdo_client::{GitPullRequest, PullRequestStatus};
+use azdo_client::{AdoClient, GitPullRequest, PullRequestStatus};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 use crate::auth::client_for_organization;
-use crate::db::{AppDatabase, Organization};
+use crate::db::{AppDatabase, CachedPr, CachedReviewPr, Organization};
 use crate::error::{AppError, Result};
 use crate::secrets::SecretStore;
 
@@ -297,6 +298,132 @@ fn matches_query(summary: &PullRequestSummary, query: &str) -> bool {
     ]
     .iter()
     .any(|value| value.to_ascii_lowercase().contains(query))
+}
+
+// ── Cache sync ────────────────────────────────────────────────────────────────
+
+pub async fn sync_prs_for_org(
+    db: &AppDatabase,
+    client: &AdoClient,
+    org: &Organization,
+) -> Result<()> {
+    let scope = format!("prs:{}", org.id);
+    let error_count = db.get_sync_state(&scope)?.map_or(0, |s| s.error_count);
+
+    match do_sync_prs(db, client, org).await {
+        Ok(()) => {
+            let now = Utc::now().to_rfc3339();
+            db.update_sync_state(&scope, &org.id, Some(&now), 0, None)?;
+            tracing::info!(org = %org.name, "PR sync completed");
+            Ok(())
+        }
+        Err(e) => {
+            if let Err(db_err) =
+                db.update_sync_state(&scope, &org.id, None, error_count + 1, Some(&e.to_string()))
+            {
+                tracing::warn!(error = ?db_err, "failed to persist sync error state");
+            }
+            Err(e)
+        }
+    }
+}
+
+async fn do_sync_prs(db: &AppDatabase, client: &AdoClient, org: &Organization) -> Result<()> {
+    let projects = client.list_projects().await?;
+    let mut cached_prs: Vec<CachedPr> = Vec::new();
+
+    for project in &projects {
+        let repos = client.list_repositories(&project.id).await?;
+        for repo in repos {
+            let prs = client
+                .list_pull_requests(&project.id, &repo.id, PullRequestStatus::Active)
+                .await?;
+            for pr in prs {
+                let web_url = format!(
+                    "{}/{}/_git/{}/pullrequest/{}",
+                    org.base_url, project.name, repo.name, pr.pull_request_id
+                );
+                cached_prs.push(CachedPr {
+                    org_id: org.id.clone(),
+                    project_id: project.id.clone(),
+                    project_name: project.name.clone(),
+                    repository_id: repo.id.clone(),
+                    repository_name: repo.name.clone(),
+                    pull_request_id: pr.pull_request_id,
+                    title: pr.title,
+                    status: pr.status,
+                    created_by: pr.created_by.and_then(|u| u.display_name.or(u.unique_name)),
+                    creation_date: pr.creation_date.to_rfc3339(),
+                    source_ref_name: short_ref(&pr.source_ref_name),
+                    target_ref_name: short_ref(&pr.target_ref_name),
+                    web_url: Some(web_url),
+                });
+            }
+        }
+    }
+
+    db.clear_pull_requests(&org.id)?;
+    db.upsert_pull_requests(&cached_prs)?;
+
+    if let Some(user_id) = &org.authenticated_user_id {
+        let mut cached_reviews: Vec<CachedReviewPr> = Vec::new();
+
+        for project in &projects {
+            let prs = client
+                .list_pull_requests_by_reviewer(&project.id, user_id, 200)
+                .await?;
+            for pr in prs {
+                let Some(repo) = &pr.repository else { continue };
+                let repo_id = repo.id.clone();
+                let repo_name = repo.name.clone();
+                let (proj_id, proj_name) = repo
+                    .project
+                    .as_ref()
+                    .map(|p| (p.id.clone(), p.name.clone()))
+                    .unwrap_or_else(|| (project.id.clone(), project.name.clone()));
+
+                let reviewer = pr
+                    .reviewers
+                    .as_deref()
+                    .unwrap_or(&[])
+                    .iter()
+                    .find(|r| r.id.as_deref() == Some(user_id));
+                let (my_vote, my_is_required) = reviewer
+                    .map(|r| (r.vote, r.is_required))
+                    .unwrap_or((0, false));
+
+                let web_url = format!(
+                    "{}/{}/_git/{}/pullrequest/{}",
+                    org.base_url, proj_name, repo_name, pr.pull_request_id
+                );
+                cached_reviews.push(CachedReviewPr {
+                    org_id: org.id.clone(),
+                    project_id: proj_id,
+                    project_name: proj_name,
+                    repository_id: repo_id,
+                    repository_name: repo_name,
+                    pull_request_id: pr.pull_request_id,
+                    title: pr.title.clone(),
+                    created_by: pr
+                        .created_by
+                        .as_ref()
+                        .and_then(|u| u.display_name.clone().or(u.unique_name.clone())),
+                    creation_date: pr.creation_date.to_rfc3339(),
+                    target_ref_name: short_ref(&pr.target_ref_name),
+                    web_url: Some(web_url),
+                    my_vote,
+                    my_vote_label: vote_label(my_vote).to_string(),
+                    my_is_required,
+                    is_draft: pr.is_draft.unwrap_or(false),
+                });
+            }
+        }
+
+        db.clear_review_pull_requests(&org.id)?;
+        db.upsert_review_pull_requests(&cached_reviews)?;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
