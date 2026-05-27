@@ -93,6 +93,33 @@ const workItemSummariesSchema = z.array(workItemSummarySchema);
 
 export type WorkItemSummary = z.infer<typeof workItemSummarySchema>;
 
+const workItemPreviewSchema = z.object({
+  organizationId: z.string(),
+  projectId: z.string(),
+  projectName: z.string(),
+  id: z.number(),
+  title: z.string(),
+  workItemType: z.string().nullable(),
+  state: z.string().nullable(),
+  assignedTo: z.string().nullable(),
+  createdBy: z.string().nullable(),
+  createdDate: z.string().nullable(),
+  changedDate: z.string().nullable(),
+  areaPath: z.string().nullable(),
+  iterationPath: z.string().nullable(),
+  reason: z.string().nullable(),
+  tags: z.string().nullable(),
+  priority: z.string().nullable(),
+  severity: z.string().nullable(),
+  storyPoints: z.string().nullable(),
+  remainingWork: z.string().nullable(),
+  descriptionHtml: z.string().nullable(),
+  acceptanceCriteriaHtml: z.string().nullable(),
+  webUrl: z.string().nullable(),
+});
+
+export type WorkItemPreview = z.infer<typeof workItemPreviewSchema>;
+
 const commitSummarySchema = z.object({
   organizationId: z.string(),
   projectId: z.string(),
@@ -166,6 +193,12 @@ export type SearchWorkItemsInput = {
 
 export type ListMyWorkItemsInput = {
   organizationId?: string;
+};
+
+export type GetWorkItemPreviewInput = {
+  organizationId?: string;
+  projectId: string;
+  workItemId: number;
 };
 
 export type SearchCommitsInput = {
@@ -253,6 +286,13 @@ export async function listMyWorkItems(
 ): Promise<WorkItemSummary[]> {
   const result = await invokeCommand("list_my_work_items", { input });
   return workItemSummariesSchema.parse(result);
+}
+
+export async function getWorkItemPreview(
+  input: GetWorkItemPreviewInput,
+): Promise<WorkItemPreview> {
+  const result = await invokeCommand("get_work_item_preview", { input });
+  return workItemPreviewSchema.parse(result);
 }
 
 export async function searchCommits(
@@ -351,6 +391,11 @@ async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
     }
     case "list_my_work_items":
       return demoMyWorkItems();
+    case "get_work_item_preview": {
+      const input = (args as { input?: GetWorkItemPreviewInput } | undefined)
+        ?.input;
+      return demoWorkItemPreview(input);
+    }
     case "search_commits": {
       const input = (args as { input?: SearchCommitsInput } | undefined)
         ?.input;
@@ -714,6 +759,50 @@ function demoMyWorkItems(): WorkItemSummary[] {
       webUrl: "https://dev.azure.com/contoso/Infrastructure/_workitems/edit/51",
     },
   ];
+}
+
+function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
+  const allItems = [...demoWorkItems(), ...demoMyWorkItems()];
+  const summary =
+    allItems.find(
+      (item) =>
+        item.id === input?.workItemId &&
+        (!input?.projectId || item.projectId === input.projectId),
+    ) ?? allItems[0];
+
+  return {
+    organizationId: summary.organizationId,
+    projectId: summary.projectId,
+    projectName: summary.projectName,
+    id: summary.id,
+    title: summary.title,
+    workItemType: summary.workItemType,
+    state: summary.state,
+    assignedTo: summary.assignedTo,
+    createdBy: summary.assignedTo ?? "Demo User",
+    createdDate: "2026-05-20T09:00:00Z",
+    changedDate: summary.changedDate,
+    areaPath: `${summary.projectName}\\Product`,
+    iterationPath: `${summary.projectName}\\Sprint 24`,
+    reason: summary.state === "Closed" ? "Completed" : "Work started",
+    tags: "dashboard; preview; demo",
+    priority: summary.workItemType === "Bug" ? "1" : "2",
+    severity: summary.workItemType === "Bug" ? "2 - High" : null,
+    storyPoints: summary.workItemType === "User Story" ? "5" : null,
+    remainingWork: summary.workItemType === "Task" ? "3" : null,
+    descriptionHtml: `<p>${escapeDemoHtml(summary.title)} の背景と期待する動作を確認します。</p><ul><li>Azure DevOps から詳細 field を取得</li><li>右側の preview pane に表示</li></ul>`,
+    acceptanceCriteriaHtml:
+      "<ul><li>一覧で選択した Work Item と preview が同期する</li><li>HTML field は sandbox 内で表示する</li></ul>",
+    webUrl: summary.webUrl,
+  };
+}
+
+function escapeDemoHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function demoReviewPullRequests(): ReviewPullRequestSummary[] {

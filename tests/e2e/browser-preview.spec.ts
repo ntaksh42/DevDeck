@@ -4,7 +4,10 @@ test.describe("browser preview", () => {
   test("lets an agent exercise the main demo-data workflows", async ({ page }) => {
     await page.goto("/");
     const main = page.getByRole("main");
+    const sidebar = page.getByRole("complementary").first();
 
+    await expect(main.getByRole("heading", { name: "My Reviews" })).toBeVisible();
+    await sidebar.getByRole("button", { name: "Search" }).first().click();
     await expect(main.getByRole("heading", { name: "Pull Requests" })).toBeVisible();
     await expect(main.getByText("Run a search to load pull requests.")).toBeVisible();
 
@@ -41,17 +44,22 @@ test.describe("browser preview", () => {
     await main.getByLabel("Show Drafts").check();
     await expect(main.getByText("Draft", { exact: true })).toBeVisible();
 
-    await page.getByRole("button", { name: "Work Items" }).click();
-    await main.getByPlaceholder("title text").fill("onboarding");
+    await sidebar.getByRole("button", { name: "Search" }).nth(1).click();
+    await main.getByPlaceholder("title, type, assignee…").fill("onboarding");
     await main.getByRole("button", { name: "Search" }).click();
     await expect(main.getByText("Validate onboarding with PAT credentials")).toBeVisible();
+    await expect(main.getByRole("heading", { name: "Work Item Preview" })).toBeVisible();
+    await expect(main.getByRole("separator", { name: "Resize work item preview" })).toBeVisible();
+    await expect(
+      main.frameLocator('iframe[title^="Work item preview"]').getByText("Azure DevOps から詳細 field を取得"),
+    ).toBeVisible();
 
     await page.getByRole("button", { name: "Commits" }).click();
     await main.getByPlaceholder("message, author, repository, SHA").fill("dashboard");
     await expect(main.getByLabel("Project")).toBeVisible();
     await expect(main.getByLabel("Repository")).toBeVisible();
     await main.getByLabel("From", { exact: true }).fill("2026-05-01");
-    await main.getByLabel("To", { exact: true }).fill("2026-05-25");
+    await main.getByLabel("To", { exact: true }).fill("2026-05-28");
     await main.getByRole("button", { name: "Search" }).click();
     await expect(main.getByText("Add commit search dashboard")).toBeVisible();
 

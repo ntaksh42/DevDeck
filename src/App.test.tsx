@@ -237,6 +237,9 @@ describe("App", () => {
       if (command === "list_my_review_pull_requests") {
         return Promise.resolve([]);
       }
+      if (command === "list_commit_repositories") {
+        return Promise.resolve([]);
+      }
       if (command === "search_pull_requests") {
         return Promise.resolve([
           {
@@ -265,7 +268,7 @@ describe("App", () => {
     await screen.findByText("No pull requests assigned to you.");
     fireEvent.keyDown(window, { key: "2", altKey: true });
 
-    fireEvent.change(await main.findByPlaceholderText("title, author, repository, branch"), {
+    fireEvent.change(await main.findByPlaceholderText("title, author, branch…"), {
       target: { value: "search" },
     });
     fireEvent.click(main.getByRole("button", { name: "Search" }));
@@ -276,13 +279,15 @@ describe("App", () => {
           organizationId: "contoso",
           query: "search",
           status: "active",
+          projectId: undefined,
+          repositoryId: undefined,
         },
       });
     });
     expect(await screen.findByText("Add pull request search")).toBeTruthy();
     expect(screen.getByText("Platform / azdo-dashboard")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Open in Azure DevOps" }));
+    fireEvent.click(screen.getByRole("button", { name: "#42" }));
 
     await waitFor(() => {
       expect(openUrlMock).toHaveBeenCalledWith(
@@ -297,6 +302,9 @@ describe("App", () => {
         return Promise.resolve([organization]);
       }
       if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_commit_repositories") {
         return Promise.resolve([]);
       }
       if (command === "search_work_items") {
@@ -315,6 +323,32 @@ describe("App", () => {
           },
         ]);
       }
+      if (command === "get_work_item_preview") {
+        return Promise.resolve({
+          organizationId: "contoso",
+          projectId: "project-1",
+          projectName: "Platform",
+          id: 123,
+          title: "Fix save workflow",
+          workItemType: "Bug",
+          state: "Active",
+          assignedTo: "Test User",
+          createdBy: "Creator",
+          createdDate: "2026-05-23T00:00:00Z",
+          changedDate: "2026-05-24T00:00:00Z",
+          areaPath: "Platform\\Product",
+          iterationPath: "Platform\\Sprint 24",
+          reason: "Work started",
+          tags: "save; bug",
+          priority: "1",
+          severity: "2 - High",
+          storyPoints: null,
+          remainingWork: null,
+          descriptionHtml: "<p>Fix the save flow.</p>",
+          acceptanceCriteriaHtml: "<ul><li>Save succeeds</li></ul>",
+          webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/123",
+        });
+      }
       return Promise.reject(new Error(`Unhandled command: ${command}`));
     });
 
@@ -323,7 +357,7 @@ describe("App", () => {
 
     await screen.findByText("No pull requests assigned to you.");
     fireEvent.keyDown(window, { key: "4", altKey: true });
-    fireEvent.change(await main.findByPlaceholderText("title text"), {
+    fireEvent.change(await main.findByPlaceholderText("title, type, assignee…"), {
       target: { value: "save" },
     });
     fireEvent.click(main.getByRole("button", { name: "Search" }));
@@ -335,11 +369,14 @@ describe("App", () => {
           query: "save",
           state: "all",
           workItemType: "",
+          projectId: undefined,
         },
       });
     });
     expect(await screen.findByText("Fix save workflow")).toBeTruthy();
     expect(screen.getByText("Test User")).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Work Item Preview" })).toBeTruthy();
+    expect(screen.getAllByTitle("Fix save workflow").length).toBeGreaterThan(1);
 
     fireEvent.click(screen.getByRole("button", { name: "#123" }));
 
@@ -434,7 +471,7 @@ describe("App", () => {
     expect(await screen.findByText("Add commit search")).toBeTruthy();
     expect(screen.getByText("abcdef12")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Open in Azure DevOps" }));
+    fireEvent.click(screen.getByRole("button", { name: "abcdef12" }));
 
     await waitFor(() => {
       expect(openUrlMock).toHaveBeenCalledWith(
@@ -757,7 +794,7 @@ describe("App", () => {
     expect(
       await screen.findByText("Add pull request search dashboard"),
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Open in Azure DevOps" }));
+    fireEvent.click(screen.getByRole("button", { name: "#42" }));
 
     expect(windowOpenSpy).toHaveBeenCalledWith(
       "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/pullrequest/42",

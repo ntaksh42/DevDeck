@@ -24,7 +24,10 @@ use settings::{
     GetReviewResultPreviewInput, ReviewResultPreview, SettingsService, UpdateAppSettingsInput,
 };
 use tauri::{Manager, State};
-use work_items::{ListMyWorkItemsInput, SearchWorkItemsInput, WorkItemService, WorkItemSummary};
+use work_items::{
+    GetWorkItemPreviewInput, ListMyWorkItemsInput, SearchWorkItemsInput, WorkItemPreview,
+    WorkItemService, WorkItemSummary,
+};
 
 #[derive(Clone)]
 struct AppState {
@@ -127,6 +130,15 @@ async fn list_my_work_items(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn get_work_item_preview(
+    input: GetWorkItemPreviewInput,
+    state: State<'_, AppState>,
+) -> Result<WorkItemPreview> {
+    state.work_items.preview(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn search_commits(
     input: SearchCommitsInput,
     state: State<'_, AppState>,
@@ -172,6 +184,7 @@ pub fn run() {
             list_my_review_pull_requests,
             search_work_items,
             list_my_work_items,
+            get_work_item_preview,
             search_commits,
             list_commit_repositories
         ])

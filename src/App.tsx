@@ -40,6 +40,7 @@ import {
   deleteOrganization,
   getAppSettings,
   getReviewResultPreview,
+  getWorkItemPreview,
   listCommitRepositories,
   listMyReviewPullRequests,
   listMyWorkItems,
@@ -56,6 +57,7 @@ import {
   type ReviewPullRequestSummary,
   type ReviewResultPreview,
   type SearchPullRequestsInput,
+  type WorkItemPreview,
   type WorkItemSummary,
 } from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
@@ -64,11 +66,13 @@ type View = "pullRequestSearch" | "myReviews" | "workItems" | "myWorkItems" | "c
 
 const DEFAULT_SIDEBAR_WIDTH = 256;
 const DEFAULT_REVIEW_PREVIEW_WIDTH = 420;
+const DEFAULT_WORK_ITEM_PREVIEW_WIDTH = 440;
 const DEFAULT_PR_GRID_COLUMN_WIDTHS = [64, 220, 360, 112, 64, 112, 80, 112];
 const PR_GRID_COLUMN_MIN_WIDTHS = [56, 160, 220, 96, 56, 96, 72, 96];
 const PR_GRID_COLUMN_MAX_WIDTHS = [120, 520, 960, 240, 120, 240, 180, 240];
 const SIDEBAR_WIDTH_STORAGE_KEY = "azdodeck:layout:sidebarWidth";
 const REVIEW_PREVIEW_WIDTH_STORAGE_KEY = "azdodeck:layout:reviewPreviewWidth";
+const WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY = "azdodeck:layout:workItemPreviewWidth";
 const PR_GRID_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:myReviewsGridColumnWidths";
 const DEFAULT_PR_SEARCH_COLUMN_WIDTHS = [72, 88, 340, 180, 140, 80, 180];
 const PR_SEARCH_COLUMN_MIN_WIDTHS = [56, 70, 200, 120, 100, 64, 120];
@@ -1233,6 +1237,14 @@ function WorkItemsGrid({
   const [columnWidths, setColumnWidths] = useState(() =>
     storedNumbers(WI_COLUMN_WIDTHS_STORAGE_KEY, DEFAULT_WI_COLUMN_WIDTHS, WI_COLUMN_MIN_WIDTHS, WI_COLUMN_MAX_WIDTHS),
   );
+  const [previewWidth, setPreviewWidth] = useState(() =>
+    storedNumber(
+      WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY,
+      DEFAULT_WORK_ITEM_PREVIEW_WIDTH,
+      300,
+      860,
+    ),
+  );
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -1240,6 +1252,13 @@ function WorkItemsGrid({
   useEffect(() => {
     localStorage.setItem(WI_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
   }, [columnWidths]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY,
+      String(Math.round(previewWidth)),
+    );
+  }, [previewWidth]);
 
   const sorted = useMemo(
     () =>
@@ -1253,6 +1272,17 @@ function WorkItemsGrid({
         .map(({ item }) => item),
     [results, sort],
   );
+  const selectedItem = sorted[selectedIndex] ?? null;
+  const previewQuery = useQuery({
+    queryKey: ["workItemPreview", selectedItem?.organizationId, selectedItem?.projectId, selectedItem?.id],
+    queryFn: () =>
+      getWorkItemPreview({
+        organizationId: selectedItem?.organizationId,
+        projectId: selectedItem?.projectId ?? "",
+        workItemId: selectedItem?.id ?? 0,
+      }),
+    enabled: !!selectedItem,
+  });
 
   useEffect(() => {
     if (autoFocus) containerRef.current?.focus();
@@ -1323,76 +1353,245 @@ function WorkItemsGrid({
           {copyToast}
         </div>
       )}
-      <div className="overflow-hidden rounded-md border border-border bg-white">
-        <div className="overflow-x-auto">
-          <div className="min-w-[860px]">
-            <div
-              role="row"
-              className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-              style={{ gridTemplateColumns: wiColTemplate }}
-            >
-              {WI_GRID_KEYS.map((col, i) => (
-                <WiSortHeaderButton
-                  key={col}
-                  column={col}
-                  sort={sort}
-                  onSort={applyWiSort}
-                  resizeHandle={
-                    i < WI_GRID_KEYS.length - 1 ? (
-                      <ColumnResizeHandle
-                        columnIndex={i}
-                        widths={columnWidths}
-                        setWidths={setColumnWidths}
-                        min={WI_COLUMN_MIN_WIDTHS[i]}
-                        max={WI_COLUMN_MAX_WIDTHS[i]}
-                      />
-                    ) : undefined
-                  }
-                />
-              ))}
-            </div>
-
-            {loading ? (
-              <LoadingState />
-            ) : !searched ? (
-              <div className="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
-                {emptyMessage ?? "Run a search to load work items."}
-              </div>
-            ) : sorted.length === 0 ? (
-              <div className="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
-                No work items matched.
-              </div>
-            ) : (
-              <div role="grid" aria-label="Work items">
-                {sorted.map((item, i) => (
-                  <WorkItemGridRow
-                    key={`${item.organizationId}:${item.projectId}:${item.id}`}
-                    ref={(el) => {
-                      rowRefs.current[i] = el;
-                    }}
-                    item={item}
-                    selected={i === selectedIndex}
-                    columnTemplate={wiColTemplate}
-                    onSelect={() => setSelectedIndex(i)}
+      <div
+        className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_8px_minmax(300px,var(--work-item-preview-width))]"
+        style={{ "--work-item-preview-width": `${previewWidth}px` } as CSSProperties}
+      >
+        <div className="min-w-0 overflow-hidden rounded-md border border-border bg-white">
+          <div className="overflow-x-auto">
+            <div className="min-w-[860px]">
+              <div
+                role="row"
+                className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                style={{ gridTemplateColumns: wiColTemplate }}
+              >
+                {WI_GRID_KEYS.map((col, i) => (
+                  <WiSortHeaderButton
+                    key={col}
+                    column={col}
+                    sort={sort}
+                    onSort={applyWiSort}
+                    resizeHandle={
+                      i < WI_GRID_KEYS.length - 1 ? (
+                        <ColumnResizeHandle
+                          columnIndex={i}
+                          widths={columnWidths}
+                          setWidths={setColumnWidths}
+                          min={WI_COLUMN_MIN_WIDTHS[i]}
+                          max={WI_COLUMN_MAX_WIDTHS[i]}
+                        />
+                      ) : undefined
+                    }
                   />
                 ))}
               </div>
-            )}
+
+              {loading ? (
+                <LoadingState />
+              ) : !searched ? (
+                <div className="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
+                  {emptyMessage ?? "Run a search to load work items."}
+                </div>
+              ) : sorted.length === 0 ? (
+                <div className="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
+                  No work items matched.
+                </div>
+              ) : (
+                <div role="grid" aria-label="Work items">
+                  {sorted.map((item, i) => (
+                    <WorkItemGridRow
+                      key={`${item.organizationId}:${item.projectId}:${item.id}`}
+                      ref={(el) => {
+                        rowRefs.current[i] = el;
+                      }}
+                      item={item}
+                      selected={i === selectedIndex}
+                      columnTemplate={wiColTemplate}
+                      onSelect={() => setSelectedIndex(i)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center border-t border-border px-2 py-1 text-xs text-muted-foreground">
+            <span>
+              {loading
+                ? "Loading…"
+                : searched
+                  ? `${sorted.length} item${sorted.length === 1 ? "" : "s"}`
+                  : "Ready"}
+            </span>
           </div>
         </div>
 
-        <div className="flex items-center border-t border-border px-2 py-1 text-xs text-muted-foreground">
-          <span>
-            {loading
-              ? "Loading…"
-              : searched
-                ? `${sorted.length} item${sorted.length === 1 ? "" : "s"}`
-                : "Ready"}
-          </span>
-        </div>
+        <ResizeHandle
+          ariaLabel="Resize work item preview"
+          className="hidden xl:flex"
+          direction={-1}
+          max={860}
+          min={300}
+          onChange={setPreviewWidth}
+          onReset={() => setPreviewWidth(DEFAULT_WORK_ITEM_PREVIEW_WIDTH)}
+          value={previewWidth}
+        />
+
+        <WorkItemPreviewPanel
+          preview={previewQuery.data ?? null}
+          previewError={previewQuery.isError ? commandErrorMessage(previewQuery.error) : null}
+          previewLoading={previewQuery.isFetching}
+          selectedItem={selectedItem}
+        />
       </div>
     </div>
   );
+}
+
+function WorkItemPreviewPanel({
+  preview,
+  previewError,
+  previewLoading,
+  selectedItem,
+}: {
+  preview: WorkItemPreview | null;
+  previewError: string | null;
+  previewLoading: boolean;
+  selectedItem: WorkItemSummary | null;
+}) {
+  return (
+    <aside className="flex min-h-[520px] flex-col overflow-hidden rounded-md border border-border bg-white">
+      <div className="flex items-center justify-between border-b border-border px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-semibold">Work Item Preview</h2>
+            <p className="truncate text-xs text-muted-foreground">
+              {selectedItem ? `#${selectedItem.id}` : "No work item selected"}
+            </p>
+          </div>
+        </div>
+        {previewLoading ? (
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
+        ) : null}
+      </div>
+
+      {!selectedItem ? (
+        <PreviewEmptyState message="Select a work item." />
+      ) : previewError ? (
+        <div className="m-3 rounded-md border border-destructive/30 bg-red-50 p-3 text-sm text-destructive">
+          {previewError}
+        </div>
+      ) : preview ? (
+        <>
+          <div className="border-b border-border px-3 py-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className="rounded-md bg-secondary px-2 py-1 font-mono text-xs font-medium">
+                #{preview.id}
+              </span>
+              {preview.workItemType ? (
+                <span className="rounded-md border border-border px-2 py-1 text-xs font-medium">
+                  {preview.workItemType}
+                </span>
+              ) : null}
+              {preview.state ? (
+                <span className="rounded-md border border-border px-2 py-1 text-xs font-medium">
+                  {preview.state}
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-2 line-clamp-2 text-sm font-medium" title={preview.title}>
+              {preview.title}
+            </p>
+            <p className="mt-1 truncate text-xs text-muted-foreground" title={preview.projectName}>
+              {preview.projectName}
+            </p>
+          </div>
+          <iframe
+            title={`Work item preview for #${preview.id}`}
+            sandbox=""
+            srcDoc={workItemPreviewDocument(preview)}
+            className="min-h-0 flex-1 bg-white"
+          />
+          <div className="border-t border-border p-3">
+            <button
+              type="button"
+              disabled={!preview.webUrl}
+              onClick={() => {
+                if (preview.webUrl) openExternalUrl(preview.webUrl);
+              }}
+              className="inline-flex h-8 items-center rounded-md border border-border px-3 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Open in Azure DevOps
+            </button>
+          </div>
+        </>
+      ) : (
+        <PreviewEmptyState message={`Loading work item #${selectedItem.id}.`} />
+      )}
+    </aside>
+  );
+}
+
+function workItemPreviewDocument(preview: WorkItemPreview): string {
+  const fields = [
+    ["Assigned to", preview.assignedTo],
+    ["Created by", preview.createdBy],
+    ["Created", preview.createdDate ? formatDate(preview.createdDate) : null],
+    ["Changed", preview.changedDate ? formatDate(preview.changedDate) : null],
+    ["Area", preview.areaPath],
+    ["Iteration", preview.iterationPath],
+    ["Reason", preview.reason],
+    ["Priority", preview.priority],
+    ["Severity", preview.severity],
+    ["Story points", preview.storyPoints],
+    ["Remaining work", preview.remainingWork],
+    ["Tags", preview.tags],
+  ].filter(([, value]) => !!value);
+  const fieldRows = fields
+    .map(
+      ([label, value]) =>
+        `<div class="field"><dt>${escapeHtml(label ?? "")}</dt><dd>${escapeHtml(value ?? "")}</dd></div>`,
+    )
+    .join("");
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root { color-scheme: light; }
+      body { color: #111827; font: 13px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 16px; }
+      h1 { font-size: 18px; line-height: 1.25; margin: 0 0 12px; }
+      h2 { border-top: 1px solid #e5e7eb; font-size: 13px; margin: 18px 0 8px; padding-top: 14px; text-transform: uppercase; color: #4b5563; }
+      dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; margin: 0; }
+      .field { min-width: 0; }
+      dt { color: #6b7280; font-size: 11px; margin-bottom: 2px; }
+      dd { margin: 0; overflow-wrap: anywhere; }
+      .html-field { overflow-wrap: anywhere; }
+      .html-field p { margin: 0 0 8px; }
+      .html-field ul, .html-field ol { margin: 0 0 8px 20px; padding: 0; }
+      .empty { color: #6b7280; }
+    </style>
+  </head>
+  <body>
+    <h1>${escapeHtml(preview.title)}</h1>
+    <dl>${fieldRows}</dl>
+    <h2>Description</h2>
+    <div class="html-field">${preview.descriptionHtml || '<p class="empty">No description.</p>'}</div>
+    <h2>Acceptance Criteria</h2>
+    <div class="html-field">${preview.acceptanceCriteriaHtml || '<p class="empty">No acceptance criteria.</p>'}</div>
+  </body>
+</html>`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function MyWorkItemsPanel({ organizations }: { organizations: Organization[] }) {

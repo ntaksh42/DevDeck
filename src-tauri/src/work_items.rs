@@ -16,6 +16,27 @@ const WORK_ITEM_FIELDS: &[&str] = &[
     "System.ChangedDate",
 ];
 
+const WORK_ITEM_PREVIEW_FIELDS: &[&str] = &[
+    "System.Id",
+    "System.Title",
+    "System.WorkItemType",
+    "System.State",
+    "System.AssignedTo",
+    "System.CreatedBy",
+    "System.CreatedDate",
+    "System.ChangedDate",
+    "System.AreaPath",
+    "System.IterationPath",
+    "System.Reason",
+    "System.Tags",
+    "System.Description",
+    "Microsoft.VSTS.Common.AcceptanceCriteria",
+    "Microsoft.VSTS.Common.Priority",
+    "Microsoft.VSTS.Common.Severity",
+    "Microsoft.VSTS.Scheduling.StoryPoints",
+    "Microsoft.VSTS.Scheduling.RemainingWork",
+];
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchWorkItemsInput {
@@ -32,6 +53,14 @@ pub struct ListMyWorkItemsInput {
     pub organization_id: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetWorkItemPreviewInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_id: i64,
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkItemSummary {
@@ -44,6 +73,33 @@ pub struct WorkItemSummary {
     pub state: Option<String>,
     pub assigned_to: Option<String>,
     pub changed_date: Option<String>,
+    pub web_url: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemPreview {
+    pub organization_id: String,
+    pub project_id: String,
+    pub project_name: String,
+    pub id: i64,
+    pub title: String,
+    pub work_item_type: Option<String>,
+    pub state: Option<String>,
+    pub assigned_to: Option<String>,
+    pub created_by: Option<String>,
+    pub created_date: Option<String>,
+    pub changed_date: Option<String>,
+    pub area_path: Option<String>,
+    pub iteration_path: Option<String>,
+    pub reason: Option<String>,
+    pub tags: Option<String>,
+    pub priority: Option<String>,
+    pub severity: Option<String>,
+    pub story_points: Option<String>,
+    pub remaining_work: Option<String>,
+    pub description_html: Option<String>,
+    pub acceptance_criteria_html: Option<String>,
     pub web_url: Option<String>,
 }
 
@@ -137,6 +193,38 @@ impl WorkItemService {
         Ok(results)
     }
 
+    pub async fn preview(&self, input: GetWorkItemPreviewInput) -> Result<WorkItemPreview> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = client
+            .list_projects()
+            .await?
+            .into_iter()
+            .find(|project| project.id == input.project_id)
+            .ok_or_else(|| {
+                AppError::InvalidInput(format!("project not found: {}", input.project_id))
+            })?;
+        let fields = WORK_ITEM_PREVIEW_FIELDS
+            .iter()
+            .map(|field| field.to_string())
+            .collect();
+        let work_item = client
+            .get_work_items_batch(&project.id, vec![input.work_item_id], fields)
+            .await?
+            .into_iter()
+            .next()
+            .ok_or_else(|| {
+                AppError::InvalidInput(format!("work item not found: {}", input.work_item_id))
+            })?;
+
+        Ok(summarize_work_item_preview(
+            &organization,
+            &project.id,
+            &project.name,
+            work_item,
+        ))
+    }
+
     fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {
         if let Some(id) = id {
             return self
@@ -211,18 +299,65 @@ fn summarize_work_item(
         state: string_field(&work_item, "System.State"),
         assigned_to: identity_field(&work_item, "System.AssignedTo"),
         changed_date: string_field(&work_item, "System.ChangedDate"),
-        web_url: work_item
-            .links
-            .and_then(|links| links.html.map(|html| html.href))
-            .or_else(|| {
-                Some(format!(
-                    "https://dev.azure.com/{}/{}/_workitems/edit/{}",
-                    organization.name,
-                    encode_path_segment(project_name),
-                    work_item.id
-                ))
-            }),
+        web_url: work_item_web_url(organization, project_name, work_item.id, &work_item),
     }
+}
+
+fn summarize_work_item_preview(
+    organization: &Organization,
+    project_id: &str,
+    project_name: &str,
+    work_item: WorkItem,
+) -> WorkItemPreview {
+    let web_url = work_item_web_url(organization, project_name, work_item.id, &work_item);
+
+    WorkItemPreview {
+        organization_id: organization.id.clone(),
+        project_id: project_id.to_string(),
+        project_name: project_name.to_string(),
+        id: work_item.id,
+        title: string_field(&work_item, "System.Title").unwrap_or_else(|| "(untitled)".to_string()),
+        work_item_type: string_field(&work_item, "System.WorkItemType"),
+        state: string_field(&work_item, "System.State"),
+        assigned_to: identity_field(&work_item, "System.AssignedTo"),
+        created_by: identity_field(&work_item, "System.CreatedBy"),
+        created_date: string_field(&work_item, "System.CreatedDate"),
+        changed_date: string_field(&work_item, "System.ChangedDate"),
+        area_path: string_field(&work_item, "System.AreaPath"),
+        iteration_path: string_field(&work_item, "System.IterationPath"),
+        reason: string_field(&work_item, "System.Reason"),
+        tags: string_field(&work_item, "System.Tags"),
+        priority: string_field(&work_item, "Microsoft.VSTS.Common.Priority"),
+        severity: string_field(&work_item, "Microsoft.VSTS.Common.Severity"),
+        story_points: string_field(&work_item, "Microsoft.VSTS.Scheduling.StoryPoints"),
+        remaining_work: string_field(&work_item, "Microsoft.VSTS.Scheduling.RemainingWork"),
+        description_html: string_field(&work_item, "System.Description"),
+        acceptance_criteria_html: string_field(
+            &work_item,
+            "Microsoft.VSTS.Common.AcceptanceCriteria",
+        ),
+        web_url,
+    }
+}
+
+fn work_item_web_url(
+    organization: &Organization,
+    project_name: &str,
+    work_item_id: i64,
+    work_item: &WorkItem,
+) -> Option<String> {
+    work_item
+        .links
+        .as_ref()
+        .and_then(|links| links.html.as_ref().map(|html| html.href.clone()))
+        .or_else(|| {
+            Some(format!(
+                "https://dev.azure.com/{}/{}/_workitems/edit/{}",
+                organization.name,
+                encode_path_segment(project_name),
+                work_item_id
+            ))
+        })
 }
 
 fn string_field(work_item: &WorkItem, field: &str) -> Option<String> {
@@ -313,5 +448,47 @@ mod tests {
             summary.web_url.as_deref(),
             Some("https://dev.azure.com/contoso/Platform%20Team/_workitems/edit/123")
         );
+    }
+
+    #[test]
+    fn summarize_preview_maps_rich_fields() {
+        let organization = Organization {
+            id: "contoso".to_string(),
+            name: "contoso".to_string(),
+            display_name: Some("contoso".to_string()),
+            base_url: "https://dev.azure.com/contoso".to_string(),
+            auth_provider: "pat".to_string(),
+            credential_key: "azdodeck:org:contoso:pat".to_string(),
+            authenticated_user_id: None,
+            authenticated_user_display_name: None,
+            created_at: "2026-05-24T00:00:00Z".to_string(),
+            updated_at: "2026-05-24T00:00:00Z".to_string(),
+        };
+        let mut fields = HashMap::new();
+        fields.insert("System.Title".to_string(), json!("Preview WIT"));
+        fields.insert("System.WorkItemType".to_string(), json!("User Story"));
+        fields.insert("System.State".to_string(), json!("Active"));
+        fields.insert(
+            "System.CreatedBy".to_string(),
+            json!({ "displayName": "Creator" }),
+        );
+        fields.insert("System.Description".to_string(), json!("<p>Body</p>"));
+        fields.insert("Microsoft.VSTS.Common.Priority".to_string(), json!(2));
+
+        let preview = summarize_work_item_preview(
+            &organization,
+            "project-1",
+            "Platform",
+            WorkItem {
+                id: 456,
+                fields,
+                links: None,
+            },
+        );
+
+        assert_eq!(preview.title, "Preview WIT");
+        assert_eq!(preview.created_by.as_deref(), Some("Creator"));
+        assert_eq!(preview.description_html.as_deref(), Some("<p>Body</p>"));
+        assert_eq!(preview.priority.as_deref(), Some("2"));
     }
 }
