@@ -20,6 +20,7 @@ import {
   GitCommitHorizontal,
   GripVertical,
   Eye,
+  Info,
   EyeOff,
   GitPullRequest,
   Keyboard,
@@ -650,6 +651,11 @@ function CommitSearch({ organizations }: { organizations: Organization[] }) {
         </form>
       </div>
 
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Info className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+        Showing locally synced data — refreshed automatically every 5 minutes.
+      </p>
+
       {mutation.isError ? (
         <ErrorState message={commandErrorMessage(mutation.error)} />
       ) : null}
@@ -1089,6 +1095,11 @@ function WorkItemSearch({ organizations }: { organizations: Organization[] }) {
           </div>
         </form>
       </div>
+
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Info className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+        Showing locally synced data — refreshed automatically every 5 minutes.
+      </p>
 
       {mutation.isError ? (
         <ErrorState message={commandErrorMessage(mutation.error)} />
