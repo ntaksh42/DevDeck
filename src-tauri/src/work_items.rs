@@ -167,11 +167,13 @@ impl WorkItemService {
         } else {
             let mut results = self.db.search_work_items_fts(&organization.id, &query)?;
             results.retain(|item| {
-                project_id.as_deref().map_or(true, |p| item.project_id == p)
-                    && state.as_deref().map_or(true, |s| item.state.as_deref() == Some(s))
+                project_id.as_deref().is_none_or(|p| item.project_id == p)
+                    && state
+                        .as_deref()
+                        .is_none_or(|s| item.state.as_deref() == Some(s))
                     && work_item_type
                         .as_deref()
-                        .map_or(true, |t| item.work_item_type.as_deref() == Some(t))
+                        .is_none_or(|t| item.work_item_type.as_deref() == Some(t))
             });
             results
         };

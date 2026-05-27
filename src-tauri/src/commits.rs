@@ -100,11 +100,12 @@ impl CommitService {
                 repository_filter.as_deref(),
             )?;
             rows.retain(|c| {
-                from_rfc.as_deref().map_or(true, |f| {
-                    c.author_date.as_deref().map_or(false, |d| d >= f)
-                }) && to_rfc.as_deref().map_or(true, |t| {
-                    c.author_date.as_deref().map_or(false, |d| d <= t)
-                })
+                from_rfc
+                    .as_deref()
+                    .is_none_or(|f| c.author_date.as_deref().is_some_and(|d| d >= f))
+                    && to_rfc
+                        .as_deref()
+                        .is_none_or(|t| c.author_date.as_deref().is_some_and(|d| d <= t))
             });
             rows
         };
@@ -114,15 +115,15 @@ impl CommitService {
             .filter(|c| {
                 project_filter
                     .as_deref()
-                    .map_or(true, |p| c.project_id == p)
-                    && author.as_deref().map_or(true, |a| {
+                    .is_none_or(|p| c.project_id == p)
+                    && author.as_deref().is_none_or(|a| {
                         let al = a.to_ascii_lowercase();
                         c.author_name
                             .as_deref()
-                            .map_or(false, |n| n.to_ascii_lowercase().contains(&al))
+                            .is_some_and(|n| n.to_ascii_lowercase().contains(&al))
                             || c.author_email
                                 .as_deref()
-                                .map_or(false, |e| e.to_ascii_lowercase().contains(&al))
+                                .is_some_and(|e| e.to_ascii_lowercase().contains(&al))
                     })
             })
             .map(cached_commit_to_summary)
@@ -348,7 +349,12 @@ fn commit_to_cached(
         .and_then(|a| a.date.map(|d| d.to_rfc3339()));
     let commit_id = commit.commit_id;
     let web_url = commit.remote_url.or(commit.url).or_else(|| {
-        Some(commit_web_url(org, project_name, repository_name, &commit_id))
+        Some(commit_web_url(
+            org,
+            project_name,
+            repository_name,
+            &commit_id,
+        ))
     });
     CachedCommit {
         org_id: org.id.clone(),
@@ -377,11 +383,7 @@ pub async fn sync_commits_for_org(
     Ok(())
 }
 
-async fn do_sync_commits(
-    db: &AppDatabase,
-    client: &AdoClient,
-    org: &Organization,
-) -> Result<()> {
+async fn do_sync_commits(db: &AppDatabase, client: &AdoClient, org: &Organization) -> Result<()> {
     let from_date = (Utc::now() - chrono::Duration::days(30)).to_rfc3339();
     let projects = client.list_projects().await?;
     for project in &projects {
