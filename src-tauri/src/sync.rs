@@ -5,9 +5,11 @@ use tokio::sync::mpsc;
 use tokio::time::{interval_at, Instant};
 
 use crate::auth::client_for_organization;
+use crate::commits::sync_commits_for_org;
 use crate::db::AppDatabase;
 use crate::prs::sync_prs_for_org;
 use crate::secrets::SecretStore;
+use crate::work_items::sync_work_items_for_org;
 
 pub struct SyncRunner {
     db: AppDatabase,
@@ -58,6 +60,12 @@ impl SyncRunner {
             };
             if let Err(e) = sync_prs_for_org(&self.db, &client, &org).await {
                 tracing::error!(org = %org.name, error = ?e, "sync: PR sync failed");
+            }
+            if let Err(e) = sync_work_items_for_org(&self.db, &client, &org).await {
+                tracing::error!(org = %org.name, error = ?e, "sync: WI sync failed");
+            }
+            if let Err(e) = sync_commits_for_org(&self.db, &client, &org).await {
+                tracing::error!(org = %org.name, error = ?e, "sync: commit sync failed");
             }
         }
     }
