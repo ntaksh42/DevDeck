@@ -1,3 +1,6 @@
+// Cache/sync scaffolding can land before all call sites; keep builds warning-free.
+#![allow(dead_code)]
+
 mod auth;
 mod commits;
 mod db;

@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, Result};
 
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
+
+// ── Existing public types ────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -30,6 +32,103 @@ pub struct AppSettings {
     pub review_result_folder_path: Option<String>,
 }
 
+pub struct OrganizationDraft {
+    pub id: String,
+    pub name: String,
+    pub display_name: Option<String>,
+    pub base_url: String,
+    pub auth_provider: String,
+    pub credential_key: String,
+    pub authenticated_user_id: Option<String>,
+    pub authenticated_user_display_name: Option<String>,
+}
+
+// ── Cache row types ───────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone)]
+pub struct CachedPr {
+    pub org_id: String,
+    pub project_id: String,
+    pub project_name: String,
+    pub repository_id: String,
+    pub repository_name: String,
+    pub pull_request_id: i64,
+    pub title: String,
+    pub status: String,
+    pub created_by: Option<String>,
+    pub creation_date: String,
+    pub source_ref_name: String,
+    pub target_ref_name: String,
+    pub web_url: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CachedReviewPr {
+    pub org_id: String,
+    pub project_id: String,
+    pub project_name: String,
+    pub repository_id: String,
+    pub repository_name: String,
+    pub pull_request_id: i64,
+    pub title: String,
+    pub created_by: Option<String>,
+    pub creation_date: String,
+    pub target_ref_name: String,
+    pub web_url: Option<String>,
+    pub my_vote: i32,
+    pub my_vote_label: String,
+    pub my_is_required: bool,
+    pub is_draft: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct CachedWorkItem {
+    pub org_id: String,
+    pub project_id: String,
+    pub project_name: String,
+    pub id: i64,
+    pub title: String,
+    pub work_item_type: Option<String>,
+    pub state: Option<String>,
+    pub assigned_to: Option<String>,
+    pub changed_date: Option<String>,
+    pub web_url: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CachedCommit {
+    pub org_id: String,
+    pub project_id: String,
+    pub project_name: String,
+    pub repository_id: String,
+    pub repository_name: String,
+    pub commit_id: String,
+    pub comment: String,
+    pub author_name: Option<String>,
+    pub author_email: Option<String>,
+    pub author_date: Option<String>,
+    pub web_url: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CachedRepository {
+    pub project_id: String,
+    pub project_name: String,
+    pub repository_id: String,
+    pub repository_name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SyncState {
+    pub scope: String,
+    pub org_id: String,
+    pub last_synced_at: Option<String>,
+    pub error_count: i64,
+    pub last_error: Option<String>,
+}
+
+// ── AppDatabase ───────────────────────────────────────────────────────────────
+
 #[derive(Debug, Clone)]
 pub struct AppDatabase {
     path: PathBuf,
@@ -50,8 +149,13 @@ impl AppDatabase {
     }
 
     pub fn open(&self) -> Result<Connection> {
-        Ok(Connection::open(&self.path)?)
+        let conn = Connection::open(&self.path)?;
+        conn.pragma_update(None, "foreign_keys", "ON")?;
+        conn.pragma_update(None, "recursive_triggers", "ON")?;
+        Ok(conn)
     }
+
+    // ── Organizations ────────────────────────────────────────────────────────
 
     pub fn list_organizations(&self) -> Result<Vec<Organization>> {
         let conn = self.open()?;
@@ -68,6 +172,13 @@ impl AppDatabase {
         upsert_organization(&conn, draft)
     }
 
+    pub fn delete_organization(&self, id: &str) -> Result<()> {
+        let conn = self.open()?;
+        delete_organization(&conn, id)
+    }
+
+    // ── App settings ─────────────────────────────────────────────────────────
+
     pub fn get_app_settings(&self) -> Result<AppSettings> {
         let conn = self.open()?;
         get_app_settings(&conn)
@@ -78,32 +189,210 @@ impl AppDatabase {
         update_app_settings(&conn, settings)
     }
 
-    pub fn delete_organization(&self, id: &str) -> Result<()> {
+    // ── Pull requests cache ───────────────────────────────────────────────────
+
+    pub fn upsert_pull_requests(&self, prs: &[CachedPr]) -> Result<()> {
+        if prs.is_empty() {
+            return Ok(());
+        }
         let conn = self.open()?;
-        delete_organization(&conn, id)
+        upsert_pull_requests(&conn, prs)
+    }
+
+    pub fn search_pull_requests(
+        &self,
+        org_id: &str,
+        project_id: Option<&str>,
+        repository_id: Option<&str>,
+        status: Option<&str>,
+    ) -> Result<Vec<CachedPr>> {
+        let conn = self.open()?;
+        search_pull_requests(&conn, org_id, project_id, repository_id, status)
+    }
+
+    pub fn clear_pull_requests(&self, org_id: &str) -> Result<()> {
+        let conn = self.open()?;
+        conn.execute("DELETE FROM pull_requests WHERE org_id = ?1", [org_id])?;
+        Ok(())
+    }
+
+    // ── Review PRs cache ──────────────────────────────────────────────────────
+
+    pub fn upsert_review_pull_requests(&self, prs: &[CachedReviewPr]) -> Result<()> {
+        if prs.is_empty() {
+            return Ok(());
+        }
+        let conn = self.open()?;
+        upsert_review_pull_requests(&conn, prs)
+    }
+
+    pub fn list_review_pull_requests(&self, org_id: &str) -> Result<Vec<CachedReviewPr>> {
+        let conn = self.open()?;
+        list_review_pull_requests(&conn, org_id)
+    }
+
+    pub fn clear_review_pull_requests(&self, org_id: &str) -> Result<()> {
+        let conn = self.open()?;
+        conn.execute(
+            "DELETE FROM review_pull_requests WHERE org_id = ?1",
+            [org_id],
+        )?;
+        Ok(())
+    }
+
+    // ── Work items cache ──────────────────────────────────────────────────────
+
+    pub fn upsert_work_items(&self, items: &[CachedWorkItem]) -> Result<()> {
+        if items.is_empty() {
+            return Ok(());
+        }
+        let conn = self.open()?;
+        upsert_work_items(&conn, items)
+    }
+
+    pub fn search_work_items(
+        &self,
+        org_id: &str,
+        project_id: Option<&str>,
+        state: Option<&str>,
+        work_item_type: Option<&str>,
+        assigned_to: Option<&str>,
+    ) -> Result<Vec<CachedWorkItem>> {
+        let conn = self.open()?;
+        search_work_items(
+            &conn,
+            org_id,
+            project_id,
+            state,
+            work_item_type,
+            assigned_to,
+        )
+    }
+
+    pub fn search_work_items_fts(&self, org_id: &str, query: &str) -> Result<Vec<CachedWorkItem>> {
+        let conn = self.open()?;
+        search_work_items_fts(&conn, org_id, query)
+    }
+
+    pub fn clear_work_items(&self, org_id: &str) -> Result<()> {
+        let conn = self.open()?;
+        conn.execute("DELETE FROM work_items WHERE org_id = ?1", [org_id])?;
+        Ok(())
+    }
+
+    // ── Commits cache ─────────────────────────────────────────────────────────
+
+    pub fn upsert_commits(&self, commits: &[CachedCommit]) -> Result<()> {
+        if commits.is_empty() {
+            return Ok(());
+        }
+        let conn = self.open()?;
+        upsert_commits(&conn, commits)
+    }
+
+    pub fn search_commits(
+        &self,
+        org_id: &str,
+        repository_id: Option<&str>,
+        author_email: Option<&str>,
+        from_date: Option<&str>,
+        to_date: Option<&str>,
+    ) -> Result<Vec<CachedCommit>> {
+        let conn = self.open()?;
+        search_commits(
+            &conn,
+            org_id,
+            repository_id,
+            author_email,
+            from_date,
+            to_date,
+        )
+    }
+
+    pub fn search_commits_fts(
+        &self,
+        org_id: &str,
+        query: &str,
+        repository_id: Option<&str>,
+    ) -> Result<Vec<CachedCommit>> {
+        let conn = self.open()?;
+        search_commits_fts(&conn, org_id, query, repository_id)
+    }
+
+    pub fn list_commit_repositories(&self, org_id: &str) -> Result<Vec<CachedRepository>> {
+        let conn = self.open()?;
+        list_commit_repositories(&conn, org_id)
+    }
+
+    pub fn clear_commits(&self, org_id: &str) -> Result<()> {
+        let conn = self.open()?;
+        conn.execute("DELETE FROM commits WHERE org_id = ?1", [org_id])?;
+        Ok(())
+    }
+
+    // ── Sync state ────────────────────────────────────────────────────────────
+
+    pub fn get_sync_state(&self, scope: &str) -> Result<Option<SyncState>> {
+        let conn = self.open()?;
+        Ok(conn
+            .query_row(
+                "SELECT scope, org_id, last_synced_at, error_count, last_error FROM sync_state WHERE scope = ?1",
+                [scope],
+                map_sync_state,
+            )
+            .optional()?)
+    }
+
+    pub fn list_sync_states(&self, org_id: &str) -> Result<Vec<SyncState>> {
+        let conn = self.open()?;
+        let mut stmt = conn.prepare(
+            "SELECT scope, org_id, last_synced_at, error_count, last_error FROM sync_state WHERE org_id = ?1",
+        )?;
+        let rows = stmt.query_map([org_id], map_sync_state)?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
+    pub fn update_sync_state(
+        &self,
+        scope: &str,
+        org_id: &str,
+        last_synced_at: Option<&str>,
+        error_count: i64,
+        last_error: Option<&str>,
+    ) -> Result<()> {
+        let conn = self.open()?;
+        conn.execute(
+            r#"
+            INSERT INTO sync_state(scope, org_id, last_synced_at, error_count, last_error)
+            VALUES (?1, ?2, ?3, ?4, ?5)
+            ON CONFLICT(scope) DO UPDATE SET
+                last_synced_at = excluded.last_synced_at,
+                error_count = excluded.error_count,
+                last_error = excluded.last_error
+            "#,
+            params![scope, org_id, last_synced_at, error_count, last_error],
+        )?;
+        Ok(())
     }
 }
 
-pub struct OrganizationDraft {
-    pub id: String,
-    pub name: String,
-    pub display_name: Option<String>,
-    pub base_url: String,
-    pub auth_provider: String,
-    pub credential_key: String,
-    pub authenticated_user_id: Option<String>,
-    pub authenticated_user_display_name: Option<String>,
-}
+// ── Migration ─────────────────────────────────────────────────────────────────
 
 pub fn migrate(conn: &Connection) -> Result<()> {
     conn.pragma_update(None, "foreign_keys", "ON")?;
+    conn.pragma_update(None, "recursive_triggers", "ON")?;
     let current: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
     if current > SCHEMA_VERSION {
         return Err(AppError::Database(format!(
             "database schema version {current} is newer than supported version {SCHEMA_VERSION}"
         )));
     }
-    if current == 0 {
+    if current < 1 {
+        conn.pragma_update_and_check(None, "journal_mode", "WAL", |_| Ok(()))?;
         conn.execute_batch(
             r#"
             CREATE TABLE IF NOT EXISTS app_settings(
@@ -129,8 +418,149 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             "#,
         )?;
     }
+    if current < 2 {
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS pull_requests(
+                org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                project_id TEXT NOT NULL,
+                project_name TEXT NOT NULL,
+                repository_id TEXT NOT NULL,
+                repository_name TEXT NOT NULL,
+                pull_request_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_by TEXT,
+                creation_date TEXT NOT NULL,
+                source_ref_name TEXT NOT NULL,
+                target_ref_name TEXT NOT NULL,
+                web_url TEXT,
+                PRIMARY KEY (org_id, repository_id, pull_request_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_prs_status
+                ON pull_requests(org_id, status, creation_date DESC);
+            CREATE INDEX IF NOT EXISTS idx_prs_project
+                ON pull_requests(org_id, project_id);
+
+            CREATE TABLE IF NOT EXISTS review_pull_requests(
+                org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                project_id TEXT NOT NULL,
+                project_name TEXT NOT NULL,
+                repository_id TEXT NOT NULL,
+                repository_name TEXT NOT NULL,
+                pull_request_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                created_by TEXT,
+                creation_date TEXT NOT NULL,
+                target_ref_name TEXT NOT NULL,
+                web_url TEXT,
+                my_vote INTEGER NOT NULL DEFAULT 0,
+                my_vote_label TEXT NOT NULL DEFAULT '',
+                my_is_required INTEGER NOT NULL DEFAULT 0,
+                is_draft INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (org_id, repository_id, pull_request_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_rprs_vote
+                ON review_pull_requests(org_id, my_vote);
+
+            CREATE TABLE IF NOT EXISTS work_items(
+                org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                project_id TEXT NOT NULL,
+                project_name TEXT NOT NULL,
+                id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                work_item_type TEXT,
+                state TEXT,
+                assigned_to TEXT,
+                changed_date TEXT,
+                web_url TEXT,
+                PRIMARY KEY (org_id, id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_wi_state
+                ON work_items(org_id, state, changed_date DESC);
+            CREATE INDEX IF NOT EXISTS idx_wi_assigned
+                ON work_items(org_id, assigned_to);
+
+            CREATE VIRTUAL TABLE IF NOT EXISTS work_items_fts USING fts5(
+                org_id UNINDEXED,
+                item_id UNINDEXED,
+                title
+            );
+            CREATE TRIGGER IF NOT EXISTS work_items_fts_ai
+                AFTER INSERT ON work_items BEGIN
+                    INSERT INTO work_items_fts(rowid, org_id, item_id, title)
+                    VALUES (new.rowid, new.org_id, new.id, new.title);
+                END;
+            CREATE TRIGGER IF NOT EXISTS work_items_fts_ad
+                AFTER DELETE ON work_items BEGIN
+                    DELETE FROM work_items_fts WHERE rowid = old.rowid;
+                END;
+            CREATE TRIGGER IF NOT EXISTS work_items_fts_au
+                AFTER UPDATE ON work_items BEGIN
+                    DELETE FROM work_items_fts WHERE rowid = old.rowid;
+                    INSERT INTO work_items_fts(rowid, org_id, item_id, title)
+                    VALUES (new.rowid, new.org_id, new.id, new.title);
+                END;
+
+            CREATE TABLE IF NOT EXISTS commits(
+                org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                project_id TEXT NOT NULL,
+                project_name TEXT NOT NULL,
+                repository_id TEXT NOT NULL,
+                repository_name TEXT NOT NULL,
+                commit_id TEXT NOT NULL,
+                comment TEXT NOT NULL,
+                author_name TEXT,
+                author_email TEXT,
+                author_date TEXT,
+                web_url TEXT,
+                PRIMARY KEY (org_id, repository_id, commit_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_commits_date
+                ON commits(org_id, repository_id, author_date DESC);
+            CREATE INDEX IF NOT EXISTS idx_commits_author
+                ON commits(org_id, author_email);
+
+            CREATE VIRTUAL TABLE IF NOT EXISTS commits_fts USING fts5(
+                org_id UNINDEXED,
+                repository_id UNINDEXED,
+                commit_id UNINDEXED,
+                comment,
+                author_name
+            );
+            CREATE TRIGGER IF NOT EXISTS commits_fts_ai
+                AFTER INSERT ON commits BEGIN
+                    INSERT INTO commits_fts(rowid, org_id, repository_id, commit_id, comment, author_name)
+                    VALUES (new.rowid, new.org_id, new.repository_id, new.commit_id, new.comment, new.author_name);
+                END;
+            CREATE TRIGGER IF NOT EXISTS commits_fts_ad
+                AFTER DELETE ON commits BEGIN
+                    DELETE FROM commits_fts WHERE rowid = old.rowid;
+                END;
+            CREATE TRIGGER IF NOT EXISTS commits_fts_au
+                AFTER UPDATE ON commits BEGIN
+                    DELETE FROM commits_fts WHERE rowid = old.rowid;
+                    INSERT INTO commits_fts(rowid, org_id, repository_id, commit_id, comment, author_name)
+                    VALUES (new.rowid, new.org_id, new.repository_id, new.commit_id, new.comment, new.author_name);
+                END;
+
+            CREATE TABLE IF NOT EXISTS sync_state(
+                scope TEXT PRIMARY KEY,
+                org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                last_synced_at TEXT,
+                error_count INTEGER NOT NULL DEFAULT 0,
+                last_error TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_sync_state_org ON sync_state(org_id);
+
+            PRAGMA user_version = 2;
+            "#,
+        )?;
+    }
     Ok(())
 }
+
+// ── Private helpers — organizations ──────────────────────────────────────────
 
 fn list_organizations(conn: &Connection) -> Result<Vec<Organization>> {
     let mut stmt = conn.prepare(
@@ -141,65 +571,31 @@ fn list_organizations(conn: &Connection) -> Result<Vec<Organization>> {
         ORDER BY name ASC
         "#,
     )?;
-
     let rows = stmt.query_map([], map_organization)?;
-    let mut organizations = Vec::new();
+    let mut orgs = Vec::new();
     for row in rows {
-        organizations.push(row?);
+        orgs.push(row?);
     }
-    Ok(organizations)
+    Ok(orgs)
 }
 
-fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
-    Ok(AppSettings {
-        review_result_folder_path: get_setting(conn, "review_result_folder_path")?,
-    })
-}
-
-fn update_app_settings(conn: &Connection, settings: AppSettings) -> Result<AppSettings> {
-    set_setting(
-        conn,
-        "review_result_folder_path",
-        settings.review_result_folder_path.as_deref(),
-    )?;
-    get_app_settings(conn)
-}
-
-fn get_setting(conn: &Connection, key: &str) -> Result<Option<String>> {
+fn get_organization(conn: &Connection, id: &str) -> Result<Option<Organization>> {
     Ok(conn
         .query_row(
-            "SELECT value FROM app_settings WHERE key = ?1",
-            [key],
-            |row| row.get(0),
+            r#"
+            SELECT id, name, display_name, base_url, auth_provider, credential_key,
+                   authenticated_user_id, authenticated_user_display_name, created_at, updated_at
+            FROM organizations WHERE id = ?1
+            "#,
+            [id],
+            map_organization,
         )
         .optional()?)
-}
-
-fn set_setting(conn: &Connection, key: &str, value: Option<&str>) -> Result<()> {
-    match value.map(str::trim).filter(|value| !value.is_empty()) {
-        Some(value) => {
-            conn.execute(
-                r#"
-                INSERT INTO app_settings(key, value, updated_at)
-                VALUES (?1, ?2, ?3)
-                ON CONFLICT(key) DO UPDATE SET
-                    value = excluded.value,
-                    updated_at = excluded.updated_at
-                "#,
-                params![key, value, Utc::now().to_rfc3339()],
-            )?;
-        }
-        None => {
-            conn.execute("DELETE FROM app_settings WHERE key = ?1", [key])?;
-        }
-    }
-    Ok(())
 }
 
 fn upsert_organization(conn: &Connection, draft: OrganizationDraft) -> Result<Organization> {
     let now = Utc::now().to_rfc3339();
     let created_at = existing_created_at(conn, &draft.id)?.unwrap_or_else(|| now.clone());
-
     conn.execute(
         r#"
         INSERT INTO organizations(
@@ -230,7 +626,6 @@ fn upsert_organization(conn: &Connection, draft: OrganizationDraft) -> Result<Or
             now
         ],
     )?;
-
     get_organization(conn, &draft.id)?
         .ok_or_else(|| AppError::Database("organization was not persisted".to_string()))
 }
@@ -250,20 +645,416 @@ fn delete_organization(conn: &Connection, id: &str) -> Result<()> {
     Ok(())
 }
 
-fn get_organization(conn: &Connection, id: &str) -> Result<Option<Organization>> {
+// ── Private helpers — app settings ───────────────────────────────────────────
+
+fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
+    Ok(AppSettings {
+        review_result_folder_path: get_setting(conn, "review_result_folder_path")?,
+    })
+}
+
+fn update_app_settings(conn: &Connection, settings: AppSettings) -> Result<AppSettings> {
+    set_setting(
+        conn,
+        "review_result_folder_path",
+        settings.review_result_folder_path.as_deref(),
+    )?;
+    get_app_settings(conn)
+}
+
+fn get_setting(conn: &Connection, key: &str) -> Result<Option<String>> {
     Ok(conn
         .query_row(
-            r#"
-            SELECT id, name, display_name, base_url, auth_provider, credential_key,
-                   authenticated_user_id, authenticated_user_display_name, created_at, updated_at
-            FROM organizations
-            WHERE id = ?1
-            "#,
-            [id],
-            map_organization,
+            "SELECT value FROM app_settings WHERE key = ?1",
+            [key],
+            |row| row.get(0),
         )
         .optional()?)
 }
+
+fn set_setting(conn: &Connection, key: &str, value: Option<&str>) -> Result<()> {
+    match value.map(str::trim).filter(|v| !v.is_empty()) {
+        Some(v) => {
+            conn.execute(
+                r#"
+                INSERT INTO app_settings(key, value, updated_at) VALUES (?1, ?2, ?3)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+                "#,
+                params![key, v, Utc::now().to_rfc3339()],
+            )?;
+        }
+        None => {
+            conn.execute("DELETE FROM app_settings WHERE key = ?1", [key])?;
+        }
+    }
+    Ok(())
+}
+
+// ── Private helpers — pull requests ──────────────────────────────────────────
+
+fn upsert_pull_requests(conn: &Connection, prs: &[CachedPr]) -> Result<()> {
+    let mut stmt = conn.prepare_cached(
+        r#"
+        INSERT INTO pull_requests(
+            org_id, project_id, project_name, repository_id, repository_name,
+            pull_request_id, title, status, created_by, creation_date,
+            source_ref_name, target_ref_name, web_url
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+        ON CONFLICT(org_id, repository_id, pull_request_id) DO UPDATE SET
+            project_id = excluded.project_id,
+            project_name = excluded.project_name,
+            repository_name = excluded.repository_name,
+            title = excluded.title,
+            status = excluded.status,
+            created_by = excluded.created_by,
+            creation_date = excluded.creation_date,
+            source_ref_name = excluded.source_ref_name,
+            target_ref_name = excluded.target_ref_name,
+            web_url = excluded.web_url
+        "#,
+    )?;
+    for pr in prs {
+        stmt.execute(params![
+            pr.org_id,
+            pr.project_id,
+            pr.project_name,
+            pr.repository_id,
+            pr.repository_name,
+            pr.pull_request_id,
+            pr.title,
+            pr.status,
+            pr.created_by,
+            pr.creation_date,
+            pr.source_ref_name,
+            pr.target_ref_name,
+            pr.web_url
+        ])?;
+    }
+    Ok(())
+}
+
+fn search_pull_requests(
+    conn: &Connection,
+    org_id: &str,
+    project_id: Option<&str>,
+    repository_id: Option<&str>,
+    status: Option<&str>,
+) -> Result<Vec<CachedPr>> {
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT org_id, project_id, project_name, repository_id, repository_name,
+               pull_request_id, title, status, created_by, creation_date,
+               source_ref_name, target_ref_name, web_url
+        FROM pull_requests
+        WHERE org_id = ?1
+          AND (?2 IS NULL OR project_id = ?2)
+          AND (?3 IS NULL OR repository_id = ?3)
+          AND (?4 IS NULL OR status = ?4)
+        ORDER BY creation_date DESC
+        LIMIT 500
+        "#,
+    )?;
+    let rows = stmt.query_map(
+        params![org_id, project_id, repository_id, status],
+        map_cached_pr,
+    )?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
+// ── Private helpers — review PRs ─────────────────────────────────────────────
+
+fn upsert_review_pull_requests(conn: &Connection, prs: &[CachedReviewPr]) -> Result<()> {
+    let mut stmt = conn.prepare_cached(
+        r#"
+        INSERT INTO review_pull_requests(
+            org_id, project_id, project_name, repository_id, repository_name,
+            pull_request_id, title, created_by, creation_date, target_ref_name,
+            web_url, my_vote, my_vote_label, my_is_required, is_draft
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+        ON CONFLICT(org_id, repository_id, pull_request_id) DO UPDATE SET
+            project_id = excluded.project_id,
+            project_name = excluded.project_name,
+            repository_name = excluded.repository_name,
+            title = excluded.title,
+            created_by = excluded.created_by,
+            creation_date = excluded.creation_date,
+            target_ref_name = excluded.target_ref_name,
+            web_url = excluded.web_url,
+            my_vote = excluded.my_vote,
+            my_vote_label = excluded.my_vote_label,
+            my_is_required = excluded.my_is_required,
+            is_draft = excluded.is_draft
+        "#,
+    )?;
+    for pr in prs {
+        stmt.execute(params![
+            pr.org_id,
+            pr.project_id,
+            pr.project_name,
+            pr.repository_id,
+            pr.repository_name,
+            pr.pull_request_id,
+            pr.title,
+            pr.created_by,
+            pr.creation_date,
+            pr.target_ref_name,
+            pr.web_url,
+            pr.my_vote,
+            pr.my_vote_label,
+            pr.my_is_required as i32,
+            pr.is_draft as i32
+        ])?;
+    }
+    Ok(())
+}
+
+fn list_review_pull_requests(conn: &Connection, org_id: &str) -> Result<Vec<CachedReviewPr>> {
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT org_id, project_id, project_name, repository_id, repository_name,
+               pull_request_id, title, created_by, creation_date, target_ref_name,
+               web_url, my_vote, my_vote_label, my_is_required, is_draft
+        FROM review_pull_requests
+        WHERE org_id = ?1
+        ORDER BY creation_date DESC
+        LIMIT 500
+        "#,
+    )?;
+    let rows = stmt.query_map([org_id], map_cached_review_pr)?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
+// ── Private helpers — work items ──────────────────────────────────────────────
+
+fn upsert_work_items(conn: &Connection, items: &[CachedWorkItem]) -> Result<()> {
+    let mut stmt = conn.prepare_cached(
+        r#"
+        INSERT OR REPLACE INTO work_items(
+            org_id, project_id, project_name, id, title,
+            work_item_type, state, assigned_to, changed_date, web_url
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+        "#,
+    )?;
+    for item in items {
+        stmt.execute(params![
+            item.org_id,
+            item.project_id,
+            item.project_name,
+            item.id,
+            item.title,
+            item.work_item_type,
+            item.state,
+            item.assigned_to,
+            item.changed_date,
+            item.web_url
+        ])?;
+    }
+    Ok(())
+}
+
+fn search_work_items(
+    conn: &Connection,
+    org_id: &str,
+    project_id: Option<&str>,
+    state: Option<&str>,
+    work_item_type: Option<&str>,
+    assigned_to: Option<&str>,
+) -> Result<Vec<CachedWorkItem>> {
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT org_id, project_id, project_name, id, title,
+               work_item_type, state, assigned_to, changed_date, web_url
+        FROM work_items
+        WHERE org_id = ?1
+          AND (?2 IS NULL OR project_id = ?2)
+          AND (?3 IS NULL OR state = ?3)
+          AND (?4 IS NULL OR work_item_type = ?4)
+          AND (?5 IS NULL OR assigned_to = ?5)
+        ORDER BY changed_date DESC
+        LIMIT 500
+        "#,
+    )?;
+    let rows = stmt.query_map(
+        params![org_id, project_id, state, work_item_type, assigned_to],
+        map_cached_work_item,
+    )?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
+fn search_work_items_fts(
+    conn: &Connection,
+    org_id: &str,
+    query: &str,
+) -> Result<Vec<CachedWorkItem>> {
+    let fts_query = fts5_query(query);
+    if fts_query.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT w.org_id, w.project_id, w.project_name, w.id, w.title,
+               w.work_item_type, w.state, w.assigned_to, w.changed_date, w.web_url
+        FROM work_items w
+        WHERE w.org_id = ?2
+          AND w.id IN (
+              SELECT item_id FROM work_items_fts
+              WHERE work_items_fts MATCH ?1 AND org_id = ?2
+          )
+        ORDER BY w.changed_date DESC
+        LIMIT 200
+        "#,
+    )?;
+    let rows = stmt.query_map(params![fts_query, org_id], map_cached_work_item)?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
+// ── Private helpers — commits ─────────────────────────────────────────────────
+
+fn upsert_commits(conn: &Connection, commits: &[CachedCommit]) -> Result<()> {
+    let mut stmt = conn.prepare_cached(
+        r#"
+        INSERT OR REPLACE INTO commits(
+            org_id, project_id, project_name, repository_id, repository_name,
+            commit_id, comment, author_name, author_email, author_date, web_url
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+        "#,
+    )?;
+    for c in commits {
+        stmt.execute(params![
+            c.org_id,
+            c.project_id,
+            c.project_name,
+            c.repository_id,
+            c.repository_name,
+            c.commit_id,
+            c.comment,
+            c.author_name,
+            c.author_email,
+            c.author_date,
+            c.web_url
+        ])?;
+    }
+    Ok(())
+}
+
+fn search_commits(
+    conn: &Connection,
+    org_id: &str,
+    repository_id: Option<&str>,
+    author_email: Option<&str>,
+    from_date: Option<&str>,
+    to_date: Option<&str>,
+) -> Result<Vec<CachedCommit>> {
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT org_id, project_id, project_name, repository_id, repository_name,
+               commit_id, comment, author_name, author_email, author_date, web_url
+        FROM commits
+        WHERE org_id = ?1
+          AND (?2 IS NULL OR repository_id = ?2)
+          AND (?3 IS NULL OR author_email = ?3)
+          AND (?4 IS NULL OR author_date >= ?4)
+          AND (?5 IS NULL OR author_date <= ?5)
+        ORDER BY author_date DESC
+        LIMIT 500
+        "#,
+    )?;
+    let rows = stmt.query_map(
+        params![org_id, repository_id, author_email, from_date, to_date],
+        map_cached_commit,
+    )?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
+fn search_commits_fts(
+    conn: &Connection,
+    org_id: &str,
+    query: &str,
+    repository_id: Option<&str>,
+) -> Result<Vec<CachedCommit>> {
+    let fts_query = fts5_query(query);
+    if fts_query.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT c.org_id, c.project_id, c.project_name, c.repository_id, c.repository_name,
+               c.commit_id, c.comment, c.author_name, c.author_email, c.author_date, c.web_url
+        FROM commits c
+        WHERE c.org_id = ?2
+          AND (?3 IS NULL OR c.repository_id = ?3)
+          AND c.commit_id IN (
+              SELECT commit_id FROM commits_fts
+              WHERE commits_fts MATCH ?1
+                AND org_id = ?2
+                AND (?3 IS NULL OR repository_id = ?3)
+          )
+        ORDER BY c.author_date DESC
+        LIMIT 200
+        "#,
+    )?;
+    let rows = stmt.query_map(params![fts_query, org_id, repository_id], map_cached_commit)?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
+fn list_commit_repositories(conn: &Connection, org_id: &str) -> Result<Vec<CachedRepository>> {
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT DISTINCT project_id, project_name, repository_id, repository_name
+        FROM commits WHERE org_id = ?1
+        ORDER BY project_name, repository_name
+        "#,
+    )?;
+    let rows = stmt.query_map([org_id], |row| {
+        Ok(CachedRepository {
+            project_id: row.get(0)?,
+            project_name: row.get(1)?,
+            repository_id: row.get(2)?,
+            repository_name: row.get(3)?,
+        })
+    })?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
+// ── FTS helpers ───────────────────────────────────────────────────────────────
+
+fn fts5_query(input: &str) -> String {
+    let words: Vec<String> = input
+        .split_whitespace()
+        .map(|w| format!("\"{}\"*", w.replace('"', "")))
+        .collect();
+    words.join(" OR ")
+}
+
+// ── Row mappers ───────────────────────────────────────────────────────────────
 
 fn map_organization(row: &rusqlite::Row<'_>) -> rusqlite::Result<Organization> {
     Ok(Organization {
@@ -280,20 +1071,158 @@ fn map_organization(row: &rusqlite::Row<'_>) -> rusqlite::Result<Organization> {
     })
 }
 
+fn map_cached_pr(row: &rusqlite::Row<'_>) -> rusqlite::Result<CachedPr> {
+    Ok(CachedPr {
+        org_id: row.get(0)?,
+        project_id: row.get(1)?,
+        project_name: row.get(2)?,
+        repository_id: row.get(3)?,
+        repository_name: row.get(4)?,
+        pull_request_id: row.get(5)?,
+        title: row.get(6)?,
+        status: row.get(7)?,
+        created_by: row.get(8)?,
+        creation_date: row.get(9)?,
+        source_ref_name: row.get(10)?,
+        target_ref_name: row.get(11)?,
+        web_url: row.get(12)?,
+    })
+}
+
+fn map_cached_review_pr(row: &rusqlite::Row<'_>) -> rusqlite::Result<CachedReviewPr> {
+    Ok(CachedReviewPr {
+        org_id: row.get(0)?,
+        project_id: row.get(1)?,
+        project_name: row.get(2)?,
+        repository_id: row.get(3)?,
+        repository_name: row.get(4)?,
+        pull_request_id: row.get(5)?,
+        title: row.get(6)?,
+        created_by: row.get(7)?,
+        creation_date: row.get(8)?,
+        target_ref_name: row.get(9)?,
+        web_url: row.get(10)?,
+        my_vote: row.get(11)?,
+        my_vote_label: row.get(12)?,
+        my_is_required: row.get::<_, i32>(13)? != 0,
+        is_draft: row.get::<_, i32>(14)? != 0,
+    })
+}
+
+fn map_cached_work_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<CachedWorkItem> {
+    Ok(CachedWorkItem {
+        org_id: row.get(0)?,
+        project_id: row.get(1)?,
+        project_name: row.get(2)?,
+        id: row.get(3)?,
+        title: row.get(4)?,
+        work_item_type: row.get(5)?,
+        state: row.get(6)?,
+        assigned_to: row.get(7)?,
+        changed_date: row.get(8)?,
+        web_url: row.get(9)?,
+    })
+}
+
+fn map_cached_commit(row: &rusqlite::Row<'_>) -> rusqlite::Result<CachedCommit> {
+    Ok(CachedCommit {
+        org_id: row.get(0)?,
+        project_id: row.get(1)?,
+        project_name: row.get(2)?,
+        repository_id: row.get(3)?,
+        repository_name: row.get(4)?,
+        commit_id: row.get(5)?,
+        comment: row.get(6)?,
+        author_name: row.get(7)?,
+        author_email: row.get(8)?,
+        author_date: row.get(9)?,
+        web_url: row.get(10)?,
+    })
+}
+
+fn map_sync_state(row: &rusqlite::Row<'_>) -> rusqlite::Result<SyncState> {
+    Ok(SyncState {
+        scope: row.get(0)?,
+        org_id: row.get(1)?,
+        last_synced_at: row.get(2)?,
+        error_count: row.get(3)?,
+        last_error: row.get(4)?,
+    })
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::NamedTempFile;
+
+    fn make_org_draft(id: &str) -> OrganizationDraft {
+        OrganizationDraft {
+            id: id.to_string(),
+            name: id.to_string(),
+            display_name: None,
+            base_url: format!("https://dev.azure.com/{id}"),
+            auth_provider: "pat".to_string(),
+            credential_key: format!("azdodeck:org:{id}:pat"),
+            authenticated_user_id: None,
+            authenticated_user_display_name: None,
+        }
+    }
 
     #[test]
     fn migrate_is_repeatable() {
         let conn = Connection::open_in_memory().unwrap();
         migrate(&conn).unwrap();
         migrate(&conn).unwrap();
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn migrate_v1_db_upgrades_to_v2() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS app_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS organizations(
+                id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, display_name TEXT,
+                base_url TEXT NOT NULL, auth_provider TEXT NOT NULL, credential_key TEXT NOT NULL,
+                authenticated_user_id TEXT, authenticated_user_display_name TEXT,
+                created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+            );
+            PRAGMA user_version = 1;
+            "#,
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
 
         let version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
         assert_eq!(version, SCHEMA_VERSION);
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='commits'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+
+        let fts_count: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='work_items_fts'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(fts_count, 1);
     }
 
     #[test]
@@ -304,14 +1233,9 @@ mod tests {
         let first = upsert_organization(
             &conn,
             OrganizationDraft {
-                id: "contoso".to_string(),
-                name: "contoso".to_string(),
-                display_name: Some("Contoso".to_string()),
-                base_url: "https://dev.azure.com/contoso".to_string(),
-                auth_provider: "pat".to_string(),
-                credential_key: "azdodeck:org:contoso:pat".to_string(),
                 authenticated_user_id: Some("user-1".to_string()),
                 authenticated_user_display_name: Some("First User".to_string()),
+                ..make_org_draft("contoso")
             },
         )
         .unwrap();
@@ -319,14 +1243,9 @@ mod tests {
         let second = upsert_organization(
             &conn,
             OrganizationDraft {
-                id: "contoso".to_string(),
-                name: "contoso".to_string(),
-                display_name: Some("Contoso".to_string()),
-                base_url: "https://dev.azure.com/contoso".to_string(),
-                auth_provider: "pat".to_string(),
-                credential_key: "azdodeck:org:contoso:pat".to_string(),
                 authenticated_user_id: Some("user-2".to_string()),
                 authenticated_user_display_name: Some("Second User".to_string()),
+                ..make_org_draft("contoso")
             },
         )
         .unwrap();
@@ -366,5 +1285,182 @@ mod tests {
         )
         .unwrap();
         assert_eq!(cleared, AppSettings::default());
+    }
+
+    #[test]
+    fn work_items_fts_roundtrip() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        upsert_organization(&conn, make_org_draft("org1")).unwrap();
+
+        conn.execute(
+            "INSERT OR REPLACE INTO work_items(org_id, project_id, project_name, id, title) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params!["org1", "p1", "Project One", 42_i64, "fix the login bug"],
+        )
+        .unwrap();
+
+        let results = search_work_items_fts(&conn, "org1", "login").unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, 42);
+
+        // Re-upsert same PK: FTS must not duplicate
+        conn.execute(
+            "INSERT OR REPLACE INTO work_items(org_id, project_id, project_name, id, title) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params!["org1", "p1", "Project One", 42_i64, "fix the login timeout bug"],
+        )
+        .unwrap();
+
+        let fts_count: i64 = conn
+            .query_row("SELECT count(*) FROM work_items_fts", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(fts_count, 1);
+
+        let results = search_work_items_fts(&conn, "org1", "timeout").unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].title, "fix the login timeout bug");
+    }
+
+    #[test]
+    fn commits_fts_roundtrip() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        upsert_organization(&conn, make_org_draft("org1")).unwrap();
+
+        conn.execute(
+            r#"INSERT OR REPLACE INTO commits(org_id, project_id, project_name, repository_id, repository_name, commit_id, comment)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"#,
+            params!["org1", "p1", "Proj", "repo1", "Repo", "abc123", "refactor auth middleware"],
+        )
+        .unwrap();
+
+        let results = search_commits_fts(&conn, "org1", "auth", None).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].commit_id, "abc123");
+
+        // Re-upsert same PK: FTS must not duplicate
+        conn.execute(
+            r#"INSERT OR REPLACE INTO commits(org_id, project_id, project_name, repository_id, repository_name, commit_id, comment)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"#,
+            params!["org1", "p1", "Proj", "repo1", "Repo", "abc123", "refactor auth and session middleware"],
+        )
+        .unwrap();
+
+        let fts_count: i64 = conn
+            .query_row("SELECT count(*) FROM commits_fts", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(fts_count, 1);
+
+        let results = search_commits_fts(&conn, "org1", "session", None).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].comment, "refactor auth and session middleware");
+    }
+
+    #[test]
+    fn cascade_delete_clears_cache() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        upsert_organization(&conn, make_org_draft("org1")).unwrap();
+
+        conn.execute(
+            "INSERT OR REPLACE INTO work_items(org_id, project_id, project_name, id, title) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params!["org1", "p1", "P1", 1_i64, "Test task"],
+        )
+        .unwrap();
+        conn.execute(
+            r#"INSERT OR REPLACE INTO commits(org_id, project_id, project_name, repository_id, repository_name, commit_id, comment)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"#,
+            params!["org1", "p1", "P1", "r1", "Repo", "sha1", "initial commit"],
+        )
+        .unwrap();
+
+        let wi_count: i64 = conn
+            .query_row("SELECT count(*) FROM work_items", [], |r| r.get(0))
+            .unwrap();
+        let fts_wi: i64 = conn
+            .query_row("SELECT count(*) FROM work_items_fts", [], |r| r.get(0))
+            .unwrap();
+        let c_count: i64 = conn
+            .query_row("SELECT count(*) FROM commits", [], |r| r.get(0))
+            .unwrap();
+        let fts_c: i64 = conn
+            .query_row("SELECT count(*) FROM commits_fts", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!((wi_count, fts_wi, c_count, fts_c), (1, 1, 1, 1));
+
+        conn.execute("DELETE FROM organizations WHERE id = 'org1'", [])
+            .unwrap();
+
+        let wi_count: i64 = conn
+            .query_row("SELECT count(*) FROM work_items", [], |r| r.get(0))
+            .unwrap();
+        let fts_wi: i64 = conn
+            .query_row("SELECT count(*) FROM work_items_fts", [], |r| r.get(0))
+            .unwrap();
+        let c_count: i64 = conn
+            .query_row("SELECT count(*) FROM commits", [], |r| r.get(0))
+            .unwrap();
+        let fts_c: i64 = conn
+            .query_row("SELECT count(*) FROM commits_fts", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!((wi_count, fts_wi, c_count, fts_c), (0, 0, 0, 0));
+    }
+
+    #[test]
+    fn pull_requests_upsert_and_search() {
+        let tf = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        let pr = CachedPr {
+            org_id: "org1".to_string(),
+            project_id: "proj1".to_string(),
+            project_name: "Project One".to_string(),
+            repository_id: "repo1".to_string(),
+            repository_name: "Repo One".to_string(),
+            pull_request_id: 1,
+            title: "Add feature X".to_string(),
+            status: "active".to_string(),
+            created_by: Some("Alice".to_string()),
+            creation_date: "2024-01-01T00:00:00Z".to_string(),
+            source_ref_name: "refs/heads/feature".to_string(),
+            target_ref_name: "refs/heads/main".to_string(),
+            web_url: None,
+        };
+        db.upsert_pull_requests(&[pr]).unwrap();
+
+        let results = db
+            .search_pull_requests("org1", None, None, Some("active"))
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].pull_request_id, 1);
+
+        let no_results = db
+            .search_pull_requests("org1", None, None, Some("completed"))
+            .unwrap();
+        assert!(no_results.is_empty());
+    }
+
+    #[test]
+    fn sync_state_upsert_and_read() {
+        let tf = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        db.update_sync_state("prs:org1", "org1", Some("2024-01-01T00:00:00Z"), 0, None)
+            .unwrap();
+        let state = db.get_sync_state("prs:org1").unwrap().unwrap();
+        assert_eq!(state.error_count, 0);
+        assert_eq!(
+            state.last_synced_at.as_deref(),
+            Some("2024-01-01T00:00:00Z")
+        );
+
+        db.update_sync_state("prs:org1", "org1", None, 2, Some("timeout"))
+            .unwrap();
+        let state = db.get_sync_state("prs:org1").unwrap().unwrap();
+        assert_eq!(state.error_count, 2);
+        assert_eq!(state.last_error.as_deref(), Some("timeout"));
     }
 }
