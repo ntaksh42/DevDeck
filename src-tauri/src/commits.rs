@@ -113,9 +113,7 @@ impl CommitService {
         let mut results: Vec<CommitSummary> = cached
             .into_iter()
             .filter(|c| {
-                project_filter
-                    .as_deref()
-                    .is_none_or(|p| c.project_id == p)
+                project_filter.as_deref().is_none_or(|p| c.project_id == p)
                     && author.as_deref().is_none_or(|a| {
                         let al = a.to_ascii_lowercase();
                         c.author_name
