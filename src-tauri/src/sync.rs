@@ -25,8 +25,7 @@ impl SyncRunner {
     }
 
     pub async fn run(self, handle: AppHandle, mut trigger_rx: mpsc::Receiver<()>) {
-        let start = Instant::now() + Duration::from_secs(300);
-        let mut interval = interval_at(start, Duration::from_secs(300));
+        let mut interval = interval_at(Instant::now(), Duration::from_secs(300));
         loop {
             tokio::select! {
                 _ = interval.tick() => {},
