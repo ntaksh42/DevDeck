@@ -53,6 +53,11 @@ test.describe("browser preview", () => {
     await expect(
       main.frameLocator('iframe[title^="Work item preview"]').getByText("Azure DevOps から詳細 field を取得"),
     ).toBeVisible();
+    await main.getByLabel("Comment").fill("@Ali");
+    await main.getByRole("button", { name: /Alice Johnson/ }).click();
+    await main.getByLabel("Comment").fill("@Alice Johnson please check");
+    await main.getByRole("button", { name: "Post comment" }).click();
+    await expect(main.getByText("Comment posted")).toBeVisible();
 
     await page.getByRole("button", { name: "Commits" }).click();
     await main.getByPlaceholder("message, author, repository, SHA").fill("dashboard");

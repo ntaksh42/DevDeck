@@ -349,6 +349,24 @@ describe("App", () => {
           webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/123",
         });
       }
+      if (command === "search_work_item_mentions") {
+        return Promise.resolve([
+          {
+            id: "user-creator",
+            displayName: "Creator",
+            uniqueName: "creator@example.com",
+          },
+        ]);
+      }
+      if (command === "add_work_item_comment") {
+        return Promise.resolve({
+          id: 1,
+          text: "@<user-creator> please check",
+          renderedText: "<p>@Creator please check</p>",
+          createdBy: "Test User",
+          createdDate: "2026-05-24T00:00:00Z",
+        });
+      }
       return Promise.reject(new Error(`Unhandled command: ${command}`));
     });
 
@@ -377,6 +395,23 @@ describe("App", () => {
     expect(screen.getByText("Test User")).toBeTruthy();
     expect(await screen.findByRole("heading", { name: "Work Item Preview" })).toBeTruthy();
     expect(screen.getAllByTitle("Fix save workflow").length).toBeGreaterThan(1);
+
+    const commentBox = screen.getByLabelText("Comment");
+    fireEvent.change(commentBox, { target: { value: "@Cre" } });
+    fireEvent.click(await screen.findByRole("button", { name: /Creator/ }));
+    fireEvent.change(commentBox, { target: { value: "@Creator please check" } });
+    fireEvent.click(screen.getByRole("button", { name: "Post comment" }));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("add_work_item_comment", {
+        input: {
+          organizationId: "contoso",
+          projectId: "project-1",
+          workItemId: 123,
+          markdown: "@<user-creator> please check",
+        },
+      });
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "#123" }));
 

@@ -120,6 +120,26 @@ const workItemPreviewSchema = z.object({
 
 export type WorkItemPreview = z.infer<typeof workItemPreviewSchema>;
 
+const mentionCandidateSchema = z.object({
+  id: z.string(),
+  displayName: z.string(),
+  uniqueName: z.string().nullable(),
+});
+
+const mentionCandidatesSchema = z.array(mentionCandidateSchema);
+
+export type MentionCandidate = z.infer<typeof mentionCandidateSchema>;
+
+const workItemCommentSchema = z.object({
+  id: z.number(),
+  text: z.string().nullable(),
+  renderedText: z.string().nullable(),
+  createdBy: z.string().nullable(),
+  createdDate: z.string().nullable(),
+});
+
+export type WorkItemComment = z.infer<typeof workItemCommentSchema>;
+
 const commitSummarySchema = z.object({
   organizationId: z.string(),
   projectId: z.string(),
@@ -199,6 +219,18 @@ export type GetWorkItemPreviewInput = {
   organizationId?: string;
   projectId: string;
   workItemId: number;
+};
+
+export type SearchWorkItemMentionsInput = {
+  organizationId?: string;
+  query: string;
+};
+
+export type AddWorkItemCommentInput = {
+  organizationId?: string;
+  projectId: string;
+  workItemId: number;
+  markdown: string;
 };
 
 export type SearchCommitsInput = {
@@ -293,6 +325,20 @@ export async function getWorkItemPreview(
 ): Promise<WorkItemPreview> {
   const result = await invokeCommand("get_work_item_preview", { input });
   return workItemPreviewSchema.parse(result);
+}
+
+export async function searchWorkItemMentions(
+  input: SearchWorkItemMentionsInput,
+): Promise<MentionCandidate[]> {
+  const result = await invokeCommand("search_work_item_mentions", { input });
+  return mentionCandidatesSchema.parse(result);
+}
+
+export async function addWorkItemComment(
+  input: AddWorkItemCommentInput,
+): Promise<WorkItemComment> {
+  const result = await invokeCommand("add_work_item_comment", { input });
+  return workItemCommentSchema.parse(result);
 }
 
 export async function searchCommits(
@@ -395,6 +441,17 @@ async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
       const input = (args as { input?: GetWorkItemPreviewInput } | undefined)
         ?.input;
       return demoWorkItemPreview(input);
+    }
+    case "search_work_item_mentions": {
+      const input = (
+        args as { input?: SearchWorkItemMentionsInput } | undefined
+      )?.input;
+      return demoMentionCandidates(input?.query);
+    }
+    case "add_work_item_comment": {
+      const input = (args as { input?: AddWorkItemCommentInput } | undefined)
+        ?.input;
+      return demoWorkItemComment(input?.markdown);
     }
     case "search_commits": {
       const input = (args as { input?: SearchCommitsInput } | undefined)
@@ -794,6 +851,49 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
     acceptanceCriteriaHtml:
       "<ul><li>一覧で選択した Work Item と preview が同期する</li><li>HTML field は sandbox 内で表示する</li></ul>",
     webUrl: summary.webUrl,
+  };
+}
+
+const demoMentionPeople: MentionCandidate[] = [
+  {
+    id: "demo-alice",
+    displayName: "Alice Johnson",
+    uniqueName: "alice@contoso.example",
+  },
+  {
+    id: "demo-bob",
+    displayName: "Bob Tanaka",
+    uniqueName: "bob@contoso.example",
+  },
+  {
+    id: "demo-carol",
+    displayName: "Carol Wang",
+    uniqueName: "carol@contoso.example",
+  },
+  {
+    id: "demo-frank",
+    displayName: "Frank Lee",
+    uniqueName: "frank@contoso.example",
+  },
+];
+
+function demoMentionCandidates(query?: string): MentionCandidate[] {
+  const term = query?.trim().toLowerCase() ?? "";
+  if (!term) return [];
+  return demoMentionPeople.filter(
+    (person) =>
+      person.displayName.toLowerCase().includes(term) ||
+      person.uniqueName?.toLowerCase().includes(term),
+  );
+}
+
+function demoWorkItemComment(markdown?: string): WorkItemComment {
+  return {
+    id: Date.now(),
+    text: markdown ?? "",
+    renderedText: `<p>${escapeDemoHtml(markdown ?? "")}</p>`,
+    createdBy: "Demo User",
+    createdDate: new Date().toISOString(),
   };
 }
 

@@ -1,4 +1,4 @@
-use azdo_client::WorkItem;
+use azdo_client::{Identity, WorkItem, WorkItemComment as AzdoWorkItemComment};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -61,6 +61,22 @@ pub struct GetWorkItemPreviewInput {
     pub work_item_id: i64,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchWorkItemMentionsInput {
+    pub organization_id: Option<String>,
+    pub query: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddWorkItemCommentInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_id: i64,
+    pub markdown: String,
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkItemSummary {
@@ -101,6 +117,24 @@ pub struct WorkItemPreview {
     pub description_html: Option<String>,
     pub acceptance_criteria_html: Option<String>,
     pub web_url: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct MentionCandidate {
+    pub id: String,
+    pub display_name: String,
+    pub unique_name: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemComment {
+    pub id: i64,
+    pub text: Option<String>,
+    pub rendered_text: Option<String>,
+    pub created_by: Option<String>,
+    pub created_date: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -225,6 +259,38 @@ impl WorkItemService {
         ))
     }
 
+    pub async fn search_mentions(
+        &self,
+        input: SearchWorkItemMentionsInput,
+    ) -> Result<Vec<MentionCandidate>> {
+        let query = input.query.trim();
+        if query.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let identities = client.search_identities(query, 8).await?;
+        Ok(identities
+            .into_iter()
+            .filter_map(summarize_mention_candidate)
+            .collect())
+    }
+
+    pub async fn add_comment(&self, input: AddWorkItemCommentInput) -> Result<WorkItemComment> {
+        let markdown = input.markdown.trim();
+        if markdown.is_empty() {
+            return Err(AppError::InvalidInput("comment is required".to_string()));
+        }
+
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let comment = client
+            .add_work_item_comment(&input.project_id, input.work_item_id, markdown)
+            .await?;
+        Ok(summarize_work_item_comment(comment))
+    }
+
     fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {
         if let Some(id) = id {
             return self
@@ -238,6 +304,32 @@ impl WorkItemService {
             .into_iter()
             .next()
             .ok_or_else(|| AppError::InvalidInput("no organization is configured".to_string()))
+    }
+}
+
+fn summarize_mention_candidate(identity: Identity) -> Option<MentionCandidate> {
+    let id = identity.id?;
+    let display_name = identity
+        .provider_display_name
+        .or(identity.custom_display_name)
+        .or(identity.display_name)
+        .or_else(|| identity.unique_name.clone())?;
+    Some(MentionCandidate {
+        id,
+        display_name,
+        unique_name: identity.unique_name,
+    })
+}
+
+fn summarize_work_item_comment(comment: AzdoWorkItemComment) -> WorkItemComment {
+    WorkItemComment {
+        id: comment.id,
+        text: comment.text,
+        rendered_text: comment.rendered_text,
+        created_by: comment
+            .created_by
+            .and_then(|identity| identity.display_name.or(identity.unique_name)),
+        created_date: comment.created_date,
     }
 }
 
@@ -490,5 +582,21 @@ mod tests {
         assert_eq!(preview.created_by.as_deref(), Some("Creator"));
         assert_eq!(preview.description_html.as_deref(), Some("<p>Body</p>"));
         assert_eq!(preview.priority.as_deref(), Some("2"));
+    }
+
+    #[test]
+    fn summarize_mention_candidate_prefers_provider_display_name() {
+        let candidate = summarize_mention_candidate(Identity {
+            id: Some("user-1".to_string()),
+            provider_display_name: Some("Alice Johnson".to_string()),
+            custom_display_name: None,
+            display_name: Some("Alice".to_string()),
+            unique_name: Some("alice@example.com".to_string()),
+        })
+        .unwrap();
+
+        assert_eq!(candidate.id, "user-1");
+        assert_eq!(candidate.display_name, "Alice Johnson");
+        assert_eq!(candidate.unique_name.as_deref(), Some("alice@example.com"));
     }
 }

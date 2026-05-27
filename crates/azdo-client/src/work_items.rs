@@ -51,6 +51,29 @@ pub struct LinkRef {
     pub href: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct WorkItemCommentCreate {
+    pub text: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemComment {
+    pub id: i64,
+    pub text: Option<String>,
+    pub rendered_text: Option<String>,
+    pub created_date: Option<String>,
+    pub created_by: Option<CommentIdentityRef>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommentIdentityRef {
+    pub id: Option<String>,
+    pub display_name: Option<String>,
+    pub unique_name: Option<String>,
+}
+
 impl AdoClient {
     pub async fn query_work_item_ids(&self, project_id: &str, wiql: &str) -> Result<Vec<i64>> {
         let path = format!("{project_id}/_apis/wit/wiql");
@@ -89,6 +112,23 @@ impl AdoClient {
             )
             .await?;
         Ok(response.value)
+    }
+
+    pub async fn add_work_item_comment(
+        &self,
+        project_id: &str,
+        work_item_id: i64,
+        markdown: &str,
+    ) -> Result<WorkItemComment> {
+        let path = format!("{project_id}/_apis/wit/workItems/{work_item_id}/comments");
+        self.post_json(
+            &path,
+            &[("api-version", "7.1-preview.4"), ("format", "markdown")],
+            &WorkItemCommentCreate {
+                text: markdown.to_string(),
+            },
+        )
+        .await
     }
 }
 
@@ -167,5 +207,37 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].id, 10);
         assert_eq!(items[0].fields["System.Title"], "Fix bug");
+    }
+
+    #[tokio::test]
+    async fn add_work_item_comment_posts_markdown() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/project-1/_apis/wit/workItems/10/comments"))
+            .and(query_param("api-version", "7.1-preview.4"))
+            .and(query_param("format", "markdown"))
+            .and(body_json(
+                serde_json::json!({ "text": "@<user-1> please check" }),
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 5,
+                "text": "@<user-1> please check",
+                "renderedText": "<p><a>@Test User</a> please check</p>",
+                "createdBy": { "displayName": "Me" },
+                "createdDate": "2026-05-27T00:00:00Z"
+            })))
+            .mount(&server)
+            .await;
+
+        let comment = test_client(&server)
+            .await
+            .add_work_item_comment("project-1", 10, "@<user-1> please check")
+            .await
+            .unwrap();
+        assert_eq!(comment.id, 5);
+        assert_eq!(
+            comment.created_by.unwrap().display_name.as_deref(),
+            Some("Me")
+        );
     }
 }

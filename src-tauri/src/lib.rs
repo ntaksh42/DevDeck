@@ -25,7 +25,8 @@ use settings::{
 };
 use tauri::{Manager, State};
 use work_items::{
-    GetWorkItemPreviewInput, ListMyWorkItemsInput, SearchWorkItemsInput, WorkItemPreview,
+    AddWorkItemCommentInput, GetWorkItemPreviewInput, ListMyWorkItemsInput, MentionCandidate,
+    SearchWorkItemMentionsInput, SearchWorkItemsInput, WorkItemComment, WorkItemPreview,
     WorkItemService, WorkItemSummary,
 };
 
@@ -139,6 +140,24 @@ async fn get_work_item_preview(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn search_work_item_mentions(
+    input: SearchWorkItemMentionsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<MentionCandidate>> {
+    state.work_items.search_mentions(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn add_work_item_comment(
+    input: AddWorkItemCommentInput,
+    state: State<'_, AppState>,
+) -> Result<WorkItemComment> {
+    state.work_items.add_comment(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn search_commits(
     input: SearchCommitsInput,
     state: State<'_, AppState>,
@@ -185,6 +204,8 @@ pub fn run() {
             search_work_items,
             list_my_work_items,
             get_work_item_preview,
+            search_work_item_mentions,
+            add_work_item_comment,
             search_commits,
             list_commit_repositories
         ])

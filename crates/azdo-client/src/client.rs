@@ -97,8 +97,26 @@ impl AdoClient {
         path: &str,
         query: &[(&str, &str)],
     ) -> Result<T> {
-        let url = self
-            .base_url
+        self.get_json_from_base(self.base_url.clone(), path, query)
+            .await
+    }
+
+    pub(crate) async fn get_json_vssps<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+    ) -> Result<T> {
+        let base_url = vssps_base_url(&self.base_url)?;
+        self.get_json_from_base(base_url, path, query).await
+    }
+
+    async fn get_json_from_base<T: DeserializeOwned>(
+        &self,
+        base_url: Url,
+        path: &str,
+        query: &[(&str, &str)],
+    ) -> Result<T> {
+        let url = base_url
             .join(path)
             .map_err(|e| AdoError::Auth(e.to_string()))?;
 
@@ -260,6 +278,20 @@ impl AdoClient {
             .map(|delay| self.retry_policy.capped_retry_after(delay))
             .unwrap_or_else(|| self.retry_policy.backoff_delay(attempt))
     }
+}
+
+fn vssps_base_url(base_url: &Url) -> Result<Url> {
+    if base_url.host_str() != Some("dev.azure.com") {
+        return Ok(base_url.clone());
+    }
+
+    let organization = base_url
+        .path_segments()
+        .and_then(|mut segments| segments.next())
+        .filter(|segment| !segment.is_empty())
+        .ok_or_else(|| AdoError::Auth("missing organization in base URL".to_string()))?;
+    Url::parse(&format!("https://vssps.dev.azure.com/{organization}/"))
+        .map_err(|e| AdoError::Auth(e.to_string()))
 }
 
 fn parse_retry_after(headers: &HeaderMap) -> Option<Duration> {

@@ -2,6 +2,7 @@ import {
   CSSProperties,
   FormEvent,
   PointerEvent as ReactPointerEvent,
+  KeyboardEvent as ReactKeyboardEvent,
   ReactNode,
   forwardRef,
   useEffect,
@@ -27,6 +28,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Send,
   Settings,
   Trash2,
   WifiOff,
@@ -34,6 +36,7 @@ import {
 } from "lucide-react";
 import { Route, Routes } from "react-router-dom";
 import {
+  addWorkItemComment,
   addAzureCliOrganization,
   addPatOrganization,
   commandErrorMessage,
@@ -47,11 +50,13 @@ import {
   listOrganizations,
   searchCommits,
   searchPullRequests,
+  searchWorkItemMentions,
   searchWorkItems,
   updateAppSettings,
   type AppSettings,
   type CommitRepositoryOption,
   type CommitSummary,
+  type MentionCandidate,
   type Organization,
   type PullRequestSummary,
   type ReviewPullRequestSummary,
@@ -1459,6 +1464,92 @@ function WorkItemPreviewPanel({
   previewLoading: boolean;
   selectedItem: WorkItemSummary | null;
 }) {
+  const [commentText, setCommentText] = useState("");
+  const [selectedMentions, setSelectedMentions] = useState<SelectedMention[]>([]);
+  const [mentionQuery, setMentionQuery] = useState("");
+  const [mentionStart, setMentionStart] = useState<number | null>(null);
+  const [activeMentionIndex, setActiveMentionIndex] = useState(0);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const mentionOptionsQuery = useQuery({
+    queryKey: ["workItemMentions", selectedItem?.organizationId, mentionQuery],
+    queryFn: () =>
+      searchWorkItemMentions({
+        organizationId: selectedItem?.organizationId,
+        query: mentionQuery,
+      }),
+    enabled: !!selectedItem && mentionQuery.length > 0,
+    staleTime: 60_000,
+  });
+  const mentionOptions = mentionOptionsQuery.data ?? [];
+  const showMentionOptions = mentionStart !== null && mentionOptions.length > 0;
+
+  const commentMutation = useMutation({
+    mutationFn: addWorkItemComment,
+    onSuccess: () => {
+      setCommentText("");
+      setSelectedMentions([]);
+      setMentionQuery("");
+      setMentionStart(null);
+      setActiveMentionIndex(0);
+    },
+  });
+
+  function updateMentionState(text: string, cursor: number) {
+    const mention = activeMentionAt(text, cursor);
+    setMentionStart(mention?.start ?? null);
+    setMentionQuery(mention?.query ?? "");
+    setActiveMentionIndex(0);
+  }
+
+  function applyMention(candidate: MentionCandidate) {
+    const textarea = textareaRef.current;
+    const cursor = textarea?.selectionStart ?? commentText.length;
+    const start = mentionStart ?? cursor;
+    const replacement = `@${candidate.displayName} `;
+    const next = `${commentText.slice(0, start)}${replacement}${commentText.slice(cursor)}`;
+    const nextCursor = start + replacement.length;
+    setCommentText(next);
+    setSelectedMentions((current) => addSelectedMention(current, candidate));
+    setMentionQuery("");
+    setMentionStart(null);
+    window.setTimeout(() => {
+      textarea?.focus();
+      textarea?.setSelectionRange(nextCursor, nextCursor);
+    }, 0);
+  }
+
+  function handleCommentKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
+    if (!showMentionOptions) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveMentionIndex((index) => (index + 1) % mentionOptions.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveMentionIndex(
+        (index) => (index - 1 + mentionOptions.length) % mentionOptions.length,
+      );
+    } else if (event.key === "Enter" || event.key === "Tab") {
+      event.preventDefault();
+      applyMention(mentionOptions[activeMentionIndex] ?? mentionOptions[0]);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      setMentionQuery("");
+      setMentionStart(null);
+    }
+  }
+
+  function submitComment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedItem || !commentText.trim()) return;
+    commentMutation.mutate({
+      organizationId: selectedItem.organizationId,
+      projectId: selectedItem.projectId,
+      workItemId: selectedItem.id,
+      markdown: renderAzureMentionMarkdown(commentText, selectedMentions),
+    });
+  }
+
   return (
     <aside className="flex min-h-[520px] flex-col overflow-hidden rounded-md border border-border bg-white">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
@@ -1514,16 +1605,89 @@ function WorkItemPreviewPanel({
             className="min-h-0 flex-1 bg-white"
           />
           <div className="border-t border-border p-3">
-            <button
-              type="button"
-              disabled={!preview.webUrl}
-              onClick={() => {
-                if (preview.webUrl) openExternalUrl(preview.webUrl);
-              }}
-              className="inline-flex h-8 items-center rounded-md border border-border px-3 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Open in Azure DevOps
-            </button>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                disabled={!preview.webUrl}
+                onClick={() => {
+                  if (preview.webUrl) openExternalUrl(preview.webUrl);
+                }}
+                className="inline-flex h-8 items-center rounded-md border border-border px-3 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Open in Azure DevOps
+              </button>
+              {commentMutation.isSuccess ? (
+                <span className="text-xs text-muted-foreground">Comment posted</span>
+              ) : null}
+            </div>
+            <form className="space-y-2" onSubmit={submitComment}>
+              <label className="grid gap-1.5">
+                <span className="text-xs font-medium text-muted-foreground">Comment</span>
+                <div className="relative">
+                  <textarea
+                    ref={textareaRef}
+                    value={commentText}
+                    onChange={(event) => {
+                      setCommentText(event.target.value);
+                      updateMentionState(
+                        event.target.value,
+                        event.target.selectionStart,
+                      );
+                    }}
+                    onClick={(event) => {
+                      updateMentionState(
+                        event.currentTarget.value,
+                        event.currentTarget.selectionStart,
+                      );
+                    }}
+                    onKeyDown={handleCommentKeyDown}
+                    rows={3}
+                    className="min-h-[76px] w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  {showMentionOptions ? (
+                    <div className="absolute bottom-full left-0 z-20 mb-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-white py-1 shadow-lg">
+                      {mentionOptions.map((candidate, index) => (
+                        <button
+                          key={candidate.id}
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => applyMention(candidate)}
+                          className={`flex w-full min-w-0 flex-col px-3 py-2 text-left text-sm ${
+                            index === activeMentionIndex ? "bg-secondary" : "hover:bg-muted"
+                          }`}
+                        >
+                          <span className="truncate font-medium">
+                            {candidate.displayName}
+                          </span>
+                          {candidate.uniqueName ? (
+                            <span className="truncate text-xs text-muted-foreground">
+                              {candidate.uniqueName}
+                            </span>
+                          ) : null}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </label>
+              {commentMutation.isError ? (
+                <p className="text-xs text-destructive">
+                  {commandErrorMessage(commentMutation.error)}
+                </p>
+              ) : null}
+              <button
+                type="submit"
+                disabled={!commentText.trim() || commentMutation.isPending}
+                className="inline-flex h-8 items-center gap-2 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {commentMutation.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Send className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
+                Post comment
+              </button>
+            </form>
           </div>
         </>
       ) : (
@@ -1592,6 +1756,55 @@ function escapeHtml(value: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+type SelectedMention = {
+  id: string;
+  displayName: string;
+};
+
+function activeMentionAt(
+  text: string,
+  cursor: number,
+): { start: number; query: string } | null {
+  const beforeCursor = text.slice(0, cursor);
+  const match = /(^|\s)@([^\s@<>]{0,40})$/.exec(beforeCursor);
+  if (!match) return null;
+  return {
+    start: beforeCursor.length - (match[2].length + 1),
+    query: match[2],
+  };
+}
+
+function addSelectedMention(
+  mentions: SelectedMention[],
+  candidate: MentionCandidate,
+): SelectedMention[] {
+  if (mentions.some((mention) => mention.id === candidate.id)) {
+    return mentions;
+  }
+  return [
+    ...mentions,
+    { id: candidate.id, displayName: candidate.displayName },
+  ];
+}
+
+function renderAzureMentionMarkdown(
+  text: string,
+  mentions: SelectedMention[],
+): string {
+  let markdown = text;
+  for (const mention of mentions) {
+    markdown = markdown.replace(
+      new RegExp(`@${escapeRegExp(mention.displayName)}(?=\\s|$)`, "g"),
+      `@<${mention.id}>`,
+    );
+  }
+  return markdown;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function MyWorkItemsPanel({ organizations }: { organizations: Organization[] }) {
