@@ -40,7 +40,7 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: AzDoDeck ${{ github.ref_name }}
           releaseBody: |
-            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for what changed in this release.
+            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/CHANGELOG.md) for what changed in this release.
 
             > **Windows SmartScreen warning**: Because this release is not code-signed yet, Windows may show a SmartScreen prompt. Click "More info" → "Run anyway" to proceed. This warning disappears once enough users install the app. Issue [#1](https://github.com/${{ github.repository }}/issues/1) tracks code signing.
           releaseDraft: true
