@@ -52,6 +52,7 @@ import {
   searchPullRequests,
   searchWorkItemMentions,
   searchWorkItems,
+  triggerSync,
   updateAppSettings,
   type AppSettings,
   type CommitRepositoryOption,
@@ -65,7 +66,9 @@ import {
   type WorkItemPreview,
   type WorkItemSummary,
 } from "@/lib/azdoCommands";
+import { listen } from "@tauri-apps/api/event";
 import { openExternalUrl } from "@/lib/openExternal";
+import { isTauriRuntime } from "@/lib/runtime";
 
 type View = "pullRequestSearch" | "myReviews" | "workItems" | "myWorkItems" | "commits" | "settings";
 
@@ -171,13 +174,28 @@ function AppShell() {
   const [sidebarWidth, setSidebarWidth] = useState(() =>
     storedNumber(SIDEBAR_WIDTH_STORAGE_KEY, DEFAULT_SIDEBAR_WIDTH, 220, 420),
   );
+  const queryClient = useQueryClient();
   const organizationsQuery = useQuery({
     queryKey: ["organizations"],
     queryFn: listOrganizations,
   });
+  const syncMutation = useMutation({
+    mutationFn: triggerSync,
+  });
 
   const organizations = organizationsQuery.data ?? [];
   const activeView = organizations.length === 0 ? "settings" : view;
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let cleanup: (() => void) | undefined;
+    listen("sync:updated", () => {
+      void queryClient.invalidateQueries();
+    }).then((unlisten) => {
+      cleanup = unlisten;
+    });
+    return () => cleanup?.();
+  }, [queryClient]);
 
   useEffect(() => {
     window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(sidebarWidth)));
@@ -347,6 +365,21 @@ function AppShell() {
                         : "Local Azure DevOps organization setup"}
             </p>
           </div>
+          {organizations.length > 0 && (
+            <button
+              type="button"
+              disabled={syncMutation.isPending}
+              onClick={() => syncMutation.mutate()}
+              className="flex items-center gap-1.5 rounded-md border border-border bg-white px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+              title="今すぐ同期"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${syncMutation.isPending ? "animate-spin" : ""}`}
+                aria-hidden="true"
+              />
+              同期
+            </button>
+          )}
         </header>
 
         <section className="w-full px-5 py-8 lg:px-8">

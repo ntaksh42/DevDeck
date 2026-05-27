@@ -355,6 +355,10 @@ export async function listCommitRepositories(
   return commitRepositoryOptionsSchema.parse(result);
 }
 
+export async function triggerSync(): Promise<void> {
+  await invokeCommand("trigger_sync");
+}
+
 async function invokeCommand(command: string, args?: unknown): Promise<unknown> {
   if (isTauriRuntime()) {
     return invoke(command, args as Record<string, unknown> | undefined);
@@ -461,6 +465,7 @@ async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
     case "list_commit_repositories":
       return demoCommitRepositories();
     case "delete_organization":
+    case "trigger_sync":
       return null;
     default:
       throw new Error(`Unsupported demo command: ${command}`);
