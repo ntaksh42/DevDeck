@@ -120,20 +120,20 @@ fn list_my_review_pull_requests(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
-async fn search_work_items(
+fn search_work_items(
     input: SearchWorkItemsInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkItemSummary>> {
-    state.work_items.search(input).await
+    state.work_items.search(input)
 }
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
-async fn list_my_work_items(
+fn list_my_work_items(
     input: ListMyWorkItemsInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkItemSummary>> {
-    state.work_items.list_my(input).await
+    state.work_items.list_my(input)
 }
 
 #[tauri::command]
