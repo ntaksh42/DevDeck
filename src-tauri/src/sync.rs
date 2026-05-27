@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use tauri::{AppHandle, Emitter};
+use tokio::sync::mpsc;
 use tokio::time::{interval_at, Instant};
 
 use crate::auth::client_for_organization;
@@ -18,11 +19,21 @@ impl SyncRunner {
         Self { db, secrets }
     }
 
-    pub async fn run(self, handle: AppHandle) {
+    // bounded(1) acts as debounce — extra clicks while sync runs are dropped
+    pub fn channel() -> (mpsc::Sender<()>, mpsc::Receiver<()>) {
+        mpsc::channel(1)
+    }
+
+    pub async fn run(self, handle: AppHandle, mut trigger_rx: mpsc::Receiver<()>) {
         let start = Instant::now() + Duration::from_secs(300);
         let mut interval = interval_at(start, Duration::from_secs(300));
         loop {
-            interval.tick().await;
+            tokio::select! {
+                _ = interval.tick() => {},
+                Some(_) = trigger_rx.recv() => {
+                    while trigger_rx.try_recv().is_ok() {}
+                }
+            }
             self.sync_once().await;
             if let Err(e) = handle.emit("sync:updated", ()) {
                 tracing::warn!(error = ?e, "failed to emit sync:updated");

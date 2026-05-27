@@ -29,6 +29,7 @@ use settings::{
 };
 use sync::SyncRunner;
 use tauri::{Manager, State};
+use tokio::sync::mpsc;
 use work_items::{
     AddWorkItemCommentInput, GetWorkItemPreviewInput, ListMyWorkItemsInput, MentionCandidate,
     SearchWorkItemMentionsInput, SearchWorkItemsInput, WorkItemComment, WorkItemPreview,
@@ -42,6 +43,7 @@ struct AppState {
     work_items: WorkItemService,
     commits: CommitService,
     settings: SettingsService,
+    sync_trigger: mpsc::Sender<()>,
 }
 
 #[tauri::command]
@@ -179,6 +181,13 @@ async fn list_commit_repositories(
     state.commits.list_repositories(input).await
 }
 
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+fn trigger_sync(state: State<'_, AppState>) -> Result<()> {
+    state.sync_trigger.try_send(()).ok();
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -187,14 +196,18 @@ pub fn run() {
             let app_data_dir = app.path().app_data_dir()?;
             let db = AppDatabase::new(app_data_dir.join("azdodeck.sqlite3"));
             db.initialize()?;
+            let (sync_tx, sync_rx) = SyncRunner::channel();
             app.manage(AppState {
                 organizations: OrganizationService::new(db.clone(), SecretStore),
                 pull_requests: PullRequestService::new(db.clone(), SecretStore),
                 work_items: WorkItemService::new(db.clone(), SecretStore),
                 commits: CommitService::new(db.clone(), SecretStore),
                 settings: SettingsService::new(db.clone()),
+                sync_trigger: sync_tx,
             });
-            tauri::async_runtime::spawn(SyncRunner::new(db, SecretStore).run(app.handle().clone()));
+            tauri::async_runtime::spawn(
+                SyncRunner::new(db, SecretStore).run(app.handle().clone(), sync_rx),
+            );
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -213,7 +226,8 @@ pub fn run() {
             search_work_item_mentions,
             add_work_item_comment,
             search_commits,
-            list_commit_repositories
+            list_commit_repositories,
+            trigger_sync
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
