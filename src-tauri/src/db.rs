@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, Result};
 
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 
 // ── Existing public types ────────────────────────────────────────────────────
 
@@ -277,6 +277,27 @@ impl AppDatabase {
     pub fn clear_work_items(&self, org_id: &str) -> Result<()> {
         let conn = self.open()?;
         conn.execute("DELETE FROM work_items WHERE org_id = ?1", [org_id])?;
+        Ok(())
+    }
+
+    // ── My work items cache ───────────────────────────────────────────────────
+
+    pub fn upsert_my_work_items(&self, items: &[CachedWorkItem]) -> Result<()> {
+        if items.is_empty() {
+            return Ok(());
+        }
+        let conn = self.open()?;
+        upsert_my_work_items(&conn, items)
+    }
+
+    pub fn list_my_work_items(&self, org_id: &str) -> Result<Vec<CachedWorkItem>> {
+        let conn = self.open()?;
+        list_my_work_items(&conn, org_id)
+    }
+
+    pub fn clear_my_work_items(&self, org_id: &str) -> Result<()> {
+        let conn = self.open()?;
+        conn.execute("DELETE FROM my_work_items WHERE org_id = ?1", [org_id])?;
         Ok(())
     }
 
@@ -554,6 +575,29 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             CREATE INDEX IF NOT EXISTS idx_sync_state_org ON sync_state(org_id);
 
             PRAGMA user_version = 2;
+            "#,
+        )?;
+    }
+    if current < 3 {
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS my_work_items(
+                org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                project_id TEXT NOT NULL,
+                project_name TEXT NOT NULL,
+                id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                work_item_type TEXT,
+                state TEXT,
+                assigned_to TEXT,
+                changed_date TEXT,
+                web_url TEXT,
+                PRIMARY KEY (org_id, id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_mywi_changed
+                ON my_work_items(org_id, changed_date DESC);
+
+            PRAGMA user_version = 3;
             "#,
         )?;
     }
@@ -924,6 +968,51 @@ fn search_work_items_fts(
     Ok(result)
 }
 
+fn upsert_my_work_items(conn: &Connection, items: &[CachedWorkItem]) -> Result<()> {
+    let mut stmt = conn.prepare_cached(
+        r#"
+        INSERT OR REPLACE INTO my_work_items(
+            org_id, project_id, project_name, id, title,
+            work_item_type, state, assigned_to, changed_date, web_url
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+        "#,
+    )?;
+    for item in items {
+        stmt.execute(params![
+            item.org_id,
+            item.project_id,
+            item.project_name,
+            item.id,
+            item.title,
+            item.work_item_type,
+            item.state,
+            item.assigned_to,
+            item.changed_date,
+            item.web_url
+        ])?;
+    }
+    Ok(())
+}
+
+fn list_my_work_items(conn: &Connection, org_id: &str) -> Result<Vec<CachedWorkItem>> {
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT org_id, project_id, project_name, id, title,
+               work_item_type, state, assigned_to, changed_date, web_url
+        FROM my_work_items
+        WHERE org_id = ?1
+        ORDER BY changed_date DESC
+        LIMIT 200
+        "#,
+    )?;
+    let rows = stmt.query_map([org_id], map_cached_work_item)?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
 // ── Private helpers — commits ─────────────────────────────────────────────────
 
 fn upsert_commits(conn: &Connection, commits: &[CachedCommit]) -> Result<()> {
@@ -1182,7 +1271,7 @@ mod tests {
     }
 
     #[test]
-    fn migrate_v1_db_upgrades_to_v2() {
+    fn migrate_v1_db_upgrades_to_latest() {
         let conn = Connection::open_in_memory().unwrap();
         conn.pragma_update(None, "foreign_keys", "ON").unwrap();
         conn.execute_batch(
@@ -1223,6 +1312,44 @@ mod tests {
             )
             .unwrap();
         assert_eq!(fts_count, 1);
+
+        let mywi_count: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='my_work_items'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(mywi_count, 1);
+    }
+
+    #[test]
+    fn migrate_v2_db_upgrades_to_v3() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        conn.execute_batch(
+            r#"
+            CREATE TABLE organizations(id TEXT PRIMARY KEY);
+            PRAGMA user_version = 2;
+            "#,
+        )
+        .unwrap();
+
+        migrate(&conn).unwrap();
+
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+
+        let mywi_count: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='my_work_items'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(mywi_count, 1);
     }
 
     #[test]
