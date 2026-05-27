@@ -102,20 +102,20 @@ async fn add_azure_cli_organization(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
-async fn search_pull_requests(
+fn search_pull_requests(
     input: SearchPullRequestsInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<PullRequestSummary>> {
-    state.pull_requests.search(input).await
+    state.pull_requests.search(input)
 }
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
-async fn list_my_review_pull_requests(
+fn list_my_review_pull_requests(
     input: ListMyReviewPullRequestsInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<ReviewPullRequestSummary>> {
-    state.pull_requests.list_my_reviews(input).await
+    state.pull_requests.list_my_reviews(input)
 }
 
 #[tauri::command]

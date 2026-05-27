@@ -1,8 +1,7 @@
-use azdo_client::{AdoClient, GitPullRequest, PullRequestStatus};
+use azdo_client::{AdoClient, PullRequestStatus};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
-use crate::auth::client_for_organization;
 use crate::db::{AppDatabase, CachedPr, CachedReviewPr, Organization};
 use crate::error::{AppError, Result};
 use crate::secrets::SecretStore;
@@ -72,123 +71,71 @@ impl PullRequestService {
         Self { db, secrets }
     }
 
-    pub async fn list_my_reviews(
+    pub fn list_my_reviews(
         &self,
         input: ListMyReviewPullRequestsInput,
     ) -> Result<Vec<ReviewPullRequestSummary>> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
-        let user_id = organization.authenticated_user_id.clone().ok_or_else(|| {
-            AppError::InvalidInput(
-                "authenticated user ID not available; re-add the organization".to_string(),
-            )
-        })?;
-        let client = client_for_organization(&organization, &self.secrets)?;
-
-        let mut results = Vec::new();
-        for project in client.list_projects().await? {
-            let prs = client
-                .list_pull_requests_by_reviewer(&project.id, &user_id, 200)
-                .await?;
-            for pr in prs {
-                let Some(repo) = &pr.repository else { continue };
-                let repo_id = repo.id.clone();
-                let repo_name = repo.name.clone();
-                let (proj_id, proj_name) = repo
-                    .project
-                    .as_ref()
-                    .map(|p| (p.id.clone(), p.name.clone()))
-                    .unwrap_or_else(|| (project.id.clone(), project.name.clone()));
-
-                let reviewer = pr
-                    .reviewers
-                    .as_deref()
-                    .unwrap_or(&[])
-                    .iter()
-                    .find(|r| r.id.as_deref() == Some(&user_id));
-                let (my_vote, my_is_required) = reviewer
-                    .map(|r| (r.vote, r.is_required))
-                    .unwrap_or((0, false));
-
-                let web_url = format!(
-                    "{}/{}/_git/{}/pullrequest/{}",
-                    organization.base_url, proj_name, repo_name, pr.pull_request_id,
-                );
-                results.push(ReviewPullRequestSummary {
-                    organization_id: organization.id.clone(),
-                    project_id: proj_id,
-                    project_name: proj_name,
-                    repository_id: repo_id,
-                    repository_name: repo_name,
-                    pull_request_id: pr.pull_request_id,
-                    title: pr.title.clone(),
-                    created_by: pr
-                        .created_by
-                        .as_ref()
-                        .and_then(|u| u.display_name.clone().or(u.unique_name.clone())),
-                    creation_date: pr.creation_date.to_rfc3339(),
-                    target_ref_name: short_ref(&pr.target_ref_name),
-                    web_url: Some(web_url),
-                    my_vote,
-                    my_vote_label: vote_label(my_vote).to_string(),
-                    my_is_required,
-                    is_draft: pr.is_draft.unwrap_or(false),
-                });
-            }
-        }
-
+        let cached = self.db.list_review_pull_requests(&organization.id)?;
+        let mut results: Vec<ReviewPullRequestSummary> = cached
+            .into_iter()
+            .map(|pr| ReviewPullRequestSummary {
+                organization_id: pr.org_id,
+                project_id: pr.project_id,
+                project_name: pr.project_name,
+                repository_id: pr.repository_id,
+                repository_name: pr.repository_name,
+                pull_request_id: pr.pull_request_id,
+                title: pr.title,
+                created_by: pr.created_by,
+                creation_date: pr.creation_date,
+                target_ref_name: pr.target_ref_name,
+                web_url: pr.web_url,
+                my_vote: pr.my_vote,
+                my_vote_label: pr.my_vote_label,
+                my_is_required: pr.my_is_required,
+                is_draft: pr.is_draft,
+            })
+            .collect();
         results.sort_by(|a, b| b.creation_date.cmp(&a.creation_date));
-        tracing::info!(
-            organization = %organization.name,
-            count = results.len(),
-            "my review pull requests fetched"
-        );
         Ok(results)
     }
 
-    pub async fn search(&self, input: SearchPullRequestsInput) -> Result<Vec<PullRequestSummary>> {
+    // Note: cache contains only Active PRs (synced with PullRequestStatus::Active).
+    // status filters other than "active" will return 0 results until sync scope is widened.
+    pub fn search(&self, input: SearchPullRequestsInput) -> Result<Vec<PullRequestSummary>> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
-        let status = parse_status(input.status.as_deref())?;
         let query = input.query.unwrap_or_default().trim().to_ascii_lowercase();
         let project_filter = normalize_optional(input.project_id);
         let repository_filter = normalize_optional(input.repository_id);
-        let client = client_for_organization(&organization, &self.secrets)?;
-
-        let mut results = Vec::new();
-        for project in client.list_projects().await? {
-            if !matches_optional_filter(&project.id, project_filter.as_deref()) {
-                continue;
-            }
-            let repositories = client.list_repositories(&project.id).await?;
-            for repository in repositories {
-                if !matches_optional_filter(&repository.id, repository_filter.as_deref()) {
-                    continue;
-                }
-                let pull_requests = client
-                    .list_pull_requests(&project.id, &repository.id, status)
-                    .await?;
-                for pull_request in pull_requests {
-                    let summary = summarize_pull_request(
-                        &organization,
-                        &project.id,
-                        &project.name,
-                        &repository.id,
-                        &repository.name,
-                        pull_request,
-                    );
-                    if matches_query(&summary, &query) {
-                        results.push(summary);
-                    }
-                }
-            }
-        }
-
+        let status_filter = normalize_optional(input.status);
+        let cached = self.db.search_pull_requests(
+            &organization.id,
+            project_filter.as_deref(),
+            repository_filter.as_deref(),
+            status_filter.as_deref(),
+        )?;
+        let mut results: Vec<PullRequestSummary> = cached
+            .into_iter()
+            .map(|pr| PullRequestSummary {
+                organization_id: pr.org_id,
+                project_id: pr.project_id,
+                project_name: pr.project_name,
+                repository_id: pr.repository_id,
+                repository_name: pr.repository_name,
+                pull_request_id: pr.pull_request_id,
+                title: pr.title,
+                status: pr.status,
+                created_by: pr.created_by,
+                creation_date: pr.creation_date,
+                source_ref_name: pr.source_ref_name,
+                target_ref_name: pr.target_ref_name,
+                web_url: pr.web_url,
+            })
+            .filter(|summary| matches_query(summary, &query))
+            .collect();
         results.sort_by(|a, b| b.creation_date.cmp(&a.creation_date));
         results.truncate(100);
-        tracing::info!(
-            organization = %organization.name,
-            count = results.len(),
-            "pull request search completed"
-        );
         Ok(results)
     }
 
@@ -205,53 +152,6 @@ impl PullRequestService {
             .into_iter()
             .next()
             .ok_or_else(|| AppError::InvalidInput("no organization is configured".to_string()))
-    }
-}
-
-fn parse_status(value: Option<&str>) -> Result<PullRequestStatus> {
-    match value
-        .unwrap_or("active")
-        .trim()
-        .to_ascii_lowercase()
-        .as_str()
-    {
-        "active" => Ok(PullRequestStatus::Active),
-        "completed" => Ok(PullRequestStatus::Completed),
-        "abandoned" => Ok(PullRequestStatus::Abandoned),
-        "all" => Ok(PullRequestStatus::All),
-        other => Err(AppError::InvalidInput(format!(
-            "unsupported pull request status: {other}"
-        ))),
-    }
-}
-
-fn summarize_pull_request(
-    organization: &Organization,
-    project_id: &str,
-    project_name: &str,
-    repository_id: &str,
-    repository_name: &str,
-    pull_request: GitPullRequest,
-) -> PullRequestSummary {
-    PullRequestSummary {
-        organization_id: organization.id.clone(),
-        project_id: project_id.to_string(),
-        project_name: project_name.to_string(),
-        repository_id: repository_id.to_string(),
-        repository_name: repository_name.to_string(),
-        pull_request_id: pull_request.pull_request_id,
-        title: pull_request.title,
-        status: pull_request.status,
-        created_by: pull_request
-            .created_by
-            .and_then(|identity| identity.display_name.or(identity.unique_name)),
-        creation_date: pull_request.creation_date.to_rfc3339(),
-        source_ref_name: short_ref(&pull_request.source_ref_name),
-        target_ref_name: short_ref(&pull_request.target_ref_name),
-        web_url: pull_request
-            .links
-            .and_then(|links| links.web.map(|web| web.href))
-            .or(pull_request.url),
     }
 }
 
@@ -277,10 +177,6 @@ fn normalize_optional(value: Option<String>) -> Option<String> {
     value
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-}
-
-fn matches_optional_filter(value: &str, filter: Option<&str>) -> bool {
-    filter.is_none_or(|filter| filter == value)
 }
 
 fn matches_query(summary: &PullRequestSummary, query: &str) -> bool {
@@ -438,16 +334,6 @@ mod tests {
         );
         assert_eq!(normalize_optional(Some(" ".to_string())), None);
         assert_eq!(normalize_optional(None), None);
-    }
-
-    #[test]
-    fn parse_status_defaults_to_active() {
-        assert_eq!(parse_status(None).unwrap(), PullRequestStatus::Active);
-        assert_eq!(
-            parse_status(Some("completed")).unwrap(),
-            PullRequestStatus::Completed
-        );
-        assert!(parse_status(Some("merged")).is_err());
     }
 
     #[test]
