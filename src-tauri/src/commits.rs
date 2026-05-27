@@ -1,9 +1,8 @@
-use azdo_client::{CommitSearchCriteria, GitCommitRef};
+use azdo_client::{AdoClient, CommitSearchCriteria, GitCommitRef};
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::auth::client_for_organization;
-use crate::db::{AppDatabase, Organization};
+use crate::db::{AppDatabase, CachedCommit, Organization};
 use crate::error::{AppError, Result};
 use crate::secrets::SecretStore;
 
@@ -63,12 +62,12 @@ impl CommitService {
         Self { db, secrets }
     }
 
-    pub async fn search(&self, input: SearchCommitsInput) -> Result<Vec<CommitSummary>> {
+    pub fn search(&self, input: SearchCommitsInput) -> Result<Vec<CommitSummary>> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
-        let client = client_for_organization(&organization, &self.secrets)?;
         let query = input.query.unwrap_or_default().trim().to_ascii_lowercase();
         let author = normalize_optional(input.author);
-        let branch = normalize_branch(input.branch);
+        // branch はキャッシュに未対応(sync はデフォルトブランチのみ取得)。
+        let _ = input.branch;
         let from_date = normalize_date(input.from_date.as_deref(), false)?;
         let to_date = normalize_date(input.to_date.as_deref(), true)?;
         if let (Some(from_date), Some(to_date)) = (&from_date, &to_date) {
@@ -81,44 +80,53 @@ impl CommitService {
         let project_filter = normalize_optional(input.project_id);
         let repository_filter = normalize_optional(input.repository_id);
 
-        let mut results = Vec::new();
-        for project in client.list_projects().await? {
-            if !matches_optional_filter(&project.id, project_filter.as_deref()) {
-                continue;
-            }
-            let repositories = client.list_repositories(&project.id).await?;
-            for repository in repositories {
-                if !matches_optional_filter(&repository.id, repository_filter.as_deref()) {
-                    continue;
-                }
-                let commits = client
-                    .list_commits(
-                        &project.id,
-                        &repository.id,
-                        CommitSearchCriteria {
-                            author: author.clone(),
-                            branch: branch.clone(),
-                            from_date: from_date.as_ref().map(DateTime::to_rfc3339),
-                            to_date: to_date.as_ref().map(DateTime::to_rfc3339),
-                            top: Some(50),
-                        },
-                    )
-                    .await?;
-                for commit in commits {
-                    let summary = summarize_commit(
-                        &organization,
-                        &project.id,
-                        &project.name,
-                        &repository.id,
-                        &repository.name,
-                        commit,
-                    );
-                    if matches_query(&summary, &query) {
-                        results.push(summary);
-                    }
-                }
-            }
-        }
+        let from_rfc = from_date.as_ref().map(DateTime::to_rfc3339);
+        let to_rfc = to_date.as_ref().map(DateTime::to_rfc3339);
+
+        let cached = if query.is_empty() {
+            // SQL 側で日付・リポジトリ絞り込み済み
+            self.db.search_commits(
+                &organization.id,
+                repository_filter.as_deref(),
+                None,
+                from_rfc.as_deref(),
+                to_rfc.as_deref(),
+            )?
+        } else {
+            // FTS は日付絞り込み非対応なので in-memory でフィルタする
+            let mut rows = self.db.search_commits_fts(
+                &organization.id,
+                &query,
+                repository_filter.as_deref(),
+            )?;
+            rows.retain(|c| {
+                from_rfc.as_deref().map_or(true, |f| {
+                    c.author_date.as_deref().map_or(false, |d| d >= f)
+                }) && to_rfc.as_deref().map_or(true, |t| {
+                    c.author_date.as_deref().map_or(false, |d| d <= t)
+                })
+            });
+            rows
+        };
+
+        let mut results: Vec<CommitSummary> = cached
+            .into_iter()
+            .filter(|c| {
+                project_filter
+                    .as_deref()
+                    .map_or(true, |p| c.project_id == p)
+                    && author.as_deref().map_or(true, |a| {
+                        let al = a.to_ascii_lowercase();
+                        c.author_name
+                            .as_deref()
+                            .map_or(false, |n| n.to_ascii_lowercase().contains(&al))
+                            || c.author_email
+                                .as_deref()
+                                .map_or(false, |e| e.to_ascii_lowercase().contains(&al))
+                    })
+            })
+            .map(cached_commit_to_summary)
+            .collect();
 
         results.sort_by(|a, b| {
             b.author_date
@@ -135,25 +143,22 @@ impl CommitService {
         Ok(results)
     }
 
-    pub async fn list_repositories(
+    pub fn list_repositories(
         &self,
         input: ListCommitRepositoriesInput,
     ) -> Result<Vec<CommitRepositoryOption>> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
-        let client = client_for_organization(&organization, &self.secrets)?;
-
-        let mut results = Vec::new();
-        for project in client.list_projects().await? {
-            let repositories = client.list_repositories(&project.id).await?;
-            for repository in repositories {
-                results.push(CommitRepositoryOption {
-                    project_id: project.id.clone(),
-                    project_name: project.name.clone(),
-                    repository_id: repository.id,
-                    repository_name: repository.name,
-                });
-            }
-        }
+        let mut results: Vec<CommitRepositoryOption> = self
+            .db
+            .list_commit_repositories(&organization.id)?
+            .into_iter()
+            .map(|r| CommitRepositoryOption {
+                project_id: r.project_id,
+                project_name: r.project_name,
+                repository_id: r.repository_id,
+                repository_name: r.repository_name,
+            })
+            .collect();
         results.sort_by(|a, b| {
             a.project_name
                 .cmp(&b.project_name)
@@ -307,6 +312,136 @@ fn matches_query(summary: &CommitSummary, query: &str) -> bool {
     ]
     .iter()
     .any(|value| value.to_ascii_lowercase().contains(query))
+}
+
+fn cached_commit_to_summary(c: CachedCommit) -> CommitSummary {
+    let short_commit_id = c.commit_id.chars().take(8).collect();
+    CommitSummary {
+        organization_id: c.org_id,
+        project_id: c.project_id,
+        project_name: c.project_name,
+        repository_id: c.repository_id,
+        repository_name: c.repository_name,
+        short_commit_id,
+        commit_id: c.commit_id,
+        comment: c.comment,
+        author_name: c.author_name,
+        author_email: c.author_email,
+        author_date: c.author_date,
+        web_url: c.web_url,
+    }
+}
+
+fn commit_to_cached(
+    org: &Organization,
+    project_id: &str,
+    project_name: &str,
+    repository_id: &str,
+    repository_name: &str,
+    commit: GitCommitRef,
+) -> CachedCommit {
+    let author_name = commit.author.as_ref().and_then(|a| a.name.clone());
+    let author_email = commit.author.as_ref().and_then(|a| a.email.clone());
+    let author_date = commit
+        .author
+        .as_ref()
+        .and_then(|a| a.date.map(|d| d.to_rfc3339()));
+    let commit_id = commit.commit_id;
+    let web_url = commit.remote_url.or(commit.url).or_else(|| {
+        Some(commit_web_url(org, project_name, repository_name, &commit_id))
+    });
+    CachedCommit {
+        org_id: org.id.clone(),
+        project_id: project_id.to_string(),
+        project_name: project_name.to_string(),
+        repository_id: repository_id.to_string(),
+        repository_name: repository_name.to_string(),
+        commit_id,
+        comment: commit.comment.unwrap_or_else(|| "(no comment)".to_string()),
+        author_name,
+        author_email,
+        author_date,
+        web_url,
+    }
+}
+
+pub async fn sync_commits_for_org(
+    db: &AppDatabase,
+    client: &AdoClient,
+    org: &Organization,
+) -> Result<()> {
+    if let Err(e) = do_sync_commits(db, client, org).await {
+        tracing::error!(org = %org.name, error = %e, "commit sync failed");
+        return Err(e);
+    }
+    Ok(())
+}
+
+async fn do_sync_commits(
+    db: &AppDatabase,
+    client: &AdoClient,
+    org: &Organization,
+) -> Result<()> {
+    let from_date = (Utc::now() - chrono::Duration::days(30)).to_rfc3339();
+    let projects = client.list_projects().await?;
+    for project in &projects {
+        let repositories = match client.list_repositories(&project.id).await {
+            Ok(repos) => repos,
+            Err(e) => {
+                tracing::warn!(
+                    org = %org.name,
+                    project = %project.name,
+                    error = %e,
+                    "failed to list repositories, skipping project"
+                );
+                continue;
+            }
+        };
+        for repository in repositories {
+            let commits = match client
+                .list_commits(
+                    &project.id,
+                    &repository.id,
+                    CommitSearchCriteria {
+                        author: None,
+                        branch: None,
+                        from_date: Some(from_date.clone()),
+                        to_date: None,
+                        top: Some(100),
+                    },
+                )
+                .await
+            {
+                Ok(c) => c,
+                Err(e) => {
+                    tracing::warn!(
+                        org = %org.name,
+                        project = %project.name,
+                        repository = %repository.name,
+                        error = %e,
+                        "failed to list commits, skipping repository"
+                    );
+                    continue;
+                }
+            };
+            let cached: Vec<CachedCommit> = commits
+                .into_iter()
+                .map(|c| {
+                    commit_to_cached(
+                        org,
+                        &project.id,
+                        &project.name,
+                        &repository.id,
+                        &repository.name,
+                        c,
+                    )
+                })
+                .collect();
+            db.upsert_commits(&cached)?;
+        }
+    }
+    tracing::info!(org = %org.name, "commit sync completed");
+    Ok(())
 }
 
 #[cfg(test)]

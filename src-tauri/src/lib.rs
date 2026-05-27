@@ -165,20 +165,20 @@ async fn add_work_item_comment(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
-async fn search_commits(
+fn search_commits(
     input: SearchCommitsInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<CommitSummary>> {
-    state.commits.search(input).await
+    state.commits.search(input)
 }
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
-async fn list_commit_repositories(
+fn list_commit_repositories(
     input: ListCommitRepositoriesInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<CommitRepositoryOption>> {
-    state.commits.list_repositories(input).await
+    state.commits.list_repositories(input)
 }
 
 #[tauri::command]
