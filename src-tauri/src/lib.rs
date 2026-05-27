@@ -9,6 +9,7 @@ mod orgs;
 mod prs;
 mod secrets;
 mod settings;
+mod sync;
 mod work_items;
 
 use commits::{
@@ -26,6 +27,7 @@ use secrets::SecretStore;
 use settings::{
     GetReviewResultPreviewInput, ReviewResultPreview, SettingsService, UpdateAppSettingsInput,
 };
+use sync::SyncRunner;
 use tauri::{Manager, State};
 use work_items::{
     AddWorkItemCommentInput, GetWorkItemPreviewInput, ListMyWorkItemsInput, MentionCandidate,
@@ -190,8 +192,9 @@ pub fn run() {
                 pull_requests: PullRequestService::new(db.clone(), SecretStore),
                 work_items: WorkItemService::new(db.clone(), SecretStore),
                 commits: CommitService::new(db.clone(), SecretStore),
-                settings: SettingsService::new(db),
+                settings: SettingsService::new(db.clone()),
             });
+            tauri::async_runtime::spawn(SyncRunner::new(db, SecretStore).run(app.handle().clone()));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

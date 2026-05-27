@@ -23,6 +23,7 @@ thiserror = { workspace = true }
 rusqlite = { version = "0.32", features = ["bundled-full"] }
 keyring = { version = "3", features = ["windows-native"] }
 azdo-client = { path = "../crates/azdo-client" }
+tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
