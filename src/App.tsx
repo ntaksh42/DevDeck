@@ -83,17 +83,17 @@ type View =
   | "commits"
   | "settings";
 
-const DEFAULT_SIDEBAR_WIDTH = 256;
+const DEFAULT_SIDEBAR_WIDTH = 232;
 const DEFAULT_REVIEW_PREVIEW_WIDTH = 420;
 const DEFAULT_WORK_ITEM_PREVIEW_WIDTH = 440;
-const DEFAULT_PR_GRID_COLUMN_WIDTHS = [64, 220, 360, 112, 64, 112, 80, 112];
+const DEFAULT_PR_GRID_COLUMN_WIDTHS = [60, 190, 320, 104, 60, 104, 76, 104];
 const PR_GRID_COLUMN_MIN_WIDTHS = [56, 160, 220, 96, 56, 96, 72, 96];
 const PR_GRID_COLUMN_MAX_WIDTHS = [120, 520, 960, 240, 120, 240, 180, 240];
 const SIDEBAR_WIDTH_STORAGE_KEY = "azdodeck:layout:sidebarWidth";
 const REVIEW_PREVIEW_WIDTH_STORAGE_KEY = "azdodeck:layout:reviewPreviewWidth";
 const WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY = "azdodeck:layout:workItemPreviewWidth";
 const PR_GRID_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:myReviewsGridColumnWidths";
-const DEFAULT_PR_SEARCH_COLUMN_WIDTHS = [72, 88, 340, 180, 140, 80, 180];
+const DEFAULT_PR_SEARCH_COLUMN_WIDTHS = [64, 80, 300, 160, 128, 72, 160];
 const PR_SEARCH_COLUMN_MIN_WIDTHS = [56, 70, 200, 120, 100, 64, 120];
 const PR_SEARCH_COLUMN_MAX_WIDTHS = [120, 140, 720, 360, 280, 120, 360];
 const PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:prSearchGridColumnWidths";
@@ -102,7 +102,7 @@ const WI_COLUMN_MIN_WIDTHS = [56, 90, 80, 200, 120, 100, 80];
 const WI_COLUMN_MAX_WIDTHS = [120, 200, 180, 720, 300, 260, 160];
 const WI_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:wiSearchGridColumnWidths";
 const WI_QUERY_VIEWS_STORAGE_KEY = "azdodeck:workItemQueryViews";
-const DEFAULT_COMMIT_COLUMN_WIDTHS = [88, 96, 360, 200, 180];
+const DEFAULT_COMMIT_COLUMN_WIDTHS = [78, 88, 320, 170, 156];
 const COMMIT_COLUMN_MIN_WIDTHS = [72, 80, 200, 140, 120];
 const COMMIT_COLUMN_MAX_WIDTHS = [140, 160, 720, 380, 340];
 const COMMIT_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:commitGridColumnWidths";
@@ -266,16 +266,16 @@ function AppShell() {
         className="fixed inset-y-0 left-0 hidden flex-col border-r border-border bg-white lg:flex"
         style={{ width: sidebarWidth }}
       >
-        <div className="flex h-16 items-center gap-3 border-b border-border px-5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Building2 className="h-5 w-5" aria-hidden="true" />
+        <div className="flex h-12 items-center gap-2 border-b border-border px-4">
+          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <Building2 className="h-4 w-4" aria-hidden="true" />
           </div>
           <div>
             <p className="text-sm font-semibold">AzDoDeck</p>
             <p className="text-xs text-muted-foreground">Azure DevOps</p>
           </div>
         </div>
-        <nav className="flex flex-1 flex-col p-3">
+        <nav className="flex flex-1 flex-col p-2">
           <div className="space-y-1">
             {/* Pull Requests section */}
             <NavSection
@@ -333,7 +333,7 @@ function AppShell() {
               onClick={() => setView("commits")}
             />
           </div>
-          <div className="mt-auto space-y-1 border-t border-border pt-3">
+          <div className="mt-auto space-y-1 border-t border-border pt-2">
             <NavButton
               active={false}
               icon={<BookOpen className="h-4 w-4" aria-hidden="true" />}
@@ -362,7 +362,7 @@ function AppShell() {
       </aside>
 
       <main className="lg:pl-[var(--sidebar-width)]" style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}>
-        <header className="flex h-16 items-center justify-between border-b border-border bg-white px-5 lg:px-8">
+        <header className="flex h-12 items-center justify-between border-b border-border bg-white px-4 lg:px-5">
           <div>
             <h1 className="text-lg font-semibold">
               {activeView === "pullRequestSearch"
@@ -400,7 +400,7 @@ function AppShell() {
               type="button"
               disabled={syncMutation.isPending}
               onClick={() => syncMutation.mutate()}
-              className="flex items-center gap-1.5 rounded-md border border-border bg-white px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-md border border-border bg-white px-3 py-1 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
               title="今すぐ同期"
             >
               <RefreshCw
@@ -412,7 +412,7 @@ function AppShell() {
           )}
         </header>
 
-        <section className="w-full px-5 py-8 lg:px-8">
+        <section className="w-full px-3 py-4 lg:px-5">
           {organizationsQuery.isLoading ? (
             <LoadingState />
           ) : organizationsQuery.isError ? (
@@ -504,13 +504,13 @@ function CommitSearch({ organizations }: { organizations: Organization[] }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <div className="rounded-md border border-border bg-white">
-        <form className="grid gap-4 p-5" onSubmit={onSubmit}>
-          <div className="grid gap-4 xl:grid-cols-[minmax(240px,1fr)_180px_180px_170px_auto]">
+        <form className="grid gap-3 p-3" onSubmit={onSubmit}>
+          <div className="grid gap-3 xl:grid-cols-[minmax(240px,1fr)_180px_180px_170px_auto]">
             <label className="grid gap-2">
               <span className="text-sm font-medium">Search</span>
-              <div className="flex h-10 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
+              <div className="flex h-9 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
                 <Search className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
                 <input
                   value={query}
@@ -531,7 +531,7 @@ function CommitSearch({ organizations }: { organizations: Organization[] }) {
                   setProjectId("");
                   setRepositoryId("");
                 }}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               >
                 {organizations.map((organization) => (
                   <option key={organization.id} value={organization.id}>
@@ -547,7 +547,7 @@ function CommitSearch({ organizations }: { organizations: Organization[] }) {
                 value={author}
                 onChange={(event) => setAuthor(event.target.value)}
                 placeholder="email or name"
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
             </label>
 
@@ -557,7 +557,7 @@ function CommitSearch({ organizations }: { organizations: Organization[] }) {
                 value={branch}
                 onChange={(event) => setBranch(event.target.value)}
                 placeholder="main"
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
             </label>
 
@@ -565,7 +565,7 @@ function CommitSearch({ organizations }: { organizations: Organization[] }) {
               <button
                 type="submit"
                 disabled={mutation.isPending || !selectedOrganizationId}
-                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
+                className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
               >
                 {mutation.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -577,14 +577,14 @@ function CommitSearch({ organizations }: { organizations: Organization[] }) {
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[150px_150px_auto_220px_240px_1fr]">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[150px_150px_auto_220px_240px_1fr]">
             <label className="grid gap-2">
               <span className="text-sm font-medium">From</span>
               <input
                 type="date"
                 value={fromDate}
                 onChange={(event) => setFromDate(event.target.value)}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
             </label>
 
@@ -594,7 +594,7 @@ function CommitSearch({ organizations }: { organizations: Organization[] }) {
                 type="date"
                 value={toDate}
                 onChange={(event) => setToDate(event.target.value)}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
             </label>
 
@@ -614,7 +614,7 @@ function CommitSearch({ organizations }: { organizations: Organization[] }) {
                       setFromDate(fmt(from));
                       setToDate(fmt(to));
                     }}
-                    className="inline-flex h-10 items-center rounded-md border border-input bg-background px-2.5 text-xs hover:bg-muted"
+                    className="inline-flex h-9 items-center rounded-md border border-input bg-background px-2.5 text-xs hover:bg-muted"
                   >
                     {days}d
                   </button>
@@ -631,7 +631,7 @@ function CommitSearch({ organizations }: { organizations: Organization[] }) {
                   setProjectId(event.target.value);
                   setRepositoryId("");
                 }}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <option value="">All projects</option>
                 {projectOptions.map((project) => (
@@ -648,7 +648,7 @@ function CommitSearch({ organizations }: { organizations: Organization[] }) {
                 value={repositoryId}
                 disabled={repositoriesQuery.isLoading || filteredRepositoryOptions.length === 0}
                 onChange={(event) => setRepositoryId(event.target.value)}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <option value="">All repositories</option>
                 {filteredRepositoryOptions.map((repository) => (
@@ -804,7 +804,7 @@ const CommitGridRow = forwardRef<
           openExternalUrl(commit.webUrl);
         }
       }}
-      className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
+      className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
         selected ? "bg-secondary" : "hover:bg-muted/50"
       }`}
       style={{ gridTemplateColumns: columnTemplate }}
@@ -925,16 +925,16 @@ function CommitResults({
 
   return (
     <div className="overflow-hidden rounded-md border border-border bg-white">
-      <div className="flex items-center justify-between border-b border-border px-5 py-4">
+      <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <h2 className="text-base font-semibold">Results</h2>
         <span className="text-sm text-muted-foreground">{countLabel}</span>
       </div>
       {!searched && !loading ? (
-        <div className="px-5 py-10 text-center text-sm text-muted-foreground">
+        <div className="px-3 py-6 text-center text-sm text-muted-foreground">
           Run a search to load commits.
         </div>
       ) : results.length === 0 && !loading ? (
-        <div className="px-5 py-10 text-center text-sm text-muted-foreground">
+        <div className="px-3 py-6 text-center text-sm text-muted-foreground">
           No commits matched.
         </div>
       ) : (
@@ -942,7 +942,7 @@ function CommitResults({
           <div className="min-w-[720px]">
             <div
               role="row"
-              className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+              className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
               style={{ gridTemplateColumns: commitColTemplate }}
             >
               <div role="columnheader" className="relative min-w-0 truncate px-1">
@@ -989,7 +989,7 @@ function CommitResults({
         </div>
       )}
       {copyToast && (
-        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1.5 text-xs text-background shadow-lg">
+        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1 text-xs text-background shadow-lg">
           {copyToast}
         </div>
       )}
@@ -1315,9 +1315,9 @@ function WorkItemViewsPanel({ organizations }: { organizations: Organization[] }
   const selectedCount = selectedResults.length;
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-4 xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
-        <form className="rounded-md border border-border bg-white p-4" onSubmit={saveView}>
+    <div className="space-y-3">
+      <div className="grid gap-3 xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+        <form className="rounded-md border border-border bg-white p-3" onSubmit={saveView}>
           <div className="mb-4 flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold">Query View</h2>
             <button
@@ -1399,7 +1399,7 @@ function WorkItemViewsPanel({ organizations }: { organizations: Organization[] }
                 onChange={(event) => setDraftWiql(event.target.value)}
                 rows={8}
                 spellCheck={false}
-                className="min-h-[176px] resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-xs leading-5 outline-none focus:ring-2 focus:ring-ring"
+                className="min-h-[132px] resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-xs leading-5 outline-none focus:ring-2 focus:ring-ring"
               />
             </label>
 
@@ -1431,7 +1431,7 @@ function WorkItemViewsPanel({ organizations }: { organizations: Organization[] }
         </form>
 
         <div className="min-w-0 rounded-md border border-border bg-white">
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <div className="flex items-center justify-between border-b border-border px-3 py-2">
             <div>
               <h2 className="text-sm font-semibold">Views</h2>
               <p className="text-xs text-muted-foreground">
@@ -1450,11 +1450,11 @@ function WorkItemViewsPanel({ organizations }: { organizations: Organization[] }
           </div>
 
           {views.length === 0 ? (
-            <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+            <div className="px-3 py-6 text-center text-sm text-muted-foreground">
               Save a WIQL view to start tracking result counts.
             </div>
           ) : (
-            <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-3 p-3 md:grid-cols-2 xl:grid-cols-3">
               {views.map((view, index) => {
                 const query = viewQueries[index];
                 const count = query?.data?.length ?? 0;
@@ -1467,7 +1467,7 @@ function WorkItemViewsPanel({ organizations }: { organizations: Organization[] }
                       setSelectedViewId(view.id);
                       loadDraft(view);
                     }}
-                    className={`min-h-[116px] rounded-md border p-3 text-left outline-none transition-colors focus:ring-2 focus:ring-ring ${
+                    className={`min-h-[92px] rounded-md border p-3 text-left outline-none transition-colors focus:ring-2 focus:ring-ring ${
                       selected
                         ? "border-primary bg-secondary"
                         : "border-border bg-white hover:bg-muted/60"
@@ -1646,7 +1646,7 @@ const WorkItemGridRow = forwardRef<
         openExternalUrl(item.webUrl);
       }
     }}
-    className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
+    className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
       selected ? "bg-secondary" : "hover:bg-muted/50"
     }`}
     style={{ gridTemplateColumns: columnTemplate }}
@@ -1820,7 +1820,7 @@ function WorkItemsGrid({
   return (
     <div ref={containerRef} className="outline-none" tabIndex={-1} onKeyDown={handleKeyDown}>
       {copyToast && (
-        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1.5 text-xs text-background shadow-lg">
+        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1 text-xs text-background shadow-lg">
           {copyToast}
         </div>
       )}
@@ -1833,7 +1833,7 @@ function WorkItemsGrid({
             <div className="min-w-[760px]">
               <div
                 role="row"
-                className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                 style={{ gridTemplateColumns: wiColTemplate }}
               >
                 {WI_GRID_KEYS.map((col, i) => (
@@ -2017,7 +2017,7 @@ function WorkItemPreviewPanel({
   }
 
   return (
-    <aside className="flex min-h-[520px] flex-col overflow-hidden rounded-md border border-border bg-white">
+    <aside className="flex min-h-[440px] flex-col overflow-hidden rounded-md border border-border bg-white">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -2108,7 +2108,7 @@ function WorkItemPreviewPanel({
                     }}
                     onKeyDown={handleCommentKeyDown}
                     rows={3}
-                    className="min-h-[76px] w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    className="min-h-[64px] w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
                   />
                   {showMentionOptions ? (
                     <div className="absolute bottom-full left-0 z-20 mb-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-white py-1 shadow-lg">
@@ -2438,7 +2438,7 @@ const ReviewPrRow = forwardRef<
           openExternalUrl(pr.webUrl);
         }
       }}
-      className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1.5 text-sm outline-none
+      className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1 text-sm outline-none
         focus:ring-2 focus:ring-inset focus:ring-ring
         ${selected && isStale ? "bg-orange-100 dark:bg-orange-900/30"
           : selected ? "bg-secondary"
@@ -3031,7 +3031,7 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
               {/* Column headers */}
               <div
                 role="row"
-                className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                 style={{ gridTemplateColumns: COLS }}
               >
                 {(["pullRequestId", "repositoryName", "title", "createdBy", "creationDate", "targetRefName", "myIsRequired"] as SortKey[]).map((col, i) => (
@@ -3131,7 +3131,7 @@ function ReviewResultPreviewPanel({
   const hasFolder = !!settings?.reviewResultFolderPath;
 
   return (
-    <aside className="flex min-h-[520px] flex-col overflow-hidden rounded-md border border-border bg-white">
+    <aside className="flex min-h-[440px] flex-col overflow-hidden rounded-md border border-border bg-white">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -3375,7 +3375,7 @@ function NavButton({
       disabled={disabled}
       onClick={onClick}
       aria-keyshortcuts={shortcut}
-      className={`flex h-10 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-medium ${
+      className={`flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-sm font-medium ${
         active ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-secondary"
       } disabled:cursor-not-allowed disabled:opacity-50`}
     >
@@ -3398,7 +3398,7 @@ function NavSection({
 }) {
   return (
     <div className={disabled ? "opacity-50" : ""}>
-      <div className="flex h-10 items-center gap-3 px-3 text-sm font-semibold text-foreground">
+      <div className="flex h-8 items-center gap-2 px-2.5 text-sm font-semibold text-foreground">
         {icon}
         {label}
       </div>
@@ -3428,7 +3428,7 @@ function NavSubItem({
       disabled={disabled}
       onClick={onClick}
       aria-keyshortcuts={shortcut}
-      className={`flex h-8 w-full items-center rounded-md px-2 text-left text-sm ${
+      className={`flex h-7 w-full items-center rounded-md px-2 text-left text-sm ${
         active ? "bg-secondary font-medium text-foreground" : "text-muted-foreground hover:bg-secondary"
       } disabled:cursor-not-allowed disabled:opacity-50`}
     >
@@ -3496,7 +3496,7 @@ function ErrorState({ message }: { message: string }) {
   const { containerCls, textCls, icon, hint } = variants[kind];
 
   return (
-    <div role="alert" className={`flex gap-3 rounded-md border p-4 ${containerCls}`}>
+    <div role="alert" className={`flex gap-3 rounded-md border p-3 ${containerCls}`}>
       <div className="mt-0.5">{icon}</div>
       <div>
         <p className={`text-sm font-medium ${textCls}`}>{message}</p>
@@ -3555,16 +3555,16 @@ function PullRequestSearch({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <div className="rounded-md border border-border bg-white">
-        <form className="grid gap-4 p-5" onSubmit={onSubmit}>
+        <form className="grid gap-3 p-3" onSubmit={onSubmit}>
           {organizations.length > 1 && (
             <label className="grid gap-2">
               <span className="text-sm font-medium">Organization</span>
               <select
                 value={organizationId}
                 onChange={(e) => { setOrganizationId(e.target.value); setProjectId(""); setRepositoryId(""); }}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               >
                 {organizations.map((o) => (
                   <option key={o.id} value={o.id}>{o.name}</option>
@@ -3572,10 +3572,10 @@ function PullRequestSearch({
               </select>
             </label>
           )}
-          <div className="grid gap-4 lg:grid-cols-[1fr_160px_200px_160px_auto]">
+          <div className="grid gap-3 lg:grid-cols-[1fr_160px_200px_160px_auto]">
             <label className="grid gap-2">
               <span className="text-sm font-medium">Search</span>
-              <div className="flex h-10 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
+              <div className="flex h-9 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
                 <Search className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
                 <input
                   value={query}
@@ -3593,7 +3593,7 @@ function PullRequestSearch({
                 value={projectId}
                 onChange={(e) => onProjectChange(e.target.value)}
                 disabled={repositoriesQuery.isLoading}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
               >
                 <option value="">All projects</option>
                 {projects.map((p) => (
@@ -3608,7 +3608,7 @@ function PullRequestSearch({
                 value={repositoryId}
                 onChange={(e) => setRepositoryId(e.target.value)}
                 disabled={repositoriesQuery.isLoading}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
               >
                 <option value="">All repositories</option>
                 {filteredRepositories.map((r) => (
@@ -3622,7 +3622,7 @@ function PullRequestSearch({
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value as SearchPullRequestsInput["status"])}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="active">Active</option>
                 <option value="completed">Completed</option>
@@ -3635,7 +3635,7 @@ function PullRequestSearch({
               <button
                 type="submit"
                 disabled={mutation.isPending || !organizationId}
-                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
+                className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
               >
                 {mutation.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -3716,16 +3716,16 @@ function PullRequestResults({
 
   return (
     <div className="overflow-hidden rounded-md border border-border bg-white">
-      <div className="flex items-center justify-between border-b border-border px-5 py-4">
+      <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <h2 className="text-base font-semibold">Results</h2>
         <span className="text-sm text-muted-foreground">{countLabel}</span>
       </div>
       {!searched && !loading ? (
-        <div className="px-5 py-10 text-center text-sm text-muted-foreground">
+        <div className="px-3 py-6 text-center text-sm text-muted-foreground">
           Run a search to load pull requests.
         </div>
       ) : results.length === 0 && !loading ? (
-        <div className="px-5 py-10 text-center text-sm text-muted-foreground">
+        <div className="px-3 py-6 text-center text-sm text-muted-foreground">
           No pull requests matched.
         </div>
       ) : (
@@ -3769,7 +3769,7 @@ function PullRequestResults({
         </div>
       )}
       {copyToast && (
-        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1.5 text-xs text-background shadow-lg">
+        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1 text-xs text-background shadow-lg">
           {copyToast}
         </div>
       )}
@@ -3807,7 +3807,7 @@ const PrSearchRow = forwardRef<
           openExternalUrl(pr.webUrl);
         }
       }}
-      className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
+      className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
         selected ? "bg-secondary" : "hover:bg-muted/50"
       }`}
       style={{ gridTemplateColumns: columnTemplate }}
@@ -3863,11 +3863,11 @@ function OrganizationSettings({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <SetupPanel compact />
       <ReviewResultFolderSettings />
       <div className="overflow-hidden rounded-md border border-border bg-white">
-        <div className="border-b border-border px-5 py-4">
+        <div className="border-b border-border px-3 py-2">
           <h2 className="text-base font-semibold">Organizations</h2>
         </div>
         {deleteMutation.isError && (
@@ -3879,7 +3879,7 @@ function OrganizationSettings({
           {organizations.map((organization) => (
             <div
               key={organization.id}
-              className="grid items-center gap-4 px-5 py-4 md:grid-cols-[1fr_auto_auto_auto]"
+              className="grid items-center gap-4 px-3 py-2 md:grid-cols-[1fr_auto_auto_auto]"
             >
               <div>
                 <p className="font-medium">{organization.name}</p>
@@ -3944,7 +3944,7 @@ function ReviewResultFolderSettings() {
 
   return (
     <div className="rounded-md border border-border bg-white">
-      <div className="border-b border-border px-5 py-4">
+      <div className="border-b border-border px-3 py-2">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
             <FileText className="h-5 w-5" aria-hidden="true" />
@@ -3958,14 +3958,14 @@ function ReviewResultFolderSettings() {
         </div>
       </div>
 
-      <form className="grid gap-4 p-5" onSubmit={onSubmit}>
+      <form className="grid gap-3 p-3" onSubmit={onSubmit}>
         <label className="grid gap-2">
           <span className="text-sm font-medium">Folder path</span>
           <input
             value={folderPath}
             onChange={(event) => setFolderPath(event.target.value)}
             placeholder="C:\\reports\\azdo-reviews"
-            className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
           />
         </label>
 
@@ -3989,7 +3989,7 @@ function ReviewResultFolderSettings() {
           <button
             type="submit"
             disabled={settingsQuery.isLoading || mutation.isPending}
-            className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {mutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -4055,7 +4055,7 @@ function SetupPanel({ compact = false }: { compact?: boolean }) {
 
   return (
     <div className="rounded-md border border-border bg-white">
-      <div className="border-b border-border px-5 py-4">
+      <div className="border-b border-border px-3 py-2">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
             <Plus className="h-5 w-5" aria-hidden="true" />
@@ -4071,7 +4071,7 @@ function SetupPanel({ compact = false }: { compact?: boolean }) {
         </div>
       </div>
 
-      <form className="grid gap-5 p-5" onSubmit={onSubmit}>
+      <form className="grid gap-3 p-3" onSubmit={onSubmit}>
         <label className="grid gap-2">
           <span className="text-sm font-medium">Organization</span>
           <input
@@ -4079,13 +4079,13 @@ function SetupPanel({ compact = false }: { compact?: boolean }) {
             onChange={(event) => setOrganization(event.target.value)}
             placeholder="contoso"
             autoFocus={!compact}
-            className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none ring-offset-background focus:ring-2 focus:ring-ring"
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none ring-offset-background focus:ring-2 focus:ring-ring"
           />
         </label>
 
         <label className="grid gap-2">
           <span className="text-sm font-medium">Personal access token</span>
-          <div className="flex h-10 overflow-hidden rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring">
+          <div className="flex h-9 overflow-hidden rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring">
             <input
               value={pat}
               onChange={(event) => setPat(event.target.value)}
@@ -4133,7 +4133,7 @@ function SetupPanel({ compact = false }: { compact?: boolean }) {
           <button
             type="submit"
             disabled={isConnecting}
-            className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {patMutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -4146,7 +4146,7 @@ function SetupPanel({ compact = false }: { compact?: boolean }) {
             type="button"
             disabled={isConnecting}
             onClick={onConnectAzureCli}
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-border px-4 text-sm font-medium text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-4 text-sm font-medium text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
           >
             {azureCliMutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />

@@ -893,12 +893,12 @@ describe("App", () => {
 
     await screen.findByText("Needs review");
     const navResize = screen.getByRole("separator", { name: "Resize navigation" });
-    expect(navResize.getAttribute("aria-valuenow")).toBe("256");
+    expect(navResize.getAttribute("aria-valuenow")).toBe("232");
     fireEvent.keyDown(navResize, { key: "ArrowRight" });
-    expect(navResize.getAttribute("aria-valuenow")).toBe("272");
-    expect(window.localStorage.getItem("azdodeck:layout:sidebarWidth")).toBe("272");
+    expect(navResize.getAttribute("aria-valuenow")).toBe("248");
+    expect(window.localStorage.getItem("azdodeck:layout:sidebarWidth")).toBe("248");
     fireEvent.keyDown(navResize, { key: "Escape" });
-    expect(navResize.getAttribute("aria-valuenow")).toBe("256");
+    expect(navResize.getAttribute("aria-valuenow")).toBe("232");
 
     expect(await screen.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
     const previewResize = screen.getByRole("separator", { name: "Resize review preview" });
