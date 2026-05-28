@@ -1825,7 +1825,7 @@ function WorkItemsGrid({
         </div>
       )}
       <div
-        className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_8px_minmax(300px,var(--work-item-preview-width))]"
+        className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_8px_minmax(300px,var(--work-item-preview-width))]"
         style={{ "--work-item-preview-width": `${previewWidth}px` } as CSSProperties}
       >
         <div className="min-w-0 overflow-hidden rounded-md border border-border bg-white">
@@ -2017,7 +2017,7 @@ function WorkItemPreviewPanel({
   }
 
   return (
-    <aside className="flex min-h-[440px] flex-col overflow-hidden rounded-md border border-border bg-white">
+    <aside className="flex min-h-[340px] flex-col overflow-hidden rounded-md border border-border bg-white">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -3021,7 +3021,7 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
       </div>
 
       <div
-        className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_8px_minmax(280px,var(--review-preview-width))]"
+        className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_8px_minmax(280px,var(--review-preview-width))]"
         style={{ "--review-preview-width": `${previewWidth}px` } as CSSProperties}
       >
         {/* Grid */}
@@ -3131,7 +3131,7 @@ function ReviewResultPreviewPanel({
   const hasFolder = !!settings?.reviewResultFolderPath;
 
   return (
-    <aside className="flex min-h-[440px] flex-col overflow-hidden rounded-md border border-border bg-white">
+    <aside className="flex min-h-[340px] flex-col overflow-hidden rounded-md border border-border bg-white">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
