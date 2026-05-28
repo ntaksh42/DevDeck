@@ -10,7 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   BookOpen,
@@ -50,6 +50,8 @@ import {
   listMyReviewPullRequests,
   listMyWorkItems,
   listOrganizations,
+  listWorkItemProjects,
+  runWorkItemQuery,
   searchCommits,
   searchPullRequests,
   searchWorkItemMentions,
@@ -72,7 +74,14 @@ import { listen } from "@tauri-apps/api/event";
 import { openExternalUrl } from "@/lib/openExternal";
 import { isTauriRuntime } from "@/lib/runtime";
 
-type View = "pullRequestSearch" | "myReviews" | "workItems" | "myWorkItems" | "commits" | "settings";
+type View =
+  | "pullRequestSearch"
+  | "myReviews"
+  | "workItems"
+  | "myWorkItems"
+  | "workItemViews"
+  | "commits"
+  | "settings";
 
 const DEFAULT_SIDEBAR_WIDTH = 256;
 const DEFAULT_REVIEW_PREVIEW_WIDTH = 420;
@@ -92,6 +101,7 @@ const DEFAULT_WI_COLUMN_WIDTHS = [72, 120, 100, 340, 160, 140, 100];
 const WI_COLUMN_MIN_WIDTHS = [56, 90, 80, 200, 120, 100, 80];
 const WI_COLUMN_MAX_WIDTHS = [120, 200, 180, 720, 300, 260, 160];
 const WI_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:wiSearchGridColumnWidths";
+const WI_QUERY_VIEWS_STORAGE_KEY = "azdodeck:workItemQueryViews";
 const DEFAULT_COMMIT_COLUMN_WIDTHS = [88, 96, 360, 200, 180];
 const COMMIT_COLUMN_MIN_WIDTHS = [72, 80, 200, 140, 120];
 const COMMIT_COLUMN_MAX_WIDTHS = [140, 160, 720, 380, 340];
@@ -307,6 +317,12 @@ function AppShell() {
                 shortcut="Alt+4"
                 onClick={() => setView("workItems")}
               />
+              <NavSubItem
+                active={activeView === "workItemViews"}
+                disabled={organizations.length === 0}
+                label="Views"
+                onClick={() => setView("workItemViews")}
+              />
             </NavSection>
             <NavButton
               active={activeView === "commits"}
@@ -357,9 +373,11 @@ function AppShell() {
                     ? "Work Items"
                     : activeView === "myWorkItems"
                       ? "My Work Items"
-                      : activeView === "commits"
-                        ? "Commits"
-                        : "Settings"}
+                      : activeView === "workItemViews"
+                        ? "Work Item Views"
+                        : activeView === "commits"
+                          ? "Commits"
+                          : "Settings"}
             </h1>
             <p className="text-sm text-muted-foreground">
               {activeView === "pullRequestSearch"
@@ -370,9 +388,11 @@ function AppShell() {
                     ? "Search Azure DevOps work items across projects"
                     : activeView === "myWorkItems"
                       ? "Work items assigned to you"
-                      : activeView === "commits"
-                        ? "Search Azure DevOps commits across repositories"
-                        : "Local Azure DevOps organization setup"}
+                      : activeView === "workItemViews"
+                        ? "Saved WIQL views with counts, grid results, and preview"
+                        : activeView === "commits"
+                          ? "Search Azure DevOps commits across repositories"
+                          : "Local Azure DevOps organization setup"}
             </p>
           </div>
           {organizations.length > 0 && (
@@ -405,6 +425,8 @@ function AppShell() {
             <WorkItemSearch organizations={organizations} />
           ) : activeView === "myWorkItems" ? (
             <MyWorkItemsPanel organizations={organizations} />
+          ) : activeView === "workItemViews" ? (
+            <WorkItemViewsPanel organizations={organizations} />
           ) : activeView === "commits" ? (
             <CommitSearch organizations={organizations} />
           ) : organizations.length === 0 ? (
@@ -1116,6 +1138,416 @@ function WorkItemSearch({ organizations }: { organizations: Organization[] }) {
       ) : null}
 
       <WorkItemsGrid loading={mutation.isPending} results={results} searched={mutation.isSuccess} />
+    </div>
+  );
+}
+
+type WorkItemQueryView = {
+  id: string;
+  name: string;
+  projectId: string;
+  wiql: string;
+  limit: number;
+};
+
+function loadWorkItemQueryViews(): WorkItemQueryView[] {
+  const value = window.localStorage.getItem(WI_QUERY_VIEWS_STORAGE_KEY);
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((view): WorkItemQueryView | null => {
+        if (
+          !view ||
+          typeof view.id !== "string" ||
+          typeof view.name !== "string" ||
+          typeof view.projectId !== "string" ||
+          typeof view.wiql !== "string"
+        ) {
+          return null;
+        }
+        const limit = Number(view.limit);
+        return {
+          id: view.id,
+          name: view.name,
+          projectId: view.projectId,
+          wiql: view.wiql,
+          limit: Number.isFinite(limit) ? clamp(limit, 1, 500) : 200,
+        };
+      })
+      .filter((view): view is WorkItemQueryView => view !== null);
+  } catch {
+    return [];
+  }
+}
+
+function newWorkItemViewId(): string {
+  return `wi-view-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function defaultWorkItemWiql(): string {
+  return [
+    "SELECT [System.Id]",
+    "FROM WorkItems",
+    "WHERE [System.TeamProject] = @project",
+    "ORDER BY [System.ChangedDate] DESC",
+  ].join("\n");
+}
+
+function WorkItemViewsPanel({ organizations }: { organizations: Organization[] }) {
+  const queryClient = useQueryClient();
+  const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
+  const [views, setViews] = useState<WorkItemQueryView[]>(() => loadWorkItemQueryViews());
+  const [selectedViewId, setSelectedViewId] = useState<string | null>(views[0]?.id ?? null);
+  const [editingViewId, setEditingViewId] = useState<string | null>(views[0]?.id ?? null);
+  const [draftName, setDraftName] = useState(views[0]?.name ?? "");
+  const [draftProjectId, setDraftProjectId] = useState(views[0]?.projectId ?? "");
+  const [draftWiql, setDraftWiql] = useState(views[0]?.wiql ?? defaultWorkItemWiql());
+  const [draftLimit, setDraftLimit] = useState(String(views[0]?.limit ?? 200));
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const selectedOrganizationId = organizationId || organizations[0]?.id || "";
+  const projectsQuery = useQuery({
+    queryKey: ["wiViewProjects", selectedOrganizationId],
+    queryFn: () => listWorkItemProjects({ organizationId: selectedOrganizationId }),
+    enabled: !!selectedOrganizationId,
+  });
+  const projectOptions = projectsQuery.data ?? [];
+
+  useEffect(() => {
+    window.localStorage.setItem(WI_QUERY_VIEWS_STORAGE_KEY, JSON.stringify(views));
+  }, [views]);
+
+  useEffect(() => {
+    if (!draftProjectId && projectOptions[0]) {
+      setDraftProjectId(projectOptions[0].projectId);
+    }
+  }, [draftProjectId, projectOptions]);
+
+  useEffect(() => {
+    if (selectedViewId && views.some((view) => view.id === selectedViewId)) return;
+    const next = views[0]?.id ?? null;
+    setSelectedViewId(next);
+    if (next) {
+      loadDraft(views[0]);
+    }
+  }, [selectedViewId, views]);
+
+  const viewQueries = useQueries({
+    queries: views.map((view) => ({
+      queryKey: [
+        "workItemQueryView",
+        selectedOrganizationId,
+        view.id,
+        view.projectId,
+        view.wiql,
+        view.limit,
+      ],
+      queryFn: () =>
+        runWorkItemQuery({
+          organizationId: selectedOrganizationId,
+          projectId: view.projectId,
+          wiql: view.wiql,
+          limit: view.limit,
+        }),
+      enabled: !!selectedOrganizationId && !!view.projectId && !!view.wiql.trim(),
+    })),
+  });
+
+  const selectedViewIndex = Math.max(
+    0,
+    views.findIndex((view) => view.id === selectedViewId),
+  );
+  const selectedView = views[selectedViewIndex] ?? null;
+  const selectedQuery = selectedView ? viewQueries[selectedViewIndex] : null;
+  const selectedResults = selectedQuery?.data ?? [];
+
+  function loadDraft(view: WorkItemQueryView) {
+    setEditingViewId(view.id);
+    setDraftName(view.name);
+    setDraftProjectId(view.projectId);
+    setDraftWiql(view.wiql);
+    setDraftLimit(String(view.limit));
+    setFormError(null);
+  }
+
+  function resetDraft() {
+    setEditingViewId(null);
+    setDraftName("");
+    setDraftProjectId(projectOptions[0]?.projectId ?? "");
+    setDraftWiql(defaultWorkItemWiql());
+    setDraftLimit("200");
+    setFormError(null);
+  }
+
+  function saveView(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = draftName.trim();
+    const wiql = draftWiql.trim();
+    const limit = clamp(Number(draftLimit), 1, 500);
+    if (!name) {
+      setFormError("View name is required.");
+      return;
+    }
+    if (!draftProjectId) {
+      setFormError("Project is required.");
+      return;
+    }
+    if (!wiql) {
+      setFormError("WIQL query is required.");
+      return;
+    }
+    if (!Number.isFinite(Number(draftLimit))) {
+      setFormError("Limit must be a number.");
+      return;
+    }
+
+    const nextView: WorkItemQueryView = {
+      id: editingViewId ?? newWorkItemViewId(),
+      name,
+      projectId: draftProjectId,
+      wiql,
+      limit,
+    };
+    setViews((current) =>
+      editingViewId && current.some((view) => view.id === editingViewId)
+        ? current.map((view) => (view.id === editingViewId ? nextView : view))
+        : [...current, nextView],
+    );
+    setSelectedViewId(nextView.id);
+    setEditingViewId(nextView.id);
+    setFormError(null);
+  }
+
+  function deleteSelectedView() {
+    if (!selectedView) return;
+    setViews((current) => current.filter((view) => view.id !== selectedView.id));
+    resetDraft();
+  }
+
+  const refreshViews = () => {
+    void queryClient.invalidateQueries({
+      queryKey: ["workItemQueryView", selectedOrganizationId],
+    });
+  };
+
+  const selectedCount = selectedResults.length;
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-4 xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+        <form className="rounded-md border border-border bg-white p-4" onSubmit={saveView}>
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold">Query View</h2>
+            <button
+              type="button"
+              onClick={resetDraft}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary"
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+              New
+            </button>
+          </div>
+
+          <div className="grid gap-3">
+            {organizations.length > 1 ? (
+              <label className="grid gap-1.5">
+                <span className="text-xs font-medium text-muted-foreground">Organization</span>
+                <select
+                  value={selectedOrganizationId}
+                  onChange={(event) => {
+                    setOrganizationId(event.target.value);
+                    setDraftProjectId("");
+                  }}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {organizations.map((organization) => (
+                    <option key={organization.id} value={organization.id}>
+                      {organization.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+
+            <label className="grid gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">Name</span>
+              <input
+                value={draftName}
+                onChange={(event) => setDraftName(event.target.value)}
+                placeholder="Active bugs"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </label>
+
+            <div className="grid gap-3 sm:grid-cols-[1fr_90px]">
+              <label className="grid gap-1.5">
+                <span className="text-xs font-medium text-muted-foreground">Project</span>
+                <select
+                  value={draftProjectId}
+                  disabled={projectsQuery.isLoading || projectOptions.length === 0}
+                  onChange={(event) => setDraftProjectId(event.target.value)}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+                >
+                  <option value="">Select project</option>
+                  {projectOptions.map((project) => (
+                    <option key={project.projectId} value={project.projectId}>
+                      {project.projectName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="grid gap-1.5">
+                <span className="text-xs font-medium text-muted-foreground">Limit</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={draftLimit}
+                  onChange={(event) => setDraftLimit(event.target.value)}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+              </label>
+            </div>
+
+            <label className="grid gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">WIQL</span>
+              <textarea
+                value={draftWiql}
+                onChange={(event) => setDraftWiql(event.target.value)}
+                rows={8}
+                spellCheck={false}
+                className="min-h-[176px] resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-xs leading-5 outline-none focus:ring-2 focus:ring-ring"
+              />
+            </label>
+
+            {formError ? (
+              <p role="alert" className="text-xs text-destructive">
+                {formError}
+              </p>
+            ) : null}
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="submit"
+                className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                {editingViewId ? "Update View" : "Save View"}
+              </button>
+              <button
+                type="button"
+                disabled={!selectedView}
+                onClick={deleteSelectedView}
+                className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                Delete
+              </button>
+            </div>
+          </div>
+        </form>
+
+        <div className="min-w-0 rounded-md border border-border bg-white">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <div>
+              <h2 className="text-sm font-semibold">Views</h2>
+              <p className="text-xs text-muted-foreground">
+                {views.length === 0 ? "No saved WIQL views" : `${views.length} saved views`}
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={views.length === 0}
+              onClick={refreshViews}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+              Refresh
+            </button>
+          </div>
+
+          {views.length === 0 ? (
+            <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+              Save a WIQL view to start tracking result counts.
+            </div>
+          ) : (
+            <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
+              {views.map((view, index) => {
+                const query = viewQueries[index];
+                const count = query?.data?.length ?? 0;
+                const selected = selectedView?.id === view.id;
+                return (
+                  <button
+                    key={view.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedViewId(view.id);
+                      loadDraft(view);
+                    }}
+                    className={`min-h-[116px] rounded-md border p-3 text-left outline-none transition-colors focus:ring-2 focus:ring-ring ${
+                      selected
+                        ? "border-primary bg-secondary"
+                        : "border-border bg-white hover:bg-muted/60"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="min-w-0 truncate text-sm font-semibold" title={view.name}>
+                        {view.name}
+                      </span>
+                      {query?.isFetching ? (
+                        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" aria-hidden="true" />
+                      ) : null}
+                    </div>
+                    <div className="mt-3 text-3xl font-semibold leading-none">
+                      {query?.isError ? "!" : count}
+                    </div>
+                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                      {query?.isError
+                        ? commandErrorMessage(query.error)
+                        : `${view.limit} max results`}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {selectedView ? (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-base font-semibold">{selectedView.name}</h2>
+              <p className="text-xs text-muted-foreground">
+                {selectedQuery?.isFetching
+                  ? "Loading query results"
+                  : selectedQuery?.isError
+                    ? "Query failed"
+                    : `${selectedCount} result${selectedCount === 1 ? "" : "s"}`}
+              </p>
+            </div>
+            <span className="rounded-md border border-border bg-white px-2 py-1 font-mono text-xs text-muted-foreground">
+              {selectedView.projectId}
+            </span>
+          </div>
+
+          {selectedQuery?.isError ? (
+            <ErrorState message={commandErrorMessage(selectedQuery.error)} />
+          ) : null}
+
+          <WorkItemsGrid
+            loading={!!selectedQuery?.isFetching}
+            results={selectedResults}
+            searched={!!selectedQuery}
+            autoFocus
+            emptyMessage="Select or save a WIQL view to load work items."
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

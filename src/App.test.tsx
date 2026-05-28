@@ -426,6 +426,104 @@ describe("App", () => {
     });
   });
 
+  it("saves a work item view and renders query results with preview", async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_work_item_projects") {
+        return Promise.resolve([
+          {
+            projectId: "project-1",
+            projectName: "Platform",
+          },
+        ]);
+      }
+      if (command === "run_work_item_query") {
+        return Promise.resolve([
+          {
+            organizationId: "contoso",
+            projectId: "project-1",
+            projectName: "Platform",
+            id: 321,
+            title: "Fix view query workflow",
+            workItemType: "Bug",
+            state: "Active",
+            assignedTo: "Test User",
+            changedDate: "2026-05-24T00:00:00Z",
+            webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/321",
+          },
+        ]);
+      }
+      if (command === "get_work_item_preview") {
+        return Promise.resolve({
+          organizationId: "contoso",
+          projectId: "project-1",
+          projectName: "Platform",
+          id: 321,
+          title: "Fix view query workflow",
+          workItemType: "Bug",
+          state: "Active",
+          assignedTo: "Test User",
+          createdBy: "Creator",
+          createdDate: "2026-05-23T00:00:00Z",
+          changedDate: "2026-05-24T00:00:00Z",
+          areaPath: "Platform\\Product",
+          iterationPath: "Platform\\Sprint 24",
+          reason: "Work started",
+          tags: "view; bug",
+          priority: "1",
+          severity: "2 - High",
+          storyPoints: null,
+          remainingWork: null,
+          descriptionHtml: "<p>Fix the saved view workflow.</p>",
+          acceptanceCriteriaHtml: "<ul><li>View results render</li></ul>",
+          webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/321",
+        });
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+    const main = within(await screen.findByRole("main"));
+
+    await screen.findByText("No pull requests assigned to you.");
+    fireEvent.click(screen.getByRole("button", { name: "Views" }));
+    await main.findByText("Query View");
+    await main.findByText("Platform");
+
+    fireEvent.change(main.getByLabelText("Name"), {
+      target: { value: "Active Bugs" },
+    });
+    fireEvent.change(main.getByLabelText("Project"), {
+      target: { value: "project-1" },
+    });
+    fireEvent.change(main.getByLabelText("WIQL"), {
+      target: {
+        value:
+          "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project AND [System.WorkItemType] = 'Bug'",
+      },
+    });
+    fireEvent.click(main.getByRole("button", { name: "Save View" }));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("run_work_item_query", {
+        input: {
+          organizationId: "contoso",
+          projectId: "project-1",
+          wiql: "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project AND [System.WorkItemType] = 'Bug'",
+          limit: 200,
+        },
+      });
+    });
+    expect((await screen.findAllByText("Fix view query workflow")).length).toBeGreaterThan(0);
+    expect(await screen.findByRole("heading", { name: "Work Item Preview" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Active Bugs/ })).toBeTruthy();
+  });
+
   it("searches commits and renders results", async () => {
     invokeMock.mockImplementation((command: string) => {
       if (command === "list_organizations") {

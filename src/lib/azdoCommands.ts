@@ -93,6 +93,15 @@ const workItemSummariesSchema = z.array(workItemSummarySchema);
 
 export type WorkItemSummary = z.infer<typeof workItemSummarySchema>;
 
+const workItemProjectOptionSchema = z.object({
+  projectId: z.string(),
+  projectName: z.string(),
+});
+
+const workItemProjectOptionsSchema = z.array(workItemProjectOptionSchema);
+
+export type WorkItemProjectOption = z.infer<typeof workItemProjectOptionSchema>;
+
 const workItemPreviewSchema = z.object({
   organizationId: z.string(),
   projectId: z.string(),
@@ -211,6 +220,17 @@ export type SearchWorkItemsInput = {
   projectId?: string;
 };
 
+export type RunWorkItemQueryInput = {
+  organizationId?: string;
+  projectId: string;
+  wiql: string;
+  limit?: number;
+};
+
+export type ListWorkItemProjectsInput = {
+  organizationId?: string;
+};
+
 export type ListMyWorkItemsInput = {
   organizationId?: string;
 };
@@ -317,6 +337,20 @@ export async function listMyWorkItems(
   input: ListMyWorkItemsInput,
 ): Promise<WorkItemSummary[]> {
   const result = await invokeCommand("list_my_work_items", { input });
+  return workItemSummariesSchema.parse(result);
+}
+
+export async function listWorkItemProjects(
+  input: ListWorkItemProjectsInput,
+): Promise<WorkItemProjectOption[]> {
+  const result = await invokeCommand("list_work_item_projects", { input });
+  return workItemProjectOptionsSchema.parse(result);
+}
+
+export async function runWorkItemQuery(
+  input: RunWorkItemQueryInput,
+): Promise<WorkItemSummary[]> {
+  const result = await invokeCommand("run_work_item_query", { input });
   return workItemSummariesSchema.parse(result);
 }
 
@@ -441,6 +475,13 @@ async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
     }
     case "list_my_work_items":
       return demoMyWorkItems();
+    case "list_work_item_projects":
+      return demoWorkItemProjects();
+    case "run_work_item_query": {
+      const input = (args as { input?: RunWorkItemQueryInput } | undefined)
+        ?.input;
+      return demoRunWorkItemQuery(input);
+    }
     case "get_work_item_preview": {
       const input = (args as { input?: GetWorkItemPreviewInput } | undefined)
         ?.input;
@@ -821,6 +862,41 @@ function demoMyWorkItems(): WorkItemSummary[] {
       webUrl: "https://dev.azure.com/contoso/Infrastructure/_workitems/edit/51",
     },
   ];
+}
+
+function demoWorkItemProjects(): WorkItemProjectOption[] {
+  const projects = new Map<string, string>();
+  for (const item of [...demoWorkItems(), ...demoMyWorkItems()]) {
+    projects.set(item.projectId, item.projectName);
+  }
+  return [...projects.entries()]
+    .map(([projectId, projectName]) => ({ projectId, projectName }))
+    .sort((a, b) => a.projectName.localeCompare(b.projectName));
+}
+
+function demoRunWorkItemQuery(input?: RunWorkItemQueryInput): WorkItemSummary[] {
+  const wiql = input?.wiql.toLowerCase() ?? "";
+  let results = demoWorkItems({ projectId: input?.projectId });
+
+  const stateMatch = /\[system\.state\]\s*=\s*'([^']+)'/.exec(wiql);
+  if (stateMatch) {
+    const state = stateMatch[1].toLowerCase();
+    results = results.filter((item) => item.state?.toLowerCase() === state);
+  }
+
+  const typeMatch = /\[system\.workitemtype\]\s*=\s*'([^']+)'/.exec(wiql);
+  if (typeMatch) {
+    const workItemType = typeMatch[1].toLowerCase();
+    results = results.filter((item) => item.workItemType?.toLowerCase() === workItemType);
+  }
+
+  const titleMatch = /\[system\.title\]\s+contains\s+'([^']+)'/.exec(wiql);
+  if (titleMatch) {
+    const term = titleMatch[1].toLowerCase();
+    results = results.filter((item) => item.title.toLowerCase().includes(term));
+  }
+
+  return results.slice(0, input?.limit ?? 200);
 }
 
 function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {

@@ -50,6 +50,21 @@ pub struct SearchWorkItemsInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RunWorkItemQueryInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub wiql: String,
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListWorkItemProjectsInput {
+    pub organization_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListMyWorkItemsInput {
     pub organization_id: Option<String>,
 }
@@ -95,6 +110,13 @@ pub struct WorkItemSummary {
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct WorkItemProjectOption {
+    pub project_id: String,
+    pub project_name: String,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkItemPreview {
     pub organization_id: String,
     pub project_id: String,
@@ -118,6 +140,7 @@ pub struct WorkItemPreview {
     pub description_html: Option<String>,
     pub acceptance_criteria_html: Option<String>,
     pub web_url: Option<String>,
+    pub comments: Vec<WorkItemComment>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -187,6 +210,74 @@ impl WorkItemService {
         Ok(cached.into_iter().map(cached_wi_to_summary).collect())
     }
 
+    pub async fn list_projects(
+        &self,
+        input: ListWorkItemProjectsInput,
+    ) -> Result<Vec<WorkItemProjectOption>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let mut projects = client
+            .list_projects()
+            .await?
+            .into_iter()
+            .map(|project| WorkItemProjectOption {
+                project_id: project.id,
+                project_name: project.name,
+            })
+            .collect::<Vec<_>>();
+        projects.sort_by(|a, b| a.project_name.cmp(&b.project_name));
+        Ok(projects)
+    }
+
+    pub async fn run_query(&self, input: RunWorkItemQueryInput) -> Result<Vec<WorkItemSummary>> {
+        let wiql = input.wiql.trim();
+        if wiql.is_empty() {
+            return Err(AppError::InvalidInput("WIQL query is required".to_string()));
+        }
+        if !wiql.to_ascii_lowercase().contains("from workitems") {
+            return Err(AppError::InvalidInput(
+                "WIQL must query FROM WorkItems".to_string(),
+            ));
+        }
+
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = client
+            .list_projects()
+            .await?
+            .into_iter()
+            .find(|project| project.id == input.project_id)
+            .ok_or_else(|| {
+                AppError::InvalidInput(format!("project not found: {}", input.project_id))
+            })?;
+
+        let limit = input.limit.unwrap_or(200).clamp(1, 500);
+        let ids = client
+            .query_work_item_ids(&project.id, wiql)
+            .await?
+            .into_iter()
+            .take(limit)
+            .collect::<Vec<_>>();
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let fields = WORK_ITEM_FIELDS
+            .iter()
+            .map(|field| field.to_string())
+            .collect();
+        let work_items = client
+            .get_work_items_batch(&project.id, ids, fields)
+            .await?;
+
+        Ok(work_items
+            .into_iter()
+            .map(|work_item| {
+                summarize_work_item(&organization, &project.id, &project.name, work_item)
+            })
+            .collect())
+    }
+
     pub async fn preview(&self, input: GetWorkItemPreviewInput) -> Result<WorkItemPreview> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
@@ -202,20 +293,24 @@ impl WorkItemService {
             .iter()
             .map(|field| field.to_string())
             .collect();
-        let work_item = client
-            .get_work_items_batch(&project.id, vec![input.work_item_id], fields)
-            .await?
+        let (work_items_result, comments_result) = tokio::join!(
+            client.get_work_items_batch(&project.id, vec![input.work_item_id], fields),
+            client.list_work_item_comments(&project.id, input.work_item_id, 50),
+        );
+        let work_item = work_items_result?
             .into_iter()
             .next()
             .ok_or_else(|| {
                 AppError::InvalidInput(format!("work item not found: {}", input.work_item_id))
             })?;
+        let comments = comments_result.unwrap_or_default();
 
         Ok(summarize_work_item_preview(
             &organization,
             &project.id,
             &project.name,
             work_item,
+            comments,
         ))
     }
 

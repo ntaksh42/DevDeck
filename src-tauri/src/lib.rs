@@ -31,9 +31,10 @@ use sync::SyncRunner;
 use tauri::{Manager, State};
 use tokio::sync::mpsc;
 use work_items::{
-    AddWorkItemCommentInput, GetWorkItemPreviewInput, ListMyWorkItemsInput, MentionCandidate,
+    AddWorkItemCommentInput, GetWorkItemPreviewInput, ListMyWorkItemsInput,
+    ListWorkItemProjectsInput, MentionCandidate, RunWorkItemQueryInput,
     SearchWorkItemMentionsInput, SearchWorkItemsInput, WorkItemComment, WorkItemPreview,
-    WorkItemService, WorkItemSummary,
+    WorkItemProjectOption, WorkItemService, WorkItemSummary,
 };
 
 #[derive(Clone)]
@@ -138,6 +139,24 @@ fn list_my_work_items(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn list_work_item_projects(
+    input: ListWorkItemProjectsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<WorkItemProjectOption>> {
+    state.work_items.list_projects(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn run_work_item_query(
+    input: RunWorkItemQueryInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<WorkItemSummary>> {
+    state.work_items.run_query(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn get_work_item_preview(
     input: GetWorkItemPreviewInput,
     state: State<'_, AppState>,
@@ -222,6 +241,8 @@ pub fn run() {
             list_my_review_pull_requests,
             search_work_items,
             list_my_work_items,
+            list_work_item_projects,
+            run_work_item_query,
             get_work_item_preview,
             search_work_item_mentions,
             add_work_item_comment,
