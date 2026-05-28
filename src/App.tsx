@@ -2018,59 +2018,54 @@ function WorkItemPreviewPanel({
 
   return (
     <aside className="flex min-h-[340px] flex-col overflow-hidden rounded-md border border-border bg-white">
-      <div className="flex items-center justify-between border-b border-border px-3 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold">Work Item Preview</h2>
-            <p className="truncate text-xs text-muted-foreground">
-              {selectedItem ? `#${selectedItem.id}` : "No work item selected"}
-            </p>
-          </div>
-        </div>
-        {previewLoading ? (
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
-        ) : null}
-      </div>
-
       {!selectedItem ? (
         <PreviewEmptyState message="Select a work item." />
-      ) : previewError ? (
-        <div className="m-3 rounded-md border border-destructive/30 bg-red-50 p-3 text-sm text-destructive">
-          {previewError}
-        </div>
-      ) : preview ? (
+      ) : (
         <>
           <div className="border-b border-border px-3 py-2">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <span className="rounded-md bg-secondary px-2 py-1 font-mono text-xs font-medium">
-                #{preview.id}
-              </span>
-              {preview.workItemType ? (
-                <span className="rounded-md border border-border px-2 py-1 text-xs font-medium">
-                  {preview.workItemType}
+            <div className="flex min-w-0 items-center justify-between gap-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                  #{selectedItem.id}
                 </span>
-              ) : null}
-              {preview.state ? (
-                <span className="rounded-md border border-border px-2 py-1 text-xs font-medium">
-                  {preview.state}
+                {(preview?.workItemType ?? selectedItem.workItemType) ? (
+                  <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-xs font-medium">
+                    {preview?.workItemType ?? selectedItem.workItemType}
+                  </span>
+                ) : null}
+                {(preview?.state ?? selectedItem.state) ? (
+                  <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-xs font-medium">
+                    {preview?.state ?? selectedItem.state}
+                  </span>
+                ) : null}
+                <span
+                  className="min-w-0 truncate text-xs text-muted-foreground"
+                  title={selectedItem.projectName}
+                >
+                  · {selectedItem.projectName}
                 </span>
+              </div>
+              {previewLoading ? (
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" aria-hidden="true" />
               ) : null}
             </div>
-            <p className="mt-2 line-clamp-2 text-sm font-medium" title={preview.title}>
-              {preview.title}
-            </p>
-            <p className="mt-1 truncate text-xs text-muted-foreground" title={preview.projectName}>
-              {preview.projectName}
+            <p className="mt-1 line-clamp-2 text-sm font-semibold" title={selectedItem.title}>
+              {selectedItem.title}
             </p>
           </div>
-          <iframe
-            title={`Work item preview for #${preview.id}`}
-            sandbox=""
-            srcDoc={workItemPreviewDocument(preview)}
-            className="min-h-0 flex-1 bg-white"
-          />
-          <div className="border-t border-border p-3">
+          {previewError ? (
+            <div className="m-3 rounded-md border border-destructive/30 bg-red-50 p-3 text-sm text-destructive">
+              {previewError}
+            </div>
+          ) : preview ? (
+            <>
+              <iframe
+                title={`Work item preview for #${preview.id}`}
+                sandbox=""
+                srcDoc={workItemPreviewDocument(preview)}
+                className="min-h-0 flex-1 bg-white"
+              />
+              <div className="border-t border-border p-3">
             <div className="mb-3 flex items-center justify-between gap-2">
               <button
                 type="button"
@@ -2154,10 +2149,12 @@ function WorkItemPreviewPanel({
                 Post comment
               </button>
             </form>
-          </div>
+              </div>
+            </>
+          ) : (
+            <PreviewEmptyState message={`Loading work item #${selectedItem.id}.`} />
+          )}
         </>
-      ) : (
-        <PreviewEmptyState message={`Loading work item #${selectedItem.id}.`} />
       )}
     </aside>
   );
@@ -2200,10 +2197,10 @@ function workItemPreviewDocument(preview: WorkItemPreview): string {
     <meta charset="utf-8" />
     <style>
       :root { color-scheme: light; }
-      body { color: #111827; font: 13px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 16px; }
-      h1 { font-size: 18px; line-height: 1.25; margin: 0 0 12px; }
-      h2 { border-top: 1px solid #e5e7eb; font-size: 13px; margin: 18px 0 8px; padding-top: 14px; text-transform: uppercase; color: #4b5563; }
-      dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; margin: 0; }
+      body { color: #111827; font: 13px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 10px 12px; }
+      h2 { border-top: 1px solid #e5e7eb; font-size: 13px; margin: 10px 0 4px; padding-top: 8px; text-transform: uppercase; color: #4b5563; }
+      h2:first-of-type { border-top: none; margin-top: 0; padding-top: 0; }
+      dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; margin: 0; }
       .field { min-width: 0; }
       dt { color: #6b7280; font-size: 11px; margin-bottom: 2px; }
       dd { margin: 0; overflow-wrap: anywhere; }
@@ -2220,13 +2217,12 @@ function workItemPreviewDocument(preview: WorkItemPreview): string {
     </style>
   </head>
   <body>
-    <h1>${escapeHtml(preview.title)}</h1>
     <dl>${fieldRows}</dl>
     <h2>Description</h2>
     <div class="html-field">${preview.descriptionHtml || '<p class="empty">No description.</p>'}</div>
     <h2>Acceptance Criteria</h2>
     <div class="html-field">${preview.acceptanceCriteriaHtml || '<p class="empty">No acceptance criteria.</p>'}</div>
-    <h2>Comments</h2>
+    <h2>Comments (${preview.comments.length})</h2>
     <div class="comments">${commentsHtml || '<p class="empty">No comments.</p>'}</div>
   </body>
 </html>`;

@@ -395,9 +395,9 @@ describe("App", () => {
         },
       });
     });
-    expect(await screen.findByText("Fix save workflow")).toBeTruthy();
+    expect((await screen.findAllByText("Fix save workflow")).length).toBeGreaterThan(0);
     expect(screen.getByText("Test User")).toBeTruthy();
-    expect(await screen.findByRole("heading", { name: "Work Item Preview" })).toBeTruthy();
+    expect(await screen.findByLabelText("Comment")).toBeTruthy();
     expect(screen.getAllByTitle("Fix save workflow").length).toBeGreaterThan(1);
 
     const commentBox = screen.getByLabelText("Comment");
@@ -520,7 +520,7 @@ describe("App", () => {
       });
     });
     expect((await screen.findAllByText("Fix view query workflow")).length).toBeGreaterThan(0);
-    expect(await screen.findByRole("heading", { name: "Work Item Preview" })).toBeTruthy();
+    expect(await screen.findByLabelText("Comment")).toBeTruthy();
     expect(screen.getByRole("button", { name: /Active Bugs/ })).toBeTruthy();
   });
 

@@ -10,6 +10,7 @@ All notable changes to AzDoDeck are documented here.
 
 ### Changed
 - Compact Work Item filter bar with denser grid columns
+- Work Item preview panel collapsed to single compact header: badges and title shown immediately on row selection; iframe drops duplicate h1, tighter CSS spacing, comment count in section heading
 
 ## [0.1.0] — 2026-05-28
 
