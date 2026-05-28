@@ -379,7 +379,7 @@ describe("App", () => {
 
     await screen.findByText("No pull requests assigned to you.");
     fireEvent.keyDown(window, { key: "4", altKey: true });
-    fireEvent.change(await main.findByPlaceholderText("title, type, assignee…"), {
+    fireEvent.change(await main.findByPlaceholderText("Search work items…"), {
       target: { value: "save" },
     });
     fireEvent.click(main.getByRole("button", { name: "Search" }));
