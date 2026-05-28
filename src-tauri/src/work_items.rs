@@ -297,12 +297,9 @@ impl WorkItemService {
             client.get_work_items_batch(&project.id, vec![input.work_item_id], fields),
             client.list_work_item_comments(&project.id, input.work_item_id, 50),
         );
-        let work_item = work_items_result?
-            .into_iter()
-            .next()
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("work item not found: {}", input.work_item_id))
-            })?;
+        let work_item = work_items_result?.into_iter().next().ok_or_else(|| {
+            AppError::InvalidInput(format!("work item not found: {}", input.work_item_id))
+        })?;
         let comments = comments_result.unwrap_or_default();
 
         Ok(summarize_work_item_preview(
@@ -455,6 +452,7 @@ fn summarize_work_item_preview(
     project_id: &str,
     project_name: &str,
     work_item: WorkItem,
+    comments: Vec<AzdoWorkItemComment>,
 ) -> WorkItemPreview {
     let web_url = work_item_web_url(organization, project_name, work_item.id, &work_item);
 
@@ -484,6 +482,10 @@ fn summarize_work_item_preview(
             "Microsoft.VSTS.Common.AcceptanceCriteria",
         ),
         web_url,
+        comments: comments
+            .into_iter()
+            .map(summarize_work_item_comment)
+            .collect(),
     }
 }
 
@@ -757,6 +759,7 @@ mod tests {
                 fields,
                 links: None,
             },
+            vec![],
         );
 
         assert_eq!(preview.title, "Preview WIT");

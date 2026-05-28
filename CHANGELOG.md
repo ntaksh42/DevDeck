@@ -6,6 +6,7 @@ All notable changes to AzDoDeck are documented here.
 
 ### Added
 - Help menu with embedded HTML user guide (sidebar button)
+- Work Item preview panel shows posted comments
 
 ## [0.1.0] — 2026-05-28
 

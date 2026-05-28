@@ -102,6 +102,16 @@ const workItemProjectOptionsSchema = z.array(workItemProjectOptionSchema);
 
 export type WorkItemProjectOption = z.infer<typeof workItemProjectOptionSchema>;
 
+const workItemCommentSchema = z.object({
+  id: z.number(),
+  text: z.string().nullable(),
+  renderedText: z.string().nullable(),
+  createdBy: z.string().nullable(),
+  createdDate: z.string().nullable(),
+});
+
+export type WorkItemComment = z.infer<typeof workItemCommentSchema>;
+
 const workItemPreviewSchema = z.object({
   organizationId: z.string(),
   projectId: z.string(),
@@ -125,6 +135,7 @@ const workItemPreviewSchema = z.object({
   descriptionHtml: z.string().nullable(),
   acceptanceCriteriaHtml: z.string().nullable(),
   webUrl: z.string().nullable(),
+  comments: z.array(workItemCommentSchema).default([]),
 });
 
 export type WorkItemPreview = z.infer<typeof workItemPreviewSchema>;
@@ -138,16 +149,6 @@ const mentionCandidateSchema = z.object({
 const mentionCandidatesSchema = z.array(mentionCandidateSchema);
 
 export type MentionCandidate = z.infer<typeof mentionCandidateSchema>;
-
-const workItemCommentSchema = z.object({
-  id: z.number(),
-  text: z.string().nullable(),
-  renderedText: z.string().nullable(),
-  createdBy: z.string().nullable(),
-  createdDate: z.string().nullable(),
-});
-
-export type WorkItemComment = z.infer<typeof workItemCommentSchema>;
 
 const commitSummarySchema = z.object({
   organizationId: z.string(),
@@ -932,6 +933,22 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
     acceptanceCriteriaHtml:
       "<ul><li>一覧で選択した Work Item と preview が同期する</li><li>HTML field は sandbox 内で表示する</li></ul>",
     webUrl: summary.webUrl,
+    comments: [
+      {
+        id: 2,
+        text: "LGTM — shipped this in the last sprint, no blockers.",
+        renderedText: "<p>LGTM — shipped this in the last sprint, no blockers.</p>",
+        createdBy: "Alice Johnson",
+        createdDate: "2026-05-27T14:00:00Z",
+      },
+      {
+        id: 1,
+        text: "Needs AC review before moving to Active.",
+        renderedText: "<p>Needs AC review before moving to Active.</p>",
+        createdBy: "Demo User",
+        createdDate: "2026-05-26T09:00:00Z",
+      },
+    ],
   };
 }
 

@@ -2205,6 +2205,15 @@ function workItemPreviewDocument(preview: WorkItemPreview): string {
     )
     .join("");
 
+  const commentsHtml = preview.comments
+    .map((c) => {
+      const author = escapeHtml(c.createdBy ?? "Unknown");
+      const date = c.createdDate ? escapeHtml(formatDate(c.createdDate)) : "";
+      const body = c.renderedText || `<p>${escapeHtml(c.text ?? "")}</p>`;
+      return `<div class="comment"><div class="comment-meta"><span class="comment-author">${author}</span>${date ? `<span class="comment-date">${date}</span>` : ""}</div><div class="html-field comment-body">${body}</div></div>`;
+    })
+    .join("");
+
   return `<!doctype html>
 <html>
   <head>
@@ -2222,6 +2231,12 @@ function workItemPreviewDocument(preview: WorkItemPreview): string {
       .html-field p { margin: 0 0 8px; }
       .html-field ul, .html-field ol { margin: 0 0 8px 20px; padding: 0; }
       .empty { color: #6b7280; }
+      .comment { border-top: 1px solid #f3f4f6; padding: 10px 0 2px; }
+      .comment:first-child { border-top: none; }
+      .comment-meta { display: flex; gap: 8px; align-items: baseline; margin-bottom: 4px; }
+      .comment-author { font-weight: 600; font-size: 12px; }
+      .comment-date { color: #6b7280; font-size: 11px; }
+      .comment-body p { margin: 0 0 4px; }
     </style>
   </head>
   <body>
@@ -2231,6 +2246,8 @@ function workItemPreviewDocument(preview: WorkItemPreview): string {
     <div class="html-field">${preview.descriptionHtml || '<p class="empty">No description.</p>'}</div>
     <h2>Acceptance Criteria</h2>
     <div class="html-field">${preview.acceptanceCriteriaHtml || '<p class="empty">No acceptance criteria.</p>'}</div>
+    <h2>Comments</h2>
+    <div class="comments">${commentsHtml || '<p class="empty">No comments.</p>'}</div>
   </body>
 </html>`;
 }

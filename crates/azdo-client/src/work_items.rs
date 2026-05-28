@@ -74,6 +74,13 @@ pub struct CommentIdentityRef {
     pub unique_name: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemCommentsList {
+    #[serde(default)]
+    pub comments: Vec<WorkItemComment>,
+}
+
 impl AdoClient {
     pub async fn query_work_item_ids(&self, project_id: &str, wiql: &str) -> Result<Vec<i64>> {
         let path = format!("{project_id}/_apis/wit/wiql");
@@ -129,6 +136,27 @@ impl AdoClient {
             },
         )
         .await
+    }
+
+    pub async fn list_work_item_comments(
+        &self,
+        project_id: &str,
+        work_item_id: i64,
+        top: u32,
+    ) -> Result<Vec<WorkItemComment>> {
+        let path = format!("{project_id}/_apis/wit/workItems/{work_item_id}/comments");
+        let top_str = top.to_string();
+        let response: WorkItemCommentsList = self
+            .get_json(
+                &path,
+                &[
+                    ("api-version", "7.1-preview.4"),
+                    ("$top", &top_str),
+                    ("order", "desc"),
+                ],
+            )
+            .await?;
+        Ok(response.comments)
     }
 }
 
@@ -238,6 +266,55 @@ mod tests {
         assert_eq!(
             comment.created_by.unwrap().display_name.as_deref(),
             Some("Me")
+        );
+    }
+
+    #[tokio::test]
+    async fn list_work_item_comments_returns_comments() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/wit/workItems/10/comments"))
+            .and(query_param("api-version", "7.1-preview.4"))
+            .and(query_param("$top", "50"))
+            .and(query_param("order", "desc"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "totalCount": 2,
+                "count": 2,
+                "comments": [
+                    {
+                        "id": 2,
+                        "text": "Second comment",
+                        "renderedText": "<p>Second comment</p>",
+                        "createdBy": { "displayName": "Bob" },
+                        "createdDate": "2026-05-28T10:00:00Z"
+                    },
+                    {
+                        "id": 1,
+                        "text": "First comment",
+                        "renderedText": "<p>First comment</p>",
+                        "createdBy": { "displayName": "Alice" },
+                        "createdDate": "2026-05-27T10:00:00Z"
+                    }
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let comments = test_client(&server)
+            .await
+            .list_work_item_comments("project-1", 10, 50)
+            .await
+            .unwrap();
+        assert_eq!(comments.len(), 2);
+        assert_eq!(comments[0].id, 2);
+        assert_eq!(
+            comments[0]
+                .created_by
+                .as_ref()
+                .unwrap()
+                .display_name
+                .as_deref(),
+            Some("Bob")
         );
     }
 }
