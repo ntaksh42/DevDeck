@@ -13,6 +13,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  BookOpen,
   Building2,
   ChevronDown,
   ChevronUp,
@@ -172,6 +173,7 @@ function beginHorizontalResize(
 function AppShell() {
   const [view, setView] = useState<View>("myReviews");
   const [helpOpen, setHelpOpen] = useState(false);
+  const [userGuideOpen, setUserGuideOpen] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(() =>
     storedNumber(SIDEBAR_WIDTH_STORAGE_KEY, DEFAULT_SIDEBAR_WIDTH, 220, 420),
   );
@@ -216,6 +218,7 @@ function AppShell() {
 
       if (event.key === "Escape" && !event.altKey) {
         setHelpOpen(false);
+        setUserGuideOpen(false);
         return;
       }
 
@@ -314,7 +317,13 @@ function AppShell() {
               onClick={() => setView("commits")}
             />
           </div>
-          <div className="mt-auto border-t border-border pt-3">
+          <div className="mt-auto space-y-1 border-t border-border pt-3">
+            <NavButton
+              active={false}
+              icon={<BookOpen className="h-4 w-4" aria-hidden="true" />}
+              label="Help"
+              onClick={() => setUserGuideOpen(true)}
+            />
             <NavButton
               active={activeView === "settings"}
               icon={<Settings className="h-4 w-4" aria-hidden="true" />}
@@ -406,6 +415,7 @@ function AppShell() {
         </section>
       </main>
       {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
+      {userGuideOpen && <UserGuideDialog onClose={() => setUserGuideOpen(false)} />}
     </div>
   );
 }
@@ -2881,6 +2891,43 @@ function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Show this help</span><kbd className={kbd}>?</kbd></div>
           <div className={row}><span>Close dialog</span><kbd className={kbd}>Esc</kbd></div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function UserGuideDialog({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      onClick={onClose}
+      aria-hidden="false"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="user-guide-title"
+        className="relative h-[90vh] w-[90vw] max-w-5xl overflow-hidden rounded-lg border border-border bg-white shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex h-12 items-center justify-between border-b border-border bg-white px-4">
+          <h2 id="user-guide-title" className="flex items-center gap-2 text-sm font-semibold">
+            <BookOpen className="h-4 w-4" aria-hidden="true" />
+            AzDoDeck ユーザーガイド
+          </h2>
+          <button
+            aria-label="Close user guide"
+            className="rounded p-1 text-muted-foreground hover:bg-muted"
+            onClick={onClose}
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+        <iframe
+          src="./help.html"
+          title="AzDoDeck ユーザーガイド"
+          className="h-[calc(100%-3rem)] w-full border-0"
+        />
       </div>
     </div>
   );

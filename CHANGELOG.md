@@ -4,6 +4,9 @@ All notable changes to AzDoDeck are documented here.
 
 ## [Unreleased]
 
+### Added
+- Help menu with embedded HTML user guide (sidebar button)
+
 ## [0.1.0] — 2026-05-28
 
 ### Added
