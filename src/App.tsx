@@ -97,7 +97,7 @@ const DEFAULT_PR_SEARCH_COLUMN_WIDTHS = [72, 88, 340, 180, 140, 80, 180];
 const PR_SEARCH_COLUMN_MIN_WIDTHS = [56, 70, 200, 120, 100, 64, 120];
 const PR_SEARCH_COLUMN_MAX_WIDTHS = [120, 140, 720, 360, 280, 120, 360];
 const PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:prSearchGridColumnWidths";
-const DEFAULT_WI_COLUMN_WIDTHS = [72, 120, 100, 340, 160, 140, 100];
+const DEFAULT_WI_COLUMN_WIDTHS = [60, 100, 80, 280, 130, 120, 90];
 const WI_COLUMN_MIN_WIDTHS = [56, 90, 80, 200, 120, 100, 80];
 const WI_COLUMN_MAX_WIDTHS = [120, 200, 180, 720, 300, 260, 160];
 const WI_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:wiSearchGridColumnWidths";
@@ -1031,102 +1031,82 @@ function WorkItemSearch({ organizations }: { organizations: Organization[] }) {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-md border border-border bg-white">
-        <form className="grid gap-4 p-5" onSubmit={onSubmit}>
-          {organizations.length > 1 && (
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Organization</span>
-              <select
-                value={organizationId}
-                onChange={(e) => { setOrganizationId(e.target.value); setProjectId(""); }}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-              >
-                {organizations.map((o) => (
-                  <option key={o.id} value={o.id}>{o.name}</option>
-                ))}
-              </select>
-            </label>
+    <div className="space-y-4">
+      <form className="flex flex-wrap items-center gap-2" onSubmit={onSubmit}>
+        {organizations.length > 1 && (
+          <select
+            value={organizationId}
+            onChange={(e) => { setOrganizationId(e.target.value); setProjectId(""); }}
+            aria-label="Organization"
+            className="h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+          >
+            {organizations.map((o) => (
+              <option key={o.id} value={o.id}>{o.name}</option>
+            ))}
+          </select>
+        )}
+        <div className="flex h-8 min-w-[180px] flex-1 items-center rounded-md border border-input bg-background px-2 focus-within:ring-2 focus-within:ring-ring">
+          <Search className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search work items…"
+            aria-label="Search"
+            autoFocus
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+          />
+        </div>
+        <select
+          value={projectId}
+          onChange={(event) => setProjectId(event.target.value)}
+          disabled={repositoriesQuery.isLoading}
+          aria-label="Project"
+          className="h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+        >
+          <option value="">All projects</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+        <select
+          value={state}
+          onChange={(event) => setState(event.target.value)}
+          aria-label="State"
+          className="h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+        >
+          <option value="all">All states</option>
+          <option value="New">New</option>
+          <option value="Active">Active</option>
+          <option value="Resolved">Resolved</option>
+          <option value="Closed">Closed</option>
+        </select>
+        <select
+          value={workItemType}
+          onChange={(event) => setWorkItemType(event.target.value)}
+          aria-label="Type"
+          className="h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+        >
+          <option value="">Any type</option>
+          <option value="Bug">Bug</option>
+          <option value="Epic">Epic</option>
+          <option value="Feature">Feature</option>
+          <option value="Task">Task</option>
+          <option value="User Story">User Story</option>
+          <option value="Test Case">Test Case</option>
+        </select>
+        <button
+          type="submit"
+          disabled={mutation.isPending || !organizationId}
+          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {mutation.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+          ) : (
+            <Search className="h-3.5 w-3.5" aria-hidden="true" />
           )}
-          <div className="grid gap-4 lg:grid-cols-[1fr_160px_150px_160px_auto]">
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Search</span>
-              <div className="flex h-10 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
-                <Search className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="title, type, assignee…"
-                  autoFocus
-                  className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-                />
-              </div>
-            </label>
-
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Project</span>
-              <select
-                value={projectId}
-                onChange={(event) => setProjectId(event.target.value)}
-                disabled={repositoriesQuery.isLoading}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
-              >
-                <option value="">All projects</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </label>
-
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">State</span>
-              <select
-                value={state}
-                onChange={(event) => setState(event.target.value)}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="all">All</option>
-                <option value="New">New</option>
-                <option value="Active">Active</option>
-                <option value="Resolved">Resolved</option>
-                <option value="Closed">Closed</option>
-              </select>
-            </label>
-
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Type</span>
-              <select
-                value={workItemType}
-                onChange={(event) => setWorkItemType(event.target.value)}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="">Any</option>
-                <option value="Bug">Bug</option>
-                <option value="Epic">Epic</option>
-                <option value="Feature">Feature</option>
-                <option value="Task">Task</option>
-                <option value="User Story">User Story</option>
-                <option value="Test Case">Test Case</option>
-              </select>
-            </label>
-
-            <div className="flex items-end">
-              <button
-                type="submit"
-                disabled={mutation.isPending || !organizationId}
-                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
-              >
-                {mutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <Search className="h-4 w-4" aria-hidden="true" />
-                )}
-                Search
-              </button>
-            </div>
-          </div>
-        </form>
-      </div>
+          Search
+        </button>
+      </form>
 
       <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <Info className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
@@ -1850,7 +1830,7 @@ function WorkItemsGrid({
       >
         <div className="min-w-0 overflow-hidden rounded-md border border-border bg-white">
           <div className="overflow-x-auto">
-            <div className="min-w-[860px]">
+            <div className="min-w-[760px]">
               <div
                 role="row"
                 className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
@@ -2330,55 +2310,47 @@ function MyWorkItemsPanel({ organizations }: { organizations: Organization[] }) 
   }, [allResults, filter]);
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-md border border-border bg-white">
-        <div className="grid gap-4 p-5 lg:grid-cols-[1fr_180px_auto]">
-          <label className="grid gap-2">
-            <span className="text-sm font-medium">Filter</span>
-            <div className="flex h-10 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
-              <Search className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
-              <input
-                value={filter}
-                onChange={(event) => setFilter(event.target.value)}
-                placeholder="Filter by title"
-                className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-              />
-            </div>
-          </label>
-
-          {organizations.length > 1 ? (
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Organization</span>
-              <select
-                value={selectedOrganizationId}
-                onChange={(event) => setOrganizationId(event.target.value)}
-                className="h-10 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-              >
-                {organizations.map((organization) => (
-                  <option key={organization.id} value={organization.id}>
-                    {organization.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-
-          <div className="flex items-end">
-            <button
-              type="button"
-              disabled={query.isFetching}
-              onClick={() => query.refetch()}
-              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
-            >
-              {query.isFetching ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <RefreshCw className="h-4 w-4" aria-hidden="true" />
-              )}
-              Refresh
-            </button>
-          </div>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex h-8 min-w-[180px] flex-1 items-center rounded-md border border-input bg-background px-2 focus-within:ring-2 focus-within:ring-ring">
+          <Search className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <input
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+            placeholder="Filter work items…"
+            aria-label="Filter"
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+          />
         </div>
+
+        {organizations.length > 1 ? (
+          <select
+            value={selectedOrganizationId}
+            onChange={(event) => setOrganizationId(event.target.value)}
+            aria-label="Organization"
+            className="h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+          >
+            {organizations.map((organization) => (
+              <option key={organization.id} value={organization.id}>
+                {organization.name}
+              </option>
+            ))}
+          </select>
+        ) : null}
+
+        <button
+          type="button"
+          disabled={query.isFetching}
+          onClick={() => query.refetch()}
+          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {query.isFetching ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+          ) : (
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+          )}
+          Refresh
+        </button>
       </div>
 
       {query.isError ? (

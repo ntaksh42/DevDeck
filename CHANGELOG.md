@@ -8,6 +8,9 @@ All notable changes to AzDoDeck are documented here.
 - Help menu with embedded HTML user guide (sidebar button)
 - Work Item preview panel shows posted comments
 
+### Changed
+- Compact Work Item filter bar with denser grid columns
+
 ## [0.1.0] — 2026-05-28
 
 ### Added
