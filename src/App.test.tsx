@@ -131,7 +131,7 @@ describe("App", () => {
     expect(await screen.findByText("Organizations")).toBeTruthy();
     expect(screen.getByText("https://dev.azure.com/contoso")).toBeTruthy();
     expect(screen.getByText("PAT")).toBeTruthy();
-    expect(screen.getByText("Test User")).toBeTruthy();
+    expect(screen.getAllByText("Test User").length).toBeGreaterThan(0);
     expect(await screen.findByDisplayValue("C:\\reports")).toBeTruthy();
   });
 
@@ -396,9 +396,10 @@ describe("App", () => {
       });
     });
     expect((await screen.findAllByText("Fix save workflow")).length).toBeGreaterThan(0);
-    expect(screen.getByText("Test User")).toBeTruthy();
+    expect(screen.getAllByText("Test User").length).toBeGreaterThan(0);
     expect(await screen.findByLabelText("Comment")).toBeTruthy();
     expect(screen.getAllByTitle("Fix save workflow").length).toBeGreaterThan(1);
+    expect(document.querySelector("iframe")).toBeNull();
 
     const commentBox = screen.getByLabelText("Comment");
     fireEvent.change(commentBox, { target: { value: "@Cre" } });

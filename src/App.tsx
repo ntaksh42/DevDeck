@@ -2017,7 +2017,7 @@ function WorkItemPreviewPanel({
   }
 
   return (
-    <aside className="flex min-h-[340px] flex-col overflow-hidden rounded-md border border-border bg-white">
+    <aside className="flex flex-col overflow-hidden rounded-md border border-border bg-white">
       {!selectedItem ? (
         <PreviewEmptyState message="Select a work item." />
       ) : (
@@ -2059,96 +2059,91 @@ function WorkItemPreviewPanel({
             </div>
           ) : preview ? (
             <>
-              <iframe
-                title={`Work item preview for #${preview.id}`}
-                sandbox=""
-                srcDoc={workItemPreviewDocument(preview)}
-                className="min-h-0 flex-1 bg-white"
-              />
-              <div className="border-t border-border p-3">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <button
-                type="button"
-                disabled={!preview.webUrl}
-                onClick={() => {
-                  if (preview.webUrl) openExternalUrl(preview.webUrl);
-                }}
-                className="inline-flex h-8 items-center rounded-md border border-border px-3 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Open in Azure DevOps
-              </button>
-              {commentMutation.isSuccess ? (
-                <span className="text-xs text-muted-foreground">Comment posted</span>
-              ) : null}
-            </div>
-            <form className="space-y-2" onSubmit={submitComment}>
-              <label className="grid gap-1.5">
-                <span className="text-xs font-medium text-muted-foreground">Comment</span>
-                <div className="relative">
-                  <textarea
-                    ref={textareaRef}
-                    value={commentText}
-                    onChange={(event) => {
-                      setCommentText(event.target.value);
-                      updateMentionState(
-                        event.target.value,
-                        event.target.selectionStart,
-                      );
+              <WorkItemPreviewDetails preview={preview} />
+              <div className="border-t border-border p-2">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    disabled={!preview.webUrl}
+                    onClick={() => {
+                      if (preview.webUrl) openExternalUrl(preview.webUrl);
                     }}
-                    onClick={(event) => {
-                      updateMentionState(
-                        event.currentTarget.value,
-                        event.currentTarget.selectionStart,
-                      );
-                    }}
-                    onKeyDown={handleCommentKeyDown}
-                    rows={3}
-                    className="min-h-[64px] w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-                  />
-                  {showMentionOptions ? (
-                    <div className="absolute bottom-full left-0 z-20 mb-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-white py-1 shadow-lg">
-                      {mentionOptions.map((candidate, index) => (
-                        <button
-                          key={candidate.id}
-                          type="button"
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => applyMention(candidate)}
-                          className={`flex w-full min-w-0 flex-col px-3 py-2 text-left text-sm ${
-                            index === activeMentionIndex ? "bg-secondary" : "hover:bg-muted"
-                          }`}
-                        >
-                          <span className="truncate font-medium">
-                            {candidate.displayName}
-                          </span>
-                          {candidate.uniqueName ? (
-                            <span className="truncate text-xs text-muted-foreground">
-                              {candidate.uniqueName}
-                            </span>
-                          ) : null}
-                        </button>
-                      ))}
-                    </div>
+                    className="inline-flex h-7 items-center rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Open in Azure DevOps
+                  </button>
+                  {commentMutation.isSuccess ? (
+                    <span className="text-xs text-muted-foreground">Comment posted</span>
                   ) : null}
                 </div>
-              </label>
-              {commentMutation.isError ? (
-                <p className="text-xs text-destructive">
-                  {commandErrorMessage(commentMutation.error)}
-                </p>
-              ) : null}
-              <button
-                type="submit"
-                disabled={!commentText.trim() || commentMutation.isPending}
-                className="inline-flex h-8 items-center gap-2 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {commentMutation.isPending ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                ) : (
-                  <Send className="h-3.5 w-3.5" aria-hidden="true" />
-                )}
-                Post comment
-              </button>
-            </form>
+                <form className="space-y-1.5" onSubmit={submitComment}>
+                  <label className="grid gap-1">
+                    <span className="text-xs font-medium text-muted-foreground">Comment</span>
+                    <div className="relative">
+                      <textarea
+                        ref={textareaRef}
+                        value={commentText}
+                        onChange={(event) => {
+                          setCommentText(event.target.value);
+                          updateMentionState(
+                            event.target.value,
+                            event.target.selectionStart,
+                          );
+                        }}
+                        onClick={(event) => {
+                          updateMentionState(
+                            event.currentTarget.value,
+                            event.currentTarget.selectionStart,
+                          );
+                        }}
+                        onKeyDown={handleCommentKeyDown}
+                        rows={2}
+                        className="min-h-[48px] w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                      />
+                      {showMentionOptions ? (
+                        <div className="absolute bottom-full left-0 z-20 mb-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-white py-1 shadow-lg">
+                          {mentionOptions.map((candidate, index) => (
+                            <button
+                              key={candidate.id}
+                              type="button"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => applyMention(candidate)}
+                              className={`flex w-full min-w-0 flex-col px-3 py-2 text-left text-sm ${
+                                index === activeMentionIndex ? "bg-secondary" : "hover:bg-muted"
+                              }`}
+                            >
+                              <span className="truncate font-medium">
+                                {candidate.displayName}
+                              </span>
+                              {candidate.uniqueName ? (
+                                <span className="truncate text-xs text-muted-foreground">
+                                  {candidate.uniqueName}
+                                </span>
+                              ) : null}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </label>
+                  {commentMutation.isError ? (
+                    <p className="text-xs text-destructive">
+                      {commandErrorMessage(commentMutation.error)}
+                    </p>
+                  ) : null}
+                  <button
+                    type="submit"
+                    disabled={!commentText.trim() || commentMutation.isPending}
+                    className="inline-flex h-7 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {commentMutation.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Send className="h-3.5 w-3.5" aria-hidden="true" />
+                    )}
+                    Post comment
+                  </button>
+                </form>
               </div>
             </>
           ) : (
@@ -2160,7 +2155,7 @@ function WorkItemPreviewPanel({
   );
 }
 
-function workItemPreviewDocument(preview: WorkItemPreview): string {
+function WorkItemPreviewDetails({ preview }: { preview: WorkItemPreview }) {
   const fields = [
     ["Assigned to", preview.assignedTo],
     ["Created by", preview.createdBy],
@@ -2175,66 +2170,85 @@ function workItemPreviewDocument(preview: WorkItemPreview): string {
     ["Remaining work", preview.remainingWork],
     ["Tags", preview.tags],
   ].filter(([, value]) => !!value);
-  const fieldRows = fields
-    .map(
-      ([label, value]) =>
-        `<div class="field"><dt>${escapeHtml(label ?? "")}</dt><dd>${escapeHtml(value ?? "")}</dd></div>`,
-    )
-    .join("");
 
-  const commentsHtml = preview.comments
-    .map((c) => {
-      const author = escapeHtml(c.createdBy ?? "Unknown");
-      const date = c.createdDate ? escapeHtml(formatDate(c.createdDate)) : "";
-      const body = c.renderedText || `<p>${escapeHtml(c.text ?? "")}</p>`;
-      return `<div class="comment"><div class="comment-meta"><span class="comment-author">${author}</span>${date ? `<span class="comment-date">${date}</span>` : ""}</div><div class="html-field comment-body">${body}</div></div>`;
-    })
-    .join("");
+  const description = htmlToText(preview.descriptionHtml);
+  const acceptanceCriteria = htmlToText(preview.acceptanceCriteriaHtml);
+  const visibleComments = preview.comments.slice(0, 2);
 
-  return `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <style>
-      :root { color-scheme: light; }
-      body { color: #111827; font: 13px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 10px 12px; }
-      h2 { border-top: 1px solid #e5e7eb; font-size: 13px; margin: 10px 0 4px; padding-top: 8px; text-transform: uppercase; color: #4b5563; }
-      h2:first-of-type { border-top: none; margin-top: 0; padding-top: 0; }
-      dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; margin: 0; }
-      .field { min-width: 0; }
-      dt { color: #6b7280; font-size: 11px; margin-bottom: 2px; }
-      dd { margin: 0; overflow-wrap: anywhere; }
-      .html-field { overflow-wrap: anywhere; }
-      .html-field p { margin: 0 0 8px; }
-      .html-field ul, .html-field ol { margin: 0 0 8px 20px; padding: 0; }
-      .empty { color: #6b7280; }
-      .comment { border-top: 1px solid #f3f4f6; padding: 10px 0 2px; }
-      .comment:first-child { border-top: none; }
-      .comment-meta { display: flex; gap: 8px; align-items: baseline; margin-bottom: 4px; }
-      .comment-author { font-weight: 600; font-size: 12px; }
-      .comment-date { color: #6b7280; font-size: 11px; }
-      .comment-body p { margin: 0 0 4px; }
-    </style>
-  </head>
-  <body>
-    <dl>${fieldRows}</dl>
-    <h2>Description</h2>
-    <div class="html-field">${preview.descriptionHtml || '<p class="empty">No description.</p>'}</div>
-    <h2>Acceptance Criteria</h2>
-    <div class="html-field">${preview.acceptanceCriteriaHtml || '<p class="empty">No acceptance criteria.</p>'}</div>
-    <h2>Comments (${preview.comments.length})</h2>
-    <div class="comments">${commentsHtml || '<p class="empty">No comments.</p>'}</div>
-  </body>
-</html>`;
+  return (
+    <div className="px-3 py-2 text-xs">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+        {fields.map(([label, value]) => (
+          <div key={label ?? ""} className="min-w-0">
+            <dt className="truncate text-muted-foreground">{label}</dt>
+            <dd className="truncate text-foreground" title={value ?? undefined}>
+              {value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      {(description || acceptanceCriteria) && (
+        <div className="mt-2 grid gap-2 border-t border-border pt-2">
+          {description ? (
+            <section>
+              <h3 className="mb-1 text-[11px] font-semibold uppercase text-muted-foreground">
+                Description
+              </h3>
+              <p className="line-clamp-3 text-xs leading-5 text-foreground">{description}</p>
+            </section>
+          ) : null}
+          {acceptanceCriteria ? (
+            <section>
+              <h3 className="mb-1 text-[11px] font-semibold uppercase text-muted-foreground">
+                Acceptance Criteria
+              </h3>
+              <p className="line-clamp-3 text-xs leading-5 text-foreground">
+                {acceptanceCriteria}
+              </p>
+            </section>
+          ) : null}
+        </div>
+      )}
+
+      {visibleComments.length > 0 ? (
+        <div className="mt-2 border-t border-border pt-2">
+          <h3 className="mb-1 text-[11px] font-semibold uppercase text-muted-foreground">
+            Comments ({preview.comments.length})
+          </h3>
+          <div className="space-y-1.5">
+            {visibleComments.map((comment) => (
+              <div key={comment.id} className="min-w-0">
+                <div className="flex min-w-0 items-baseline gap-2">
+                  <span className="truncate font-medium">
+                    {comment.createdBy ?? "Unknown"}
+                  </span>
+                  {comment.createdDate ? (
+                    <span className="shrink-0 text-[11px] text-muted-foreground">
+                      {formatRelativeDate(comment.createdDate)}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="line-clamp-2 text-xs leading-5 text-foreground">
+                  {htmlToText(comment.renderedText) || comment.text || "No text"}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+function htmlToText(value: string | null | undefined): string {
+  if (!value) return "";
+  if (typeof document === "undefined") {
+    return value.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  }
+  const element = document.createElement("div");
+  element.innerHTML = value;
+  return (element.textContent ?? "").replace(/\s+/g, " ").trim();
 }
 
 type SelectedMention = {
