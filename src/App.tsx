@@ -2107,21 +2107,6 @@ function WorkItemPreviewPanel({
             <>
               <WorkItemPreviewDetails preview={preview} />
               <div className="border-t border-border p-2">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    disabled={!preview.webUrl}
-                    onClick={() => {
-                      if (preview.webUrl) openExternalUrl(preview.webUrl);
-                    }}
-                    className="inline-flex h-7 items-center rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Open in Azure DevOps
-                  </button>
-                  {commentMutation.isSuccess ? (
-                    <span className="text-xs text-muted-foreground">Comment posted</span>
-                  ) : null}
-                </div>
                 <form className="space-y-1.5" onSubmit={submitComment}>
                   <label className="grid gap-1">
                     <span className="text-xs font-medium text-muted-foreground">Comment</span>
@@ -2177,18 +2162,23 @@ function WorkItemPreviewPanel({
                       {commandErrorMessage(commentMutation.error)}
                     </p>
                   ) : null}
-                  <button
-                    type="submit"
-                    disabled={!commentText.trim() || commentMutation.isPending}
-                    className="inline-flex h-7 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {commentMutation.isPending ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                    ) : (
-                      <Send className="h-3.5 w-3.5" aria-hidden="true" />
-                    )}
-                    Post comment
-                  </button>
+                  <div className="flex items-center justify-between gap-2">
+                    <button
+                      type="submit"
+                      disabled={!commentText.trim() || commentMutation.isPending}
+                      className="inline-flex h-7 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {commentMutation.isPending ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Send className="h-3.5 w-3.5" aria-hidden="true" />
+                      )}
+                      Post comment
+                    </button>
+                    {commentMutation.isSuccess ? (
+                      <span className="text-xs text-muted-foreground">Comment posted</span>
+                    ) : null}
+                  </div>
                 </form>
               </div>
             </>
