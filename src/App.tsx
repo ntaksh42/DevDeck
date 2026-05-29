@@ -1955,6 +1955,7 @@ function WorkItemPreviewPanel({
   const [mentionStart, setMentionStart] = useState<number | null>(null);
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const queryClient = useQueryClient();
   const recentMentionOptions = useMemo(
     () => recentWorkItemMentionCandidates(preview),
     [preview],
@@ -1999,6 +2000,7 @@ function WorkItemPreviewPanel({
       setMentionQuery("");
       setMentionStart(null);
       setActiveMentionIndex(0);
+      void queryClient.invalidateQueries({ queryKey: ["workItemPreview"] });
     },
   });
 
