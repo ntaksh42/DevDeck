@@ -261,7 +261,7 @@ function AppShell() {
   }, [organizations.length]);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="h-screen overflow-hidden bg-background text-foreground">
       <aside
         className="fixed inset-y-0 left-0 hidden flex-col border-r border-border bg-white lg:flex"
         style={{ width: sidebarWidth }}
@@ -361,7 +361,10 @@ function AppShell() {
         />
       </aside>
 
-      <main className="lg:pl-[var(--sidebar-width)]" style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}>
+      <main
+        className="flex h-screen flex-col lg:pl-[var(--sidebar-width)]"
+        style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
+      >
         <header className="flex h-12 items-center justify-between border-b border-border bg-white px-4 lg:px-5">
           <div>
             <h1 className="text-lg font-semibold">
@@ -412,7 +415,13 @@ function AppShell() {
           )}
         </header>
 
-        <section className="w-full px-3 py-4 lg:px-5">
+        <section
+          className={`flex min-h-0 flex-1 flex-col px-3 py-3 lg:px-5 ${
+            activeView === "settings" || organizations.length === 0
+              ? "overflow-auto"
+              : "overflow-hidden"
+          }`}
+        >
           {organizationsQuery.isLoading ? (
             <LoadingState />
           ) : organizationsQuery.isError ? (
@@ -1031,8 +1040,8 @@ function WorkItemSearch({ organizations }: { organizations: Organization[] }) {
   }
 
   return (
-    <div className="space-y-4">
-      <form className="flex flex-wrap items-center gap-2" onSubmit={onSubmit}>
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <form className="flex shrink-0 flex-wrap items-center gap-2" onSubmit={onSubmit}>
         {organizations.length > 1 && (
           <select
             value={organizationId}
@@ -1108,7 +1117,7 @@ function WorkItemSearch({ organizations }: { organizations: Organization[] }) {
         </button>
       </form>
 
-      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <p className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
         <Info className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
         Showing locally synced data — refreshed automatically every 5 minutes.
       </p>
@@ -1315,8 +1324,8 @@ function WorkItemViewsPanel({ organizations }: { organizations: Organization[] }
   const selectedCount = selectedResults.length;
 
   return (
-    <div className="space-y-3">
-      <div className="grid gap-3 xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="grid shrink-0 gap-3 xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
         <form className="rounded-md border border-border bg-white p-3" onSubmit={saveView}>
           <div className="mb-4 flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold">Query View</h2>
@@ -1430,7 +1439,7 @@ function WorkItemViewsPanel({ organizations }: { organizations: Organization[] }
           </div>
         </form>
 
-        <div className="min-w-0 rounded-md border border-border bg-white">
+        <div className="min-w-0 overflow-hidden rounded-md border border-border bg-white">
           <div className="flex items-center justify-between border-b border-border px-3 py-2">
             <div>
               <h2 className="text-sm font-semibold">Views</h2>
@@ -1454,7 +1463,7 @@ function WorkItemViewsPanel({ organizations }: { organizations: Organization[] }
               Save a WIQL view to start tracking result counts.
             </div>
           ) : (
-            <div className="grid gap-3 p-3 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid max-h-[220px] gap-3 overflow-auto p-3 md:grid-cols-2 xl:grid-cols-3">
               {views.map((view, index) => {
                 const query = viewQueries[index];
                 const count = query?.data?.length ?? 0;
@@ -1498,7 +1507,7 @@ function WorkItemViewsPanel({ organizations }: { organizations: Organization[] }
       </div>
 
       {selectedView ? (
-        <div className="space-y-3">
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="text-base font-semibold">{selectedView.name}</h2>
@@ -1818,18 +1827,23 @@ function WorkItemsGrid({
   const wiColTemplate = columnWidths.map((w) => `${w}px`).join(" ");
 
   return (
-    <div ref={containerRef} className="outline-none" tabIndex={-1} onKeyDown={handleKeyDown}>
+    <div
+      ref={containerRef}
+      className="flex min-h-0 flex-1 flex-col outline-none"
+      tabIndex={-1}
+      onKeyDown={handleKeyDown}
+    >
       {copyToast && (
         <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1 text-xs text-background shadow-lg">
           {copyToast}
         </div>
       )}
       <div
-        className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_8px_minmax(300px,var(--work-item-preview-width))]"
+        className="grid min-h-0 flex-1 items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_8px_minmax(300px,var(--work-item-preview-width))]"
         style={{ "--work-item-preview-width": `${previewWidth}px` } as CSSProperties}
       >
-        <div className="min-w-0 overflow-hidden rounded-md border border-border bg-white">
-          <div className="overflow-x-auto">
+        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-white">
+          <div className="min-h-0 flex-1 overflow-auto">
             <div className="min-w-[760px]">
               <div
                 role="row"
@@ -2049,7 +2063,7 @@ function WorkItemPreviewPanel({
   }
 
   return (
-    <aside className="flex flex-col overflow-hidden rounded-md border border-border bg-white">
+    <aside className="flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-white">
       {!selectedItem ? (
         <PreviewEmptyState message="Select a work item." />
       ) : (
@@ -2208,7 +2222,7 @@ function WorkItemPreviewDetails({ preview }: { preview: WorkItemPreview }) {
   const visibleComments = preview.comments.slice(0, 2);
 
   return (
-    <div className="px-3 py-2 text-xs">
+    <div className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5">
         {fields.map(([label, value]) => (
           <div key={label ?? ""} className="min-w-0">
@@ -2455,8 +2469,8 @@ function MyWorkItemsPanel({ organizations }: { organizations: Organization[] }) 
   }, [allResults, filter]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         <div className="flex h-8 min-w-[180px] flex-1 items-center rounded-md border border-input bg-background px-2 focus-within:ring-2 focus-within:ring-ring">
           <Search className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
           <input
