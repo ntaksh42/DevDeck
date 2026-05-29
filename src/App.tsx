@@ -2068,19 +2068,19 @@ function WorkItemPreviewPanel({
         <PreviewEmptyState message="Select a work item." />
       ) : (
         <>
-          <div className="border-b border-border px-3 py-2">
+          <div className="border-b border-border px-2.5 py-1.5">
             <div className="flex min-w-0 items-center justify-between gap-2">
-              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+              <div className="flex min-w-0 flex-wrap items-center gap-1">
                 <span className="shrink-0 font-mono text-xs text-muted-foreground">
                   #{selectedItem.id}
                 </span>
                 {(preview?.workItemType ?? selectedItem.workItemType) ? (
-                  <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-xs font-medium">
+                  <span className="shrink-0 rounded border border-border px-1 py-0.5 text-[11px] font-medium leading-none">
                     {preview?.workItemType ?? selectedItem.workItemType}
                   </span>
                 ) : null}
                 {(preview?.state ?? selectedItem.state) ? (
-                  <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-xs font-medium">
+                  <span className="shrink-0 rounded border border-border px-1 py-0.5 text-[11px] font-medium leading-none">
                     {preview?.state ?? selectedItem.state}
                   </span>
                 ) : null}
@@ -2095,7 +2095,7 @@ function WorkItemPreviewPanel({
                 <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" aria-hidden="true" />
               ) : null}
             </div>
-            <p className="mt-1 line-clamp-2 text-sm font-semibold" title={selectedItem.title}>
+            <p className="mt-0.5 line-clamp-2 text-[13px] font-semibold leading-5" title={selectedItem.title}>
               {selectedItem.title}
             </p>
           </div>
@@ -2193,8 +2193,8 @@ function WorkItemPreviewPanel({
 
 function WorkItemPreviewDetails({ preview }: { preview: WorkItemPreview }) {
   const fields = [
-    ["Assigned to", preview.assignedTo],
-    ["Created by", preview.createdBy],
+    ["Assigned", preview.assignedTo],
+    ["Author", preview.createdBy],
     ["Created", preview.createdDate ? formatDate(preview.createdDate) : null],
     ["Changed", preview.changedDate ? formatDate(preview.changedDate) : null],
     ["Area", preview.areaPath],
@@ -2212,12 +2212,15 @@ function WorkItemPreviewDetails({ preview }: { preview: WorkItemPreview }) {
   const visibleComments = preview.comments.slice(0, 2);
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto px-3 py-2 text-xs">
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+    <div className="min-h-0 flex-1 overflow-auto px-2.5 py-1.5 text-xs">
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-1">
         {fields.map(([label, value]) => (
-          <div key={label ?? ""} className="min-w-0">
-            <dt className="truncate text-muted-foreground">{label}</dt>
-            <dd className="truncate text-foreground" title={value ?? undefined}>
+          <div
+            key={label ?? ""}
+            className="grid min-w-0 grid-cols-[58px_minmax(0,1fr)] items-baseline gap-1"
+          >
+            <dt className="truncate text-[11px] leading-4 text-muted-foreground">{label}</dt>
+            <dd className="truncate leading-4 text-foreground" title={value ?? undefined}>
               {value}
             </dd>
           </div>
@@ -2225,21 +2228,21 @@ function WorkItemPreviewDetails({ preview }: { preview: WorkItemPreview }) {
       </dl>
 
       {(description || acceptanceCriteria) && (
-        <div className="mt-2 grid gap-2 border-t border-border pt-2">
+        <div className="mt-1.5 grid gap-1.5 border-t border-border pt-1.5">
           {description ? (
             <section>
-              <h3 className="mb-1 text-[11px] font-semibold uppercase text-muted-foreground">
+              <h3 className="mb-0.5 text-[11px] font-semibold uppercase text-muted-foreground">
                 Description
               </h3>
-              <p className="line-clamp-3 text-xs leading-5 text-foreground">{description}</p>
+              <p className="line-clamp-3 text-xs leading-4 text-foreground">{description}</p>
             </section>
           ) : null}
           {acceptanceCriteria ? (
             <section>
-              <h3 className="mb-1 text-[11px] font-semibold uppercase text-muted-foreground">
+              <h3 className="mb-0.5 text-[11px] font-semibold uppercase text-muted-foreground">
                 Acceptance Criteria
               </h3>
-              <p className="line-clamp-3 text-xs leading-5 text-foreground">
+              <p className="line-clamp-3 text-xs leading-4 text-foreground">
                 {acceptanceCriteria}
               </p>
             </section>
@@ -2248,11 +2251,11 @@ function WorkItemPreviewDetails({ preview }: { preview: WorkItemPreview }) {
       )}
 
       {visibleComments.length > 0 ? (
-        <div className="mt-2 border-t border-border pt-2">
-          <h3 className="mb-1 text-[11px] font-semibold uppercase text-muted-foreground">
+        <div className="mt-1.5 border-t border-border pt-1.5">
+          <h3 className="mb-0.5 text-[11px] font-semibold uppercase text-muted-foreground">
             Comments ({preview.comments.length})
           </h3>
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             {visibleComments.map((comment) => (
               <div key={comment.id} className="min-w-0">
                 <div className="flex min-w-0 items-baseline gap-2">
@@ -2265,7 +2268,7 @@ function WorkItemPreviewDetails({ preview }: { preview: WorkItemPreview }) {
                     </span>
                   ) : null}
                 </div>
-                <p className="line-clamp-2 text-xs leading-5 text-foreground">
+                <p className="line-clamp-2 text-xs leading-4 text-foreground">
                   {htmlToText(comment.renderedText) || comment.text || "No text"}
                 </p>
               </div>
