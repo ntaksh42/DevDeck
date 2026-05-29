@@ -3072,7 +3072,7 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
   return (
     <div
       ref={containerRef}
-      className="space-y-2 outline-none"
+      className="flex min-h-0 flex-1 flex-col gap-2 outline-none"
       tabIndex={-1}
       onKeyDown={handleKeyDown}
     >
@@ -3086,7 +3086,7 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
         </div>
       )}
       {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-white px-3 py-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-md border border-border bg-white px-3 py-2">
         {organizations.length > 1 && (
           <select
             value={organizationId}
@@ -3180,12 +3180,12 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
       </div>
 
       <div
-        className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_8px_minmax(280px,var(--review-preview-width))]"
+        className="grid min-h-0 flex-1 items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_8px_minmax(280px,var(--review-preview-width))]"
         style={{ "--review-preview-width": `${previewWidth}px` } as CSSProperties}
       >
         {/* Grid */}
-        <div className="min-w-0 overflow-hidden rounded-md border border-border bg-white">
-          <div className="overflow-x-auto">
+        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-white">
+          <div className="min-h-0 flex-1 overflow-auto">
             <div className="min-w-[980px]">
               {/* Column headers */}
               <div
@@ -3290,7 +3290,7 @@ function ReviewResultPreviewPanel({
   const hasFolder = !!settings?.reviewResultFolderPath;
 
   return (
-    <aside className="flex min-h-[340px] flex-col overflow-hidden rounded-md border border-border bg-white">
+    <aside className="flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-white">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
