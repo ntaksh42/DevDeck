@@ -243,6 +243,14 @@ function AppShell() {
         return;
       }
 
+      if (event.key === "s" || event.key === "S") {
+        event.preventDefault();
+        if (organizations.length > 0 && !syncMutation.isPending) {
+          syncMutation.mutate();
+        }
+        return;
+      }
+
       const nextViewByKey: Record<string, View> =
         organizations.length === 0
           ? { "6": "settings" }
@@ -253,6 +261,7 @@ function AppShell() {
               "4": "workItems",
               "5": "commits",
               "6": "settings",
+              "7": "workItemViews",
             };
       const nextView = nextViewByKey[event.key];
       if (!nextView) {
@@ -328,6 +337,7 @@ function AppShell() {
                 active={activeView === "workItemViews"}
                 disabled={organizations.length === 0}
                 label="Views"
+                shortcut="Alt+7"
                 onClick={() => setView("workItemViews")}
               />
             </NavSection>
@@ -410,6 +420,7 @@ function AppShell() {
               type="button"
               disabled={syncMutation.isPending}
               onClick={() => syncMutation.mutate()}
+              aria-keyshortcuts="Alt+S"
               className="flex items-center gap-1.5 rounded-md border border-border bg-white px-3 py-1 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
               title="今すぐ同期"
             >
@@ -1204,6 +1215,8 @@ function WorkItemViewsPanel({ organizations }: { organizations: Organization[] }
   const [draftWiql, setDraftWiql] = useState(views[0]?.wiql ?? defaultWorkItemWiql());
   const [draftLimit, setDraftLimit] = useState(String(views[0]?.limit ?? 200));
   const [formError, setFormError] = useState<string | null>(null);
+  const viewButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const viewFormRef = useRef<HTMLFormElement | null>(null);
 
   const selectedOrganizationId = organizationId || organizations[0]?.id || "";
   const projectsQuery = useQuery({
@@ -1325,6 +1338,41 @@ function WorkItemViewsPanel({ organizations }: { organizations: Organization[] }
     resetDraft();
   }
 
+  function selectViewAt(index: number) {
+    const nextIndex = clamp(index, 0, views.length - 1);
+    const view = views[nextIndex];
+    if (!view) return;
+    setSelectedViewId(view.id);
+    loadDraft(view);
+    viewButtonRefs.current[nextIndex]?.focus();
+  }
+
+  function handleViewListKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (isEditableTarget(event.target) || views.length === 0) return;
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      event.preventDefault();
+      selectViewAt(selectedViewIndex + 1);
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      event.preventDefault();
+      selectViewAt(selectedViewIndex - 1);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      selectViewAt(0);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      selectViewAt(views.length - 1);
+    } else if (event.key === "Delete") {
+      event.preventDefault();
+      deleteSelectedView();
+    } else if (event.key === "n" || event.key === "N") {
+      event.preventDefault();
+      resetDraft();
+    } else if (event.key === "r" || event.key === "R") {
+      event.preventDefault();
+      refreshViews();
+    }
+  }
+
   const refreshViews = () => {
     void queryClient.invalidateQueries({
       queryKey: ["workItemQueryView", selectedOrganizationId],
@@ -1336,11 +1384,22 @@ function WorkItemViewsPanel({ organizations }: { organizations: Organization[] }
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="grid shrink-0 gap-3 xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
-        <form className="rounded-md border border-border bg-white p-3" onSubmit={saveView}>
+        <form
+          ref={viewFormRef}
+          className="rounded-md border border-border bg-white p-3"
+          onSubmit={saveView}
+          onKeyDown={(event) => {
+            if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+              event.preventDefault();
+              viewFormRef.current?.requestSubmit();
+            }
+          }}
+        >
           <div className="mb-4 flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold">Query View</h2>
             <button
               type="button"
+              aria-keyshortcuts="N"
               onClick={resetDraft}
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary"
             >
@@ -1473,7 +1532,12 @@ function WorkItemViewsPanel({ organizations }: { organizations: Organization[] }
               Save a WIQL view to start tracking result counts.
             </div>
           ) : (
-            <div className="grid max-h-[220px] gap-3 overflow-auto p-3 md:grid-cols-2 xl:grid-cols-3">
+            <div
+              role="listbox"
+              aria-label="Saved work item views"
+              className="grid max-h-[220px] gap-3 overflow-auto p-3 md:grid-cols-2 xl:grid-cols-3"
+              onKeyDown={handleViewListKeyDown}
+            >
               {views.map((view, index) => {
                 const query = viewQueries[index];
                 const count = query?.data?.length ?? 0;
@@ -1481,7 +1545,13 @@ function WorkItemViewsPanel({ organizations }: { organizations: Organization[] }
                 return (
                   <button
                     key={view.id}
+                    ref={(element) => {
+                      viewButtonRefs.current[index] = element;
+                    }}
                     type="button"
+                    role="option"
+                    aria-selected={selected}
+                    aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Home End Delete N R"
                     onClick={() => {
                       setSelectedViewId(view.id);
                       loadDraft(view);
@@ -1754,6 +1824,9 @@ function WorkItemsGrid({
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [bulkAssignQuery, setBulkAssignQuery] = useState("");
   const [bulkToast, setBulkToast] = useState<string | null>(null);
+  const [focusCommentRequest, setFocusCommentRequest] = useState(0);
+  const [openAssigneeRequest, setOpenAssigneeRequest] = useState(0);
+  const [openStateRequest, setOpenStateRequest] = useState(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
   const queryClient = useQueryClient();
@@ -2001,6 +2074,28 @@ function WorkItemsGrid({
         const key = `${item.organizationId}:${item.projectId}:${item.id}`;
         handleCheckboxChange(selectedIndex, !checkedIds.has(key), false);
       }
+    } else if (e.key === "m" || e.key === "M") {
+      e.preventDefault();
+      setFocusCommentRequest((value) => value + 1);
+    } else if (e.key === "a" || e.key === "A") {
+      e.preventDefault();
+      if (checkedIds.size > 0) {
+        setBulkStateOpen(false);
+        setBulkAssignOpen(true);
+      } else {
+        setOpenAssigneeRequest((value) => value + 1);
+      }
+    } else if (e.key === "s" || e.key === "S") {
+      e.preventDefault();
+      if (checkedIds.size > 0) {
+        setBulkAssignOpen(false);
+        setBulkStateOpen(true);
+      } else {
+        setOpenStateRequest((value) => value + 1);
+      }
+    } else if (e.key === "Escape") {
+      setBulkAssignOpen(false);
+      setBulkStateOpen(false);
     }
   }
 
@@ -2148,6 +2243,9 @@ function WorkItemsGrid({
         />
 
         <WorkItemPreviewPanel
+          focusCommentRequest={focusCommentRequest}
+          openAssigneeRequest={openAssigneeRequest}
+          openStateRequest={openStateRequest}
           preview={previewQuery.data ?? null}
           previewError={previewQuery.isError ? commandErrorMessage(previewQuery.error) : null}
           previewLoading={previewQuery.isFetching}
@@ -2159,11 +2257,17 @@ function WorkItemsGrid({
 }
 
 function WorkItemPreviewPanel({
+  focusCommentRequest,
+  openAssigneeRequest,
+  openStateRequest,
   preview,
   previewError,
   previewLoading,
   selectedItem,
 }: {
+  focusCommentRequest?: number;
+  openAssigneeRequest?: number;
+  openStateRequest?: number;
   preview: WorkItemPreview | null;
   previewError: string | null;
   previewLoading: boolean;
@@ -2313,6 +2417,24 @@ function WorkItemPreviewPanel({
     setStatePickerOpen(false);
   }, [selectedItem?.id]);
 
+  useEffect(() => {
+    if (!focusCommentRequest || !selectedItem) return;
+    textareaRef.current?.focus();
+  }, [focusCommentRequest, selectedItem]);
+
+  useEffect(() => {
+    if (!openAssigneeRequest || !selectedItem) return;
+    setAssigneeOpen(true);
+    setStatePickerOpen(false);
+    setAssigneeQuery("");
+  }, [openAssigneeRequest, selectedItem]);
+
+  useEffect(() => {
+    if (!openStateRequest || !selectedItem) return;
+    setStatePickerOpen(true);
+    setAssigneeOpen(false);
+  }, [openStateRequest, selectedItem]);
+
   function updateMentionState(text: string, cursor: number) {
     const mention = activeMentionAt(text, cursor);
     setMentionStart(mention?.start ?? null);
@@ -2450,6 +2572,7 @@ function WorkItemPreviewPanel({
                     open={statePickerOpen}
                     options={statesQuery.data ?? []}
                     pending={stateMutation.isPending}
+                    shortcut="S"
                   />
                 }
                 assigneeControl={
@@ -2463,6 +2586,7 @@ function WorkItemPreviewPanel({
                     options={assigneeOptions}
                     pending={assignMutation.isPending}
                     query={assigneeQuery}
+                    shortcut="A"
                   />
                 }
               />
@@ -2488,6 +2612,7 @@ function WorkItemPreviewPanel({
                           );
                         }}
                         onKeyDown={handleCommentKeyDown}
+                        aria-keyshortcuts="M Control+Enter Meta+Enter"
                         rows={2}
                         className="min-h-[48px] w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
                       />
@@ -2789,6 +2914,7 @@ function StatePicker({
   open,
   options,
   pending,
+  shortcut,
 }: {
   current: string | null;
   loading: boolean;
@@ -2797,12 +2923,14 @@ function StatePicker({
   open: boolean;
   options: string[];
   pending: boolean;
+  shortcut?: string;
 }) {
   return (
     <div className="relative min-w-0">
       <button
         type="button"
         aria-label="Change state"
+        aria-keyshortcuts={shortcut}
         disabled={pending}
         onClick={() => onOpenChange(!open)}
         className="max-w-full truncate rounded px-1 text-left text-xs leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
@@ -2820,10 +2948,11 @@ function StatePicker({
           ) : options.length === 0 ? (
             <div className="px-3 py-2 text-xs text-muted-foreground">No states available</div>
           ) : (
-            options.map((state) => (
+            options.map((state, index) => (
               <button
                 key={state}
                 type="button"
+                autoFocus={index === 0}
                 onClick={() => onSelect(state)}
                 onKeyDown={(e) => {
                   if (e.key === "Escape") { e.preventDefault(); onOpenChange(false); }
@@ -2907,10 +3036,11 @@ function BulkActionBar({
                   <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> Loading…
                 </div>
               ) : (
-                stateOptions.map((s) => (
+                stateOptions.map((s, index) => (
                   <button
                     key={s}
                     type="button"
+                    autoFocus={index === 0}
                     onClick={() => { onStateSelect(s); onStateOpenChange(false); }}
                     onKeyDown={(e) => { if (e.key === "Escape") onStateOpenChange(false); }}
                     className="flex w-full items-center px-3 py-1.5 text-left text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -2993,6 +3123,7 @@ function AssigneePicker({
   options,
   pending,
   query,
+  shortcut,
 }: {
   current: string | null;
   loading: boolean;
@@ -3003,12 +3134,14 @@ function AssigneePicker({
   options: MentionCandidate[];
   pending: boolean;
   query: string;
+  shortcut?: string;
 }) {
   return (
     <div className="relative min-w-0">
       <button
         type="button"
         aria-label="Change assignee"
+        aria-keyshortcuts={shortcut}
         disabled={pending}
         onClick={() => onOpenChange(!open)}
         className="max-w-full truncate rounded px-1 text-left text-xs leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
@@ -4230,20 +4363,34 @@ function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>WI Search</span><kbd className={kbd}>Alt+4</kbd></div>
           <div className={row}><span>Commits</span><kbd className={kbd}>Alt+5</kbd></div>
           <div className={row}><span>Settings</span><kbd className={kbd}>Alt+6</kbd></div>
+          <div className={row}><span>Work Item Views</span><kbd className={kbd}>Alt+7</kbd></div>
+          <div className={row}><span>Sync now</span><kbd className={kbd}>Alt+S</kbd></div>
 
           <p className={section}>My Reviews</p>
           <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>
           <div className={row}><span>Filter: All / My / Approved / Rejected</span><kbd className={kbd}>1–4</kbd></div>
           <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>Enter</kbd></div>
-          <div className={row}><span>Toggle details</span><kbd className={kbd}>D</kbd></div>
-          <div className={row}><span>Mark reviewed</span><kbd className={kbd}>R</kbd></div>
+          <div className={row}><span>Show drafts</span><kbd className={kbd}>D</kbd></div>
+          <div className={row}><span>Refresh</span><kbd className={kbd}>R</kbd></div>
           <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
-          <div className={row}><span>Move row</span><kbd className={kbd}>↑ ↓</kbd></div>
+          <div className={row}><span>Move row</span><kbd className={kbd}>↑ ↓ PgUp PgDn Home End</kbd></div>
 
           <p className={section}>PR Search / WI Search / Commits</p>
           <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>Enter</kbd></div>
           <div className={row}><span>Move row</span><kbd className={kbd}>↑ ↓ Home End</kbd></div>
           <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
+
+          <p className={section}>Work Items</p>
+          <div className={row}><span>Select row</span><kbd className={kbd}>Space</kbd></div>
+          <div className={row}><span>Assign selected item</span><kbd className={kbd}>A</kbd></div>
+          <div className={row}><span>Change state</span><kbd className={kbd}>S</kbd></div>
+          <div className={row}><span>Focus comment</span><kbd className={kbd}>M</kbd></div>
+          <div className={row}><span>Post comment</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
+
+          <p className={section}>Work Item Views</p>
+          <div className={row}><span>Move view card</span><kbd className={kbd}>← → ↑ ↓</kbd></div>
+          <div className={row}><span>New / refresh / delete</span><kbd className={kbd}>N / R / Del</kbd></div>
+          <div className={row}><span>Save WIQL view</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
 
           <p className={section}>General</p>
           <div className={row}><span>Show this help</span><kbd className={kbd}>?</kbd></div>
@@ -4639,9 +4786,25 @@ function PullRequestResults({
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (isEditableTarget(e.target)) return;
+    if (results.length === 0) return;
     if (e.key === "ArrowDown") { e.preventDefault(); moveSelection(1); }
     else if (e.key === "ArrowUp") { e.preventDefault(); moveSelection(-1); }
+    else if (e.key === "Home") { e.preventDefault(); setSelectedIndex(0); rowRefs.current[0]?.focus(); }
+    else if (e.key === "End") {
+      e.preventDefault();
+      const last = results.length - 1;
+      setSelectedIndex(last);
+      rowRefs.current[last]?.focus();
+    }
+    else if (e.key === "PageDown") { e.preventDefault(); moveSelection(10); }
+    else if (e.key === "PageUp") { e.preventDefault(); moveSelection(-10); }
+    else if (e.key === "Enter") {
+      e.preventDefault();
+      const pr = results[selectedIndex];
+      if (pr?.webUrl) openExternalUrl(pr.webUrl);
+    }
     else if (e.key === "c" || e.key === "C") {
+      e.preventDefault();
       const pr = results[selectedIndex];
       if (pr?.webUrl) {
         void navigator.clipboard.writeText(pr.webUrl).then(() => {

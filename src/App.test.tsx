@@ -456,7 +456,9 @@ describe("App", () => {
     expect(descriptionFrame?.getAttribute("scrolling")).toBe("no");
     expect(descriptionFrame?.style.maxHeight).toBe("");
 
-    fireEvent.click(screen.getByRole("button", { name: "Change assignee" }));
+    const workItemsGrid = screen.getByRole("grid", { name: "Work items" });
+    fireEvent.keyDown(workItemsGrid, { key: "a" });
+    expect(await screen.findByPlaceholderText("Search assignee...")).toBeTruthy();
     fireEvent.click(await screen.findByRole("button", { name: /creator@example.com/ }));
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("assign_work_item", {
@@ -469,7 +471,9 @@ describe("App", () => {
       });
     });
 
+    fireEvent.keyDown(workItemsGrid, { key: "m" });
     const commentBox = screen.getByLabelText("Comment");
+    expect(document.activeElement).toBe(commentBox);
     fireEvent.change(commentBox, { target: { value: "@" } });
     (commentBox as HTMLTextAreaElement).setSelectionRange(1, 1);
     fireEvent.click(commentBox);
@@ -562,7 +566,7 @@ describe("App", () => {
     const main = within(await screen.findByRole("main"));
 
     await screen.findByText("No pull requests assigned to you.");
-    fireEvent.click(screen.getByRole("button", { name: "Views" }));
+    fireEvent.keyDown(window, { key: "7", altKey: true });
     await main.findByText("Query View");
     await main.findByText("Platform");
 
@@ -578,7 +582,7 @@ describe("App", () => {
           "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project AND [System.WorkItemType] = 'Bug'",
       },
     });
-    fireEvent.click(main.getByRole("button", { name: "Save View" }));
+    fireEvent.keyDown(main.getByLabelText("WIQL"), { key: "Enter", ctrlKey: true });
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("run_work_item_query", {
@@ -592,7 +596,8 @@ describe("App", () => {
     });
     expect((await screen.findAllByText("Fix view query workflow")).length).toBeGreaterThan(0);
     expect(await screen.findByLabelText("Comment")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Active Bugs/ })).toBeTruthy();
+    expect(screen.getByRole("option", { name: /Active Bugs/ })).toBeTruthy();
+    expect(screen.getByRole("listbox", { name: "Saved work item views" })).toBeTruthy();
   });
 
   it("searches commits and renders results", async () => {
