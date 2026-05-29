@@ -31,10 +31,10 @@ use sync::SyncRunner;
 use tauri::{Manager, State};
 use tokio::sync::mpsc;
 use work_items::{
-    AddWorkItemCommentInput, AssignWorkItemInput, GetWorkItemPreviewInput, ListMyWorkItemsInput,
-    ListWorkItemProjectsInput, MentionCandidate, RunWorkItemQueryInput,
-    SearchWorkItemMentionsInput, SearchWorkItemsInput, WorkItemComment, WorkItemPreview,
-    WorkItemProjectOption, WorkItemService, WorkItemSummary,
+    AddWorkItemCommentInput, AssignWorkItemInput, GetWorkItemPreviewInput,
+    ListMyWorkItemsInput, ListWorkItemProjectsInput, ListWorkItemTypeStatesInput, MentionCandidate,
+    RunWorkItemQueryInput, SearchWorkItemMentionsInput, SearchWorkItemsInput, SetWorkItemStateInput,
+    WorkItemComment, WorkItemPreview, WorkItemProjectOption, WorkItemService, WorkItemSummary,
 };
 
 #[derive(Clone)]
@@ -193,6 +193,24 @@ async fn assign_work_item(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn set_work_item_state(
+    input: SetWorkItemStateInput,
+    state: State<'_, AppState>,
+) -> Result<WorkItemPreview> {
+    state.work_items.set_state(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn list_work_item_type_states(
+    input: ListWorkItemTypeStatesInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>> {
+    state.work_items.list_type_states(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 fn search_commits(
     input: SearchCommitsInput,
     state: State<'_, AppState>,
@@ -256,6 +274,8 @@ pub fn run() {
             search_work_item_mentions,
             add_work_item_comment,
             assign_work_item,
+            set_work_item_state,
+            list_work_item_type_states,
             search_commits,
             list_commit_repositories,
             trigger_sync

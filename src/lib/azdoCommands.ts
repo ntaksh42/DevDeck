@@ -263,6 +263,19 @@ export type AssignWorkItemInput = {
   assignedTo: string;
 };
 
+export type SetWorkItemStateInput = {
+  organizationId?: string;
+  projectId: string;
+  workItemId: number;
+  state: string;
+};
+
+export type ListWorkItemTypeStatesInput = {
+  organizationId?: string;
+  projectId: string;
+  workItemType: string;
+};
+
 export type SearchCommitsInput = {
   organizationId?: string;
   query?: string;
@@ -392,6 +405,20 @@ export async function assignWorkItem(
   return workItemPreviewSchema.parse(result);
 }
 
+export async function setWorkItemState(
+  input: SetWorkItemStateInput,
+): Promise<WorkItemPreview> {
+  const result = await invokeCommand("set_work_item_state", { input });
+  return workItemPreviewSchema.parse(result);
+}
+
+export async function listWorkItemTypeStates(
+  input: ListWorkItemTypeStatesInput,
+): Promise<string[]> {
+  const result = await invokeCommand("list_work_item_type_states", { input });
+  return z.array(z.string()).parse(result);
+}
+
 export async function searchCommits(
   input: SearchCommitsInput,
 ): Promise<CommitSummary[]> {
@@ -519,6 +546,16 @@ async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
       const input = (args as { input?: AssignWorkItemInput } | undefined)
         ?.input;
       return demoAssignWorkItem(input);
+    }
+    case "set_work_item_state": {
+      const input = (args as { input?: SetWorkItemStateInput } | undefined)
+        ?.input;
+      return demoSetWorkItemState(input);
+    }
+    case "list_work_item_type_states": {
+      const input = (args as { input?: ListWorkItemTypeStatesInput } | undefined)
+        ?.input;
+      return demoListWorkItemTypeStates(input);
     }
     case "search_commits": {
       const input = (args as { input?: SearchCommitsInput } | undefined)
@@ -999,6 +1036,31 @@ function demoAssignWorkItem(input?: AssignWorkItemInput): WorkItemPreview {
     assignedTo: person?.displayName ?? assignee,
     changedDate: new Date().toISOString(),
   };
+}
+
+function demoSetWorkItemState(input?: SetWorkItemStateInput): WorkItemPreview {
+  const preview = demoWorkItemPreview(
+    input
+      ? { organizationId: input.organizationId, projectId: input.projectId, workItemId: input.workItemId }
+      : undefined,
+  );
+  if (!input?.state?.trim()) return preview;
+  return { ...preview, state: input.state.trim(), changedDate: new Date().toISOString() };
+}
+
+const DEMO_STATES_BY_TYPE: Record<string, string[]> = {
+  Bug: ["New", "Active", "Resolved", "Closed"],
+  Task: ["To Do", "In Progress", "Done"],
+  "User Story": ["New", "Active", "Resolved", "Closed"],
+  Feature: ["New", "In Progress", "Resolved", "Closed"],
+  Epic: ["New", "In Progress", "Resolved", "Closed"],
+  Issue: ["To Do", "Doing", "Done"],
+};
+const DEMO_STATES_FALLBACK = ["New", "Active", "Resolved", "Closed"];
+
+function demoListWorkItemTypeStates(input?: ListWorkItemTypeStatesInput): string[] {
+  if (!input?.workItemType) return DEMO_STATES_FALLBACK;
+  return DEMO_STATES_BY_TYPE[input.workItemType] ?? DEMO_STATES_FALLBACK;
 }
 
 const demoMentionPeople: MentionCandidate[] = [

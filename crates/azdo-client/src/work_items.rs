@@ -88,6 +88,16 @@ pub struct WorkItemCommentsList {
     pub comments: Vec<WorkItemComment>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct WorkItemTypeState {
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct WorkItemTypeStatesList {
+    pub value: Vec<WorkItemTypeState>,
+}
+
 impl AdoClient {
     pub async fn query_work_item_ids(&self, project_id: &str, wiql: &str) -> Result<Vec<i64>> {
         let path = format!("{project_id}/_apis/wit/wiql");
@@ -184,6 +194,39 @@ impl AdoClient {
             }],
         )
         .await
+    }
+
+    pub async fn update_work_item_state(
+        &self,
+        project_id: &str,
+        work_item_id: i64,
+        state: &str,
+    ) -> Result<WorkItem> {
+        let path = format!("{project_id}/_apis/wit/workItems/{work_item_id}");
+        self.patch_json(
+            &path,
+            &[("api-version", "7.1-preview")],
+            "application/json-patch+json",
+            &[WorkItemPatchOperation {
+                op: "add",
+                path: "/fields/System.State",
+                value: state,
+            }],
+        )
+        .await
+    }
+
+    pub async fn list_work_item_type_states(
+        &self,
+        project_id: &str,
+        work_item_type: &str,
+    ) -> Result<Vec<String>> {
+        let encoded_type = work_item_type.replace(' ', "%20");
+        let path = format!("{project_id}/_apis/wit/workitemtypes/{encoded_type}/states");
+        let response: WorkItemTypeStatesList = self
+            .get_json(&path, &[("api-version", "7.1-preview.1")])
+            .await?;
+        Ok(response.value.into_iter().map(|s| s.name).collect())
     }
 }
 
@@ -382,5 +425,64 @@ mod tests {
             item.fields["System.AssignedTo"]["displayName"].as_str(),
             Some("Alice Johnson")
         );
+    }
+
+    #[tokio::test]
+    async fn update_work_item_state_patches_state_field() {
+        let server = MockServer::start().await;
+        Mock::given(method("PATCH"))
+            .and(path("/project-1/_apis/wit/workItems/10"))
+            .and(query_param("api-version", "7.1-preview"))
+            .and(body_json(serde_json::json!([
+                {
+                    "op": "add",
+                    "path": "/fields/System.State",
+                    "value": "Active"
+                }
+            ])))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 10,
+                "fields": {
+                    "System.Title": "Fix bug",
+                    "System.State": "Active"
+                }
+            })))
+            .mount(&server)
+            .await;
+
+        let item = test_client(&server)
+            .await
+            .update_work_item_state("project-1", 10, "Active")
+            .await
+            .unwrap();
+
+        assert_eq!(item.id, 10);
+        assert_eq!(item.fields["System.State"].as_str(), Some("Active"));
+    }
+
+    #[tokio::test]
+    async fn list_work_item_type_states_returns_names() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/wit/workitemtypes/Bug/states"))
+            .and(query_param("api-version", "7.1-preview.1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 3,
+                "value": [
+                    { "name": "New" },
+                    { "name": "Active" },
+                    { "name": "Resolved" }
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let states = test_client(&server)
+            .await
+            .list_work_item_type_states("project-1", "Bug")
+            .await
+            .unwrap();
+
+        assert_eq!(states, vec!["New", "Active", "Resolved"]);
     }
 }

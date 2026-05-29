@@ -102,6 +102,23 @@ pub struct AssignWorkItemInput {
     pub assigned_to: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetWorkItemStateInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_id: i64,
+    pub state: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListWorkItemTypeStatesInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_type: String,
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkItemSummary {
@@ -386,6 +403,48 @@ impl WorkItemService {
             work_item,
             comments,
         ))
+    }
+
+    pub async fn set_state(&self, input: SetWorkItemStateInput) -> Result<WorkItemPreview> {
+        let state = input.state.trim().to_string();
+        if state.is_empty() {
+            return Err(AppError::InvalidInput("state is required".to_string()));
+        }
+
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = client
+            .list_projects()
+            .await?
+            .into_iter()
+            .find(|p| p.id == input.project_id)
+            .ok_or_else(|| {
+                AppError::InvalidInput(format!("project not found: {}", input.project_id))
+            })?;
+
+        let work_item = client
+            .update_work_item_state(&project.id, input.work_item_id, &state)
+            .await?;
+        let comments = client
+            .list_work_item_comments(&project.id, input.work_item_id, 50)
+            .await
+            .unwrap_or_default();
+
+        Ok(summarize_work_item_preview(
+            &organization,
+            &project.id,
+            &project.name,
+            work_item,
+            comments,
+        ))
+    }
+
+    pub async fn list_type_states(&self, input: ListWorkItemTypeStatesInput) -> Result<Vec<String>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        Ok(client
+            .list_work_item_type_states(&input.project_id, &input.work_item_type)
+            .await?)
     }
 
     fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {

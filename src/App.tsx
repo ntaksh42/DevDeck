@@ -40,6 +40,8 @@ import { Route, Routes } from "react-router-dom";
 import {
   addWorkItemComment,
   assignWorkItem,
+  setWorkItemState,
+  listWorkItemTypeStates,
   addAzureCliOrganization,
   addPatOrganization,
   commandErrorMessage,
@@ -1959,6 +1961,24 @@ function WorkItemPreviewPanel({
   const queryClient = useQueryClient();
   const [assigneeOpen, setAssigneeOpen] = useState(false);
   const [assigneeQuery, setAssigneeQuery] = useState("");
+  const [statePickerOpen, setStatePickerOpen] = useState(false);
+
+  const statesQuery = useQuery({
+    queryKey: [
+      "workItemTypeStates",
+      selectedItem?.organizationId,
+      selectedItem?.projectId,
+      preview?.workItemType,
+    ],
+    queryFn: () =>
+      listWorkItemTypeStates({
+        organizationId: selectedItem?.organizationId,
+        projectId: selectedItem?.projectId ?? "",
+        workItemType: preview?.workItemType ?? "",
+      }),
+    enabled: statePickerOpen && !!preview?.workItemType,
+    staleTime: Infinity,
+  });
   const recentMentionOptions = useMemo(
     () => recentWorkItemMentionCandidates(preview),
     [preview],
@@ -2052,9 +2072,28 @@ function WorkItemPreviewPanel({
     },
   });
 
+  const stateMutation = useMutation({
+    mutationFn: setWorkItemState,
+    onSuccess: (updatedPreview) => {
+      setStatePickerOpen(false);
+      queryClient.setQueryData(
+        [
+          "workItemPreview",
+          updatedPreview.organizationId,
+          updatedPreview.projectId,
+          updatedPreview.id,
+        ],
+        updatedPreview,
+      );
+      void queryClient.invalidateQueries({ queryKey: ["myWorkItems"] });
+      void queryClient.invalidateQueries({ queryKey: ["workItemQueryView"] });
+    },
+  });
+
   useEffect(() => {
     setAssigneeOpen(false);
     setAssigneeQuery("");
+    setStatePickerOpen(false);
   }, [selectedItem?.id]);
 
   function updateMentionState(text: string, cursor: number) {
@@ -2177,6 +2216,25 @@ function WorkItemPreviewPanel({
             <>
               <WorkItemPreviewDetails
                 preview={preview}
+                stateControl={
+                  <StatePicker
+                    current={preview.state}
+                    loading={statesQuery.isFetching}
+                    onOpenChange={setStatePickerOpen}
+                    onSelect={(state) => {
+                      if (!selectedItem) return;
+                      stateMutation.mutate({
+                        organizationId: selectedItem.organizationId,
+                        projectId: selectedItem.projectId,
+                        workItemId: selectedItem.id,
+                        state,
+                      });
+                    }}
+                    open={statePickerOpen}
+                    options={statesQuery.data ?? []}
+                    pending={stateMutation.isPending}
+                  />
+                }
                 assigneeControl={
                   <AssigneePicker
                     current={preview.assignedTo}
@@ -2279,9 +2337,11 @@ function WorkItemPreviewPanel({
 function WorkItemPreviewDetails({
   preview,
   assigneeControl,
+  stateControl,
 }: {
   preview: WorkItemPreview;
   assigneeControl: ReactNode;
+  stateControl: ReactNode;
 }) {
   const fields = [
     ["Author", preview.createdBy],
@@ -2304,6 +2364,10 @@ function WorkItemPreviewDetails({
   return (
     <div className="min-h-0 flex-1 overflow-auto px-2.5 py-1.5 text-xs">
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1">
+        <div className="grid min-w-0 grid-cols-[58px_minmax(0,1fr)] items-baseline gap-1">
+          <dt className="truncate text-[11px] leading-4 text-muted-foreground">State</dt>
+          <dd className="min-w-0 leading-4">{stateControl}</dd>
+        </div>
         <div className="grid min-w-0 grid-cols-[58px_minmax(0,1fr)] items-baseline gap-1">
           <dt className="truncate text-[11px] leading-4 text-muted-foreground">Assigned</dt>
           <dd className="min-w-0 leading-4">{assigneeControl}</dd>
@@ -2498,6 +2562,72 @@ function escapeHtml(value: string | null | undefined): string | null {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function StatePicker({
+  current,
+  loading,
+  onOpenChange,
+  onSelect,
+  open,
+  options,
+  pending,
+}: {
+  current: string | null;
+  loading: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSelect: (state: string) => void;
+  open: boolean;
+  options: string[];
+  pending: boolean;
+}) {
+  return (
+    <div className="relative min-w-0">
+      <button
+        type="button"
+        aria-label="Change state"
+        disabled={pending}
+        onClick={() => onOpenChange(!open)}
+        className="max-w-full truncate rounded px-1 text-left text-xs leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+        title={current ?? "—"}
+      >
+        {pending ? "Updating..." : (current ?? "—")}
+      </button>
+      {open ? (
+        <div className="absolute left-0 top-full z-30 mt-1 min-w-[120px] rounded-md border border-border bg-white py-1 shadow-lg">
+          {loading ? (
+            <div className="flex items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+              Loading…
+            </div>
+          ) : options.length === 0 ? (
+            <div className="px-3 py-2 text-xs text-muted-foreground">No states available</div>
+          ) : (
+            options.map((state) => (
+              <button
+                key={state}
+                type="button"
+                onClick={() => onSelect(state)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") { e.preventDefault(); onOpenChange(false); }
+                }}
+                className={`flex w-full items-center gap-1.5 px-3 py-1 text-left text-xs ${
+                  state === current
+                    ? "font-semibold text-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                <span
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${state === current ? "bg-primary" : "bg-transparent"}`}
+                />
+                {state}
+              </button>
+            ))
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function AssigneePicker({
