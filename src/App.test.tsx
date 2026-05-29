@@ -449,7 +449,12 @@ describe("App", () => {
     expect(screen.getAllByText("Test User").length).toBeGreaterThan(0);
     expect(await screen.findByLabelText("Comment")).toBeTruthy();
     expect(screen.getAllByTitle("Fix save workflow").length).toBeGreaterThan(1);
-    expect(document.querySelector('iframe[title="Description"]')).toBeTruthy();
+    const descriptionFrame = document.querySelector(
+      'iframe[title="Description"]',
+    ) as HTMLIFrameElement | null;
+    expect(descriptionFrame).toBeTruthy();
+    expect(descriptionFrame?.getAttribute("scrolling")).toBe("no");
+    expect(descriptionFrame?.style.maxHeight).toBe("");
 
     fireEvent.click(screen.getByRole("button", { name: "Change assignee" }));
     fireEvent.click(await screen.findByRole("button", { name: /creator@example.com/ }));

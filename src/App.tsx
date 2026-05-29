@@ -2331,7 +2331,6 @@ function WorkItemPreviewDetails({
               <RichHtmlFrame
                 html={descriptionHtml}
                 title="Description"
-                maxHeight={180}
               />
             </section>
           ) : null}
@@ -2343,7 +2342,6 @@ function WorkItemPreviewDetails({
               <RichHtmlFrame
                 html={acceptanceCriteriaHtml}
                 title="Acceptance Criteria"
-                maxHeight={150}
               />
             </section>
           ) : null}
@@ -2371,7 +2369,6 @@ function WorkItemPreviewDetails({
                 <RichHtmlFrame
                   html={commentRichHtml(comment.renderedText, comment.text)}
                   title={`Comment by ${comment.createdBy ?? "Unknown"}`}
-                  maxHeight={96}
                   minHeight={32}
                 />
               </div>
@@ -2385,34 +2382,58 @@ function WorkItemPreviewDetails({
 
 function RichHtmlFrame({
   html,
-  maxHeight,
   minHeight = 40,
   title,
 }: {
   html: string;
-  maxHeight: number;
   minHeight?: number;
   title: string;
 }) {
   const [height, setHeight] = useState(minHeight);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const srcDoc = useMemo(() => buildRichHtmlDocument(html), [html]);
+
+  useEffect(() => {
+    return () => {
+      resizeObserverRef.current?.disconnect();
+    };
+  }, []);
 
   return (
     <iframe
       title={title}
       srcDoc={srcDoc}
       sandbox="allow-same-origin"
+      scrolling="no"
       className="block w-full rounded border border-border bg-white"
-      style={{ height, maxHeight }}
+      style={{ height }}
       onLoad={(event) => {
-        const doc = event.currentTarget.contentDocument;
+        const frame = event.currentTarget;
+        const doc = frame.contentDocument;
         const body = doc?.body;
         if (!body) return;
-        const nextHeight = Math.max(
-          minHeight,
-          Math.min(maxHeight, Math.ceil(body.scrollHeight)),
-        );
-        setHeight(nextHeight);
+        const syncHeight = () => {
+          setHeight(Math.max(minHeight, Math.ceil(body.scrollHeight)));
+        };
+        syncHeight();
+        frame.contentWindow?.requestAnimationFrame(syncHeight);
+        doc.querySelectorAll("img, video").forEach((media) => {
+          media.addEventListener("load", syncHeight, { once: true });
+          media.addEventListener("error", syncHeight, { once: true });
+        });
+        resizeObserverRef.current?.disconnect();
+        const frameWindow = frame.contentWindow as
+          | (Window & { ResizeObserver?: typeof ResizeObserver })
+          | null;
+        const globalScope = globalThis as typeof globalThis & {
+          ResizeObserver?: typeof ResizeObserver;
+        };
+        const ResizeObserverCtor = frameWindow?.ResizeObserver ?? globalScope.ResizeObserver;
+        if (ResizeObserverCtor) {
+          const resizeObserver = new ResizeObserverCtor(syncHeight);
+          resizeObserver.observe(body);
+          resizeObserverRef.current = resizeObserver;
+        }
       }}
     />
   );
