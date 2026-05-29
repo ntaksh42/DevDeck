@@ -1936,6 +1936,14 @@ function WorkItemPreviewPanel({
   const [mentionStart, setMentionStart] = useState<number | null>(null);
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const recentMentionOptions = useMemo(
+    () => recentWorkItemMentionCandidates(preview),
+    [preview],
+  );
+  const mentionPriorityNames = useMemo(
+    () => workItemMentionPriorityNames(preview),
+    [preview],
+  );
 
   const mentionOptionsQuery = useQuery({
     queryKey: ["workItemMentions", selectedItem?.organizationId, mentionQuery],
@@ -1944,10 +1952,24 @@ function WorkItemPreviewPanel({
         organizationId: selectedItem?.organizationId,
         query: mentionQuery,
       }),
-    enabled: !!selectedItem && mentionQuery.length > 0,
+    enabled: !!selectedItem && mentionStart !== null && mentionQuery.length > 0,
     staleTime: 60_000,
   });
-  const mentionOptions = mentionOptionsQuery.data ?? [];
+  const mentionOptions = useMemo(
+    () =>
+      rankMentionCandidates({
+        recent: recentMentionOptions,
+        remote: mentionOptionsQuery.data ?? [],
+        query: mentionQuery,
+        priorityNames: mentionPriorityNames,
+      }),
+    [
+      mentionOptionsQuery.data,
+      mentionPriorityNames,
+      mentionQuery,
+      recentMentionOptions,
+    ],
+  );
   const showMentionOptions = mentionStart !== null && mentionOptions.length > 0;
 
   const commentMutation = useMutation({
@@ -1985,7 +2007,23 @@ function WorkItemPreviewPanel({
     }, 0);
   }
 
+  function postComment() {
+    if (!selectedItem || !commentText.trim() || commentMutation.isPending) return;
+    commentMutation.mutate({
+      organizationId: selectedItem.organizationId,
+      projectId: selectedItem.projectId,
+      workItemId: selectedItem.id,
+      markdown: renderAzureMentionMarkdown(commentText, selectedMentions),
+    });
+  }
+
   function handleCommentKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      postComment();
+      return;
+    }
+
     if (!showMentionOptions) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -2007,13 +2045,7 @@ function WorkItemPreviewPanel({
 
   function submitComment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedItem || !commentText.trim()) return;
-    commentMutation.mutate({
-      organizationId: selectedItem.organizationId,
-      projectId: selectedItem.projectId,
-      workItemId: selectedItem.id,
-      markdown: renderAzureMentionMarkdown(commentText, selectedMentions),
-    });
+    postComment();
   }
 
   return (
@@ -2249,6 +2281,109 @@ function htmlToText(value: string | null | undefined): string {
   const element = document.createElement("div");
   element.innerHTML = value;
   return (element.textContent ?? "").replace(/\s+/g, " ").trim();
+}
+
+function recentWorkItemMentionCandidates(
+  preview: WorkItemPreview | null,
+): MentionCandidate[] {
+  if (!preview) return [];
+  const candidates = new Map<string, MentionCandidate>();
+  for (const comment of preview.comments) {
+    if (!comment.createdById || !comment.createdBy) continue;
+    candidates.set(comment.createdById, {
+      id: comment.createdById,
+      displayName: comment.createdBy,
+      uniqueName: comment.createdByUniqueName ?? null,
+    });
+  }
+  return [...candidates.values()];
+}
+
+function workItemMentionPriorityNames(preview: WorkItemPreview | null): string[] {
+  if (!preview) return [];
+  const names = [
+    ...preview.comments.map((comment) => comment.createdBy),
+    preview.createdBy,
+    preview.assignedTo,
+  ];
+  return uniqueNormalizedNames(names);
+}
+
+function rankMentionCandidates({
+  recent,
+  remote,
+  query,
+  priorityNames,
+}: {
+  recent: MentionCandidate[];
+  remote: MentionCandidate[];
+  query: string;
+  priorityNames: string[];
+}): MentionCandidate[] {
+  const term = query.trim().toLowerCase();
+  const recentIds = new Map(recent.map((candidate, index) => [candidate.id, index]));
+  const priority = new Map(priorityNames.map((name, index) => [name, index]));
+  const candidates = new Map<string, MentionCandidate>();
+
+  for (const candidate of [...recent, ...remote]) {
+    const key = candidate.id || candidate.uniqueName || candidate.displayName;
+    if (!candidates.has(key)) {
+      candidates.set(key, candidate);
+    }
+  }
+
+  return [...candidates.values()]
+    .filter((candidate) => mentionCandidateMatches(candidate, term))
+    .sort((left, right) => {
+      const leftRecent = recentIds.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+      const rightRecent = recentIds.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+      if (leftRecent !== rightRecent) return leftRecent - rightRecent;
+
+      const leftPriority =
+        priority.get(normalizeMentionName(left.displayName)) ?? Number.MAX_SAFE_INTEGER;
+      const rightPriority =
+        priority.get(normalizeMentionName(right.displayName)) ?? Number.MAX_SAFE_INTEGER;
+      if (leftPriority !== rightPriority) return leftPriority - rightPriority;
+
+      const leftStarts = mentionCandidateStartsWith(left, term) ? 0 : 1;
+      const rightStarts = mentionCandidateStartsWith(right, term) ? 0 : 1;
+      if (leftStarts !== rightStarts) return leftStarts - rightStarts;
+
+      return left.displayName.localeCompare(right.displayName);
+    })
+    .slice(0, 8);
+}
+
+function mentionCandidateMatches(candidate: MentionCandidate, term: string): boolean {
+  if (!term) return true;
+  return (
+    candidate.displayName.toLowerCase().includes(term) ||
+    (candidate.uniqueName?.toLowerCase().includes(term) ?? false)
+  );
+}
+
+function mentionCandidateStartsWith(candidate: MentionCandidate, term: string): boolean {
+  if (!term) return true;
+  return (
+    candidate.displayName.toLowerCase().startsWith(term) ||
+    (candidate.uniqueName?.toLowerCase().startsWith(term) ?? false)
+  );
+}
+
+function uniqueNormalizedNames(values: Array<string | null | undefined>): string[] {
+  const names: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const normalized = normalizeMentionName(value);
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    names.push(normalized);
+  }
+  return names;
+}
+
+function normalizeMentionName(value: string | null | undefined): string {
+  return value?.trim().toLowerCase() ?? "";
 }
 
 type SelectedMention = {

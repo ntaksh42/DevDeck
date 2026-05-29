@@ -351,6 +351,17 @@ describe("App", () => {
           descriptionHtml: "<p>Fix the save flow.</p>",
           acceptanceCriteriaHtml: "<ul><li>Save succeeds</li></ul>",
           webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/123",
+          comments: [
+            {
+              id: 7,
+              text: "Earlier context",
+              renderedText: "<p>Earlier context</p>",
+              createdBy: "Creator",
+              createdById: "user-creator",
+              createdByUniqueName: "creator@example.com",
+              createdDate: "2026-05-23T12:00:00Z",
+            },
+          ],
         });
       }
       if (command === "search_work_item_mentions") {
@@ -402,10 +413,12 @@ describe("App", () => {
     expect(document.querySelector("iframe")).toBeNull();
 
     const commentBox = screen.getByLabelText("Comment");
-    fireEvent.change(commentBox, { target: { value: "@Cre" } });
+    fireEvent.change(commentBox, { target: { value: "@" } });
+    (commentBox as HTMLTextAreaElement).setSelectionRange(1, 1);
+    fireEvent.click(commentBox);
     fireEvent.click(await screen.findByRole("button", { name: /Creator/ }));
     fireEvent.change(commentBox, { target: { value: "@Creator please check" } });
-    fireEvent.click(screen.getByRole("button", { name: "Post comment" }));
+    fireEvent.keyDown(commentBox, { key: "Enter", ctrlKey: true });
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("add_work_item_comment", {

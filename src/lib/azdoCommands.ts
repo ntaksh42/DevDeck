@@ -107,6 +107,8 @@ const workItemCommentSchema = z.object({
   text: z.string().nullable(),
   renderedText: z.string().nullable(),
   createdBy: z.string().nullable(),
+  createdById: z.string().nullable().optional(),
+  createdByUniqueName: z.string().nullable().optional(),
   createdDate: z.string().nullable(),
 });
 
@@ -939,6 +941,8 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
         text: "LGTM — shipped this in the last sprint, no blockers.",
         renderedText: "<p>LGTM — shipped this in the last sprint, no blockers.</p>",
         createdBy: "Alice Johnson",
+        createdById: "demo-alice",
+        createdByUniqueName: "alice@contoso.example",
         createdDate: "2026-05-27T14:00:00Z",
       },
       {
@@ -946,6 +950,8 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
         text: "Needs AC review before moving to Active.",
         renderedText: "<p>Needs AC review before moving to Active.</p>",
         createdBy: "Demo User",
+        createdById: "demo-user",
+        createdByUniqueName: "demo.user@contoso.example",
         createdDate: "2026-05-26T09:00:00Z",
       },
     ],
@@ -977,7 +983,7 @@ const demoMentionPeople: MentionCandidate[] = [
 
 function demoMentionCandidates(query?: string): MentionCandidate[] {
   const term = query?.trim().toLowerCase() ?? "";
-  if (!term) return [];
+  if (!term) return demoMentionPeople;
   return demoMentionPeople.filter(
     (person) =>
       person.displayName.toLowerCase().includes(term) ||
@@ -991,6 +997,8 @@ function demoWorkItemComment(markdown?: string): WorkItemComment {
     text: markdown ?? "",
     renderedText: `<p>${escapeDemoHtml(markdown ?? "")}</p>`,
     createdBy: "Demo User",
+    createdById: "demo-user",
+    createdByUniqueName: "demo.user@contoso.example",
     createdDate: new Date().toISOString(),
   };
 }

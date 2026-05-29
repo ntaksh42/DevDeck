@@ -158,6 +158,8 @@ pub struct WorkItemComment {
     pub text: Option<String>,
     pub rendered_text: Option<String>,
     pub created_by: Option<String>,
+    pub created_by_id: Option<String>,
+    pub created_by_unique_name: Option<String>,
     pub created_date: Option<String>,
 }
 
@@ -374,13 +376,24 @@ fn summarize_mention_candidate(identity: Identity) -> Option<MentionCandidate> {
 }
 
 fn summarize_work_item_comment(comment: AzdoWorkItemComment) -> WorkItemComment {
+    let (created_by, created_by_id, created_by_unique_name) = comment
+        .created_by
+        .map(|identity| {
+            let created_by = identity
+                .display_name
+                .clone()
+                .or_else(|| identity.unique_name.clone());
+            (created_by, identity.id, identity.unique_name)
+        })
+        .unwrap_or((None, None, None));
+
     WorkItemComment {
         id: comment.id,
         text: comment.text,
         rendered_text: comment.rendered_text,
-        created_by: comment
-            .created_by
-            .and_then(|identity| identity.display_name.or(identity.unique_name)),
+        created_by,
+        created_by_id,
+        created_by_unique_name,
         created_date: comment.created_date,
     }
 }
