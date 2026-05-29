@@ -42,6 +42,8 @@ import {
   assignWorkItem,
   setWorkItemState,
   listWorkItemTypeStates,
+  setWorkItemsState,
+  assignWorkItems,
   addAzureCliOrganization,
   addPatOrganization,
   commandErrorMessage,
@@ -62,6 +64,7 @@ import {
   triggerSync,
   updateAppSettings,
   type AppSettings,
+  type BulkWorkItemResult,
   type CommitRepositoryOption,
   type CommitSummary,
   type MentionCandidate,
@@ -1645,10 +1648,12 @@ const WorkItemGridRow = forwardRef<
   {
     item: WorkItemSummary;
     selected: boolean;
+    checked: boolean;
     columnTemplate: string;
     onSelect: () => void;
+    onCheckedChange: (checked: boolean, shiftKey: boolean) => void;
   }
->(({ item, selected, columnTemplate, onSelect }, ref) => (
+>(({ item, selected, checked, columnTemplate, onSelect, onCheckedChange }, ref) => (
   <div
     ref={ref}
     tabIndex={selected ? 0 : -1}
@@ -1656,17 +1661,27 @@ const WorkItemGridRow = forwardRef<
     aria-selected={selected}
     onClick={onSelect}
     onKeyDown={(e) => {
-      if ((e.target as HTMLElement).closest("button")) return;
+      if ((e.target as HTMLElement).closest("button,input")) return;
       if (e.key === "Enter" && item.webUrl) {
         e.stopPropagation();
         openExternalUrl(item.webUrl);
       }
     }}
     className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
-      selected ? "bg-secondary" : "hover:bg-muted/50"
+      checked ? "bg-primary/5" : selected ? "bg-secondary" : "hover:bg-muted/50"
     }`}
     style={{ gridTemplateColumns: columnTemplate }}
   >
+    <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+      <input
+        type="checkbox"
+        checked={checked}
+        aria-label={`Select #${item.id}`}
+        onChange={(e) => onCheckedChange(e.target.checked, e.nativeEvent instanceof MouseEvent ? (e.nativeEvent as MouseEvent).shiftKey : false)}
+        onClick={(e) => e.stopPropagation()}
+        className="h-3.5 w-3.5 cursor-pointer rounded border-gray-300"
+      />
+    </div>
     <button
       type="button"
       onClick={(e) => {
@@ -1733,8 +1748,15 @@ function WorkItemsGrid({
     ),
   );
   const [copyToast, setCopyToast] = useState<string | null>(null);
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  const [lastCheckedIndex, setLastCheckedIndex] = useState<number | null>(null);
+  const [bulkStateOpen, setBulkStateOpen] = useState(false);
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
+  const [bulkAssignQuery, setBulkAssignQuery] = useState("");
+  const [bulkToast, setBulkToast] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     localStorage.setItem(WI_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
@@ -1772,6 +1794,121 @@ function WorkItemsGrid({
     staleTime: 30_000,
   });
 
+  const checkedItems = useMemo(
+    () => sorted.filter((item) => checkedIds.has(`${item.organizationId}:${item.projectId}:${item.id}`)),
+    [sorted, checkedIds],
+  );
+  const bulkStateType = useMemo(() => {
+    const types = new Set(checkedItems.map((item) => item.workItemType).filter(Boolean));
+    return types.size === 1 ? ([...types][0] ?? null) : null;
+  }, [checkedItems]);
+  const firstCheckedItem = checkedItems[0] ?? null;
+
+  const COMMON_STATES = ["New", "Active", "Resolved", "Closed", "To Do", "Doing", "Done"];
+
+  const bulkStatesQuery = useQuery({
+    queryKey: [
+      "workItemTypeStates",
+      firstCheckedItem?.organizationId,
+      firstCheckedItem?.projectId,
+      bulkStateType,
+    ],
+    queryFn: () =>
+      listWorkItemTypeStates({
+        organizationId: firstCheckedItem?.organizationId,
+        projectId: firstCheckedItem?.projectId ?? "",
+        workItemType: bulkStateType ?? "",
+      }),
+    enabled: bulkStateOpen && !!bulkStateType && !!firstCheckedItem,
+    staleTime: Infinity,
+  });
+  const bulkStateOptions = bulkStateType && bulkStatesQuery.data ? bulkStatesQuery.data : COMMON_STATES;
+
+  const bulkMentionsQuery = useQuery({
+    queryKey: ["workItemMentions", firstCheckedItem?.organizationId, bulkAssignQuery],
+    queryFn: () =>
+      searchWorkItemMentions({
+        organizationId: firstCheckedItem?.organizationId,
+        query: bulkAssignQuery,
+      }),
+    enabled: bulkAssignOpen && !!firstCheckedItem && bulkAssignQuery.trim().length > 0,
+    staleTime: 60_000,
+  });
+
+  function showBulkToast(results: BulkWorkItemResult[]) {
+    const failed = results.filter((r) => r.error).length;
+    const succeeded = results.length - failed;
+    const msg =
+      failed === 0
+        ? `${succeeded} item${succeeded === 1 ? "" : "s"} updated`
+        : `${succeeded} updated, ${failed} failed`;
+    setBulkToast(msg);
+    window.setTimeout(() => setBulkToast(null), 3000);
+  }
+
+  const bulkStateMutation = useMutation({
+    mutationFn: async (state: string) => {
+      const groups = new Map<string, typeof checkedItems>();
+      for (const item of checkedItems) {
+        const key = `${item.organizationId}:${item.projectId}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(item);
+      }
+      const allResults: BulkWorkItemResult[] = [];
+      for (const [, items] of groups) {
+        const r = await setWorkItemsState({
+          organizationId: items[0].organizationId,
+          projectId: items[0].projectId,
+          workItemIds: items.map((i) => i.id),
+          state,
+        });
+        allResults.push(...r);
+      }
+      return allResults;
+    },
+    onSuccess: (results) => {
+      setBulkStateOpen(false);
+      setCheckedIds(new Set());
+      setLastCheckedIndex(null);
+      showBulkToast(results);
+      void queryClient.invalidateQueries({ queryKey: ["myWorkItems"] });
+      void queryClient.invalidateQueries({ queryKey: ["workItemQueryView"] });
+      void queryClient.invalidateQueries({ queryKey: ["workItemPreview"] });
+    },
+  });
+
+  const bulkAssignMutation = useMutation({
+    mutationFn: async (assignedTo: string) => {
+      const groups = new Map<string, typeof checkedItems>();
+      for (const item of checkedItems) {
+        const key = `${item.organizationId}:${item.projectId}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(item);
+      }
+      const allResults: BulkWorkItemResult[] = [];
+      for (const [, items] of groups) {
+        const r = await assignWorkItems({
+          organizationId: items[0].organizationId,
+          projectId: items[0].projectId,
+          workItemIds: items.map((i) => i.id),
+          assignedTo,
+        });
+        allResults.push(...r);
+      }
+      return allResults;
+    },
+    onSuccess: (results) => {
+      setBulkAssignOpen(false);
+      setBulkAssignQuery("");
+      setCheckedIds(new Set());
+      setLastCheckedIndex(null);
+      showBulkToast(results);
+      void queryClient.invalidateQueries({ queryKey: ["myWorkItems"] });
+      void queryClient.invalidateQueries({ queryKey: ["workItemQueryView"] });
+      void queryClient.invalidateQueries({ queryKey: ["workItemPreview"] });
+    },
+  });
+
   useEffect(() => {
     if (autoFocus) containerRef.current?.focus();
   }, [autoFocus]);
@@ -1780,10 +1917,38 @@ function WorkItemsGrid({
     setSelectedIndex((i) => Math.min(i, Math.max(sorted.length - 1, 0)));
   }, [sorted.length]);
 
+  useEffect(() => {
+    setCheckedIds(new Set());
+    setLastCheckedIndex(null);
+  }, [results]);
+
   function moveSelection(index: number) {
     const next = Math.max(0, Math.min(index, sorted.length - 1));
     setSelectedIndex(next);
     rowRefs.current[next]?.focus();
+  }
+
+  function handleCheckboxChange(index: number, checked: boolean, shiftKey: boolean) {
+    const item = sorted[index];
+    if (!item) return;
+    const key = `${item.organizationId}:${item.projectId}:${item.id}`;
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      if (shiftKey && lastCheckedIndex !== null) {
+        const from = Math.min(lastCheckedIndex, index);
+        const to = Math.max(lastCheckedIndex, index);
+        for (let i = from; i <= to; i++) {
+          const it = sorted[i];
+          if (!it) continue;
+          const k = `${it.organizationId}:${it.projectId}:${it.id}`;
+          if (checked) next.add(k); else next.delete(k);
+        }
+      } else {
+        if (checked) next.add(key); else next.delete(key);
+      }
+      return next;
+    });
+    setLastCheckedIndex(index);
   }
 
   function applyWiSort(column: WiSortKey) {
@@ -1829,10 +1994,17 @@ function WorkItemsGrid({
           window.setTimeout(() => setCopyToast(null), 2000);
         });
       }
+    } else if (e.key === " ") {
+      e.preventDefault();
+      const item = sorted[selectedIndex];
+      if (item) {
+        const key = `${item.organizationId}:${item.projectId}:${item.id}`;
+        handleCheckboxChange(selectedIndex, !checkedIds.has(key), false);
+      }
     }
   }
 
-  const wiColTemplate = columnWidths.map((w) => `${w}px`).join(" ");
+  const wiColTemplate = `28px ${columnWidths.map((w) => `${w}px`).join(" ")}`;
 
   return (
     <div
@@ -1841,11 +2013,31 @@ function WorkItemsGrid({
       tabIndex={-1}
       onKeyDown={handleKeyDown}
     >
-      {copyToast && (
+      {copyToast || bulkToast ? (
         <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1 text-xs text-background shadow-lg">
-          {copyToast}
+          {copyToast ?? bulkToast}
         </div>
-      )}
+      ) : null}
+      {checkedIds.size > 0 ? (
+        <BulkActionBar
+          count={checkedIds.size}
+          onClear={() => { setCheckedIds(new Set()); setLastCheckedIndex(null); }}
+          stateOpen={bulkStateOpen}
+          onStateOpenChange={setBulkStateOpen}
+          stateOptions={bulkStateOptions}
+          stateLoading={bulkStatesQuery.isFetching}
+          statePending={bulkStateMutation.isPending}
+          onStateSelect={(state) => bulkStateMutation.mutate(state)}
+          assignOpen={bulkAssignOpen}
+          onAssignOpenChange={(open) => { setBulkAssignOpen(open); if (!open) setBulkAssignQuery(""); }}
+          assignQuery={bulkAssignQuery}
+          onAssignQueryChange={setBulkAssignQuery}
+          assignOptions={bulkMentionsQuery.data ?? []}
+          assignLoading={bulkMentionsQuery.isFetching}
+          assignPending={bulkAssignMutation.isPending}
+          onAssignSelect={(candidate) => bulkAssignMutation.mutate(candidate.uniqueName ?? candidate.displayName)}
+        />
+      ) : null}
       <div
         className="grid min-h-0 flex-1 items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_8px_minmax(300px,var(--work-item-preview-width))]"
         style={{ "--work-item-preview-width": `${previewWidth}px` } as CSSProperties}
@@ -1858,6 +2050,29 @@ function WorkItemsGrid({
                 className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                 style={{ gridTemplateColumns: wiColTemplate }}
               >
+                <div role="columnheader" className="flex items-center justify-center">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all"
+                    checked={sorted.length > 0 && sorted.every((item) => checkedIds.has(`${item.organizationId}:${item.projectId}:${item.id}`))}
+                    ref={(el) => {
+                      if (el) {
+                        const some = sorted.some((item) => checkedIds.has(`${item.organizationId}:${item.projectId}:${item.id}`));
+                        const all = sorted.length > 0 && sorted.every((item) => checkedIds.has(`${item.organizationId}:${item.projectId}:${item.id}`));
+                        el.indeterminate = some && !all;
+                      }
+                    }}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setCheckedIds(new Set(sorted.map((item) => `${item.organizationId}:${item.projectId}:${item.id}`)));
+                      } else {
+                        setCheckedIds(new Set());
+                      }
+                      setLastCheckedIndex(null);
+                    }}
+                    className="h-3.5 w-3.5 cursor-pointer rounded border-gray-300"
+                  />
+                </div>
                 {WI_GRID_KEYS.map((col, i) => (
                   <WiSortHeaderButton
                     key={col}
@@ -1899,8 +2114,10 @@ function WorkItemsGrid({
                       }}
                       item={item}
                       selected={i === selectedIndex}
+                      checked={checkedIds.has(`${item.organizationId}:${item.projectId}:${item.id}`)}
                       columnTemplate={wiColTemplate}
                       onSelect={() => setSelectedIndex(i)}
+                      onCheckedChange={(checked, shiftKey) => handleCheckboxChange(i, checked, shiftKey)}
                     />
                   ))}
                 </div>
@@ -2626,6 +2843,142 @@ function StatePicker({
           )}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function BulkActionBar({
+  count,
+  onClear,
+  stateOpen,
+  onStateOpenChange,
+  stateOptions,
+  stateLoading,
+  statePending,
+  onStateSelect,
+  assignOpen,
+  onAssignOpenChange,
+  assignQuery,
+  onAssignQueryChange,
+  assignOptions,
+  assignLoading,
+  assignPending,
+  onAssignSelect,
+}: {
+  count: number;
+  onClear: () => void;
+  stateOpen: boolean;
+  onStateOpenChange: (open: boolean) => void;
+  stateOptions: string[];
+  stateLoading: boolean;
+  statePending: boolean;
+  onStateSelect: (state: string) => void;
+  assignOpen: boolean;
+  onAssignOpenChange: (open: boolean) => void;
+  assignQuery: string;
+  onAssignQueryChange: (q: string) => void;
+  assignOptions: MentionCandidate[];
+  assignLoading: boolean;
+  assignPending: boolean;
+  onAssignSelect: (candidate: MentionCandidate) => void;
+}) {
+  return (
+    <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-1.5">
+      <span className="text-xs font-medium text-foreground">
+        {count} item{count === 1 ? "" : "s"} selected
+      </span>
+      <div className="flex items-center gap-1.5">
+        {/* State picker */}
+        <div className="relative">
+          <button
+            type="button"
+            disabled={statePending}
+            onClick={() => onStateOpenChange(!stateOpen)}
+            className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-white px-2.5 text-xs font-medium hover:bg-secondary disabled:opacity-60"
+          >
+            {statePending ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : null}
+            State
+            <ChevronDown className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
+          </button>
+          {stateOpen ? (
+            <div className="absolute left-0 top-full z-30 mt-1 min-w-[130px] rounded-md border border-border bg-white py-1 shadow-lg">
+              {stateLoading ? (
+                <div className="flex items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> Loading…
+                </div>
+              ) : (
+                stateOptions.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => { onStateSelect(s); onStateOpenChange(false); }}
+                    onKeyDown={(e) => { if (e.key === "Escape") onStateOpenChange(false); }}
+                    className="flex w-full items-center px-3 py-1.5 text-left text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    {s}
+                  </button>
+                ))
+              )}
+            </div>
+          ) : null}
+        </div>
+        {/* Assignee picker */}
+        <div className="relative">
+          <button
+            type="button"
+            disabled={assignPending}
+            onClick={() => onAssignOpenChange(!assignOpen)}
+            className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-white px-2.5 text-xs font-medium hover:bg-secondary disabled:opacity-60"
+          >
+            {assignPending ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : null}
+            Assignee
+            <ChevronDown className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
+          </button>
+          {assignOpen ? (
+            <div className="absolute left-0 top-full z-30 mt-1 w-56 rounded-md border border-border bg-white p-1 shadow-lg">
+              <input
+                autoFocus
+                value={assignQuery}
+                onChange={(e) => onAssignQueryChange(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Escape") onAssignOpenChange(false); }}
+                placeholder="Search assignee..."
+                className="mb-1 h-7 w-full rounded border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
+              />
+              <div className="max-h-44 overflow-auto">
+                {assignLoading ? (
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">Searching…</div>
+                ) : assignOptions.length > 0 ? (
+                  assignOptions.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => onAssignSelect(c)}
+                      className="flex w-full min-w-0 flex-col rounded px-2 py-1 text-left text-xs hover:bg-secondary"
+                    >
+                      <span className="truncate font-medium">{c.displayName}</span>
+                      {c.uniqueName ? (
+                        <span className="truncate text-[11px] text-muted-foreground">{c.uniqueName}</span>
+                      ) : null}
+                    </button>
+                  ))
+                ) : (
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                    {assignQuery.trim() ? "No matches" : "Type to search"}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onClear}
+        className="ml-auto rounded p-0.5 text-muted-foreground hover:text-foreground"
+        aria-label="Clear selection"
+      >
+        <X className="h-3.5 w-3.5" aria-hidden="true" />
+      </button>
     </div>
   );
 }

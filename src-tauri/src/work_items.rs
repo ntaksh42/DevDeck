@@ -119,6 +119,31 @@ pub struct ListWorkItemTypeStatesInput {
     pub work_item_type: String,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkWorkItemResult {
+    pub id: i64,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetWorkItemsStateInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_ids: Vec<i64>,
+    pub state: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssignWorkItemsInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_ids: Vec<i64>,
+    pub assigned_to: String,
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkItemSummary {
@@ -445,6 +470,60 @@ impl WorkItemService {
         Ok(client
             .list_work_item_type_states(&input.project_id, &input.work_item_type)
             .await?)
+    }
+
+    pub async fn set_items_state(&self, input: SetWorkItemsStateInput) -> Result<Vec<BulkWorkItemResult>> {
+        let state = input.state.trim().to_string();
+        if state.is_empty() {
+            return Err(AppError::InvalidInput("state is required".to_string()));
+        }
+        if input.work_item_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = client
+            .list_projects()
+            .await?
+            .into_iter()
+            .find(|p| p.id == input.project_id)
+            .ok_or_else(|| AppError::InvalidInput(format!("project not found: {}", input.project_id)))?;
+
+        let mut results = Vec::new();
+        for id in input.work_item_ids {
+            match client.update_work_item_state(&project.id, id, &state).await {
+                Ok(_) => results.push(BulkWorkItemResult { id, error: None }),
+                Err(e) => results.push(BulkWorkItemResult { id, error: Some(e.to_string()) }),
+            }
+        }
+        Ok(results)
+    }
+
+    pub async fn assign_items(&self, input: AssignWorkItemsInput) -> Result<Vec<BulkWorkItemResult>> {
+        let assigned_to = input.assigned_to.trim().to_string();
+        if assigned_to.is_empty() {
+            return Err(AppError::InvalidInput("assignee is required".to_string()));
+        }
+        if input.work_item_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = client
+            .list_projects()
+            .await?
+            .into_iter()
+            .find(|p| p.id == input.project_id)
+            .ok_or_else(|| AppError::InvalidInput(format!("project not found: {}", input.project_id)))?;
+
+        let mut results = Vec::new();
+        for id in input.work_item_ids {
+            match client.update_work_item_assigned_to(&project.id, id, &assigned_to).await {
+                Ok(_) => results.push(BulkWorkItemResult { id, error: None }),
+                Err(e) => results.push(BulkWorkItemResult { id, error: Some(e.to_string()) }),
+            }
+        }
+        Ok(results)
     }
 
     fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {

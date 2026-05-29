@@ -31,10 +31,12 @@ use sync::SyncRunner;
 use tauri::{Manager, State};
 use tokio::sync::mpsc;
 use work_items::{
-    AddWorkItemCommentInput, AssignWorkItemInput, GetWorkItemPreviewInput,
-    ListMyWorkItemsInput, ListWorkItemProjectsInput, ListWorkItemTypeStatesInput, MentionCandidate,
-    RunWorkItemQueryInput, SearchWorkItemMentionsInput, SearchWorkItemsInput, SetWorkItemStateInput,
-    WorkItemComment, WorkItemPreview, WorkItemProjectOption, WorkItemService, WorkItemSummary,
+    AddWorkItemCommentInput, AssignWorkItemInput, AssignWorkItemsInput, BulkWorkItemResult,
+    GetWorkItemPreviewInput, ListMyWorkItemsInput, ListWorkItemProjectsInput,
+    ListWorkItemTypeStatesInput, MentionCandidate, RunWorkItemQueryInput,
+    SearchWorkItemMentionsInput, SearchWorkItemsInput, SetWorkItemStateInput,
+    SetWorkItemsStateInput, WorkItemComment, WorkItemPreview, WorkItemProjectOption,
+    WorkItemService, WorkItemSummary,
 };
 
 #[derive(Clone)]
@@ -202,6 +204,24 @@ async fn set_work_item_state(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn set_work_items_state(
+    input: SetWorkItemsStateInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<BulkWorkItemResult>> {
+    state.work_items.set_items_state(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn assign_work_items(
+    input: AssignWorkItemsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<BulkWorkItemResult>> {
+    state.work_items.assign_items(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn list_work_item_type_states(
     input: ListWorkItemTypeStatesInput,
     state: State<'_, AppState>,
@@ -276,6 +296,8 @@ pub fn run() {
             assign_work_item,
             set_work_item_state,
             list_work_item_type_states,
+            set_work_items_state,
+            assign_work_items,
             search_commits,
             list_commit_repositories,
             trigger_sync

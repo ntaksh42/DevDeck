@@ -276,6 +276,31 @@ export type ListWorkItemTypeStatesInput = {
   workItemType: string;
 };
 
+export type BulkWorkItemResult = {
+  id: number;
+  error: string | null;
+};
+
+const bulkWorkItemResultSchema = z.object({
+  id: z.number(),
+  error: z.string().nullable(),
+});
+const bulkWorkItemResultsSchema = z.array(bulkWorkItemResultSchema);
+
+export type SetWorkItemsStateInput = {
+  organizationId?: string;
+  projectId: string;
+  workItemIds: number[];
+  state: string;
+};
+
+export type AssignWorkItemsInput = {
+  organizationId?: string;
+  projectId: string;
+  workItemIds: number[];
+  assignedTo: string;
+};
+
 export type SearchCommitsInput = {
   organizationId?: string;
   query?: string;
@@ -419,6 +444,20 @@ export async function listWorkItemTypeStates(
   return z.array(z.string()).parse(result);
 }
 
+export async function setWorkItemsState(
+  input: SetWorkItemsStateInput,
+): Promise<BulkWorkItemResult[]> {
+  const result = await invokeCommand("set_work_items_state", { input });
+  return bulkWorkItemResultsSchema.parse(result);
+}
+
+export async function assignWorkItems(
+  input: AssignWorkItemsInput,
+): Promise<BulkWorkItemResult[]> {
+  const result = await invokeCommand("assign_work_items", { input });
+  return bulkWorkItemResultsSchema.parse(result);
+}
+
 export async function searchCommits(
   input: SearchCommitsInput,
 ): Promise<CommitSummary[]> {
@@ -556,6 +595,14 @@ async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
       const input = (args as { input?: ListWorkItemTypeStatesInput } | undefined)
         ?.input;
       return demoListWorkItemTypeStates(input);
+    }
+    case "set_work_items_state": {
+      const input = (args as { input?: SetWorkItemsStateInput } | undefined)?.input;
+      return (input?.workItemIds ?? []).map((id) => ({ id, error: null }));
+    }
+    case "assign_work_items": {
+      const input = (args as { input?: AssignWorkItemsInput } | undefined)?.input;
+      return (input?.workItemIds ?? []).map((id) => ({ id, error: null }));
     }
     case "search_commits": {
       const input = (args as { input?: SearchCommitsInput } | undefined)
