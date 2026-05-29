@@ -191,6 +191,7 @@ function AppShell() {
   const organizationsQuery = useQuery({
     queryKey: ["organizations"],
     queryFn: listOrganizations,
+    staleTime: 5 * 60_000,
   });
   const syncMutation = useMutation({
     mutationFn: triggerSync,
@@ -471,6 +472,7 @@ function CommitSearch({ organizations }: { organizations: Organization[] }) {
     queryKey: ["commitRepositories", selectedOrganizationId],
     queryFn: () => listCommitRepositories({ organizationId: selectedOrganizationId }),
     enabled: !!selectedOrganizationId,
+    staleTime: 5 * 60_000,
   });
   const repositoryOptions = repositoriesQuery.data ?? [];
   const projectOptions = useMemo(() => uniqueCommitProjects(repositoryOptions), [repositoryOptions]);
@@ -1017,6 +1019,7 @@ function WorkItemSearch({ organizations }: { organizations: Organization[] }) {
     queryKey: ["wiRepositories", organizationId],
     queryFn: () => listCommitRepositories({ organizationId }),
     enabled: !!organizationId,
+    staleTime: 5 * 60_000,
   });
   const allRepositories = repositoriesQuery.data ?? [];
   const projects = useMemo(() => {
@@ -1201,6 +1204,7 @@ function WorkItemViewsPanel({ organizations }: { organizations: Organization[] }
     queryKey: ["wiViewProjects", selectedOrganizationId],
     queryFn: () => listWorkItemProjects({ organizationId: selectedOrganizationId }),
     enabled: !!selectedOrganizationId,
+    staleTime: 5 * 60_000,
   });
   const projectOptions = projectsQuery.data ?? [];
 
@@ -1762,6 +1766,7 @@ function WorkItemsGrid({
         workItemId: selectedItem?.id ?? 0,
       }),
     enabled: !!selectedItem,
+    staleTime: 30_000,
   });
 
   useEffect(() => {
@@ -1950,6 +1955,7 @@ function WorkItemPreviewPanel({
   const [mentionStart, setMentionStart] = useState<number | null>(null);
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const queryClient = useQueryClient();
   const recentMentionOptions = useMemo(
     () => recentWorkItemMentionCandidates(preview),
     [preview],
@@ -1994,6 +2000,7 @@ function WorkItemPreviewPanel({
       setMentionQuery("");
       setMentionStart(null);
       setActiveMentionIndex(0);
+      void queryClient.invalidateQueries({ queryKey: ["workItemPreview"] });
     },
   });
 
@@ -2452,6 +2459,7 @@ function MyWorkItemsPanel({ organizations }: { organizations: Organization[] }) 
     queryKey: ["myWorkItems", selectedOrganizationId],
     queryFn: () => listMyWorkItems({ organizationId: selectedOrganizationId }),
     enabled: !!selectedOrganizationId,
+    staleTime: 5 * 60_000,
   });
 
   const allResults = query.data ?? [];
@@ -2805,6 +2813,7 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
     queryKey: ["myReviews", organizationId],
     queryFn: () => listMyReviewPullRequests({ organizationId }),
     enabled: !!organizationId,
+    staleTime: 5 * 60_000,
   });
 
   const [textFilter, setTextFilter] = useState("");
@@ -2876,6 +2885,7 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
   const settingsQuery = useQuery({
     queryKey: ["appSettings"],
     queryFn: getAppSettings,
+    staleTime: 5 * 60_000,
   });
 
   const previewQuery = useQuery({
@@ -3673,6 +3683,7 @@ function PullRequestSearch({
     queryKey: ["prRepositories", organizationId],
     queryFn: () => listCommitRepositories({ organizationId }),
     enabled: !!organizationId,
+    staleTime: 5 * 60_000,
   });
   const allRepositories = repositoriesQuery.data ?? [];
 
@@ -4074,6 +4085,7 @@ function ReviewResultFolderSettings() {
   const settingsQuery = useQuery({
     queryKey: ["appSettings"],
     queryFn: getAppSettings,
+    staleTime: 5 * 60_000,
   });
   const [folderPath, setFolderPath] = useState("");
 
