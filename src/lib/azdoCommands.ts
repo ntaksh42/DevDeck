@@ -256,6 +256,13 @@ export type AddWorkItemCommentInput = {
   markdown: string;
 };
 
+export type AssignWorkItemInput = {
+  organizationId?: string;
+  projectId: string;
+  workItemId: number;
+  assignedTo: string;
+};
+
 export type SearchCommitsInput = {
   organizationId?: string;
   query?: string;
@@ -376,6 +383,13 @@ export async function addWorkItemComment(
 ): Promise<WorkItemComment> {
   const result = await invokeCommand("add_work_item_comment", { input });
   return workItemCommentSchema.parse(result);
+}
+
+export async function assignWorkItem(
+  input: AssignWorkItemInput,
+): Promise<WorkItemPreview> {
+  const result = await invokeCommand("assign_work_item", { input });
+  return workItemPreviewSchema.parse(result);
 }
 
 export async function searchCommits(
@@ -500,6 +514,11 @@ async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
       const input = (args as { input?: AddWorkItemCommentInput } | undefined)
         ?.input;
       return demoWorkItemComment(input?.markdown);
+    }
+    case "assign_work_item": {
+      const input = (args as { input?: AssignWorkItemInput } | undefined)
+        ?.input;
+      return demoAssignWorkItem(input);
     }
     case "search_commits": {
       const input = (args as { input?: SearchCommitsInput } | undefined)
@@ -955,6 +974,30 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
         createdDate: "2026-05-26T09:00:00Z",
       },
     ],
+  };
+}
+
+function demoAssignWorkItem(input?: AssignWorkItemInput): WorkItemPreview {
+  const preview = demoWorkItemPreview(
+    input
+      ? {
+          organizationId: input.organizationId,
+          projectId: input.projectId,
+          workItemId: input.workItemId,
+        }
+      : undefined,
+  );
+  const assignee = input?.assignedTo?.trim();
+  if (!assignee) return preview;
+  const person = demoMentionPeople.find(
+    (candidate) =>
+      candidate.uniqueName?.toLowerCase() === assignee.toLowerCase() ||
+      candidate.displayName.toLowerCase() === assignee.toLowerCase(),
+  );
+  return {
+    ...preview,
+    assignedTo: person?.displayName ?? assignee,
+    changedDate: new Date().toISOString(),
   };
 }
 

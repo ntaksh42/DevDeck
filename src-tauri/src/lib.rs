@@ -31,7 +31,7 @@ use sync::SyncRunner;
 use tauri::{Manager, State};
 use tokio::sync::mpsc;
 use work_items::{
-    AddWorkItemCommentInput, GetWorkItemPreviewInput, ListMyWorkItemsInput,
+    AddWorkItemCommentInput, AssignWorkItemInput, GetWorkItemPreviewInput, ListMyWorkItemsInput,
     ListWorkItemProjectsInput, MentionCandidate, RunWorkItemQueryInput,
     SearchWorkItemMentionsInput, SearchWorkItemsInput, WorkItemComment, WorkItemPreview,
     WorkItemProjectOption, WorkItemService, WorkItemSummary,
@@ -184,6 +184,15 @@ async fn add_work_item_comment(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn assign_work_item(
+    input: AssignWorkItemInput,
+    state: State<'_, AppState>,
+) -> Result<WorkItemPreview> {
+    state.work_items.assign(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 fn search_commits(
     input: SearchCommitsInput,
     state: State<'_, AppState>,
@@ -246,6 +255,7 @@ pub fn run() {
             get_work_item_preview,
             search_work_item_mentions,
             add_work_item_comment,
+            assign_work_item,
             search_commits,
             list_commit_repositories,
             trigger_sync

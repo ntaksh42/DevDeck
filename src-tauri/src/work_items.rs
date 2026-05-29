@@ -93,6 +93,15 @@ pub struct AddWorkItemCommentInput {
     pub markdown: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssignWorkItemInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_id: i64,
+    pub assigned_to: String,
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkItemSummary {
@@ -343,6 +352,40 @@ impl WorkItemService {
             .add_work_item_comment(&input.project_id, input.work_item_id, markdown)
             .await?;
         Ok(summarize_work_item_comment(comment))
+    }
+
+    pub async fn assign(&self, input: AssignWorkItemInput) -> Result<WorkItemPreview> {
+        let assigned_to = input.assigned_to.trim();
+        if assigned_to.is_empty() {
+            return Err(AppError::InvalidInput("assignee is required".to_string()));
+        }
+
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = client
+            .list_projects()
+            .await?
+            .into_iter()
+            .find(|project| project.id == input.project_id)
+            .ok_or_else(|| {
+                AppError::InvalidInput(format!("project not found: {}", input.project_id))
+            })?;
+
+        let work_item = client
+            .update_work_item_assigned_to(&project.id, input.work_item_id, assigned_to)
+            .await?;
+        let comments = client
+            .list_work_item_comments(&project.id, input.work_item_id, 50)
+            .await
+            .unwrap_or_default();
+
+        Ok(summarize_work_item_preview(
+            &organization,
+            &project.id,
+            &project.name,
+            work_item,
+            comments,
+        ))
     }
 
     fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {

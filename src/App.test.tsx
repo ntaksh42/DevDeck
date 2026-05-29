@@ -373,6 +373,43 @@ describe("App", () => {
           },
         ]);
       }
+      if (command === "assign_work_item") {
+        return Promise.resolve({
+          organizationId: "contoso",
+          projectId: "project-1",
+          projectName: "Platform",
+          id: 123,
+          title: "Fix save workflow",
+          workItemType: "Bug",
+          state: "Active",
+          assignedTo: "Creator",
+          createdBy: "Creator",
+          createdDate: "2026-05-23T00:00:00Z",
+          changedDate: "2026-05-24T01:00:00Z",
+          areaPath: "Platform\\Product",
+          iterationPath: "Platform\\Sprint 24",
+          reason: "Work started",
+          tags: "save; bug",
+          priority: "1",
+          severity: "2 - High",
+          storyPoints: null,
+          remainingWork: null,
+          descriptionHtml: "<p>Fix the save flow.</p>",
+          acceptanceCriteriaHtml: "<ul><li>Save succeeds</li></ul>",
+          webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/123",
+          comments: [
+            {
+              id: 7,
+              text: "Earlier context",
+              renderedText: "<p>Earlier context</p>",
+              createdBy: "Creator",
+              createdById: "user-creator",
+              createdByUniqueName: "creator@example.com",
+              createdDate: "2026-05-23T12:00:00Z",
+            },
+          ],
+        });
+      }
       if (command === "add_work_item_comment") {
         return Promise.resolve({
           id: 1,
@@ -411,6 +448,19 @@ describe("App", () => {
     expect(await screen.findByLabelText("Comment")).toBeTruthy();
     expect(screen.getAllByTitle("Fix save workflow").length).toBeGreaterThan(1);
     expect(document.querySelector("iframe")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Change assignee" }));
+    fireEvent.click(await screen.findByRole("button", { name: /creator@example.com/ }));
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("assign_work_item", {
+        input: {
+          organizationId: "contoso",
+          projectId: "project-1",
+          workItemId: 123,
+          assignedTo: "creator@example.com",
+        },
+      });
+    });
 
     const commentBox = screen.getByLabelText("Comment");
     fireEvent.change(commentBox, { target: { value: "@" } });

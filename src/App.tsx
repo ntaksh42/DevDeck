@@ -39,6 +39,7 @@ import {
 import { Route, Routes } from "react-router-dom";
 import {
   addWorkItemComment,
+  assignWorkItem,
   addAzureCliOrganization,
   addPatOrganization,
   commandErrorMessage,
@@ -1956,6 +1957,8 @@ function WorkItemPreviewPanel({
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const queryClient = useQueryClient();
+  const [assigneeOpen, setAssigneeOpen] = useState(false);
+  const [assigneeQuery, setAssigneeQuery] = useState("");
   const recentMentionOptions = useMemo(
     () => recentWorkItemMentionCandidates(preview),
     [preview],
@@ -1992,6 +1995,32 @@ function WorkItemPreviewPanel({
   );
   const showMentionOptions = mentionStart !== null && mentionOptions.length > 0;
 
+  const assigneeOptionsQuery = useQuery({
+    queryKey: ["workItemAssignees", selectedItem?.organizationId, assigneeQuery],
+    queryFn: () =>
+      searchWorkItemMentions({
+        organizationId: selectedItem?.organizationId,
+        query: assigneeQuery,
+      }),
+    enabled: !!selectedItem && assigneeOpen && assigneeQuery.trim().length > 0,
+    staleTime: 60_000,
+  });
+  const assigneeOptions = useMemo(
+    () =>
+      rankMentionCandidates({
+        recent: recentMentionOptions,
+        remote: assigneeOptionsQuery.data ?? [],
+        query: assigneeQuery,
+        priorityNames: mentionPriorityNames,
+      }),
+    [
+      assigneeOptionsQuery.data,
+      assigneeQuery,
+      mentionPriorityNames,
+      recentMentionOptions,
+    ],
+  );
+
   const commentMutation = useMutation({
     mutationFn: addWorkItemComment,
     onSuccess: () => {
@@ -2003,6 +2032,30 @@ function WorkItemPreviewPanel({
       void queryClient.invalidateQueries({ queryKey: ["workItemPreview"] });
     },
   });
+
+  const assignMutation = useMutation({
+    mutationFn: assignWorkItem,
+    onSuccess: (updatedPreview) => {
+      setAssigneeOpen(false);
+      setAssigneeQuery("");
+      queryClient.setQueryData(
+        [
+          "workItemPreview",
+          updatedPreview.organizationId,
+          updatedPreview.projectId,
+          updatedPreview.id,
+        ],
+        updatedPreview,
+      );
+      void queryClient.invalidateQueries({ queryKey: ["myWorkItems"] });
+      void queryClient.invalidateQueries({ queryKey: ["workItemQueryView"] });
+    },
+  });
+
+  useEffect(() => {
+    setAssigneeOpen(false);
+    setAssigneeQuery("");
+  }, [selectedItem?.id]);
 
   function updateMentionState(text: string, cursor: number) {
     const mention = activeMentionAt(text, cursor);
@@ -2035,6 +2088,16 @@ function WorkItemPreviewPanel({
       projectId: selectedItem.projectId,
       workItemId: selectedItem.id,
       markdown: renderAzureMentionMarkdown(commentText, selectedMentions),
+    });
+  }
+
+  function assignTo(candidate: MentionCandidate) {
+    if (!selectedItem) return;
+    assignMutation.mutate({
+      organizationId: selectedItem.organizationId,
+      projectId: selectedItem.projectId,
+      workItemId: selectedItem.id,
+      assignedTo: candidate.uniqueName ?? candidate.displayName,
     });
   }
 
@@ -2112,7 +2175,22 @@ function WorkItemPreviewPanel({
             </div>
           ) : preview ? (
             <>
-              <WorkItemPreviewDetails preview={preview} />
+              <WorkItemPreviewDetails
+                preview={preview}
+                assigneeControl={
+                  <AssigneePicker
+                    current={preview.assignedTo}
+                    loading={assigneeOptionsQuery.isFetching}
+                    onOpenChange={setAssigneeOpen}
+                    onQueryChange={setAssigneeQuery}
+                    onSelect={assignTo}
+                    open={assigneeOpen}
+                    options={assigneeOptions}
+                    pending={assignMutation.isPending}
+                    query={assigneeQuery}
+                  />
+                }
+              />
               <div className="border-t border-border p-2">
                 <form className="space-y-1.5" onSubmit={submitComment}>
                   <label className="grid gap-1">
@@ -2198,9 +2276,14 @@ function WorkItemPreviewPanel({
   );
 }
 
-function WorkItemPreviewDetails({ preview }: { preview: WorkItemPreview }) {
+function WorkItemPreviewDetails({
+  preview,
+  assigneeControl,
+}: {
+  preview: WorkItemPreview;
+  assigneeControl: ReactNode;
+}) {
   const fields = [
-    ["Assigned", preview.assignedTo],
     ["Author", preview.createdBy],
     ["Created", preview.createdDate ? formatDate(preview.createdDate) : null],
     ["Changed", preview.changedDate ? formatDate(preview.changedDate) : null],
@@ -2221,6 +2304,10 @@ function WorkItemPreviewDetails({ preview }: { preview: WorkItemPreview }) {
   return (
     <div className="min-h-0 flex-1 overflow-auto px-2.5 py-1.5 text-xs">
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1">
+        <div className="grid min-w-0 grid-cols-[58px_minmax(0,1fr)] items-baseline gap-1">
+          <dt className="truncate text-[11px] leading-4 text-muted-foreground">Assigned</dt>
+          <dd className="min-w-0 leading-4">{assigneeControl}</dd>
+        </div>
         {fields.map(([label, value]) => (
           <div
             key={label ?? ""}
@@ -2280,6 +2367,85 @@ function WorkItemPreviewDetails({ preview }: { preview: WorkItemPreview }) {
                 </p>
               </div>
             ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AssigneePicker({
+  current,
+  loading,
+  onOpenChange,
+  onQueryChange,
+  onSelect,
+  open,
+  options,
+  pending,
+  query,
+}: {
+  current: string | null;
+  loading: boolean;
+  onOpenChange: (open: boolean) => void;
+  onQueryChange: (query: string) => void;
+  onSelect: (candidate: MentionCandidate) => void;
+  open: boolean;
+  options: MentionCandidate[];
+  pending: boolean;
+  query: string;
+}) {
+  return (
+    <div className="relative min-w-0">
+      <button
+        type="button"
+        aria-label="Change assignee"
+        disabled={pending}
+        onClick={() => onOpenChange(!open)}
+        className="max-w-full truncate rounded px-1 text-left text-xs leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+        title={current ?? "Unassigned"}
+      >
+        {pending ? "Updating..." : current ?? "Unassigned"}
+      </button>
+      {open ? (
+        <div className="absolute left-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-white p-1 shadow-lg">
+          <input
+            autoFocus
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                onOpenChange(false);
+              }
+            }}
+            placeholder="Search assignee..."
+            className="mb-1 h-7 w-full rounded border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
+          />
+          <div className="max-h-44 overflow-auto">
+            {loading ? (
+              <div className="px-2 py-1.5 text-xs text-muted-foreground">Searching...</div>
+            ) : options.length > 0 ? (
+              options.map((candidate) => (
+                <button
+                  key={candidate.id}
+                  type="button"
+                  onClick={() => onSelect(candidate)}
+                  className="flex w-full min-w-0 flex-col rounded px-2 py-1 text-left text-xs hover:bg-secondary"
+                >
+                  <span className="truncate font-medium">{candidate.displayName}</span>
+                  {candidate.uniqueName ? (
+                    <span className="truncate text-[11px] text-muted-foreground">
+                      {candidate.uniqueName}
+                    </span>
+                  ) : null}
+                </button>
+              ))
+            ) : (
+              <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                {query.trim() ? "No matches" : "No recent assignees"}
+              </div>
+            )}
           </div>
         </div>
       ) : null}
