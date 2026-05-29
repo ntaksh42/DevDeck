@@ -348,7 +348,8 @@ describe("App", () => {
           severity: "2 - High",
           storyPoints: null,
           remainingWork: null,
-          descriptionHtml: "<p>Fix the save flow.</p>",
+          descriptionHtml:
+            '<p>Fix the save flow.</p><img src="https://example.test/save-flow.png" alt="Save flow diagram">',
           acceptanceCriteriaHtml: "<ul><li>Save succeeds</li></ul>",
           webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/123",
           comments: [
@@ -394,7 +395,8 @@ describe("App", () => {
           severity: "2 - High",
           storyPoints: null,
           remainingWork: null,
-          descriptionHtml: "<p>Fix the save flow.</p>",
+          descriptionHtml:
+            '<p>Fix the save flow.</p><img src="https://example.test/save-flow.png" alt="Save flow diagram">',
           acceptanceCriteriaHtml: "<ul><li>Save succeeds</li></ul>",
           webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/123",
           comments: [
@@ -447,7 +449,7 @@ describe("App", () => {
     expect(screen.getAllByText("Test User").length).toBeGreaterThan(0);
     expect(await screen.findByLabelText("Comment")).toBeTruthy();
     expect(screen.getAllByTitle("Fix save workflow").length).toBeGreaterThan(1);
-    expect(document.querySelector("iframe")).toBeNull();
+    expect(document.querySelector('iframe[title="Description"]')).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Change assignee" }));
     fireEvent.click(await screen.findByRole("button", { name: /creator@example.com/ }));

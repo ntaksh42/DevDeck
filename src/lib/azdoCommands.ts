@@ -950,7 +950,7 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
     severity: summary.workItemType === "Bug" ? "2 - High" : null,
     storyPoints: summary.workItemType === "User Story" ? "5" : null,
     remainingWork: summary.workItemType === "Task" ? "3" : null,
-    descriptionHtml: `<p>${escapeDemoHtml(summary.title)} の背景と期待する動作を確認します。</p><ul><li>Azure DevOps から詳細 field を取得</li><li>右側の preview pane に表示</li></ul>`,
+    descriptionHtml: `<p>${escapeDemoHtml(summary.title)} の背景と期待する動作を確認します。</p><ul><li>Azure DevOps から詳細 field を取得</li><li>右側の preview pane に表示</li></ul><p><img alt="Demo preview image" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='92' viewBox='0 0 320 92'%3E%3Crect width='320' height='92' rx='8' fill='%23eff6ff'/%3E%3Crect x='14' y='14' width='88' height='64' rx='5' fill='%232563eb'/%3E%3Crect x='116' y='22' width='178' height='10' rx='5' fill='%2393c5fd'/%3E%3Crect x='116' y='42' width='148' height='10' rx='5' fill='%23bfdbfe'/%3E%3Crect x='116' y='62' width='118' height='10' rx='5' fill='%23dbeafe'/%3E%3C/svg%3E"></p>`,
     acceptanceCriteriaHtml:
       "<ul><li>一覧で選択した Work Item と preview が同期する</li><li>HTML field は sandbox 内で表示する</li></ul>",
     webUrl: summary.webUrl,

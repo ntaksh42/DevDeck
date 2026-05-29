@@ -2297,8 +2297,8 @@ function WorkItemPreviewDetails({
     ["Tags", preview.tags],
   ].filter(([, value]) => !!value);
 
-  const description = htmlToText(preview.descriptionHtml);
-  const acceptanceCriteria = htmlToText(preview.acceptanceCriteriaHtml);
+  const descriptionHtml = normalizeRichHtml(preview.descriptionHtml);
+  const acceptanceCriteriaHtml = normalizeRichHtml(preview.acceptanceCriteriaHtml);
   const visibleComments = preview.comments.slice(0, 2);
 
   return (
@@ -2321,24 +2321,30 @@ function WorkItemPreviewDetails({
         ))}
       </dl>
 
-      {(description || acceptanceCriteria) && (
+      {(descriptionHtml || acceptanceCriteriaHtml) && (
         <div className="mt-1.5 grid gap-1.5 border-t border-border pt-1.5">
-          {description ? (
+          {descriptionHtml ? (
             <section>
               <h3 className="mb-0.5 text-[11px] font-semibold uppercase text-muted-foreground">
                 Description
               </h3>
-              <p className="line-clamp-3 text-xs leading-4 text-foreground">{description}</p>
+              <RichHtmlFrame
+                html={descriptionHtml}
+                title="Description"
+                maxHeight={180}
+              />
             </section>
           ) : null}
-          {acceptanceCriteria ? (
+          {acceptanceCriteriaHtml ? (
             <section>
               <h3 className="mb-0.5 text-[11px] font-semibold uppercase text-muted-foreground">
                 Acceptance Criteria
               </h3>
-              <p className="line-clamp-3 text-xs leading-4 text-foreground">
-                {acceptanceCriteria}
-              </p>
+              <RichHtmlFrame
+                html={acceptanceCriteriaHtml}
+                title="Acceptance Criteria"
+                maxHeight={150}
+              />
             </section>
           ) : null}
         </div>
@@ -2362,9 +2368,12 @@ function WorkItemPreviewDetails({
                     </span>
                   ) : null}
                 </div>
-                <p className="line-clamp-2 text-xs leading-4 text-foreground">
-                  {htmlToText(comment.renderedText) || comment.text || "No text"}
-                </p>
+                <RichHtmlFrame
+                  html={commentRichHtml(comment.renderedText, comment.text)}
+                  title={`Comment by ${comment.createdBy ?? "Unknown"}`}
+                  maxHeight={96}
+                  minHeight={32}
+                />
               </div>
             ))}
           </div>
@@ -2372,6 +2381,102 @@ function WorkItemPreviewDetails({
       ) : null}
     </div>
   );
+}
+
+function RichHtmlFrame({
+  html,
+  maxHeight,
+  minHeight = 40,
+  title,
+}: {
+  html: string;
+  maxHeight: number;
+  minHeight?: number;
+  title: string;
+}) {
+  const [height, setHeight] = useState(minHeight);
+  const srcDoc = useMemo(() => buildRichHtmlDocument(html), [html]);
+
+  return (
+    <iframe
+      title={title}
+      srcDoc={srcDoc}
+      sandbox="allow-same-origin"
+      className="block w-full rounded border border-border bg-white"
+      style={{ height, maxHeight }}
+      onLoad={(event) => {
+        const doc = event.currentTarget.contentDocument;
+        const body = doc?.body;
+        if (!body) return;
+        const nextHeight = Math.max(
+          minHeight,
+          Math.min(maxHeight, Math.ceil(body.scrollHeight)),
+        );
+        setHeight(nextHeight);
+      }}
+    />
+  );
+}
+
+function buildRichHtmlDocument(html: string): string {
+  return `<!doctype html>
+<html>
+<head>
+  <base target="_blank">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    html, body { margin: 0; padding: 0; background: #fff; }
+    body {
+      box-sizing: border-box;
+      color: #0f172a;
+      font: 12px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow-wrap: anywhere;
+    }
+    * { box-sizing: border-box; }
+    p { margin: 0 0 6px; }
+    p:last-child, ul:last-child, ol:last-child, table:last-child, pre:last-child { margin-bottom: 0; }
+    ul, ol { margin: 0 0 6px 18px; padding: 0; }
+    li { margin: 1px 0; }
+    a { color: #2563eb; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    img, video { max-width: 100%; height: auto; border: 1px solid #dbe3ef; border-radius: 4px; }
+    table { width: 100%; margin: 0 0 6px; border-collapse: collapse; font-size: 12px; }
+    th, td { border: 1px solid #dbe3ef; padding: 3px 5px; text-align: left; vertical-align: top; }
+    th { background: #f8fafc; font-weight: 600; }
+    pre, code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; }
+    pre { margin: 0 0 6px; padding: 6px; overflow: auto; border: 1px solid #dbe3ef; border-radius: 4px; background: #f8fafc; }
+    blockquote { margin: 0 0 6px; padding-left: 8px; border-left: 2px solid #cbd5e1; color: #475569; }
+  </style>
+</head>
+<body>${html}</body>
+</html>`;
+}
+
+function normalizeRichHtml(value: string | null | undefined): string | null {
+  const html = value?.trim();
+  if (!html) return null;
+  if (htmlToText(html) || /<(img|video|table|pre|blockquote|ul|ol|li|a)\b/i.test(html)) {
+    return html;
+  }
+  return null;
+}
+
+function commentRichHtml(
+  renderedText: string | null | undefined,
+  plainText: string | null | undefined,
+): string {
+  return normalizeRichHtml(renderedText) ?? escapeHtml(plainText) ?? "No text";
+}
+
+function escapeHtml(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function AssigneePicker({
