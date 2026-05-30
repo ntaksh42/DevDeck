@@ -128,6 +128,16 @@ function focusWorkItemCommentInput(): boolean {
   return true;
 }
 
+function focusPrimaryGrid(): boolean {
+  const grid = document.querySelector<HTMLElement>("[data-primary-grid='true']");
+  if (!grid) return false;
+  const selectedRow = grid.querySelector<HTMLElement>("[role='row'][aria-selected='true']");
+  const focusTarget =
+    selectedRow ?? grid.querySelector<HTMLElement>("[tabindex='0']") ?? grid;
+  focusTarget.focus();
+  return true;
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -250,6 +260,12 @@ function AppShell() {
       }
 
       if (!event.altKey || event.shiftKey) {
+        return;
+      }
+
+      if (event.key === "g" || event.key === "G") {
+        event.preventDefault();
+        focusPrimaryGrid();
         return;
       }
 
@@ -988,7 +1004,14 @@ function CommitResults({
           No commits matched.
         </div>
       ) : (
-        <div role="grid" aria-label="Commit search results" className="overflow-x-auto" onKeyDown={handleKeyDown}>
+        <div
+          role="grid"
+          aria-label="Commit search results"
+          data-primary-grid="true"
+          tabIndex={-1}
+          className="overflow-x-auto"
+          onKeyDown={handleKeyDown}
+        >
           <div className="min-w-[720px]">
             <div
               role="row"
@@ -2222,7 +2245,12 @@ function WorkItemsGrid({
                   No work items matched.
                 </div>
               ) : (
-                <div role="grid" aria-label="Work items">
+                <div
+                  role="grid"
+                  aria-label="Work items"
+                  data-primary-grid="true"
+                  tabIndex={-1}
+                >
                   {sorted.map((item, i) => (
                     <WorkItemGridRow
                       key={`${item.organizationId}:${item.projectId}:${item.id}`}
@@ -4153,7 +4181,12 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
                   {allPrs.length === 0 ? "No pull requests assigned to you." : "No results match the current filter."}
                 </div>
               ) : (
-                <div role="grid" aria-label="My review pull requests">
+                <div
+                  role="grid"
+                  aria-label="My review pull requests"
+                  data-primary-grid="true"
+                  tabIndex={-1}
+                >
                   {sortedPrs.map((pr, i) => (
                     <ReviewPrRow
                       key={`${pr.organizationId}-${pr.pullRequestId}`}
@@ -4385,6 +4418,7 @@ function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Settings</span><kbd className={kbd}>Alt+6</kbd></div>
           <div className={row}><span>Work Item Views</span><kbd className={kbd}>Alt+7</kbd></div>
           <div className={row}><span>Sync now</span><kbd className={kbd}>Alt+S</kbd></div>
+          <div className={row}><span>Focus grid</span><kbd className={kbd}>Alt+G</kbd></div>
 
           <p className={section}>My Reviews</p>
           <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>
@@ -4850,7 +4884,14 @@ function PullRequestResults({
           No pull requests matched.
         </div>
       ) : (
-        <div role="grid" aria-label="Pull request search results" className="overflow-x-auto" onKeyDown={handleKeyDown}>
+        <div
+          role="grid"
+          aria-label="Pull request search results"
+          data-primary-grid="true"
+          tabIndex={-1}
+          className="overflow-x-auto"
+          onKeyDown={handleKeyDown}
+        >
           <div
             role="row"
             className="grid border-b border-border bg-muted/40 px-2 py-1 text-xs font-medium text-muted-foreground"

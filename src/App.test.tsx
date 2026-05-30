@@ -483,6 +483,11 @@ describe("App", () => {
     (commentBox as HTMLTextAreaElement).blur();
     fireEvent.keyDown(window, { key: "m", altKey: true });
     expect(document.activeElement).toBe(commentBox);
+    fireEvent.keyDown(window, { key: "g", altKey: true });
+    expect(document.activeElement?.getAttribute("role")).toBe("row");
+    expect(document.activeElement?.getAttribute("aria-selected")).toBe("true");
+    fireEvent.keyDown(window, { key: "m", altKey: true });
+    expect(document.activeElement).toBe(commentBox);
     fireEvent.change(commentBox, { target: { value: "@" } });
     (commentBox as HTMLTextAreaElement).setSelectionRange(1, 1);
     fireEvent.click(commentBox);
