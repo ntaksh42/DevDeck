@@ -384,6 +384,15 @@ describe("App", () => {
               createdByUniqueName: "creator@example.com",
               createdDate: "2026-05-23T12:00:00Z",
             },
+            {
+              id: 6,
+              text: "Older context",
+              renderedText: "<p>Older context</p>",
+              createdBy: "Reviewer",
+              createdById: "user-reviewer",
+              createdByUniqueName: "reviewer@example.com",
+              createdDate: "2026-05-23T11:00:00Z",
+            },
           ],
         });
       }
@@ -502,6 +511,16 @@ describe("App", () => {
     expect(
       commentSrcDocs.some((srcDoc) => srcDoc.includes("@&lt;user-creator&gt;")),
     ).toBe(false);
+    expect(
+      [
+        ...document.querySelectorAll('iframe[title^="Comment by "]'),
+      ].map((frame) => frame.getAttribute("srcdoc") ?? ""),
+    ).toHaveLength(3);
+    expect(
+      [...document.querySelectorAll('iframe[title="Comment by Reviewer"]')].some(
+        (frame) => (frame.getAttribute("srcdoc") ?? "").includes("Older context"),
+      ),
+    ).toBe(true);
 
     const workItemsGrid = screen.getByRole("grid", { name: "Work items" });
     fireEvent.keyDown(workItemsGrid, { key: "a" });

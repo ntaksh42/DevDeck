@@ -2814,7 +2814,6 @@ function WorkItemPreviewDetails({
 
   const descriptionHtml = normalizeRichHtml(preview.descriptionHtml);
   const acceptanceCriteriaHtml = normalizeRichHtml(preview.acceptanceCriteriaHtml);
-  const visibleComments = preview.comments.slice(0, 2);
 
   return (
     <div className="min-h-0 flex-1 overflow-auto px-2 py-1 text-xs">
@@ -2873,13 +2872,13 @@ function WorkItemPreviewDetails({
         </div>
       )}
 
-      {visibleComments.length > 0 ? (
+      {preview.comments.length > 0 ? (
         <div className="mt-1 border-t border-border pt-1">
           <h3 className="mb-0.5 text-[10px] font-semibold uppercase leading-3 text-muted-foreground">
             Comments ({preview.comments.length})
           </h3>
           <div className="space-y-1">
-            {visibleComments.map((comment) => (
+            {preview.comments.map((comment) => (
               <div key={comment.id} className="min-w-0">
                 <div className="flex min-w-0 items-baseline gap-2">
                   <span className="truncate font-medium">

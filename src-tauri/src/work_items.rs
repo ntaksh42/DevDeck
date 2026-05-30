@@ -38,6 +38,8 @@ const WORK_ITEM_PREVIEW_FIELDS: &[&str] = &[
     "Microsoft.VSTS.Scheduling.RemainingWork",
 ];
 
+const WORK_ITEM_PREVIEW_COMMENT_LIMIT: u32 = 200;
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchWorkItemsInput {
@@ -348,7 +350,11 @@ impl WorkItemService {
             .collect();
         let (work_items_result, comments_result) = tokio::join!(
             client.get_work_items_batch(&project.id, vec![input.work_item_id], fields),
-            client.list_work_item_comments(&project.id, input.work_item_id, 50),
+            client.list_work_item_comments(
+                &project.id,
+                input.work_item_id,
+                WORK_ITEM_PREVIEW_COMMENT_LIMIT,
+            ),
         );
         let work_item = work_items_result?.into_iter().next().ok_or_else(|| {
             AppError::InvalidInput(format!("work item not found: {}", input.work_item_id))
@@ -417,7 +423,11 @@ impl WorkItemService {
             .update_work_item_assigned_to(&project.id, input.work_item_id, assigned_to)
             .await?;
         let comments = client
-            .list_work_item_comments(&project.id, input.work_item_id, 50)
+            .list_work_item_comments(
+                &project.id,
+                input.work_item_id,
+                WORK_ITEM_PREVIEW_COMMENT_LIMIT,
+            )
             .await
             .unwrap_or_default();
 
@@ -451,7 +461,11 @@ impl WorkItemService {
             .update_work_item_state(&project.id, input.work_item_id, &state)
             .await?;
         let comments = client
-            .list_work_item_comments(&project.id, input.work_item_id, 50)
+            .list_work_item_comments(
+                &project.id,
+                input.work_item_id,
+                WORK_ITEM_PREVIEW_COMMENT_LIMIT,
+            )
             .await
             .unwrap_or_default();
 
@@ -464,7 +478,10 @@ impl WorkItemService {
         ))
     }
 
-    pub async fn list_type_states(&self, input: ListWorkItemTypeStatesInput) -> Result<Vec<String>> {
+    pub async fn list_type_states(
+        &self,
+        input: ListWorkItemTypeStatesInput,
+    ) -> Result<Vec<String>> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
         Ok(client
@@ -472,7 +489,10 @@ impl WorkItemService {
             .await?)
     }
 
-    pub async fn set_items_state(&self, input: SetWorkItemsStateInput) -> Result<Vec<BulkWorkItemResult>> {
+    pub async fn set_items_state(
+        &self,
+        input: SetWorkItemsStateInput,
+    ) -> Result<Vec<BulkWorkItemResult>> {
         let state = input.state.trim().to_string();
         if state.is_empty() {
             return Err(AppError::InvalidInput("state is required".to_string()));
@@ -487,19 +507,27 @@ impl WorkItemService {
             .await?
             .into_iter()
             .find(|p| p.id == input.project_id)
-            .ok_or_else(|| AppError::InvalidInput(format!("project not found: {}", input.project_id)))?;
+            .ok_or_else(|| {
+                AppError::InvalidInput(format!("project not found: {}", input.project_id))
+            })?;
 
         let mut results = Vec::new();
         for id in input.work_item_ids {
             match client.update_work_item_state(&project.id, id, &state).await {
                 Ok(_) => results.push(BulkWorkItemResult { id, error: None }),
-                Err(e) => results.push(BulkWorkItemResult { id, error: Some(e.to_string()) }),
+                Err(e) => results.push(BulkWorkItemResult {
+                    id,
+                    error: Some(e.to_string()),
+                }),
             }
         }
         Ok(results)
     }
 
-    pub async fn assign_items(&self, input: AssignWorkItemsInput) -> Result<Vec<BulkWorkItemResult>> {
+    pub async fn assign_items(
+        &self,
+        input: AssignWorkItemsInput,
+    ) -> Result<Vec<BulkWorkItemResult>> {
         let assigned_to = input.assigned_to.trim().to_string();
         if assigned_to.is_empty() {
             return Err(AppError::InvalidInput("assignee is required".to_string()));
@@ -514,13 +542,21 @@ impl WorkItemService {
             .await?
             .into_iter()
             .find(|p| p.id == input.project_id)
-            .ok_or_else(|| AppError::InvalidInput(format!("project not found: {}", input.project_id)))?;
+            .ok_or_else(|| {
+                AppError::InvalidInput(format!("project not found: {}", input.project_id))
+            })?;
 
         let mut results = Vec::new();
         for id in input.work_item_ids {
-            match client.update_work_item_assigned_to(&project.id, id, &assigned_to).await {
+            match client
+                .update_work_item_assigned_to(&project.id, id, &assigned_to)
+                .await
+            {
                 Ok(_) => results.push(BulkWorkItemResult { id, error: None }),
-                Err(e) => results.push(BulkWorkItemResult { id, error: Some(e.to_string()) }),
+                Err(e) => results.push(BulkWorkItemResult {
+                    id,
+                    error: Some(e.to_string()),
+                }),
             }
         }
         Ok(results)
