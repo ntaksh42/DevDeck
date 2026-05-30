@@ -2686,16 +2686,13 @@ function WorkItemPreviewDetails({
   stateControl: ReactNode;
 }) {
   const fields = [
-    ["Author", preview.createdBy],
-    ["Created", preview.createdDate ? formatDate(preview.createdDate) : null],
-    ["Changed", preview.changedDate ? formatDate(preview.changedDate) : null],
     ["Area", preview.areaPath],
     ["Iteration", preview.iterationPath],
     ["Reason", preview.reason],
     ["Priority", preview.priority],
     ["Severity", preview.severity],
-    ["Story points", preview.storyPoints],
-    ["Remaining work", preview.remainingWork],
+    ["Points", preview.storyPoints],
+    ["Remain", preview.remainingWork],
     ["Tags", preview.tags],
   ].filter(([, value]) => !!value);
 
@@ -2704,23 +2701,23 @@ function WorkItemPreviewDetails({
   const visibleComments = preview.comments.slice(0, 2);
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto px-2.5 py-1.5 text-xs">
-      <dl className="grid grid-cols-2 gap-x-3 gap-y-1">
-        <div className="grid min-w-0 grid-cols-[58px_minmax(0,1fr)] items-baseline gap-1">
-          <dt className="truncate text-[11px] leading-4 text-muted-foreground">State</dt>
-          <dd className="min-w-0 leading-4">{stateControl}</dd>
+    <div className="min-h-0 flex-1 overflow-auto px-2 py-1 text-xs">
+      <dl className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-x-2 gap-y-0.5">
+        <div className="grid min-w-0 grid-cols-[50px_minmax(0,1fr)] items-baseline gap-1">
+          <dt className="truncate text-[11px] leading-[15px] text-muted-foreground">State</dt>
+          <dd className="min-w-0 leading-[15px]">{stateControl}</dd>
         </div>
-        <div className="grid min-w-0 grid-cols-[58px_minmax(0,1fr)] items-baseline gap-1">
-          <dt className="truncate text-[11px] leading-4 text-muted-foreground">Assigned</dt>
-          <dd className="min-w-0 leading-4">{assigneeControl}</dd>
+        <div className="grid min-w-0 grid-cols-[50px_minmax(0,1fr)] items-baseline gap-1">
+          <dt className="truncate text-[11px] leading-[15px] text-muted-foreground">Assigned</dt>
+          <dd className="min-w-0 leading-[15px]">{assigneeControl}</dd>
         </div>
         {fields.map(([label, value]) => (
           <div
             key={label ?? ""}
-            className="grid min-w-0 grid-cols-[58px_minmax(0,1fr)] items-baseline gap-1"
+            className="grid min-w-0 grid-cols-[50px_minmax(0,1fr)] items-baseline gap-1"
           >
-            <dt className="truncate text-[11px] leading-4 text-muted-foreground">{label}</dt>
-            <dd className="truncate leading-4 text-foreground" title={value ?? undefined}>
+            <dt className="truncate text-[11px] leading-[15px] text-muted-foreground">{label}</dt>
+            <dd className="truncate leading-[15px] text-foreground" title={value ?? undefined}>
               {value}
             </dd>
           </div>
@@ -2728,10 +2725,10 @@ function WorkItemPreviewDetails({
       </dl>
 
       {(descriptionHtml || acceptanceCriteriaHtml) && (
-        <div className="mt-1.5 grid gap-1.5 border-t border-border pt-1.5">
+        <div className="mt-1 grid gap-1 border-t border-border pt-1">
           {descriptionHtml ? (
             <section>
-              <h3 className="mb-0.5 text-[11px] font-semibold uppercase text-muted-foreground">
+              <h3 className="mb-0.5 text-[10px] font-semibold uppercase leading-3 text-muted-foreground">
                 Description
               </h3>
               <RichHtmlFrame
@@ -2742,7 +2739,7 @@ function WorkItemPreviewDetails({
           ) : null}
           {acceptanceCriteriaHtml ? (
             <section>
-              <h3 className="mb-0.5 text-[11px] font-semibold uppercase text-muted-foreground">
+              <h3 className="mb-0.5 text-[10px] font-semibold uppercase leading-3 text-muted-foreground">
                 Acceptance Criteria
               </h3>
               <RichHtmlFrame
@@ -2755,8 +2752,8 @@ function WorkItemPreviewDetails({
       )}
 
       {visibleComments.length > 0 ? (
-        <div className="mt-1.5 border-t border-border pt-1.5">
-          <h3 className="mb-0.5 text-[11px] font-semibold uppercase text-muted-foreground">
+        <div className="mt-1 border-t border-border pt-1">
+          <h3 className="mb-0.5 text-[10px] font-semibold uppercase leading-3 text-muted-foreground">
             Comments ({preview.comments.length})
           </h3>
           <div className="space-y-1">

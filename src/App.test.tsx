@@ -449,6 +449,12 @@ describe("App", () => {
     expect(screen.getAllByText("Test User").length).toBeGreaterThan(0);
     expect(await screen.findByLabelText("Comment")).toBeTruthy();
     expect(screen.getAllByTitle("Fix save workflow").length).toBeGreaterThan(1);
+    const previewLabels = [...document.querySelectorAll("dt")].map((node) =>
+      node.textContent?.trim(),
+    );
+    expect(previewLabels).not.toContain("Author");
+    expect(previewLabels).not.toContain("Created");
+    expect(previewLabels).not.toContain("Changed");
     const descriptionFrame = document.querySelector(
       'iframe[title="Description"]',
     ) as HTMLIFrameElement | null;
