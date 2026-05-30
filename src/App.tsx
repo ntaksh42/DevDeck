@@ -138,6 +138,29 @@ function focusPrimaryGrid(): boolean {
   return true;
 }
 
+function focusPrimaryPreview(): boolean {
+  const preview = document.querySelector<HTMLElement>("[data-primary-preview='true']");
+  if (!preview) return false;
+  preview.focus();
+  return true;
+}
+
+function stopPreviewNavigationKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
+  if (
+    event.key === "ArrowDown" ||
+    event.key === "ArrowUp" ||
+    event.key === "ArrowLeft" ||
+    event.key === "ArrowRight" ||
+    event.key === "PageDown" ||
+    event.key === "PageUp" ||
+    event.key === "Home" ||
+    event.key === "End" ||
+    event.key === " "
+  ) {
+    event.stopPropagation();
+  }
+}
+
 function ShortcutHint({ children }: { children: ReactNode }) {
   return (
     <kbd className="inline-flex h-4 items-center rounded border border-border bg-muted px-1 font-mono text-[10px] font-medium leading-none text-muted-foreground">
@@ -274,6 +297,12 @@ function AppShell() {
       if (event.key === "g" || event.key === "G") {
         event.preventDefault();
         focusPrimaryGrid();
+        return;
+      }
+
+      if (event.key === "p" || event.key === "P") {
+        event.preventDefault();
+        focusPrimaryPreview();
         return;
       }
 
@@ -2646,7 +2675,9 @@ function WorkItemPreviewPanel({
               </div>
               {previewLoading ? (
                 <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" aria-hidden="true" />
-              ) : null}
+              ) : (
+                <ShortcutHint>Alt+P</ShortcutHint>
+              )}
             </div>
             <p className="mt-0.5 line-clamp-2 text-[13px] font-semibold leading-5" title={selectedItem.title}>
               {selectedItem.title}
@@ -2816,7 +2847,14 @@ function WorkItemPreviewDetails({
   const acceptanceCriteriaHtml = normalizeRichHtml(preview.acceptanceCriteriaHtml);
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto px-2 py-1 text-xs">
+    <div
+      aria-keyshortcuts="Alt+P"
+      aria-label="Work item preview"
+      className="min-h-0 flex-1 overflow-auto px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-inset focus:ring-ring"
+      data-primary-preview="true"
+      onKeyDown={stopPreviewNavigationKeyDown}
+      tabIndex={-1}
+    >
       <dl className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-x-2 gap-y-0.5">
         <div className="grid min-w-0 grid-cols-[50px_minmax(0,1fr)] items-baseline gap-1">
           <dt className="truncate text-[11px] leading-[15px] text-muted-foreground">State</dt>
@@ -4443,7 +4481,9 @@ function ReviewResultPreviewPanel({
         </div>
         {previewLoading ? (
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
-        ) : null}
+        ) : (
+          <ShortcutHint>Alt+P</ShortcutHint>
+        )}
       </div>
 
       {settingsLoading ? (
@@ -4470,9 +4510,12 @@ function ReviewResultPreviewPanel({
           </div>
           <iframe
             title={`Review result preview for PR${preview.pullRequestId}`}
+            aria-keyshortcuts="Alt+P"
             sandbox=""
             srcDoc={preview.html}
-            className="min-h-0 flex-1 bg-white"
+            className="min-h-0 flex-1 bg-white outline-none focus:ring-2 focus:ring-inset focus:ring-ring"
+            data-primary-preview="true"
+            tabIndex={-1}
           />
         </>
       ) : (
@@ -4595,6 +4638,7 @@ function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Work Item Views</span><kbd className={kbd}>Alt+7</kbd></div>
           <div className={row}><span>Sync now</span><kbd className={kbd}>Alt+S</kbd></div>
           <div className={row}><span>Focus grid</span><kbd className={kbd}>Alt+G</kbd></div>
+          <div className={row}><span>Focus preview</span><kbd className={kbd}>Alt+P</kbd></div>
 
           <p className={section}>My Reviews</p>
           <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>

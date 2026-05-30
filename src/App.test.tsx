@@ -546,9 +546,13 @@ describe("App", () => {
     fireEvent.keyDown(window, { key: "g", altKey: true });
     expect(document.activeElement?.getAttribute("role")).toBe("row");
     expect(document.activeElement?.getAttribute("aria-selected")).toBe("true");
+    fireEvent.keyDown(window, { key: "p", altKey: true });
+    expect(document.activeElement).toBe(screen.getByLabelText("Work item preview"));
     fireEvent.keyDown(document.activeElement ?? workItemsGrid, { key: "ArrowDown" });
-    expect(document.activeElement?.getAttribute("role")).toBe("row");
+    expect(document.activeElement).toBe(screen.getByLabelText("Work item preview"));
     expect(document.activeElement).not.toBe(commentBox);
+    fireEvent.keyDown(window, { key: "g", altKey: true });
+    expect(document.activeElement?.getAttribute("role")).toBe("row");
     fireEvent.keyDown(document.activeElement ?? workItemsGrid, { key: "ArrowUp" });
     fireEvent.keyDown(window, { key: "m", altKey: true });
     commentBox = screen.getByLabelText("Comment");
