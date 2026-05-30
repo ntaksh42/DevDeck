@@ -480,6 +480,9 @@ describe("App", () => {
     fireEvent.keyDown(workItemsGrid, { key: "m" });
     const commentBox = screen.getByLabelText("Comment");
     expect(document.activeElement).toBe(commentBox);
+    (commentBox as HTMLTextAreaElement).blur();
+    fireEvent.keyDown(window, { key: "m", altKey: true });
+    expect(document.activeElement).toBe(commentBox);
     fireEvent.change(commentBox, { target: { value: "@" } });
     (commentBox as HTMLTextAreaElement).setSelectionRange(1, 1);
     fireEvent.click(commentBox);

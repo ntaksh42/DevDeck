@@ -118,6 +118,16 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return !!element?.closest("input, textarea, select, [contenteditable='true']");
 }
 
+function focusWorkItemCommentInput(): boolean {
+  const textarea = document.querySelector<HTMLTextAreaElement>(
+    "[data-work-item-comment-input='true']",
+  );
+  if (!textarea) return false;
+  textarea.focus();
+  textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+  return true;
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -243,6 +253,18 @@ function AppShell() {
         return;
       }
 
+      if (event.key === "m" || event.key === "M") {
+        if (
+          activeView === "myWorkItems" ||
+          activeView === "workItems" ||
+          activeView === "workItemViews"
+        ) {
+          event.preventDefault();
+          focusWorkItemCommentInput();
+        }
+        return;
+      }
+
       if (event.key === "s" || event.key === "S") {
         event.preventDefault();
         if (organizations.length > 0 && !syncMutation.isPending) {
@@ -274,7 +296,7 @@ function AppShell() {
 
     window.addEventListener("keydown", onGlobalKeyDown);
     return () => window.removeEventListener("keydown", onGlobalKeyDown);
-  }, [organizations.length]);
+  }, [activeView, organizations.length, syncMutation.isPending, syncMutation.mutate]);
 
   return (
     <div className="h-screen overflow-hidden bg-background text-foreground">
@@ -2597,6 +2619,7 @@ function WorkItemPreviewPanel({
                     <div className="relative">
                       <textarea
                         ref={textareaRef}
+                        data-work-item-comment-input="true"
                         value={commentText}
                         onChange={(event) => {
                           setCommentText(event.target.value);
@@ -2612,7 +2635,7 @@ function WorkItemPreviewPanel({
                           );
                         }}
                         onKeyDown={handleCommentKeyDown}
-                        aria-keyshortcuts="M Control+Enter Meta+Enter"
+                        aria-keyshortcuts="M Alt+M Control+Enter Meta+Enter"
                         rows={2}
                         className="min-h-[48px] w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
                       />
@@ -4381,7 +4404,7 @@ function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Select row</span><kbd className={kbd}>Space</kbd></div>
           <div className={row}><span>Assign selected item</span><kbd className={kbd}>A</kbd></div>
           <div className={row}><span>Change state</span><kbd className={kbd}>S</kbd></div>
-          <div className={row}><span>Focus comment</span><kbd className={kbd}>M</kbd></div>
+          <div className={row}><span>Focus comment</span><kbd className={kbd}>Alt+M / M</kbd></div>
           <div className={row}><span>Post comment</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
 
           <p className={section}>Work Item Views</p>
