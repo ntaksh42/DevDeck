@@ -325,6 +325,18 @@ describe("App", () => {
             changedDate: "2026-05-24T00:00:00Z",
             webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/123",
           },
+          {
+            organizationId: "contoso",
+            projectId: "project-1",
+            projectName: "Platform",
+            id: 124,
+            title: "Review save workflow",
+            workItemType: "Task",
+            state: "Active",
+            assignedTo: "Test User",
+            changedDate: "2026-05-23T00:00:00Z",
+            webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/124",
+          },
         ]);
       }
       if (command === "get_work_item_preview") {
@@ -478,7 +490,7 @@ describe("App", () => {
     });
 
     fireEvent.keyDown(workItemsGrid, { key: "m" });
-    const commentBox = screen.getByLabelText("Comment");
+    let commentBox = screen.getByLabelText("Comment");
     expect(document.activeElement).toBe(commentBox);
     (commentBox as HTMLTextAreaElement).blur();
     fireEvent.keyDown(window, { key: "m", altKey: true });
@@ -486,7 +498,12 @@ describe("App", () => {
     fireEvent.keyDown(window, { key: "g", altKey: true });
     expect(document.activeElement?.getAttribute("role")).toBe("row");
     expect(document.activeElement?.getAttribute("aria-selected")).toBe("true");
+    fireEvent.keyDown(document.activeElement ?? workItemsGrid, { key: "ArrowDown" });
+    expect(document.activeElement?.getAttribute("role")).toBe("row");
+    expect(document.activeElement).not.toBe(commentBox);
+    fireEvent.keyDown(document.activeElement ?? workItemsGrid, { key: "ArrowUp" });
     fireEvent.keyDown(window, { key: "m", altKey: true });
+    commentBox = screen.getByLabelText("Comment");
     expect(document.activeElement).toBe(commentBox);
     fireEvent.change(commentBox, { target: { value: "@" } });
     (commentBox as HTMLTextAreaElement).setSelectionRange(1, 1);

@@ -138,6 +138,14 @@ function focusPrimaryGrid(): boolean {
   return true;
 }
 
+function ShortcutHint({ children }: { children: ReactNode }) {
+  return (
+    <kbd className="inline-flex h-4 items-center rounded border border-border bg-muted px-1 font-mono text-[10px] font-medium leading-none text-muted-foreground">
+      {children}
+    </kbd>
+  );
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -993,7 +1001,10 @@ function CommitResults({
     <div className="overflow-hidden rounded-md border border-border bg-white">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <h2 className="text-base font-semibold">Results</h2>
-        <span className="text-sm text-muted-foreground">{countLabel}</span>
+        <span className="flex items-center gap-2 text-sm text-muted-foreground">
+          {countLabel}
+          <ShortcutHint>Alt+G</ShortcutHint>
+        </span>
       </div>
       {!searched && !loading ? (
         <div className="px-3 py-6 text-center text-sm text-muted-foreground">
@@ -2270,7 +2281,7 @@ function WorkItemsGrid({
             </div>
           </div>
 
-          <div className="flex items-center border-t border-border px-2 py-1 text-xs text-muted-foreground">
+          <div className="flex items-center justify-between border-t border-border px-2 py-1 text-xs text-muted-foreground">
             <span>
               {loading
                 ? "Loading…"
@@ -2278,6 +2289,7 @@ function WorkItemsGrid({
                   ? `${sorted.length} item${sorted.length === 1 ? "" : "s"}`
                   : "Ready"}
             </span>
+            <ShortcutHint>Alt+G</ShortcutHint>
           </div>
         </div>
 
@@ -2333,6 +2345,9 @@ function WorkItemPreviewPanel({
   const [assigneeOpen, setAssigneeOpen] = useState(false);
   const [assigneeQuery, setAssigneeQuery] = useState("");
   const [statePickerOpen, setStatePickerOpen] = useState(false);
+  const handledFocusCommentRequest = useRef(0);
+  const handledOpenAssigneeRequest = useRef(0);
+  const handledOpenStateRequest = useRef(0);
 
   const statesQuery = useQuery({
     queryKey: [
@@ -2468,19 +2483,40 @@ function WorkItemPreviewPanel({
   }, [selectedItem?.id]);
 
   useEffect(() => {
-    if (!focusCommentRequest || !selectedItem) return;
+    if (
+      !focusCommentRequest ||
+      handledFocusCommentRequest.current === focusCommentRequest
+    ) {
+      return;
+    }
+    handledFocusCommentRequest.current = focusCommentRequest;
+    if (!selectedItem) return;
     textareaRef.current?.focus();
   }, [focusCommentRequest, selectedItem]);
 
   useEffect(() => {
-    if (!openAssigneeRequest || !selectedItem) return;
+    if (
+      !openAssigneeRequest ||
+      handledOpenAssigneeRequest.current === openAssigneeRequest
+    ) {
+      return;
+    }
+    handledOpenAssigneeRequest.current = openAssigneeRequest;
+    if (!selectedItem) return;
     setAssigneeOpen(true);
     setStatePickerOpen(false);
     setAssigneeQuery("");
   }, [openAssigneeRequest, selectedItem]);
 
   useEffect(() => {
-    if (!openStateRequest || !selectedItem) return;
+    if (
+      !openStateRequest ||
+      handledOpenStateRequest.current === openStateRequest
+    ) {
+      return;
+    }
+    handledOpenStateRequest.current = openStateRequest;
+    if (!selectedItem) return;
     setStatePickerOpen(true);
     setAssigneeOpen(false);
   }, [openStateRequest, selectedItem]);
@@ -2643,7 +2679,13 @@ function WorkItemPreviewPanel({
               <div className="border-t border-border p-2">
                 <form className="space-y-1.5" onSubmit={submitComment}>
                   <label className="grid gap-1">
-                    <span className="text-xs font-medium text-muted-foreground">Comment</span>
+                    <span className="flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
+                      <span>Comment</span>
+                      <span className="flex items-center gap-1">
+                        <ShortcutHint>Alt+M</ShortcutHint>
+                        <ShortcutHint>Ctrl+Enter</ShortcutHint>
+                      </span>
+                    </span>
                     <div className="relative">
                       <textarea
                         ref={textareaRef}
@@ -2663,6 +2705,7 @@ function WorkItemPreviewPanel({
                           );
                         }}
                         onKeyDown={handleCommentKeyDown}
+                        aria-label="Comment"
                         aria-keyshortcuts="M Alt+M Control+Enter Meta+Enter"
                         rows={2}
                         className="min-h-[48px] w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
@@ -2756,11 +2799,17 @@ function WorkItemPreviewDetails({
       <dl className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-x-2 gap-y-0.5">
         <div className="grid min-w-0 grid-cols-[50px_minmax(0,1fr)] items-baseline gap-1">
           <dt className="truncate text-[11px] leading-[15px] text-muted-foreground">State</dt>
-          <dd className="min-w-0 leading-[15px]">{stateControl}</dd>
+          <dd className="flex min-w-0 items-center gap-1 leading-[15px]">
+            {stateControl}
+            <ShortcutHint>S</ShortcutHint>
+          </dd>
         </div>
         <div className="grid min-w-0 grid-cols-[50px_minmax(0,1fr)] items-baseline gap-1">
           <dt className="truncate text-[11px] leading-[15px] text-muted-foreground">Assigned</dt>
-          <dd className="min-w-0 leading-[15px]">{assigneeControl}</dd>
+          <dd className="flex min-w-0 items-center gap-1 leading-[15px]">
+            {assigneeControl}
+            <ShortcutHint>A</ShortcutHint>
+          </dd>
         </div>
         {fields.map(([label, value]) => (
           <div
@@ -4208,7 +4257,10 @@ function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
               {visiblePrs.length} 件中{" "}
               <span className="font-medium text-foreground">{noVoteCount}</span> 件が未投票
             </span>
-            {isFiltered && <span>フィルタ適用中: {sortedPrs.length} 件表示</span>}
+            <span className="flex items-center gap-2">
+              {isFiltered ? <span>フィルタ適用中: {sortedPrs.length} 件表示</span> : null}
+              <ShortcutHint>Alt+G</ShortcutHint>
+            </span>
           </div>
         </div>
 
@@ -4873,7 +4925,10 @@ function PullRequestResults({
     <div className="overflow-hidden rounded-md border border-border bg-white">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <h2 className="text-base font-semibold">Results</h2>
-        <span className="text-sm text-muted-foreground">{countLabel}</span>
+        <span className="flex items-center gap-2 text-sm text-muted-foreground">
+          {countLabel}
+          <ShortcutHint>Alt+G</ShortcutHint>
+        </span>
       </div>
       {!searched && !loading ? (
         <div className="px-3 py-6 text-center text-sm text-muted-foreground">
