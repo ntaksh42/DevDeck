@@ -3004,12 +3004,22 @@ function buildRichHtmlDocument(html: string): string {
 }
 
 function normalizeRichHtml(value: string | null | undefined): string | null {
-  const html = value?.trim();
+  const html = decodeEscapedRichHtml(value)?.trim();
   if (!html) return null;
   if (htmlToText(html) || /<(img|video|table|pre|blockquote|ul|ol|li|a)\b/i.test(html)) {
     return html;
   }
   return null;
+}
+
+function decodeEscapedRichHtml(value: string | null | undefined): string | null {
+  const html = value?.trim();
+  if (!html) return null;
+  if (!/&lt;\/?(?:a|blockquote|br|div|img|li|ol|p|pre|span|strong|table|td|th|tr|ul)\b/i.test(html)) {
+    return html;
+  }
+  const decoded = decodeBasicHtmlEntities(html);
+  return /<\/?[a-z][^>]*>/i.test(decoded) ? decoded : html;
 }
 
 function commentRichHtml(

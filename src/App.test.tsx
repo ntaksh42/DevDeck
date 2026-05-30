@@ -366,6 +366,16 @@ describe("App", () => {
           webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/123",
           comments: [
             {
+              id: 8,
+              text: '<div><a href="#" data-vss-mention="version:2.0,user-creator">@Creator</a>&nbsp;Posted from Azure</div>',
+              renderedText:
+                '&lt;div&gt;&lt;a href=&quot;#&quot; data-vss-mention=&quot;version:2.0,user-creator&quot;&gt;@Creator&lt;/a&gt;&amp;nbsp;Posted from Azure&lt;/div&gt;',
+              createdBy: "Creator",
+              createdById: "user-creator",
+              createdByUniqueName: "creator@example.com",
+              createdDate: "2026-05-23T13:00:00Z",
+            },
+            {
               id: 7,
               text: "@<user-creator> Earlier context",
               renderedText: "<p>@&lt;user-creator&gt; Earlier context</p>",
@@ -473,12 +483,25 @@ describe("App", () => {
     expect(descriptionFrame).toBeTruthy();
     expect(descriptionFrame?.getAttribute("scrolling")).toBe("no");
     expect(descriptionFrame?.style.maxHeight).toBe("");
-    const commentFrame = document.querySelector(
-      'iframe[title="Comment by Creator"]',
-    ) as HTMLIFrameElement | null;
-    const commentSrcDoc = commentFrame?.getAttribute("srcdoc") ?? "";
-    expect(commentSrcDoc).toContain("@Creator Earlier context");
-    expect(commentSrcDoc).not.toContain("@&lt;user-creator&gt;");
+    const commentSrcDocs = [
+      ...document.querySelectorAll('iframe[title="Comment by Creator"]'),
+    ].map((frame) => frame.getAttribute("srcdoc") ?? "");
+    expect(
+      commentSrcDocs.some(
+        (srcDoc) =>
+          srcDoc.includes('data-vss-mention="version:2.0,user-creator"') &&
+          srcDoc.includes("@Creator</a>&nbsp;Posted from Azure"),
+      ),
+    ).toBe(true);
+    expect(commentSrcDocs.some((srcDoc) => srcDoc.includes("&lt;div&gt;"))).toBe(
+      false,
+    );
+    expect(
+      commentSrcDocs.some((srcDoc) => srcDoc.includes("@Creator Earlier context")),
+    ).toBe(true);
+    expect(
+      commentSrcDocs.some((srcDoc) => srcDoc.includes("@&lt;user-creator&gt;")),
+    ).toBe(false);
 
     const workItemsGrid = screen.getByRole("grid", { name: "Work items" });
     fireEvent.keyDown(workItemsGrid, { key: "a" });
