@@ -5255,6 +5255,7 @@ function OrganizationSettings({
   return (
     <div className="space-y-3">
       <SetupPanel compact />
+      <ShowWindowHotkeySettings />
       <ReviewResultFolderSettings />
       <div className="overflow-hidden rounded-md border border-border bg-white">
         <div className="border-b border-border px-3 py-2">
@@ -5330,7 +5331,10 @@ function ReviewResultFolderSettings() {
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    mutation.mutate({ reviewResultFolderPath: folderPath });
+    mutation.mutate({
+      reviewResultFolderPath: folderPath,
+      showWindowHotkey: settingsQuery.data?.showWindowHotkey ?? null,
+    });
   }
 
   return (
@@ -5386,6 +5390,100 @@ function ReviewResultFolderSettings() {
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
             ) : (
               <FileText className="h-4 w-4" aria-hidden="true" />
+            )}
+            Save
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ShowWindowHotkeySettings() {
+  const queryClient = useQueryClient();
+  const settingsQuery = useQuery({
+    queryKey: ["appSettings"],
+    queryFn: getAppSettings,
+    staleTime: 5 * 60_000,
+  });
+  const [hotkey, setHotkey] = useState("");
+
+  useEffect(() => {
+    setHotkey(settingsQuery.data?.showWindowHotkey ?? "");
+  }, [settingsQuery.data?.showWindowHotkey]);
+
+  const mutation = useMutation({
+    mutationFn: updateAppSettings,
+    onSuccess: (settings) => {
+      queryClient.setQueryData(["appSettings"], settings);
+    },
+  });
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    mutation.mutate({
+      reviewResultFolderPath: settingsQuery.data?.reviewResultFolderPath ?? null,
+      showWindowHotkey: hotkey,
+    });
+  }
+
+  return (
+    <div className="rounded-md border border-border bg-white">
+      <div className="border-b border-border px-3 py-2">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
+            <Keyboard className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold">Show window hotkey</h2>
+            <p className="text-sm text-muted-foreground">
+              Bring AzDoDeck to the front from anywhere.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <form className="grid gap-3 p-3" onSubmit={onSubmit}>
+        <label className="grid gap-2">
+          <span className="text-sm font-medium">Hotkey</span>
+          <input
+            aria-label="Show window hotkey"
+            value={hotkey}
+            onChange={(event) => setHotkey(event.target.value)}
+            placeholder="Ctrl+Alt+D"
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+          />
+        </label>
+        <p className="text-xs text-muted-foreground">
+          Leave blank to disable. Use combinations like Ctrl+Alt+D or Ctrl+Shift+Space.
+        </p>
+
+        {settingsQuery.isError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {commandErrorMessage(settingsQuery.error)}
+          </p>
+        ) : null}
+
+        {mutation.isError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {commandErrorMessage(mutation.error)}
+          </p>
+        ) : null}
+
+        {mutation.isSuccess ? (
+          <p className="text-sm text-green-700">Show window hotkey saved.</p>
+        ) : null}
+
+        <div>
+          <button
+            type="submit"
+            disabled={settingsQuery.isLoading || mutation.isPending}
+            className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {mutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Keyboard className="h-4 w-4" aria-hidden="true" />
             )}
             Save
           </button>

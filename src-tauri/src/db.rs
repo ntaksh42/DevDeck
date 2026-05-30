@@ -30,6 +30,7 @@ pub struct Organization {
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     pub review_result_folder_path: Option<String>,
+    pub show_window_hotkey: Option<String>,
 }
 
 pub struct OrganizationDraft {
@@ -694,6 +695,7 @@ fn delete_organization(conn: &Connection, id: &str) -> Result<()> {
 fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
     Ok(AppSettings {
         review_result_folder_path: get_setting(conn, "review_result_folder_path")?,
+        show_window_hotkey: get_setting(conn, "show_window_hotkey")?,
     })
 }
 
@@ -702,6 +704,11 @@ fn update_app_settings(conn: &Connection, settings: AppSettings) -> Result<AppSe
         conn,
         "review_result_folder_path",
         settings.review_result_folder_path.as_deref(),
+    )?;
+    set_setting(
+        conn,
+        "show_window_hotkey",
+        settings.show_window_hotkey.as_deref(),
     )?;
     get_app_settings(conn)
 }
@@ -1396,6 +1403,7 @@ mod tests {
             &conn,
             AppSettings {
                 review_result_folder_path: Some("C:/reports".to_string()),
+                show_window_hotkey: Some("Ctrl+Alt+D".to_string()),
             },
         )
         .unwrap();
@@ -1403,11 +1411,13 @@ mod tests {
             saved.review_result_folder_path.as_deref(),
             Some("C:/reports")
         );
+        assert_eq!(saved.show_window_hotkey.as_deref(), Some("Ctrl+Alt+D"));
 
         let cleared = update_app_settings(
             &conn,
             AppSettings {
                 review_result_folder_path: Some("   ".to_string()),
+                show_window_hotkey: Some("   ".to_string()),
             },
         )
         .unwrap();

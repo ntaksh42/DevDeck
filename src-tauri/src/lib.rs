@@ -1,6 +1,8 @@
 // Cache/sync scaffolding can land before all call sites; keep builds warning-free.
 #![allow(dead_code)]
 
+use std::str::FromStr;
+
 mod auth;
 mod commits;
 mod db;
@@ -17,7 +19,7 @@ use commits::{
     SearchCommitsInput,
 };
 use db::{AppDatabase, AppSettings, Organization};
-use error::Result;
+use error::{AppError, Result};
 use orgs::{AddAzureCliOrganizationInput, AddPatOrganizationInput, OrganizationService};
 use prs::{
     ListMyReviewPullRequestsInput, PullRequestService, PullRequestSummary,
@@ -25,10 +27,12 @@ use prs::{
 };
 use secrets::SecretStore;
 use settings::{
-    GetReviewResultPreviewInput, ReviewResultPreview, SettingsService, UpdateAppSettingsInput,
+    normalize_app_settings, GetReviewResultPreviewInput, ReviewResultPreview, SettingsService,
+    UpdateAppSettingsInput,
 };
 use sync::SyncRunner;
-use tauri::{Manager, State};
+use tauri::{AppHandle, Manager, State};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tokio::sync::mpsc;
 use work_items::{
     AddWorkItemCommentInput, AssignWorkItemInput, AssignWorkItemsInput, BulkWorkItemResult,
@@ -66,8 +70,11 @@ fn get_app_settings(state: State<'_, AppState>) -> Result<AppSettings> {
 fn update_app_settings(
     input: UpdateAppSettingsInput,
     state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<AppSettings> {
-    state.settings.update(input)
+    let settings = normalize_app_settings(input);
+    configure_show_window_hotkey(&app, settings.show_window_hotkey.as_deref())?;
+    state.settings.update_normalized(settings)
 }
 
 #[tauri::command]
@@ -254,14 +261,51 @@ fn trigger_sync(state: State<'_, AppState>) -> Result<()> {
     Ok(())
 }
 
+fn configure_show_window_hotkey(app: &AppHandle, hotkey: Option<&str>) -> Result<()> {
+    app.global_shortcut()
+        .unregister_all()
+        .map_err(|error| AppError::InvalidInput(error.to_string()))?;
+
+    let Some(hotkey) = hotkey.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(());
+    };
+    let shortcut = Shortcut::from_str(hotkey).map_err(|error| {
+        AppError::InvalidInput(format!("show window hotkey is invalid: {error}"))
+    })?;
+    app.global_shortcut()
+        .register(shortcut)
+        .map_err(|error| AppError::InvalidInput(error.to_string()))?;
+    Ok(())
+}
+
+fn show_main_window(app: &AppHandle) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.set_focus();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state == ShortcutState::Pressed {
+                        show_main_window(app);
+                    }
+                })
+                .build(),
+        )
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir()?;
             let db = AppDatabase::new(app_data_dir.join("azdodeck.sqlite3"));
             db.initialize()?;
+            let settings = db.get_app_settings()?;
+            configure_show_window_hotkey(app.handle(), settings.show_window_hotkey.as_deref())?;
             let (sync_tx, sync_rx) = SyncRunner::channel();
             app.manage(AppState {
                 organizations: OrganizationService::new(db.clone(), SecretStore),

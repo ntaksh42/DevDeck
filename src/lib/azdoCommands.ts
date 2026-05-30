@@ -21,6 +21,7 @@ export type Organization = z.infer<typeof organizationSchema>;
 
 const appSettingsSchema = z.object({
   reviewResultFolderPath: z.string().nullable(),
+  showWindowHotkey: z.string().nullable().default(null),
 });
 
 export type AppSettings = z.infer<typeof appSettingsSchema>;
@@ -197,6 +198,7 @@ export type DeleteOrganizationInput = {
 
 export type UpdateAppSettingsInput = {
   reviewResultFolderPath?: string | null;
+  showWindowHotkey?: string | null;
 };
 
 export type GetReviewResultPreviewInput = {
@@ -499,6 +501,7 @@ const demoOrganization: Organization = {
 
 let demoSettings: AppSettings = {
   reviewResultFolderPath: "C:\\reports\\azdo-reviews",
+  showWindowHotkey: null,
 };
 
 async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
@@ -513,7 +516,14 @@ async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
       const input = (args as { input?: UpdateAppSettingsInput } | undefined)
         ?.input;
       demoSettings = {
-        reviewResultFolderPath: input?.reviewResultFolderPath?.trim() || null,
+        reviewResultFolderPath:
+          input && "reviewResultFolderPath" in input
+            ? input.reviewResultFolderPath?.trim() || null
+            : demoSettings.reviewResultFolderPath,
+        showWindowHotkey:
+          input && "showWindowHotkey" in input
+            ? input.showWindowHotkey?.trim() || null
+            : demoSettings.showWindowHotkey,
       };
       return demoSettings;
     }

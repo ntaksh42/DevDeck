@@ -10,6 +10,7 @@ use crate::error::{AppError, Result};
 #[serde(rename_all = "camelCase")]
 pub struct UpdateAppSettingsInput {
     pub review_result_folder_path: Option<String>,
+    pub show_window_hotkey: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -42,11 +43,22 @@ impl SettingsService {
     }
 
     pub fn update(&self, input: UpdateAppSettingsInput) -> Result<AppSettings> {
-        self.db.update_app_settings(AppSettings {
-            review_result_folder_path: normalize_path(input.review_result_folder_path),
-        })
+        self.update_normalized(normalize_app_settings(input))
     }
 
+    pub fn update_normalized(&self, settings: AppSettings) -> Result<AppSettings> {
+        self.db.update_app_settings(settings)
+    }
+}
+
+pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
+    AppSettings {
+        review_result_folder_path: normalize_path(input.review_result_folder_path),
+        show_window_hotkey: normalize_path(input.show_window_hotkey),
+    }
+}
+
+impl SettingsService {
     pub fn review_result_preview(
         &self,
         input: GetReviewResultPreviewInput,

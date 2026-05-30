@@ -141,11 +141,11 @@ describe("App", () => {
         return Promise.resolve([organization]);
       }
       if (command === "get_app_settings") {
-        return Promise.resolve({ reviewResultFolderPath: null });
+        return Promise.resolve({ reviewResultFolderPath: null, showWindowHotkey: null });
       }
       if (command === "update_app_settings") {
         return Promise.resolve(
-          (args as { input: { reviewResultFolderPath: string } }).input,
+          (args as { input: { reviewResultFolderPath: string; showWindowHotkey: string | null } }).input,
         );
       }
       if (command === "list_my_review_pull_requests") {
@@ -167,16 +167,61 @@ describe("App", () => {
       target: { value: "D:\\azdo-review-results" },
     });
     expect((folderPathInput as HTMLInputElement).value).toBe("D:\\azdo-review-results");
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[1]);
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("update_app_settings", {
         input: {
           reviewResultFolderPath: "D:\\azdo-review-results",
+          showWindowHotkey: null,
         },
       });
     });
     expect(await screen.findByText("Review result folder saved.")).toBeTruthy();
+  });
+
+  it("saves the show window hotkey setting", async () => {
+    invokeMock.mockImplementation((command: string, args?: unknown) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve({
+          reviewResultFolderPath: "C:\\reports",
+          showWindowHotkey: null,
+        });
+      }
+      if (command === "update_app_settings") {
+        return Promise.resolve(
+          (args as { input: { reviewResultFolderPath: string | null; showWindowHotkey: string } }).input,
+        );
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+
+    await screen.findByText("No pull requests assigned to you.");
+    fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    expect(await screen.findByRole("heading", { name: "Show window hotkey" })).toBeTruthy();
+    const hotkeyInput = screen.getByLabelText("Show window hotkey");
+    fireEvent.change(hotkeyInput, {
+      target: { value: "Ctrl+Alt+D" },
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[0]);
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("update_app_settings", {
+        input: {
+          reviewResultFolderPath: "C:\\reports",
+          showWindowHotkey: "Ctrl+Alt+D",
+        },
+      });
+    });
+    expect(await screen.findByText("Show window hotkey saved.")).toBeTruthy();
   });
 
   it("submits organization setup to the backend", async () => {
