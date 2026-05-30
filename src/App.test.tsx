@@ -386,6 +386,15 @@ describe("App", () => {
             },
             {
               id: 6,
+              text: '<div><a href="#" data-vss-mention="version:2.0,user-reviewer">@Reviewer</a>&nbsp;Raw text fallback</div><div><br></div>',
+              renderedText: null,
+              createdBy: "Reviewer",
+              createdById: "user-reviewer",
+              createdByUniqueName: "reviewer@example.com",
+              createdDate: "2026-05-23T11:30:00Z",
+            },
+            {
+              id: 5,
               text: "Older context",
               renderedText: "<p>Older context</p>",
               createdBy: "Reviewer",
@@ -515,12 +524,23 @@ describe("App", () => {
       [
         ...document.querySelectorAll('iframe[title^="Comment by "]'),
       ].map((frame) => frame.getAttribute("srcdoc") ?? ""),
-    ).toHaveLength(3);
+    ).toHaveLength(4);
     expect(
       [...document.querySelectorAll('iframe[title="Comment by Reviewer"]')].some(
         (frame) => (frame.getAttribute("srcdoc") ?? "").includes("Older context"),
       ),
     ).toBe(true);
+    const reviewerCommentSrcDocs = [
+      ...document.querySelectorAll('iframe[title="Comment by Reviewer"]'),
+    ].map((frame) => frame.getAttribute("srcdoc") ?? "");
+    expect(
+      reviewerCommentSrcDocs.some((srcDoc) =>
+        srcDoc.includes("@Reviewer</a>&nbsp;Raw text fallback"),
+      ),
+    ).toBe(true);
+    expect(
+      reviewerCommentSrcDocs.some((srcDoc) => srcDoc.includes("&lt;div&gt;")),
+    ).toBe(false);
 
     const workItemsGrid = screen.getByRole("grid", { name: "Work items" });
     fireEvent.keyDown(workItemsGrid, { key: "a" });

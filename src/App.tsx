@@ -3093,7 +3093,12 @@ function commentRichHtml(
     plainText,
     mentionDisplayNames,
   );
-  return normalizeRichHtml(rendered) ?? escapeHtml(plain) ?? "No text";
+  return (
+    normalizeRichHtml(rendered) ??
+    normalizeRichHtml(plain) ??
+    escapeHtml(plain) ??
+    "No text"
+  );
 }
 
 function commentAuthorInitials(name: string | null | undefined): string {
