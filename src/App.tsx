@@ -2337,6 +2337,9 @@ function WorkItemPreviewPanel({
 }) {
   const [commentText, setCommentText] = useState("");
   const [selectedMentions, setSelectedMentions] = useState<SelectedMention[]>([]);
+  const [mentionDisplayNamesById, setMentionDisplayNamesById] = useState<
+    Record<string, string>
+  >({});
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionStart, setMentionStart] = useState<number | null>(null);
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
@@ -2369,6 +2372,18 @@ function WorkItemPreviewPanel({
     () => recentWorkItemMentionCandidates(preview),
     [preview],
   );
+  const commentMentionDisplayNames = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const [id, displayName] of Object.entries(mentionDisplayNamesById)) {
+      names.set(id, displayName);
+      names.set(id.toLowerCase(), displayName);
+    }
+    for (const candidate of recentMentionOptions) {
+      names.set(candidate.id, candidate.displayName);
+      names.set(candidate.id.toLowerCase(), candidate.displayName);
+    }
+    return names;
+  }, [mentionDisplayNamesById, recentMentionOptions]);
   const mentionPriorityNames = useMemo(
     () => workItemMentionPriorityNames(preview),
     [preview],
@@ -2537,6 +2552,10 @@ function WorkItemPreviewPanel({
     const nextCursor = start + replacement.length;
     setCommentText(next);
     setSelectedMentions((current) => addSelectedMention(current, candidate));
+    setMentionDisplayNamesById((current) => ({
+      ...current,
+      [candidate.id]: candidate.displayName,
+    }));
     setMentionQuery("");
     setMentionStart(null);
     window.setTimeout(() => {
@@ -2640,6 +2659,7 @@ function WorkItemPreviewPanel({
           ) : preview ? (
             <>
               <WorkItemPreviewDetails
+                mentionDisplayNames={commentMentionDisplayNames}
                 preview={preview}
                 stateControl={
                   <StatePicker
@@ -2773,10 +2793,12 @@ function WorkItemPreviewPanel({
 function WorkItemPreviewDetails({
   preview,
   assigneeControl,
+  mentionDisplayNames,
   stateControl,
 }: {
   preview: WorkItemPreview;
   assigneeControl: ReactNode;
+  mentionDisplayNames: ReadonlyMap<string, string>;
   stateControl: ReactNode;
 }) {
   const fields = [
@@ -2870,7 +2892,11 @@ function WorkItemPreviewDetails({
                   ) : null}
                 </div>
                 <RichHtmlFrame
-                  html={commentRichHtml(comment.renderedText, comment.text)}
+                  html={commentRichHtml(
+                    comment.renderedText,
+                    comment.text,
+                    mentionDisplayNames,
+                  )}
                   title={`Comment by ${comment.createdBy ?? "Unknown"}`}
                   minHeight={32}
                 />
@@ -2989,8 +3015,66 @@ function normalizeRichHtml(value: string | null | undefined): string | null {
 function commentRichHtml(
   renderedText: string | null | undefined,
   plainText: string | null | undefined,
+  mentionDisplayNames: ReadonlyMap<string, string>,
 ): string {
-  return normalizeRichHtml(renderedText) ?? escapeHtml(plainText) ?? "No text";
+  const rendered = replaceAzureMentionDisplayNamesInHtml(
+    renderedText,
+    mentionDisplayNames,
+  );
+  const plain = replaceAzureMentionDisplayNamesInText(
+    plainText,
+    mentionDisplayNames,
+  );
+  return normalizeRichHtml(rendered) ?? escapeHtml(plain) ?? "No text";
+}
+
+function replaceAzureMentionDisplayNamesInHtml(
+  value: string | null | undefined,
+  mentionDisplayNames: ReadonlyMap<string, string>,
+): string | null | undefined {
+  if (!value || mentionDisplayNames.size === 0) return value;
+  return value.replace(
+    /@(?:<|&lt;)([^<>&]+)(?:>|&gt;)/g,
+    (token, encodedId: string) => {
+      const displayName = mentionDisplayNameForId(
+        mentionDisplayNames,
+        encodedId,
+      );
+      return displayName ? `@${escapeHtml(displayName) ?? displayName}` : token;
+    },
+  );
+}
+
+function replaceAzureMentionDisplayNamesInText(
+  value: string | null | undefined,
+  mentionDisplayNames: ReadonlyMap<string, string>,
+): string | null | undefined {
+  if (!value || mentionDisplayNames.size === 0) return value;
+  return value.replace(/@<([^>]+)>/g, (token, id: string) => {
+    const displayName = mentionDisplayNameForId(mentionDisplayNames, id);
+    return displayName ? `@${displayName}` : token;
+  });
+}
+
+function mentionDisplayNameForId(
+  mentionDisplayNames: ReadonlyMap<string, string>,
+  id: string,
+): string | null {
+  const normalizedId = decodeBasicHtmlEntities(id).trim();
+  return (
+    mentionDisplayNames.get(normalizedId) ??
+    mentionDisplayNames.get(normalizedId.toLowerCase()) ??
+    null
+  );
+}
+
+function decodeBasicHtmlEntities(value: string): string {
+  return value
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
 }
 
 function escapeHtml(value: string | null | undefined): string | null {

@@ -367,8 +367,8 @@ describe("App", () => {
           comments: [
             {
               id: 7,
-              text: "Earlier context",
-              renderedText: "<p>Earlier context</p>",
+              text: "@<user-creator> Earlier context",
+              renderedText: "<p>@&lt;user-creator&gt; Earlier context</p>",
               createdBy: "Creator",
               createdById: "user-creator",
               createdByUniqueName: "creator@example.com",
@@ -473,6 +473,12 @@ describe("App", () => {
     expect(descriptionFrame).toBeTruthy();
     expect(descriptionFrame?.getAttribute("scrolling")).toBe("no");
     expect(descriptionFrame?.style.maxHeight).toBe("");
+    const commentFrame = document.querySelector(
+      'iframe[title="Comment by Creator"]',
+    ) as HTMLIFrameElement | null;
+    const commentSrcDoc = commentFrame?.getAttribute("srcdoc") ?? "";
+    expect(commentSrcDoc).toContain("@Creator Earlier context");
+    expect(commentSrcDoc).not.toContain("@&lt;user-creator&gt;");
 
     const workItemsGrid = screen.getByRole("grid", { name: "Work items" });
     fireEvent.keyDown(workItemsGrid, { key: "a" });
