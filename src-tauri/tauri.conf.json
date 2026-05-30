@@ -23,13 +23,25 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis", "msi"],
+    "publisher": "AzDoDeck contributors",
+    "copyright": "Copyright © 2026 AzDoDeck contributors",
+    "category": "DeveloperTool",
+    "shortDescription": "Azure DevOps desktop dashboard",
+    "longDescription": "AzDoDeck is a local desktop dashboard for Azure DevOps. Browse pull requests assigned to you, search work items and commits across projects, and take quick actions — all from a single window backed by a local cache.",
+    "homepage": "https://github.com/ntaksh42/azdo-dashboard",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["English"]
+      }
+    }
   }
 }
