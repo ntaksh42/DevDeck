@@ -2877,29 +2877,40 @@ function WorkItemPreviewDetails({
           <h3 className="mb-0.5 text-[10px] font-semibold uppercase leading-3 text-muted-foreground">
             Comments ({preview.comments.length})
           </h3>
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             {preview.comments.map((comment) => (
-              <div key={comment.id} className="min-w-0">
-                <div className="flex min-w-0 items-baseline gap-2">
-                  <span className="truncate font-medium">
+              <article
+                key={comment.id}
+                className="min-w-0 overflow-hidden rounded-md border border-border bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+              >
+                <div className="flex min-w-0 items-center gap-1.5 border-b border-border bg-muted/30 px-2 py-1">
+                  <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+                    {commentAuthorInitials(comment.createdBy)}
+                  </span>
+                  <span className="min-w-0 truncate font-semibold">
                     {comment.createdBy ?? "Unknown"}
                   </span>
+                  <span className="text-[11px] text-muted-foreground">commented</span>
                   {comment.createdDate ? (
                     <span className="shrink-0 text-[11px] text-muted-foreground">
                       {formatRelativeDate(comment.createdDate)}
                     </span>
                   ) : null}
                 </div>
-                <RichHtmlFrame
-                  html={commentRichHtml(
-                    comment.renderedText,
-                    comment.text,
-                    mentionDisplayNames,
-                  )}
-                  title={`Comment by ${comment.createdBy ?? "Unknown"}`}
-                  minHeight={32}
-                />
-              </div>
+                <div className="px-2 py-1.5">
+                  <RichHtmlFrame
+                    density="comfortable"
+                    framed={false}
+                    html={commentRichHtml(
+                      comment.renderedText,
+                      comment.text,
+                      mentionDisplayNames,
+                    )}
+                    title={`Comment by ${comment.createdBy ?? "Unknown"}`}
+                    minHeight={34}
+                  />
+                </div>
+              </article>
             ))}
           </div>
         </div>
@@ -2909,17 +2920,21 @@ function WorkItemPreviewDetails({
 }
 
 function RichHtmlFrame({
+  density = "compact",
+  framed = true,
   html,
   minHeight = 40,
   title,
 }: {
+  density?: "compact" | "comfortable";
+  framed?: boolean;
   html: string;
   minHeight?: number;
   title: string;
 }) {
   const [height, setHeight] = useState(minHeight);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
-  const srcDoc = useMemo(() => buildRichHtmlDocument(html), [html]);
+  const srcDoc = useMemo(() => buildRichHtmlDocument(html, density), [density, html]);
 
   useEffect(() => {
     return () => {
@@ -2933,7 +2948,7 @@ function RichHtmlFrame({
       srcDoc={srcDoc}
       sandbox="allow-same-origin"
       scrolling="no"
-      className="block w-full rounded border border-border bg-white"
+      className={`block w-full bg-white ${framed ? "rounded border border-border" : ""}`}
       style={{ height }}
       onLoad={(event) => {
         const frame = event.currentTarget;
@@ -2967,7 +2982,13 @@ function RichHtmlFrame({
   );
 }
 
-function buildRichHtmlDocument(html: string): string {
+function buildRichHtmlDocument(
+  html: string,
+  density: "compact" | "comfortable" = "compact",
+): string {
+  const fontSize = density === "comfortable" ? 13 : 12;
+  const lineHeight = density === "comfortable" ? 1.45 : 1.35;
+  const paragraphMargin = density === "comfortable" ? 8 : 6;
   return `<!doctype html>
 <html>
 <head>
@@ -2979,11 +3000,11 @@ function buildRichHtmlDocument(html: string): string {
     body {
       box-sizing: border-box;
       color: #0f172a;
-      font: 12px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font: ${fontSize}px/${lineHeight} -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       overflow-wrap: anywhere;
     }
     * { box-sizing: border-box; }
-    p { margin: 0 0 6px; }
+    p { margin: 0 0 ${paragraphMargin}px; }
     p:last-child, ul:last-child, ol:last-child, table:last-child, pre:last-child { margin-bottom: 0; }
     ul, ol { margin: 0 0 6px 18px; padding: 0; }
     li { margin: 1px 0; }
@@ -3035,6 +3056,16 @@ function commentRichHtml(
     mentionDisplayNames,
   );
   return normalizeRichHtml(rendered) ?? escapeHtml(plain) ?? "No text";
+}
+
+function commentAuthorInitials(name: string | null | undefined): string {
+  const normalized = name?.trim();
+  if (!normalized) return "?";
+  const parts = normalized.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
+  }
+  return [...normalized].slice(0, 2).join("").toUpperCase();
 }
 
 function replaceAzureMentionDisplayNamesInHtml(
