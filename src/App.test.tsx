@@ -208,9 +208,13 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
     expect(await screen.findByRole("heading", { name: "Show window hotkey" })).toBeTruthy();
     const hotkeyInput = screen.getByLabelText("Show window hotkey");
-    fireEvent.change(hotkeyInput, {
-      target: { value: "Ctrl+Alt+D" },
+    fireEvent.keyDown(hotkeyInput, {
+      key: "d",
+      code: "KeyD",
+      ctrlKey: true,
+      altKey: true,
     });
+    expect((hotkeyInput as HTMLInputElement).value).toBe("Ctrl+Alt+D");
     fireEvent.click(screen.getAllByRole("button", { name: "Save" })[0]);
 
     await waitFor(() => {

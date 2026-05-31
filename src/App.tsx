@@ -5427,6 +5427,25 @@ function ShowWindowHotkeySettings() {
     });
   }
 
+  function handleHotkeyKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+    if (
+      !event.ctrlKey &&
+      !event.altKey &&
+      !event.shiftKey &&
+      !event.metaKey &&
+      (event.key === "Backspace" || event.key === "Delete" || event.key === "Escape")
+    ) {
+      event.preventDefault();
+      setHotkey("");
+      return;
+    }
+
+    const nextHotkey = hotkeyFromKeyboardEvent(event);
+    if (!nextHotkey) return;
+    event.preventDefault();
+    setHotkey(nextHotkey);
+  }
+
   return (
     <div className="rounded-md border border-border bg-white">
       <div className="border-b border-border px-3 py-2">
@@ -5450,12 +5469,13 @@ function ShowWindowHotkeySettings() {
             aria-label="Show window hotkey"
             value={hotkey}
             onChange={(event) => setHotkey(event.target.value)}
+            onKeyDown={handleHotkeyKeyDown}
             placeholder="Ctrl+Alt+D"
             className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
           />
         </label>
         <p className="text-xs text-muted-foreground">
-          Leave blank to disable. Use combinations like Ctrl+Alt+D or Ctrl+Shift+Space.
+          Press a key combination or type it manually. Leave blank to disable.
         </p>
 
         {settingsQuery.isError ? (
@@ -5490,6 +5510,40 @@ function ShowWindowHotkeySettings() {
         </div>
       </form>
     </div>
+  );
+}
+
+function hotkeyFromKeyboardEvent(
+  event: ReactKeyboardEvent<HTMLInputElement>,
+): string | null {
+  const key = normalizeHotkeyKey(event.key);
+  if (!key || isModifierKey(key)) return null;
+
+  const parts: string[] = [];
+  if (event.ctrlKey) parts.push("Ctrl");
+  if (event.altKey) parts.push("Alt");
+  if (event.shiftKey) parts.push("Shift");
+  if (event.metaKey) parts.push("Meta");
+  if (parts.length === 0) return null;
+  parts.push(key);
+  return parts.join("+");
+}
+
+function normalizeHotkeyKey(key: string): string | null {
+  if (!key) return null;
+  if (key === " " || key === "Spacebar") return "Space";
+  if (key === "Esc") return "Escape";
+  if (key.length === 1) return key.toUpperCase();
+  return key;
+}
+
+function isModifierKey(key: string): boolean {
+  return (
+    key === "Control" ||
+    key === "Ctrl" ||
+    key === "Alt" ||
+    key === "Shift" ||
+    key === "Meta"
   );
 }
 
