@@ -141,6 +141,13 @@ export function WorkItemPreviewPanel({
     ],
   );
   const showMentionOptions = mentionStart !== null && mentionOptions.length > 0;
+  const mentionPickerRef = useCloseOnOutsidePointer<HTMLDivElement>(
+    showMentionOptions,
+    () => {
+      setMentionStart(null);
+      setMentionQuery("");
+    },
+  );
 
   const assigneeOptionsQuery = useQuery({
     queryKey: workItemQueryKeys.assignees(
@@ -494,7 +501,7 @@ export function WorkItemPreviewPanel({
                         <ShortcutHint>Ctrl+Enter</ShortcutHint>
                       </span>
                     </span>
-                    <div className="relative">
+                    <div ref={mentionPickerRef} className="relative">
                       <textarea
                         ref={textareaRef}
                         data-work-item-comment-input="true"
@@ -1094,6 +1101,32 @@ function escapeHtml(value: string | null | undefined): string | null {
     .replace(/'/g, "&#39;");
 }
 
+function useCloseOnOutsidePointer<T extends HTMLElement>(
+  open: boolean,
+  onClose: () => void,
+) {
+  const ref = useRef<T | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (!(target instanceof Node) || ref.current?.contains(target)) {
+        return;
+      }
+      onClose();
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+    };
+  }, [onClose, open]);
+
+  return ref;
+}
+
 function StatePicker({
   current,
   loading,
@@ -1113,8 +1146,12 @@ function StatePicker({
   pending: boolean;
   shortcut?: string;
 }) {
+  const pickerRef = useCloseOnOutsidePointer<HTMLDivElement>(open, () =>
+    onOpenChange(false),
+  );
+
   return (
-    <div className="relative min-w-0">
+    <div ref={pickerRef} className="relative min-w-0">
       <button
         type="button"
         aria-label="Change state"
@@ -1187,8 +1224,12 @@ function AssigneePicker({
   query: string;
   shortcut?: string;
 }) {
+  const pickerRef = useCloseOnOutsidePointer<HTMLDivElement>(open, () =>
+    onOpenChange(false),
+  );
+
   return (
-    <div className="relative min-w-0">
+    <div ref={pickerRef} className="relative min-w-0">
       <button
         type="button"
         aria-label="Change assignee"
