@@ -98,6 +98,13 @@ pub struct WorkItemTypeStatesList {
     pub value: Vec<WorkItemTypeState>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct SavedQuery {
+    pub id: String,
+    pub name: String,
+    pub wiql: Option<String>,
+}
+
 impl AdoClient {
     pub async fn query_work_item_ids(&self, project_id: &str, wiql: &str) -> Result<Vec<i64>> {
         let path = format!("{project_id}/_apis/wit/wiql");
@@ -227,6 +234,16 @@ impl AdoClient {
             .get_json(&path, &[("api-version", "7.1-preview.1")])
             .await?;
         Ok(response.value.into_iter().map(|s| s.name).collect())
+    }
+
+    pub async fn get_saved_query(
+        &self,
+        project_id: &str,
+        query_id: &str,
+    ) -> Result<SavedQuery> {
+        let path = format!("{project_id}/_apis/wit/queries/{query_id}");
+        self.get_json(&path, &[("api-version", "7.1"), ("$expand", "all")])
+            .await
     }
 }
 
@@ -458,6 +475,57 @@ mod tests {
 
         assert_eq!(item.id, 10);
         assert_eq!(item.fields["System.State"].as_str(), Some("Active"));
+    }
+
+    #[tokio::test]
+    async fn get_saved_query_returns_wiql() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/wit/queries/abc-def-123"))
+            .and(query_param("api-version", "7.1"))
+            .and(query_param("$expand", "all"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": "abc-def-123",
+                "name": "Active Bugs",
+                "queryType": "flat",
+                "wiql": "SELECT [System.Id] FROM WorkItems WHERE [System.WorkItemType] = 'Bug'"
+            })))
+            .mount(&server)
+            .await;
+
+        let query = test_client(&server)
+            .await
+            .get_saved_query("project-1", "abc-def-123")
+            .await
+            .unwrap();
+        assert_eq!(query.id, "abc-def-123");
+        assert_eq!(query.name, "Active Bugs");
+        assert_eq!(
+            query.wiql.as_deref(),
+            Some("SELECT [System.Id] FROM WorkItems WHERE [System.WorkItemType] = 'Bug'")
+        );
+    }
+
+    #[tokio::test]
+    async fn get_saved_query_folder_has_no_wiql() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/wit/queries/folder-guid"))
+            .and(query_param("$expand", "all"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": "folder-guid",
+                "name": "My Queries",
+                "isFolder": true
+            })))
+            .mount(&server)
+            .await;
+
+        let query = test_client(&server)
+            .await
+            .get_saved_query("project-1", "folder-guid")
+            .await
+            .unwrap();
+        assert!(query.wiql.is_none());
     }
 
     #[tokio::test]

@@ -121,6 +121,22 @@ pub struct ListWorkItemTypeStatesInput {
     pub work_item_type: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetSavedQueryInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub query_id: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedQueryResult {
+    pub id: String,
+    pub name: String,
+    pub wiql: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BulkWorkItemResult {
@@ -568,6 +584,23 @@ impl WorkItemService {
         Ok(results)
     }
 
+    pub async fn get_saved_query(&self, input: GetSavedQueryInput) -> Result<SavedQueryResult> {
+        let query_id = input.query_id.trim().to_string();
+        if query_id.is_empty() {
+            return Err(AppError::InvalidInput("query ID is required".to_string()));
+        }
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let query = client
+            .get_saved_query(&input.project_id, &query_id)
+            .await?;
+        Ok(SavedQueryResult {
+            id: query.id,
+            name: query.name,
+            wiql: query.wiql,
+        })
+    }
+
     fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {
         if let Some(id) = id {
             return self
@@ -848,23 +881,6 @@ pub async fn sync_work_items_for_org(
     }
 }
 
-fn validate_work_item_wiql(wiql: &str) -> Result<&str> {
-    let wiql = wiql.trim();
-    if wiql.is_empty() {
-        return Err(AppError::InvalidInput("WIQL query is required".to_string()));
-    }
-    if !wiql.to_ascii_lowercase().contains("from workitems") {
-        return Err(AppError::InvalidInput(
-            "WIQL must query FROM WorkItems".to_string(),
-        ));
-    }
-    Ok(wiql)
-}
-
-fn work_item_query_limit(limit: Option<usize>) -> usize {
-    limit.unwrap_or(200).clamp(1, 500)
-}
-
 async fn do_sync_work_items(
     db: &AppDatabase,
     client: &AdoClient,
@@ -910,6 +926,23 @@ async fn do_sync_work_items(
     db.upsert_my_work_items(&my_cached)?;
 
     Ok(())
+}
+
+fn validate_work_item_wiql(wiql: &str) -> Result<&str> {
+    let wiql = wiql.trim();
+    if wiql.is_empty() {
+        return Err(AppError::InvalidInput("WIQL query is required".to_string()));
+    }
+    if !wiql.to_ascii_lowercase().contains("from workitems") {
+        return Err(AppError::InvalidInput(
+            "WIQL must query FROM WorkItems".to_string(),
+        ));
+    }
+    Ok(wiql)
+}
+
+fn work_item_query_limit(limit: Option<usize>) -> usize {
+    limit.unwrap_or(200).clamp(1, 500)
 }
 
 #[cfg(test)]

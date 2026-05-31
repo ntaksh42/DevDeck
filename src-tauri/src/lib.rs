@@ -36,8 +36,8 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tokio::sync::mpsc;
 use work_items::{
     AddWorkItemCommentInput, AssignWorkItemInput, AssignWorkItemsInput, BulkWorkItemResult,
-    GetWorkItemPreviewInput, ListMyWorkItemsInput, ListWorkItemProjectsInput,
-    ListWorkItemTypeStatesInput, MentionCandidate, RunWorkItemQueryInput,
+    GetSavedQueryInput, GetWorkItemPreviewInput, ListMyWorkItemsInput, ListWorkItemProjectsInput,
+    ListWorkItemTypeStatesInput, MentionCandidate, RunWorkItemQueryInput, SavedQueryResult,
     SearchWorkItemMentionsInput, SearchWorkItemsInput, SetWorkItemStateInput,
     SetWorkItemsStateInput, WorkItemComment, WorkItemPreview, WorkItemProjectOption,
     WorkItemService, WorkItemSummary,
@@ -247,6 +247,15 @@ async fn list_work_item_type_states(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn get_saved_query(
+    input: GetSavedQueryInput,
+    state: State<'_, AppState>,
+) -> Result<SavedQueryResult> {
+    state.work_items.get_saved_query(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 fn search_commits(
     input: SearchCommitsInput,
     state: State<'_, AppState>,
@@ -350,6 +359,7 @@ pub fn run() {
             assign_work_item,
             set_work_item_state,
             list_work_item_type_states,
+            get_saved_query,
             set_work_items_state,
             assign_work_items,
             search_commits,

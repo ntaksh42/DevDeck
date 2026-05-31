@@ -153,6 +153,14 @@ const mentionCandidatesSchema = z.array(mentionCandidateSchema);
 
 export type MentionCandidate = z.infer<typeof mentionCandidateSchema>;
 
+const savedQueryResultSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  wiql: z.string().nullish(),
+});
+
+export type SavedQueryResult = z.infer<typeof savedQueryResultSchema>;
+
 const commitSummarySchema = z.object({
   organizationId: z.string(),
   projectId: z.string(),
@@ -314,6 +322,12 @@ export type SearchCommitsInput = {
   repositoryId?: string;
 };
 
+export type GetSavedQueryInput = {
+  organizationId?: string;
+  projectId: string;
+  queryId: string;
+};
+
 export type ListCommitRepositoriesInput = {
   organizationId?: string;
 };
@@ -465,6 +479,13 @@ export async function assignWorkItems(
 ): Promise<BulkWorkItemResult[]> {
   const result = await invokeCommand("assign_work_items", { input });
   return bulkWorkItemResultsSchema.parse(result);
+}
+
+export async function getSavedQuery(
+  input: GetSavedQueryInput,
+): Promise<SavedQueryResult> {
+  const result = await invokeCommand("get_saved_query", { input });
+  return savedQueryResultSchema.parse(result);
 }
 
 export async function searchCommits(
@@ -633,6 +654,18 @@ async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
     }
     case "list_commit_repositories":
       return demoCommitRepositories();
+    case "get_saved_query": {
+      const input = (args as { input?: GetSavedQueryInput } | undefined)?.input;
+      const queryId = input?.queryId ?? "";
+      if (queryId === "00000000-0000-0000-0000-000000000000") {
+        return { id: queryId, name: "My Queries (folder)", wiql: null };
+      }
+      return {
+        id: queryId || "demo-query-id",
+        name: "Demo Imported Query",
+        wiql: "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project ORDER BY [System.ChangedDate] DESC",
+      };
+    }
     case "delete_organization":
     case "trigger_sync":
       return null;
@@ -1056,9 +1089,9 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
     severity: summary.workItemType === "Bug" ? "2 - High" : null,
     storyPoints: summary.workItemType === "User Story" ? "5" : null,
     remainingWork: summary.workItemType === "Task" ? "3" : null,
-    descriptionHtml: `<p>${escapeDemoHtml(summary.title)} の背景と期待する動作を確認します。</p><ul><li>Azure DevOps から詳細 field を取得</li><li>右側の preview pane に表示</li></ul><p><img alt="Demo preview image" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='92' viewBox='0 0 320 92'%3E%3Crect width='320' height='92' rx='8' fill='%23eff6ff'/%3E%3Crect x='14' y='14' width='88' height='64' rx='5' fill='%232563eb'/%3E%3Crect x='116' y='22' width='178' height='10' rx='5' fill='%2393c5fd'/%3E%3Crect x='116' y='42' width='148' height='10' rx='5' fill='%23bfdbfe'/%3E%3Crect x='116' y='62' width='118' height='10' rx='5' fill='%23dbeafe'/%3E%3C/svg%3E"></p>`,
+    descriptionHtml: `<p>Review background and expected behavior for ${escapeDemoHtml(summary.title)}.</p><ul><li>Fetch detail fields from Azure DevOps</li><li>Display in the right-side preview pane</li></ul><p><img alt="Demo preview image" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='92' viewBox='0 0 320 92'%3E%3Crect width='320' height='92' rx='8' fill='%23eff6ff'/%3E%3Crect x='14' y='14' width='88' height='64' rx='5' fill='%232563eb'/%3E%3Crect x='116' y='22' width='178' height='10' rx='5' fill='%2393c5fd'/%3E%3Crect x='116' y='42' width='148' height='10' rx='5' fill='%23bfdbfe'/%3E%3Crect x='116' y='62' width='118' height='10' rx='5' fill='%23dbeafe'/%3E%3C/svg%3E"></p>`,
     acceptanceCriteriaHtml:
-      "<ul><li>一覧で選択した Work Item と preview が同期する</li><li>HTML field は sandbox 内で表示する</li></ul>",
+      "<ul><li>Selected work item syncs with the preview pane</li><li>HTML fields are rendered in a sandbox</li></ul>",
     webUrl: summary.webUrl,
     comments: [
       {
