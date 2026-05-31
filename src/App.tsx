@@ -41,6 +41,7 @@ import { LoadingState, ErrorState } from "@/components/StateDisplay";
 import { NavButton, NavSection, NavSubItem } from "@/components/Nav";
 import { HelpDialog } from "@/components/HelpDialog";
 import { UserGuideDialog } from "@/components/UserGuideDialog";
+import { CommandPalette, type CommandPaletteAction } from "@/components/CommandPalette";
 import { CommitSearch } from "@/features/commits/CommitSearch";
 import { WorkItemSearch } from '@/features/work-items/WorkItemSearch';
 import { WorkItemViewsPanel } from '@/features/work-items/WorkItemViewsPanel';
@@ -74,6 +75,7 @@ function invalidateSyncedDataQueries(queryClient: QueryClient): void {
 function AppShell() {
   const [view, setView] = useState<View>("myReviews");
   const [helpOpen, setHelpOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [userGuideOpen, setUserGuideOpen] = useState(false);
   const [navExpanded, setNavExpanded] = useState<Record<NavSectionId, boolean>>({
     pullRequests: true,
@@ -157,6 +159,166 @@ function AppShell() {
     setNavExpanded((current) => ({ ...current, [id]: expanded }));
   }
 
+  function dispatchWorkItemCommand(command: string): void {
+    window.dispatchEvent(new CustomEvent(`azdodeck:work-items:${command}`));
+  }
+
+  const commandActions: CommandPaletteAction[] = [
+    {
+      disabled: organizations.length === 0,
+      group: "Navigation",
+      id: "nav.myReviews",
+      keywords: ["pull request", "review"],
+      label: "Go to My Reviews",
+      run: () => setView("myReviews"),
+      shortcut: "Alt+1",
+    },
+    {
+      disabled: organizations.length === 0,
+      group: "Navigation",
+      id: "nav.pullRequestSearch",
+      keywords: ["pull request", "search"],
+      label: "Go to Pull Request Search",
+      run: () => setView("pullRequestSearch"),
+      shortcut: "Alt+2",
+    },
+    {
+      disabled: organizations.length === 0,
+      group: "Navigation",
+      id: "nav.myWorkItems",
+      keywords: ["work item", "assigned"],
+      label: "Go to My Work Items",
+      run: () => setView("myWorkItems"),
+      shortcut: "Alt+3",
+    },
+    {
+      disabled: organizations.length === 0,
+      group: "Navigation",
+      id: "nav.workItemViews",
+      keywords: ["wiql", "query", "saved"],
+      label: "Go to Work Item Views",
+      run: () => setView("workItemViews"),
+      shortcut: "Alt+4",
+    },
+    {
+      disabled: organizations.length === 0,
+      group: "Navigation",
+      id: "nav.workItemSearch",
+      keywords: ["work item", "search"],
+      label: "Go to Work Item Search",
+      run: () => setView("workItems"),
+      shortcut: "Alt+5",
+    },
+    {
+      disabled: organizations.length === 0,
+      group: "Navigation",
+      id: "nav.commits",
+      keywords: ["commit", "search"],
+      label: "Go to Commits",
+      run: () => setView("commits"),
+      shortcut: "Alt+6",
+    },
+    {
+      group: "Navigation",
+      id: "nav.settings",
+      keywords: ["option", "preferences"],
+      label: "Go to Settings",
+      run: () => setView("settings"),
+      shortcut: "Alt+,",
+    },
+    {
+      group: "Focus",
+      id: "focus.grid",
+      keywords: ["list", "table", "rows"],
+      label: "Focus grid",
+      run: focusPrimaryGrid,
+      shortcut: "Alt+G",
+    },
+    {
+      group: "Focus",
+      id: "focus.preview",
+      keywords: ["details", "pane"],
+      label: "Focus preview",
+      run: focusPrimaryPreview,
+      shortcut: "Alt+P",
+    },
+    {
+      group: "Focus",
+      id: "focus.comment",
+      keywords: ["work item", "discussion"],
+      label: "Focus work item comment",
+      run: () => {
+        if (!focusWorkItemCommentInput()) dispatchWorkItemCommand("focus-comment");
+      },
+      shortcut: "M",
+    },
+    {
+      disabled:
+        activeView !== "myWorkItems" &&
+        activeView !== "workItems" &&
+        activeView !== "workItemViews",
+      group: "Work Items",
+      id: "wi.state",
+      keywords: ["status", "transition"],
+      label: "Change selected work item state",
+      run: () => dispatchWorkItemCommand("open-state"),
+      shortcut: "S",
+    },
+    {
+      disabled:
+        activeView !== "myWorkItems" &&
+        activeView !== "workItems" &&
+        activeView !== "workItemViews",
+      group: "Work Items",
+      id: "wi.assignee",
+      keywords: ["assign", "owner"],
+      label: "Change selected work item assignee",
+      run: () => dispatchWorkItemCommand("open-assignee"),
+      shortcut: "A",
+    },
+    {
+      disabled:
+        activeView !== "myWorkItems" &&
+        activeView !== "workItems" &&
+        activeView !== "workItemViews",
+      group: "Work Items",
+      id: "wi.priority",
+      keywords: ["prio"],
+      label: "Change selected work item priority",
+      run: () => dispatchWorkItemCommand("open-priority"),
+      shortcut: "P",
+    },
+    {
+      disabled:
+        activeView !== "myWorkItems" &&
+        activeView !== "workItems" &&
+        activeView !== "workItemViews",
+      group: "Work Items",
+      id: "wi.postComment",
+      keywords: ["submit", "discussion"],
+      label: "Post work item comment",
+      run: () => dispatchWorkItemCommand("post-comment"),
+      shortcut: "Ctrl+Enter",
+    },
+    {
+      disabled: organizations.length === 0 || syncMutation.isPending,
+      group: "General",
+      id: "general.sync",
+      keywords: ["refresh"],
+      label: "Sync now",
+      run: () => syncMutation.mutate(),
+      shortcut: "Alt+S",
+    },
+    {
+      group: "General",
+      id: "general.shortcuts",
+      keywords: ["keyboard", "help"],
+      label: "Show keyboard shortcuts",
+      run: () => setHelpOpen(true),
+      shortcut: "?",
+    },
+  ];
+
   function handleNavKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
     const current = (event.target as HTMLElement).closest<HTMLButtonElement>(
       "[data-nav-item='true']",
@@ -234,6 +396,18 @@ function AppShell() {
         (event.ctrlKey || event.metaKey) &&
         !event.altKey &&
         !event.shiftKey &&
+        (event.key === "k" || event.key === "K")
+      ) {
+        event.preventDefault();
+        setCommandPaletteOpen(true);
+        return;
+      }
+
+      if (
+        !event.defaultPrevented &&
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        !event.shiftKey &&
         (event.key === "f" || event.key === "F")
       ) {
         const filterInput = document.querySelector<HTMLInputElement>(
@@ -268,7 +442,12 @@ function AppShell() {
       }
 
       if (event.key === "Escape" && !event.altKey) {
+        if (isEditableTarget(event.target) && focusPrimaryGrid()) {
+          event.preventDefault();
+          return;
+        }
         setHelpOpen(false);
+        setCommandPaletteOpen(false);
         setUserGuideOpen(false);
         return;
       }
@@ -548,6 +727,12 @@ function AppShell() {
         </section>
       </main>
       {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
+      {commandPaletteOpen && (
+        <CommandPalette
+          actions={commandActions}
+          onClose={() => setCommandPaletteOpen(false)}
+        />
+      )}
       {userGuideOpen && <UserGuideDialog onClose={() => setUserGuideOpen(false)} />}
     </div>
   );

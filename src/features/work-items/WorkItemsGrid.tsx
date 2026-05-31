@@ -20,7 +20,14 @@ import {
   type MentionCandidate,
   type WorkItemSummary,
 } from '@/lib/azdoCommands';
-import { storedNumbers, storedNumber, isEditableTarget, formatRelativeDate, type SortDirection } from '@/lib/utils';
+import {
+  storedNumbers,
+  storedNumber,
+  isEditableTarget,
+  focusPrimaryPreview,
+  formatRelativeDate,
+  type SortDirection,
+} from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
 import { ShortcutHint } from '@/components/ShortcutHint';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
@@ -144,7 +151,10 @@ const WorkItemGridRow = forwardRef<
     onClick={onSelect}
     onKeyDown={(e) => {
       if ((e.target as HTMLElement).closest("button,input")) return;
-      if (e.key === "Enter" && item.webUrl) {
+      if (e.key === "Enter") {
+        e.stopPropagation();
+        focusPrimaryPreview();
+      } else if ((e.key === "o" || e.key === "O") && item.webUrl) {
         e.stopPropagation();
         openExternalUrl(item.webUrl);
       }
@@ -451,10 +461,10 @@ export function WorkItemsGrid({
   function handleKeyDown(e: React.KeyboardEvent) {
     if (isEditableTarget(e.target)) return;
     if (sorted.length === 0) return;
-    if (e.key === "ArrowDown") {
+    if (e.key === "ArrowDown" || e.key === "j" || e.key === "J") {
       e.preventDefault();
       moveSelection(selectedIndex + 1);
-    } else if (e.key === "ArrowUp") {
+    } else if (e.key === "ArrowUp" || e.key === "k" || e.key === "K") {
       e.preventDefault();
       moveSelection(selectedIndex - 1);
     } else if (e.key === "Home") {
@@ -470,6 +480,9 @@ export function WorkItemsGrid({
       e.preventDefault();
       moveSelection(selectedIndex - 10);
     } else if (e.key === "Enter") {
+      e.preventDefault();
+      focusPrimaryPreview();
+    } else if (e.key === "o" || e.key === "O") {
       e.preventDefault();
       const item = sorted[selectedIndex];
       if (item?.webUrl) openExternalUrl(item.webUrl);

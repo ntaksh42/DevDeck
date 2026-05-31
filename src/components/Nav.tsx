@@ -30,6 +30,7 @@ export function NavButton({
       type="button"
       disabled={disabled}
       onClick={onClick}
+      aria-label={label}
       aria-keyshortcuts={shortcut}
       data-nav-item="true"
       data-nav-active={active ? "true" : undefined}
@@ -109,6 +110,7 @@ export function NavSubItem({
       type="button"
       disabled={disabled}
       onClick={onClick}
+      aria-label={label}
       aria-keyshortcuts={shortcut}
       data-nav-item="true"
       data-nav-active={active ? "true" : undefined}

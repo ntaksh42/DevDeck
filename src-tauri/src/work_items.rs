@@ -140,6 +140,15 @@ pub struct SetWorkItemStateInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SetWorkItemPriorityInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_id: i64,
+    pub priority: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListWorkItemTypeStatesInput {
     pub organization_id: Option<String>,
     pub project_id: String,
@@ -548,6 +557,45 @@ impl WorkItemService {
 
         let work_item = client
             .update_work_item_state(&project.id, input.work_item_id, &state)
+            .await?;
+        let comments = client
+            .list_work_item_comments(
+                &project.id,
+                input.work_item_id,
+                WORK_ITEM_PREVIEW_COMMENT_LIMIT,
+            )
+            .await
+            .unwrap_or_default();
+
+        Ok(summarize_work_item_preview(
+            &organization,
+            &project.id,
+            &project.name,
+            work_item,
+            comments,
+        ))
+    }
+
+    pub async fn set_priority(&self, input: SetWorkItemPriorityInput) -> Result<WorkItemPreview> {
+        if input.priority <= 0 {
+            return Err(AppError::InvalidInput(
+                "priority must be positive".to_string(),
+            ));
+        }
+
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = client
+            .list_projects()
+            .await?
+            .into_iter()
+            .find(|p| p.id == input.project_id)
+            .ok_or_else(|| {
+                AppError::InvalidInput(format!("project not found: {}", input.project_id))
+            })?;
+
+        let work_item = client
+            .update_work_item_priority(&project.id, input.work_item_id, input.priority)
             .await?;
         let comments = client
             .list_work_item_comments(

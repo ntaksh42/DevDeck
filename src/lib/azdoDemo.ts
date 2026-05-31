@@ -22,6 +22,7 @@ import type {
   SearchPullRequestsInput,
   SearchWorkItemMentionsInput,
   SearchWorkItemsInput,
+  SetWorkItemPriorityInput,
   SetWorkItemsStateInput,
   SetWorkItemStateInput,
   UpdateAppSettingsInput,
@@ -162,6 +163,11 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       const input = (args as { input?: SetWorkItemStateInput } | undefined)
         ?.input;
       return demoSetWorkItemState(input);
+    }
+    case "set_work_item_priority": {
+      const input = (args as { input?: SetWorkItemPriorityInput } | undefined)
+        ?.input;
+      return demoSetWorkItemPriority(input);
     }
     case "list_work_item_type_states": {
       const input = (args as { input?: ListWorkItemTypeStatesInput } | undefined)
@@ -677,6 +683,24 @@ function demoSetWorkItemState(input?: SetWorkItemStateInput): WorkItemPreview {
   );
   if (!input?.state?.trim()) return preview;
   return { ...preview, state: input.state.trim(), changedDate: new Date().toISOString() };
+}
+
+function demoSetWorkItemPriority(input?: SetWorkItemPriorityInput): WorkItemPreview {
+  const preview = demoWorkItemPreview(
+    input
+      ? {
+          organizationId: input.organizationId,
+          projectId: input.projectId,
+          workItemId: input.workItemId,
+        }
+      : undefined,
+  );
+  if (!input?.priority) return preview;
+  return {
+    ...preview,
+    changedDate: new Date().toISOString(),
+    priority: String(input.priority),
+  };
 }
 
 const DEMO_STATES_BY_TYPE: Record<string, string[]> = {

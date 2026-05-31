@@ -293,6 +293,13 @@ export type SetWorkItemStateInput = {
   state: string;
 };
 
+export type SetWorkItemPriorityInput = {
+  organizationId?: string;
+  projectId: string;
+  workItemId: number;
+  priority: number;
+};
+
 export type ListWorkItemTypeStatesInput = {
   organizationId?: string;
   projectId: string;
@@ -487,6 +494,13 @@ export async function setWorkItemState(
   input: SetWorkItemStateInput,
 ): Promise<WorkItemPreview> {
   const result = await invokeCommand("set_work_item_state", { input });
+  return workItemPreviewSchema.parse(result);
+}
+
+export async function setWorkItemPriority(
+  input: SetWorkItemPriorityInput,
+): Promise<WorkItemPreview> {
+  const result = await invokeCommand("set_work_item_priority", { input });
   return workItemPreviewSchema.parse(result);
 }
 

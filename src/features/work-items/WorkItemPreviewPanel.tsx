@@ -15,6 +15,7 @@ import {
   deleteWorkItemComment,
   fetchWorkItemImage,
   setWorkItemState,
+  setWorkItemPriority,
   listWorkItemTypeStates,
   searchWorkItemMentions,
   commandErrorMessage,
@@ -22,7 +23,7 @@ import {
   type WorkItemPreview,
   type WorkItemSummary,
 } from '@/lib/azdoCommands';
-import { formatRelativeDate } from '@/lib/utils';
+import { formatRelativeDate, isEditableTarget } from '@/lib/utils';
 import { PreviewEmptyState } from '@/components/StateDisplay';
 import { ShortcutHint } from '@/components/ShortcutHint';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from './queryKeys';
@@ -72,6 +73,7 @@ export function WorkItemPreviewPanel({
   const [assigneeOpen, setAssigneeOpen] = useState(false);
   const [assigneeQuery, setAssigneeQuery] = useState("");
   const [statePickerOpen, setStatePickerOpen] = useState(false);
+  const [priorityPickerOpen, setPriorityPickerOpen] = useState(false);
   const handledFocusCommentRequest = useRef(0);
   const handledOpenAssigneeRequest = useRef(0);
   const handledOpenStateRequest = useRef(0);
@@ -259,10 +261,28 @@ export function WorkItemPreviewPanel({
     },
   });
 
+  const priorityMutation = useMutation({
+    mutationFn: setWorkItemPriority,
+    onSuccess: (updatedPreview) => {
+      setPriorityPickerOpen(false);
+      queryClient.setQueryData(
+        workItemQueryKeys.preview(
+          updatedPreview.organizationId,
+          updatedPreview.projectId,
+          updatedPreview.id,
+        ),
+        updatedPreview,
+      );
+      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot() });
+      invalidateWorkItemQueryViews(queryClient);
+    },
+  });
+
   useEffect(() => {
     setAssigneeOpen(false);
     setAssigneeQuery("");
     setStatePickerOpen(false);
+    setPriorityPickerOpen(false);
   }, [selectedItem?.id]);
 
   useEffect(() => {
@@ -288,6 +308,7 @@ export function WorkItemPreviewPanel({
     if (!selectedItem) return;
     setAssigneeOpen(true);
     setStatePickerOpen(false);
+    setPriorityPickerOpen(false);
     setAssigneeQuery("");
   }, [openAssigneeRequest, selectedItem]);
 
@@ -302,6 +323,7 @@ export function WorkItemPreviewPanel({
     if (!selectedItem) return;
     setStatePickerOpen(true);
     setAssigneeOpen(false);
+    setPriorityPickerOpen(false);
   }, [openStateRequest, selectedItem]);
 
   function updateMentionState(text: string, cursor: number) {
@@ -362,6 +384,91 @@ export function WorkItemPreviewPanel({
     });
   }
 
+  function setPriority(priority: number) {
+    if (!selectedItem) return;
+    priorityMutation.mutate({
+      organizationId: selectedItem.organizationId,
+      projectId: selectedItem.projectId,
+      workItemId: selectedItem.id,
+      priority,
+    });
+  }
+
+  useEffect(() => {
+    function openState() {
+      if (!selectedItem) return;
+      setStatePickerOpen(true);
+      setAssigneeOpen(false);
+      setPriorityPickerOpen(false);
+    }
+    function openAssignee() {
+      if (!selectedItem) return;
+      setAssigneeOpen(true);
+      setStatePickerOpen(false);
+      setPriorityPickerOpen(false);
+      setAssigneeQuery("");
+    }
+    function openPriority() {
+      if (!selectedItem) return;
+      setPriorityPickerOpen(true);
+      setAssigneeOpen(false);
+      setStatePickerOpen(false);
+    }
+    function focusComment() {
+      if (!selectedItem) return;
+      textareaRef.current?.focus();
+    }
+    function submitCurrentComment() {
+      postComment();
+    }
+
+    window.addEventListener("azdodeck:work-items:open-state", openState);
+    window.addEventListener("azdodeck:work-items:open-assignee", openAssignee);
+    window.addEventListener("azdodeck:work-items:open-priority", openPriority);
+    window.addEventListener("azdodeck:work-items:focus-comment", focusComment);
+    window.addEventListener("azdodeck:work-items:post-comment", submitCurrentComment);
+    return () => {
+      window.removeEventListener("azdodeck:work-items:open-state", openState);
+      window.removeEventListener("azdodeck:work-items:open-assignee", openAssignee);
+      window.removeEventListener("azdodeck:work-items:open-priority", openPriority);
+      window.removeEventListener("azdodeck:work-items:focus-comment", focusComment);
+      window.removeEventListener("azdodeck:work-items:post-comment", submitCurrentComment);
+    };
+  }, [commentMutation.isPending, commentText, selectedItem]);
+
+  function handlePreviewPanelKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
+    if (
+      isEditableTarget(event.target) ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey
+    ) {
+      return;
+    }
+
+    if (event.key === "s" || event.key === "S") {
+      event.preventDefault();
+      setStatePickerOpen(true);
+      setAssigneeOpen(false);
+      setPriorityPickerOpen(false);
+    } else if (event.key === "a" || event.key === "A") {
+      event.preventDefault();
+      setAssigneeOpen(true);
+      setStatePickerOpen(false);
+      setPriorityPickerOpen(false);
+      setAssigneeQuery("");
+    } else if (event.key === "p" || event.key === "P") {
+      event.preventDefault();
+      setPriorityPickerOpen(true);
+      setAssigneeOpen(false);
+      setStatePickerOpen(false);
+    } else if (event.key === "m" || event.key === "M") {
+      event.preventDefault();
+      textareaRef.current?.focus();
+    }
+  }
+
   function handleCommentKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
       event.preventDefault();
@@ -394,7 +501,10 @@ export function WorkItemPreviewPanel({
   }
 
   return (
-    <aside className="flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-white shadow-sm">
+    <aside
+      className="flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-white shadow-sm"
+      onKeyDown={handlePreviewPanelKeyDown}
+    >
       {!selectedItem ? (
         <PreviewEmptyState message="Select a work item." />
       ) : (
@@ -455,14 +565,37 @@ export function WorkItemPreviewPanel({
                 mentionDisplayNames={commentMentionDisplayNames}
                 onDeleteComment={deleteComment}
                 preview={preview}
+                priorityControl={
+                  <PriorityPicker
+                    current={preview.priority}
+                    onOpenChange={(open) => {
+                      setPriorityPickerOpen(open);
+                      if (open) {
+                        setAssigneeOpen(false);
+                        setStatePickerOpen(false);
+                      }
+                    }}
+                    onSelect={setPriority}
+                    open={priorityPickerOpen}
+                    pending={priorityMutation.isPending}
+                    shortcut="P"
+                  />
+                }
                 resolveImageSource={resolvePreviewImage}
                 stateControl={
                   <StatePicker
                     current={preview.state}
                     loading={statesQuery.isFetching}
-                    onOpenChange={setStatePickerOpen}
+                    onOpenChange={(open) => {
+                      setStatePickerOpen(open);
+                      if (open) {
+                        setAssigneeOpen(false);
+                        setPriorityPickerOpen(false);
+                      }
+                    }}
                     onSelect={(state) => {
                       if (!selectedItem) return;
+                      setPriorityPickerOpen(false);
                       stateMutation.mutate({
                         organizationId: selectedItem.organizationId,
                         projectId: selectedItem.projectId,
@@ -480,7 +613,10 @@ export function WorkItemPreviewPanel({
                   <AssigneePicker
                     current={preview.assignedTo}
                     loading={assigneeOptionsQuery.isFetching}
-                    onOpenChange={setAssigneeOpen}
+                    onOpenChange={(open) => {
+                      setAssigneeOpen(open);
+                      if (open) setPriorityPickerOpen(false);
+                    }}
                     onQueryChange={setAssigneeQuery}
                     onSelect={assignTo}
                     open={assigneeOpen}
@@ -593,6 +729,7 @@ function WorkItemPreviewDetails({
   deletePending,
   mentionDisplayNames,
   onDeleteComment,
+  priorityControl,
   resolveImageSource,
   stateControl,
 }: {
@@ -603,6 +740,7 @@ function WorkItemPreviewDetails({
   deletePending: boolean;
   mentionDisplayNames: ReadonlyMap<string, string>;
   onDeleteComment: (commentId: number) => void;
+  priorityControl: ReactNode;
   resolveImageSource: (url: string) => Promise<string | null>;
   stateControl: ReactNode;
 }) {
@@ -610,7 +748,6 @@ function WorkItemPreviewDetails({
     ["Area", preview.areaPath],
     ["Iteration", preview.iterationPath],
     ["Reason", preview.reason],
-    ["Priority", preview.priority],
     ["Severity", preview.severity],
     ["Points", preview.storyPoints],
     ["Remain", preview.remainingWork],
@@ -630,12 +767,15 @@ function WorkItemPreviewDetails({
       tabIndex={-1}
     >
       <div className="rounded-md border border-border bg-slate-50/50 px-2 py-1">
-        <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 border-b border-border/70 pb-1">
+        <div className="grid grid-cols-[repeat(3,minmax(0,1fr))] gap-x-2 gap-y-0.5 border-b border-border/70 pb-1">
           <PreviewControl label="State" shortcut="S">
             {stateControl}
           </PreviewControl>
           <PreviewControl label="Assigned" shortcut="A">
             {assigneeControl}
+          </PreviewControl>
+          <PreviewControl label="Priority" shortcut="P">
+            {priorityControl}
           </PreviewControl>
         </div>
         <div className="grid grid-cols-[repeat(auto-fit,minmax(96px,1fr))] gap-x-2 gap-y-0.5 pt-1">
@@ -1195,6 +1335,74 @@ function StatePicker({
               </button>
             ))
           )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PriorityPicker({
+  current,
+  onOpenChange,
+  onSelect,
+  open,
+  pending,
+  shortcut,
+}: {
+  current: string | null;
+  onOpenChange: (open: boolean) => void;
+  onSelect: (priority: number) => void;
+  open: boolean;
+  pending: boolean;
+  shortcut?: string;
+}) {
+  const pickerRef = useCloseOnOutsidePointer<HTMLDivElement>(open, () =>
+    onOpenChange(false),
+  );
+  const options = [1, 2, 3, 4];
+
+  return (
+    <div ref={pickerRef} className="relative min-w-0">
+      <button
+        type="button"
+        aria-label="Change priority"
+        aria-keyshortcuts={shortcut}
+        disabled={pending}
+        onClick={() => onOpenChange(!open)}
+        className="max-w-full truncate rounded px-1 text-left text-xs leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+        title={current ?? "—"}
+      >
+        {pending ? "Updating..." : (current ?? "—")}
+      </button>
+      {open ? (
+        <div className="absolute left-0 top-full z-30 mt-1 min-w-[96px] rounded-md border border-border bg-white py-1 shadow-lg">
+          {options.map((priority, index) => {
+            const value = String(priority);
+            return (
+              <button
+                key={priority}
+                type="button"
+                autoFocus={index === 0}
+                onClick={() => onSelect(priority)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    onOpenChange(false);
+                  }
+                }}
+                className={`flex w-full items-center gap-1.5 px-3 py-1 text-left text-xs ${
+                  value === current
+                    ? "font-semibold text-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                <span
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${value === current ? "bg-primary" : "bg-transparent"}`}
+                />
+                {priority}
+              </button>
+            );
+          })}
         </div>
       ) : null}
     </div>

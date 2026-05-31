@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use crate::client::AdoClient;
 use crate::error::Result;
@@ -57,10 +57,10 @@ pub struct WorkItemCommentCreate {
 }
 
 #[derive(Debug, Serialize)]
-pub struct WorkItemPatchOperation<'a> {
+pub struct WorkItemPatchOperation {
     pub op: &'static str,
     pub path: &'static str,
-    pub value: &'a str,
+    pub value: Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -208,7 +208,7 @@ impl AdoClient {
             &[WorkItemPatchOperation {
                 op: "add",
                 path: "/fields/System.AssignedTo",
-                value: assigned_to,
+                value: json!(assigned_to),
             }],
         )
         .await
@@ -228,7 +228,27 @@ impl AdoClient {
             &[WorkItemPatchOperation {
                 op: "add",
                 path: "/fields/System.State",
-                value: state,
+                value: json!(state),
+            }],
+        )
+        .await
+    }
+
+    pub async fn update_work_item_priority(
+        &self,
+        project_id: &str,
+        work_item_id: i64,
+        priority: i64,
+    ) -> Result<WorkItem> {
+        let path = format!("{project_id}/_apis/wit/workItems/{work_item_id}");
+        self.patch_json(
+            &path,
+            &[("api-version", "7.1-preview")],
+            "application/json-patch+json",
+            &[WorkItemPatchOperation {
+                op: "add",
+                path: "/fields/Microsoft.VSTS.Common.Priority",
+                value: json!(priority),
             }],
         )
         .await
@@ -499,6 +519,42 @@ mod tests {
 
         assert_eq!(item.id, 10);
         assert_eq!(item.fields["System.State"].as_str(), Some("Active"));
+    }
+
+    #[tokio::test]
+    async fn update_work_item_priority_patches_priority_field() {
+        let server = MockServer::start().await;
+        Mock::given(method("PATCH"))
+            .and(path("/project-1/_apis/wit/workItems/10"))
+            .and(query_param("api-version", "7.1-preview"))
+            .and(body_json(serde_json::json!([
+                {
+                    "op": "add",
+                    "path": "/fields/Microsoft.VSTS.Common.Priority",
+                    "value": 1
+                }
+            ])))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 10,
+                "fields": {
+                    "System.Title": "Fix bug",
+                    "Microsoft.VSTS.Common.Priority": 1
+                }
+            })))
+            .mount(&server)
+            .await;
+
+        let item = test_client(&server)
+            .await
+            .update_work_item_priority("project-1", 10, 1)
+            .await
+            .unwrap();
+
+        assert_eq!(item.id, 10);
+        assert_eq!(
+            item.fields["Microsoft.VSTS.Common.Priority"].as_i64(),
+            Some(1)
+        );
     }
 
     #[tokio::test]

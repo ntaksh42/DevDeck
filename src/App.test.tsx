@@ -517,7 +517,7 @@ describe("App", () => {
     const main = within(await screen.findByRole("main"));
 
     await screen.findByText("No pull requests assigned to you.");
-    fireEvent.keyDown(window, { key: "4", altKey: true });
+    fireEvent.keyDown(window, { key: "5", altKey: true });
     fireEvent.change(await main.findByPlaceholderText("Search work items…"), {
       target: { value: "save" },
     });
@@ -718,8 +718,9 @@ describe("App", () => {
     const main = within(await screen.findByRole("main"));
 
     await screen.findByText("No pull requests assigned to you.");
-    fireEvent.keyDown(window, { key: "7", altKey: true });
-    await main.findByText("Query View");
+    fireEvent.keyDown(window, { key: "4", altKey: true });
+    fireEvent.click(await main.findByRole("button", { name: /Add/ }));
+    await screen.findByRole("dialog", { name: "Add View" });
     await main.findByText("Platform");
 
     fireEvent.change(main.getByLabelText("Name"), {
@@ -1073,12 +1074,15 @@ describe("App", () => {
     expect(await main.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: "4", altKey: true });
-    expect(await main.findByRole("heading", { name: "Work Items" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "Work Item Views" })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: "5", altKey: true });
-    expect(await main.findByRole("heading", { name: "Commits" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "Work Items" })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: "6", altKey: true });
+    expect(await main.findByRole("heading", { name: "Commits" })).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: ",", altKey: true });
     expect(await main.findByRole("heading", { name: "Organizations" })).toBeTruthy();
   });
 
