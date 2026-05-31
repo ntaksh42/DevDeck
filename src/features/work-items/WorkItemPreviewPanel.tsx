@@ -622,8 +622,8 @@ function WorkItemPreviewDetails({
       onKeyDown={stopPreviewNavigationKeyDown}
       tabIndex={-1}
     >
-      <div className="grid gap-1.5 rounded-md border border-border bg-slate-50/60 p-2">
-        <div className="grid grid-cols-2 gap-1.5">
+      <div className="rounded-md border border-border bg-slate-50/50 px-2 py-1">
+        <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 border-b border-border/70 pb-1">
           <PreviewControl label="State" shortcut="S">
             {stateControl}
           </PreviewControl>
@@ -631,17 +631,17 @@ function WorkItemPreviewDetails({
             {assigneeControl}
           </PreviewControl>
         </div>
-        {fields.length > 0 ? (
-          <dl className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-x-3 gap-y-1 border-t border-border/70 pt-1.5">
-            {fields.map(([label, value]) => (
-              <PreviewField
-                key={label ?? ""}
-                label={label ?? ""}
-                value={value ?? ""}
-              />
-            ))}
-          </dl>
-        ) : null}
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(96px,1fr))] gap-x-2 gap-y-0.5 pt-1">
+          {fields.length > 0
+            ? fields.map(([label, value]) => (
+                <PreviewField
+                  key={label ?? ""}
+                  label={label ?? ""}
+                  value={value ?? ""}
+                />
+              ))
+            : null}
+        </div>
       </div>
 
       {(descriptionHtml || acceptanceCriteriaHtml) && (
@@ -781,23 +781,21 @@ function PreviewControl({
   shortcut: string;
 }) {
   return (
-    <div className="min-w-0 rounded border border-border bg-white px-2 py-1">
-      <div className="mb-0.5 flex items-center justify-between gap-1">
-        <span className="text-[10px] font-semibold uppercase leading-3 text-muted-foreground">
-          {label}
-        </span>
-        <ShortcutHint>{shortcut}</ShortcutHint>
-      </div>
+    <div className="grid min-w-0 grid-cols-[52px_minmax(0,1fr)_auto] items-center gap-1">
+      <span className="truncate text-[10px] font-semibold uppercase leading-4 text-muted-foreground">
+        {label}
+      </span>
       <div className="flex min-w-0 items-center leading-4">{children}</div>
+      <ShortcutHint>{shortcut}</ShortcutHint>
     </div>
   );
 }
 
 function PreviewField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid min-w-0 grid-cols-[58px_minmax(0,1fr)] items-baseline gap-1">
-      <dt className="truncate text-[11px] leading-4 text-muted-foreground">{label}</dt>
-      <dd className="truncate text-[12px] font-medium leading-4 text-foreground" title={value}>
+    <div className="grid min-w-0 grid-cols-[44px_minmax(0,1fr)] items-baseline gap-1">
+      <dt className="truncate text-[10px] leading-4 text-muted-foreground">{label}</dt>
+      <dd className="truncate text-[12px] font-semibold leading-4 text-foreground" title={value}>
         {value}
       </dd>
     </div>
