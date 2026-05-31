@@ -1,6 +1,8 @@
 import {
   CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import {
@@ -57,6 +59,8 @@ type View =
   | "commits"
   | "settings";
 
+type NavSectionId = "pullRequests" | "workItems";
+
 const DEFAULT_SIDEBAR_WIDTH = 232;
 const SIDEBAR_WIDTH_STORAGE_KEY = "azdodeck:layout:sidebarWidth";
 
@@ -71,9 +75,18 @@ function AppShell() {
   const [view, setView] = useState<View>("myReviews");
   const [helpOpen, setHelpOpen] = useState(false);
   const [userGuideOpen, setUserGuideOpen] = useState(false);
+  const [navExpanded, setNavExpanded] = useState<Record<NavSectionId, boolean>>({
+    pullRequests: true,
+    workItems: true,
+  });
   const [sidebarWidth, setSidebarWidth] = useState(() =>
-    storedNumber(SIDEBAR_WIDTH_STORAGE_KEY, DEFAULT_SIDEBAR_WIDTH, 220, 420),
+    storedNumber(SIDEBAR_WIDTH_STORAGE_KEY, DEFAULT_SIDEBAR_WIDTH, 160, 420),
   );
+  const navRef = useRef<HTMLElement | null>(null);
+  const navTypeaheadRef = useRef<{ value: string; timer: number | null }>({
+    value: "",
+    timer: null,
+  });
   const queryClient = useQueryClient();
   const organizationsQuery = useQuery({
     queryKey: ["organizations"],
@@ -86,6 +99,118 @@ function AppShell() {
 
   const organizations = organizationsQuery.data ?? [];
   const activeView = organizations.length === 0 ? "settings" : view;
+
+  function getNavItems(): HTMLButtonElement[] {
+    const nav = navRef.current;
+    if (!nav) return [];
+    return Array.from(
+      nav.querySelectorAll<HTMLButtonElement>("[data-nav-item='true']:not(:disabled)"),
+    ).filter((item) => item.offsetParent !== null);
+  }
+
+  function focusNavigation(): void {
+    const items = getNavItems();
+    const target =
+      items.find((item) => item.dataset.navActive === "true") ?? items[0];
+    target?.focus();
+  }
+
+  function focusNavItem(current: HTMLButtonElement, delta: number): void {
+    const items = getNavItems();
+    const currentIndex = Math.max(0, items.indexOf(current));
+    const nextIndex = Math.min(items.length - 1, Math.max(0, currentIndex + delta));
+    items[nextIndex]?.focus();
+  }
+
+  function focusNavItemByTypeahead(event: KeyboardEvent): boolean {
+    if (
+      event.key.length !== 1 ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      isEditableTarget(event.target)
+    ) {
+      return false;
+    }
+
+    if (navTypeaheadRef.current.timer !== null) {
+      window.clearTimeout(navTypeaheadRef.current.timer);
+    }
+    navTypeaheadRef.current.value =
+      `${navTypeaheadRef.current.value}${event.key}`.toLowerCase();
+    navTypeaheadRef.current.timer = window.setTimeout(() => {
+      navTypeaheadRef.current.value = "";
+      navTypeaheadRef.current.timer = null;
+    }, 800);
+
+    const term = navTypeaheadRef.current.value;
+    const items = getNavItems();
+    const match = items.find((item) =>
+      (item.dataset.navLabel ?? "").toLowerCase().startsWith(term),
+    );
+    if (!match) return false;
+    match.focus();
+    return true;
+  }
+
+  function setNavSectionExpanded(id: NavSectionId, expanded: boolean): void {
+    setNavExpanded((current) => ({ ...current, [id]: expanded }));
+  }
+
+  function handleNavKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
+    const current = (event.target as HTMLElement).closest<HTMLButtonElement>(
+      "[data-nav-item='true']",
+    );
+    if (!current) return;
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      focusNavItem(current, 1);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      focusNavItem(current, -1);
+      return;
+    }
+    if (event.key === "Home") {
+      event.preventDefault();
+      getNavItems()[0]?.focus();
+      return;
+    }
+    if (event.key === "End") {
+      event.preventDefault();
+      const items = getNavItems();
+      items[items.length - 1]?.focus();
+      return;
+    }
+    if (event.key === "ArrowRight" && current.dataset.navSection === "true") {
+      event.preventDefault();
+      const sectionId = current.dataset.sectionId as NavSectionId | undefined;
+      if (sectionId && !navExpanded[sectionId]) {
+        setNavSectionExpanded(sectionId, true);
+      } else {
+        focusNavItem(current, 1);
+      }
+      return;
+    }
+    if (event.key === "ArrowLeft" && current.dataset.navSection === "true") {
+      event.preventDefault();
+      const sectionId = current.dataset.sectionId as NavSectionId | undefined;
+      if (sectionId && navExpanded[sectionId]) {
+        setNavSectionExpanded(sectionId, false);
+      }
+      return;
+    }
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      current.click();
+      return;
+    }
+    if (focusNavItemByTypeahead(event.nativeEvent)) {
+      event.preventDefault();
+    }
+  }
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -132,7 +257,11 @@ function AppShell() {
         return;
       }
 
-      if (event.key === "?" && !event.altKey && !isEditableTarget(event.target)) {
+      if (
+        (event.key === "?" || event.key === "F1") &&
+        !event.altKey &&
+        !isEditableTarget(event.target)
+      ) {
         event.preventDefault();
         setHelpOpen(true);
         return;
@@ -145,6 +274,12 @@ function AppShell() {
       }
 
       if (!event.altKey || event.shiftKey) {
+        return;
+      }
+
+      if (event.key === "n" || event.key === "N") {
+        event.preventDefault();
+        focusNavigation();
         return;
       }
 
@@ -190,15 +325,15 @@ function AppShell() {
 
       const nextViewByKey: Record<string, View> =
         organizations.length === 0
-          ? { "6": "settings" }
+          ? { ",": "settings" }
           : {
               "1": "myReviews",
               "2": "pullRequestSearch",
               "3": "myWorkItems",
-              "4": "workItems",
-              "5": "commits",
-              "6": "settings",
-              "7": "workItemViews",
+              "4": "workItemViews",
+              "5": "workItems",
+              "6": "commits",
+              ",": "settings",
             };
       const nextView = nextViewByKey[event.key];
       if (!nextView) {
@@ -219,22 +354,30 @@ function AppShell() {
         className="fixed inset-y-0 left-0 hidden flex-col border-r border-border bg-white lg:flex"
         style={{ width: sidebarWidth }}
       >
-        <div className="flex h-12 items-center gap-2 border-b border-border px-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
+        <div className="flex h-12 min-w-0 items-center gap-2 border-b border-border px-4">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <Building2 className="h-4 w-4" aria-hidden="true" />
           </div>
-          <div>
-            <p className="text-sm font-semibold">AzDoDeck</p>
-            <p className="text-xs text-muted-foreground">Azure DevOps</p>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">AzDoDeck</p>
+            <p className="truncate text-xs text-muted-foreground">Azure DevOps</p>
           </div>
         </div>
-        <nav className="flex flex-1 flex-col p-2">
+        <nav
+          ref={navRef}
+          aria-label="Primary navigation"
+          className="flex flex-1 flex-col p-2"
+          onKeyDown={handleNavKeyDown}
+        >
           <div className="space-y-1">
             {/* Pull Requests section */}
             <NavSection
+              id="pullRequests"
               icon={<GitPullRequest className="h-4 w-4" aria-hidden="true" />}
               label="Pull Requests"
               disabled={organizations.length === 0}
+              expanded={navExpanded.pullRequests}
+              onExpandedChange={(expanded) => setNavSectionExpanded("pullRequests", expanded)}
             >
               <NavSubItem
                 active={activeView === "myReviews"}
@@ -252,9 +395,12 @@ function AppShell() {
               />
             </NavSection>
             <NavSection
+              id="workItems"
               icon={<ListChecks className="h-4 w-4" aria-hidden="true" />}
               label="Work Items"
               disabled={organizations.length === 0}
+              expanded={navExpanded.workItems}
+              onExpandedChange={(expanded) => setNavSectionExpanded("workItems", expanded)}
             >
               <NavSubItem
                 active={activeView === "myWorkItems"}
@@ -264,18 +410,18 @@ function AppShell() {
                 onClick={() => setView("myWorkItems")}
               />
               <NavSubItem
-                active={activeView === "workItems"}
-                disabled={organizations.length === 0}
-                label="Search"
-                shortcut="Alt+4"
-                onClick={() => setView("workItems")}
-              />
-              <NavSubItem
                 active={activeView === "workItemViews"}
                 disabled={organizations.length === 0}
                 label="Views"
-                shortcut="Alt+7"
+                shortcut="Alt+4"
                 onClick={() => setView("workItemViews")}
+              />
+              <NavSubItem
+                active={activeView === "workItems"}
+                disabled={organizations.length === 0}
+                label="Search"
+                shortcut="Alt+5"
+                onClick={() => setView("workItems")}
               />
             </NavSection>
             <NavButton
@@ -283,7 +429,7 @@ function AppShell() {
               disabled={organizations.length === 0}
               icon={<GitCommitHorizontal className="h-4 w-4" aria-hidden="true" />}
               label="Commits"
-              shortcut="Alt+5"
+              shortcut="Alt+6"
               onClick={() => setView("commits")}
             />
           </div>
@@ -292,13 +438,14 @@ function AppShell() {
               active={false}
               icon={<BookOpen className="h-4 w-4" aria-hidden="true" />}
               label="Help"
-              onClick={() => setUserGuideOpen(true)}
+              shortcut="F1"
+              onClick={() => setHelpOpen(true)}
             />
             <NavButton
               active={activeView === "settings"}
               icon={<Settings className="h-4 w-4" aria-hidden="true" />}
               label="Settings"
-              shortcut="Alt+6"
+              shortcut="Alt+,"
               onClick={() => setView("settings")}
             />
           </div>
@@ -308,7 +455,7 @@ function AppShell() {
           className="absolute inset-y-0 right-[-5px] hidden lg:flex"
           direction={1}
           max={420}
-          min={220}
+          min={160}
           onChange={setSidebarWidth}
           onReset={() => setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)}
           value={sidebarWidth}

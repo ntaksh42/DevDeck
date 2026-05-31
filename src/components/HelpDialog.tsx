@@ -15,7 +15,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="help-title"
-        className="relative w-full max-w-sm rounded-lg border border-border bg-white p-6 shadow-xl"
+        className="relative w-full max-w-md rounded-lg border border-border bg-white p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
@@ -37,10 +37,15 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>My Reviews</span><kbd className={kbd}>Alt+1</kbd></div>
           <div className={row}><span>PR Search</span><kbd className={kbd}>Alt+2</kbd></div>
           <div className={row}><span>My Work Items</span><kbd className={kbd}>Alt+3</kbd></div>
-          <div className={row}><span>WI Search</span><kbd className={kbd}>Alt+4</kbd></div>
-          <div className={row}><span>Commits</span><kbd className={kbd}>Alt+5</kbd></div>
-          <div className={row}><span>Settings</span><kbd className={kbd}>Alt+6</kbd></div>
-          <div className={row}><span>Work Item Views</span><kbd className={kbd}>Alt+7</kbd></div>
+          <div className={row}><span>Work Item Views</span><kbd className={kbd}>Alt+4</kbd></div>
+          <div className={row}><span>WI Search</span><kbd className={kbd}>Alt+5</kbd></div>
+          <div className={row}><span>Commits</span><kbd className={kbd}>Alt+6</kbd></div>
+          <div className={row}><span>Settings</span><kbd className={kbd}>Alt+,</kbd></div>
+          <div className={row}><span>Focus left navigation</span><kbd className={kbd}>Alt+N</kbd></div>
+          <div className={row}><span>Move in left navigation</span><kbd className={kbd}>↑ ↓ Home End</kbd></div>
+          <div className={row}><span>Expand / collapse section</span><kbd className={kbd}>← →</kbd></div>
+          <div className={row}><span>Open focused navigation item</span><kbd className={kbd}>Enter</kbd></div>
+          <div className={row}><span>Typeahead in navigation</span><kbd className={kbd}>A–Z</kbd></div>
           <div className={row}><span>Sync now</span><kbd className={kbd}>Alt+S</kbd></div>
           <div className={row}><span>Focus grid</span><kbd className={kbd}>Alt+G</kbd></div>
           <div className={row}><span>Focus preview</span><kbd className={kbd}>Alt+P</kbd></div>
@@ -74,7 +79,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Save (in dialog)</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
 
           <p className={section}>General</p>
-          <div className={row}><span>Show this help</span><kbd className={kbd}>?</kbd></div>
+          <div className={row}><span>Show this help</span><kbd className={kbd}>F1 / ?</kbd></div>
           <div className={row}><span>Close dialog</span><kbd className={kbd}>Esc</kbd></div>
         </div>
       </div>
