@@ -26,6 +26,7 @@ keyring = { version = "3", features = ["windows-native"] }
 azdo-client = { path = "../crates/azdo-client" }
 tokio = { workspace = true }
 tracing = { workspace = true }
+base64 = "0.22"
 
 [dev-dependencies]
 tempfile = "3"

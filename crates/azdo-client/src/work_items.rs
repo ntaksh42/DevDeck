@@ -162,6 +162,17 @@ impl AdoClient {
         .await
     }
 
+    pub async fn delete_work_item_comment(
+        &self,
+        project_id: &str,
+        work_item_id: i64,
+        comment_id: i64,
+    ) -> Result<()> {
+        let path = format!("{project_id}/_apis/wit/workItems/{work_item_id}/comments/{comment_id}");
+        self.delete(&path, &[("api-version", "7.1-preview.4")])
+            .await
+    }
+
     pub async fn list_work_item_comments(
         &self,
         project_id: &str,
@@ -236,11 +247,7 @@ impl AdoClient {
         Ok(response.value.into_iter().map(|s| s.name).collect())
     }
 
-    pub async fn get_saved_query(
-        &self,
-        project_id: &str,
-        query_id: &str,
-    ) -> Result<SavedQuery> {
+    pub async fn get_saved_query(&self, project_id: &str, query_id: &str) -> Result<SavedQuery> {
         let path = format!("{project_id}/_apis/wit/queries/{query_id}");
         self.get_json(&path, &[("api-version", "7.1"), ("$expand", "all")])
             .await
@@ -403,6 +410,23 @@ mod tests {
                 .as_deref(),
             Some("Bob")
         );
+    }
+
+    #[tokio::test]
+    async fn delete_work_item_comment_sends_delete() {
+        let server = MockServer::start().await;
+        Mock::given(method("DELETE"))
+            .and(path("/project-1/_apis/wit/workItems/10/comments/5"))
+            .and(query_param("api-version", "7.1-preview.4"))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&server)
+            .await;
+
+        test_client(&server)
+            .await
+            .delete_work_item_comment("project-1", 10, 5)
+            .await
+            .unwrap();
     }
 
     #[tokio::test]

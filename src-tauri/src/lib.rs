@@ -36,10 +36,11 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tokio::sync::mpsc;
 use work_items::{
     AddWorkItemCommentInput, AssignWorkItemInput, AssignWorkItemsInput, BulkWorkItemResult,
-    GetSavedQueryInput, GetWorkItemPreviewInput, ListMyWorkItemsInput, ListWorkItemProjectsInput,
+    DeleteWorkItemCommentInput, FetchWorkItemImageInput, GetSavedQueryInput,
+    GetWorkItemPreviewInput, ListMyWorkItemsInput, ListWorkItemProjectsInput,
     ListWorkItemTypeStatesInput, MentionCandidate, RunWorkItemQueryInput, SavedQueryResult,
     SearchWorkItemMentionsInput, SearchWorkItemsInput, SetWorkItemStateInput,
-    SetWorkItemsStateInput, WorkItemComment, WorkItemPreview, WorkItemProjectOption,
+    SetWorkItemsStateInput, WorkItemComment, WorkItemImage, WorkItemPreview, WorkItemProjectOption,
     WorkItemService, WorkItemSummary,
 };
 
@@ -193,11 +194,29 @@ async fn search_work_item_mentions(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn fetch_work_item_image(
+    input: FetchWorkItemImageInput,
+    state: State<'_, AppState>,
+) -> Result<WorkItemImage> {
+    state.work_items.fetch_image(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn add_work_item_comment(
     input: AddWorkItemCommentInput,
     state: State<'_, AppState>,
 ) -> Result<WorkItemComment> {
     state.work_items.add_comment(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn delete_work_item_comment(
+    input: DeleteWorkItemCommentInput,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    state.work_items.delete_comment(input).await
 }
 
 #[tauri::command]
@@ -355,7 +374,9 @@ pub fn run() {
             count_work_item_query,
             get_work_item_preview,
             search_work_item_mentions,
+            fetch_work_item_image,
             add_work_item_comment,
+            delete_work_item_comment,
             assign_work_item,
             set_work_item_state,
             list_work_item_type_states,

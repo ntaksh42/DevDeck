@@ -1,4 +1,6 @@
 use azdo_client::{AdoClient, Identity, WorkItem, WorkItemComment as AzdoWorkItemComment};
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use base64::Engine;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -39,6 +41,7 @@ const WORK_ITEM_PREVIEW_FIELDS: &[&str] = &[
 ];
 
 const WORK_ITEM_PREVIEW_COMMENT_LIMIT: u32 = 200;
+const WORK_ITEM_IMAGE_MAX_BYTES: usize = 10 * 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -88,11 +91,33 @@ pub struct SearchWorkItemMentionsInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct FetchWorkItemImageInput {
+    pub organization_id: Option<String>,
+    pub url: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemImage {
+    pub data_url: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AddWorkItemCommentInput {
     pub organization_id: Option<String>,
     pub project_id: String,
     pub work_item_id: i64,
     pub markdown: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteWorkItemCommentInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_id: i64,
+    pub comment_id: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -410,6 +435,35 @@ impl WorkItemService {
             .collect())
     }
 
+    pub async fn fetch_image(&self, input: FetchWorkItemImageInput) -> Result<WorkItemImage> {
+        let url = input.url.trim();
+        if url.is_empty() {
+            return Err(AppError::InvalidInput("image URL is required".to_string()));
+        }
+
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let response = client.get_attachment_bytes(url).await?;
+        if response.bytes.len() > WORK_ITEM_IMAGE_MAX_BYTES {
+            return Err(AppError::InvalidInput(
+                "image is too large to preview".to_string(),
+            ));
+        }
+
+        let content_type = response
+            .content_type
+            .as_deref()
+            .and_then(normalize_image_content_type)
+            .or_else(|| image_content_type_from_url(url))
+            .ok_or_else(|| {
+                AppError::InvalidInput("attachment is not a supported preview image".to_string())
+            })?;
+        let encoded = BASE64_STANDARD.encode(response.bytes);
+        Ok(WorkItemImage {
+            data_url: format!("data:{content_type};base64,{encoded}"),
+        })
+    }
+
     pub async fn add_comment(&self, input: AddWorkItemCommentInput) -> Result<WorkItemComment> {
         let markdown = input.markdown.trim();
         if markdown.is_empty() {
@@ -422,6 +476,19 @@ impl WorkItemService {
             .add_work_item_comment(&input.project_id, input.work_item_id, markdown)
             .await?;
         Ok(summarize_work_item_comment(comment))
+    }
+
+    pub async fn delete_comment(&self, input: DeleteWorkItemCommentInput) -> Result<()> {
+        if input.comment_id <= 0 {
+            return Err(AppError::InvalidInput("comment ID is required".to_string()));
+        }
+
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        client
+            .delete_work_item_comment(&input.project_id, input.work_item_id, input.comment_id)
+            .await?;
+        Ok(())
     }
 
     pub async fn assign(&self, input: AssignWorkItemInput) -> Result<WorkItemPreview> {
@@ -591,9 +658,7 @@ impl WorkItemService {
         }
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let query = client
-            .get_saved_query(&input.project_id, &query_id)
-            .await?;
+        let query = client.get_saved_query(&input.project_id, &query_id).await?;
         Ok(SavedQueryResult {
             id: query.id,
             name: query.name,
@@ -795,6 +860,43 @@ fn identity_field(work_item: &WorkItem, field: &str) -> Option<String> {
             .or_else(|| map.get("uniqueName").and_then(Value::as_str))
             .map(ToString::to_string),
         _ => None,
+    }
+}
+
+fn normalize_image_content_type(content_type: &str) -> Option<&'static str> {
+    let media_type = content_type
+        .split(';')
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    match media_type.as_str() {
+        "image/png" => Some("image/png"),
+        "image/jpeg" | "image/jpg" => Some("image/jpeg"),
+        "image/gif" => Some("image/gif"),
+        "image/webp" => Some("image/webp"),
+        "image/svg+xml" => Some("image/svg+xml"),
+        "image/bmp" => Some("image/bmp"),
+        _ => None,
+    }
+}
+
+fn image_content_type_from_url(url: &str) -> Option<&'static str> {
+    let path = url.split('?').next().unwrap_or(url).to_ascii_lowercase();
+    if path.ends_with(".png") {
+        Some("image/png")
+    } else if path.ends_with(".jpg") || path.ends_with(".jpeg") {
+        Some("image/jpeg")
+    } else if path.ends_with(".gif") {
+        Some("image/gif")
+    } else if path.ends_with(".webp") {
+        Some("image/webp")
+    } else if path.ends_with(".svg") {
+        Some("image/svg+xml")
+    } else if path.ends_with(".bmp") {
+        Some("image/bmp")
+    } else {
+        None
     }
 }
 

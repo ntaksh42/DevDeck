@@ -8,10 +8,12 @@ import {
   useState,
 } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Send } from 'lucide-react';
+import { Loader2, Send, Trash2 } from 'lucide-react';
 import {
   addWorkItemComment,
   assignWorkItem,
+  deleteWorkItemComment,
+  fetchWorkItemImage,
   setWorkItemState,
   listWorkItemTypeStates,
   searchWorkItemMentions,
@@ -169,6 +171,17 @@ export function WorkItemPreviewPanel({
     ],
   );
 
+  const resolvePreviewImage = useMemo(
+    () => async (url: string) => {
+      if (!selectedItem) return null;
+      return fetchWorkItemImage({
+        organizationId: selectedItem.organizationId,
+        url,
+      });
+    },
+    [selectedItem],
+  );
+
   const commentMutation = useMutation({
     mutationFn: addWorkItemComment,
     onSuccess: () => {
@@ -177,6 +190,29 @@ export function WorkItemPreviewPanel({
       setMentionQuery("");
       setMentionStart(null);
       setActiveMentionIndex(0);
+      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
+    },
+  });
+
+  const deleteCommentMutation = useMutation({
+    mutationFn: deleteWorkItemComment,
+    onSuccess: (_result, variables) => {
+      queryClient.setQueryData(
+        workItemQueryKeys.preview(
+          variables.organizationId,
+          variables.projectId,
+          variables.workItemId,
+        ),
+        (current: WorkItemPreview | undefined) =>
+          current
+            ? {
+                ...current,
+                comments: current.comments.filter(
+                  (comment) => comment.id !== variables.commentId,
+                ),
+              }
+            : current,
+      );
       void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
     },
   });
@@ -299,6 +335,16 @@ export function WorkItemPreviewPanel({
     });
   }
 
+  function deleteComment(commentId: number) {
+    if (!selectedItem || deleteCommentMutation.isPending) return;
+    deleteCommentMutation.mutate({
+      organizationId: selectedItem.organizationId,
+      projectId: selectedItem.projectId,
+      workItemId: selectedItem.id,
+      commentId,
+    });
+  }
+
   function assignTo(candidate: MentionCandidate) {
     if (!selectedItem) return;
     assignMutation.mutate({
@@ -386,8 +432,21 @@ export function WorkItemPreviewPanel({
           ) : preview ? (
             <>
               <WorkItemPreviewDetails
+                deleteCommentError={
+                  deleteCommentMutation.isError
+                    ? commandErrorMessage(deleteCommentMutation.error)
+                    : null
+                }
+                deletingCommentId={
+                  deleteCommentMutation.isPending
+                    ? deleteCommentMutation.variables?.commentId ?? null
+                    : null
+                }
+                deletePending={deleteCommentMutation.isPending}
                 mentionDisplayNames={commentMentionDisplayNames}
+                onDeleteComment={deleteComment}
                 preview={preview}
+                resolveImageSource={resolvePreviewImage}
                 stateControl={
                   <StatePicker
                     current={preview.state}
@@ -520,12 +579,22 @@ export function WorkItemPreviewPanel({
 function WorkItemPreviewDetails({
   preview,
   assigneeControl,
+  deleteCommentError,
+  deletingCommentId,
+  deletePending,
   mentionDisplayNames,
+  onDeleteComment,
+  resolveImageSource,
   stateControl,
 }: {
   preview: WorkItemPreview;
   assigneeControl: ReactNode;
+  deleteCommentError: string | null;
+  deletingCommentId: number | null;
+  deletePending: boolean;
   mentionDisplayNames: ReadonlyMap<string, string>;
+  onDeleteComment: (commentId: number) => void;
+  resolveImageSource: (url: string) => Promise<string | null>;
   stateControl: ReactNode;
 }) {
   const fields = [
@@ -587,7 +656,9 @@ function WorkItemPreviewDetails({
                 Description
               </h3>
               <RichHtmlFrame
+                baseUrl={preview.webUrl}
                 html={descriptionHtml}
+                resolveImageSource={resolveImageSource}
                 title="Description"
               />
             </section>
@@ -598,7 +669,9 @@ function WorkItemPreviewDetails({
                 Acceptance Criteria
               </h3>
               <RichHtmlFrame
+                baseUrl={preview.webUrl}
                 html={acceptanceCriteriaHtml}
+                resolveImageSource={resolveImageSource}
                 title="Acceptance Criteria"
               />
             </section>
@@ -611,41 +684,65 @@ function WorkItemPreviewDetails({
           <h3 className="mb-0.5 text-[10px] font-semibold uppercase leading-3 text-muted-foreground">
             Comments ({preview.comments.length})
           </h3>
+          {deleteCommentError ? (
+            <p className="mb-1 text-[11px] leading-4 text-destructive">
+              {deleteCommentError}
+            </p>
+          ) : null}
           <div className="space-y-1.5">
-            {preview.comments.map((comment) => (
-              <article
-                key={comment.id}
-                className="min-w-0 overflow-hidden rounded-md border border-border bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
-              >
-                <div className="flex min-w-0 items-center gap-1.5 border-b border-border bg-muted/30 px-2 py-1">
-                  <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
-                    {commentAuthorInitials(comment.createdBy)}
-                  </span>
-                  <span className="min-w-0 truncate font-semibold">
-                    {comment.createdBy ?? "Unknown"}
-                  </span>
-                  <span className="text-[11px] text-muted-foreground">commented</span>
-                  {comment.createdDate ? (
-                    <span className="shrink-0 text-[11px] text-muted-foreground">
-                      {formatRelativeDate(comment.createdDate)}
+            {preview.comments.map((comment) => {
+              const deleting = deletingCommentId === comment.id;
+              return (
+                <article
+                  key={comment.id}
+                  className="min-w-0 overflow-hidden rounded-md border border-border bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+                >
+                  <div className="flex min-w-0 items-center gap-1.5 border-b border-border bg-muted/30 px-2 py-1">
+                    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+                      {commentAuthorInitials(comment.createdBy)}
                     </span>
-                  ) : null}
-                </div>
-                <div className="px-2 py-1.5">
-                  <RichHtmlFrame
-                    density="comfortable"
-                    framed={false}
-                    html={commentRichHtml(
-                      comment.renderedText,
-                      comment.text,
-                      mentionDisplayNames,
-                    )}
-                    title={`Comment by ${comment.createdBy ?? "Unknown"}`}
-                    minHeight={34}
-                  />
-                </div>
-              </article>
-            ))}
+                    <span className="min-w-0 truncate font-semibold">
+                      {comment.createdBy ?? "Unknown"}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">commented</span>
+                    {comment.createdDate ? (
+                      <span className="shrink-0 text-[11px] text-muted-foreground">
+                        {formatRelativeDate(comment.createdDate)}
+                      </span>
+                    ) : null}
+                    <button
+                      type="button"
+                      aria-label={`Delete comment ${comment.id}`}
+                      className="ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-transparent text-muted-foreground hover:border-border hover:bg-white hover:text-destructive disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={deletePending}
+                      title="Delete comment"
+                      onClick={() => onDeleteComment(comment.id)}
+                    >
+                      {deleting ? (
+                        <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  </div>
+                  <div className="px-2 py-1.5">
+                    <RichHtmlFrame
+                      baseUrl={preview.webUrl}
+                      density="comfortable"
+                      framed={false}
+                      html={commentRichHtml(
+                        comment.renderedText,
+                        comment.text,
+                        mentionDisplayNames,
+                      )}
+                      title={`Comment by ${comment.createdBy ?? "Unknown"}`}
+                      resolveImageSource={resolveImageSource}
+                      minHeight={34}
+                    />
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </div>
       ) : null}
@@ -654,16 +751,20 @@ function WorkItemPreviewDetails({
 }
 
 function RichHtmlFrame({
+  baseUrl,
   density = "compact",
   framed = true,
   html,
   minHeight = 40,
+  resolveImageSource,
   title,
 }: {
+  baseUrl?: string | null;
   density?: "compact" | "comfortable";
   framed?: boolean;
   html: string;
   minHeight?: number;
+  resolveImageSource?: (url: string) => Promise<string | null>;
   title: string;
 }) {
   const [height, setHeight] = useState(minHeight);
@@ -698,14 +799,12 @@ function RichHtmlFrame({
           media.addEventListener("load", syncHeight, { once: true });
           media.addEventListener("error", syncHeight, { once: true });
         });
+        hydrateAuthenticatedImages(doc, baseUrl, resolveImageSource, syncHeight);
         resizeObserverRef.current?.disconnect();
         const frameWindow = frame.contentWindow as
           | (Window & { ResizeObserver?: typeof ResizeObserver })
           | null;
-        const globalScope = globalThis as typeof globalThis & {
-          ResizeObserver?: typeof ResizeObserver;
-        };
-        const ResizeObserverCtor = frameWindow?.ResizeObserver ?? globalScope.ResizeObserver;
+        const ResizeObserverCtor = frameWindow?.ResizeObserver;
         if (ResizeObserverCtor) {
           const resizeObserver = new ResizeObserverCtor(syncHeight);
           resizeObserver.observe(body);
@@ -714,6 +813,61 @@ function RichHtmlFrame({
       }}
     />
   );
+}
+
+function hydrateAuthenticatedImages(
+  doc: Document,
+  baseUrl: string | null | undefined,
+  resolveImageSource: ((url: string) => Promise<string | null>) | undefined,
+  syncHeight: () => void,
+) {
+  if (!resolveImageSource) return;
+
+  for (const image of Array.from(doc.querySelectorAll("img"))) {
+    const rawSrc = image.getAttribute("src");
+    if (!rawSrc || isInlineImageSource(rawSrc) || image.dataset.azdoImageHydrated) {
+      continue;
+    }
+
+    const absoluteUrl = toAbsoluteHttpUrl(rawSrc, baseUrl);
+    if (!absoluteUrl) continue;
+    if (!isWorkItemAttachmentUrl(absoluteUrl)) continue;
+
+    image.dataset.azdoImageHydrated = "true";
+    void resolveImageSource(absoluteUrl)
+      .then((dataUrl) => {
+        if (!dataUrl || !image.isConnected) return;
+        image.src = dataUrl;
+        syncHeight();
+      })
+      .catch(() => {
+        image.dataset.azdoImageError = "true";
+      });
+  }
+}
+
+function isWorkItemAttachmentUrl(src: string): boolean {
+  try {
+    return new URL(src).pathname.toLowerCase().includes("/_apis/wit/attachments/");
+  } catch {
+    return false;
+  }
+}
+
+function isInlineImageSource(src: string): boolean {
+  return /^(data|blob):/i.test(src);
+}
+
+function toAbsoluteHttpUrl(src: string, baseUrl: string | null | undefined): string | null {
+  try {
+    const url = new URL(src, baseUrl || window.location.href);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return null;
+    }
+    return url.href;
+  } catch {
+    return null;
+  }
 }
 
 function buildRichHtmlDocument(

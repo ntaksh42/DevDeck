@@ -260,11 +260,23 @@ export type SearchWorkItemMentionsInput = {
   query: string;
 };
 
+export type FetchWorkItemImageInput = {
+  organizationId?: string;
+  url: string;
+};
+
 export type AddWorkItemCommentInput = {
   organizationId?: string;
   projectId: string;
   workItemId: number;
   markdown: string;
+};
+
+export type DeleteWorkItemCommentInput = {
+  organizationId?: string;
+  projectId: string;
+  workItemId: number;
+  commentId: number;
 };
 
 export type AssignWorkItemInput = {
@@ -440,11 +452,28 @@ export async function searchWorkItemMentions(
   return mentionCandidatesSchema.parse(result);
 }
 
+const workItemImageSchema = z.object({
+  dataUrl: z.string(),
+});
+
+export async function fetchWorkItemImage(
+  input: FetchWorkItemImageInput,
+): Promise<string> {
+  const result = await invokeCommand("fetch_work_item_image", { input });
+  return workItemImageSchema.parse(result).dataUrl;
+}
+
 export async function addWorkItemComment(
   input: AddWorkItemCommentInput,
 ): Promise<WorkItemComment> {
   const result = await invokeCommand("add_work_item_comment", { input });
   return workItemCommentSchema.parse(result);
+}
+
+export async function deleteWorkItemComment(
+  input: DeleteWorkItemCommentInput,
+): Promise<void> {
+  await invokeCommand("delete_work_item_comment", { input });
 }
 
 export async function assignWorkItem(

@@ -7,6 +7,7 @@ import type {
   AssignWorkItemsInput,
   CommitRepositoryOption,
   CommitSummary,
+  DeleteWorkItemCommentInput,
   GetReviewResultPreviewInput,
   GetSavedQueryInput,
   GetWorkItemPreviewInput,
@@ -42,10 +43,14 @@ const demoOrganization: Organization = {
   updatedAt: "2026-05-24T00:00:00Z",
 };
 
+const DEMO_PREVIEW_IMAGE_DATA_URL =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='92' viewBox='0 0 320 92'%3E%3Crect width='320' height='92' rx='8' fill='%23eff6ff'/%3E%3Crect x='14' y='14' width='88' height='64' rx='5' fill='%232563eb'/%3E%3Crect x='116' y='22' width='178' height='10' rx='5' fill='%2393c5fd'/%3E%3Crect x='116' y='42' width='148' height='10' rx='5' fill='%23bfdbfe'/%3E%3Crect x='116' y='62' width='118' height='10' rx='5' fill='%23dbeafe'/%3E%3C/svg%3E";
+
 let demoSettings: AppSettings = {
   reviewResultFolderPath: "C:\\reports\\azdo-reviews",
   showWindowHotkey: null,
 };
+const deletedDemoWorkItemComments = new Set<number>();
 
 export async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
   await new Promise((resolve) => window.setTimeout(resolve, 100));
@@ -134,10 +139,19 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       )?.input;
       return demoMentionCandidates(input?.query);
     }
+    case "fetch_work_item_image": {
+      return { dataUrl: DEMO_PREVIEW_IMAGE_DATA_URL };
+    }
     case "add_work_item_comment": {
       const input = (args as { input?: AddWorkItemCommentInput } | undefined)
         ?.input;
       return demoWorkItemComment(input?.markdown);
+    }
+    case "delete_work_item_comment": {
+      const input = (args as { input?: DeleteWorkItemCommentInput } | undefined)
+        ?.input;
+      if (input) deletedDemoWorkItemComments.add(input.commentId);
+      return null;
     }
     case "assign_work_item": {
       const input = (args as { input?: AssignWorkItemInput } | undefined)
@@ -604,7 +618,7 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
     severity: summary.workItemType === "Bug" ? "2 - High" : null,
     storyPoints: summary.workItemType === "User Story" ? "5" : null,
     remainingWork: summary.workItemType === "Task" ? "3" : null,
-    descriptionHtml: `<p>Review background and expected behavior for ${escapeDemoHtml(summary.title)}.</p><ul><li>Fetch detail fields from Azure DevOps</li><li>Display in the right-side preview pane</li></ul><p><img alt="Demo preview image" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='92' viewBox='0 0 320 92'%3E%3Crect width='320' height='92' rx='8' fill='%23eff6ff'/%3E%3Crect x='14' y='14' width='88' height='64' rx='5' fill='%232563eb'/%3E%3Crect x='116' y='22' width='178' height='10' rx='5' fill='%2393c5fd'/%3E%3Crect x='116' y='42' width='148' height='10' rx='5' fill='%23bfdbfe'/%3E%3Crect x='116' y='62' width='118' height='10' rx='5' fill='%23dbeafe'/%3E%3C/svg%3E"></p>`,
+    descriptionHtml: `<p>Review background and expected behavior for ${escapeDemoHtml(summary.title)}.</p><ul><li>Fetch detail fields from Azure DevOps</li><li>Display in the right-side preview pane</li></ul><p><img alt="Demo preview image" src="https://dev.azure.com/contoso/${encodeURIComponent(summary.projectName)}/_apis/wit/attachments/demo-preview-image?fileName=preview.svg"></p>`,
     acceptanceCriteriaHtml:
       "<ul><li>Selected work item syncs with the preview pane</li><li>HTML fields are rendered in a sandbox</li></ul>",
     webUrl: summary.webUrl,
@@ -627,7 +641,7 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
         createdByUniqueName: "demo.user@contoso.example",
         createdDate: "2026-05-26T09:00:00Z",
       },
-    ],
+    ].filter((comment) => !deletedDemoWorkItemComments.has(comment.id)),
   };
 }
 
