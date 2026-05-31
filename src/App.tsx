@@ -228,6 +228,26 @@ function AppShell() {
     },
     {
       group: "Focus",
+      id: "focus.filter",
+      keywords: ["search", "find"],
+      label: "Focus filter",
+      run: () => {
+        const filterInput = document.querySelector<HTMLInputElement>(
+          [
+            "[data-filter-input='true']",
+            "input[aria-label='Filter']",
+            "input[type='search']",
+            "input[placeholder*='Filter']",
+            "input[placeholder*='Search']",
+          ].join(","),
+        );
+        filterInput?.focus();
+        filterInput?.select();
+      },
+      shortcut: "Ctrl+F",
+    },
+    {
+      group: "Focus",
       id: "focus.grid",
       keywords: ["list", "table", "rows"],
       label: "Focus grid",

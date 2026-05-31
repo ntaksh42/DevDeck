@@ -7,7 +7,7 @@ import {
   useState,
 } from 'react';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Plus, RefreshCw, Trash2, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, Pin, PinOff, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import {
   getSavedQuery,
   countWorkItemQuery,
@@ -16,7 +16,7 @@ import {
   commandErrorMessage,
   type Organization,
 } from '@/lib/azdoCommands';
-import { clamp, isEditableTarget } from '@/lib/utils';
+import { clamp, isEditableTarget, type SortDirection } from '@/lib/utils';
 import { ErrorState } from '@/components/StateDisplay';
 import { WorkItemsGrid } from './WorkItemsGrid';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from './queryKeys';
@@ -24,7 +24,11 @@ const WI_QUERY_VIEWS_STORAGE_KEY = "azdodeck:workItemQueryViews";
 type WorkItemQueryView = {
   id: string;
   name: string;
+  pinned?: boolean;
   projectId: string;
+  previewVisible?: boolean;
+  sortDirection?: SortDirection;
+  sortKey?: "id" | "workItemType" | "state" | "title" | "projectName" | "assignedTo" | "changedDate";
   wiql: string;
   limit: number;
 };
@@ -50,7 +54,13 @@ function loadWorkItemQueryViews(): WorkItemQueryView[] {
         return {
           id: view.id,
           name: view.name,
+          pinned: view.pinned === true,
           projectId: view.projectId,
+          previewVisible: view.previewVisible !== false,
+          sortDirection: view.sortDirection === "asc" || view.sortDirection === "desc"
+            ? view.sortDirection
+            : "desc",
+          sortKey: isWorkItemSortKey(view.sortKey) ? view.sortKey : "changedDate",
           wiql: view.wiql,
           limit: Number.isFinite(limit) ? clamp(limit, 1, 500) : 200,
         };
@@ -59,6 +69,18 @@ function loadWorkItemQueryViews(): WorkItemQueryView[] {
   } catch {
     return [];
   }
+}
+
+function isWorkItemSortKey(value: unknown): value is NonNullable<WorkItemQueryView["sortKey"]> {
+  return (
+    value === "id" ||
+    value === "workItemType" ||
+    value === "state" ||
+    value === "title" ||
+    value === "projectName" ||
+    value === "assignedTo" ||
+    value === "changedDate"
+  );
 }
 
 function newWorkItemViewId(): string {
@@ -355,7 +377,11 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
     const nextView: WorkItemQueryView = {
       id: editingViewId ?? newWorkItemViewId(),
       name,
+      pinned: views.find((view) => view.id === editingViewId)?.pinned ?? false,
       projectId: draftProjectId,
+      previewVisible: views.find((view) => view.id === editingViewId)?.previewVisible ?? true,
+      sortDirection: views.find((view) => view.id === editingViewId)?.sortDirection ?? "desc",
+      sortKey: views.find((view) => view.id === editingViewId)?.sortKey ?? "changedDate",
       wiql,
       limit,
     };
@@ -377,6 +403,43 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
     resetDraft();
   }
 
+  function updateSelectedView(patch: Partial<WorkItemQueryView>) {
+    if (!selectedView) return;
+    setViews((current) =>
+      current.map((view) =>
+        view.id === selectedView.id ? { ...view, ...patch } : view,
+      ),
+    );
+  }
+
+  function toggleSelectedViewPinned() {
+    if (!selectedView) return;
+    const pinned = !selectedView.pinned;
+    setViews((current) => {
+      const next = current.map((view) =>
+        view.id === selectedView.id ? { ...view, pinned } : view,
+      );
+      if (!pinned) return next;
+      const target = next.find((view) => view.id === selectedView.id);
+      if (!target) return next;
+      return [target, ...next.filter((view) => view.id !== selectedView.id)];
+    });
+  }
+
+  function moveSelectedView(delta: number) {
+    if (!selectedView) return;
+    setViews((current) => {
+      const index = current.findIndex((view) => view.id === selectedView.id);
+      if (index < 0) return current;
+      const nextIndex = clamp(index + delta, 0, current.length - 1);
+      if (nextIndex === index) return current;
+      const next = [...current];
+      const [item] = next.splice(index, 1);
+      next.splice(nextIndex, 0, item);
+      return next;
+    });
+  }
+
   function selectViewAt(index: number) {
     const nextIndex = clamp(index, 0, views.length - 1);
     const view = views[nextIndex];
@@ -388,7 +451,13 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
 
   function handleViewListKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (isEditableTarget(event.target) || views.length === 0) return;
-    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+    if (event.shiftKey && (event.key === "ArrowLeft" || event.key === "ArrowUp")) {
+      event.preventDefault();
+      moveSelectedView(-1);
+    } else if (event.shiftKey && (event.key === "ArrowRight" || event.key === "ArrowDown")) {
+      event.preventDefault();
+      moveSelectedView(1);
+    } else if (event.key === "ArrowRight" || event.key === "ArrowDown") {
       event.preventDefault();
       selectViewAt(selectedViewIndex + 1);
     } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
@@ -436,6 +505,56 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
             </p>
           </div>
           <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              disabled={!selectedView}
+              onClick={toggleSelectedViewPinned}
+              title={selectedView?.pinned ? "Unpin selected view" : "Pin selected view"}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {selectedView?.pinned ? (
+                <PinOff className="h-3.5 w-3.5" aria-hidden="true" />
+              ) : (
+                <Pin className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              {selectedView?.pinned ? "Unpin" : "Pin"}
+            </button>
+            <button
+              type="button"
+              disabled={!selectedView || selectedViewIndex <= 0}
+              onClick={() => moveSelectedView(-1)}
+              title="Move selected view left"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              disabled={!selectedView || selectedViewIndex >= views.length - 1}
+              onClick={() => moveSelectedView(1)}
+              title="Move selected view right"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              disabled={!selectedView}
+              onClick={() =>
+                updateSelectedView({
+                  previewVisible: selectedView?.previewVisible === false,
+                })
+              }
+              title={selectedView?.previewVisible === false ? "Show preview for this view" : "Hide preview for this view"}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {selectedView?.previewVisible === false ? (
+                <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+              ) : (
+                <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              Preview
+            </button>
             <button
               type="button"
               disabled={!selectedView}
@@ -523,12 +642,17 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
                     <span className="min-w-0 truncate text-sm font-semibold" title={view.name}>
                       {view.name}
                     </span>
-                    {query?.isFetching ? (
-                      <Loader2
-                        className="h-4 w-4 shrink-0 animate-spin text-muted-foreground"
-                        aria-hidden="true"
-                      />
-                    ) : null}
+                    <span className="flex shrink-0 items-center gap-1">
+                      {view.pinned ? (
+                        <Pin className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+                      ) : null}
+                      {query?.isFetching ? (
+                        <Loader2
+                          className="h-4 w-4 animate-spin text-muted-foreground"
+                          aria-hidden="true"
+                        />
+                      ) : null}
+                    </span>
                   </div>
                   <div className="mt-3 text-3xl font-semibold leading-none">
                     {query?.isError ? "!" : count}
@@ -537,6 +661,10 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
                     {query?.isError
                       ? commandErrorMessage(query.error)
                       : `${view.limit} max results`}
+                  </p>
+                  <p className="mt-1 truncate text-[11px] text-muted-foreground/80">
+                    {(view.sortKey ?? "changedDate")} {(view.sortDirection ?? "desc").toUpperCase()}
+                    {view.previewVisible === false ? " · preview off" : ""}
                   </p>
                 </button>
               );
@@ -568,11 +696,24 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
           ) : null}
 
           <WorkItemsGrid
+            key={selectedView.id}
             loading={!!selectedQuery?.isFetching}
             results={selectedResults}
             searched={!!selectedQuery}
             autoFocus
             emptyMessage="Select or save a WIQL view to load work items."
+            initialSort={{
+              key: selectedView.sortKey ?? "changedDate",
+              direction: selectedView.sortDirection ?? "desc",
+            }}
+            onSortChange={(sort) =>
+              updateSelectedView({
+                sortKey: sort.key,
+                sortDirection: sort.direction,
+              })
+            }
+            previewVisible={selectedView.previewVisible !== false}
+            storageKeyScope={selectedView.id}
           />
         </div>
       ) : null}

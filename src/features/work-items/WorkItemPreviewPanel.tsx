@@ -46,6 +46,7 @@ function stopPreviewNavigationKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
 export function WorkItemPreviewPanel({
   focusCommentRequest,
   openAssigneeRequest,
+  openPriorityRequest,
   openStateRequest,
   preview,
   previewError,
@@ -54,6 +55,7 @@ export function WorkItemPreviewPanel({
 }: {
   focusCommentRequest?: number;
   openAssigneeRequest?: number;
+  openPriorityRequest?: number;
   openStateRequest?: number;
   preview: WorkItemPreview | null;
   previewError: string | null;
@@ -76,6 +78,7 @@ export function WorkItemPreviewPanel({
   const [priorityPickerOpen, setPriorityPickerOpen] = useState(false);
   const handledFocusCommentRequest = useRef(0);
   const handledOpenAssigneeRequest = useRef(0);
+  const handledOpenPriorityRequest = useRef(0);
   const handledOpenStateRequest = useRef(0);
 
   const statesQuery = useQuery({
@@ -325,6 +328,20 @@ export function WorkItemPreviewPanel({
     setAssigneeOpen(false);
     setPriorityPickerOpen(false);
   }, [openStateRequest, selectedItem]);
+
+  useEffect(() => {
+    if (
+      !openPriorityRequest ||
+      handledOpenPriorityRequest.current === openPriorityRequest
+    ) {
+      return;
+    }
+    handledOpenPriorityRequest.current = openPriorityRequest;
+    if (!selectedItem) return;
+    setPriorityPickerOpen(true);
+    setAssigneeOpen(false);
+    setStatePickerOpen(false);
+  }, [openPriorityRequest, selectedItem]);
 
   function updateMentionState(text: string, cursor: number) {
     const mention = activeMentionAt(text, cursor);

@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronUp, Loader2, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Filter, Loader2, X } from 'lucide-react';
 import {
   setWorkItemsState,
   assignWorkItems,
@@ -40,6 +40,8 @@ const WI_COLUMN_MAX_WIDTHS = [120, 200, 180, 720, 300, 260, 160];
 const WI_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:wiSearchGridColumnWidths";
 const DEFAULT_WORK_ITEM_PREVIEW_WIDTH = 440;
 const WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY = "azdodeck:layout:workItemPreviewWidth";
+const WI_GRID_ROW_HEIGHT = 29;
+const WI_GRID_OVERSCAN = 8;
 type WiSortKey =
   | "id"
   | "workItemType"
@@ -84,11 +86,15 @@ function WiSortHeaderButton({
   sort,
   onSort,
   resizeHandle,
+  filterActive,
+  onFilterOpen,
 }: {
   column: WiSortKey;
   sort: WiSortState;
   onSort: (column: WiSortKey) => void;
   resizeHandle?: ReactNode;
+  filterActive?: boolean;
+  onFilterOpen?: (anchorEl: HTMLButtonElement) => void;
 }) {
   const active = sort.key === column;
   const label = wiSortLabels[column];
@@ -98,25 +104,41 @@ function WiSortHeaderButton({
       aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
       className="relative min-w-0"
     >
-      <button
-        type="button"
-        aria-label={`Sort by ${label}`}
-        onClick={() => onSort(column)}
-        className={`flex w-full min-w-0 items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring ${
-          active ? "text-foreground" : ""
-        }`}
-      >
-        <span className="truncate">{label}</span>
-        {active ? (
-          sort.direction === "asc" ? (
-            <ChevronUp className="h-3 w-3 shrink-0" aria-hidden="true" />
+      <div className="flex min-w-0 items-center">
+        <button
+          type="button"
+          aria-label={`Sort by ${label}`}
+          onClick={() => onSort(column)}
+          className={`flex min-w-0 flex-1 items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring ${
+            active ? "text-foreground" : ""
+          }`}
+        >
+          <span className="truncate">{label}</span>
+          {active ? (
+            sort.direction === "asc" ? (
+              <ChevronUp className="h-3 w-3 shrink-0" aria-hidden="true" />
+            ) : (
+              <ChevronDown className="h-3 w-3 shrink-0" aria-hidden="true" />
+            )
           ) : (
-            <ChevronDown className="h-3 w-3 shrink-0" aria-hidden="true" />
-          )
-        ) : (
-          <span className="h-3 w-3 shrink-0" aria-hidden="true" />
+            <span className="h-3 w-3 shrink-0" aria-hidden="true" />
+          )}
+        </button>
+        {onFilterOpen && (
+          <button
+            type="button"
+            aria-label={`Filter by ${label}`}
+            onClick={(e) => onFilterOpen(e.currentTarget)}
+            className={`shrink-0 rounded p-0.5 focus:outline-none focus:ring-1 focus:ring-ring ${
+              filterActive
+                ? "text-primary"
+                : "text-muted-foreground/40 hover:text-muted-foreground"
+            }`}
+          >
+            <Filter className="h-3 w-3" aria-hidden="true" />
+          </button>
         )}
-      </button>
+      </div>
       {resizeHandle}
     </div>
   );
@@ -131,6 +153,17 @@ const WI_GRID_KEYS: WiSortKey[] = [
   "assignedTo",
   "changedDate",
 ];
+
+type FilterableColumn = "workItemType" | "state" | "projectName" | "assignedTo";
+const FILTERABLE_COLUMNS: Record<FilterableColumn, (item: WorkItemSummary) => string> = {
+  workItemType: (item) => item.workItemType ?? "(empty)",
+  state: (item) => item.state ?? "(empty)",
+  projectName: (item) => item.projectName,
+  assignedTo: (item) => item.assignedTo ?? "(Unassigned)",
+};
+function isFilterableColumn(col: WiSortKey): col is FilterableColumn {
+  return col in FILTERABLE_COLUMNS;
+}
 
 const WorkItemGridRow = forwardRef<
   HTMLDivElement,
@@ -219,21 +252,37 @@ export function WorkItemsGrid({
   searched,
   autoFocus = false,
   emptyMessage,
+  initialSort,
+  onSortChange,
+  previewVisible = true,
+  storageKeyScope,
 }: {
   results: WorkItemSummary[];
   loading: boolean;
   searched: boolean;
   autoFocus?: boolean;
   emptyMessage?: string;
+  initialSort?: WiSortState;
+  onSortChange?: (sort: WiSortState) => void;
+  previewVisible?: boolean;
+  storageKeyScope?: string;
 }) {
+  const columnWidthsStorageKey = storageKeyScope
+    ? `${WI_COLUMN_WIDTHS_STORAGE_KEY}:${storageKeyScope}`
+    : WI_COLUMN_WIDTHS_STORAGE_KEY;
+  const previewWidthStorageKey = storageKeyScope
+    ? `${WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY}:${storageKeyScope}`
+    : WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY;
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [sort, setWiSort] = useState<WiSortState>({ key: "changedDate", direction: "desc" });
+  const [sort, setWiSort] = useState<WiSortState>(
+    initialSort ?? { key: "changedDate", direction: "desc" },
+  );
   const [columnWidths, setColumnWidths] = useState(() =>
-    storedNumbers(WI_COLUMN_WIDTHS_STORAGE_KEY, DEFAULT_WI_COLUMN_WIDTHS, WI_COLUMN_MIN_WIDTHS, WI_COLUMN_MAX_WIDTHS),
+    storedNumbers(columnWidthsStorageKey, DEFAULT_WI_COLUMN_WIDTHS, WI_COLUMN_MIN_WIDTHS, WI_COLUMN_MAX_WIDTHS),
   );
   const [previewWidth, setPreviewWidth] = useState(() =>
     storedNumber(
-      WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY,
+      previewWidthStorageKey,
       DEFAULT_WORK_ITEM_PREVIEW_WIDTH,
       300,
       860,
@@ -249,20 +298,44 @@ export function WorkItemsGrid({
   const [focusCommentRequest, setFocusCommentRequest] = useState(0);
   const [openAssigneeRequest, setOpenAssigneeRequest] = useState(0);
   const [openStateRequest, setOpenStateRequest] = useState(0);
+  const [openPriorityRequest, setOpenPriorityRequest] = useState(0);
+  const [columnFilters, setColumnFilters] = useState<Partial<Record<FilterableColumn, Set<string>>>>({});
+  const [openFilterCol, setOpenFilterCol] = useState<FilterableColumn | null>(null);
+  const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const gridScrollRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const [gridViewport, setGridViewport] = useState({ height: 0, scrollTop: 0 });
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    localStorage.setItem(WI_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
-  }, [columnWidths]);
+    setWiSort(initialSort ?? { key: "changedDate", direction: "desc" });
+  }, [initialSort?.direction, initialSort?.key]);
+
+  useEffect(() => {
+    setColumnWidths(
+      storedNumbers(columnWidthsStorageKey, DEFAULT_WI_COLUMN_WIDTHS, WI_COLUMN_MIN_WIDTHS, WI_COLUMN_MAX_WIDTHS),
+    );
+    setPreviewWidth(
+      storedNumber(
+        previewWidthStorageKey,
+        DEFAULT_WORK_ITEM_PREVIEW_WIDTH,
+        300,
+        860,
+      ),
+    );
+  }, [columnWidthsStorageKey, previewWidthStorageKey]);
+
+  useEffect(() => {
+    localStorage.setItem(columnWidthsStorageKey, JSON.stringify(columnWidths));
+  }, [columnWidths, columnWidthsStorageKey]);
 
   useEffect(() => {
     localStorage.setItem(
-      WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY,
+      previewWidthStorageKey,
       String(Math.round(previewWidth)),
     );
-  }, [previewWidth]);
+  }, [previewWidth, previewWidthStorageKey]);
 
   const sorted = useMemo(
     () =>
@@ -276,7 +349,29 @@ export function WorkItemsGrid({
         .map(({ item }) => item),
     [results, sort],
   );
-  const selectedItem = sorted[selectedIndex] ?? null;
+
+  const columnUniqueValues = useMemo(() => {
+    const map = {} as Record<FilterableColumn, string[]>;
+    for (const col of Object.keys(FILTERABLE_COLUMNS) as FilterableColumn[]) {
+      map[col] = [...new Set(results.map(FILTERABLE_COLUMNS[col]))].sort();
+    }
+    return map;
+  }, [results]);
+
+  const displayed = useMemo(() => {
+    const hasFilters = (Object.values(columnFilters) as (Set<string> | undefined)[]).some(v => v && v.size > 0);
+    if (!hasFilters) return sorted;
+    return sorted.filter(item => {
+      for (const col of Object.keys(columnFilters) as FilterableColumn[]) {
+        const activeValues = columnFilters[col];
+        if (!activeValues || activeValues.size === 0) continue;
+        if (!activeValues.has(FILTERABLE_COLUMNS[col](item))) return false;
+      }
+      return true;
+    });
+  }, [sorted, columnFilters]);
+
+  const selectedItem = displayed[selectedIndex] ?? null;
   const previewQuery = useQuery({
     queryKey: workItemQueryKeys.preview(
       selectedItem?.organizationId,
@@ -294,8 +389,8 @@ export function WorkItemsGrid({
   });
 
   const checkedItems = useMemo(
-    () => sorted.filter((item) => checkedIds.has(`${item.organizationId}:${item.projectId}:${item.id}`)),
-    [sorted, checkedIds],
+    () => displayed.filter((item) => checkedIds.has(`${item.organizationId}:${item.projectId}:${item.id}`)),
+    [displayed, checkedIds],
   );
   const bulkStateType = useMemo(() => {
     const types = new Set(checkedItems.map((item) => item.workItemType).filter(Boolean));
@@ -411,22 +506,57 @@ export function WorkItemsGrid({
   }, [autoFocus]);
 
   useEffect(() => {
-    setSelectedIndex((i) => Math.min(i, Math.max(sorted.length - 1, 0)));
-  }, [sorted.length]);
+    setSelectedIndex((i) => Math.min(i, Math.max(displayed.length - 1, 0)));
+  }, [displayed.length]);
+
+  useEffect(() => {
+    const scroller = gridScrollRef.current;
+    if (!scroller) return;
+    const scrollerElement = scroller;
+
+    function updateViewport() {
+      setGridViewport({
+        height: scrollerElement.clientHeight,
+        scrollTop: scrollerElement.scrollTop,
+      });
+    }
+
+    updateViewport();
+    scrollerElement.addEventListener("scroll", updateViewport, { passive: true });
+    const resizeObserver =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateViewport);
+    resizeObserver?.observe(scrollerElement);
+    return () => {
+      scrollerElement.removeEventListener("scroll", updateViewport);
+      resizeObserver?.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     setCheckedIds(new Set());
     setLastCheckedIndex(null);
+    setColumnFilters({});
+    setOpenFilterCol(null);
   }, [results]);
 
   function moveSelection(index: number) {
-    const next = Math.max(0, Math.min(index, sorted.length - 1));
+    const next = Math.max(0, Math.min(index, displayed.length - 1));
     setSelectedIndex(next);
-    rowRefs.current[next]?.focus();
+    const scroller = gridScrollRef.current;
+    if (scroller) {
+      const rowTop = next * WI_GRID_ROW_HEIGHT;
+      const rowBottom = rowTop + WI_GRID_ROW_HEIGHT;
+      if (rowTop < scroller.scrollTop) {
+        scroller.scrollTop = rowTop;
+      } else if (rowBottom > scroller.scrollTop + scroller.clientHeight) {
+        scroller.scrollTop = rowBottom - scroller.clientHeight;
+      }
+    }
+    window.setTimeout(() => rowRefs.current[next]?.focus(), 0);
   }
 
   function handleCheckboxChange(index: number, checked: boolean, shiftKey: boolean) {
-    const item = sorted[index];
+    const item = displayed[index];
     if (!item) return;
     const key = `${item.organizationId}:${item.projectId}:${item.id}`;
     setCheckedIds((prev) => {
@@ -435,7 +565,7 @@ export function WorkItemsGrid({
         const from = Math.min(lastCheckedIndex, index);
         const to = Math.max(lastCheckedIndex, index);
         for (let i = from; i <= to; i++) {
-          const it = sorted[i];
+          const it = displayed[i];
           if (!it) continue;
           const k = `${it.organizationId}:${it.projectId}:${it.id}`;
           if (checked) next.add(k); else next.delete(k);
@@ -448,19 +578,77 @@ export function WorkItemsGrid({
     setLastCheckedIndex(index);
   }
 
+  function openFilter(col: FilterableColumn, anchorEl: HTMLButtonElement) {
+    setFilterAnchorRect(anchorEl.getBoundingClientRect());
+    setOpenFilterCol(col);
+  }
+
+  function toggleFilter(col: FilterableColumn, value: string) {
+    const allValues = columnUniqueValues[col] ?? [];
+    setColumnFilters(prev => {
+      const current = prev[col];
+      if (!current || current.size === 0) {
+        const next = new Set(allValues.filter(v => v !== value));
+        if (next.size === 0) return prev;
+        return { ...prev, [col]: next };
+      }
+      const next = new Set(current);
+      if (next.has(value)) {
+        next.delete(value);
+        if (next.size === 0) {
+          const { [col]: _, ...rest } = prev;
+          return rest;
+        }
+      } else {
+        next.add(value);
+        if (next.size === allValues.length) {
+          const { [col]: _, ...rest } = prev;
+          return rest;
+        }
+      }
+      return { ...prev, [col]: next };
+    });
+  }
+
+  function clearColumnFilter(col: FilterableColumn) {
+    setColumnFilters(prev => {
+      const { [col]: _, ...rest } = prev;
+      return rest;
+    });
+  }
+
   function applyWiSort(column: WiSortKey) {
     setWiSort((current) => {
-      if (current.key !== column) {
-        return { key: column, direction: column === "changedDate" ? "desc" : "asc" };
-      }
-      return { key: column, direction: current.direction === "asc" ? "desc" : "asc" };
+      const next: WiSortState =
+        current.key !== column
+          ? { key: column, direction: column === "changedDate" ? "desc" : "asc" }
+          : { key: column, direction: current.direction === "asc" ? "desc" : "asc" };
+      onSortChange?.(next);
+      return next;
     });
     setSelectedIndex(0);
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    if (isEditableTarget(e.target)) return;
-    if (sorted.length === 0) return;
+    if (e.defaultPrevented) return;
+    if (isEditableTarget(e.target)) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        moveSelection(selectedIndex);
+      }
+      return;
+    }
+    if (e.key === "Escape") {
+      if (openFilterCol) {
+        setOpenFilterCol(null);
+        setFilterAnchorRect(null);
+        return;
+      }
+      setBulkAssignOpen(false);
+      setBulkStateOpen(false);
+      return;
+    }
+    if (displayed.length === 0) return;
     if (e.key === "ArrowDown" || e.key === "j" || e.key === "J") {
       e.preventDefault();
       moveSelection(selectedIndex + 1);
@@ -472,7 +660,7 @@ export function WorkItemsGrid({
       moveSelection(0);
     } else if (e.key === "End") {
       e.preventDefault();
-      moveSelection(sorted.length - 1);
+      moveSelection(displayed.length - 1);
     } else if (e.key === "PageDown") {
       e.preventDefault();
       moveSelection(selectedIndex + 10);
@@ -484,10 +672,10 @@ export function WorkItemsGrid({
       focusPrimaryPreview();
     } else if (e.key === "o" || e.key === "O") {
       e.preventDefault();
-      const item = sorted[selectedIndex];
+      const item = displayed[selectedIndex];
       if (item?.webUrl) openExternalUrl(item.webUrl);
     } else if (e.key === "c" || e.key === "C") {
-      const item = sorted[selectedIndex];
+      const item = displayed[selectedIndex];
       if (item?.webUrl) {
         void navigator.clipboard.writeText(item.webUrl).then(() => {
           setCopyToast("URL copied");
@@ -496,7 +684,7 @@ export function WorkItemsGrid({
       }
     } else if (e.key === " ") {
       e.preventDefault();
-      const item = sorted[selectedIndex];
+      const item = displayed[selectedIndex];
       if (item) {
         const key = `${item.organizationId}:${item.projectId}:${item.id}`;
         handleCheckboxChange(selectedIndex, !checkedIds.has(key), false);
@@ -506,7 +694,7 @@ export function WorkItemsGrid({
       setFocusCommentRequest((value) => value + 1);
     } else if (e.key === "a" || e.key === "A") {
       e.preventDefault();
-      if (checkedIds.size > 0) {
+      if (checkedItems.length > 0) {
         setBulkStateOpen(false);
         setBulkAssignOpen(true);
       } else {
@@ -514,19 +702,35 @@ export function WorkItemsGrid({
       }
     } else if (e.key === "s" || e.key === "S") {
       e.preventDefault();
-      if (checkedIds.size > 0) {
+      if (checkedItems.length > 0) {
         setBulkAssignOpen(false);
         setBulkStateOpen(true);
       } else {
         setOpenStateRequest((value) => value + 1);
       }
-    } else if (e.key === "Escape") {
-      setBulkAssignOpen(false);
-      setBulkStateOpen(false);
+    } else if (e.key === "p" || e.key === "P") {
+      e.preventDefault();
+      setOpenPriorityRequest((value) => value + 1);
     }
   }
 
   const wiColTemplate = `28px ${columnWidths.map((w) => `${w}px`).join(" ")}`;
+  const hasActiveFilters = (Object.values(columnFilters) as (Set<string> | undefined)[]).some(v => v && v.size > 0);
+  const firstVirtualRow = Math.max(
+    0,
+    Math.floor(gridViewport.scrollTop / WI_GRID_ROW_HEIGHT) - WI_GRID_OVERSCAN,
+  );
+  const visibleRowCount = Math.ceil(
+    Math.max(gridViewport.height, WI_GRID_ROW_HEIGHT) / WI_GRID_ROW_HEIGHT,
+  );
+  const lastVirtualRow = Math.min(
+    displayed.length,
+    firstVirtualRow + visibleRowCount + WI_GRID_OVERSCAN * 2,
+  );
+  const virtualRows = displayed.slice(firstVirtualRow, lastVirtualRow);
+  const virtualTopPadding = firstVirtualRow * WI_GRID_ROW_HEIGHT;
+  const virtualBottomPadding =
+    Math.max(0, displayed.length - lastVirtualRow) * WI_GRID_ROW_HEIGHT;
 
   return (
     <div
@@ -540,9 +744,9 @@ export function WorkItemsGrid({
           {copyToast ?? bulkToast}
         </div>
       ) : null}
-      {checkedIds.size > 0 ? (
+      {checkedItems.length > 0 ? (
         <BulkActionBar
-          count={checkedIds.size}
+          count={checkedItems.length}
           onClear={() => { setCheckedIds(new Set()); setLastCheckedIndex(null); }}
           stateOpen={bulkStateOpen}
           onStateOpenChange={setBulkStateOpen}
@@ -561,11 +765,15 @@ export function WorkItemsGrid({
         />
       ) : null}
       <div
-        className="grid min-h-0 flex-1 items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_8px_minmax(300px,var(--work-item-preview-width))]"
+        className={`grid min-h-0 flex-1 items-stretch gap-3 ${
+          previewVisible
+            ? "xl:grid-cols-[minmax(0,1fr)_8px_minmax(300px,var(--work-item-preview-width))]"
+            : "xl:grid-cols-[minmax(0,1fr)]"
+        }`}
         style={{ "--work-item-preview-width": `${previewWidth}px` } as CSSProperties}
       >
         <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-white">
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div ref={gridScrollRef} className="min-h-0 flex-1 overflow-auto">
             <div className="min-w-[760px]">
               <div
                 role="row"
@@ -576,17 +784,17 @@ export function WorkItemsGrid({
                   <input
                     type="checkbox"
                     aria-label="Select all"
-                    checked={sorted.length > 0 && sorted.every((item) => checkedIds.has(`${item.organizationId}:${item.projectId}:${item.id}`))}
+                    checked={displayed.length > 0 && displayed.every((item) => checkedIds.has(`${item.organizationId}:${item.projectId}:${item.id}`))}
                     ref={(el) => {
                       if (el) {
-                        const some = sorted.some((item) => checkedIds.has(`${item.organizationId}:${item.projectId}:${item.id}`));
-                        const all = sorted.length > 0 && sorted.every((item) => checkedIds.has(`${item.organizationId}:${item.projectId}:${item.id}`));
+                        const some = displayed.some((item) => checkedIds.has(`${item.organizationId}:${item.projectId}:${item.id}`));
+                        const all = displayed.length > 0 && displayed.every((item) => checkedIds.has(`${item.organizationId}:${item.projectId}:${item.id}`));
                         el.indeterminate = some && !all;
                       }
                     }}
                     onChange={(e) => {
                       if (e.target.checked) {
-                        setCheckedIds(new Set(sorted.map((item) => `${item.organizationId}:${item.projectId}:${item.id}`)));
+                        setCheckedIds(new Set(displayed.map((item) => `${item.organizationId}:${item.projectId}:${item.id}`)));
                       } else {
                         setCheckedIds(new Set());
                       }
@@ -601,6 +809,8 @@ export function WorkItemsGrid({
                     column={col}
                     sort={sort}
                     onSort={applyWiSort}
+                    filterActive={isFilterableColumn(col) && !!(columnFilters[col]?.size)}
+                    onFilterOpen={isFilterableColumn(col) ? (el) => openFilter(col, el) : undefined}
                     resizeHandle={
                       i < WI_GRID_KEYS.length - 1 ? (
                         <ColumnResizeHandle
@@ -626,6 +836,17 @@ export function WorkItemsGrid({
                 <div className="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
                   No work items matched.
                 </div>
+              ) : displayed.length === 0 ? (
+                <div className="flex min-h-24 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <span>No items match the active filters.</span>
+                  <button
+                    type="button"
+                    onClick={() => setColumnFilters({})}
+                    className="rounded border border-border px-2 py-0.5 text-xs hover:bg-secondary"
+                  >
+                    Clear filters
+                  </button>
+                </div>
               ) : (
                 <div
                   role="grid"
@@ -633,20 +854,29 @@ export function WorkItemsGrid({
                   data-primary-grid="true"
                   tabIndex={-1}
                 >
-                  {sorted.map((item, i) => (
-                    <WorkItemGridRow
-                      key={`${item.organizationId}:${item.projectId}:${item.id}`}
-                      ref={(el) => {
-                        rowRefs.current[i] = el;
-                      }}
-                      item={item}
-                      selected={i === selectedIndex}
-                      checked={checkedIds.has(`${item.organizationId}:${item.projectId}:${item.id}`)}
-                      columnTemplate={wiColTemplate}
-                      onSelect={() => setSelectedIndex(i)}
-                      onCheckedChange={(checked, shiftKey) => handleCheckboxChange(i, checked, shiftKey)}
-                    />
-                  ))}
+                  {virtualTopPadding > 0 ? (
+                    <div style={{ height: virtualTopPadding }} />
+                  ) : null}
+                  {virtualRows.map((item, offset) => {
+                    const i = firstVirtualRow + offset;
+                    return (
+                      <WorkItemGridRow
+                        key={`${item.organizationId}:${item.projectId}:${item.id}`}
+                        ref={(el) => {
+                          rowRefs.current[i] = el;
+                        }}
+                        item={item}
+                        selected={i === selectedIndex}
+                        checked={checkedIds.has(`${item.organizationId}:${item.projectId}:${item.id}`)}
+                        columnTemplate={wiColTemplate}
+                        onSelect={() => setSelectedIndex(i)}
+                        onCheckedChange={(checked, shiftKey) => handleCheckboxChange(i, checked, shiftKey)}
+                      />
+                    );
+                  })}
+                  {virtualBottomPadding > 0 ? (
+                    <div style={{ height: virtualBottomPadding }} />
+                  ) : null}
                 </div>
               )}
             </div>
@@ -657,33 +887,145 @@ export function WorkItemsGrid({
               {loading
                 ? "Loading…"
                 : searched
-                  ? `${sorted.length} item${sorted.length === 1 ? "" : "s"}`
+                  ? hasActiveFilters
+                    ? `${displayed.length} of ${sorted.length} item${sorted.length === 1 ? "" : "s"}`
+                    : `${displayed.length} item${displayed.length === 1 ? "" : "s"}`
                   : "Ready"}
             </span>
             <ShortcutHint>Alt+G</ShortcutHint>
           </div>
         </div>
 
-        <ResizeHandle
-          ariaLabel="Resize work item preview"
-          className="hidden xl:flex"
-          direction={-1}
-          max={860}
-          min={300}
-          onChange={setPreviewWidth}
-          onReset={() => setPreviewWidth(DEFAULT_WORK_ITEM_PREVIEW_WIDTH)}
-          value={previewWidth}
-        />
+        {previewVisible ? (
+          <>
+            <ResizeHandle
+              ariaLabel="Resize work item preview"
+              className="hidden xl:flex"
+              direction={-1}
+              max={860}
+              min={300}
+              onChange={setPreviewWidth}
+              onReset={() => setPreviewWidth(DEFAULT_WORK_ITEM_PREVIEW_WIDTH)}
+              value={previewWidth}
+            />
 
-        <WorkItemPreviewPanel
-          focusCommentRequest={focusCommentRequest}
-          openAssigneeRequest={openAssigneeRequest}
-          openStateRequest={openStateRequest}
-          preview={previewQuery.data ?? null}
-          previewError={previewQuery.isError ? commandErrorMessage(previewQuery.error) : null}
-          previewLoading={previewQuery.isFetching}
-          selectedItem={selectedItem}
+            <WorkItemPreviewPanel
+              focusCommentRequest={focusCommentRequest}
+              openAssigneeRequest={openAssigneeRequest}
+              openPriorityRequest={openPriorityRequest}
+              openStateRequest={openStateRequest}
+              preview={previewQuery.data ?? null}
+              previewError={previewQuery.isError ? commandErrorMessage(previewQuery.error) : null}
+              previewLoading={previewQuery.isFetching}
+              selectedItem={selectedItem}
+            />
+          </>
+        ) : null}
+      </div>
+      {openFilterCol && filterAnchorRect ? (
+        <ColumnFilterDropdown
+          anchorRect={filterAnchorRect}
+          allValues={columnUniqueValues[openFilterCol] ?? []}
+          activeValues={columnFilters[openFilterCol]}
+          onToggle={(value) => toggleFilter(openFilterCol, value)}
+          onClearAll={() => clearColumnFilter(openFilterCol)}
+          onClose={() => { setOpenFilterCol(null); setFilterAnchorRect(null); }}
         />
+      ) : null}
+    </div>
+  );
+}
+
+function ColumnFilterDropdown({
+  anchorRect,
+  allValues,
+  activeValues,
+  onToggle,
+  onClearAll,
+  onClose,
+}: {
+  anchorRect: DOMRect;
+  allValues: string[];
+  activeValues: Set<string> | undefined;
+  onToggle: (value: string) => void;
+  onClearAll: () => void;
+  onClose: () => void;
+}) {
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    function onMouseDown(e: MouseEvent) {
+      if (!dropdownRef.current?.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [onClose]);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") { e.stopPropagation(); onClose(); }
+    }
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [onClose]);
+
+  const isAllChecked = !activeValues || activeValues.size === 0;
+  const filteredValues = search.trim()
+    ? allValues.filter(v => v.toLowerCase().includes(search.trim().toLowerCase()))
+    : allValues;
+
+  const top = Math.min(anchorRect.bottom + 2, window.innerHeight - 280);
+  const left = Math.min(anchorRect.left, window.innerWidth - 208);
+
+  return (
+    <div
+      ref={dropdownRef}
+      className="fixed z-50 w-52 rounded-md border border-border bg-white shadow-lg"
+      style={{ top, left }}
+    >
+      <div className="border-b border-border p-1.5">
+        <input
+          autoFocus
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search…"
+          className="w-full rounded border border-input bg-background px-2 py-0.5 text-xs outline-none focus:ring-1 focus:ring-ring"
+        />
+      </div>
+      <div className="border-b border-border p-1">
+        <button
+          type="button"
+          onClick={onClearAll}
+          className={`w-full rounded px-2 py-0.5 text-left text-xs hover:bg-secondary ${
+            isAllChecked ? "font-medium text-foreground" : "text-muted-foreground"
+          }`}
+        >
+          (All)
+        </button>
+      </div>
+      <div className="max-h-44 overflow-auto p-1">
+        {filteredValues.length === 0 ? (
+          <p className="px-2 py-1 text-xs text-muted-foreground">No values</p>
+        ) : (
+          filteredValues.map(value => {
+            const checked = isAllChecked || (activeValues?.has(value) ?? false);
+            return (
+              <label
+                key={value}
+                className="flex cursor-pointer select-none items-center gap-1.5 rounded px-2 py-0.5 text-xs hover:bg-secondary"
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => onToggle(value)}
+                  className="h-3 w-3"
+                />
+                <span className="truncate">{value || "(empty)"}</span>
+              </label>
+            );
+          })
+        )}
       </div>
     </div>
   );

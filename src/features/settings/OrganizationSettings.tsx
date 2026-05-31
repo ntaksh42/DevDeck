@@ -33,6 +33,7 @@ export function OrganizationSettings({
       <SetupPanel compact />
       <ShowWindowHotkeySettings />
       <ReviewResultFolderSettings />
+      <DataCacheSettings />
       <div className="overflow-hidden rounded-md border border-border bg-white">
         <div className="border-b border-border px-3 py-2">
           <h2 className="text-base font-semibold">Organizations</h2>
@@ -82,6 +83,84 @@ export function OrganizationSettings({
       </div>
     </div>
   );
+}
+
+function DataCacheSettings() {
+  const queryClient = useQueryClient();
+  const [revision, setRevision] = useState(0);
+  const queryCount = queryClient.getQueryCache().getAll().length;
+  const azdodeckStorageEntries = Object.keys(window.localStorage).filter((key) =>
+    key.startsWith("azdodeck:"),
+  );
+  const layoutStorageEntries = azdodeckStorageEntries.filter((key) =>
+    key.startsWith("azdodeck:layout:"),
+  );
+  const localStorageBytes = azdodeckStorageEntries.reduce((total, key) => {
+    const value = window.localStorage.getItem(key) ?? "";
+    return total + key.length + value.length;
+  }, 0);
+
+  function refreshStats() {
+    setRevision((value) => value + 1);
+  }
+
+  function clearDataCache() {
+    queryClient.clear();
+    refreshStats();
+  }
+
+  function resetLayoutCache() {
+    for (const key of layoutStorageEntries) {
+      window.localStorage.removeItem(key);
+    }
+    refreshStats();
+  }
+
+  return (
+    <div className="rounded-md border border-border bg-white" data-cache-revision={revision}>
+      <div className="border-b border-border px-3 py-2">
+        <h2 className="text-base font-semibold">Data cache</h2>
+        <p className="text-sm text-muted-foreground">
+          Clear cached server responses without removing organizations or saved WIQL views.
+        </p>
+      </div>
+      <div className="grid gap-3 p-3 md:grid-cols-[1fr_auto] md:items-center">
+        <div className="grid gap-1 text-sm">
+          <p>
+            <span className="text-muted-foreground">Query cache:</span>{" "}
+            <span className="font-medium">{queryCount} entries</span>
+          </p>
+          <p>
+            <span className="text-muted-foreground">Local UI storage:</span>{" "}
+            <span className="font-medium">{formatBytes(localStorageBytes)}</span>
+            <span className="text-muted-foreground"> across {azdodeckStorageEntries.length} keys</span>
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={clearDataCache}
+            className="inline-flex h-8 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium hover:bg-secondary"
+          >
+            Clear data cache
+          </button>
+          <button
+            type="button"
+            onClick={resetLayoutCache}
+            disabled={layoutStorageEntries.length === 0}
+            className="inline-flex h-8 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Reset layout cache
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  return `${(bytes / 1024).toFixed(1)} KB`;
 }
 
 export function ReviewResultFolderSettings() {
