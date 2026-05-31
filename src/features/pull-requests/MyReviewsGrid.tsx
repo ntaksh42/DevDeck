@@ -21,6 +21,8 @@ import {
 } from '@/lib/azdoCommands';
 import {
 
+  matchesAllSearchTerms,
+  splitSearchTerms,
   storedNumbers,
   storedNumber,
   isEditableTarget,
@@ -307,15 +309,17 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
   const allPrs = query.data ?? [];
 
   const filtered = useMemo(() => {
-    const lower = textFilter.toLowerCase();
+    const terms = splitSearchTerms(textFilter);
     return allPrs.filter((pr) => {
       if (!showDrafts && pr.isDraft) return false;
-      if (
-        lower &&
-        !pr.repositoryName.toLowerCase().includes(lower) &&
-        !pr.title.toLowerCase().includes(lower) &&
-        !(pr.createdBy ?? "").toLowerCase().includes(lower)
-      )
+      if (!matchesAllSearchTerms(terms, [
+        pr.pullRequestId,
+        pr.repositoryName,
+        pr.title,
+        pr.createdBy,
+        pr.targetRefName,
+        pr.myVoteLabel,
+      ]))
         return false;
       if (voteFilter === "noVote" && pr.myVote !== 0) return false;
       if (voteFilter === "approved" && pr.myVote !== 10 && pr.myVote !== 5) return false;
@@ -815,4 +819,3 @@ function ReviewResultPreviewPanel({
     </aside>
   );
 }
-

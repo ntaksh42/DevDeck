@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2, RefreshCw, Search } from 'lucide-react';
 import { listMyWorkItems, commandErrorMessage, type Organization } from '@/lib/azdoCommands';
+import { matchesAllSearchTerms, splitSearchTerms } from '@/lib/utils';
 import { ErrorState } from '@/components/StateDisplay';
 import { WorkItemsGrid } from './WorkItemsGrid';
 import { workItemQueryKeys } from './queryKeys';
@@ -20,9 +21,18 @@ export function MyWorkItemsPanel({ organizations }: { organizations: Organizatio
 
   const allResults = query.data ?? [];
   const results = useMemo(() => {
-    const term = filter.trim().toLowerCase();
-    if (!term) return allResults;
-    return allResults.filter((item) => item.title.toLowerCase().includes(term));
+    const terms = splitSearchTerms(filter);
+    if (terms.length === 0) return allResults;
+    return allResults.filter((item) =>
+      matchesAllSearchTerms(terms, [
+        item.id,
+        item.title,
+        item.workItemType,
+        item.state,
+        item.projectName,
+        item.assignedTo,
+      ]),
+    );
   }, [allResults, filter]);
 
   return (

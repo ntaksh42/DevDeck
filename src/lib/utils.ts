@@ -84,6 +84,22 @@ export function focusViewsPanel(): boolean {
   return true;
 }
 
+export function splitSearchTerms(value: string): string[] {
+  return value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+}
+
+export function matchesAllSearchTerms(
+  terms: string[],
+  values: Array<string | number | null | undefined>,
+): boolean {
+  if (terms.length === 0) return true;
+  const haystack = values
+    .filter((value) => value !== null && value !== undefined)
+    .join(" ")
+    .toLowerCase();
+  return terms.every((term) => haystack.includes(term));
+}
+
 export function formatDate(value: string): string {
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
