@@ -11,6 +11,23 @@ export type CommandPaletteAction = {
   shortcut?: string;
 };
 
+const COMMAND_USAGE_STORAGE_KEY = "azdodeck:commandPalette:usage";
+
+function loadCommandUsage(): Record<string, number> {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(COMMAND_USAGE_STORAGE_KEY) ?? "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function recordCommandUsage(id: string) {
+  const usage = loadCommandUsage();
+  usage[id] = Date.now();
+  window.localStorage.setItem(COMMAND_USAGE_STORAGE_KEY, JSON.stringify(usage));
+}
+
 export function CommandPalette({
   actions,
   onClose,
@@ -20,25 +37,28 @@ export function CommandPalette({
 }) {
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  const [usage, setUsage] = useState<Record<string, number>>(() => loadCommandUsage());
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const filteredActions = useMemo(() => {
     const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    return actions.filter((action) => {
-      if (action.disabled) return false;
-      if (terms.length === 0) return true;
-      const haystack = [
-        action.group,
-        action.label,
-        action.shortcut,
-        ...(action.keywords ?? []),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return terms.every((term) => haystack.includes(term));
-    });
-  }, [actions, query]);
+    return actions
+      .filter((action) => {
+        if (action.disabled) return false;
+        if (terms.length === 0) return true;
+        const haystack = [
+          action.group,
+          action.label,
+          action.shortcut,
+          ...(action.keywords ?? []),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return terms.every((term) => haystack.includes(term));
+      })
+      .sort((left, right) => (usage[right.id] ?? 0) - (usage[left.id] ?? 0));
+  }, [actions, query, usage]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -51,6 +71,8 @@ export function CommandPalette({
   function runActiveAction(index = activeIndex) {
     const action = filteredActions[index];
     if (!action) return;
+    recordCommandUsage(action.id);
+    setUsage(loadCommandUsage());
     onClose();
     window.setTimeout(action.run, 0);
   }

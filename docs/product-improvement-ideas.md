@@ -14,27 +14,36 @@ Trello, GitLab, and GitKraken.
   manual ordering, per-view sort, and per-view preview visibility.
 - Work Item Grid virtualization for large result sets.
 - Settings cache controls for data cache and layout cache.
+- Built-in Work Item Views for Assigned to me, Following, Mentioned, and My Activity.
+- `state:Doing assignee:me` style My Work Items filtering and filter helper chips.
+- Recent Work Item local tracking for selected/opened items.
+- Saved replies for Work Item comments.
+- Long comment folding with quick expand.
+- Image lightbox previews for rich Work Item description and comment images.
+- Clear image load failure state for Azure DevOps attachment auth/permission issues.
+- Work Item type specific fields such as Severity, Points, and Remaining Work.
+- WIQL macro insertion helpers for `@Me`, `@Today`, `@CurrentIteration`, and `@Follows`.
+- Command palette ranking based on recently used commands.
+- Adjacent Work Item preview prefetch and visible cache age.
 
-## Work Item Views
+## Requires Azure DevOps API Expansion
 
-- Add fixed built-in views for Assigned to me, Following, Mentioned, and My Activity.
-- Add view favorites, folders, and shared/team view grouping.
-- Add `state:Doing assignee:me tag:foo` style filter syntax on top of WIQL views.
-- Add filter suggestions for state, type, project, assignee, area, iteration, and tag.
-- Add recently opened and recently commented Work Items.
-- Add unread comment and unread mention indicators.
-- Add follow and unfollow actions from the preview header.
+These remain product ideas because they need additional Azure DevOps endpoints,
+data modeling, or event history support beyond the current command surface.
 
-## Preview And Comments
+### Work Item Views
 
-- Add comment editing.
-- Add saved replies for frequently used comments.
-- Add long comment folding with quick expand.
-- Add timeline events for state changes, assignee changes, and comments.
-- Add relation sections for parent, children, related work, linked PRs, branches, and commits.
-- Add image lightbox previews for description and comment attachments.
-- Add clear image load failure states for auth, permission, and expired URL cases.
-- Add Work Item type specific field sets, such as Severity for Bugs and Remaining Work for Tasks.
+- View folders and shared/team view grouping.
+- Recently commented Work Items.
+- Unread comment and unread mention indicators.
+- Follow and unfollow actions from the preview header.
+
+### Preview And Comments
+
+- Comment editing.
+- Timeline events for state changes, assignee changes, and comments.
+- Relation sections for parent, children, related work, linked PRs, branches, and commits.
+- Shared Azure DevOps query folder import.
 
 ## Pull Request Review
 
@@ -50,21 +59,15 @@ Trello, GitLab, and GitKraken.
 - Show only context-relevant shortcuts in a compact status bar.
 - Teach shortcuts opportunistically after mouse actions.
 - Add back and forward history with `Alt+Left` and `Alt+Right`.
-- Add command palette ranking based on recently used commands.
 
 ## Scale And Reliability
 
 - Add paged or incremental query result fetching for very large WIQL results.
-- Prefetch adjacent Work Item previews after the selected row stabilizes.
-- Show cache age, such as "data from 5 minutes ago".
 - Keep the last successful list visible during API failures.
 - Add background bulk operation progress with per-row failure reporting.
 - Centralize retry and backoff display for throttling and transient Azure DevOps errors.
 
 ## Azure DevOps Integration
 
-- Import shared Azure DevOps query folders into Work Item Views.
 - Add WIQL editor completion and validation.
-- Add UI helpers to insert Azure DevOps macros such as `@Me`, `@Today`,
-  `@CurrentIteration`, and `@Follows`.
 - Move "Open in Azure DevOps" into a compact icon or context menu where possible.

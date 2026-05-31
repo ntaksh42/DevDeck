@@ -35,7 +35,7 @@ type WorkItemQueryView = {
 
 function loadWorkItemQueryViews(): WorkItemQueryView[] {
   const value = window.localStorage.getItem(WI_QUERY_VIEWS_STORAGE_KEY);
-  if (!value) return [];
+  if (!value) return defaultWorkItemQueryViews();
   try {
     const parsed = JSON.parse(value);
     if (!Array.isArray(parsed)) return [];
@@ -69,6 +69,77 @@ function loadWorkItemQueryViews(): WorkItemQueryView[] {
   } catch {
     return [];
   }
+}
+
+function defaultWorkItemQueryViews(): WorkItemQueryView[] {
+  return [
+    {
+      id: "builtin-assigned-to-me",
+      name: "Assigned to me",
+      pinned: true,
+      previewVisible: true,
+      projectId: "",
+      sortDirection: "desc",
+      sortKey: "changedDate",
+      wiql: [
+        "SELECT [System.Id]",
+        "FROM WorkItems",
+        "WHERE [System.AssignedTo] = @Me",
+        "ORDER BY [System.ChangedDate] DESC",
+      ].join("\n"),
+      limit: 200,
+    },
+    {
+      id: "builtin-following",
+      name: "Following",
+      pinned: true,
+      previewVisible: true,
+      projectId: "",
+      sortDirection: "desc",
+      sortKey: "changedDate",
+      wiql: [
+        "SELECT [System.Id]",
+        "FROM WorkItems",
+        "WHERE [System.Id] IN (@Follows)",
+        "ORDER BY [System.ChangedDate] DESC",
+      ].join("\n"),
+      limit: 200,
+    },
+    {
+      id: "builtin-mentioned",
+      name: "Mentioned",
+      previewVisible: true,
+      projectId: "",
+      sortDirection: "desc",
+      sortKey: "changedDate",
+      wiql: [
+        "SELECT [System.Id]",
+        "FROM WorkItems",
+        "WHERE [System.History] CONTAINS WORDS @Me",
+        "ORDER BY [System.ChangedDate] DESC",
+      ].join("\n"),
+      limit: 200,
+    },
+    {
+      id: "builtin-my-activity",
+      name: "My activity",
+      previewVisible: true,
+      projectId: "",
+      sortDirection: "desc",
+      sortKey: "changedDate",
+      wiql: [
+        "SELECT [System.Id]",
+        "FROM WorkItems",
+        "WHERE [System.ChangedBy] = @Me OR [System.CreatedBy] = @Me",
+        "ORDER BY [System.ChangedDate] DESC",
+      ].join("\n"),
+      limit: 200,
+    },
+  ];
+}
+
+function firstCustomView(views: WorkItemQueryView[]): WorkItemQueryView | null {
+  return views.find((view) => !view.id.startsWith("builtin-")) ?? null;
 }
 
 function isWorkItemSortKey(value: unknown): value is NonNullable<WorkItemQueryView["sortKey"]> {
@@ -142,12 +213,17 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
   const queryClient = useQueryClient();
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
   const [views, setViews] = useState<WorkItemQueryView[]>(() => loadWorkItemQueryViews());
-  const [selectedViewId, setSelectedViewId] = useState<string | null>(views[0]?.id ?? null);
-  const [editingViewId, setEditingViewId] = useState<string | null>(views[0]?.id ?? null);
-  const [draftName, setDraftName] = useState(views[0]?.name ?? "");
-  const [draftProjectId, setDraftProjectId] = useState(views[0]?.projectId ?? "");
-  const [draftWiql, setDraftWiql] = useState(views[0]?.wiql ?? defaultWorkItemWiql());
-  const [draftLimit, setDraftLimit] = useState(String(views[0]?.limit ?? 200));
+  const initialSelectedView = firstCustomView(views);
+  const [selectedViewId, setSelectedViewId] = useState<string | null>(initialSelectedView?.id ?? null);
+  const [editingViewId, setEditingViewId] = useState<string | null>(initialSelectedView?.id ?? null);
+  const [draftName, setDraftName] = useState(initialSelectedView?.name ?? "");
+  const [draftProjectId, setDraftProjectId] = useState(initialSelectedView?.projectId ?? "");
+  const [draftWiql, setDraftWiql] = useState(initialSelectedView?.wiql ?? defaultWorkItemWiql());
+  const [draftLimit, setDraftLimit] = useState(String(initialSelectedView?.limit ?? 200));
+  const draftNameRef = useRef(draftName);
+  const draftProjectIdRef = useRef(draftProjectId);
+  const draftWiqlRef = useRef(draftWiql);
+  const draftLimitRef = useRef(draftLimit);
   const [draftUrl, setDraftUrl] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -203,6 +279,7 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
   useEffect(() => {
     if (!draftProjectId && projectOptions[0]) {
       setDraftProjectId(projectOptions[0].projectId);
+      draftProjectIdRef.current = projectOptions[0].projectId;
     }
   }, [draftProjectId, projectOptions]);
 
@@ -210,22 +287,30 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
   useEffect(() => {
     if (!dialogOpen || !resolvedProjectId || !urlQueryId) return;
     setDraftProjectId(resolvedProjectId);
+    draftProjectIdRef.current = resolvedProjectId;
   }, [resolvedProjectId, urlQueryId, dialogOpen]);
 
   // Auto-fill WIQL and name from fetched saved query; guard id to handle cached-ref case
   useEffect(() => {
     const data = savedQueryFetch.data;
     if (!data || data.id !== urlQueryId) return;
-    if (data.wiql) setDraftWiql(data.wiql);
-    setDraftName((prev) => (prev ? prev : data.name));
+    if (data.wiql) {
+      setDraftWiql(data.wiql);
+      draftWiqlRef.current = data.wiql;
+    }
+    setDraftName((prev) => {
+      if (prev) return prev;
+      draftNameRef.current = data.name;
+      return data.name;
+    });
   }, [savedQueryFetch.data, urlQueryId]);
 
   useEffect(() => {
     if (selectedViewId && views.some((view) => view.id === selectedViewId)) return;
-    const next = views[0]?.id ?? null;
-    setSelectedViewId(next);
+    const next = firstCustomView(views);
+    setSelectedViewId(next?.id ?? null);
     if (next) {
-      loadDraft(views[0]);
+      loadDraft(next);
     }
   }, [selectedViewId, views]);
 
@@ -234,18 +319,18 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
       queryKey: workItemQueryKeys.queryCount({
         organizationId: selectedOrganizationId,
         viewId: view.id,
-        projectId: view.projectId,
+        projectId: view.projectId || projectOptions[0]?.projectId,
         wiql: view.wiql,
         limit: view.limit,
       }),
       queryFn: () =>
         countWorkItemQuery({
           organizationId: selectedOrganizationId,
-          projectId: view.projectId,
+          projectId: view.projectId || projectOptions[0]?.projectId || "",
           wiql: view.wiql,
           limit: view.limit,
         }),
-      enabled: !!selectedOrganizationId && !!view.projectId && !!view.wiql.trim(),
+      enabled: !!selectedOrganizationId && !!(view.projectId || projectOptions[0]?.projectId) && !!view.wiql.trim(),
       staleTime: 5 * 60_000,
     })),
   });
@@ -255,26 +340,27 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
     views.findIndex((view) => view.id === selectedViewId),
   );
   const selectedView = views[selectedViewIndex] ?? null;
+  const selectedViewProjectId = selectedView?.projectId || projectOptions[0]?.projectId || "";
   const selectedCountQuery = selectedView ? viewCountQueries[selectedViewIndex] : null;
   const selectedQuery = useQuery({
     queryKey: workItemQueryKeys.queryView({
       organizationId: selectedOrganizationId,
       viewId: selectedView?.id,
-      projectId: selectedView?.projectId,
+      projectId: selectedViewProjectId,
       wiql: selectedView?.wiql,
       limit: selectedView?.limit,
     }),
     queryFn: () =>
       runWorkItemQuery({
         organizationId: selectedOrganizationId,
-        projectId: selectedView!.projectId,
+        projectId: selectedViewProjectId,
         wiql: selectedView!.wiql,
         limit: selectedView!.limit,
       }),
     enabled:
       !!selectedView &&
       !!selectedOrganizationId &&
-      !!selectedView.projectId &&
+      !!selectedViewProjectId &&
       !!selectedView.wiql.trim(),
     staleTime: 5 * 60_000,
   });
@@ -283,19 +369,29 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
   function loadDraft(view: WorkItemQueryView) {
     setEditingViewId(view.id);
     setDraftName(view.name);
+    draftNameRef.current = view.name;
     setDraftProjectId(view.projectId);
+    draftProjectIdRef.current = view.projectId;
     setDraftWiql(view.wiql);
+    draftWiqlRef.current = view.wiql;
     setDraftLimit(String(view.limit));
+    draftLimitRef.current = String(view.limit);
     setDraftUrl("");
     setFormError(null);
   }
 
   function resetDraft() {
+    const defaultProjectId = projectOptions[0]?.projectId ?? "";
+    const defaultWiql = defaultWorkItemWiql();
     setEditingViewId(null);
     setDraftName("");
-    setDraftProjectId(projectOptions[0]?.projectId ?? "");
-    setDraftWiql(defaultWorkItemWiql());
+    draftNameRef.current = "";
+    setDraftProjectId(defaultProjectId);
+    draftProjectIdRef.current = defaultProjectId;
+    setDraftWiql(defaultWiql);
+    draftWiqlRef.current = defaultWiql;
     setDraftLimit("200");
+    draftLimitRef.current = "200";
     setDraftUrl("");
     setFormError(null);
   }
@@ -323,6 +419,7 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
       if (matchedOrg && matchedOrg.id !== organizationId) {
         setOrganizationId(matchedOrg.id);
         setDraftProjectId("");
+        draftProjectIdRef.current = "";
       }
     }
   }
@@ -354,14 +451,16 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
 
   function saveView(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const name = draftName.trim();
-    const wiql = draftWiql.trim();
-    const limit = clamp(Number(draftLimit), 1, 500);
+    const name = draftNameRef.current.trim();
+    const projectId = draftProjectIdRef.current;
+    const wiql = draftWiqlRef.current.trim();
+    const limitInput = draftLimitRef.current;
+    const limit = clamp(Number(limitInput), 1, 500);
     if (!name) {
       setFormError("View name is required.");
       return;
     }
-    if (!draftProjectId) {
+    if (!projectId) {
       setFormError("Project is required.");
       return;
     }
@@ -369,7 +468,7 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
       setFormError("WIQL query is required.");
       return;
     }
-    if (!Number.isFinite(Number(draftLimit))) {
+    if (!Number.isFinite(Number(limitInput))) {
       setFormError("Limit must be a number.");
       return;
     }
@@ -378,7 +477,7 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
       id: editingViewId ?? newWorkItemViewId(),
       name,
       pinned: views.find((view) => view.id === editingViewId)?.pinned ?? false,
-      projectId: draftProjectId,
+      projectId,
       previewVisible: views.find((view) => view.id === editingViewId)?.previewVisible ?? true,
       sortDirection: views.find((view) => view.id === editingViewId)?.sortDirection ?? "desc",
       sortKey: views.find((view) => view.id === editingViewId)?.sortKey ?? "changedDate",
@@ -673,7 +772,7 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
         )}
       </div>
 
-      {selectedView ? (
+      {selectedView && !dialogOpen ? (
         <div className="flex min-h-0 flex-1 flex-col gap-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -687,7 +786,7 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
               </p>
             </div>
             <span className="rounded-md border border-border bg-white px-2 py-1 font-mono text-xs text-muted-foreground">
-              {selectedView.projectId}
+              {selectedView.projectId || selectedViewProjectId}
             </span>
           </div>
 
@@ -697,6 +796,7 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
 
           <WorkItemsGrid
             key={selectedView.id}
+            dataUpdatedAt={selectedQuery?.dataUpdatedAt}
             loading={!!selectedQuery?.isFetching}
             results={selectedResults}
             searched={!!selectedQuery}
@@ -799,6 +899,7 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
                     onChange={(event) => {
                       setOrganizationId(event.target.value);
                       setDraftProjectId("");
+                      draftProjectIdRef.current = "";
                     }}
                     className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
                   >
@@ -815,7 +916,10 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
                 <span className="text-xs font-medium text-muted-foreground">Name</span>
                 <input
                   value={draftName}
-                  onChange={(event) => setDraftName(event.target.value)}
+                  onChange={(event) => {
+                    setDraftName(event.target.value);
+                    draftNameRef.current = event.target.value;
+                  }}
                   placeholder="Active bugs"
                   className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
                 />
@@ -827,7 +931,10 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
                   <select
                     value={draftProjectId}
                     disabled={projectsQuery.isLoading || projectOptions.length === 0}
-                    onChange={(event) => setDraftProjectId(event.target.value)}
+                    onChange={(event) => {
+                      setDraftProjectId(event.target.value);
+                      draftProjectIdRef.current = event.target.value;
+                    }}
                     className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
                   >
                     <option value="">Select project</option>
@@ -846,22 +953,54 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
                     min={1}
                     max={500}
                     value={draftLimit}
-                    onChange={(event) => setDraftLimit(event.target.value)}
+                    onChange={(event) => {
+                      setDraftLimit(event.target.value);
+                      draftLimitRef.current = event.target.value;
+                    }}
                     className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
                   />
                 </label>
               </div>
 
-              <label className="grid gap-1.5">
-                <span className="text-xs font-medium text-muted-foreground">WIQL</span>
+              <div className="grid gap-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <label
+                    className="text-xs font-medium text-muted-foreground"
+                    htmlFor="view-wiql-input"
+                  >
+                    WIQL
+                  </label>
+                  <span className="flex flex-wrap justify-end gap-1">
+                    {["@Me", "@Today", "@CurrentIteration", "@Follows"].map((macro) => (
+                      <button
+                        key={macro}
+                        type="button"
+                        onClick={() =>
+                          setDraftWiql((value) => {
+                            const next = `${value}${value.endsWith(" ") || value.endsWith("\n") ? "" : " "}${macro}`;
+                            draftWiqlRef.current = next;
+                            return next;
+                          })
+                        }
+                        className="rounded border border-border bg-white px-1.5 py-0.5 font-mono text-[10px] hover:bg-secondary"
+                      >
+                        {macro}
+                      </button>
+                    ))}
+                  </span>
+                </div>
                 <textarea
+                  id="view-wiql-input"
                   value={draftWiql}
-                  onChange={(event) => setDraftWiql(event.target.value)}
+                  onChange={(event) => {
+                    setDraftWiql(event.target.value);
+                    draftWiqlRef.current = event.target.value;
+                  }}
                   rows={7}
                   spellCheck={false}
                   className="min-h-[120px] resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-xs leading-5 outline-none focus:ring-2 focus:ring-ring"
                 />
-              </label>
+              </div>
 
               {formError ? (
                 <p role="alert" className="text-xs text-destructive">

@@ -6,6 +6,9 @@ import { matchesAllSearchTerms, splitSearchTerms } from '@/lib/utils';
 import { ErrorState } from '@/components/StateDisplay';
 import { WorkItemsGrid } from './WorkItemsGrid';
 import { workItemQueryKeys } from './queryKeys';
+
+const FILTER_SUGGESTIONS = ["state:", "type:", "project:", "assignee:", "tag:"];
+
 export function MyWorkItemsPanel({ organizations }: { organizations: Organization[] }) {
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
   const [filter, setFilter] = useState("");
@@ -23,16 +26,36 @@ export function MyWorkItemsPanel({ organizations }: { organizations: Organizatio
   const results = useMemo(() => {
     const terms = splitSearchTerms(filter);
     if (terms.length === 0) return allResults;
-    return allResults.filter((item) =>
-      matchesAllSearchTerms(terms, [
+    return allResults.filter((item) => {
+      const freeTerms: string[] = [];
+      for (const term of terms) {
+        const [key, ...rest] = term.split(":");
+        const value = rest.join(":");
+        if (!value || !["state", "type", "project", "assignee", "tag"].includes(key)) {
+          freeTerms.push(term);
+          continue;
+        }
+        const target =
+          key === "state"
+            ? item.state
+            : key === "type"
+              ? item.workItemType
+              : key === "project"
+                ? item.projectName
+                : key === "assignee"
+                  ? item.assignedTo
+                  : "";
+        if (!String(target ?? "").toLowerCase().includes(value)) return false;
+      }
+      return matchesAllSearchTerms(freeTerms, [
         item.id,
         item.title,
         item.workItemType,
         item.state,
         item.projectName,
         item.assignedTo,
-      ]),
-    );
+      ]);
+    });
   }, [allResults, filter]);
 
   return (
@@ -78,12 +101,26 @@ export function MyWorkItemsPanel({ organizations }: { organizations: Organizatio
           Refresh
         </button>
       </div>
+      <div className="-mt-2 flex shrink-0 flex-wrap items-center gap-1 text-xs text-muted-foreground">
+        <span>Filter helpers</span>
+        {FILTER_SUGGESTIONS.map((suggestion) => (
+          <button
+            key={suggestion}
+            type="button"
+            onClick={() => setFilter((value) => `${value}${value && !value.endsWith(" ") ? " " : ""}${suggestion}`)}
+            className="rounded border border-border bg-white px-1.5 py-0.5 font-mono text-[11px] hover:bg-secondary"
+          >
+            {suggestion}
+          </button>
+        ))}
+      </div>
 
       {query.isError ? (
         <ErrorState message={commandErrorMessage(query.error)} />
       ) : null}
 
       <WorkItemsGrid
+        dataUpdatedAt={query.dataUpdatedAt}
         loading={query.isFetching}
         results={results}
         searched={query.isSuccess || query.isFetching}

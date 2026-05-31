@@ -27,6 +27,21 @@ import { formatRelativeDate, isEditableTarget } from '@/lib/utils';
 import { PreviewEmptyState } from '@/components/StateDisplay';
 import { ShortcutHint } from '@/components/ShortcutHint';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from './queryKeys';
+const SAVED_REPLIES_STORAGE_KEY = "azdodeck:workItems:savedReplies";
+
+function loadSavedReplies(): string[] {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(SAVED_REPLIES_STORAGE_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function storeSavedReplies(replies: string[]) {
+  window.localStorage.setItem(SAVED_REPLIES_STORAGE_KEY, JSON.stringify(replies.slice(0, 20)));
+}
+
 function stopPreviewNavigationKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
   if (
     event.key === 'ArrowDown' ||
@@ -63,6 +78,7 @@ export function WorkItemPreviewPanel({
   selectedItem: WorkItemSummary | null;
 }) {
   const [commentText, setCommentText] = useState("");
+  const [savedReplies, setSavedReplies] = useState<string[]>(() => loadSavedReplies());
   const [selectedMentions, setSelectedMentions] = useState<SelectedMention[]>([]);
   const [mentionDisplayNamesById, setMentionDisplayNamesById] = useState<
     Record<string, string>
@@ -381,6 +397,14 @@ export function WorkItemPreviewPanel({
     });
   }
 
+  function saveCurrentReply() {
+    const reply = commentText.trim();
+    if (!reply) return;
+    const next = [reply, ...savedReplies.filter((value) => value !== reply)].slice(0, 20);
+    setSavedReplies(next);
+    storeSavedReplies(next);
+  }
+
   function deleteComment(commentId: number) {
     if (!selectedItem || deleteCommentMutation.isPending) return;
     deleteCommentMutation.mutate({
@@ -646,13 +670,42 @@ export function WorkItemPreviewPanel({
               />
               <div className="border-t border-border bg-slate-50/70 p-2">
                 <form className="space-y-1.5" onSubmit={submitComment}>
-                  <label className="grid gap-1">
+                  <div className="grid gap-1">
                     <span className="flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
                       <span>Comment</span>
                       <span className="flex items-center gap-1">
                         <ShortcutHint>Alt+M</ShortcutHint>
                         <ShortcutHint>Ctrl+Enter</ShortcutHint>
                       </span>
+                    </span>
+                    <span className="flex flex-wrap items-center gap-1">
+                      {savedReplies.length > 0 ? (
+                        <select
+                          aria-label="Saved replies"
+                          value=""
+                          onChange={(event) => {
+                            if (!event.target.value) return;
+                            setCommentText(event.target.value);
+                            event.target.value = "";
+                          }}
+                          className="h-6 rounded border border-input bg-white px-1 text-xs"
+                        >
+                          <option value="">Saved replies</option>
+                          {savedReplies.map((reply, index) => (
+                            <option key={`${index}:${reply}`} value={reply}>
+                              {reply.slice(0, 60)}
+                            </option>
+                          ))}
+                        </select>
+                      ) : null}
+                      <button
+                        type="button"
+                        disabled={!commentText.trim()}
+                        onClick={saveCurrentReply}
+                        className="h-6 rounded border border-border bg-white px-2 text-xs hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Save reply
+                      </button>
                     </span>
                     <div ref={mentionPickerRef} className="relative">
                       <textarea
@@ -703,7 +756,7 @@ export function WorkItemPreviewPanel({
                         </div>
                       ) : null}
                     </div>
-                  </label>
+                  </div>
                   {commentMutation.isError ? (
                     <p className="text-xs text-destructive">
                       {commandErrorMessage(commentMutation.error)}
@@ -761,6 +814,7 @@ function WorkItemPreviewDetails({
   resolveImageSource: (url: string) => Promise<string | null>;
   stateControl: ReactNode;
 }) {
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const fields = [
     ["Area", preview.areaPath],
     ["Iteration", preview.iterationPath],
@@ -815,6 +869,7 @@ function WorkItemPreviewDetails({
               <RichHtmlFrame
                 baseUrl={preview.webUrl}
                 html={descriptionHtml}
+                onImageOpen={setLightboxSrc}
                 resolveImageSource={resolveImageSource}
                 title="Description"
               />
@@ -825,6 +880,7 @@ function WorkItemPreviewDetails({
               <RichHtmlFrame
                 baseUrl={preview.webUrl}
                 html={acceptanceCriteriaHtml}
+                onImageOpen={setLightboxSrc}
                 resolveImageSource={resolveImageSource}
                 title="Acceptance Criteria"
               />
@@ -844,60 +900,126 @@ function WorkItemPreviewDetails({
             {preview.comments.map((comment) => {
               const deleting = deletingCommentId === comment.id;
               return (
-                <article
+                <CollapsibleComment
+                  baseUrl={preview.webUrl}
+                  commentHtml={commentRichHtml(
+                    comment.renderedText,
+                    comment.text,
+                    mentionDisplayNames,
+                  )}
+                  createdBy={comment.createdBy}
+                  createdDate={comment.createdDate}
+                  deleting={deleting}
+                  deletePending={deletePending}
+                  id={comment.id}
                   key={comment.id}
-                  className="min-w-0 overflow-hidden rounded-md border border-border bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
-                >
-                  <div className="flex min-w-0 items-center gap-1.5 border-b border-border bg-slate-50 px-2 py-1.5">
-                    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[10px] font-semibold text-blue-700">
-                      {commentAuthorInitials(comment.createdBy)}
-                    </span>
-                    <span className="min-w-0 truncate font-semibold">
-                      {comment.createdBy ?? "Unknown"}
-                    </span>
-                    <span className="hidden text-[11px] text-muted-foreground sm:inline">commented</span>
-                    {comment.createdDate ? (
-                      <span className="shrink-0 text-[11px] text-muted-foreground">
-                        {formatRelativeDate(comment.createdDate)}
-                      </span>
-                    ) : null}
-                    <button
-                      type="button"
-                      aria-label={`Delete comment ${comment.id}`}
-                      className="ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-transparent text-muted-foreground hover:border-border hover:bg-white hover:text-destructive disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={deletePending}
-                      title="Delete comment"
-                      onClick={() => onDeleteComment(comment.id)}
-                    >
-                      {deleting ? (
-                        <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                  </div>
-                  <div className="px-2.5 py-2">
-                    <RichHtmlFrame
-                      baseUrl={preview.webUrl}
-                      density="comfortable"
-                      framed={false}
-                      html={commentRichHtml(
-                        comment.renderedText,
-                        comment.text,
-                        mentionDisplayNames,
-                      )}
-                      title={`Comment by ${comment.createdBy ?? "Unknown"}`}
-                      resolveImageSource={resolveImageSource}
-                      minHeight={34}
-                    />
-                  </div>
-                </article>
+                  onDelete={onDeleteComment}
+                  onImageOpen={setLightboxSrc}
+                  resolveImageSource={resolveImageSource}
+                />
               );
             })}
           </div>
         </PreviewSection>
       ) : null}
+      {lightboxSrc ? (
+        <button
+          type="button"
+          className="fixed inset-0 z-50 flex cursor-zoom-out items-center justify-center bg-black/75 p-6"
+          onClick={() => setLightboxSrc(null)}
+          aria-label="Close image preview"
+        >
+          <img
+            src={lightboxSrc}
+            alt=""
+            className="max-h-full max-w-full rounded-md bg-white object-contain shadow-2xl"
+          />
+        </button>
+      ) : null}
     </div>
+  );
+}
+
+function CollapsibleComment({
+  baseUrl,
+  commentHtml,
+  createdBy,
+  createdDate,
+  deleting,
+  deletePending,
+  id,
+  onDelete,
+  onImageOpen,
+  resolveImageSource,
+}: {
+  baseUrl?: string | null;
+  commentHtml: string;
+  createdBy: string | null;
+  createdDate: string | null;
+  deleting: boolean;
+  deletePending: boolean;
+  id: number;
+  onDelete: (commentId: number) => void;
+  onImageOpen: (src: string) => void;
+  resolveImageSource: (url: string) => Promise<string | null>;
+}) {
+  const [expanded, setExpanded] = useState(commentHtml.length < 700);
+  const collapsible = commentHtml.length >= 700;
+
+  return (
+    <article className="min-w-0 overflow-hidden rounded-md border border-border bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <div className="flex min-w-0 items-center gap-1.5 border-b border-border bg-slate-50 px-2 py-1.5">
+        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[10px] font-semibold text-blue-700">
+          {commentAuthorInitials(createdBy)}
+        </span>
+        <span className="min-w-0 truncate font-semibold">
+          {createdBy ?? "Unknown"}
+        </span>
+        <span className="hidden text-[11px] text-muted-foreground sm:inline">commented</span>
+        {createdDate ? (
+          <span className="shrink-0 text-[11px] text-muted-foreground">
+            {formatRelativeDate(createdDate)}
+          </span>
+        ) : null}
+        <button
+          type="button"
+          aria-label={`Delete comment ${id}`}
+          className="ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-transparent text-muted-foreground hover:border-border hover:bg-white hover:text-destructive disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={deletePending}
+          title="Delete comment"
+          onClick={() => onDelete(id)}
+        >
+          {deleting ? (
+            <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
+          )}
+        </button>
+      </div>
+      <div className="px-2.5 py-2">
+        <div className={expanded ? "" : "max-h-32 overflow-hidden"}>
+          <RichHtmlFrame
+            baseUrl={baseUrl}
+            density="comfortable"
+            framed={false}
+            html={commentHtml}
+            title={`Comment by ${createdBy ?? "Unknown"}`}
+            resolveImageSource={resolveImageSource}
+            onImageOpen={onImageOpen}
+            minHeight={34}
+          />
+        </div>
+        {collapsible ? (
+          <button
+            type="button"
+            onClick={() => setExpanded((value) => !value)}
+            className="mt-1 rounded border border-border bg-white px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+          >
+            {expanded ? "Collapse" : "Expand"}
+          </button>
+        ) : null}
+      </div>
+    </article>
   );
 }
 
@@ -994,6 +1116,7 @@ function RichHtmlFrame({
   framed = true,
   html,
   minHeight = 40,
+  onImageOpen,
   resolveImageSource,
   title,
 }: {
@@ -1002,6 +1125,7 @@ function RichHtmlFrame({
   framed?: boolean;
   html: string;
   minHeight?: number;
+  onImageOpen?: (src: string) => void;
   resolveImageSource?: (url: string) => Promise<string | null>;
   title: string;
 }) {
@@ -1036,6 +1160,11 @@ function RichHtmlFrame({
         doc.querySelectorAll("img, video").forEach((media) => {
           media.addEventListener("load", syncHeight, { once: true });
           media.addEventListener("error", syncHeight, { once: true });
+        });
+        doc.querySelectorAll("img").forEach((image) => {
+          image.addEventListener("click", () => {
+            if (image.src) onImageOpen?.(image.src);
+          });
         });
         hydrateAuthenticatedImages(doc, baseUrl, resolveImageSource, syncHeight);
         resizeObserverRef.current?.disconnect();
@@ -1080,6 +1209,11 @@ function hydrateAuthenticatedImages(
       })
       .catch(() => {
         image.dataset.azdoImageError = "true";
+        const fallback = doc.createElement("span");
+        fallback.textContent = "Image could not be loaded. Check Azure DevOps auth or attachment permissions.";
+        fallback.className = "azdo-image-error";
+        image.replaceWith(fallback);
+        syncHeight();
       });
   }
 }
@@ -1137,6 +1271,16 @@ function buildRichHtmlDocument(
     a { color: #2563eb; text-decoration: none; }
     a:hover { text-decoration: underline; }
     img, video { max-width: 100%; height: auto; border: 1px solid #dbe3ef; border-radius: 4px; }
+    img { cursor: zoom-in; }
+    .azdo-image-error {
+      display: inline-block;
+      margin: 2px 0;
+      padding: 6px 8px;
+      color: #991b1b;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 4px;
+    }
     table { width: 100%; margin: 0 0 6px; border-collapse: collapse; font-size: 12px; }
     th, td { border: 1px solid #dbe3ef; padding: 3px 5px; text-align: left; vertical-align: top; }
     th { background: #f8fafc; font-weight: 600; }

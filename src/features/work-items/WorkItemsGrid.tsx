@@ -42,6 +42,7 @@ const DEFAULT_WORK_ITEM_PREVIEW_WIDTH = 440;
 const WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY = "azdodeck:layout:workItemPreviewWidth";
 const WI_GRID_ROW_HEIGHT = 29;
 const WI_GRID_OVERSCAN = 8;
+const RECENT_WORK_ITEMS_STORAGE_KEY = "azdodeck:workItems:recent";
 type WiSortKey =
   | "id"
   | "workItemType"
@@ -165,6 +166,32 @@ function isFilterableColumn(col: WiSortKey): col is FilterableColumn {
   return col in FILTERABLE_COLUMNS;
 }
 
+function recordRecentWorkItem(item: WorkItemSummary) {
+  try {
+    const current = JSON.parse(
+      window.localStorage.getItem(RECENT_WORK_ITEMS_STORAGE_KEY) ?? "[]",
+    );
+    const list = Array.isArray(current) ? current : [];
+    const key = `${item.organizationId}:${item.projectId}:${item.id}`;
+    const next = [
+      {
+        key,
+        id: item.id,
+        organizationId: item.organizationId,
+        projectId: item.projectId,
+        projectName: item.projectName,
+        title: item.title,
+        viewedAt: new Date().toISOString(),
+        webUrl: item.webUrl,
+      },
+      ...list.filter((entry) => entry?.key !== key),
+    ].slice(0, 20);
+    window.localStorage.setItem(RECENT_WORK_ITEMS_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // Recent items are a convenience only.
+  }
+}
+
 const WorkItemGridRow = forwardRef<
   HTMLDivElement,
   {
@@ -252,6 +279,7 @@ export function WorkItemsGrid({
   searched,
   autoFocus = false,
   emptyMessage,
+  dataUpdatedAt,
   initialSort,
   onSortChange,
   previewVisible = true,
@@ -262,6 +290,7 @@ export function WorkItemsGrid({
   searched: boolean;
   autoFocus?: boolean;
   emptyMessage?: string;
+  dataUpdatedAt?: number;
   initialSort?: WiSortState;
   onSortChange?: (sort: WiSortState) => void;
   previewVisible?: boolean;
@@ -397,6 +426,31 @@ export function WorkItemsGrid({
     return types.size === 1 ? ([...types][0] ?? null) : null;
   }, [checkedItems]);
   const firstCheckedItem = checkedItems[0] ?? null;
+
+  useEffect(() => {
+    if (!selectedItem) return;
+    recordRecentWorkItem(selectedItem);
+  }, [selectedItem]);
+
+  useEffect(() => {
+    for (const item of [displayed[selectedIndex - 1], displayed[selectedIndex + 1]]) {
+      if (!item) continue;
+      void queryClient.prefetchQuery({
+        queryKey: workItemQueryKeys.preview(
+          item.organizationId,
+          item.projectId,
+          item.id,
+        ),
+        queryFn: () =>
+          getWorkItemPreview({
+            organizationId: item.organizationId,
+            projectId: item.projectId,
+            workItemId: item.id,
+          }),
+        staleTime: 30_000,
+      });
+    }
+  }, [displayed, queryClient, selectedIndex]);
 
   const COMMON_STATES = ["New", "Active", "Resolved", "Closed", "To Do", "Doing", "Done"];
 
@@ -891,6 +945,7 @@ export function WorkItemsGrid({
                     ? `${displayed.length} of ${sorted.length} item${sorted.length === 1 ? "" : "s"}`
                     : `${displayed.length} item${displayed.length === 1 ? "" : "s"}`
                   : "Ready"}
+              {dataUpdatedAt ? ` · data ${formatRelativeDate(new Date(dataUpdatedAt).toISOString())}` : ""}
             </span>
             <ShortcutHint>Alt+G</ShortcutHint>
           </div>
