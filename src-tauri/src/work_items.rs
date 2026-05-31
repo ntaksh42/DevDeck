@@ -285,15 +285,7 @@ impl WorkItemService {
     }
 
     pub async fn run_query(&self, input: RunWorkItemQueryInput) -> Result<Vec<WorkItemSummary>> {
-        let wiql = input.wiql.trim();
-        if wiql.is_empty() {
-            return Err(AppError::InvalidInput("WIQL query is required".to_string()));
-        }
-        if !wiql.to_ascii_lowercase().contains("from workitems") {
-            return Err(AppError::InvalidInput(
-                "WIQL must query FROM WorkItems".to_string(),
-            ));
-        }
+        let wiql = validate_work_item_wiql(&input.wiql)?;
 
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
@@ -306,7 +298,7 @@ impl WorkItemService {
                 AppError::InvalidInput(format!("project not found: {}", input.project_id))
             })?;
 
-        let limit = input.limit.unwrap_or(200).clamp(1, 500);
+        let limit = work_item_query_limit(input.limit);
         let ids = client
             .query_work_item_ids(&project.id, wiql)
             .await?
@@ -331,6 +323,20 @@ impl WorkItemService {
                 summarize_work_item(&organization, &project.id, &project.name, work_item)
             })
             .collect())
+    }
+
+    pub async fn count_query(&self, input: RunWorkItemQueryInput) -> Result<usize> {
+        let wiql = validate_work_item_wiql(&input.wiql)?;
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let limit = work_item_query_limit(input.limit);
+        let count = client
+            .query_work_item_ids(&input.project_id, wiql)
+            .await?
+            .into_iter()
+            .take(limit)
+            .count();
+        Ok(count)
     }
 
     pub async fn preview(&self, input: GetWorkItemPreviewInput) -> Result<WorkItemPreview> {
@@ -840,6 +846,23 @@ pub async fn sync_work_items_for_org(
             Err(e)
         }
     }
+}
+
+fn validate_work_item_wiql(wiql: &str) -> Result<&str> {
+    let wiql = wiql.trim();
+    if wiql.is_empty() {
+        return Err(AppError::InvalidInput("WIQL query is required".to_string()));
+    }
+    if !wiql.to_ascii_lowercase().contains("from workitems") {
+        return Err(AppError::InvalidInput(
+            "WIQL must query FROM WorkItems".to_string(),
+        ));
+    }
+    Ok(wiql)
+}
+
+fn work_item_query_limit(limit: Option<usize>) -> usize {
+    limit.unwrap_or(200).clamp(1, 500)
 }
 
 async fn do_sync_work_items(

@@ -40,6 +40,7 @@ import { Route, Routes } from "react-router-dom";
 import {
   addWorkItemComment,
   assignWorkItem,
+  countWorkItemQuery,
   setWorkItemState,
   listWorkItemTypeStates,
   setWorkItemsState,
@@ -1331,10 +1332,10 @@ function WorkItemViewsPanel({ organizations }: { organizations: Organization[] }
     }
   }, [selectedViewId, views]);
 
-  const viewQueries = useQueries({
+  const viewCountQueries = useQueries({
     queries: views.map((view) => ({
       queryKey: [
-        "workItemQueryView",
+        "workItemQueryCount",
         selectedOrganizationId,
         view.id,
         view.projectId,
@@ -1342,13 +1343,14 @@ function WorkItemViewsPanel({ organizations }: { organizations: Organization[] }
         view.limit,
       ],
       queryFn: () =>
-        runWorkItemQuery({
+        countWorkItemQuery({
           organizationId: selectedOrganizationId,
           projectId: view.projectId,
           wiql: view.wiql,
           limit: view.limit,
         }),
       enabled: !!selectedOrganizationId && !!view.projectId && !!view.wiql.trim(),
+      staleTime: 5 * 60_000,
     })),
   });
 
@@ -1357,7 +1359,30 @@ function WorkItemViewsPanel({ organizations }: { organizations: Organization[] }
     views.findIndex((view) => view.id === selectedViewId),
   );
   const selectedView = views[selectedViewIndex] ?? null;
-  const selectedQuery = selectedView ? viewQueries[selectedViewIndex] : null;
+  const selectedCountQuery = selectedView ? viewCountQueries[selectedViewIndex] : null;
+  const selectedQuery = useQuery({
+    queryKey: [
+      "workItemQueryView",
+      selectedOrganizationId,
+      selectedView?.id,
+      selectedView?.projectId,
+      selectedView?.wiql,
+      selectedView?.limit,
+    ],
+    queryFn: () =>
+      runWorkItemQuery({
+        organizationId: selectedOrganizationId,
+        projectId: selectedView!.projectId,
+        wiql: selectedView!.wiql,
+        limit: selectedView!.limit,
+      }),
+    enabled:
+      !!selectedView &&
+      !!selectedOrganizationId &&
+      !!selectedView.projectId &&
+      !!selectedView.wiql.trim(),
+    staleTime: 5 * 60_000,
+  });
   const selectedResults = selectedQuery?.data ?? [];
 
   function loadDraft(view: WorkItemQueryView) {
@@ -1462,9 +1487,12 @@ function WorkItemViewsPanel({ organizations }: { organizations: Organization[] }
     void queryClient.invalidateQueries({
       queryKey: ["workItemQueryView", selectedOrganizationId],
     });
+    void queryClient.invalidateQueries({
+      queryKey: ["workItemQueryCount", selectedOrganizationId],
+    });
   };
 
-  const selectedCount = selectedResults.length;
+  const selectedCount = selectedCountQuery?.data ?? selectedResults.length;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -1624,8 +1652,8 @@ function WorkItemViewsPanel({ organizations }: { organizations: Organization[] }
               onKeyDown={handleViewListKeyDown}
             >
               {views.map((view, index) => {
-                const query = viewQueries[index];
-                const count = query?.data?.length ?? 0;
+                const query = viewCountQueries[index];
+                const count = query?.data ?? 0;
                 const selected = selectedView?.id === view.id;
                 return (
                   <button
@@ -2030,6 +2058,7 @@ function WorkItemsGrid({
       setLastCheckedIndex(null);
       showBulkToast(results);
       void queryClient.invalidateQueries({ queryKey: ["myWorkItems"] });
+      void queryClient.invalidateQueries({ queryKey: ["workItemQueryCount"] });
       void queryClient.invalidateQueries({ queryKey: ["workItemQueryView"] });
       void queryClient.invalidateQueries({ queryKey: ["workItemPreview"] });
     },
@@ -2062,6 +2091,7 @@ function WorkItemsGrid({
       setLastCheckedIndex(null);
       showBulkToast(results);
       void queryClient.invalidateQueries({ queryKey: ["myWorkItems"] });
+      void queryClient.invalidateQueries({ queryKey: ["workItemQueryCount"] });
       void queryClient.invalidateQueries({ queryKey: ["workItemQueryView"] });
       void queryClient.invalidateQueries({ queryKey: ["workItemPreview"] });
     },
@@ -2498,6 +2528,7 @@ function WorkItemPreviewPanel({
         updatedPreview,
       );
       void queryClient.invalidateQueries({ queryKey: ["myWorkItems"] });
+      void queryClient.invalidateQueries({ queryKey: ["workItemQueryCount"] });
       void queryClient.invalidateQueries({ queryKey: ["workItemQueryView"] });
     },
   });
@@ -2516,6 +2547,7 @@ function WorkItemPreviewPanel({
         updatedPreview,
       );
       void queryClient.invalidateQueries({ queryKey: ["myWorkItems"] });
+      void queryClient.invalidateQueries({ queryKey: ["workItemQueryCount"] });
       void queryClient.invalidateQueries({ queryKey: ["workItemQueryView"] });
     },
   });

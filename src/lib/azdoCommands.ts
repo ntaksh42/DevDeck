@@ -404,6 +404,13 @@ export async function runWorkItemQuery(
   return workItemSummariesSchema.parse(result);
 }
 
+export async function countWorkItemQuery(
+  input: RunWorkItemQueryInput,
+): Promise<number> {
+  const result = await invokeCommand("count_work_item_query", { input });
+  return z.number().parse(result);
+}
+
 export async function getWorkItemPreview(
   input: GetWorkItemPreviewInput,
 ): Promise<WorkItemPreview> {
@@ -574,6 +581,11 @@ async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
       const input = (args as { input?: RunWorkItemQueryInput } | undefined)
         ?.input;
       return demoRunWorkItemQuery(input);
+    }
+    case "count_work_item_query": {
+      const input = (args as { input?: RunWorkItemQueryInput } | undefined)
+        ?.input;
+      return demoRunWorkItemQuery(input).length;
     }
     case "get_work_item_preview": {
       const input = (args as { input?: GetWorkItemPreviewInput } | undefined)
