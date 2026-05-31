@@ -3,7 +3,12 @@ import {
   useEffect,
   useState,
 } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   BookOpen,
   Building2,
@@ -38,6 +43,7 @@ import { CommitSearch } from "@/features/commits/CommitSearch";
 import { WorkItemSearch } from '@/features/work-items/WorkItemSearch';
 import { WorkItemViewsPanel } from '@/features/work-items/WorkItemViewsPanel';
 import { MyWorkItemsPanel } from '@/features/work-items/MyWorkItemsPanel';
+import { invalidateWorkItemQueryViews, workItemQueryKeys } from '@/features/work-items/queryKeys';
 import { OrganizationSettings, SetupPanel } from '@/features/settings/OrganizationSettings';
 import { MyReviewsGrid } from '@/features/pull-requests/MyReviewsGrid';
 import { PullRequestSearch } from '@/features/pull-requests/PullRequestSearch';
@@ -53,6 +59,13 @@ type View =
 
 const DEFAULT_SIDEBAR_WIDTH = 232;
 const SIDEBAR_WIDTH_STORAGE_KEY = "azdodeck:layout:sidebarWidth";
+
+function invalidateSyncedDataQueries(queryClient: QueryClient): void {
+  void queryClient.invalidateQueries({ queryKey: ["myReviews"] });
+  void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot() });
+  invalidateWorkItemQueryViews(queryClient);
+  void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
+}
 
 function AppShell() {
   const [view, setView] = useState<View>("myReviews");
@@ -78,7 +91,7 @@ function AppShell() {
     if (!isTauriRuntime()) return;
     let cleanup: (() => void) | undefined;
     listen("sync:updated", () => {
-      void queryClient.invalidateQueries();
+      invalidateSyncedDataQueries(queryClient);
     }).then((unlisten) => {
       cleanup = unlisten;
     });
