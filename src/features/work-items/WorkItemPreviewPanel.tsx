@@ -387,33 +387,38 @@ export function WorkItemPreviewPanel({
   }
 
   return (
-    <aside className="flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-white">
+    <aside className="flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-white shadow-sm">
       {!selectedItem ? (
         <PreviewEmptyState message="Select a work item." />
       ) : (
         <>
-          <div className="border-b border-border px-2.5 py-1.5">
-            <div className="flex min-w-0 items-center justify-between gap-2">
-              <div className="flex min-w-0 flex-wrap items-center gap-1">
-                <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                  #{selectedItem.id}
-                </span>
-                {(preview?.workItemType ?? selectedItem.workItemType) ? (
-                  <span className="shrink-0 rounded border border-border px-1 py-0.5 text-[11px] font-medium leading-none">
-                    {preview?.workItemType ?? selectedItem.workItemType}
+          <div className="border-b border-border bg-gradient-to-b from-slate-50 to-white px-3 py-2">
+            <div className="flex min-w-0 items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                  <span className="shrink-0 font-mono text-[11px] font-semibold text-muted-foreground">
+                    #{selectedItem.id}
                   </span>
-                ) : null}
-                {(preview?.state ?? selectedItem.state) ? (
-                  <span className="shrink-0 rounded border border-border px-1 py-0.5 text-[11px] font-medium leading-none">
-                    {preview?.state ?? selectedItem.state}
+                  {(preview?.workItemType ?? selectedItem.workItemType) ? (
+                    <WorkItemBadge tone="type">
+                      {preview?.workItemType ?? selectedItem.workItemType}
+                    </WorkItemBadge>
+                  ) : null}
+                  {(preview?.state ?? selectedItem.state) ? (
+                    <WorkItemBadge tone={stateBadgeTone(preview?.state ?? selectedItem.state)}>
+                      {preview?.state ?? selectedItem.state}
+                    </WorkItemBadge>
+                  ) : null}
+                  <span
+                    className="min-w-0 truncate text-[11px] text-muted-foreground"
+                    title={selectedItem.projectName}
+                  >
+                    {selectedItem.projectName}
                   </span>
-                ) : null}
-                <span
-                  className="min-w-0 truncate text-xs text-muted-foreground"
-                  title={selectedItem.projectName}
-                >
-                  · {selectedItem.projectName}
-                </span>
+                </div>
+                <h2 className="mt-1 line-clamp-2 text-[15px] font-semibold leading-5 text-foreground" title={selectedItem.title}>
+                  {selectedItem.title}
+                </h2>
               </div>
               {previewLoading ? (
                 <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" aria-hidden="true" />
@@ -421,9 +426,6 @@ export function WorkItemPreviewPanel({
                 <ShortcutHint>Alt+P</ShortcutHint>
               )}
             </div>
-            <p className="mt-0.5 line-clamp-2 text-[13px] font-semibold leading-5" title={selectedItem.title}>
-              {selectedItem.title}
-            </p>
           </div>
           {previewError ? (
             <div className="m-3 rounded-md border border-destructive/30 bg-red-50 p-3 text-sm text-destructive">
@@ -482,7 +484,7 @@ export function WorkItemPreviewPanel({
                   />
                 }
               />
-              <div className="border-t border-border p-2">
+              <div className="border-t border-border bg-slate-50/70 p-2">
                 <form className="space-y-1.5" onSubmit={submitComment}>
                   <label className="grid gap-1">
                     <span className="flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
@@ -514,7 +516,7 @@ export function WorkItemPreviewPanel({
                         aria-label="Comment"
                         aria-keyshortcuts="M Alt+M Control+Enter Meta+Enter"
                         rows={2}
-                        className="min-h-[48px] w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+                        className="min-h-[42px] w-full resize-none rounded-md border border-input bg-white px-2 py-1.5 text-sm outline-none transition-[min-height] focus:min-h-[72px] focus:ring-2 focus:ring-ring"
                       />
                       {showMentionOptions ? (
                         <div className="absolute bottom-full left-0 z-20 mb-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-white py-1 shadow-lg">
@@ -551,7 +553,7 @@ export function WorkItemPreviewPanel({
                     <button
                       type="submit"
                       disabled={!commentText.trim() || commentMutation.isPending}
-                      className="inline-flex h-7 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="inline-flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {commentMutation.isPending ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
@@ -615,81 +617,66 @@ function WorkItemPreviewDetails({
     <div
       aria-keyshortcuts="Alt+P"
       aria-label="Work item preview"
-      className="min-h-0 flex-1 overflow-auto px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-inset focus:ring-ring"
+      className="min-h-0 flex-1 overflow-auto bg-white px-2.5 py-2 text-xs outline-none focus:ring-2 focus:ring-inset focus:ring-ring"
       data-primary-preview="true"
       onKeyDown={stopPreviewNavigationKeyDown}
       tabIndex={-1}
     >
-      <dl className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-x-2 gap-y-0.5">
-        <div className="grid min-w-0 grid-cols-[50px_minmax(0,1fr)] items-baseline gap-1">
-          <dt className="truncate text-[11px] leading-[15px] text-muted-foreground">State</dt>
-          <dd className="flex min-w-0 items-center gap-1 leading-[15px]">
+      <div className="grid gap-1.5 rounded-md border border-border bg-slate-50/60 p-2">
+        <div className="grid grid-cols-2 gap-1.5">
+          <PreviewControl label="State" shortcut="S">
             {stateControl}
-            <ShortcutHint>S</ShortcutHint>
-          </dd>
-        </div>
-        <div className="grid min-w-0 grid-cols-[50px_minmax(0,1fr)] items-baseline gap-1">
-          <dt className="truncate text-[11px] leading-[15px] text-muted-foreground">Assigned</dt>
-          <dd className="flex min-w-0 items-center gap-1 leading-[15px]">
+          </PreviewControl>
+          <PreviewControl label="Assigned" shortcut="A">
             {assigneeControl}
-            <ShortcutHint>A</ShortcutHint>
-          </dd>
+          </PreviewControl>
         </div>
-        {fields.map(([label, value]) => (
-          <div
-            key={label ?? ""}
-            className="grid min-w-0 grid-cols-[50px_minmax(0,1fr)] items-baseline gap-1"
-          >
-            <dt className="truncate text-[11px] leading-[15px] text-muted-foreground">{label}</dt>
-            <dd className="truncate leading-[15px] text-foreground" title={value ?? undefined}>
-              {value}
-            </dd>
-          </div>
-        ))}
-      </dl>
+        {fields.length > 0 ? (
+          <dl className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-x-3 gap-y-1 border-t border-border/70 pt-1.5">
+            {fields.map(([label, value]) => (
+              <PreviewField
+                key={label ?? ""}
+                label={label ?? ""}
+                value={value ?? ""}
+              />
+            ))}
+          </dl>
+        ) : null}
+      </div>
 
       {(descriptionHtml || acceptanceCriteriaHtml) && (
-        <div className="mt-1 grid gap-1 border-t border-border pt-1">
+        <div className="mt-2 grid gap-2">
           {descriptionHtml ? (
-            <section>
-              <h3 className="mb-0.5 text-[10px] font-semibold uppercase leading-3 text-muted-foreground">
-                Description
-              </h3>
+            <PreviewSection title="Description">
               <RichHtmlFrame
                 baseUrl={preview.webUrl}
                 html={descriptionHtml}
                 resolveImageSource={resolveImageSource}
                 title="Description"
               />
-            </section>
+            </PreviewSection>
           ) : null}
           {acceptanceCriteriaHtml ? (
-            <section>
-              <h3 className="mb-0.5 text-[10px] font-semibold uppercase leading-3 text-muted-foreground">
-                Acceptance Criteria
-              </h3>
+            <PreviewSection title="Acceptance Criteria">
               <RichHtmlFrame
                 baseUrl={preview.webUrl}
                 html={acceptanceCriteriaHtml}
                 resolveImageSource={resolveImageSource}
                 title="Acceptance Criteria"
               />
-            </section>
+            </PreviewSection>
           ) : null}
         </div>
       )}
 
       {preview.comments.length > 0 ? (
-        <div className="mt-1 border-t border-border pt-1">
-          <h3 className="mb-0.5 text-[10px] font-semibold uppercase leading-3 text-muted-foreground">
-            Comments ({preview.comments.length})
-          </h3>
+        <PreviewSection className="mt-2" title={`Comments (${preview.comments.length})`}>
           {deleteCommentError ? (
             <p className="mb-1 text-[11px] leading-4 text-destructive">
               {deleteCommentError}
             </p>
           ) : null}
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {preview.comments.map((comment) => {
               const deleting = deletingCommentId === comment.id;
               return (
@@ -697,14 +684,14 @@ function WorkItemPreviewDetails({
                   key={comment.id}
                   className="min-w-0 overflow-hidden rounded-md border border-border bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
                 >
-                  <div className="flex min-w-0 items-center gap-1.5 border-b border-border bg-muted/30 px-2 py-1">
-                    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
+                  <div className="flex min-w-0 items-center gap-1.5 border-b border-border bg-slate-50 px-2 py-1.5">
+                    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[10px] font-semibold text-blue-700">
                       {commentAuthorInitials(comment.createdBy)}
                     </span>
                     <span className="min-w-0 truncate font-semibold">
                       {comment.createdBy ?? "Unknown"}
                     </span>
-                    <span className="text-[11px] text-muted-foreground">commented</span>
+                    <span className="hidden text-[11px] text-muted-foreground sm:inline">commented</span>
                     {comment.createdDate ? (
                       <span className="shrink-0 text-[11px] text-muted-foreground">
                         {formatRelativeDate(comment.createdDate)}
@@ -725,7 +712,7 @@ function WorkItemPreviewDetails({
                       )}
                     </button>
                   </div>
-                  <div className="px-2 py-1.5">
+                  <div className="px-2.5 py-2">
                     <RichHtmlFrame
                       baseUrl={preview.webUrl}
                       density="comfortable"
@@ -744,9 +731,98 @@ function WorkItemPreviewDetails({
               );
             })}
           </div>
-        </div>
+        </PreviewSection>
       ) : null}
     </div>
+  );
+}
+
+function WorkItemBadge({
+  children,
+  tone,
+}: {
+  children: ReactNode;
+  tone: "type" | "neutral" | "green" | "amber" | "blue";
+}) {
+  const toneClass =
+    tone === "green"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : tone === "amber"
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+        : tone === "blue"
+          ? "border-blue-200 bg-blue-50 text-blue-700"
+          : tone === "type"
+            ? "border-slate-300 bg-white text-slate-700"
+            : "border-border bg-white text-muted-foreground";
+  return (
+    <span
+      className={`shrink-0 rounded border px-1.5 py-0.5 text-[11px] font-medium leading-none ${toneClass}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function stateBadgeTone(state: string | null | undefined): "neutral" | "green" | "amber" | "blue" {
+  const normalized = state?.toLowerCase() ?? "";
+  if (/(done|closed|resolved|completed|removed)/.test(normalized)) return "green";
+  if (/(blocked|new|to do|todo|proposed)/.test(normalized)) return "amber";
+  if (/(active|doing|progress|committed)/.test(normalized)) return "blue";
+  return "neutral";
+}
+
+function PreviewControl({
+  children,
+  label,
+  shortcut,
+}: {
+  children: ReactNode;
+  label: string;
+  shortcut: string;
+}) {
+  return (
+    <div className="min-w-0 rounded border border-border bg-white px-2 py-1">
+      <div className="mb-0.5 flex items-center justify-between gap-1">
+        <span className="text-[10px] font-semibold uppercase leading-3 text-muted-foreground">
+          {label}
+        </span>
+        <ShortcutHint>{shortcut}</ShortcutHint>
+      </div>
+      <div className="flex min-w-0 items-center leading-4">{children}</div>
+    </div>
+  );
+}
+
+function PreviewField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid min-w-0 grid-cols-[58px_minmax(0,1fr)] items-baseline gap-1">
+      <dt className="truncate text-[11px] leading-4 text-muted-foreground">{label}</dt>
+      <dd className="truncate text-[12px] font-medium leading-4 text-foreground" title={value}>
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+function PreviewSection({
+  children,
+  className = "",
+  title,
+}: {
+  children: ReactNode;
+  className?: string;
+  title: string;
+}) {
+  return (
+    <section className={`min-w-0 ${className}`}>
+      <div className="mb-1 flex items-center gap-2">
+        <h3 className="text-[10px] font-semibold uppercase leading-3 tracking-normal text-muted-foreground">
+          {title}
+        </h3>
+        <div className="h-px min-w-0 flex-1 bg-border" />
+      </div>
+      {children}
+    </section>
   );
 }
 
