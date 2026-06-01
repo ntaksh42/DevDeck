@@ -21,6 +21,35 @@ import { ErrorState } from '@/components/StateDisplay';
 import { WorkItemsGrid } from './WorkItemsGrid';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from './queryKeys';
 const WI_QUERY_VIEWS_STORAGE_KEY = "azdodeck:workItemQueryViews";
+type WiqlCompletion = {
+  label: string;
+  value: string;
+  detail: string;
+};
+
+const WIQL_COMPLETIONS: WiqlCompletion[] = [
+  { label: "System.Id", value: "[System.Id]", detail: "Work item ID" },
+  { label: "System.Title", value: "[System.Title]", detail: "Title" },
+  { label: "System.State", value: "[System.State]", detail: "State" },
+  { label: "System.WorkItemType", value: "[System.WorkItemType]", detail: "Type" },
+  { label: "System.AssignedTo", value: "[System.AssignedTo]", detail: "Assignee" },
+  { label: "System.ChangedDate", value: "[System.ChangedDate]", detail: "Changed date" },
+  { label: "System.CreatedDate", value: "[System.CreatedDate]", detail: "Created date" },
+  { label: "System.TeamProject", value: "[System.TeamProject]", detail: "Project" },
+  { label: "System.Tags", value: "[System.Tags]", detail: "Tags" },
+  { label: "Microsoft.VSTS.Common.Priority", value: "[Microsoft.VSTS.Common.Priority]", detail: "Priority" },
+  { label: "Microsoft.VSTS.Common.Severity", value: "[Microsoft.VSTS.Common.Severity]", detail: "Severity" },
+  { label: "@Me", value: "@Me", detail: "Current user" },
+  { label: "@Today", value: "@Today", detail: "Today" },
+  { label: "@CurrentIteration", value: "@CurrentIteration", detail: "Current iteration" },
+  { label: "@Follows", value: "@Follows", detail: "Followed work items" },
+  { label: "SELECT", value: "SELECT ", detail: "Projection" },
+  { label: "FROM WorkItems", value: "FROM WorkItems", detail: "Work Item source" },
+  { label: "WHERE", value: "WHERE ", detail: "Filter" },
+  { label: "ORDER BY", value: "ORDER BY ", detail: "Sort" },
+  { label: "CONTAINS WORDS", value: "CONTAINS WORDS ", detail: "Text contains" },
+];
+
 type WorkItemQueryView = {
   id: string;
   name: string;
@@ -167,6 +196,47 @@ function defaultWorkItemWiql(): string {
   ].join("\n");
 }
 
+function validateWiql(value: string): { errors: string[]; warnings: string[] } {
+  const normalized = value.trim().replace(/\s+/g, " ").toLowerCase();
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  if (!normalized.startsWith("select ")) {
+    errors.push("WIQL must start with SELECT.");
+  }
+  if (!/\bfrom\s+workitems\b/.test(normalized)) {
+    errors.push("WIQL must include FROM WorkItems.");
+  }
+  if (!/\bwhere\b/.test(normalized)) {
+    warnings.push("Add a WHERE clause to avoid broad queries.");
+  }
+  if (!/\border\s+by\b/.test(normalized)) {
+    warnings.push("Add ORDER BY for stable result ordering.");
+  }
+  return { errors, warnings };
+}
+
+function wiqlTokenRange(value: string, cursor: number): { start: number; end: number; token: string } {
+  const before = value.slice(0, cursor);
+  const after = value.slice(cursor);
+  const startMatch = /(?:^|[\s,=<>()[\]])([@\w.]*)$/.exec(before);
+  const endMatch = /^([@\w.]*)/.exec(after);
+  const token = `${startMatch?.[1] ?? ""}${endMatch?.[1] ?? ""}`;
+  return {
+    start: cursor - (startMatch?.[1]?.length ?? 0),
+    end: cursor + (endMatch?.[1]?.length ?? 0),
+    token,
+  };
+}
+
+function wiqlCompletionMatches(value: string, cursor: number): WiqlCompletion[] {
+  const token = wiqlTokenRange(value, cursor).token.toLowerCase();
+  const normalizedToken = token.replace(/^\[/, "");
+  return WIQL_COMPLETIONS.filter((completion) => {
+    const haystack = `${completion.label} ${completion.value} ${completion.detail}`.toLowerCase();
+    return !normalizedToken || haystack.includes(normalizedToken);
+  }).slice(0, 8);
+}
+
 function parseAzdoQueryUrl(url: string): {
   orgName?: string;
   projectName?: string;
@@ -224,6 +294,9 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
   const draftProjectIdRef = useRef(draftProjectId);
   const draftWiqlRef = useRef(draftWiql);
   const draftLimitRef = useRef(draftLimit);
+  const draftWiqlTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [wiqlCursor, setWiqlCursor] = useState(draftWiql.length);
+  const [wiqlCompletionsOpen, setWiqlCompletionsOpen] = useState(false);
   const [draftUrl, setDraftUrl] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -238,6 +311,11 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
     staleTime: 5 * 60_000,
   });
   const projectOptions = projectsQuery.data ?? [];
+  const wiqlValidation = useMemo(() => validateWiql(draftWiql), [draftWiql]);
+  const wiqlCompletions = useMemo(
+    () => wiqlCompletionMatches(draftWiql, wiqlCursor),
+    [draftWiql, wiqlCursor],
+  );
 
   // URL parse: derived from draftUrl
   const urlParsed = useMemo(() => parseAzdoQueryUrl(draftUrl), [draftUrl]);
@@ -297,6 +375,7 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
     if (data.wiql) {
       setDraftWiql(data.wiql);
       draftWiqlRef.current = data.wiql;
+      setWiqlCursor(data.wiql.length);
     }
     setDraftName((prev) => {
       if (prev) return prev;
@@ -374,6 +453,7 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
     draftProjectIdRef.current = view.projectId;
     setDraftWiql(view.wiql);
     draftWiqlRef.current = view.wiql;
+    setWiqlCursor(view.wiql.length);
     setDraftLimit(String(view.limit));
     draftLimitRef.current = String(view.limit);
     setDraftUrl("");
@@ -390,6 +470,7 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
     draftProjectIdRef.current = defaultProjectId;
     setDraftWiql(defaultWiql);
     draftWiqlRef.current = defaultWiql;
+    setWiqlCursor(defaultWiql.length);
     setDraftLimit("200");
     draftLimitRef.current = "200";
     setDraftUrl("");
@@ -468,6 +549,11 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
       setFormError("WIQL query is required.");
       return;
     }
+    const validation = validateWiql(wiql);
+    if (validation.errors.length > 0) {
+      setFormError(validation.errors[0]);
+      return;
+    }
     if (!Number.isFinite(Number(limitInput))) {
       setFormError("Limit must be a number.");
       return;
@@ -494,6 +580,40 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
     setDraftUrl("");
     setFormError(null);
     setDialogOpen(false);
+  }
+
+  function updateDraftWiql(value: string, cursor?: number) {
+    setDraftWiql(value);
+    draftWiqlRef.current = value;
+    if (typeof cursor === "number") setWiqlCursor(cursor);
+  }
+
+  function insertWiqlText(value: string) {
+    const textarea = draftWiqlTextareaRef.current;
+    const cursor = textarea?.selectionStart ?? wiqlCursor;
+    const next = `${draftWiql.slice(0, cursor)}${draftWiql.slice(0, cursor).endsWith(" ") || value.startsWith(" ") || cursor === 0 ? "" : " "}${value}${draftWiql.slice(cursor)}`;
+    const nextCursor = cursor + value.length + (draftWiql.slice(0, cursor).endsWith(" ") || value.startsWith(" ") || cursor === 0 ? 0 : 1);
+    updateDraftWiql(next, nextCursor);
+    window.setTimeout(() => {
+      textarea?.focus();
+      textarea?.setSelectionRange(nextCursor, nextCursor);
+    }, 0);
+  }
+
+  function applyWiqlCompletion(completion: WiqlCompletion) {
+    const range = wiqlTokenRange(draftWiql, wiqlCursor);
+    const prefix = draftWiql.slice(0, range.start);
+    const suffix = draftWiql.slice(range.end);
+    const separator = prefix && !/\s$/.test(prefix) && !completion.value.startsWith(" ") ? " " : "";
+    const trailing = suffix && !/^\s/.test(suffix) && !completion.value.endsWith(" ") ? " " : "";
+    const next = `${prefix}${separator}${completion.value}${trailing}${suffix}`;
+    const nextCursor = prefix.length + separator.length + completion.value.length + trailing.length;
+    updateDraftWiql(next, nextCursor);
+    setWiqlCompletionsOpen(false);
+    window.setTimeout(() => {
+      draftWiqlTextareaRef.current?.focus();
+      draftWiqlTextareaRef.current?.setSelectionRange(nextCursor, nextCursor);
+    }, 0);
   }
 
   function deleteSelectedView() {
@@ -975,13 +1095,7 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
                       <button
                         key={macro}
                         type="button"
-                        onClick={() =>
-                          setDraftWiql((value) => {
-                            const next = `${value}${value.endsWith(" ") || value.endsWith("\n") ? "" : " "}${macro}`;
-                            draftWiqlRef.current = next;
-                            return next;
-                          })
-                        }
+                        onClick={() => insertWiqlText(macro)}
                         className="rounded border border-border bg-white px-1.5 py-0.5 font-mono text-[10px] hover:bg-secondary"
                       >
                         {macro}
@@ -990,16 +1104,60 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
                   </span>
                 </div>
                 <textarea
+                  ref={draftWiqlTextareaRef}
                   id="view-wiql-input"
                   value={draftWiql}
                   onChange={(event) => {
-                    setDraftWiql(event.target.value);
-                    draftWiqlRef.current = event.target.value;
+                    updateDraftWiql(event.target.value, event.target.selectionStart);
+                    setWiqlCompletionsOpen(true);
+                  }}
+                  onClick={(event) => setWiqlCursor(event.currentTarget.selectionStart)}
+                  onKeyUp={(event) => setWiqlCursor(event.currentTarget.selectionStart)}
+                  onFocus={(event) => {
+                    setWiqlCursor(event.currentTarget.selectionStart);
+                    setWiqlCompletionsOpen(true);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.ctrlKey && event.key === " ") {
+                      event.preventDefault();
+                      setWiqlCompletionsOpen((open) => !open);
+                    }
+                    if (event.key === "Escape" && wiqlCompletionsOpen) {
+                      event.stopPropagation();
+                      setWiqlCompletionsOpen(false);
+                    }
                   }}
                   rows={7}
                   spellCheck={false}
                   className="min-h-[120px] resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-xs leading-5 outline-none focus:ring-2 focus:ring-ring"
                 />
+                {wiqlCompletionsOpen && wiqlCompletions.length > 0 ? (
+                  <div className="flex max-h-24 flex-wrap gap-1 overflow-auto rounded-md border border-border bg-slate-50 p-1.5">
+                    {wiqlCompletions.map((completion) => (
+                      <button
+                        key={`${completion.label}:${completion.value}`}
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => applyWiqlCompletion(completion)}
+                        className="rounded border border-border bg-white px-1.5 py-0.5 text-left text-[11px] hover:bg-secondary"
+                        title={completion.detail}
+                      >
+                        <span className="font-mono">{completion.label}</span>
+                        <span className="ml-1 text-muted-foreground">{completion.detail}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {wiqlValidation.errors.length > 0 || wiqlValidation.warnings.length > 0 ? (
+                  <div className="space-y-0.5 text-xs">
+                    {wiqlValidation.errors.map((error) => (
+                      <p key={error} className="text-destructive">{error}</p>
+                    ))}
+                    {wiqlValidation.warnings.map((warning) => (
+                      <p key={warning} className="text-amber-700">{warning}</p>
+                    ))}
+                  </div>
+                ) : null}
               </div>
 
               {formError ? (

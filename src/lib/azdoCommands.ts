@@ -331,6 +331,13 @@ export type AssignWorkItemsInput = {
   assignedTo: string;
 };
 
+export type SetWorkItemsPriorityInput = {
+  organizationId?: string;
+  projectId: string;
+  workItemIds: number[];
+  priority: number;
+};
+
 export type SearchCommitsInput = {
   organizationId?: string;
   query?: string;
@@ -522,6 +529,13 @@ export async function assignWorkItems(
   input: AssignWorkItemsInput,
 ): Promise<BulkWorkItemResult[]> {
   const result = await invokeCommand("assign_work_items", { input });
+  return bulkWorkItemResultsSchema.parse(result);
+}
+
+export async function setWorkItemsPriority(
+  input: SetWorkItemsPriorityInput,
+): Promise<BulkWorkItemResult[]> {
+  const result = await invokeCommand("set_work_items_priority", { input });
   return bulkWorkItemResultsSchema.parse(result);
 }
 

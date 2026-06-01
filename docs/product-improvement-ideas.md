@@ -25,6 +25,9 @@ Trello, GitLab, and GitKraken.
 - WIQL macro insertion helpers for `@Me`, `@Today`, `@CurrentIteration`, and `@Follows`.
 - Command palette ranking based on recently used commands.
 - Adjacent Work Item preview prefetch and visible cache age.
+- Work Item Grid column visibility customization, saved per grid/view.
+- WIQL editor completions and lightweight validation.
+- Bulk Work Item state, assignee, and priority updates with failure details.
 
 ## Requires Azure DevOps API Expansion
 
@@ -64,10 +67,9 @@ data modeling, or event history support beyond the current command surface.
 
 - Add paged or incremental query result fetching for very large WIQL results.
 - Keep the last successful list visible during API failures.
-- Add background bulk operation progress with per-row failure reporting.
+- Add background bulk operation progress for long-running multi-project updates.
 - Centralize retry and backoff display for throttling and transient Azure DevOps errors.
 
 ## Azure DevOps Integration
 
-- Add WIQL editor completion and validation.
 - Move "Open in Azure DevOps" into a compact icon or context menu where possible.

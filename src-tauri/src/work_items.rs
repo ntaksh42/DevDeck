@@ -200,6 +200,15 @@ pub struct AssignWorkItemsInput {
     pub assigned_to: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetWorkItemsPriorityInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_ids: Vec<i64>,
+    pub priority: i64,
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkItemSummary {
@@ -691,6 +700,45 @@ impl WorkItemService {
         for id in input.work_item_ids {
             match client
                 .update_work_item_assigned_to(&project.id, id, &assigned_to)
+                .await
+            {
+                Ok(_) => results.push(BulkWorkItemResult { id, error: None }),
+                Err(e) => results.push(BulkWorkItemResult {
+                    id,
+                    error: Some(e.to_string()),
+                }),
+            }
+        }
+        Ok(results)
+    }
+
+    pub async fn set_items_priority(
+        &self,
+        input: SetWorkItemsPriorityInput,
+    ) -> Result<Vec<BulkWorkItemResult>> {
+        if input.priority <= 0 {
+            return Err(AppError::InvalidInput(
+                "priority must be positive".to_string(),
+            ));
+        }
+        if input.work_item_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = client
+            .list_projects()
+            .await?
+            .into_iter()
+            .find(|p| p.id == input.project_id)
+            .ok_or_else(|| {
+                AppError::InvalidInput(format!("project not found: {}", input.project_id))
+            })?;
+
+        let mut results = Vec::new();
+        for id in input.work_item_ids {
+            match client
+                .update_work_item_priority(&project.id, id, input.priority)
                 .await
             {
                 Ok(_) => results.push(BulkWorkItemResult { id, error: None }),

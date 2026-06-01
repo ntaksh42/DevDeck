@@ -12,6 +12,7 @@ import { ChevronDown, ChevronUp, Filter, Loader2, X } from 'lucide-react';
 import {
   setWorkItemsState,
   assignWorkItems,
+  setWorkItemsPriority,
   listWorkItemTypeStates,
   searchWorkItemMentions,
   getWorkItemPreview,
@@ -40,6 +41,7 @@ const DEFAULT_WI_COLUMN_WIDTHS = [46, 64, 60, 180, 82, 84, 68];
 const WI_COLUMN_MIN_WIDTHS = [44, 58, 56, 150, 70, 74, 60];
 const WI_COLUMN_MAX_WIDTHS = [120, 200, 180, 720, 300, 260, 160];
 const WI_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:wiSearchGridColumnWidths:v2";
+const WI_VISIBLE_COLUMNS_STORAGE_KEY = "azdodeck:layout:wiSearchGridVisibleColumns:v1";
 const DEFAULT_WORK_ITEM_PREVIEW_WIDTH = 440;
 const WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY = "azdodeck:layout:workItemPreviewWidth";
 const WI_GRID_ROW_HEIGHT = 29;
@@ -160,6 +162,84 @@ const WI_GRID_KEYS: WiSortKey[] = [
   "assignedTo",
   "changedDate",
 ];
+const WI_GRID_REQUIRED_COLUMNS: WiSortKey[] = ["id", "title"];
+
+function loadVisibleWorkItemColumns(key: string): WiSortKey[] {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(key) ?? "null");
+    if (!Array.isArray(parsed)) return [...WI_GRID_KEYS];
+    const visible = parsed.filter((value): value is WiSortKey =>
+      WI_GRID_KEYS.includes(value as WiSortKey),
+    );
+    for (const required of WI_GRID_REQUIRED_COLUMNS) {
+      if (!visible.includes(required)) visible.push(required);
+    }
+    return visible.length > 0 ? visible : [...WI_GRID_KEYS];
+  } catch {
+    return [...WI_GRID_KEYS];
+  }
+}
+
+function workItemCellValue(item: WorkItemSummary, column: WiSortKey): ReactNode {
+  switch (column) {
+    case "id":
+      return (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (item.webUrl) openExternalUrl(item.webUrl);
+          }}
+          className="truncate text-left font-mono text-xs text-primary hover:underline"
+          title={`#${item.id}`}
+        >
+          #{item.id}
+        </button>
+      );
+    case "workItemType":
+      return (
+        <span className="truncate text-xs text-muted-foreground" title={item.workItemType ?? undefined}>
+          {item.workItemType ?? "—"}
+        </span>
+      );
+    case "state":
+      return (
+        <span className="truncate text-xs" title={item.state ?? undefined}>
+          {item.state ?? "—"}
+        </span>
+      );
+    case "title":
+      return (
+        <span className="truncate font-medium text-foreground" title={item.title}>
+          {item.title}
+        </span>
+      );
+    case "projectName":
+      return (
+        <span className="truncate text-xs text-muted-foreground" title={item.projectName}>
+          {item.projectName}
+        </span>
+      );
+    case "assignedTo":
+      return (
+        <span
+          className="truncate text-xs text-muted-foreground"
+          title={item.assignedTo ?? "Unassigned"}
+        >
+          {item.assignedTo ?? "—"}
+        </span>
+      );
+    case "changedDate":
+      return (
+        <span
+          className="text-xs text-muted-foreground"
+          title={item.changedDate ? new Date(item.changedDate).toLocaleString() : undefined}
+        >
+          {item.changedDate ? formatRelativeDate(item.changedDate) : "—"}
+        </span>
+      );
+  }
+}
 
 type FilterableColumn = "workItemType" | "state" | "projectName" | "assignedTo";
 const FILTERABLE_COLUMNS: Record<FilterableColumn, (item: WorkItemSummary) => string> = {
@@ -205,10 +285,11 @@ const WorkItemGridRow = forwardRef<
     selected: boolean;
     checked: boolean;
     columnTemplate: string;
+    visibleColumns: WiSortKey[];
     onSelect: () => void;
     onCheckedChange: (checked: boolean, shiftKey: boolean) => void;
   }
->(({ item, selected, checked, columnTemplate, onSelect, onCheckedChange }, ref) => (
+>(({ item, selected, checked, columnTemplate, visibleColumns, onSelect, onCheckedChange }, ref) => (
   <div
     ref={ref}
     tabIndex={selected ? 0 : -1}
@@ -240,41 +321,11 @@ const WorkItemGridRow = forwardRef<
         className="h-3.5 w-3.5 cursor-pointer rounded border-gray-300"
       />
     </div>
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        if (item.webUrl) openExternalUrl(item.webUrl);
-      }}
-      className="truncate text-left font-mono text-xs text-primary hover:underline"
-      title={`#${item.id}`}
-    >
-      #{item.id}
-    </button>
-    <span className="truncate text-xs text-muted-foreground" title={item.workItemType ?? undefined}>
-      {item.workItemType ?? "—"}
-    </span>
-    <span className="truncate text-xs" title={item.state ?? undefined}>
-      {item.state ?? "—"}
-    </span>
-    <span className="truncate font-medium text-foreground" title={item.title}>
-      {item.title}
-    </span>
-    <span className="truncate text-xs text-muted-foreground" title={item.projectName}>
-      {item.projectName}
-    </span>
-    <span
-      className="truncate text-xs text-muted-foreground"
-      title={item.assignedTo ?? "Unassigned"}
-    >
-      {item.assignedTo ?? "—"}
-    </span>
-    <span
-      className="text-xs text-muted-foreground"
-      title={item.changedDate ? new Date(item.changedDate).toLocaleString() : undefined}
-    >
-      {item.changedDate ? formatRelativeDate(item.changedDate) : "—"}
-    </span>
+    {visibleColumns.map((column) => (
+      <div key={column} className="min-w-0">
+        {workItemCellValue(item, column)}
+      </div>
+    ))}
   </div>
 ));
 WorkItemGridRow.displayName = "WorkItemGridRow";
@@ -305,6 +356,9 @@ export function WorkItemsGrid({
   const columnWidthsStorageKey = storageKeyScope
     ? `${WI_COLUMN_WIDTHS_STORAGE_KEY}:${storageKeyScope}`
     : WI_COLUMN_WIDTHS_STORAGE_KEY;
+  const visibleColumnsStorageKey = storageKeyScope
+    ? `${WI_VISIBLE_COLUMNS_STORAGE_KEY}:${storageKeyScope}`
+    : WI_VISIBLE_COLUMNS_STORAGE_KEY;
   const previewWidthStorageKey = storageKeyScope
     ? `${WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY}:${storageKeyScope}`
     : WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY;
@@ -314,6 +368,9 @@ export function WorkItemsGrid({
   );
   const [columnWidths, setColumnWidths] = useState(() =>
     storedNumbers(columnWidthsStorageKey, DEFAULT_WI_COLUMN_WIDTHS, WI_COLUMN_MIN_WIDTHS, WI_COLUMN_MAX_WIDTHS),
+  );
+  const [visibleColumns, setVisibleColumns] = useState<WiSortKey[]>(() =>
+    loadVisibleWorkItemColumns(visibleColumnsStorageKey),
   );
   const [previewWidth, setPreviewWidth] = useState(() =>
     storedNumber(
@@ -328,8 +385,11 @@ export function WorkItemsGrid({
   const [lastCheckedIndex, setLastCheckedIndex] = useState<number | null>(null);
   const [bulkStateOpen, setBulkStateOpen] = useState(false);
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
+  const [bulkPriorityOpen, setBulkPriorityOpen] = useState(false);
   const [bulkAssignQuery, setBulkAssignQuery] = useState("");
   const [bulkToast, setBulkToast] = useState<string | null>(null);
+  const [bulkFailures, setBulkFailures] = useState<BulkWorkItemResult[]>([]);
+  const [columnMenuRect, setColumnMenuRect] = useState<DOMRect | null>(null);
   const [focusCommentRequest, setFocusCommentRequest] = useState(0);
   const [openAssigneeRequest, setOpenAssigneeRequest] = useState(0);
   const [openStateRequest, setOpenStateRequest] = useState(0);
@@ -352,6 +412,7 @@ export function WorkItemsGrid({
     setColumnWidths(
       storedNumbers(columnWidthsStorageKey, DEFAULT_WI_COLUMN_WIDTHS, WI_COLUMN_MIN_WIDTHS, WI_COLUMN_MAX_WIDTHS),
     );
+    setVisibleColumns(loadVisibleWorkItemColumns(visibleColumnsStorageKey));
     setPreviewWidth(
       storedNumber(
         previewWidthStorageKey,
@@ -360,11 +421,15 @@ export function WorkItemsGrid({
         860,
       ),
     );
-  }, [columnWidthsStorageKey, previewWidthStorageKey]);
+  }, [columnWidthsStorageKey, previewWidthStorageKey, visibleColumnsStorageKey]);
 
   useEffect(() => {
     localStorage.setItem(columnWidthsStorageKey, JSON.stringify(columnWidths));
   }, [columnWidths, columnWidthsStorageKey]);
+
+  useEffect(() => {
+    localStorage.setItem(visibleColumnsStorageKey, JSON.stringify(visibleColumns));
+  }, [visibleColumns, visibleColumnsStorageKey]);
 
   useEffect(() => {
     localStorage.setItem(
@@ -504,6 +569,7 @@ export function WorkItemsGrid({
   function showBulkToast(results: BulkWorkItemResult[]) {
     const failed = results.filter((r) => r.error).length;
     const succeeded = results.length - failed;
+    setBulkFailures(results.filter((r) => r.error));
     const msg =
       failed === 0
         ? `${succeeded} item${succeeded === 1 ? "" : "s"} updated`
@@ -564,6 +630,35 @@ export function WorkItemsGrid({
     onSuccess: (results) => {
       setBulkAssignOpen(false);
       setBulkAssignQuery("");
+      setCheckedIds(new Set());
+      setLastCheckedIndex(null);
+      showBulkToast(results);
+      invalidateWorkItemMutationCaches(queryClient);
+    },
+  });
+
+  const bulkPriorityMutation = useMutation({
+    mutationFn: async (priority: number) => {
+      const groups = new Map<string, typeof checkedItems>();
+      for (const item of checkedItems) {
+        const key = `${item.organizationId}:${item.projectId}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(item);
+      }
+      const allResults: BulkWorkItemResult[] = [];
+      for (const [, items] of groups) {
+        const r = await setWorkItemsPriority({
+          organizationId: items[0].organizationId,
+          projectId: items[0].projectId,
+          workItemIds: items.map((i) => i.id),
+          priority,
+        });
+        allResults.push(...r);
+      }
+      return allResults;
+    },
+    onSuccess: (results) => {
+      setBulkPriorityOpen(false);
       setCheckedIds(new Set());
       setLastCheckedIndex(null);
       showBulkToast(results);
@@ -731,6 +826,8 @@ export function WorkItemsGrid({
       }
       setBulkAssignOpen(false);
       setBulkStateOpen(false);
+      setBulkPriorityOpen(false);
+      setColumnMenuRect(null);
       return;
     }
     if (displayed.length === 0) return;
@@ -781,6 +878,7 @@ export function WorkItemsGrid({
       e.preventDefault();
       if (checkedItems.length > 0) {
         setBulkStateOpen(false);
+        setBulkPriorityOpen(false);
         setBulkAssignOpen(true);
       } else {
         setOpenAssigneeRequest((value) => value + 1);
@@ -789,17 +887,42 @@ export function WorkItemsGrid({
       e.preventDefault();
       if (checkedItems.length > 0) {
         setBulkAssignOpen(false);
+        setBulkPriorityOpen(false);
         setBulkStateOpen(true);
       } else {
         setOpenStateRequest((value) => value + 1);
       }
     } else if (e.key === "p" || e.key === "P") {
       e.preventDefault();
-      setOpenPriorityRequest((value) => value + 1);
+      if (checkedItems.length > 0) {
+        setBulkAssignOpen(false);
+        setBulkStateOpen(false);
+        setBulkPriorityOpen(true);
+      } else {
+        setOpenPriorityRequest((value) => value + 1);
+      }
     }
   }
 
-  const wiColTemplate = gridColumnTemplate(columnWidths, 3, ["28px"]);
+  function toggleColumnVisibility(column: WiSortKey) {
+    if (WI_GRID_REQUIRED_COLUMNS.includes(column)) return;
+    setVisibleColumns((current) =>
+      current.includes(column)
+        ? current.filter((value) => value !== column)
+        : WI_GRID_KEYS.filter((value) => value === column || current.includes(value)),
+    );
+  }
+
+  function resetColumnVisibility() {
+    setVisibleColumns([...WI_GRID_KEYS]);
+    setColumnWidths([...DEFAULT_WI_COLUMN_WIDTHS]);
+  }
+
+  const visibleColumnWidths = visibleColumns.map(
+    (column) => columnWidths[WI_GRID_KEYS.indexOf(column)],
+  );
+  const wiFlexibleIndex = Math.max(0, visibleColumns.indexOf("title"));
+  const wiColTemplate = gridColumnTemplate(visibleColumnWidths, wiFlexibleIndex, ["28px"]);
   const hasActiveFilters = (Object.values(columnFilters) as (Set<string> | undefined)[]).some(v => v && v.size > 0);
   const firstVirtualRow = Math.max(
     0,
@@ -834,19 +957,48 @@ export function WorkItemsGrid({
           count={checkedItems.length}
           onClear={() => { setCheckedIds(new Set()); setLastCheckedIndex(null); }}
           stateOpen={bulkStateOpen}
-          onStateOpenChange={setBulkStateOpen}
+          onStateOpenChange={(open) => {
+            setBulkStateOpen(open);
+            if (open) {
+              setBulkAssignOpen(false);
+              setBulkPriorityOpen(false);
+            }
+          }}
           stateOptions={bulkStateOptions}
           stateLoading={bulkStatesQuery.isFetching}
           statePending={bulkStateMutation.isPending}
           onStateSelect={(state) => bulkStateMutation.mutate(state)}
           assignOpen={bulkAssignOpen}
-          onAssignOpenChange={(open) => { setBulkAssignOpen(open); if (!open) setBulkAssignQuery(""); }}
+          onAssignOpenChange={(open) => {
+            setBulkAssignOpen(open);
+            if (!open) setBulkAssignQuery("");
+            if (open) {
+              setBulkStateOpen(false);
+              setBulkPriorityOpen(false);
+            }
+          }}
           assignQuery={bulkAssignQuery}
           onAssignQueryChange={setBulkAssignQuery}
           assignOptions={bulkMentionsQuery.data ?? []}
           assignLoading={bulkMentionsQuery.isFetching}
           assignPending={bulkAssignMutation.isPending}
           onAssignSelect={(candidate) => bulkAssignMutation.mutate(candidate.uniqueName ?? candidate.displayName)}
+          priorityOpen={bulkPriorityOpen}
+          onPriorityOpenChange={(open) => {
+            setBulkPriorityOpen(open);
+            if (open) {
+              setBulkStateOpen(false);
+              setBulkAssignOpen(false);
+            }
+          }}
+          priorityPending={bulkPriorityMutation.isPending}
+          onPrioritySelect={(priority) => bulkPriorityMutation.mutate(priority)}
+        />
+      ) : null}
+      {bulkFailures.length > 0 ? (
+        <BulkFailurePanel
+          failures={bulkFailures}
+          onDismiss={() => setBulkFailures([])}
         />
       ) : null}
       <div
@@ -859,7 +1011,7 @@ export function WorkItemsGrid({
       >
         <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-white">
           <div ref={gridScrollRef} className="min-h-0 flex-1 overflow-auto">
-            <div className="min-w-[680px]">
+            <div className="min-w-[520px]">
               <div
                 role="row"
                 className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
@@ -888,7 +1040,7 @@ export function WorkItemsGrid({
                     className="h-3.5 w-3.5 cursor-pointer rounded border-gray-300"
                   />
                 </div>
-                {WI_GRID_KEYS.map((col, i) => (
+                {visibleColumns.map((col, i) => (
                   <WiSortHeaderButton
                     key={col}
                     column={col}
@@ -897,13 +1049,13 @@ export function WorkItemsGrid({
                     filterActive={isFilterableColumn(col) && !!(columnFilters[col]?.size)}
                     onFilterOpen={isFilterableColumn(col) ? (el) => openFilter(col, el) : undefined}
                     resizeHandle={
-                      i < WI_GRID_KEYS.length - 1 ? (
+                      i < visibleColumns.length - 1 ? (
                         <ColumnResizeHandle
-                          columnIndex={i}
+                          columnIndex={WI_GRID_KEYS.indexOf(col)}
                           widths={columnWidths}
                           setWidths={setColumnWidths}
-                          min={WI_COLUMN_MIN_WIDTHS[i]}
-                          max={WI_COLUMN_MAX_WIDTHS[i]}
+                          min={WI_COLUMN_MIN_WIDTHS[WI_GRID_KEYS.indexOf(col)]}
+                          max={WI_COLUMN_MAX_WIDTHS[WI_GRID_KEYS.indexOf(col)]}
                         />
                       ) : undefined
                     }
@@ -954,6 +1106,7 @@ export function WorkItemsGrid({
                         selected={i === selectedIndex}
                         checked={checkedIds.has(`${item.organizationId}:${item.projectId}:${item.id}`)}
                         columnTemplate={wiColTemplate}
+                        visibleColumns={visibleColumns}
                         onSelect={() => setSelectedIndex(i)}
                         onCheckedChange={(checked, shiftKey) => handleCheckboxChange(i, checked, shiftKey)}
                       />
@@ -967,7 +1120,7 @@ export function WorkItemsGrid({
             </div>
           </div>
 
-          <div className="flex items-center justify-between border-t border-border px-2 py-1 text-xs text-muted-foreground">
+          <div className="flex items-center justify-between gap-2 border-t border-border px-2 py-1 text-xs text-muted-foreground">
             <span>
               {loading
                 ? "Loading…"
@@ -978,7 +1131,16 @@ export function WorkItemsGrid({
                   : "Ready"}
               {dataUpdatedAt ? ` · data ${formatRelativeDate(new Date(dataUpdatedAt).toISOString())}` : ""}
             </span>
-            <ShortcutHint>Alt+G</ShortcutHint>
+            <span className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={(event) => setColumnMenuRect(event.currentTarget.getBoundingClientRect())}
+                className="rounded border border-border bg-white px-2 py-0.5 text-xs hover:bg-secondary"
+              >
+                Columns
+              </button>
+              <ShortcutHint>Alt+G</ShortcutHint>
+            </span>
           </div>
         </div>
 
@@ -1017,6 +1179,15 @@ export function WorkItemsGrid({
           onToggle={(value) => toggleFilter(openFilterCol, value)}
           onClearAll={() => clearColumnFilter(openFilterCol)}
           onClose={() => { setOpenFilterCol(null); setFilterAnchorRect(null); }}
+        />
+      ) : null}
+      {columnMenuRect ? (
+        <ColumnVisibilityDropdown
+          anchorRect={columnMenuRect}
+          visibleColumns={visibleColumns}
+          onToggle={toggleColumnVisibility}
+          onReset={resetColumnVisibility}
+          onClose={() => setColumnMenuRect(null)}
         />
       ) : null}
     </div>
@@ -1118,6 +1289,117 @@ function ColumnFilterDropdown({
   );
 }
 
+function ColumnVisibilityDropdown({
+  anchorRect,
+  visibleColumns,
+  onToggle,
+  onReset,
+  onClose,
+}: {
+  anchorRect: DOMRect;
+  visibleColumns: WiSortKey[];
+  onToggle: (column: WiSortKey) => void;
+  onReset: () => void;
+  onClose: () => void;
+}) {
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onMouseDown(e: MouseEvent) {
+      if (!dropdownRef.current?.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [onClose]);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+      }
+    }
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [onClose]);
+
+  const top = Math.min(anchorRect.bottom + 2, window.innerHeight - 300);
+  const left = Math.min(anchorRect.left, window.innerWidth - 224);
+
+  return (
+    <div
+      ref={dropdownRef}
+      className="fixed z-50 w-56 rounded-md border border-border bg-white p-1 shadow-lg"
+      style={{ top, left }}
+    >
+      <div className="border-b border-border px-2 py-1.5 text-xs font-semibold text-foreground">
+        Visible columns
+      </div>
+      <div className="py-1">
+        {WI_GRID_KEYS.map((column) => {
+          const required = WI_GRID_REQUIRED_COLUMNS.includes(column);
+          return (
+            <label
+              key={column}
+              className="flex cursor-pointer select-none items-center justify-between gap-2 rounded px-2 py-1 text-xs hover:bg-secondary"
+            >
+              <span>{wiSortLabels[column]}</span>
+              <input
+                type="checkbox"
+                checked={visibleColumns.includes(column)}
+                disabled={required}
+                onChange={() => onToggle(column)}
+                className="h-3 w-3"
+              />
+            </label>
+          );
+        })}
+      </div>
+      <div className="border-t border-border p-1">
+        <button
+          type="button"
+          onClick={onReset}
+          className="w-full rounded px-2 py-1 text-left text-xs text-muted-foreground hover:bg-secondary hover:text-foreground"
+        >
+          Reset columns
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function BulkFailurePanel({
+  failures,
+  onDismiss,
+}: {
+  failures: BulkWorkItemResult[];
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="mb-2 rounded-md border border-destructive/30 bg-red-50 px-3 py-2 text-xs text-destructive">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-medium">
+          {failures.length} bulk update failure{failures.length === 1 ? "" : "s"}
+        </span>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="rounded px-1 text-destructive hover:bg-red-100"
+        >
+          Dismiss
+        </button>
+      </div>
+      <ul className="mt-1 max-h-24 overflow-auto">
+        {failures.map((failure) => (
+          <li key={failure.id} className="truncate">
+            #{failure.id}: {failure.error}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function BulkActionBar({
   count,
   onClear,
@@ -1135,6 +1417,10 @@ function BulkActionBar({
   assignLoading,
   assignPending,
   onAssignSelect,
+  priorityOpen,
+  onPriorityOpenChange,
+  priorityPending,
+  onPrioritySelect,
 }: {
   count: number;
   onClear: () => void;
@@ -1152,6 +1438,10 @@ function BulkActionBar({
   assignLoading: boolean;
   assignPending: boolean;
   onAssignSelect: (candidate: MentionCandidate) => void;
+  priorityOpen: boolean;
+  onPriorityOpenChange: (open: boolean) => void;
+  priorityPending: boolean;
+  onPrioritySelect: (priority: number) => void;
 }) {
   return (
     <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-1.5">
@@ -1239,6 +1529,39 @@ function BulkActionBar({
                   </div>
                 )}
               </div>
+            </div>
+          ) : null}
+        </div>
+        <div className="relative">
+          <button
+            type="button"
+            disabled={priorityPending}
+            onClick={() => onPriorityOpenChange(!priorityOpen)}
+            className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-white px-2.5 text-xs font-medium hover:bg-secondary disabled:opacity-60"
+          >
+            {priorityPending ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : null}
+            Priority
+            <ChevronDown className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
+          </button>
+          {priorityOpen ? (
+            <div className="absolute left-0 top-full z-30 mt-1 min-w-[96px] rounded-md border border-border bg-white py-1 shadow-lg">
+              {[1, 2, 3, 4].map((priority, index) => (
+                <button
+                  key={priority}
+                  type="button"
+                  autoFocus={index === 0}
+                  onClick={() => {
+                    onPrioritySelect(priority);
+                    onPriorityOpenChange(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") onPriorityOpenChange(false);
+                  }}
+                  className="flex w-full items-center px-3 py-1.5 text-left text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {priority}
+                </button>
+              ))}
             </div>
           ) : null}
         </div>

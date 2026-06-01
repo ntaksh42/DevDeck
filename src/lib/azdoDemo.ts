@@ -23,6 +23,7 @@ import type {
   SearchWorkItemMentionsInput,
   SearchWorkItemsInput,
   SetWorkItemPriorityInput,
+  SetWorkItemsPriorityInput,
   SetWorkItemsStateInput,
   SetWorkItemStateInput,
   UpdateAppSettingsInput,
@@ -180,6 +181,10 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     }
     case "assign_work_items": {
       const input = (args as { input?: AssignWorkItemsInput } | undefined)?.input;
+      return (input?.workItemIds ?? []).map((id) => ({ id, error: null }));
+    }
+    case "set_work_items_priority": {
+      const input = (args as { input?: SetWorkItemsPriorityInput } | undefined)?.input;
       return (input?.workItemIds ?? []).map((id) => ({ id, error: null }));
     }
     case "search_commits": {

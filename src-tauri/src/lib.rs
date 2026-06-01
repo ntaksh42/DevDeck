@@ -40,8 +40,8 @@ use work_items::{
     GetWorkItemPreviewInput, ListMyWorkItemsInput, ListWorkItemProjectsInput,
     ListWorkItemTypeStatesInput, MentionCandidate, RunWorkItemQueryInput, SavedQueryResult,
     SearchWorkItemMentionsInput, SearchWorkItemsInput, SetWorkItemPriorityInput,
-    SetWorkItemStateInput, SetWorkItemsStateInput, WorkItemComment, WorkItemImage, WorkItemPreview,
-    WorkItemProjectOption, WorkItemService, WorkItemSummary,
+    SetWorkItemStateInput, SetWorkItemsPriorityInput, SetWorkItemsStateInput, WorkItemComment,
+    WorkItemImage, WorkItemPreview, WorkItemProjectOption, WorkItemService, WorkItemSummary,
 };
 
 #[derive(Clone)]
@@ -266,6 +266,15 @@ async fn assign_work_items(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn set_work_items_priority(
+    input: SetWorkItemsPriorityInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<BulkWorkItemResult>> {
+    state.work_items.set_items_priority(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn list_work_item_type_states(
     input: ListWorkItemTypeStatesInput,
     state: State<'_, AppState>,
@@ -401,6 +410,7 @@ pub fn run() {
             get_saved_query,
             set_work_items_state,
             assign_work_items,
+            set_work_items_priority,
             search_commits,
             list_commit_repositories,
             trigger_sync
