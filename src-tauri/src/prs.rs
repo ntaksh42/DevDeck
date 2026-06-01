@@ -1,4 +1,4 @@
-use azdo_client::{AdoClient, PullRequestStatus};
+use azdo_client::{AdoClient, AdoError, PullRequestStatus};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
@@ -196,6 +196,10 @@ fn matches_query(summary: &PullRequestSummary, query: &str) -> bool {
     .any(|value| value.to_ascii_lowercase().contains(query))
 }
 
+fn is_ado_not_found(error: &AdoError) -> bool {
+    matches!(error, AdoError::Api { status: 404, .. })
+}
+
 // ── Cache sync ────────────────────────────────────────────────────────────────
 
 pub async fn sync_prs_for_org(
@@ -229,11 +233,37 @@ async fn do_sync_prs(db: &AppDatabase, client: &AdoClient, org: &Organization) -
     let mut cached_prs: Vec<CachedPr> = Vec::new();
 
     for project in &projects {
-        let repos = client.list_repositories(&project.id).await?;
+        let repos = match client.list_repositories(&project.id).await {
+            Ok(repos) => repos,
+            Err(e) if is_ado_not_found(&e) => {
+                tracing::warn!(
+                    org = %org.name,
+                    project = %project.name,
+                    error = %e,
+                    "repository list returned 404, skipping project"
+                );
+                continue;
+            }
+            Err(e) => return Err(e.into()),
+        };
         for repo in repos {
-            let prs = client
+            let prs = match client
                 .list_pull_requests(&project.id, &repo.id, PullRequestStatus::Active)
-                .await?;
+                .await
+            {
+                Ok(prs) => prs,
+                Err(e) if is_ado_not_found(&e) => {
+                    tracing::warn!(
+                        org = %org.name,
+                        project = %project.name,
+                        repository = %repo.name,
+                        error = %e,
+                        "pull request list returned 404, skipping repository"
+                    );
+                    continue;
+                }
+                Err(e) => return Err(e.into()),
+            };
             for pr in prs {
                 let web_url = format!(
                     "{}/{}/_git/{}/pullrequest/{}",
@@ -265,9 +295,22 @@ async fn do_sync_prs(db: &AppDatabase, client: &AdoClient, org: &Organization) -
         let mut cached_reviews: Vec<CachedReviewPr> = Vec::new();
 
         for project in &projects {
-            let prs = client
+            let prs = match client
                 .list_pull_requests_by_reviewer(&project.id, user_id, 200)
-                .await?;
+                .await
+            {
+                Ok(prs) => prs,
+                Err(e) if is_ado_not_found(&e) => {
+                    tracing::warn!(
+                        org = %org.name,
+                        project = %project.name,
+                        error = %e,
+                        "review pull request list returned 404, skipping project"
+                    );
+                    continue;
+                }
+                Err(e) => return Err(e.into()),
+            };
             for pr in prs {
                 let Some(repo) = &pr.repository else { continue };
                 let repo_id = repo.id.clone();
@@ -364,5 +407,18 @@ mod tests {
         assert!(matches_query(&summary, "test user"));
         assert!(matches_query(&summary, "pr-search"));
         assert!(!matches_query(&summary, "work item"));
+    }
+
+    #[test]
+    fn is_ado_not_found_only_matches_404_api_errors() {
+        assert!(is_ado_not_found(&AdoError::Api {
+            status: 404,
+            body: "not found".to_string(),
+        }));
+        assert!(!is_ado_not_found(&AdoError::Api {
+            status: 500,
+            body: "server error".to_string(),
+        }));
+        assert!(!is_ado_not_found(&AdoError::Unauthorized));
     }
 }
