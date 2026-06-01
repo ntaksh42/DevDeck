@@ -1,4 +1,4 @@
-name: Release
+name: Release Windows x64 Installer
 
 on:
   push:
@@ -10,14 +10,20 @@ permissions:
 
 jobs:
   release:
-    name: Build & Release (Windows)
+    name: Build & Release (Windows x64)
     runs-on: windows-latest
+    env:
+      CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
     steps:
       - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: windows-x64-installer
 
       - uses: pnpm/action-setup@v4
         with:
@@ -30,6 +36,12 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Check frontend
+        run: pnpm build
+
+      - name: Check Rust
+        run: cargo test --workspace --target x86_64-pc-windows-msvc
+
       - name: Build and publish release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -38,9 +50,23 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: AzDoDeck ${{ github.ref_name }}
           releaseBody: |
+            Windows x64 installers are attached below.
+
+            - `*.exe`: NSIS installer, recommended for most users.
+            - `*.msi`: MSI installer for managed Windows environments.
+
             See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/CHANGELOG.md) for what changed in this release.
 
             > **Windows SmartScreen warning**: Because this release is not code-signed yet, Windows may show a SmartScreen prompt. Click "More info" → "Run anyway" to proceed. This warning disappears once enough users install the app.
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
-          args: --bundles nsis,msi
+          args: --target x86_64-pc-windows-msvc --bundles nsis,msi
+
+      - name: Upload Windows installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AzDoDeck-windows-x64-installers
+          path: |
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+          if-no-files-found: error

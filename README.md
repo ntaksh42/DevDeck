@@ -22,7 +22,7 @@ A Windows desktop dashboard for Azure DevOps. Search pull requests, work items, 
 
 ## Installation
 
-1. Go to the [Releases](../../releases) page and download the latest `.msi` or `.exe` installer.
+1. Go to the [latest GitHub Release](../../releases/latest) and download the Windows x64 `.exe` or `.msi` installer.
 2. Run the installer. On first launch Windows may show a SmartScreen prompt — click **More info → Run anyway** (see [SmartScreen note](#windows-smartscreen) below).
 3. Connect an Azure DevOps organization on the Settings screen.
 
@@ -144,6 +144,21 @@ pnpm tauri build
 ```
 
 Produces an MSI and NSIS installer in `src-tauri/target/release/bundle/`.
+
+### Publishing Windows installers
+
+Release installers are built by GitHub Actions when a version tag is pushed:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The release workflow builds Windows x64 only and publishes both installer
+formats to the GitHub Release:
+
+- `.exe` NSIS installer for normal interactive installs.
+- `.msi` installer for managed Windows environments.
 
 ---
 
