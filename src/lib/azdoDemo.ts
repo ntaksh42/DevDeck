@@ -32,6 +32,14 @@ import type {
   WorkItemProjectOption,
   WorkItemSummary,
 } from "@/lib/azdoCommands";
+import {
+  applyPullRequestScenario,
+  applyReviewPullRequestScenario,
+  applyWorkItemPreviewScenario,
+  applyWorkItemScenario,
+  demoResponseDelayMs,
+  shouldFailDemoCommand,
+} from "@/lib/azdoDemoHarness";
 const demoOrganization: Organization = {
   id: "contoso",
   name: "contoso",
@@ -55,7 +63,11 @@ let demoSettings: AppSettings = {
 const deletedDemoWorkItemComments = new Set<number>();
 
 export async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
-  await new Promise((resolve) => window.setTimeout(resolve, 100));
+  await new Promise((resolve) => window.setTimeout(resolve, demoResponseDelayMs()));
+
+  if (shouldFailDemoCommand(command)) {
+    throw new Error(`Demo harness forced ${command} to fail`);
+  }
 
   switch (command) {
     case "list_organizations":
@@ -354,7 +366,7 @@ function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[]
   const query = input?.query?.trim().toLowerCase();
   const statusFilter = input?.status ?? "active";
 
-  return all.filter((pr) => {
+  return applyPullRequestScenario(all).filter((pr) => {
     if (input?.projectId && pr.projectId !== input.projectId) return false;
     if (input?.repositoryId && pr.repositoryId !== input.repositoryId) return false;
     if (statusFilter !== "all" && pr.status !== statusFilter) return false;
@@ -485,7 +497,7 @@ function demoWorkItems(input?: SearchWorkItemsInput): WorkItemSummary[] {
   const stateFilter = input?.state && input.state !== "all" ? input.state : undefined;
   const typeFilter = input?.workItemType?.trim() || undefined;
 
-  return all.filter((item) => {
+  return applyWorkItemScenario(all).filter((item) => {
     if (input?.projectId && item.projectId !== input.projectId) return false;
     if (stateFilter && item.state !== stateFilter) return false;
     if (typeFilter && item.workItemType !== typeFilter) return false;
@@ -501,7 +513,7 @@ function demoWorkItems(input?: SearchWorkItemsInput): WorkItemSummary[] {
 }
 
 function demoMyWorkItems(): WorkItemSummary[] {
-  return [
+  return applyWorkItemScenario([
     {
       organizationId: "contoso",
       projectId: "platform",
@@ -562,7 +574,7 @@ function demoMyWorkItems(): WorkItemSummary[] {
       changedDate: "2026-05-23T07:00:00Z",
       webUrl: "https://dev.azure.com/contoso/Infrastructure/_workitems/edit/51",
     },
-  ];
+  ]);
 }
 
 function demoWorkItemProjects(): WorkItemProjectOption[] {
@@ -609,7 +621,7 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
         (!input?.projectId || item.projectId === input.projectId),
     ) ?? allItems[0];
 
-  return {
+  return applyWorkItemPreviewScenario({
     organizationId: summary.organizationId,
     projectId: summary.projectId,
     projectName: summary.projectName,
@@ -653,7 +665,7 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
         createdDate: "2026-05-26T09:00:00Z",
       },
     ].filter((comment) => !deletedDemoWorkItemComments.has(comment.id)),
-  };
+  });
 }
 
 function demoAssignWorkItem(input?: AssignWorkItemInput): WorkItemPreview {
@@ -783,7 +795,7 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
   const hr = 3_600_000;
   const day = 86_400_000;
 
-  return [
+  return applyReviewPullRequestScenario([
     {
       organizationId: "contoso",
       projectId: "platform",
@@ -903,7 +915,7 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myIsRequired: false,
       isDraft: false,
     },
-  ];
+  ]);
 }
 
 function demoCommitRepositories(): CommitRepositoryOption[] {

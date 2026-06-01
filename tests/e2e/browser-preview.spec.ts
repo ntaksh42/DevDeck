@@ -75,4 +75,41 @@ test.describe("browser preview", () => {
     await expect(main.getByRole("heading", { name: "Review result previews" })).toBeVisible();
     await expect(main.getByText("https://dev.azure.com/contoso")).toBeVisible();
   });
+
+  test("renders rich Azure DevOps work item content through the demo harness", async ({
+    page,
+  }) => {
+    await page.goto("/?scenario=rich-text");
+    const main = page.getByRole("main");
+    const sidebar = page.getByRole("complementary").first();
+
+    await sidebar.getByRole("button", { name: "Search" }).nth(1).click();
+    await main.getByPlaceholder("Search work items…").fill("onboarding");
+    await main.getByRole("button", { name: "Search" }).click();
+
+    await expect(
+      main.frameLocator('iframe[title="Description"]').getByText("rich Azure DevOps content"),
+    ).toBeVisible();
+    await expect(
+      main.frameLocator('iframe[title="Description"]').getByText("Renders through fetch_work_item_image"),
+    ).toBeVisible();
+  });
+
+  test("can exercise large demo datasets", async ({ page }) => {
+    await page.goto("/?scenario=large-data");
+    const main = page.getByRole("main");
+    const sidebar = page.getByRole("complementary").first();
+
+    await sidebar.getByRole("button", { name: "Search" }).first().click();
+    await main.getByRole("button", { name: "Search" }).click();
+
+    await expect(
+      main.getByText("Add pull request search dashboard #1", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      main.getByText("Refactor authentication flow with OAuth 2.0 PKCE #2", {
+        exact: true,
+      }),
+    ).toBeVisible();
+  });
 });
