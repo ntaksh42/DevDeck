@@ -653,6 +653,11 @@ export function WorkItemPreviewPanel({
                 assigneeControl={
                   <AssigneePicker
                     current={preview.assignedTo}
+                    error={
+                      assigneeOptionsQuery.isError
+                        ? commandErrorMessage(assigneeOptionsQuery.error)
+                        : null
+                    }
                     loading={assigneeOptionsQuery.isFetching}
                     onOpenChange={(open) => {
                       setAssigneeOpen(open);
@@ -1572,6 +1577,7 @@ function PriorityPicker({
 
 function AssigneePicker({
   current,
+  error,
   loading,
   onOpenChange,
   onQueryChange,
@@ -1583,6 +1589,7 @@ function AssigneePicker({
   shortcut,
 }: {
   current: string | null;
+  error: string | null;
   loading: boolean;
   onOpenChange: (open: boolean) => void;
   onQueryChange: (query: string) => void;
@@ -1626,6 +1633,11 @@ function AssigneePicker({
             className="mb-1 h-7 w-full rounded border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
           />
           <div className="max-h-44 overflow-auto">
+            {error && query.trim() ? (
+              <div className="mb-1 rounded border border-destructive/30 bg-destructive/5 px-2 py-1 text-[11px] text-destructive">
+                Search failed: {error}
+              </div>
+            ) : null}
             {loading ? (
               <div className="px-2 py-1.5 text-xs text-muted-foreground">Searching...</div>
             ) : options.length > 0 ? (

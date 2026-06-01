@@ -733,16 +733,21 @@ impl WorkItemService {
 }
 
 fn summarize_mention_candidate(identity: Identity) -> Option<MentionCandidate> {
-    let id = identity.id?;
+    let id = identity.id.clone()?;
+    let unique_name = identity
+        .unique_name
+        .clone()
+        .or_else(|| identity.property_value("Mail").map(ToString::to_string))
+        .or_else(|| identity.property_value("Account").map(ToString::to_string));
     let display_name = identity
         .provider_display_name
         .or(identity.custom_display_name)
         .or(identity.display_name)
-        .or_else(|| identity.unique_name.clone())?;
+        .or_else(|| unique_name.clone())?;
     Some(MentionCandidate {
         id,
         display_name,
-        unique_name: identity.unique_name,
+        unique_name,
     })
 }
 
@@ -1262,12 +1267,20 @@ mod tests {
 
     #[test]
     fn summarize_mention_candidate_prefers_provider_display_name() {
+        let mut properties = HashMap::new();
+        properties.insert(
+            "Mail".to_string(),
+            azdo_client::identity::IdentityProperty {
+                value: Some("alice@example.com".to_string()),
+            },
+        );
         let candidate = summarize_mention_candidate(Identity {
             id: Some("user-1".to_string()),
             provider_display_name: Some("Alice Johnson".to_string()),
             custom_display_name: None,
             display_name: Some("Alice".to_string()),
-            unique_name: Some("alice@example.com".to_string()),
+            unique_name: None,
+            properties: Some(properties),
         })
         .unwrap();
 
