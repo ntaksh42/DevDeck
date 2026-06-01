@@ -16,16 +16,16 @@ import {
   type SearchPullRequestsInput,
   type PullRequestSummary,
 } from '@/lib/azdoCommands';
-import { clamp, storedNumbers, isEditableTarget, formatDate, formatRelativeDate } from '@/lib/utils';
+import { clamp, storedNumbers, gridColumnTemplate, isEditableTarget, formatDate, formatRelativeDate } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
 import { ColumnResizeHandle } from '@/components/ResizeHandle';
 import { ShortcutHint } from '@/components/ShortcutHint';
 import { ErrorState } from '@/components/StateDisplay';
 
-const DEFAULT_PR_SEARCH_COLUMN_WIDTHS = [64, 80, 300, 160, 128, 72, 160];
-const PR_SEARCH_COLUMN_MIN_WIDTHS = [56, 70, 200, 120, 100, 64, 120];
+const DEFAULT_PR_SEARCH_COLUMN_WIDTHS = [56, 70, 220, 130, 104, 64, 120];
+const PR_SEARCH_COLUMN_MIN_WIDTHS = [52, 64, 160, 104, 86, 58, 100];
 const PR_SEARCH_COLUMN_MAX_WIDTHS = [120, 140, 720, 360, 280, 120, 360];
-const PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY = 'azdodeck:layout:prSearchGridColumnWidths';
+const PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY = 'azdodeck:layout:prSearchGridColumnWidths:v2';
 export function PullRequestSearch({
   organizations,
 }: {
@@ -202,7 +202,7 @@ function PullRequestResults({
     localStorage.setItem(PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
   }, [columnWidths]);
 
-  const columnTemplate = columnWidths.map((w) => `${w}px`).join(" ");
+  const columnTemplate = gridColumnTemplate(columnWidths, 2);
 
   const countLabel = useMemo(() => {
     if (loading) return "Searching";

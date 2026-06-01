@@ -25,6 +25,7 @@ import {
   splitSearchTerms,
   storedNumbers,
   storedNumber,
+  gridColumnTemplate,
   isEditableTarget,
 
   formatRelativeDate,
@@ -37,10 +38,10 @@ import { LoadingState, ErrorState, PreviewEmptyState } from '@/components/StateD
 
 const DEFAULT_REVIEW_PREVIEW_WIDTH = 420;
 const REVIEW_PREVIEW_WIDTH_STORAGE_KEY = 'azdodeck:layout:reviewPreviewWidth';
-const DEFAULT_PR_GRID_COLUMN_WIDTHS = [60, 190, 320, 104, 60, 104, 76, 104];
-const PR_GRID_COLUMN_MIN_WIDTHS = [56, 160, 220, 96, 56, 96, 72, 96];
+const DEFAULT_PR_GRID_COLUMN_WIDTHS = [52, 110, 180, 82, 56, 76, 68, 78];
+const PR_GRID_COLUMN_MIN_WIDTHS = [48, 96, 150, 72, 50, 68, 62, 70];
 const PR_GRID_COLUMN_MAX_WIDTHS = [120, 520, 960, 240, 120, 240, 180, 240];
-const PR_GRID_COLUMN_WIDTHS_STORAGE_KEY = 'azdodeck:layout:myReviewsGridColumnWidths';
+const PR_GRID_COLUMN_WIDTHS_STORAGE_KEY = 'azdodeck:layout:myReviewsGridColumnWidths:v2';
 type VoteValue = -10 | -5 | 0 | 5 | 10 | number;
 
 function VoteBadge({ vote, label }: { vote: VoteValue; label: string }) {
@@ -532,7 +533,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     { value: "all", label: "All" },
   ];
 
-  const COLS = columnWidths.map((width) => `${width}px`).join(" ");
+  const COLS = gridColumnTemplate(columnWidths, 2);
 
   return (
     <div
@@ -651,7 +652,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
         {/* Grid */}
         <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-white">
           <div className="min-h-0 flex-1 overflow-auto">
-            <div className="min-w-[980px]">
+            <div className="min-w-[720px]">
               {/* Column headers */}
               <div
                 role="row"

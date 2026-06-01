@@ -40,6 +40,17 @@ export function storedNumbers(
   }
 }
 
+export function gridColumnTemplate(
+  widths: number[],
+  flexibleIndex: number,
+  prefixColumns: string[] = [],
+): string {
+  const columns = widths.map((width, index) =>
+    index === flexibleIndex ? `minmax(${width}px, 1fr)` : `${width}px`,
+  );
+  return [...prefixColumns, ...columns].join(" ");
+}
+
 export function isEditableTarget(target: EventTarget | null): boolean {
   const element = target instanceof HTMLElement ? target : null;
   return !!element?.closest("input, textarea, select, [contenteditable='true']");

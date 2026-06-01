@@ -21,6 +21,7 @@ import {
 import {
   clamp,
   storedNumbers,
+  gridColumnTemplate,
   isEditableTarget,
   formatDate,
   formatRelativeDate,
@@ -30,10 +31,10 @@ import { ShortcutHint } from "@/components/ShortcutHint";
 import { ColumnResizeHandle } from "@/components/ResizeHandle";
 import { ErrorState } from "@/components/StateDisplay";
 
-const DEFAULT_COMMIT_COLUMN_WIDTHS = [78, 88, 320, 170, 156];
-const COMMIT_COLUMN_MIN_WIDTHS = [72, 80, 200, 140, 120];
+const DEFAULT_COMMIT_COLUMN_WIDTHS = [72, 80, 220, 140, 120];
+const COMMIT_COLUMN_MIN_WIDTHS = [66, 72, 160, 110, 96];
 const COMMIT_COLUMN_MAX_WIDTHS = [140, 160, 720, 380, 340];
-const COMMIT_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:commitGridColumnWidths";
+const COMMIT_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:commitGridColumnWidths:v2";
 
 export function CommitSearch({ organizations }: { organizations: Organization[] }) {
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
@@ -452,7 +453,7 @@ function CommitResults({
     localStorage.setItem(COMMIT_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
   }, [columnWidths]);
 
-  const commitColTemplate = columnWidths.map((w) => `${w}px`).join(" ");
+  const commitColTemplate = gridColumnTemplate(columnWidths, 2);
 
   const sorted = useMemo(() => {
     const dir = sort.direction === "asc" ? 1 : -1;
@@ -543,7 +544,7 @@ function CommitResults({
           className="overflow-x-auto"
           onKeyDown={handleKeyDown}
         >
-          <div className="min-w-[720px]">
+          <div className="min-w-[680px]">
             <div
               role="row"
               className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"

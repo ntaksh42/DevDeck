@@ -24,6 +24,7 @@ import {
 import {
   storedNumbers,
   storedNumber,
+  gridColumnTemplate,
   isEditableTarget,
   focusPrimaryPreview,
   formatRelativeDate,
@@ -35,10 +36,10 @@ import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { LoadingState } from '@/components/StateDisplay';
 import { WorkItemPreviewPanel } from './WorkItemPreviewPanel';
 import { invalidateWorkItemMutationCaches, workItemQueryKeys } from './queryKeys';
-const DEFAULT_WI_COLUMN_WIDTHS = [60, 100, 80, 280, 130, 120, 90];
-const WI_COLUMN_MIN_WIDTHS = [56, 90, 80, 200, 120, 100, 80];
+const DEFAULT_WI_COLUMN_WIDTHS = [46, 64, 60, 180, 82, 84, 68];
+const WI_COLUMN_MIN_WIDTHS = [44, 58, 56, 150, 70, 74, 60];
 const WI_COLUMN_MAX_WIDTHS = [120, 200, 180, 720, 300, 260, 160];
-const WI_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:wiSearchGridColumnWidths";
+const WI_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:wiSearchGridColumnWidths:v2";
 const DEFAULT_WORK_ITEM_PREVIEW_WIDTH = 440;
 const WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY = "azdodeck:layout:workItemPreviewWidth";
 const WI_GRID_ROW_HEIGHT = 29;
@@ -798,7 +799,7 @@ export function WorkItemsGrid({
     }
   }
 
-  const wiColTemplate = `28px ${columnWidths.map((w) => `${w}px`).join(" ")}`;
+  const wiColTemplate = gridColumnTemplate(columnWidths, 3, ["28px"]);
   const hasActiveFilters = (Object.values(columnFilters) as (Set<string> | undefined)[]).some(v => v && v.size > 0);
   const firstVirtualRow = Math.max(
     0,
@@ -858,7 +859,7 @@ export function WorkItemsGrid({
       >
         <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-white">
           <div ref={gridScrollRef} className="min-h-0 flex-1 overflow-auto">
-            <div className="min-w-[760px]">
+            <div className="min-w-[680px]">
               <div
                 role="row"
                 className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
