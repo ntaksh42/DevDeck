@@ -308,20 +308,28 @@ fn trigger_sync(state: State<'_, AppState>) -> Result<()> {
 }
 
 fn configure_show_window_hotkey(app: &AppHandle, hotkey: Option<&str>) -> Result<()> {
+    let shortcut = parse_show_window_hotkey(hotkey)?;
+
     app.global_shortcut()
         .unregister_all()
         .map_err(|error| AppError::InvalidInput(error.to_string()))?;
 
-    let Some(hotkey) = hotkey.map(str::trim).filter(|value| !value.is_empty()) else {
+    let Some(shortcut) = shortcut else {
         return Ok(());
     };
-    let shortcut = Shortcut::from_str(hotkey).map_err(|error| {
-        AppError::InvalidInput(format!("show window hotkey is invalid: {error}"))
-    })?;
     app.global_shortcut()
         .register(shortcut)
         .map_err(|error| AppError::InvalidInput(error.to_string()))?;
     Ok(())
+}
+
+fn parse_show_window_hotkey(hotkey: Option<&str>) -> Result<Option<Shortcut>> {
+    let Some(hotkey) = hotkey.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(None);
+    };
+    Shortcut::from_str(hotkey)
+        .map(Some)
+        .map_err(|error| AppError::InvalidInput(format!("show window hotkey is invalid: {error}")))
 }
 
 fn show_main_window(app: &AppHandle) {
@@ -399,4 +407,18 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_show_window_hotkey_validates_before_registration_changes() {
+        assert!(parse_show_window_hotkey(Some("Ctrl+Alt+D"))
+            .unwrap()
+            .is_some());
+        assert!(parse_show_window_hotkey(Some("   ")).unwrap().is_none());
+        assert!(parse_show_window_hotkey(Some("not a shortcut")).is_err());
+    }
 }

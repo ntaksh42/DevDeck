@@ -146,8 +146,6 @@ export function PullRequestSearch({
                 className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="active">Active</option>
-                <option value="completed">Completed</option>
-                <option value="abandoned">Abandoned</option>
                 <option value="all">All</option>
               </select>
             </label>
@@ -389,4 +387,3 @@ const PrSearchRow = forwardRef<
   );
 });
 PrSearchRow.displayName = "PrSearchRow";
-

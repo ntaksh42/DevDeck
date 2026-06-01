@@ -1,9 +1,9 @@
-import { type FormEvent, useState, useMemo } from "react";
+import { type FormEvent, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Info, Loader2, Search } from "lucide-react";
 import {
   searchWorkItems,
-  listCommitRepositories,
+  listWorkItemProjects,
   commandErrorMessage,
   type Organization,
 } from "@/lib/azdoCommands";
@@ -18,18 +18,13 @@ export function WorkItemSearch({ organizations }: { organizations: Organization[
   const [workItemType, setWorkItemType] = useState("");
   const [projectId, setProjectId] = useState("");
 
-  const repositoriesQuery = useQuery({
+  const projectsQuery = useQuery({
     queryKey: workItemQueryKeys.searchProjects(organizationId),
-    queryFn: () => listCommitRepositories({ organizationId }),
+    queryFn: () => listWorkItemProjects({ organizationId }),
     enabled: !!organizationId,
     staleTime: 5 * 60_000,
   });
-  const allRepositories = repositoriesQuery.data ?? [];
-  const projects = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const repo of allRepositories) seen.set(repo.projectId, repo.projectName);
-    return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
-  }, [allRepositories]);
+  const projects = projectsQuery.data ?? [];
 
   const mutation = useMutation({ mutationFn: searchWorkItems });
   const results = mutation.data ?? [];
@@ -74,13 +69,13 @@ export function WorkItemSearch({ organizations }: { organizations: Organization[
         <select
           value={projectId}
           onChange={(event) => setProjectId(event.target.value)}
-          disabled={repositoriesQuery.isLoading}
+          disabled={projectsQuery.isLoading}
           aria-label="Project"
           className="h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
         >
           <option value="">All projects</option>
           {projects.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
+            <option key={p.projectId} value={p.projectId}>{p.projectName}</option>
           ))}
         </select>
         <select

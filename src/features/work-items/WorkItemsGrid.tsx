@@ -18,6 +18,7 @@ import {
   commandErrorMessage,
   type BulkWorkItemResult,
   type MentionCandidate,
+  type WorkItemPreview,
   type WorkItemSummary,
 } from '@/lib/azdoCommands';
 import {
@@ -52,6 +53,10 @@ type WiSortKey =
   | "assignedTo"
   | "changedDate";
 type WiSortState = { key: WiSortKey; direction: SortDirection };
+
+function workItemSummaryKey(item: Pick<WorkItemSummary, "organizationId" | "projectId" | "id">): string {
+  return `${item.organizationId}:${item.projectId}:${item.id}`;
+}
 
 const wiSortLabels: Record<WiSortKey, string> = {
   id: "#",
@@ -328,6 +333,7 @@ export function WorkItemsGrid({
   const [openAssigneeRequest, setOpenAssigneeRequest] = useState(0);
   const [openStateRequest, setOpenStateRequest] = useState(0);
   const [openPriorityRequest, setOpenPriorityRequest] = useState(0);
+  const [itemOverrides, setItemOverrides] = useState<Map<string, Partial<WorkItemSummary>>>(new Map());
   const [columnFilters, setColumnFilters] = useState<Partial<Record<FilterableColumn, Set<string>>>>({});
   const [openFilterCol, setOpenFilterCol] = useState<FilterableColumn | null>(null);
   const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
@@ -366,9 +372,18 @@ export function WorkItemsGrid({
     );
   }, [previewWidth, previewWidthStorageKey]);
 
+  const effectiveResults = useMemo(
+    () =>
+      results.map((item) => ({
+        ...item,
+        ...(itemOverrides.get(workItemSummaryKey(item)) ?? {}),
+      })),
+    [itemOverrides, results],
+  );
+
   const sorted = useMemo(
     () =>
-      results
+      effectiveResults
         .map((item, index) => ({ item, index }))
         .sort((a, b) => {
           const result = compareWorkItems(a.item, b.item, sort.key);
@@ -376,16 +391,16 @@ export function WorkItemsGrid({
           return directed || a.index - b.index;
         })
         .map(({ item }) => item),
-    [results, sort],
+    [effectiveResults, sort],
   );
 
   const columnUniqueValues = useMemo(() => {
     const map = {} as Record<FilterableColumn, string[]>;
     for (const col of Object.keys(FILTERABLE_COLUMNS) as FilterableColumn[]) {
-      map[col] = [...new Set(results.map(FILTERABLE_COLUMNS[col]))].sort();
+      map[col] = [...new Set(effectiveResults.map(FILTERABLE_COLUMNS[col]))].sort();
     }
     return map;
-  }, [results]);
+  }, [effectiveResults]);
 
   const displayed = useMemo(() => {
     const hasFilters = (Object.values(columnFilters) as (Set<string> | undefined)[]).some(v => v && v.size > 0);
@@ -587,11 +602,26 @@ export function WorkItemsGrid({
   }, []);
 
   useEffect(() => {
+    setItemOverrides(new Map());
     setCheckedIds(new Set());
     setLastCheckedIndex(null);
     setColumnFilters({});
     setOpenFilterCol(null);
   }, [results]);
+
+  function handlePreviewUpdated(preview: WorkItemPreview) {
+    const key = workItemSummaryKey(preview);
+    setItemOverrides((current) => {
+      const next = new Map(current);
+      next.set(key, {
+        assignedTo: preview.assignedTo,
+        changedDate: preview.changedDate,
+        state: preview.state,
+        workItemType: preview.workItemType,
+      });
+      return next;
+    });
+  }
 
   function moveSelection(index: number) {
     const next = Math.max(0, Math.min(index, displayed.length - 1));
@@ -973,6 +1003,7 @@ export function WorkItemsGrid({
               previewError={previewQuery.isError ? commandErrorMessage(previewQuery.error) : null}
               previewLoading={previewQuery.isFetching}
               selectedItem={selectedItem}
+              onPreviewUpdated={handlePreviewUpdated}
             />
           </>
         ) : null}

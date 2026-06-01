@@ -30,3 +30,5 @@ base64 = "0.22"
 
 [dev-dependencies]
 tempfile = "3"
+url = { workspace = true }
+wiremock = "0.6"

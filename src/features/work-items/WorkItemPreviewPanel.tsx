@@ -67,6 +67,7 @@ export function WorkItemPreviewPanel({
   previewError,
   previewLoading,
   selectedItem,
+  onPreviewUpdated,
 }: {
   focusCommentRequest?: number;
   openAssigneeRequest?: number;
@@ -76,6 +77,7 @@ export function WorkItemPreviewPanel({
   previewError: string | null;
   previewLoading: boolean;
   selectedItem: WorkItemSummary | null;
+  onPreviewUpdated?: (preview: WorkItemPreview) => void;
 }) {
   const [commentText, setCommentText] = useState("");
   const [savedReplies, setSavedReplies] = useState<string[]>(() => loadSavedReplies());
@@ -248,6 +250,7 @@ export function WorkItemPreviewPanel({
   const assignMutation = useMutation({
     mutationFn: assignWorkItem,
     onSuccess: (updatedPreview) => {
+      onPreviewUpdated?.(updatedPreview);
       setAssigneeOpen(false);
       setAssigneeQuery("");
       queryClient.setQueryData(
@@ -266,6 +269,7 @@ export function WorkItemPreviewPanel({
   const stateMutation = useMutation({
     mutationFn: setWorkItemState,
     onSuccess: (updatedPreview) => {
+      onPreviewUpdated?.(updatedPreview);
       setStatePickerOpen(false);
       queryClient.setQueryData(
         workItemQueryKeys.preview(
@@ -283,6 +287,7 @@ export function WorkItemPreviewPanel({
   const priorityMutation = useMutation({
     mutationFn: setWorkItemPriority,
     onSuccess: (updatedPreview) => {
+      onPreviewUpdated?.(updatedPreview);
       setPriorityPickerOpen(false);
       queryClient.setQueryData(
         workItemQueryKeys.preview(

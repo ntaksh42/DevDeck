@@ -339,6 +339,8 @@ describe("App", () => {
     });
     expect(await screen.findByText("Add pull request search")).toBeTruthy();
     expect(screen.getByText("Platform / azdo-dashboard")).toBeTruthy();
+    expect(main.queryByRole("option", { name: "Completed" })).toBeNull();
+    expect(main.queryByRole("option", { name: "Abandoned" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "#42" }));
 
@@ -357,8 +359,13 @@ describe("App", () => {
       if (command === "list_my_review_pull_requests") {
         return Promise.resolve([]);
       }
-      if (command === "list_commit_repositories") {
-        return Promise.resolve([]);
+      if (command === "list_work_item_projects") {
+        return Promise.resolve([
+          {
+            projectId: "project-1",
+            projectName: "Platform",
+          },
+        ]);
       }
       if (command === "search_work_items") {
         return Promise.resolve([
@@ -518,6 +525,7 @@ describe("App", () => {
 
     await screen.findByText("No pull requests assigned to you.");
     fireEvent.keyDown(window, { key: "5", altKey: true });
+    await main.findByText("Platform");
     fireEvent.change(await main.findByPlaceholderText("Search work items…"), {
       target: { value: "save" },
     });
@@ -531,6 +539,11 @@ describe("App", () => {
           state: "all",
           workItemType: "",
           projectId: undefined,
+        },
+      });
+      expect(invokeMock).toHaveBeenCalledWith("list_work_item_projects", {
+        input: {
+          organizationId: "contoso",
         },
       });
     });
@@ -604,6 +617,9 @@ describe("App", () => {
           assignedTo: "creator@example.com",
         },
       });
+    });
+    await waitFor(() => {
+      expect(within(workItemsGrid).getAllByText("Creator").length).toBeGreaterThan(0);
     });
 
     fireEvent.keyDown(workItemsGrid, { key: "m" });

@@ -1,4 +1,6 @@
-use azdo_client::{AdoClient, Identity, WorkItem, WorkItemComment as AzdoWorkItemComment};
+use azdo_client::{
+    AdoClient, AdoError, Identity, WorkItem, WorkItemComment as AzdoWorkItemComment,
+};
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use chrono::Utc;
@@ -1063,27 +1065,76 @@ async fn do_sync_work_items(
     let mut my_cached: Vec<CachedWorkItem> = Vec::new();
 
     for project in &projects {
-        let ids = client
-            .query_work_item_ids(&project.id, SYNC_WI_WIQL)
-            .await?;
+        let ids = match client.query_work_item_ids(&project.id, SYNC_WI_WIQL).await {
+            Ok(ids) => ids,
+            Err(e) if is_ado_not_found(&e) => {
+                tracing::warn!(
+                    org = %org.name,
+                    project = %project.name,
+                    error = %e,
+                    "work item query returned 404, skipping project"
+                );
+                continue;
+            }
+            Err(e) => return Err(e.into()),
+        };
         let ids: Vec<i64> = ids.into_iter().take(200).collect();
         if !ids.is_empty() {
-            let work_items = client
+            let work_items = match client
                 .get_work_items_batch(&project.id, ids, fields.clone())
-                .await?;
+                .await
+            {
+                Ok(work_items) => work_items,
+                Err(e) if is_ado_not_found(&e) => {
+                    tracing::warn!(
+                        org = %org.name,
+                        project = %project.name,
+                        error = %e,
+                        "work item batch returned 404, skipping project"
+                    );
+                    continue;
+                }
+                Err(e) => return Err(e.into()),
+            };
             for wi in work_items {
                 all_cached.push(work_item_to_cached(org, &project.id, &project.name, wi));
             }
         }
 
-        let my_ids = client
+        let my_ids = match client
             .query_work_item_ids(&project.id, SYNC_MY_WI_WIQL)
-            .await?;
+            .await
+        {
+            Ok(ids) => ids,
+            Err(e) if is_ado_not_found(&e) => {
+                tracing::warn!(
+                    org = %org.name,
+                    project = %project.name,
+                    error = %e,
+                    "my work item query returned 404, skipping project"
+                );
+                continue;
+            }
+            Err(e) => return Err(e.into()),
+        };
         let my_ids: Vec<i64> = my_ids.into_iter().take(200).collect();
         if !my_ids.is_empty() {
-            let work_items = client
+            let work_items = match client
                 .get_work_items_batch(&project.id, my_ids, fields.clone())
-                .await?;
+                .await
+            {
+                Ok(work_items) => work_items,
+                Err(e) if is_ado_not_found(&e) => {
+                    tracing::warn!(
+                        org = %org.name,
+                        project = %project.name,
+                        error = %e,
+                        "my work item batch returned 404, skipping project"
+                    );
+                    continue;
+                }
+                Err(e) => return Err(e.into()),
+            };
             for wi in work_items {
                 my_cached.push(work_item_to_cached(org, &project.id, &project.name, wi));
             }
@@ -1097,6 +1148,10 @@ async fn do_sync_work_items(
     db.upsert_my_work_items(&my_cached)?;
 
     Ok(())
+}
+
+fn is_ado_not_found(error: &AdoError) -> bool {
+    matches!(error, AdoError::Api { status: 404, .. })
 }
 
 fn validate_work_item_wiql(wiql: &str) -> Result<&str> {
@@ -1119,10 +1174,36 @@ fn work_item_query_limit(limit: Option<usize>) -> usize {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::sync::Arc;
 
+    use azdo_client::PatProvider;
     use serde_json::json;
+    use url::Url;
+    use wiremock::matchers::{method, path, query_param};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
+    use crate::db::OrganizationDraft;
+
+    async fn test_client(server: &MockServer) -> AdoClient {
+        let base_url = Url::parse(&format!("{}/", server.uri())).unwrap();
+        AdoClient::new("contoso", Arc::new(PatProvider::new("test-pat")))
+            .unwrap()
+            .with_base_url(base_url)
+    }
+
+    fn make_org_draft() -> OrganizationDraft {
+        OrganizationDraft {
+            id: "contoso".to_string(),
+            name: "contoso".to_string(),
+            display_name: Some("contoso".to_string()),
+            base_url: "https://dev.azure.com/contoso".to_string(),
+            auth_provider: "pat".to_string(),
+            credential_key: "azdodeck:org:contoso:pat".to_string(),
+            authenticated_user_id: None,
+            authenticated_user_display_name: None,
+        }
+    }
 
     #[test]
     fn matches_optional_filter_allows_none_and_matching_value() {
@@ -1287,5 +1368,70 @@ mod tests {
         assert_eq!(candidate.id, "user-1");
         assert_eq!(candidate.display_name, "Alice Johnson");
         assert_eq!(candidate.unique_name.as_deref(), Some("alice@example.com"));
+    }
+
+    #[tokio::test]
+    async fn sync_work_items_skips_not_found_project_and_keeps_other_results() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/_apis/projects"))
+            .and(query_param("api-version", "7.1-preview"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "count": 2,
+                "value": [
+                    { "id": "project-ok", "name": "Platform" },
+                    { "id": "project-missing", "name": "Archived" }
+                ]
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/project-ok/_apis/wit/wiql"))
+            .and(query_param("api-version", "7.1-preview"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "workItems": [{ "id": 10 }]
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/project-ok/_apis/wit/workitemsbatch"))
+            .and(query_param("api-version", "7.1-preview"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "count": 1,
+                "value": [{
+                    "id": 10,
+                    "fields": {
+                        "System.Title": "Keep synced item",
+                        "System.WorkItemType": "Task",
+                        "System.State": "Active",
+                        "System.ChangedDate": "2026-05-24T00:00:00Z"
+                    }
+                }]
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/project-missing/_apis/wit/wiql"))
+            .and(query_param("api-version", "7.1-preview"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+
+        let db_file = tempfile::NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(db_file.path().to_path_buf());
+        db.initialize().unwrap();
+        let org = db.upsert_organization(make_org_draft()).unwrap();
+        let client = test_client(&server).await;
+
+        do_sync_work_items(&db, &client, &org).await.unwrap();
+
+        let cached = db
+            .search_work_items(&org.id, None, None, None, None)
+            .unwrap();
+        assert_eq!(cached.len(), 1);
+        assert_eq!(cached[0].title, "Keep synced item");
+        let my_cached = db.list_my_work_items(&org.id).unwrap();
+        assert_eq!(my_cached.len(), 1);
+        assert_eq!(my_cached[0].title, "Keep synced item");
     }
 }

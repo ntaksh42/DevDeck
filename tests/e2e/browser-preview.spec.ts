@@ -19,7 +19,7 @@ test.describe("browser preview", () => {
     await expect(main.getByRole("heading", { name: "My Reviews" })).toBeVisible();
     await expect(main.getByRole("grid", { name: "My review pull requests" })).toBeVisible();
     await expect(main.getByText("Add rate limiting middleware to all endpoints")).toBeVisible();
-    await expect(main.getByText(/件中 2 件が未投票/)).toBeVisible();
+    await expect(main.getByText(/6 total,\s*2 not voted/)).toBeVisible();
     await expect(main.getByRole("tab", { name: "Rejected" })).toHaveCount(0);
     await expect(main.getByText("review-PR101.html", { exact: true })).toBeVisible();
     await expect(page.getByRole("separator", { name: "Resize navigation" })).toBeVisible();
@@ -45,17 +45,19 @@ test.describe("browser preview", () => {
     await expect(main.getByText("Draft", { exact: true })).toBeVisible();
 
     await sidebar.getByRole("button", { name: "Search" }).nth(1).click();
-    await main.getByPlaceholder("title, type, assignee…").fill("onboarding");
+    await main.getByPlaceholder("Search work items…").fill("onboarding");
     await main.getByRole("button", { name: "Search" }).click();
-    await expect(main.getByText("Validate onboarding with PAT credentials")).toBeVisible();
-    await expect(main.getByRole("heading", { name: "Work Item Preview" })).toBeVisible();
+    await expect(
+      main.getByRole("heading", { name: "Validate onboarding with PAT credentials" }),
+    ).toBeVisible();
     await expect(main.getByRole("separator", { name: "Resize work item preview" })).toBeVisible();
     await expect(
-      main.frameLocator('iframe[title^="Work item preview"]').getByText("Azure DevOps から詳細 field を取得"),
+      main.frameLocator('iframe[title="Description"]').getByText("Fetch detail fields from Azure DevOps"),
     ).toBeVisible();
-    await main.getByLabel("Comment").fill("@Ali");
+    const commentInput = main.getByRole("textbox", { name: "Comment" });
+    await commentInput.fill("@Ali");
     await main.getByRole("button", { name: /Alice Johnson/ }).click();
-    await main.getByLabel("Comment").fill("@Alice Johnson please check");
+    await commentInput.fill("@Alice Johnson please check");
     await main.getByRole("button", { name: "Post comment" }).click();
     await expect(main.getByText("Comment posted")).toBeVisible();
 

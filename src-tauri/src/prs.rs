@@ -176,7 +176,7 @@ fn vote_label(vote: i32) -> &'static str {
 fn normalize_optional(value: Option<String>) -> Option<String> {
     value
         .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
+        .filter(|value| !value.is_empty() && value != "all")
 }
 
 fn matches_query(summary: &PullRequestSummary, query: &str) -> bool {
@@ -375,6 +375,7 @@ mod tests {
             normalize_optional(Some(" project-1 ".to_string())),
             Some("project-1".to_string())
         );
+        assert_eq!(normalize_optional(Some("all".to_string())), None);
         assert_eq!(normalize_optional(Some(" ".to_string())), None);
         assert_eq!(normalize_optional(None), None);
     }
