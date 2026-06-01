@@ -33,6 +33,8 @@ const WORK_ITEM_PREVIEW_FIELDS: &[&str] = &[
     "System.Reason",
     "System.Tags",
     "System.Description",
+    "Microsoft.VSTS.TCM.ReproSteps",
+    "Microsoft.VSTS.CMMI.Symptom",
     "Microsoft.VSTS.Common.AcceptanceCriteria",
     "Microsoft.VSTS.Common.Priority",
     "Microsoft.VSTS.Common.Severity",
@@ -858,7 +860,14 @@ fn summarize_work_item_preview(
         severity: string_field(&work_item, "Microsoft.VSTS.Common.Severity"),
         story_points: string_field(&work_item, "Microsoft.VSTS.Scheduling.StoryPoints"),
         remaining_work: string_field(&work_item, "Microsoft.VSTS.Scheduling.RemainingWork"),
-        description_html: string_field(&work_item, "System.Description"),
+        description_html: first_string_field(
+            &work_item,
+            &[
+                "System.Description",
+                "Microsoft.VSTS.TCM.ReproSteps",
+                "Microsoft.VSTS.CMMI.Symptom",
+            ],
+        ),
         acceptance_criteria_html: string_field(
             &work_item,
             "Microsoft.VSTS.Common.AcceptanceCriteria",
@@ -897,6 +906,13 @@ fn string_field(work_item: &WorkItem, field: &str) -> Option<String> {
         value if value.is_number() || value.is_boolean() => Some(value.to_string()),
         _ => None,
     }
+}
+
+fn first_string_field(work_item: &WorkItem, fields: &[&str]) -> Option<String> {
+    fields
+        .iter()
+        .filter_map(|field| string_field(work_item, field))
+        .find(|value| !value.trim().is_empty())
 }
 
 fn identity_field(work_item: &WorkItem, field: &str) -> Option<String> {
@@ -1202,6 +1218,46 @@ mod tests {
         assert_eq!(preview.created_by.as_deref(), Some("Creator"));
         assert_eq!(preview.description_html.as_deref(), Some("<p>Body</p>"));
         assert_eq!(preview.priority.as_deref(), Some("2"));
+    }
+
+    #[test]
+    fn summarize_preview_uses_repro_steps_as_description_fallback() {
+        let organization = Organization {
+            id: "contoso".to_string(),
+            name: "contoso".to_string(),
+            display_name: Some("contoso".to_string()),
+            base_url: "https://dev.azure.com/contoso".to_string(),
+            auth_provider: "pat".to_string(),
+            credential_key: "azdodeck:org:contoso:pat".to_string(),
+            authenticated_user_id: None,
+            authenticated_user_display_name: None,
+            created_at: "2026-05-24T00:00:00Z".to_string(),
+            updated_at: "2026-05-24T00:00:00Z".to_string(),
+        };
+        let mut fields = HashMap::new();
+        fields.insert("System.Title".to_string(), json!("Bug preview"));
+        fields.insert("System.Description".to_string(), json!(" "));
+        fields.insert(
+            "Microsoft.VSTS.TCM.ReproSteps".to_string(),
+            json!("<div>Steps from bug field</div>"),
+        );
+
+        let preview = summarize_work_item_preview(
+            &organization,
+            "project-1",
+            "Platform",
+            WorkItem {
+                id: 457,
+                fields,
+                links: None,
+            },
+            vec![],
+        );
+
+        assert_eq!(
+            preview.description_html.as_deref(),
+            Some("<div>Steps from bug field</div>")
+        );
     }
 
     #[test]
