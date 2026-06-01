@@ -27,7 +27,7 @@ import {
   storedNumber,
   gridColumnTemplate,
   isEditableTarget,
-
+  formatDate,
   formatRelativeDate,
   type SortDirection,
 } from '@/lib/utils';
@@ -42,6 +42,8 @@ const DEFAULT_PR_GRID_COLUMN_WIDTHS = [52, 110, 180, 82, 56, 76, 68, 78];
 const PR_GRID_COLUMN_MIN_WIDTHS = [48, 96, 150, 72, 50, 68, 62, 70];
 const PR_GRID_COLUMN_MAX_WIDTHS = [120, 520, 960, 240, 120, 240, 180, 240];
 const PR_GRID_COLUMN_WIDTHS_STORAGE_KEY = 'azdodeck:layout:myReviewsGridColumnWidths:v2';
+const PR_GRID_ROW_HEIGHT = 29;
+const PR_GRID_OVERSCAN = 8;
 type VoteValue = -10 | -5 | 0 | 5 | 10 | number;
 
 function VoteBadge({ vote, label }: { vote: VoteValue; label: string }) {
@@ -81,7 +83,10 @@ const ReviewPrRow = forwardRef<
     onSelect: () => void;
   }
 >(({ pr, selected, columnTemplate, onSelect }, ref) => {
-  const isStale = Math.floor((Date.now() - new Date(pr.creationDate).getTime()) / 86_400_000) >= 3;
+  const createdTime = new Date(pr.creationDate).getTime();
+  const isStale = Number.isFinite(createdTime)
+    ? Math.floor((Date.now() - createdTime) / 86_400_000) >= 3
+    : false;
   return (
     <div
       ref={ref}
@@ -144,7 +149,7 @@ const ReviewPrRow = forwardRef<
       {/* Created */}
       <span
         className={`text-xs ${isStale ? "font-medium text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`}
-        title={new Date(pr.creationDate).toLocaleString()}
+        title={formatDate(pr.creationDate)}
       >
         {formatRelativeDate(pr.creationDate)}
       </span>
@@ -213,7 +218,14 @@ function compareReviewPrs(
     case "createdBy":
       return compareStrings(a.createdBy, b.createdBy);
     case "creationDate":
-      return new Date(a.creationDate).getTime() - new Date(b.creationDate).getTime();
+      {
+        const left = new Date(a.creationDate).getTime();
+        const right = new Date(b.creationDate).getTime();
+        if (Number.isFinite(left) && Number.isFinite(right)) return left - right;
+        if (Number.isFinite(left)) return -1;
+        if (Number.isFinite(right)) return 1;
+        return compareStrings(a.creationDate, b.creationDate);
+      }
     case "targetRefName":
       return compareStrings(a.targetRefName, b.targetRefName);
     case "myIsRequired":
@@ -301,7 +313,9 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const filterInputRef = useRef<HTMLInputElement | null>(null);
+  const gridScrollRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const [gridViewport, setGridViewport] = useState({ height: 0, scrollTop: 0 });
 
   useEffect(() => {
     localStorage.setItem(PR_GRID_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
@@ -372,6 +386,29 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     setSelectedIndex((index) => Math.min(index, Math.max(sortedPrs.length - 1, 0)));
   }, [sortedPrs.length]);
 
+  useEffect(() => {
+    const scroller = gridScrollRef.current;
+    if (!scroller) return;
+    const scrollerElement = scroller;
+
+    function updateViewport() {
+      setGridViewport({
+        height: scrollerElement.clientHeight,
+        scrollTop: scrollerElement.scrollTop,
+      });
+    }
+
+    updateViewport();
+    scrollerElement.addEventListener("scroll", updateViewport, { passive: true });
+    const resizeObserver =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateViewport);
+    resizeObserver?.observe(scrollerElement);
+    return () => {
+      scrollerElement.removeEventListener("scroll", updateViewport);
+      resizeObserver?.disconnect();
+    };
+  }, []);
+
   function applyVoteFilter(value: VoteFilter) {
     setVoteFilter(value);
     setSelectedIndex(0);
@@ -384,7 +421,17 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
   function moveSelection(index: number) {
     const next = Math.max(0, Math.min(index, sortedPrs.length - 1));
     setSelectedIndex(next);
-    focusRow(next);
+    const scroller = gridScrollRef.current;
+    if (scroller) {
+      const rowTop = next * PR_GRID_ROW_HEIGHT;
+      const rowBottom = rowTop + PR_GRID_ROW_HEIGHT;
+      if (rowTop < scroller.scrollTop) {
+        scroller.scrollTop = rowTop;
+      } else if (rowBottom > scroller.scrollTop + scroller.clientHeight) {
+        scroller.scrollTop = rowBottom - scroller.clientHeight;
+      }
+    }
+    window.setTimeout(() => focusRow(next), 0);
   }
 
   function moveVoteFilter(delta: number) {
@@ -534,6 +581,21 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
   ];
 
   const COLS = gridColumnTemplate(columnWidths, 2);
+  const firstVirtualRow = Math.max(
+    0,
+    Math.floor(gridViewport.scrollTop / PR_GRID_ROW_HEIGHT) - PR_GRID_OVERSCAN,
+  );
+  const visibleRowCount = Math.ceil(
+    Math.max(gridViewport.height, PR_GRID_ROW_HEIGHT) / PR_GRID_ROW_HEIGHT,
+  );
+  const lastVirtualRow = Math.min(
+    sortedPrs.length,
+    firstVirtualRow + visibleRowCount + PR_GRID_OVERSCAN * 2,
+  );
+  const virtualRows = sortedPrs.slice(firstVirtualRow, lastVirtualRow);
+  const virtualTopPadding = firstVirtualRow * PR_GRID_ROW_HEIGHT;
+  const virtualBottomPadding =
+    Math.max(0, sortedPrs.length - lastVirtualRow) * PR_GRID_ROW_HEIGHT;
 
   return (
     <div
@@ -651,7 +713,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
       >
         {/* Grid */}
         <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-white">
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div ref={gridScrollRef} className="min-h-0 flex-1 overflow-auto">
             <div className="min-w-[720px]">
               {/* Column headers */}
               <div
@@ -694,16 +756,25 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
                   data-primary-grid="true"
                   tabIndex={-1}
                 >
-                  {sortedPrs.map((pr, i) => (
-                    <ReviewPrRow
-                      key={`${pr.organizationId}-${pr.pullRequestId}`}
-                      ref={(el) => { rowRefs.current[i] = el; }}
-                      columnTemplate={COLS}
-                      pr={pr}
-                      selected={i === selectedIndex}
-                      onSelect={() => setSelectedIndex(i)}
-                    />
-                  ))}
+                  {virtualTopPadding > 0 ? (
+                    <div style={{ height: virtualTopPadding }} />
+                  ) : null}
+                  {virtualRows.map((pr, offset) => {
+                    const i = firstVirtualRow + offset;
+                    return (
+                      <ReviewPrRow
+                        key={`${pr.organizationId}-${pr.pullRequestId}`}
+                        ref={(el) => { rowRefs.current[i] = el; }}
+                        columnTemplate={COLS}
+                        pr={pr}
+                        selected={i === selectedIndex}
+                        onSelect={() => setSelectedIndex(i)}
+                      />
+                    );
+                  })}
+                  {virtualBottomPadding > 0 ? (
+                    <div style={{ height: virtualBottomPadding }} />
+                  ) : null}
                 </div>
               )}
             </div>

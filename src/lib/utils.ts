@@ -112,15 +112,18 @@ export function matchesAllSearchTerms(
 }
 
 export function formatDate(value: string): string {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "—";
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(new Date(value));
+  }).format(date);
 }
 
 export function formatRelativeDate(isoString: string): string {
   const now = Date.now();
   const then = new Date(isoString).getTime();
+  if (!Number.isFinite(then)) return "—";
   const diffMs = now - then;
   const mins = Math.floor(diffMs / 60_000);
   if (mins < 60) return mins <= 1 ? "just now" : `${mins}m ago`;

@@ -145,8 +145,7 @@ export function PullRequestSearch({
                 onChange={(e) => setStatus(e.target.value as SearchPullRequestsInput["status"])}
                 className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               >
-                <option value="active">Active</option>
-                <option value="all">All</option>
+                <option value="active">Active cached PRs</option>
               </select>
             </label>
 
@@ -201,6 +200,10 @@ function PullRequestResults({
   useEffect(() => {
     localStorage.setItem(PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
   }, [columnWidths]);
+
+  useEffect(() => {
+    setSelectedIndex((index) => Math.min(index, Math.max(results.length - 1, 0)));
+  }, [results.length]);
 
   const columnTemplate = gridColumnTemplate(columnWidths, 2);
 
