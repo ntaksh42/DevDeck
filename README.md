@@ -160,6 +160,11 @@ formats to the GitHub Release:
 - `.exe` NSIS installer for normal interactive installs.
 - `.msi` installer for managed Windows environments.
 
+The installers are intentionally small because AzDoDeck uses the system
+Microsoft Edge WebView2 runtime instead of bundling a browser engine. If WebView2
+is missing, the installer downloads and installs the WebView2 bootstrapper
+silently during setup.
+
 ---
 
 ## Architecture
