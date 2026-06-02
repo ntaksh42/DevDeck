@@ -1,4 +1,5 @@
 import {
+  type ChangeEvent,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
@@ -7,7 +8,7 @@ import {
   useState,
 } from 'react';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, Pin, PinOff, Plus, RefreshCw, Trash2, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Copy, Download, Eye, EyeOff, Loader2, Pin, PinOff, Plus, RefreshCw, Trash2, Upload, X } from 'lucide-react';
 import {
   getSavedQuery,
   countWorkItemQuery,
@@ -16,11 +17,18 @@ import {
   commandErrorMessage,
   type Organization,
 } from '@/lib/azdoCommands';
-import { clamp, isEditableTarget, type SortDirection } from '@/lib/utils';
+import { clamp, isEditableTarget } from '@/lib/utils';
 import { ErrorState } from '@/components/StateDisplay';
 import { WorkItemsGrid } from './WorkItemsGrid';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from './queryKeys';
-const WI_QUERY_VIEWS_STORAGE_KEY = "azdodeck:workItemQueryViews";
+import {
+  createWorkItemQueryViewsExport,
+  loadWorkItemQueryViews,
+  parseWorkItemQueryViewsImport,
+  saveWorkItemQueryViews,
+  type WorkItemQueryView,
+} from './workItemViewsStorage';
+
 type WiqlCompletion = {
   label: string;
   value: string;
@@ -50,137 +58,8 @@ const WIQL_COMPLETIONS: WiqlCompletion[] = [
   { label: "CONTAINS WORDS", value: "CONTAINS WORDS ", detail: "Text contains" },
 ];
 
-type WorkItemQueryView = {
-  id: string;
-  name: string;
-  pinned?: boolean;
-  projectId: string;
-  previewVisible?: boolean;
-  sortDirection?: SortDirection;
-  sortKey?: "id" | "workItemType" | "state" | "title" | "projectName" | "assignedTo" | "changedDate";
-  wiql: string;
-  limit: number;
-};
-
-function loadWorkItemQueryViews(): WorkItemQueryView[] {
-  const value = window.localStorage.getItem(WI_QUERY_VIEWS_STORAGE_KEY);
-  if (!value) return defaultWorkItemQueryViews();
-  try {
-    const parsed = JSON.parse(value);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((view): WorkItemQueryView | null => {
-        if (
-          !view ||
-          typeof view.id !== "string" ||
-          typeof view.name !== "string" ||
-          typeof view.projectId !== "string" ||
-          typeof view.wiql !== "string"
-        ) {
-          return null;
-        }
-        const limit = Number(view.limit);
-        return {
-          id: view.id,
-          name: view.name,
-          pinned: view.pinned === true,
-          projectId: view.projectId,
-          previewVisible: view.previewVisible !== false,
-          sortDirection: view.sortDirection === "asc" || view.sortDirection === "desc"
-            ? view.sortDirection
-            : "desc",
-          sortKey: isWorkItemSortKey(view.sortKey) ? view.sortKey : "changedDate",
-          wiql: view.wiql,
-          limit: Number.isFinite(limit) ? clamp(limit, 1, 500) : 200,
-        };
-      })
-      .filter((view): view is WorkItemQueryView => view !== null);
-  } catch {
-    return [];
-  }
-}
-
-function defaultWorkItemQueryViews(): WorkItemQueryView[] {
-  return [
-    {
-      id: "builtin-assigned-to-me",
-      name: "Assigned to me",
-      pinned: true,
-      previewVisible: true,
-      projectId: "",
-      sortDirection: "desc",
-      sortKey: "changedDate",
-      wiql: [
-        "SELECT [System.Id]",
-        "FROM WorkItems",
-        "WHERE [System.AssignedTo] = @Me",
-        "ORDER BY [System.ChangedDate] DESC",
-      ].join("\n"),
-      limit: 200,
-    },
-    {
-      id: "builtin-following",
-      name: "Following",
-      pinned: true,
-      previewVisible: true,
-      projectId: "",
-      sortDirection: "desc",
-      sortKey: "changedDate",
-      wiql: [
-        "SELECT [System.Id]",
-        "FROM WorkItems",
-        "WHERE [System.Id] IN (@Follows)",
-        "ORDER BY [System.ChangedDate] DESC",
-      ].join("\n"),
-      limit: 200,
-    },
-    {
-      id: "builtin-mentioned",
-      name: "Mentioned",
-      previewVisible: true,
-      projectId: "",
-      sortDirection: "desc",
-      sortKey: "changedDate",
-      wiql: [
-        "SELECT [System.Id]",
-        "FROM WorkItems",
-        "WHERE [System.History] CONTAINS WORDS @Me",
-        "ORDER BY [System.ChangedDate] DESC",
-      ].join("\n"),
-      limit: 200,
-    },
-    {
-      id: "builtin-my-activity",
-      name: "My activity",
-      previewVisible: true,
-      projectId: "",
-      sortDirection: "desc",
-      sortKey: "changedDate",
-      wiql: [
-        "SELECT [System.Id]",
-        "FROM WorkItems",
-        "WHERE [System.ChangedBy] = @Me OR [System.CreatedBy] = @Me",
-        "ORDER BY [System.ChangedDate] DESC",
-      ].join("\n"),
-      limit: 200,
-    },
-  ];
-}
-
 function firstCustomView(views: WorkItemQueryView[]): WorkItemQueryView | null {
   return views.find((view) => !view.id.startsWith("builtin-")) ?? null;
-}
-
-function isWorkItemSortKey(value: unknown): value is NonNullable<WorkItemQueryView["sortKey"]> {
-  return (
-    value === "id" ||
-    value === "workItemType" ||
-    value === "state" ||
-    value === "title" ||
-    value === "projectName" ||
-    value === "assignedTo" ||
-    value === "changedDate"
-  );
 }
 
 function newWorkItemViewId(): string {
@@ -279,7 +158,26 @@ function parseAzdoQueryUrl(url: string): {
   }
 }
 
-export function WorkItemViewsPanel({ organizations }: { organizations: Organization[] }) {
+type WorkItemViewsPanelProps = {
+  organizations: Organization[];
+  selectedViewRequestId?: string | null;
+  onSelectedViewChange?: (viewId: string | null) => void;
+  onSelectedViewRequestHandled?: () => void;
+  onViewsChange?: (views: WorkItemQueryView[]) => void;
+};
+
+function viewExportFileName(): string {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  return `azdodeck-work-item-views-${stamp}.json`;
+}
+
+export function WorkItemViewsPanel({
+  organizations,
+  selectedViewRequestId,
+  onSelectedViewChange,
+  onSelectedViewRequestHandled,
+  onViewsChange,
+}: WorkItemViewsPanelProps) {
   const queryClient = useQueryClient();
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
   const [views, setViews] = useState<WorkItemQueryView[]>(() => loadWorkItemQueryViews());
@@ -300,8 +198,10 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
   const [draftUrl, setDraftUrl] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [viewMessage, setViewMessage] = useState<string | null>(null);
   const viewButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const viewFormRef = useRef<HTMLFormElement | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   const selectedOrganizationId = organizationId || organizations[0]?.id || "";
   const projectsQuery = useQuery({
@@ -351,8 +251,9 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
   });
 
   useEffect(() => {
-    window.localStorage.setItem(WI_QUERY_VIEWS_STORAGE_KEY, JSON.stringify(views));
-  }, [views]);
+    saveWorkItemQueryViews(views);
+    onViewsChange?.(views);
+  }, [onViewsChange, views]);
 
   useEffect(() => {
     if (!draftProjectId && projectOptions[0]) {
@@ -444,6 +345,22 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
     staleTime: 5 * 60_000,
   });
   const selectedResults = selectedQuery?.data ?? [];
+
+  useEffect(() => {
+    onSelectedViewChange?.(selectedView?.id ?? null);
+  }, [onSelectedViewChange, selectedView?.id]);
+
+  useEffect(() => {
+    if (!selectedViewRequestId) return;
+    const requestedView = views.find((view) => view.id === selectedViewRequestId);
+    if (!requestedView) {
+      onSelectedViewRequestHandled?.();
+      return;
+    }
+    setSelectedViewId(requestedView.id);
+    loadDraft(requestedView);
+    onSelectedViewRequestHandled?.();
+  }, [onSelectedViewRequestHandled, selectedViewRequestId, views]);
 
   function loadDraft(view: WorkItemQueryView) {
     setEditingViewId(view.id);
@@ -707,6 +624,51 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
     invalidateWorkItemQueryViews(queryClient, selectedOrganizationId);
   };
 
+  async function copySelectedViewShareJson() {
+    if (!selectedView) return;
+    const text = JSON.stringify(createWorkItemQueryViewsExport([selectedView]), null, 2);
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Clipboard API is not available.");
+      }
+      await navigator.clipboard.writeText(text);
+      setViewMessage("Copied selected view share JSON.");
+    } catch (error) {
+      setViewMessage(error instanceof Error ? error.message : "Failed to copy share JSON.");
+    }
+  }
+
+  function exportAllViews() {
+    const text = JSON.stringify(createWorkItemQueryViewsExport(views), null, 2);
+    const blob = new Blob([text], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = viewExportFileName();
+    link.click();
+    URL.revokeObjectURL(url);
+    setViewMessage(`Exported ${views.length} view${views.length === 1 ? "" : "s"}.`);
+  }
+
+  async function importViewsFromFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) return;
+    try {
+      const imported = parseWorkItemQueryViewsImport(await file.text()).map((view) => ({
+        ...view,
+        id: newWorkItemViewId(),
+      }));
+      setViews((current) => [...current, ...imported]);
+      const firstImported = imported[0];
+      setSelectedViewId(firstImported.id);
+      loadDraft(firstImported);
+      setViewMessage(`Imported ${imported.length} view${imported.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      setViewMessage(error instanceof Error ? error.message : "Failed to import views.");
+    }
+  }
+
   const selectedCount = selectedCountQuery?.data ?? selectedResults.length;
   const urlStatus = urlStatusMessage();
 
@@ -777,6 +739,43 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
             <button
               type="button"
               disabled={!selectedView}
+              onClick={() => void copySelectedViewShareJson()}
+              aria-label="Copy selected view share JSON"
+              title="Copy selected view share JSON"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+              Share
+            </button>
+            <button
+              type="button"
+              disabled={views.length === 0}
+              onClick={exportAllViews}
+              title="Export all views as JSON"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Download className="h-3.5 w-3.5" aria-hidden="true" />
+              Export
+            </button>
+            <button
+              type="button"
+              onClick={() => importInputRef.current?.click()}
+              title="Import views from JSON"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary"
+            >
+              <Upload className="h-3.5 w-3.5" aria-hidden="true" />
+              Import
+            </button>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(event) => void importViewsFromFile(event)}
+            />
+            <button
+              type="button"
+              disabled={!selectedView}
               onClick={() => openEditDialog()}
               aria-keyshortcuts="E"
               title="Edit selected view (E)"
@@ -815,6 +814,11 @@ export function WorkItemViewsPanel({ organizations }: { organizations: Organizat
             </button>
           </div>
         </div>
+        {viewMessage ? (
+          <div role="status" className="border-b border-border px-3 py-1 text-xs text-muted-foreground">
+            {viewMessage}
+          </div>
+        ) : null}
 
         {views.length === 0 ? (
           <div className="px-3 py-6 text-center text-sm text-muted-foreground">

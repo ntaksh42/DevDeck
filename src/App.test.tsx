@@ -13,6 +13,7 @@ import App from "./App";
 
 const invokeMock = vi.fn();
 const openUrlMock = vi.fn();
+const writeClipboardTextMock = vi.fn();
 
 const organization = {
   id: "contoso",
@@ -64,6 +65,7 @@ describe("App", () => {
   beforeEach(() => {
     invokeMock.mockReset();
     openUrlMock.mockReset();
+    writeClipboardTextMock.mockReset();
     window.localStorage.clear();
     invokeMock.mockImplementation((command: string) => {
       if (command === "get_app_settings") {
@@ -77,6 +79,12 @@ describe("App", () => {
     Object.defineProperty(window, "__TAURI_INTERNALS__", {
       configurable: true,
       value: {},
+    });
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: writeClipboardTextMock,
+      },
     });
   });
 
@@ -767,6 +775,17 @@ describe("App", () => {
     expect(await screen.findByLabelText("Comment")).toBeTruthy();
     expect(screen.getByRole("option", { name: /Active Bugs/ })).toBeTruthy();
     expect(screen.getByRole("listbox", { name: "Saved work item views" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Pin" }));
+    expect(screen.getByRole("button", { name: "Active Bugs" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy selected view share JSON" }));
+    await waitFor(() => {
+      expect(writeClipboardTextMock).toHaveBeenCalledWith(
+        expect.stringContaining('"name": "Active Bugs"'),
+      );
+    });
+    expect(writeClipboardTextMock.mock.calls[0][0]).toContain("azdodeck.workItemViews");
   });
 
   it("searches commits and renders results", async () => {

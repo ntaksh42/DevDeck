@@ -45,6 +45,10 @@ import { CommandPalette, type CommandPaletteAction } from "@/components/CommandP
 import { CommitSearch } from "@/features/commits/CommitSearch";
 import { WorkItemSearch } from '@/features/work-items/WorkItemSearch';
 import { WorkItemViewsPanel } from '@/features/work-items/WorkItemViewsPanel';
+import {
+  loadWorkItemQueryViews,
+  type WorkItemQueryView,
+} from '@/features/work-items/workItemViewsStorage';
 import { MyWorkItemsPanel } from '@/features/work-items/MyWorkItemsPanel';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from '@/features/work-items/queryKeys';
 import { OrganizationSettings, SetupPanel } from '@/features/settings/OrganizationSettings';
@@ -81,6 +85,11 @@ function AppShell() {
     pullRequests: true,
     workItems: true,
   });
+  const [workItemNavViews, setWorkItemNavViews] = useState<WorkItemQueryView[]>(() =>
+    loadWorkItemQueryViews(),
+  );
+  const [activeWorkItemViewId, setActiveWorkItemViewId] = useState<string | null>(null);
+  const [selectedWorkItemViewRequestId, setSelectedWorkItemViewRequestId] = useState<string | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(() =>
     storedNumber(SIDEBAR_WIDTH_STORAGE_KEY, DEFAULT_SIDEBAR_WIDTH, 160, 420),
   );
@@ -101,6 +110,10 @@ function AppShell() {
 
   const organizations = organizationsQuery.data ?? [];
   const activeView = organizations.length === 0 ? "settings" : view;
+  const pinnedWorkItemViews = workItemNavViews.filter((item) => item.pinned);
+  const activePinnedWorkItemView = pinnedWorkItemViews.find(
+    (item) => item.id === activeWorkItemViewId,
+  );
 
   function getNavItems(): HTMLButtonElement[] {
     const nav = navRef.current;
@@ -609,12 +622,29 @@ function AppShell() {
                 onClick={() => setView("myWorkItems")}
               />
               <NavSubItem
-                active={activeView === "workItemViews"}
+                active={activeView === "workItemViews" && !activePinnedWorkItemView}
                 disabled={organizations.length === 0}
                 label="Views"
                 shortcut="Alt+4"
-                onClick={() => setView("workItemViews")}
+                onClick={() => {
+                  setActiveWorkItemViewId(null);
+                  setSelectedWorkItemViewRequestId(null);
+                  setView("workItemViews");
+                }}
               />
+              {pinnedWorkItemViews.map((item) => (
+                <NavSubItem
+                  key={item.id}
+                  active={activeView === "workItemViews" && activeWorkItemViewId === item.id}
+                  disabled={organizations.length === 0}
+                  label={item.name}
+                  onClick={() => {
+                    setActiveWorkItemViewId(item.id);
+                    setSelectedWorkItemViewRequestId(item.id);
+                    setView("workItemViews");
+                  }}
+                />
+              ))}
               <NavSubItem
                 active={activeView === "workItems"}
                 disabled={organizations.length === 0}
@@ -736,7 +766,13 @@ function AppShell() {
           ) : activeView === "myWorkItems" ? (
             <MyWorkItemsPanel organizations={organizations} />
           ) : activeView === "workItemViews" ? (
-            <WorkItemViewsPanel organizations={organizations} />
+            <WorkItemViewsPanel
+              organizations={organizations}
+              selectedViewRequestId={selectedWorkItemViewRequestId}
+              onSelectedViewChange={setActiveWorkItemViewId}
+              onSelectedViewRequestHandled={() => setSelectedWorkItemViewRequestId(null)}
+              onViewsChange={setWorkItemNavViews}
+            />
           ) : activeView === "commits" ? (
             <CommitSearch organizations={organizations} />
           ) : organizations.length === 0 ? (
