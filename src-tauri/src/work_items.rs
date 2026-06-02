@@ -1,5 +1,6 @@
 use azdo_client::{
-    AdoClient, AdoError, Identity, WorkItem, WorkItemComment as AzdoWorkItemComment,
+    AdoClient, AdoError, AuthenticatedUser, Identity, WorkItem,
+    WorkItemComment as AzdoWorkItemComment,
 };
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
@@ -450,11 +451,30 @@ impl WorkItemService {
 
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
+        let current_user = if let Some(candidate) =
+            organization_authenticated_user_candidate(&organization, query)
+        {
+            Some(candidate)
+        } else {
+            client.connection_data().await.ok().and_then(|data| {
+                authenticated_user_mention_candidate(data.authenticated_user, query)
+            })
+        };
         let identities = client.search_identities(query, 8).await?;
-        Ok(identities
+        let mut candidates = Vec::new();
+        if let Some(candidate) = current_user {
+            push_unique_mention_candidate(&mut candidates, candidate);
+        }
+        for candidate in identities
             .into_iter()
             .filter_map(summarize_mention_candidate)
-            .collect())
+        {
+            push_unique_mention_candidate(&mut candidates, candidate);
+            if candidates.len() >= 8 {
+                break;
+            }
+        }
+        Ok(candidates)
     }
 
     pub async fn fetch_image(&self, input: FetchWorkItemImageInput) -> Result<WorkItemImage> {
@@ -803,6 +823,100 @@ fn summarize_mention_candidate(identity: Identity) -> Option<MentionCandidate> {
         display_name,
         unique_name,
     })
+}
+
+fn authenticated_user_mention_candidate(
+    user: AuthenticatedUser,
+    query: &str,
+) -> Option<MentionCandidate> {
+    let id = user
+        .id
+        .trim()
+        .is_empty()
+        .then_some(user.descriptor)
+        .flatten()
+        .unwrap_or(user.id);
+    mention_candidate_from_parts(id, user.provider_display_name, None, query)
+}
+
+fn organization_authenticated_user_candidate(
+    organization: &Organization,
+    query: &str,
+) -> Option<MentionCandidate> {
+    mention_candidate_from_parts(
+        organization.authenticated_user_id.clone()?,
+        organization.authenticated_user_display_name.clone(),
+        None,
+        query,
+    )
+}
+
+fn mention_candidate_from_parts(
+    id: String,
+    display_name: Option<String>,
+    unique_name: Option<String>,
+    query: &str,
+) -> Option<MentionCandidate> {
+    let id = id.trim().to_string();
+    if id.is_empty() {
+        return None;
+    }
+    let display_name = display_name
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| id.clone());
+    let unique_name = unique_name
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    if !mention_candidate_matches_query(&display_name, unique_name.as_deref(), query) {
+        return None;
+    }
+    Some(MentionCandidate {
+        id,
+        display_name,
+        unique_name,
+    })
+}
+
+fn mention_candidate_matches_query(
+    display_name: &str,
+    unique_name: Option<&str>,
+    query: &str,
+) -> bool {
+    let query = query.trim().to_lowercase();
+    if query.is_empty() {
+        return true;
+    }
+    display_name.to_lowercase().contains(&query)
+        || unique_name
+            .map(|value| value.to_lowercase().contains(&query))
+            .unwrap_or(false)
+}
+
+fn push_unique_mention_candidate(
+    candidates: &mut Vec<MentionCandidate>,
+    candidate: MentionCandidate,
+) {
+    let duplicate = candidates.iter().any(|existing| {
+        existing.id.eq_ignore_ascii_case(&candidate.id)
+            || same_optional_mention_value(
+                existing.unique_name.as_deref(),
+                candidate.unique_name.as_deref(),
+            )
+            || existing
+                .display_name
+                .eq_ignore_ascii_case(&candidate.display_name)
+    });
+    if !duplicate {
+        candidates.push(candidate);
+    }
+}
+
+fn same_optional_mention_value(left: Option<&str>, right: Option<&str>) -> bool {
+    match (left, right) {
+        (Some(left), Some(right)) => left.eq_ignore_ascii_case(right),
+        _ => false,
+    }
 }
 
 fn summarize_work_item_comment(comment: AzdoWorkItemComment) -> WorkItemComment {
@@ -1441,6 +1555,43 @@ mod tests {
         assert_eq!(candidate.id, "aad.descriptor-1");
         assert_eq!(candidate.display_name, "Naoto Akashi");
         assert_eq!(candidate.unique_name.as_deref(), Some("naoto@example.com"));
+    }
+
+    #[test]
+    fn authenticated_user_mention_candidate_matches_display_name() {
+        let candidate = authenticated_user_mention_candidate(
+            AuthenticatedUser {
+                id: "user-1".to_string(),
+                provider_display_name: Some("naoto akashi".to_string()),
+                descriptor: Some("aad.user-1".to_string()),
+            },
+            "n",
+        )
+        .unwrap();
+
+        assert_eq!(candidate.id, "user-1");
+        assert_eq!(candidate.display_name, "naoto akashi");
+    }
+
+    #[test]
+    fn organization_authenticated_user_candidate_matches_saved_user() {
+        let organization = Organization {
+            id: "contoso".to_string(),
+            name: "contoso".to_string(),
+            display_name: Some("contoso".to_string()),
+            base_url: "https://dev.azure.com/contoso".to_string(),
+            auth_provider: "pat".to_string(),
+            credential_key: "azdodeck:org:contoso:pat".to_string(),
+            authenticated_user_id: Some("user-1".to_string()),
+            authenticated_user_display_name: Some("naoto akashi".to_string()),
+            created_at: "2026-05-24T00:00:00Z".to_string(),
+            updated_at: "2026-05-24T00:00:00Z".to_string(),
+        };
+
+        let candidate = organization_authenticated_user_candidate(&organization, "n").unwrap();
+
+        assert_eq!(candidate.id, "user-1");
+        assert_eq!(candidate.display_name, "naoto akashi");
     }
 
     #[tokio::test]
