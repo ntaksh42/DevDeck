@@ -106,6 +106,9 @@ function AppShell() {
   });
   const syncMutation = useMutation({
     mutationFn: triggerSync,
+    onSuccess: () => {
+      invalidateSyncedDataQueries(queryClient);
+    },
   });
 
   const organizations = organizationsQuery.data ?? [];

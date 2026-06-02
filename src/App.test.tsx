@@ -143,6 +143,43 @@ describe("App", () => {
     expect(await screen.findByDisplayValue("C:\\reports")).toBeTruthy();
   });
 
+  it("refreshes synced data after manual sync completes", async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve({ reviewResultFolderPath: null });
+      }
+      if (command === "get_review_result_preview") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
+      if (command === "trigger_sync") {
+        return Promise.resolve(undefined);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+
+    await screen.findByText("No pull requests assigned to you.");
+    const reviewCallsBeforeSync = invokeMock.mock.calls.filter(
+      ([command]) => command === "list_my_review_pull_requests",
+    ).length;
+
+    fireEvent.click(screen.getByRole("button", { name: "Sync" }));
+
+    await waitFor(() => {
+      const reviewCallsAfterSync = invokeMock.mock.calls.filter(
+        ([command]) => command === "list_my_review_pull_requests",
+      ).length;
+      expect(reviewCallsAfterSync).toBeGreaterThan(reviewCallsBeforeSync);
+    });
+  });
+
   it("saves review result folder settings", async () => {
     invokeMock.mockImplementation((command: string, args?: unknown) => {
       if (command === "list_organizations") {

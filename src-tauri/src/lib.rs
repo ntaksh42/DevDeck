@@ -30,10 +30,10 @@ use settings::{
     normalize_app_settings, GetReviewResultPreviewInput, ReviewResultPreview, SettingsService,
     UpdateAppSettingsInput,
 };
-use sync::SyncRunner;
+use sync::{SyncRunner, SyncTrigger};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use work_items::{
     AddWorkItemCommentInput, AssignWorkItemInput, AssignWorkItemsInput, BulkWorkItemResult,
     DeleteWorkItemCommentInput, FetchWorkItemImageInput, GetSavedQueryInput,
@@ -51,7 +51,7 @@ struct AppState {
     work_items: WorkItemService,
     commits: CommitService,
     settings: SettingsService,
-    sync_trigger: mpsc::Sender<()>,
+    sync_trigger: mpsc::Sender<SyncTrigger>,
 }
 
 #[tauri::command]
@@ -311,8 +311,15 @@ fn list_commit_repositories(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
-fn trigger_sync(state: State<'_, AppState>) -> Result<()> {
-    state.sync_trigger.try_send(()).ok();
+async fn trigger_sync(state: State<'_, AppState>) -> Result<()> {
+    let (tx, rx) = oneshot::channel();
+    state
+        .sync_trigger
+        .send(tx)
+        .await
+        .map_err(|error| AppError::InvalidInput(format!("sync runner stopped: {error}")))?;
+    rx.await
+        .map_err(|error| AppError::InvalidInput(format!("sync runner stopped: {error}")))?;
     Ok(())
 }
 

@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use tauri::{AppHandle, Emitter};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tokio::time::{interval_at, Instant};
 
 use crate::auth::client_for_organization;
@@ -16,28 +16,37 @@ pub struct SyncRunner {
     secrets: SecretStore,
 }
 
+pub type SyncTrigger = oneshot::Sender<()>;
+
 impl SyncRunner {
     pub fn new(db: AppDatabase, secrets: SecretStore) -> Self {
         Self { db, secrets }
     }
 
-    // bounded(1) acts as debounce — extra clicks while sync runs are dropped
-    pub fn channel() -> (mpsc::Sender<()>, mpsc::Receiver<()>) {
+    // bounded(1) keeps manual sync requests ordered without letting the queue grow.
+    pub fn channel() -> (mpsc::Sender<SyncTrigger>, mpsc::Receiver<SyncTrigger>) {
         mpsc::channel(1)
     }
 
-    pub async fn run(self, handle: AppHandle, mut trigger_rx: mpsc::Receiver<()>) {
+    pub async fn run(self, handle: AppHandle, mut trigger_rx: mpsc::Receiver<SyncTrigger>) {
         let mut interval = interval_at(Instant::now(), Duration::from_secs(300));
         loop {
+            let mut waiters = Vec::new();
             tokio::select! {
                 _ = interval.tick() => {},
-                Some(_) = trigger_rx.recv() => {
-                    while trigger_rx.try_recv().is_ok() {}
+                Some(waiter) = trigger_rx.recv() => {
+                    waiters.push(waiter);
+                    while let Ok(waiter) = trigger_rx.try_recv() {
+                        waiters.push(waiter);
+                    }
                 }
             }
             self.sync_once().await;
             if let Err(e) = handle.emit("sync:updated", ()) {
                 tracing::warn!(error = ?e, "failed to emit sync:updated");
+            }
+            for waiter in waiters {
+                let _ = waiter.send(());
             }
         }
     }
