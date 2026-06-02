@@ -322,7 +322,7 @@ const WorkItemGridRow = forwardRef<
       />
     </div>
     {visibleColumns.map((column) => (
-      <div key={column} className="min-w-0">
+      <div key={column} className="min-w-0 truncate">
         {workItemCellValue(item, column)}
       </div>
     ))}
