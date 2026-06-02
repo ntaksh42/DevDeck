@@ -1,5 +1,11 @@
+import {
+  isPermissionGranted,
+  requestPermission,
+  sendNotification,
+} from "@tauri-apps/plugin-notification";
 import type { AppSettings } from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
+import { isTauriRuntime } from "@/lib/runtime";
 
 export type DesktopNotificationResult = "sent" | "unsupported" | "denied" | "skipped";
 
@@ -67,6 +73,10 @@ async function sendDesktopNotification(
   title: string,
   options: { body: string; onClick?: () => void },
 ): Promise<DesktopNotificationResult> {
+  if (isTauriRuntime()) {
+    return sendTauriDesktopNotification(title, options);
+  }
+
   if (!("Notification" in window)) {
     return "unsupported";
   }
@@ -85,6 +95,26 @@ async function sendDesktopNotification(
     options.onClick?.();
     notification.close();
   };
+  return "sent";
+}
+
+async function sendTauriDesktopNotification(
+  title: string,
+  options: { body: string; onClick?: () => void },
+): Promise<DesktopNotificationResult> {
+  let permissionGranted = await isPermissionGranted();
+  if (!permissionGranted) {
+    const permission = await requestPermission();
+    permissionGranted = permission === "granted";
+  }
+  if (!permissionGranted) {
+    return "denied";
+  }
+
+  sendNotification({
+    title,
+    body: options.body,
+  });
   return "sent";
 }
 
