@@ -321,7 +321,6 @@ export function WorkItemViewsPanel({
   );
   const selectedView = views[selectedViewIndex] ?? null;
   const selectedViewProjectId = selectedView?.projectId || projectOptions[0]?.projectId || "";
-  const selectedCountQuery = selectedView ? viewCountQueries[selectedViewIndex] : null;
   const selectedQuery = useQuery({
     queryKey: workItemQueryKeys.queryView({
       organizationId: selectedOrganizationId,
@@ -669,7 +668,6 @@ export function WorkItemViewsPanel({
     }
   }
 
-  const selectedCount = selectedCountQuery?.data ?? selectedResults.length;
   const urlStatus = urlStatusMessage();
 
   return (
@@ -898,22 +896,6 @@ export function WorkItemViewsPanel({
 
       {selectedView && !dialogOpen ? (
         <div className="flex min-h-0 flex-1 flex-col gap-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h2 className="text-base font-semibold">{selectedView.name}</h2>
-              <p className="text-xs text-muted-foreground">
-                {selectedQuery?.isFetching
-                  ? "Loading query results"
-                  : selectedQuery?.isError
-                    ? "Query failed"
-                    : `${selectedCount} result${selectedCount === 1 ? "" : "s"}`}
-              </p>
-            </div>
-            <span className="rounded-md border border-border bg-white px-2 py-1 font-mono text-xs text-muted-foreground">
-              {selectedView.projectId || selectedViewProjectId}
-            </span>
-          </div>
-
           {selectedQuery?.isError ? (
             <ErrorState message={commandErrorMessage(selectedQuery.error)} />
           ) : null}
