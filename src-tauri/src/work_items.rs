@@ -783,7 +783,11 @@ impl WorkItemService {
 }
 
 fn summarize_mention_candidate(identity: Identity) -> Option<MentionCandidate> {
-    let id = identity.id.clone()?;
+    let id = identity
+        .id
+        .clone()
+        .or_else(|| identity.subject_descriptor.clone())
+        .or_else(|| identity.descriptor.clone())?;
     let unique_name = identity
         .unique_name
         .clone()
@@ -1405,6 +1409,8 @@ mod tests {
         );
         let candidate = summarize_mention_candidate(Identity {
             id: Some("user-1".to_string()),
+            descriptor: None,
+            subject_descriptor: None,
             provider_display_name: Some("Alice Johnson".to_string()),
             custom_display_name: None,
             display_name: Some("Alice".to_string()),
@@ -1416,6 +1422,25 @@ mod tests {
         assert_eq!(candidate.id, "user-1");
         assert_eq!(candidate.display_name, "Alice Johnson");
         assert_eq!(candidate.unique_name.as_deref(), Some("alice@example.com"));
+    }
+
+    #[test]
+    fn summarize_mention_candidate_accepts_descriptor_without_id() {
+        let candidate = summarize_mention_candidate(Identity {
+            id: None,
+            descriptor: Some("aad.descriptor-1".to_string()),
+            subject_descriptor: None,
+            provider_display_name: Some("Naoto Akashi".to_string()),
+            custom_display_name: None,
+            display_name: None,
+            unique_name: Some("naoto@example.com".to_string()),
+            properties: None,
+        })
+        .unwrap();
+
+        assert_eq!(candidate.id, "aad.descriptor-1");
+        assert_eq!(candidate.display_name, "Naoto Akashi");
+        assert_eq!(candidate.unique_name.as_deref(), Some("naoto@example.com"));
     }
 
     #[tokio::test]

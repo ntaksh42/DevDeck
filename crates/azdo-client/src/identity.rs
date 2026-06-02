@@ -23,6 +23,8 @@ pub struct AuthenticatedUser {
 #[serde(rename_all = "camelCase")]
 pub struct Identity {
     pub id: Option<String>,
+    pub descriptor: Option<String>,
+    pub subject_descriptor: Option<String>,
     pub provider_display_name: Option<String>,
     pub custom_display_name: Option<String>,
     pub display_name: Option<String>,
@@ -84,9 +86,6 @@ impl AdoClient {
                     }
                 }
             }
-            if !identities.is_empty() {
-                break;
-            }
         }
         Ok(identities)
     }
@@ -117,6 +116,14 @@ impl AdoClient {
 fn identity_is_duplicate(existing: &[Identity], candidate: &Identity) -> bool {
     existing.iter().any(|identity| {
         same_optional_identity_value(identity.id.as_deref(), candidate.id.as_deref())
+            || same_optional_identity_value(
+                identity.descriptor.as_deref(),
+                candidate.descriptor.as_deref(),
+            )
+            || same_optional_identity_value(
+                identity.subject_descriptor.as_deref(),
+                candidate.subject_descriptor.as_deref(),
+            )
             || same_optional_identity_value(
                 identity.unique_name.as_deref(),
                 candidate.unique_name.as_deref(),
@@ -177,7 +184,7 @@ mod tests {
 
         let identities = test_client(&server)
             .await
-            .search_identities("alice", 8)
+            .search_identities("alice", 1)
             .await
             .unwrap();
         assert_eq!(identities.len(), 1);
@@ -224,7 +231,7 @@ mod tests {
 
         let identities = test_client(&server)
             .await
-            .search_identities("alice", 8)
+            .search_identities("alice", 1)
             .await
             .unwrap();
         assert_eq!(identities.len(), 1);
@@ -232,5 +239,49 @@ mod tests {
             identities[0].property_value("Mail"),
             Some("alice@example.com")
         );
+    }
+
+    #[tokio::test]
+    async fn search_identities_keeps_searching_after_general_matches() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/testorg/_apis/identities"))
+            .and(query_param("api-version", "7.1"))
+            .and(query_param("searchFilter", "General"))
+            .and(query_param("filterValue", "alice"))
+            .and(query_param("queryMembership", "None"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 1,
+                "value": [{
+                    "id": "group-1",
+                    "providerDisplayName": "Alice Team"
+                }]
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/testorg/_apis/identities"))
+            .and(query_param("api-version", "7.1"))
+            .and(query_param("searchFilter", "DisplayName"))
+            .and(query_param("filterValue", "alice"))
+            .and(query_param("queryMembership", "None"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 1,
+                "value": [{
+                    "id": "user-1",
+                    "providerDisplayName": "Alice Johnson",
+                    "uniqueName": "alice@example.com"
+                }]
+            })))
+            .mount(&server)
+            .await;
+
+        let identities = test_client(&server)
+            .await
+            .search_identities("alice", 2)
+            .await
+            .unwrap();
+        assert_eq!(identities.len(), 2);
+        assert_eq!(identities[1].id.as_deref(), Some("user-1"));
     }
 }
