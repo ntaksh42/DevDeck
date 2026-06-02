@@ -143,15 +143,15 @@ cargo clippy --workspace --all-targets -- -D warnings
 pnpm tauri build
 ```
 
-Produces an MSI and NSIS installer in `src-tauri/target/release/bundle/`.
+Produces an MSI and NSIS installer in `target/release/bundle/`.
 
 ### Publishing Windows installers
 
 Release installers are built by GitHub Actions when a version tag is pushed:
 
 ```sh
-git tag v0.1.2
-git push origin v0.1.2
+git tag v0.1.3
+git push origin v0.1.3
 ```
 
 The release workflow builds Windows x64 only and publishes both installer

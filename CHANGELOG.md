@@ -4,6 +4,15 @@ All notable changes to AzDoDeck are documented here.
 
 ## [Unreleased]
 
+## [0.1.3] — 2026-06-02
+
+### Added
+- Work Item preview fields can be customized and persisted per device.
+
+### Changed
+- Work Item grid cells truncate long values to keep dense rows stable.
+- README installer output paths now match the root Cargo target directory.
+
 ## [0.1.2] — 2026-06-02
 
 ### Fixed
