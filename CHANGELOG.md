@@ -4,6 +4,16 @@ All notable changes to AzDoDeck are documented here.
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-06-02
+
+### Added
+- GitHub Release workflow publishes Windows x64 NSIS and MSI installers.
+- Demo harness scenarios for rich text, large data, empty data, slow network, and API errors.
+
+### Changed
+- Work Item preview and PR list rendering hardened for large datasets and Azure DevOps rich text.
+- Windows installer WebView2 bootstrapper handling is explicit in Tauri configuration and documentation.
+
 ### Added
 - Help menu with embedded HTML user guide (sidebar button)
 - Work Item preview panel shows posted comments
