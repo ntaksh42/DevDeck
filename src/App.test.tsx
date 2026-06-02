@@ -595,7 +595,7 @@ describe("App", () => {
     expect((await screen.findAllByText("Fix save workflow")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Test User").length).toBeGreaterThan(0);
     expect(await screen.findByLabelText("Comment")).toBeTruthy();
-    expect(screen.getAllByTitle("Fix save workflow").length).toBeGreaterThan(1);
+    expect(screen.getAllByTitle("Fix save workflow")).toHaveLength(1);
     const previewLabels = [...document.querySelectorAll("dt")].map((node) =>
       node.textContent?.trim(),
     );

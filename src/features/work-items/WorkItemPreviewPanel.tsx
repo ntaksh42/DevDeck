@@ -636,55 +636,6 @@ export function WorkItemPreviewPanel({
         <PreviewEmptyState message="Select a work item." />
       ) : (
         <>
-          <div className="border-b border-border bg-gradient-to-b from-slate-50 to-white px-3 py-2">
-            <div className="flex min-w-0 items-start justify-between gap-2">
-              <div className="min-w-0">
-                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                  <span className="shrink-0 font-mono text-[11px] font-semibold text-muted-foreground">
-                    #{selectedItem.id}
-                  </span>
-                  {(preview?.workItemType ?? selectedItem.workItemType) ? (
-                    <WorkItemBadge tone="type">
-                      {preview?.workItemType ?? selectedItem.workItemType}
-                    </WorkItemBadge>
-                  ) : null}
-                  {(preview?.state ?? selectedItem.state) ? (
-                    <WorkItemBadge tone={stateBadgeTone(preview?.state ?? selectedItem.state)}>
-                      {preview?.state ?? selectedItem.state}
-                    </WorkItemBadge>
-                  ) : null}
-                  <span
-                    className="min-w-0 truncate text-[11px] text-muted-foreground"
-                    title={selectedItem.projectName}
-                  >
-                    {selectedItem.projectName}
-                  </span>
-                </div>
-                <h2 className="mt-1 line-clamp-2 text-[15px] font-semibold leading-5 text-foreground" title={selectedItem.title}>
-                  {selectedItem.title}
-                </h2>
-              </div>
-              <span className="flex shrink-0 items-center gap-1">
-                {previewLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
-                ) : (
-                  <ShortcutHint>Alt+P</ShortcutHint>
-                )}
-                {preview?.webUrl ? (
-                  <a
-                    href={preview.webUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label="Open in Azure DevOps"
-                    title="Open in Azure DevOps"
-                    className="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                  </a>
-                ) : null}
-              </span>
-            </div>
-          </div>
           {previewError ? (
             <div className="m-3 rounded-md border border-destructive/30 bg-red-50 p-3 text-sm text-destructive">
               {previewError}
@@ -887,8 +838,10 @@ export function WorkItemPreviewPanel({
                 </form>
               </div>
             </>
-          ) : (
+          ) : previewLoading ? (
             <PreviewEmptyState message={`Loading work item #${selectedItem.id}.`} />
+          ) : (
+            <PreviewEmptyState message={`Work item #${selectedItem.id} is not available.`} />
           )}
         </>
       )}
@@ -946,75 +899,90 @@ function WorkItemPreviewDetails({
     <div
       aria-keyshortcuts="Alt+P"
       aria-label="Work item preview"
-      className="min-h-0 flex-1 overflow-auto bg-white px-2.5 py-2 text-xs outline-none focus:ring-2 focus:ring-inset focus:ring-ring"
+      className="min-h-0 flex-1 overflow-auto bg-white px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-inset focus:ring-ring"
       data-primary-preview="true"
       onKeyDown={stopPreviewNavigationKeyDown}
       tabIndex={-1}
     >
-      <div className="rounded-md border border-border bg-slate-50/50 px-2 py-1">
-        <div className="flex items-center justify-between gap-2 border-b border-border/70 pb-1">
+      <div className="border-b border-border pb-1">
+        <div className="flex items-center justify-between gap-2">
           <span className="text-[10px] font-semibold uppercase leading-4 text-muted-foreground">
             Fields
           </span>
-          <div ref={fieldMenuRef} className="relative">
-            <button
-              type="button"
-              aria-expanded={fieldMenuOpen}
-              aria-label="Configure preview fields"
-              title="Configure preview fields"
-              onClick={() => setFieldMenuOpen((open) => !open)}
-              className="inline-flex h-5 items-center gap-1 rounded border border-border bg-white px-1.5 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
-            >
-              <SlidersHorizontal className="h-3 w-3" aria-hidden="true" />
-              Fields
-            </button>
-            {fieldMenuOpen ? (
-              <div className="absolute right-0 top-full z-30 mt-1 w-56 rounded-md border border-border bg-white p-1 shadow-lg">
-                <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground">
-                  Show attributes
-                </div>
-                <div className="max-h-64 overflow-auto">
-                  {PREVIEW_FIELD_DEFINITIONS.map((field) => (
-                    <label
-                      key={field.key}
-                      className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs hover:bg-muted"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedFieldKeys.includes(field.key)}
-                        onChange={() => toggleField(field.key)}
-                        className="h-3.5 w-3.5"
-                      />
-                      <span className="min-w-0 flex-1 truncate">{field.label}</span>
-                      {field.editable ? (
-                        <span className="rounded border border-border bg-background px-1 text-[10px] text-muted-foreground">
-                          editable
-                        </span>
-                      ) : null}
-                    </label>
-                  ))}
-                </div>
-                <div className="mt-1 flex items-center justify-between border-t border-border pt-1">
-                  <button
-                    type="button"
-                    onClick={() => onSelectedFieldKeysChange(DEFAULT_PREVIEW_FIELD_KEYS)}
-                    className="rounded px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  >
-                    Reset
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFieldMenuOpen(false)}
-                    className="rounded bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90"
-                  >
-                    Done
-                  </button>
-                </div>
-              </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <ShortcutHint>Alt+P</ShortcutHint>
+            {preview.webUrl ? (
+              <a
+                href={preview.webUrl}
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Open in Azure DevOps"
+                title="Open in Azure DevOps"
+                className="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground"
+              >
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              </a>
             ) : null}
+            <div ref={fieldMenuRef} className="relative">
+              <button
+                type="button"
+                aria-expanded={fieldMenuOpen}
+                aria-label="Configure preview fields"
+                title="Configure preview fields"
+                onClick={() => setFieldMenuOpen((open) => !open)}
+                className="inline-flex h-5 items-center gap-1 rounded border border-border bg-white px-1.5 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+              >
+                <SlidersHorizontal className="h-3 w-3" aria-hidden="true" />
+                Fields
+              </button>
+              {fieldMenuOpen ? (
+                <div className="absolute right-0 top-full z-30 mt-1 w-56 rounded-md border border-border bg-white p-1 shadow-lg">
+                  <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+                    Show attributes
+                  </div>
+                  <div className="max-h-64 overflow-auto">
+                    {PREVIEW_FIELD_DEFINITIONS.map((field) => (
+                      <label
+                        key={field.key}
+                        className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs hover:bg-muted"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedFieldKeys.includes(field.key)}
+                          onChange={() => toggleField(field.key)}
+                          className="h-3.5 w-3.5"
+                        />
+                        <span className="min-w-0 flex-1 truncate">{field.label}</span>
+                        {field.editable ? (
+                          <span className="rounded border border-border bg-background px-1 text-[10px] text-muted-foreground">
+                            editable
+                          </span>
+                        ) : null}
+                      </label>
+                    ))}
+                  </div>
+                  <div className="mt-1 flex items-center justify-between border-t border-border pt-1">
+                    <button
+                      type="button"
+                      onClick={() => onSelectedFieldKeysChange(DEFAULT_PREVIEW_FIELD_KEYS)}
+                      className="rounded px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    >
+                      Reset
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFieldMenuOpen(false)}
+                      className="rounded bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(128px,1fr))] gap-x-2 gap-y-0.5 pt-1">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-x-2 gap-y-0.5 pt-0.5">
           {selectedFieldDefinitions.map((field) =>
             field.editable === "state" ? (
               <PreviewControl key={field.key} label={field.label} shortcut={field.shortcut}>
@@ -1198,40 +1166,6 @@ function CollapsibleComment({
       </div>
     </article>
   );
-}
-
-function WorkItemBadge({
-  children,
-  tone,
-}: {
-  children: ReactNode;
-  tone: "type" | "neutral" | "green" | "amber" | "blue";
-}) {
-  const toneClass =
-    tone === "green"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-      : tone === "amber"
-        ? "border-amber-200 bg-amber-50 text-amber-700"
-        : tone === "blue"
-          ? "border-blue-200 bg-blue-50 text-blue-700"
-          : tone === "type"
-            ? "border-slate-300 bg-white text-slate-700"
-            : "border-border bg-white text-muted-foreground";
-  return (
-    <span
-      className={`shrink-0 rounded border px-1.5 py-0.5 text-[11px] font-medium leading-none ${toneClass}`}
-    >
-      {children}
-    </span>
-  );
-}
-
-function stateBadgeTone(state: string | null | undefined): "neutral" | "green" | "amber" | "blue" {
-  const normalized = state?.toLowerCase() ?? "";
-  if (/(done|closed|resolved|completed|removed)/.test(normalized)) return "green";
-  if (/(blocked|new|to do|todo|proposed)/.test(normalized)) return "amber";
-  if (/(active|doing|progress|committed)/.test(normalized)) return "blue";
-  return "neutral";
 }
 
 function selectedPreviewFieldDefinitions(keys: PreviewFieldKey[]): PreviewFieldDefinition[] {
