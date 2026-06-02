@@ -602,6 +602,18 @@ describe("App", () => {
     expect(previewLabels).not.toContain("Author");
     expect(previewLabels).not.toContain("Created");
     expect(previewLabels).not.toContain("Changed");
+    expect(previewLabels).not.toContain("Severity");
+    fireEvent.click(screen.getByRole("button", { name: "Configure preview fields" }));
+    fireEvent.click(screen.getByLabelText("Severity"));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    const updatedPreviewLabels = [...document.querySelectorAll("dt")].map((node) =>
+      node.textContent?.trim(),
+    );
+    expect(updatedPreviewLabels).toContain("Severity");
+    expect(screen.getByText("2 - High")).toBeTruthy();
+    expect(window.localStorage.getItem("azdodeck:workItems:previewFields")).toContain(
+      "severity",
+    );
     const descriptionFrame = document.querySelector(
       'iframe[title="Description"]',
     ) as HTMLIFrameElement | null;

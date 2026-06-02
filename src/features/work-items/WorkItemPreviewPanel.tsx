@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ExternalLink, Loader2, Send, Trash2 } from 'lucide-react';
+import { ExternalLink, Loader2, Send, SlidersHorizontal, Trash2 } from 'lucide-react';
 import {
   addWorkItemComment,
   assignWorkItem,
@@ -28,6 +28,62 @@ import { PreviewEmptyState } from '@/components/StateDisplay';
 import { ShortcutHint } from '@/components/ShortcutHint';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from './queryKeys';
 const SAVED_REPLIES_STORAGE_KEY = "azdodeck:workItems:savedReplies";
+const PREVIEW_FIELDS_STORAGE_KEY = "azdodeck:workItems:previewFields";
+
+type PreviewFieldKey =
+  | "state"
+  | "assignedTo"
+  | "priority"
+  | "areaPath"
+  | "iterationPath"
+  | "reason"
+  | "severity"
+  | "storyPoints"
+  | "remainingWork"
+  | "tags"
+  | "workItemType"
+  | "projectName"
+  | "createdBy"
+  | "createdDate"
+  | "changedDate";
+
+type PreviewFieldDefinition = {
+  editable?: "state" | "assignee" | "priority";
+  key: PreviewFieldKey;
+  label: string;
+  shortcut?: string;
+};
+
+const PREVIEW_FIELD_DEFINITIONS: PreviewFieldDefinition[] = [
+  { key: "state", label: "State", editable: "state", shortcut: "S" },
+  { key: "assignedTo", label: "Assigned", editable: "assignee", shortcut: "A" },
+  { key: "priority", label: "Priority", editable: "priority", shortcut: "P" },
+  { key: "areaPath", label: "Area" },
+  { key: "iterationPath", label: "Iteration" },
+  { key: "reason", label: "Reason" },
+  { key: "severity", label: "Severity" },
+  { key: "storyPoints", label: "Points" },
+  { key: "remainingWork", label: "Remain" },
+  { key: "tags", label: "Tags" },
+  { key: "workItemType", label: "Type" },
+  { key: "projectName", label: "Project" },
+  { key: "createdBy", label: "Created by" },
+  { key: "createdDate", label: "Created" },
+  { key: "changedDate", label: "Changed" },
+];
+
+const DEFAULT_PREVIEW_FIELD_KEYS: PreviewFieldKey[] = [
+  "state",
+  "assignedTo",
+  "priority",
+  "areaPath",
+  "iterationPath",
+  "reason",
+];
+
+const PREVIEW_FIELD_KEY_SET = new Set<PreviewFieldKey>(
+  PREVIEW_FIELD_DEFINITIONS.map((field) => field.key),
+);
 
 function loadSavedReplies(): string[] {
   try {
@@ -40,6 +96,24 @@ function loadSavedReplies(): string[] {
 
 function storeSavedReplies(replies: string[]) {
   window.localStorage.setItem(SAVED_REPLIES_STORAGE_KEY, JSON.stringify(replies.slice(0, 20)));
+}
+
+function loadPreviewFieldKeys(): PreviewFieldKey[] {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(PREVIEW_FIELDS_STORAGE_KEY) ?? "[]");
+    if (!Array.isArray(parsed)) return DEFAULT_PREVIEW_FIELD_KEYS;
+    const keys = parsed.filter(
+      (value): value is PreviewFieldKey =>
+        typeof value === "string" && PREVIEW_FIELD_KEY_SET.has(value as PreviewFieldKey),
+    );
+    return keys.length > 0 ? keys : DEFAULT_PREVIEW_FIELD_KEYS;
+  } catch {
+    return DEFAULT_PREVIEW_FIELD_KEYS;
+  }
+}
+
+function storePreviewFieldKeys(keys: PreviewFieldKey[]) {
+  window.localStorage.setItem(PREVIEW_FIELDS_STORAGE_KEY, JSON.stringify(keys));
 }
 
 function stopPreviewNavigationKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
@@ -81,6 +155,9 @@ export function WorkItemPreviewPanel({
 }) {
   const [commentText, setCommentText] = useState("");
   const [savedReplies, setSavedReplies] = useState<string[]>(() => loadSavedReplies());
+  const [selectedPreviewFieldKeys, setSelectedPreviewFieldKeys] = useState<PreviewFieldKey[]>(
+    () => loadPreviewFieldKeys(),
+  );
   const [selectedMentions, setSelectedMentions] = useState<SelectedMention[]>([]);
   const [mentionDisplayNamesById, setMentionDisplayNamesById] = useState<
     Record<string, string>
@@ -171,6 +248,10 @@ export function WorkItemPreviewPanel({
       setMentionQuery("");
     },
   );
+
+  useEffect(() => {
+    storePreviewFieldKeys(selectedPreviewFieldKeys);
+  }, [selectedPreviewFieldKeys]);
 
   const assigneeOptionsQuery = useQuery({
     queryKey: workItemQueryKeys.assignees(
@@ -625,6 +706,8 @@ export function WorkItemPreviewPanel({
                 mentionDisplayNames={commentMentionDisplayNames}
                 onDeleteComment={deleteComment}
                 preview={preview}
+                selectedFieldKeys={selectedPreviewFieldKeys}
+                onSelectedFieldKeysChange={setSelectedPreviewFieldKeys}
                 priorityControl={
                   <PriorityPicker
                     current={preview.priority}
@@ -821,8 +904,10 @@ function WorkItemPreviewDetails({
   deletePending,
   mentionDisplayNames,
   onDeleteComment,
+  onSelectedFieldKeysChange,
   priorityControl,
   resolveImageSource,
+  selectedFieldKeys,
   stateControl,
 }: {
   preview: WorkItemPreview;
@@ -832,23 +917,30 @@ function WorkItemPreviewDetails({
   deletePending: boolean;
   mentionDisplayNames: ReadonlyMap<string, string>;
   onDeleteComment: (commentId: number) => void;
+  onSelectedFieldKeysChange: (keys: PreviewFieldKey[]) => void;
   priorityControl: ReactNode;
   resolveImageSource: (url: string) => Promise<string | null>;
+  selectedFieldKeys: PreviewFieldKey[];
   stateControl: ReactNode;
 }) {
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
-  const fields = [
-    ["Area", preview.areaPath],
-    ["Iteration", preview.iterationPath],
-    ["Reason", preview.reason],
-    ["Severity", preview.severity],
-    ["Points", preview.storyPoints],
-    ["Remain", preview.remainingWork],
-    ["Tags", preview.tags],
-  ].filter(([, value]) => !!value);
+  const [fieldMenuOpen, setFieldMenuOpen] = useState(false);
+  const fieldMenuRef = useCloseOnOutsidePointer<HTMLDivElement>(
+    fieldMenuOpen,
+    () => setFieldMenuOpen(false),
+  );
+  const selectedFieldDefinitions = selectedPreviewFieldDefinitions(selectedFieldKeys);
 
   const descriptionHtml = normalizeRichHtml(preview.descriptionHtml);
   const acceptanceCriteriaHtml = normalizeRichHtml(preview.acceptanceCriteriaHtml);
+
+  function toggleField(key: PreviewFieldKey) {
+    onSelectedFieldKeysChange(
+      selectedFieldKeys.includes(key)
+        ? selectedFieldKeys.filter((value) => value !== key)
+        : [...selectedFieldKeys, key],
+    );
+  }
 
   return (
     <div
@@ -860,27 +952,90 @@ function WorkItemPreviewDetails({
       tabIndex={-1}
     >
       <div className="rounded-md border border-border bg-slate-50/50 px-2 py-1">
-        <div className="grid grid-cols-[repeat(3,minmax(0,1fr))] gap-x-2 gap-y-0.5 border-b border-border/70 pb-1">
-          <PreviewControl label="State" shortcut="S">
-            {stateControl}
-          </PreviewControl>
-          <PreviewControl label="Assigned" shortcut="A">
-            {assigneeControl}
-          </PreviewControl>
-          <PreviewControl label="Priority" shortcut="P">
-            {priorityControl}
-          </PreviewControl>
+        <div className="flex items-center justify-between gap-2 border-b border-border/70 pb-1">
+          <span className="text-[10px] font-semibold uppercase leading-4 text-muted-foreground">
+            Fields
+          </span>
+          <div ref={fieldMenuRef} className="relative">
+            <button
+              type="button"
+              aria-expanded={fieldMenuOpen}
+              aria-label="Configure preview fields"
+              title="Configure preview fields"
+              onClick={() => setFieldMenuOpen((open) => !open)}
+              className="inline-flex h-5 items-center gap-1 rounded border border-border bg-white px-1.5 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+            >
+              <SlidersHorizontal className="h-3 w-3" aria-hidden="true" />
+              Fields
+            </button>
+            {fieldMenuOpen ? (
+              <div className="absolute right-0 top-full z-30 mt-1 w-56 rounded-md border border-border bg-white p-1 shadow-lg">
+                <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+                  Show attributes
+                </div>
+                <div className="max-h-64 overflow-auto">
+                  {PREVIEW_FIELD_DEFINITIONS.map((field) => (
+                    <label
+                      key={field.key}
+                      className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs hover:bg-muted"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedFieldKeys.includes(field.key)}
+                        onChange={() => toggleField(field.key)}
+                        className="h-3.5 w-3.5"
+                      />
+                      <span className="min-w-0 flex-1 truncate">{field.label}</span>
+                      {field.editable ? (
+                        <span className="rounded border border-border bg-background px-1 text-[10px] text-muted-foreground">
+                          editable
+                        </span>
+                      ) : null}
+                    </label>
+                  ))}
+                </div>
+                <div className="mt-1 flex items-center justify-between border-t border-border pt-1">
+                  <button
+                    type="button"
+                    onClick={() => onSelectedFieldKeysChange(DEFAULT_PREVIEW_FIELD_KEYS)}
+                    className="rounded px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  >
+                    Reset
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFieldMenuOpen(false)}
+                    className="rounded bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
         </div>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(96px,1fr))] gap-x-2 gap-y-0.5 pt-1">
-          {fields.length > 0
-            ? fields.map(([label, value]) => (
-                <PreviewField
-                  key={label ?? ""}
-                  label={label ?? ""}
-                  value={value ?? ""}
-                />
-              ))
-            : null}
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(128px,1fr))] gap-x-2 gap-y-0.5 pt-1">
+          {selectedFieldDefinitions.map((field) =>
+            field.editable === "state" ? (
+              <PreviewControl key={field.key} label={field.label} shortcut={field.shortcut}>
+                {stateControl}
+              </PreviewControl>
+            ) : field.editable === "assignee" ? (
+              <PreviewControl key={field.key} label={field.label} shortcut={field.shortcut}>
+                {assigneeControl}
+              </PreviewControl>
+            ) : field.editable === "priority" ? (
+              <PreviewControl key={field.key} label={field.label} shortcut={field.shortcut}>
+                {priorityControl}
+              </PreviewControl>
+            ) : (
+              <PreviewField
+                key={field.key}
+                label={field.label}
+                value={previewFieldValue(preview, field.key) ?? "—"}
+              />
+            ),
+          )}
         </div>
       </div>
 
@@ -1079,6 +1234,46 @@ function stateBadgeTone(state: string | null | undefined): "neutral" | "green" |
   return "neutral";
 }
 
+function selectedPreviewFieldDefinitions(keys: PreviewFieldKey[]): PreviewFieldDefinition[] {
+  const selected = new Set(keys);
+  return PREVIEW_FIELD_DEFINITIONS.filter((field) => selected.has(field.key));
+}
+
+function previewFieldValue(preview: WorkItemPreview, key: PreviewFieldKey): string | null {
+  switch (key) {
+    case "state":
+      return preview.state;
+    case "assignedTo":
+      return preview.assignedTo;
+    case "priority":
+      return preview.priority;
+    case "areaPath":
+      return preview.areaPath;
+    case "iterationPath":
+      return preview.iterationPath;
+    case "reason":
+      return preview.reason;
+    case "severity":
+      return preview.severity;
+    case "storyPoints":
+      return preview.storyPoints;
+    case "remainingWork":
+      return preview.remainingWork;
+    case "tags":
+      return preview.tags;
+    case "workItemType":
+      return preview.workItemType;
+    case "projectName":
+      return preview.projectName;
+    case "createdBy":
+      return preview.createdBy;
+    case "createdDate":
+      return preview.createdDate ? formatRelativeDate(preview.createdDate) : null;
+    case "changedDate":
+      return preview.changedDate ? formatRelativeDate(preview.changedDate) : null;
+  }
+}
+
 function PreviewControl({
   children,
   label,
@@ -1086,7 +1281,7 @@ function PreviewControl({
 }: {
   children: ReactNode;
   label: string;
-  shortcut: string;
+  shortcut?: string;
 }) {
   return (
     <div className="grid min-w-0 grid-cols-[52px_minmax(0,1fr)_auto] items-center gap-1">
@@ -1094,7 +1289,7 @@ function PreviewControl({
         {label}
       </span>
       <div className="flex min-w-0 items-center leading-4">{children}</div>
-      <ShortcutHint>{shortcut}</ShortcutHint>
+      {shortcut ? <ShortcutHint>{shortcut}</ShortcutHint> : null}
     </div>
   );
 }
