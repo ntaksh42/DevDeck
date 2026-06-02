@@ -1,6 +1,6 @@
 import { type FormEvent, type KeyboardEvent as ReactKeyboardEvent, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Building2, Eye, EyeOff, FileText, Keyboard, Loader2, Plus, Trash2 } from 'lucide-react';
+import { Bell, Building2, Eye, EyeOff, FileText, Keyboard, Loader2, Plus, Send, Trash2 } from 'lucide-react';
 import {
   addAzureCliOrganization,
   addPatOrganization,
@@ -8,8 +8,11 @@ import {
   getAppSettings,
   updateAppSettings,
   commandErrorMessage,
+  type AppSettings,
   type Organization,
+  type UpdateAppSettingsInput,
 } from '@/lib/azdoCommands';
+import { sendTestDesktopNotification } from "@/lib/desktopNotifications";
 export function OrganizationSettings({
   organizations,
 }: {
@@ -32,6 +35,7 @@ export function OrganizationSettings({
     <div className="space-y-3">
       <SetupPanel compact />
       <ShowWindowHotkeySettings />
+      <DesktopNotificationSettings />
       <ReviewResultFolderSettings />
       <DataCacheSettings />
       <div className="overflow-hidden rounded-md border border-border bg-white">
@@ -163,6 +167,178 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024).toFixed(1)} KB`;
 }
 
+function settingsInput(
+  settings: AppSettings | undefined,
+  input: UpdateAppSettingsInput,
+): UpdateAppSettingsInput {
+  return {
+    reviewResultFolderPath: settings?.reviewResultFolderPath ?? null,
+    showWindowHotkey: settings?.showWindowHotkey ?? null,
+    desktopNotificationsEnabled: settings?.desktopNotificationsEnabled ?? false,
+    notificationContentPreviewEnabled:
+      settings?.notificationContentPreviewEnabled ?? true,
+    notifyWorkItemAssignments: settings?.notifyWorkItemAssignments ?? true,
+    notifyWorkItemStateChanges: settings?.notifyWorkItemStateChanges ?? true,
+    ...input,
+  };
+}
+
+function DesktopNotificationSettings() {
+  const queryClient = useQueryClient();
+  const settingsQuery = useQuery({
+    queryKey: ["appSettings"],
+    queryFn: getAppSettings,
+    staleTime: 5 * 60_000,
+  });
+  const [enabled, setEnabled] = useState(false);
+  const [contentPreviewEnabled, setContentPreviewEnabled] = useState(true);
+  const [assignmentsEnabled, setAssignmentsEnabled] = useState(true);
+  const [stateChangesEnabled, setStateChangesEnabled] = useState(true);
+  const [testResult, setTestResult] = useState<string | null>(null);
+
+  useEffect(() => {
+    const settings = settingsQuery.data;
+    setEnabled(settings?.desktopNotificationsEnabled ?? false);
+    setContentPreviewEnabled(settings?.notificationContentPreviewEnabled ?? true);
+    setAssignmentsEnabled(settings?.notifyWorkItemAssignments ?? true);
+    setStateChangesEnabled(settings?.notifyWorkItemStateChanges ?? true);
+  }, [settingsQuery.data]);
+
+  const mutation = useMutation({
+    mutationFn: updateAppSettings,
+    onSuccess: (settings) => {
+      queryClient.setQueryData(["appSettings"], settings);
+    },
+  });
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setTestResult(null);
+    mutation.mutate(
+      settingsInput(settingsQuery.data, {
+        desktopNotificationsEnabled: enabled,
+        notificationContentPreviewEnabled: contentPreviewEnabled,
+        notifyWorkItemAssignments: assignmentsEnabled,
+        notifyWorkItemStateChanges: stateChangesEnabled,
+      }),
+    );
+  }
+
+  async function onSendTestNotification() {
+    setTestResult(null);
+    const result = await sendTestDesktopNotification();
+    if (result === "sent") {
+      setTestResult("Test notification sent.");
+    } else if (result === "unsupported") {
+      setTestResult("Desktop notifications are not supported in this runtime.");
+    } else {
+      setTestResult("Desktop notification permission was not granted.");
+    }
+  }
+
+  return (
+    <div className="rounded-md border border-border bg-white">
+      <div className="border-b border-border px-3 py-2">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
+            <Bell className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold">Desktop notifications</h2>
+            <p className="text-sm text-muted-foreground">
+              Notify when assigned work items or states change after sync.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <form className="grid gap-3 p-3" onSubmit={onSubmit}>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(event) => setEnabled(event.target.checked)}
+            className="h-4 w-4 rounded border-input"
+          />
+          Enable desktop notifications
+        </label>
+        <div className="grid gap-2 md:grid-cols-3">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={assignmentsEnabled}
+              onChange={(event) => setAssignmentsEnabled(event.target.checked)}
+              className="h-4 w-4 rounded border-input"
+            />
+            Assigned work items
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={stateChangesEnabled}
+              onChange={(event) => setStateChangesEnabled(event.target.checked)}
+              className="h-4 w-4 rounded border-input"
+            />
+            State changes
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={contentPreviewEnabled}
+              onChange={(event) => setContentPreviewEnabled(event.target.checked)}
+              className="h-4 w-4 rounded border-input"
+            />
+            Show title in notification
+          </label>
+        </div>
+
+        {settingsQuery.isError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {commandErrorMessage(settingsQuery.error)}
+          </p>
+        ) : null}
+
+        {mutation.isError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {commandErrorMessage(mutation.error)}
+          </p>
+        ) : null}
+
+        {mutation.isSuccess ? (
+          <p className="text-sm text-green-700">Desktop notification settings saved.</p>
+        ) : null}
+
+        {testResult ? <p className="text-sm text-muted-foreground">{testResult}</p> : null}
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="submit"
+            disabled={settingsQuery.isLoading || mutation.isPending}
+            className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {mutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Bell className="h-4 w-4" aria-hidden="true" />
+            )}
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void onSendTestNotification();
+            }}
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-4 text-sm font-medium hover:bg-secondary"
+          >
+            <Send className="h-4 w-4" aria-hidden="true" />
+            Send test
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 export function ReviewResultFolderSettings() {
   const queryClient = useQueryClient();
   const settingsQuery = useQuery({
@@ -186,10 +362,7 @@ export function ReviewResultFolderSettings() {
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    mutation.mutate({
-      reviewResultFolderPath: folderPath,
-      showWindowHotkey: settingsQuery.data?.showWindowHotkey ?? null,
-    });
+    mutation.mutate(settingsInput(settingsQuery.data, { reviewResultFolderPath: folderPath }));
   }
 
   return (
@@ -276,10 +449,7 @@ export function ShowWindowHotkeySettings() {
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    mutation.mutate({
-      reviewResultFolderPath: settingsQuery.data?.reviewResultFolderPath ?? null,
-      showWindowHotkey: hotkey,
-    });
+    mutation.mutate(settingsInput(settingsQuery.data, { showWindowHotkey: hotkey }));
   }
 
   function handleHotkeyKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {

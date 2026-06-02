@@ -59,6 +59,10 @@ const DEMO_PREVIEW_IMAGE_DATA_URL =
 let demoSettings: AppSettings = {
   reviewResultFolderPath: "C:\\reports\\azdo-reviews",
   showWindowHotkey: null,
+  desktopNotificationsEnabled: false,
+  notificationContentPreviewEnabled: true,
+  notifyWorkItemAssignments: true,
+  notifyWorkItemStateChanges: true,
 };
 const deletedDemoWorkItemComments = new Set<number>();
 
@@ -86,6 +90,22 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
           input && "showWindowHotkey" in input
             ? input.showWindowHotkey?.trim() || null
             : demoSettings.showWindowHotkey,
+        desktopNotificationsEnabled:
+          input && "desktopNotificationsEnabled" in input
+            ? Boolean(input.desktopNotificationsEnabled)
+            : demoSettings.desktopNotificationsEnabled,
+        notificationContentPreviewEnabled:
+          input && "notificationContentPreviewEnabled" in input
+            ? Boolean(input.notificationContentPreviewEnabled)
+            : demoSettings.notificationContentPreviewEnabled,
+        notifyWorkItemAssignments:
+          input && "notifyWorkItemAssignments" in input
+            ? Boolean(input.notifyWorkItemAssignments)
+            : demoSettings.notifyWorkItemAssignments,
+        notifyWorkItemStateChanges:
+          input && "notifyWorkItemStateChanges" in input
+            ? Boolean(input.notifyWorkItemStateChanges)
+            : demoSettings.notifyWorkItemStateChanges,
       };
       return demoSettings;
     }

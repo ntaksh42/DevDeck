@@ -23,6 +23,10 @@ export type Organization = z.infer<typeof organizationSchema>;
 const appSettingsSchema = z.object({
   reviewResultFolderPath: z.string().nullable(),
   showWindowHotkey: z.string().nullable().default(null),
+  desktopNotificationsEnabled: z.boolean().default(false),
+  notificationContentPreviewEnabled: z.boolean().default(true),
+  notifyWorkItemAssignments: z.boolean().default(true),
+  notifyWorkItemStateChanges: z.boolean().default(true),
 });
 
 export type AppSettings = z.infer<typeof appSettingsSchema>;
@@ -208,6 +212,10 @@ export type DeleteOrganizationInput = {
 export type UpdateAppSettingsInput = {
   reviewResultFolderPath?: string | null;
   showWindowHotkey?: string | null;
+  desktopNotificationsEnabled?: boolean;
+  notificationContentPreviewEnabled?: boolean;
+  notifyWorkItemAssignments?: boolean;
+  notifyWorkItemStateChanges?: boolean;
 };
 
 export type GetReviewResultPreviewInput = {

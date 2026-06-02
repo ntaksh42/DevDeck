@@ -23,6 +23,7 @@ import {
 import { Route, Routes } from "react-router-dom";
 import {
   commandErrorMessage,
+  getAppSettings,
   listOrganizations,
   triggerSync,
 } from "@/lib/azdoCommands";
@@ -54,6 +55,10 @@ import { invalidateWorkItemQueryViews, workItemQueryKeys } from '@/features/work
 import { OrganizationSettings, SetupPanel } from '@/features/settings/OrganizationSettings';
 import { MyReviewsGrid } from '@/features/pull-requests/MyReviewsGrid';
 import { PullRequestSearch } from '@/features/pull-requests/PullRequestSearch';
+import {
+  showWorkItemNotificationEvent,
+  type WorkItemNotificationEvent,
+} from "@/lib/desktopNotifications";
 
 type View =
   | "pullRequestSearch"
@@ -94,6 +99,7 @@ function AppShell() {
     storedNumber(SIDEBAR_WIDTH_STORAGE_KEY, DEFAULT_SIDEBAR_WIDTH, 160, 420),
   );
   const navRef = useRef<HTMLElement | null>(null);
+  const appSettingsRef = useRef<Awaited<ReturnType<typeof getAppSettings>> | null>(null);
   const navTypeaheadRef = useRef<{ value: string; timer: number | null }>({
     value: "",
     timer: null,
@@ -102,6 +108,11 @@ function AppShell() {
   const organizationsQuery = useQuery({
     queryKey: ["organizations"],
     queryFn: listOrganizations,
+    staleTime: 5 * 60_000,
+  });
+  const appSettingsQuery = useQuery({
+    queryKey: ["appSettings"],
+    queryFn: getAppSettings,
     staleTime: 5 * 60_000,
   });
   const syncMutation = useMutation({
@@ -411,6 +422,10 @@ function AppShell() {
   }
 
   useEffect(() => {
+    appSettingsRef.current = appSettingsQuery.data ?? null;
+  }, [appSettingsQuery.data]);
+
+  useEffect(() => {
     if (!isTauriRuntime()) return;
     let cleanup: (() => void) | undefined;
     listen("sync:updated", () => {
@@ -420,6 +435,19 @@ function AppShell() {
     });
     return () => cleanup?.();
   }, [queryClient]);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let cleanup: (() => void) | undefined;
+    listen<WorkItemNotificationEvent>("notifications:work-items", (event) => {
+      const settings = appSettingsRef.current;
+      if (!settings) return;
+      void showWorkItemNotificationEvent(event.payload, settings);
+    }).then((unlisten) => {
+      cleanup = unlisten;
+    });
+    return () => cleanup?.();
+  }, []);
 
   useEffect(() => {
     window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(sidebarWidth)));

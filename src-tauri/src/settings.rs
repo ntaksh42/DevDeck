@@ -11,6 +11,10 @@ use crate::error::{AppError, Result};
 pub struct UpdateAppSettingsInput {
     pub review_result_folder_path: Option<String>,
     pub show_window_hotkey: Option<String>,
+    pub desktop_notifications_enabled: Option<bool>,
+    pub notification_content_preview_enabled: Option<bool>,
+    pub notify_work_item_assignments: Option<bool>,
+    pub notify_work_item_state_changes: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -55,6 +59,12 @@ pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
     AppSettings {
         review_result_folder_path: normalize_path(input.review_result_folder_path),
         show_window_hotkey: normalize_path(input.show_window_hotkey),
+        desktop_notifications_enabled: input.desktop_notifications_enabled.unwrap_or(false),
+        notification_content_preview_enabled: input
+            .notification_content_preview_enabled
+            .unwrap_or(true),
+        notify_work_item_assignments: input.notify_work_item_assignments.unwrap_or(true),
+        notify_work_item_state_changes: input.notify_work_item_state_changes.unwrap_or(true),
     }
 }
 

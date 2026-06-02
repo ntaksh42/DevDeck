@@ -26,11 +26,28 @@ pub struct Organization {
     pub updated_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     pub review_result_folder_path: Option<String>,
     pub show_window_hotkey: Option<String>,
+    pub desktop_notifications_enabled: bool,
+    pub notification_content_preview_enabled: bool,
+    pub notify_work_item_assignments: bool,
+    pub notify_work_item_state_changes: bool,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            review_result_folder_path: None,
+            show_window_hotkey: None,
+            desktop_notifications_enabled: false,
+            notification_content_preview_enabled: true,
+            notify_work_item_assignments: true,
+            notify_work_item_state_changes: true,
+        }
+    }
 }
 
 pub struct OrganizationDraft {
@@ -696,6 +713,26 @@ fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
     Ok(AppSettings {
         review_result_folder_path: get_setting(conn, "review_result_folder_path")?,
         show_window_hotkey: get_setting(conn, "show_window_hotkey")?,
+        desktop_notifications_enabled: get_bool_setting(
+            conn,
+            "desktop_notifications_enabled",
+            false,
+        )?,
+        notification_content_preview_enabled: get_bool_setting(
+            conn,
+            "notification_content_preview_enabled",
+            true,
+        )?,
+        notify_work_item_assignments: get_bool_setting(
+            conn,
+            "notify_work_item_assignments",
+            true,
+        )?,
+        notify_work_item_state_changes: get_bool_setting(
+            conn,
+            "notify_work_item_state_changes",
+            true,
+        )?,
     })
 }
 
@@ -709,6 +746,26 @@ fn update_app_settings(conn: &Connection, settings: AppSettings) -> Result<AppSe
         conn,
         "show_window_hotkey",
         settings.show_window_hotkey.as_deref(),
+    )?;
+    set_bool_setting(
+        conn,
+        "desktop_notifications_enabled",
+        settings.desktop_notifications_enabled,
+    )?;
+    set_bool_setting(
+        conn,
+        "notification_content_preview_enabled",
+        settings.notification_content_preview_enabled,
+    )?;
+    set_bool_setting(
+        conn,
+        "notify_work_item_assignments",
+        settings.notify_work_item_assignments,
+    )?;
+    set_bool_setting(
+        conn,
+        "notify_work_item_state_changes",
+        settings.notify_work_item_state_changes,
     )?;
     get_app_settings(conn)
 }
@@ -739,6 +796,22 @@ fn set_setting(conn: &Connection, key: &str, value: Option<&str>) -> Result<()> 
         }
     }
     Ok(())
+}
+
+fn get_bool_setting(conn: &Connection, key: &str, default_value: bool) -> Result<bool> {
+    Ok(get_setting(conn, key)?
+        .as_deref()
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "true" | "1" | "yes"
+            )
+        })
+        .unwrap_or(default_value))
+}
+
+fn set_bool_setting(conn: &Connection, key: &str, value: bool) -> Result<()> {
+    set_setting(conn, key, Some(if value { "true" } else { "false" }))
 }
 
 // ── Private helpers — pull requests ──────────────────────────────────────────
@@ -1404,6 +1477,10 @@ mod tests {
             AppSettings {
                 review_result_folder_path: Some("C:/reports".to_string()),
                 show_window_hotkey: Some("Ctrl+Alt+D".to_string()),
+                desktop_notifications_enabled: true,
+                notification_content_preview_enabled: false,
+                notify_work_item_assignments: true,
+                notify_work_item_state_changes: false,
             },
         )
         .unwrap();
@@ -1412,12 +1489,17 @@ mod tests {
             Some("C:/reports")
         );
         assert_eq!(saved.show_window_hotkey.as_deref(), Some("Ctrl+Alt+D"));
+        assert!(saved.desktop_notifications_enabled);
+        assert!(!saved.notification_content_preview_enabled);
+        assert!(saved.notify_work_item_assignments);
+        assert!(!saved.notify_work_item_state_changes);
 
         let cleared = update_app_settings(
             &conn,
             AppSettings {
                 review_result_folder_path: Some("   ".to_string()),
                 show_window_hotkey: Some("   ".to_string()),
+                ..AppSettings::default()
             },
         )
         .unwrap();

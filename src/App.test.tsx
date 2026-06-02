@@ -114,7 +114,7 @@ describe("App", () => {
     expect(
       await screen.findByText("Organization and PAT are required."),
     ).toBeTruthy();
-    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(invokeMock).not.toHaveBeenCalledWith("add_pat_organization", expect.anything());
   });
 
   it("shows configured organizations", async () => {
@@ -212,13 +212,17 @@ describe("App", () => {
       target: { value: "D:\\azdo-review-results" },
     });
     expect((folderPathInput as HTMLInputElement).value).toBe("D:\\azdo-review-results");
-    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[1]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[2]);
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("update_app_settings", {
         input: {
           reviewResultFolderPath: "D:\\azdo-review-results",
           showWindowHotkey: null,
+          desktopNotificationsEnabled: false,
+          notificationContentPreviewEnabled: true,
+          notifyWorkItemAssignments: true,
+          notifyWorkItemStateChanges: true,
         },
       });
     });
@@ -267,10 +271,64 @@ describe("App", () => {
         input: {
           reviewResultFolderPath: "C:\\reports",
           showWindowHotkey: "Ctrl+Alt+D",
+          desktopNotificationsEnabled: false,
+          notificationContentPreviewEnabled: true,
+          notifyWorkItemAssignments: true,
+          notifyWorkItemStateChanges: true,
         },
       });
     });
     expect(await screen.findByText("Show window hotkey saved.")).toBeTruthy();
+  });
+
+  it("saves desktop notification settings", async () => {
+    invokeMock.mockImplementation((command: string, args?: unknown) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve({
+          reviewResultFolderPath: null,
+          showWindowHotkey: null,
+          desktopNotificationsEnabled: false,
+          notificationContentPreviewEnabled: true,
+          notifyWorkItemAssignments: true,
+          notifyWorkItemStateChanges: true,
+        });
+      }
+      if (command === "update_app_settings") {
+        return Promise.resolve((args as { input: unknown }).input);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+
+    await screen.findByText("No pull requests assigned to you.");
+    fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    expect(await screen.findByRole("heading", { name: "Desktop notifications" })).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText("Enable desktop notifications"));
+    fireEvent.click(screen.getByLabelText("State changes"));
+    fireEvent.click(screen.getByLabelText("Show title in notification"));
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[1]);
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("update_app_settings", {
+        input: {
+          reviewResultFolderPath: null,
+          showWindowHotkey: null,
+          desktopNotificationsEnabled: true,
+          notificationContentPreviewEnabled: false,
+          notifyWorkItemAssignments: true,
+          notifyWorkItemStateChanges: false,
+        },
+      });
+    });
+    expect(await screen.findByText("Desktop notification settings saved.")).toBeTruthy();
   });
 
   it("submits organization setup to the backend", async () => {
