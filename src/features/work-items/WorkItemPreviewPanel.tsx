@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Send, Trash2 } from 'lucide-react';
+import { ExternalLink, Loader2, Send, Trash2 } from 'lucide-react';
 import {
   addWorkItemComment,
   assignWorkItem,
@@ -583,11 +583,25 @@ export function WorkItemPreviewPanel({
                   {selectedItem.title}
                 </h2>
               </div>
-              {previewLoading ? (
-                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" aria-hidden="true" />
-              ) : (
-                <ShortcutHint>Alt+P</ShortcutHint>
-              )}
+              <span className="flex shrink-0 items-center gap-1">
+                {previewLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
+                ) : (
+                  <ShortcutHint>Alt+P</ShortcutHint>
+                )}
+                {preview?.webUrl ? (
+                  <a
+                    href={preview.webUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label="Open in Azure DevOps"
+                    title="Open in Azure DevOps"
+                    className="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                  </a>
+                ) : null}
+              </span>
             </div>
           </div>
           {previewError ? (
@@ -679,16 +693,64 @@ export function WorkItemPreviewPanel({
                 }
               />
               <div className="border-t border-border bg-slate-50/70 p-2">
-                <form className="space-y-1.5" onSubmit={submitComment}>
-                  <div className="grid gap-1">
-                    <span className="flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
-                      <span>Comment</span>
-                      <span className="flex items-center gap-1">
-                        <ShortcutHint>Alt+M</ShortcutHint>
-                        <ShortcutHint>Ctrl+Enter</ShortcutHint>
-                      </span>
-                    </span>
-                    <span className="flex flex-wrap items-center gap-1">
+                <form className="space-y-1" onSubmit={submitComment}>
+                  <div ref={mentionPickerRef} className="relative">
+                    <textarea
+                      ref={textareaRef}
+                      data-work-item-comment-input="true"
+                      value={commentText}
+                      onChange={(event) => {
+                        setCommentText(event.target.value);
+                        updateMentionState(
+                          event.target.value,
+                          event.target.selectionStart,
+                        );
+                      }}
+                      onClick={(event) => {
+                        updateMentionState(
+                          event.currentTarget.value,
+                          event.currentTarget.selectionStart,
+                        );
+                      }}
+                      onKeyDown={handleCommentKeyDown}
+                      aria-label="Comment"
+                      aria-keyshortcuts="M Alt+M Control+Enter Meta+Enter"
+                      placeholder="Add a comment..."
+                      rows={2}
+                      className="min-h-[36px] w-full resize-none rounded-md border border-input bg-white px-2 py-1.5 text-sm outline-none transition-[min-height] focus:min-h-[64px] focus:ring-2 focus:ring-ring"
+                    />
+                    {showMentionOptions ? (
+                      <div className="absolute bottom-full left-0 z-20 mb-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-white py-1 shadow-lg">
+                        {mentionOptions.map((candidate, index) => (
+                          <button
+                            key={candidate.id}
+                            type="button"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => applyMention(candidate)}
+                            className={`flex w-full min-w-0 flex-col px-3 py-2 text-left text-sm ${
+                              index === activeMentionIndex ? "bg-secondary" : "hover:bg-muted"
+                            }`}
+                          >
+                            <span className="truncate font-medium">
+                              {candidate.displayName}
+                            </span>
+                            {candidate.uniqueName ? (
+                              <span className="truncate text-xs text-muted-foreground">
+                                {candidate.uniqueName}
+                              </span>
+                            ) : null}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  {commentMutation.isError ? (
+                    <p className="text-xs text-destructive">
+                      {commandErrorMessage(commentMutation.error)}
+                    </p>
+                  ) : null}
+                  <div className="flex flex-wrap items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1">
                       {savedReplies.length > 0 ? (
                         <select
                           aria-label="Saved replies"
@@ -716,78 +778,28 @@ export function WorkItemPreviewPanel({
                       >
                         Save reply
                       </button>
-                    </span>
-                    <div ref={mentionPickerRef} className="relative">
-                      <textarea
-                        ref={textareaRef}
-                        data-work-item-comment-input="true"
-                        value={commentText}
-                        onChange={(event) => {
-                          setCommentText(event.target.value);
-                          updateMentionState(
-                            event.target.value,
-                            event.target.selectionStart,
-                          );
-                        }}
-                        onClick={(event) => {
-                          updateMentionState(
-                            event.currentTarget.value,
-                            event.currentTarget.selectionStart,
-                          );
-                        }}
-                        onKeyDown={handleCommentKeyDown}
-                        aria-label="Comment"
-                        aria-keyshortcuts="M Alt+M Control+Enter Meta+Enter"
-                        rows={2}
-                        className="min-h-[42px] w-full resize-none rounded-md border border-input bg-white px-2 py-1.5 text-sm outline-none transition-[min-height] focus:min-h-[72px] focus:ring-2 focus:ring-ring"
-                      />
-                      {showMentionOptions ? (
-                        <div className="absolute bottom-full left-0 z-20 mb-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-white py-1 shadow-lg">
-                          {mentionOptions.map((candidate, index) => (
-                            <button
-                              key={candidate.id}
-                              type="button"
-                              onMouseDown={(event) => event.preventDefault()}
-                              onClick={() => applyMention(candidate)}
-                              className={`flex w-full min-w-0 flex-col px-3 py-2 text-left text-sm ${
-                                index === activeMentionIndex ? "bg-secondary" : "hover:bg-muted"
-                              }`}
-                            >
-                              <span className="truncate font-medium">
-                                {candidate.displayName}
-                              </span>
-                              {candidate.uniqueName ? (
-                                <span className="truncate text-xs text-muted-foreground">
-                                  {candidate.uniqueName}
-                                </span>
-                              ) : null}
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
                     </div>
-                  </div>
-                  {commentMutation.isError ? (
-                    <p className="text-xs text-destructive">
-                      {commandErrorMessage(commentMutation.error)}
-                    </p>
-                  ) : null}
-                  <div className="flex items-center justify-between gap-2">
-                    <button
-                      type="submit"
-                      disabled={!commentText.trim() || commentMutation.isPending}
-                      className="inline-flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {commentMutation.isPending ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                      ) : (
-                        <Send className="h-3.5 w-3.5" aria-hidden="true" />
-                      )}
-                      Post comment
-                    </button>
-                    {commentMutation.isSuccess ? (
-                      <span className="text-xs text-muted-foreground">Comment posted</span>
-                    ) : null}
+                    <div className="flex items-center gap-1.5">
+                      <span className="flex items-center gap-0.5">
+                        <ShortcutHint>Alt+M</ShortcutHint>
+                        <ShortcutHint>Ctrl+Enter</ShortcutHint>
+                      </span>
+                      {commentMutation.isSuccess ? (
+                        <span className="text-xs text-muted-foreground">Posted</span>
+                      ) : null}
+                      <button
+                        type="submit"
+                        disabled={!commentText.trim() || commentMutation.isPending}
+                        className="inline-flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {commentMutation.isPending ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                        ) : (
+                          <Send className="h-3.5 w-3.5" aria-hidden="true" />
+                        )}
+                        Post
+                      </button>
+                    </div>
                   </div>
                 </form>
               </div>
@@ -978,7 +990,7 @@ function CollapsibleComment({
 
   return (
     <article className="min-w-0 overflow-hidden rounded-md border border-border bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-      <div className="flex min-w-0 items-center gap-1.5 border-b border-border bg-slate-50 px-2 py-1.5">
+      <div className="flex min-w-0 items-center gap-1.5 border-b border-border bg-slate-50 px-2 py-1">
         <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[10px] font-semibold text-blue-700">
           {commentAuthorInitials(createdBy)}
         </span>

@@ -4,6 +4,12 @@ All notable changes to AzDoDeck are documented here.
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-06-02
+
+### Fixed
+- Release workflow artifact archive step now reads installers from the root
+  Cargo target directory used by Tauri.
+
 ## [0.1.1] — 2026-06-02
 
 ### Added

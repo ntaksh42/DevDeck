@@ -150,8 +150,8 @@ Produces an MSI and NSIS installer in `src-tauri/target/release/bundle/`.
 Release installers are built by GitHub Actions when a version tag is pushed:
 
 ```sh
-git tag v0.1.1
-git push origin v0.1.1
+git tag v0.1.2
+git push origin v0.1.2
 ```
 
 The release workflow builds Windows x64 only and publishes both installer
