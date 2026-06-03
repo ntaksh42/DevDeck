@@ -145,6 +145,15 @@ pub struct SetWorkItemStateInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SetWorkItemReasonInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_id: i64,
+    pub reason: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SetWorkItemPriorityInput {
     pub organization_id: Option<String>,
     pub project_id: String,
@@ -445,11 +454,12 @@ impl WorkItemService {
         input: SearchWorkItemMentionsInput,
     ) -> Result<Vec<MentionCandidate>> {
         let query = input.query.trim();
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+
         if query.is_empty() {
-            return Ok(Vec::new());
+            return self.default_mention_candidates(&organization).await;
         }
 
-        let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
         let current_user = if let Some(candidate) =
             organization_authenticated_user_candidate(&organization, query)
@@ -474,6 +484,52 @@ impl WorkItemService {
                 break;
             }
         }
+        Ok(candidates)
+    }
+
+    async fn default_mention_candidates(
+        &self,
+        organization: &Organization,
+    ) -> Result<Vec<MentionCandidate>> {
+        let mut candidates = Vec::new();
+
+        // 認証済みユーザーを先頭に（DBキャッシュ優先、なければ connection_data）
+        if let Some(candidate) = organization_authenticated_user_candidate(organization, "") {
+            push_unique_mention_candidate(&mut candidates, candidate);
+        } else {
+            let client = client_for_organization(organization, &self.secrets)?;
+            if let Some(candidate) =
+                client.connection_data().await.ok().and_then(|data| {
+                    authenticated_user_mention_candidate(data.authenticated_user, "")
+                })
+            {
+                push_unique_mention_candidate(&mut candidates, candidate);
+            }
+        }
+
+        // DBキャッシュから最近アクティブなアサイン済みユーザーを補完
+        let recent_names = self
+            .db
+            .get_recent_assignees(&organization.id)
+            .unwrap_or_default();
+        for name in recent_names {
+            let name = name.trim().to_string();
+            if name.is_empty() {
+                continue;
+            }
+            push_unique_mention_candidate(
+                &mut candidates,
+                MentionCandidate {
+                    id: name.clone(),
+                    display_name: name,
+                    unique_name: None,
+                },
+            );
+            if candidates.len() >= 8 {
+                break;
+            }
+        }
+
         Ok(candidates)
     }
 
@@ -553,6 +609,10 @@ impl WorkItemService {
         let work_item = client
             .update_work_item_assigned_to(&project.id, input.work_item_id, assigned_to)
             .await?;
+        let cached = work_item_to_cached(&organization, &project.id, &project.name, &work_item);
+        if let Err(e) = self.db.upsert_work_items(&[cached]) {
+            tracing::warn!(error = %e, "failed to update work item cache after assign");
+        }
         let comments = client
             .list_work_item_comments(
                 &project.id,
@@ -591,6 +651,52 @@ impl WorkItemService {
         let work_item = client
             .update_work_item_state(&project.id, input.work_item_id, &state)
             .await?;
+        let cached = work_item_to_cached(&organization, &project.id, &project.name, &work_item);
+        if let Err(e) = self.db.upsert_work_items(&[cached]) {
+            tracing::warn!(error = %e, "failed to update work item cache after set_state");
+        }
+        let comments = client
+            .list_work_item_comments(
+                &project.id,
+                input.work_item_id,
+                WORK_ITEM_PREVIEW_COMMENT_LIMIT,
+            )
+            .await
+            .unwrap_or_default();
+
+        Ok(summarize_work_item_preview(
+            &organization,
+            &project.id,
+            &project.name,
+            work_item,
+            comments,
+        ))
+    }
+
+    pub async fn set_reason(&self, input: SetWorkItemReasonInput) -> Result<WorkItemPreview> {
+        let reason = input.reason.trim().to_string();
+        if reason.is_empty() {
+            return Err(AppError::InvalidInput("reason is required".to_string()));
+        }
+
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = client
+            .list_projects()
+            .await?
+            .into_iter()
+            .find(|p| p.id == input.project_id)
+            .ok_or_else(|| {
+                AppError::InvalidInput(format!("project not found: {}", input.project_id))
+            })?;
+
+        let work_item = client
+            .update_work_item_reason(&project.id, input.work_item_id, &reason)
+            .await?;
+        let cached = work_item_to_cached(&organization, &project.id, &project.name, &work_item);
+        if let Err(e) = self.db.upsert_work_items(&[cached]) {
+            tracing::warn!(error = %e, "failed to update work item cache after set_reason");
+        }
         let comments = client
             .list_work_item_comments(
                 &project.id,
@@ -630,6 +736,10 @@ impl WorkItemService {
         let work_item = client
             .update_work_item_priority(&project.id, input.work_item_id, input.priority)
             .await?;
+        let cached = work_item_to_cached(&organization, &project.id, &project.name, &work_item);
+        if let Err(e) = self.db.upsert_work_items(&[cached]) {
+            tracing::warn!(error = %e, "failed to update work item cache after set_priority");
+        }
         let comments = client
             .list_work_item_comments(
                 &project.id,
@@ -684,7 +794,14 @@ impl WorkItemService {
         let mut results = Vec::new();
         for id in input.work_item_ids {
             match client.update_work_item_state(&project.id, id, &state).await {
-                Ok(_) => results.push(BulkWorkItemResult { id, error: None }),
+                Ok(wi) => {
+                    let cached =
+                        work_item_to_cached(&organization, &project.id, &project.name, &wi);
+                    if let Err(e) = self.db.upsert_work_items(&[cached]) {
+                        tracing::warn!(error = %e, "failed to update work item cache after set_items_state");
+                    }
+                    results.push(BulkWorkItemResult { id, error: None });
+                }
                 Err(e) => results.push(BulkWorkItemResult {
                     id,
                     error: Some(e.to_string()),
@@ -722,7 +839,14 @@ impl WorkItemService {
                 .update_work_item_assigned_to(&project.id, id, &assigned_to)
                 .await
             {
-                Ok(_) => results.push(BulkWorkItemResult { id, error: None }),
+                Ok(wi) => {
+                    let cached =
+                        work_item_to_cached(&organization, &project.id, &project.name, &wi);
+                    if let Err(e) = self.db.upsert_work_items(&[cached]) {
+                        tracing::warn!(error = %e, "failed to update work item cache after assign_items");
+                    }
+                    results.push(BulkWorkItemResult { id, error: None });
+                }
                 Err(e) => results.push(BulkWorkItemResult {
                     id,
                     error: Some(e.to_string()),
@@ -761,7 +885,14 @@ impl WorkItemService {
                 .update_work_item_priority(&project.id, id, input.priority)
                 .await
             {
-                Ok(_) => results.push(BulkWorkItemResult { id, error: None }),
+                Ok(wi) => {
+                    let cached =
+                        work_item_to_cached(&organization, &project.id, &project.name, &wi);
+                    if let Err(e) = self.db.upsert_work_items(&[cached]) {
+                        tracing::warn!(error = %e, "failed to update work item cache after set_items_priority");
+                    }
+                    results.push(BulkWorkItemResult { id, error: None });
+                }
                 Err(e) => results.push(BulkWorkItemResult {
                     id,
                     error: Some(e.to_string()),
@@ -1160,7 +1291,7 @@ fn work_item_to_cached(
     org: &Organization,
     project_id: &str,
     project_name: &str,
-    wi: WorkItem,
+    wi: &WorkItem,
 ) -> CachedWorkItem {
     let web_url = format!(
         "{}/{}/_workitems/edit/{}",
@@ -1173,11 +1304,11 @@ fn work_item_to_cached(
         project_id: project_id.to_string(),
         project_name: project_name.to_string(),
         id: wi.id,
-        title: string_field(&wi, "System.Title").unwrap_or_else(|| "(untitled)".to_string()),
-        work_item_type: string_field(&wi, "System.WorkItemType"),
-        state: string_field(&wi, "System.State"),
-        assigned_to: identity_field(&wi, "System.AssignedTo"),
-        changed_date: string_field(&wi, "System.ChangedDate"),
+        title: string_field(wi, "System.Title").unwrap_or_else(|| "(untitled)".to_string()),
+        work_item_type: string_field(wi, "System.WorkItemType"),
+        state: string_field(wi, "System.State"),
+        assigned_to: identity_field(wi, "System.AssignedTo"),
+        changed_date: string_field(wi, "System.ChangedDate"),
         web_url: Some(web_url),
     }
 }
@@ -1186,7 +1317,6 @@ fn work_item_to_cached(
 
 const SYNC_WI_WIQL: &str =
     "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project \
-     AND [System.ChangedDate] >= @Today - 90 \
      ORDER BY [System.ChangedDate] DESC";
 
 const SYNC_MY_WI_WIQL: &str =
@@ -1263,7 +1393,7 @@ async fn do_sync_work_items(
                 Err(e) => return Err(e.into()),
             };
             for wi in work_items {
-                all_cached.push(work_item_to_cached(org, &project.id, &project.name, wi));
+                all_cached.push(work_item_to_cached(org, &project.id, &project.name, &wi));
             }
         }
 
@@ -1302,16 +1432,12 @@ async fn do_sync_work_items(
                 Err(e) => return Err(e.into()),
             };
             for wi in work_items {
-                my_cached.push(work_item_to_cached(org, &project.id, &project.name, wi));
+                my_cached.push(work_item_to_cached(org, &project.id, &project.name, &wi));
             }
         }
     }
 
-    db.clear_work_items(&org.id)?;
-    db.upsert_work_items(&all_cached)?;
-
-    db.clear_my_work_items(&org.id)?;
-    db.upsert_my_work_items(&my_cached)?;
+    db.replace_work_items(&org.id, &all_cached, &my_cached)?;
 
     Ok(())
 }

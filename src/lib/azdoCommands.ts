@@ -301,6 +301,13 @@ export type SetWorkItemStateInput = {
   state: string;
 };
 
+export type SetWorkItemReasonInput = {
+  organizationId?: string;
+  projectId: string;
+  workItemId: number;
+  reason: string;
+};
+
 export type SetWorkItemPriorityInput = {
   organizationId?: string;
   projectId: string;
@@ -509,6 +516,13 @@ export async function setWorkItemState(
   input: SetWorkItemStateInput,
 ): Promise<WorkItemPreview> {
   const result = await invokeCommand("set_work_item_state", { input });
+  return workItemPreviewSchema.parse(result);
+}
+
+export async function setWorkItemReason(
+  input: SetWorkItemReasonInput,
+): Promise<WorkItemPreview> {
+  const result = await invokeCommand("set_work_item_reason", { input });
   return workItemPreviewSchema.parse(result);
 }
 

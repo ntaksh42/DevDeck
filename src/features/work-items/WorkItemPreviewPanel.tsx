@@ -15,6 +15,7 @@ import {
   deleteWorkItemComment,
   fetchWorkItemImage,
   setWorkItemState,
+  setWorkItemReason,
   setWorkItemPriority,
   listWorkItemTypeStates,
   searchWorkItemMentions,
@@ -48,7 +49,7 @@ type PreviewFieldKey =
   | "changedDate";
 
 type PreviewFieldDefinition = {
-  editable?: "state" | "assignee" | "priority";
+  editable?: "state" | "assignee" | "priority" | "reason";
   key: PreviewFieldKey;
   label: string;
   shortcut?: string;
@@ -60,7 +61,7 @@ const PREVIEW_FIELD_DEFINITIONS: PreviewFieldDefinition[] = [
   { key: "priority", label: "Priority", editable: "priority", shortcut: "P" },
   { key: "areaPath", label: "Area" },
   { key: "iterationPath", label: "Iteration" },
-  { key: "reason", label: "Reason" },
+  { key: "reason", label: "Reason", editable: "reason", shortcut: "R" },
   { key: "severity", label: "Severity" },
   { key: "storyPoints", label: "Points" },
   { key: "remainingWork", label: "Remain" },
@@ -170,6 +171,7 @@ export function WorkItemPreviewPanel({
   const [assigneeOpen, setAssigneeOpen] = useState(false);
   const [assigneeQuery, setAssigneeQuery] = useState("");
   const [statePickerOpen, setStatePickerOpen] = useState(false);
+  const [reasonEditorOpen, setReasonEditorOpen] = useState(false);
   const [priorityPickerOpen, setPriorityPickerOpen] = useState(false);
   const handledFocusCommentRequest = useRef(0);
   const handledOpenAssigneeRequest = useRef(0);
@@ -222,7 +224,7 @@ export function WorkItemPreviewPanel({
         organizationId: selectedItem?.organizationId,
         query: mentionQuery,
       }),
-    enabled: !!selectedItem && mentionStart !== null && mentionQuery.length > 0,
+    enabled: !!selectedItem && mentionStart !== null,
     staleTime: 60_000,
   });
   const mentionOptions = useMemo(
@@ -253,6 +255,18 @@ export function WorkItemPreviewPanel({
     storePreviewFieldKeys(selectedPreviewFieldKeys);
   }, [selectedPreviewFieldKeys]);
 
+  // Load default candidates as soon as the picker opens.
+  const assigneeDefaultQuery = useQuery({
+    queryKey: workItemQueryKeys.assignees(selectedItem?.organizationId, ""),
+    queryFn: () =>
+      searchWorkItemMentions({
+        organizationId: selectedItem?.organizationId,
+        query: "",
+      }),
+    enabled: !!selectedItem && assigneeOpen,
+    staleTime: 60_000,
+  });
+  // Run typed search only when there is input; the default query covers the empty state.
   const assigneeOptionsQuery = useQuery({
     queryKey: workItemQueryKeys.assignees(
       selectedItem?.organizationId,
@@ -269,12 +283,13 @@ export function WorkItemPreviewPanel({
   const assigneeOptions = useMemo(
     () =>
       rankMentionCandidates({
-        recent: recentMentionOptions,
+        recent: [...recentMentionOptions, ...(assigneeDefaultQuery.data ?? [])],
         remote: assigneeOptionsQuery.data ?? [],
         query: assigneeQuery,
         priorityNames: mentionPriorityNames,
       }),
     [
+      assigneeDefaultQuery.data,
       assigneeOptionsQuery.data,
       assigneeQuery,
       mentionPriorityNames,
@@ -365,6 +380,24 @@ export function WorkItemPreviewPanel({
     },
   });
 
+  const reasonMutation = useMutation({
+    mutationFn: setWorkItemReason,
+    onSuccess: (updatedPreview) => {
+      onPreviewUpdated?.(updatedPreview);
+      setReasonEditorOpen(false);
+      queryClient.setQueryData(
+        workItemQueryKeys.preview(
+          updatedPreview.organizationId,
+          updatedPreview.projectId,
+          updatedPreview.id,
+        ),
+        updatedPreview,
+      );
+      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot() });
+      invalidateWorkItemQueryViews(queryClient);
+    },
+  });
+
   const priorityMutation = useMutation({
     mutationFn: setWorkItemPriority,
     onSuccess: (updatedPreview) => {
@@ -387,7 +420,12 @@ export function WorkItemPreviewPanel({
     setAssigneeOpen(false);
     setAssigneeQuery("");
     setStatePickerOpen(false);
+    setReasonEditorOpen(false);
     setPriorityPickerOpen(false);
+    stateMutation.reset();
+    reasonMutation.reset();
+    assignMutation.reset();
+    priorityMutation.reset();
   }, [selectedItem?.id]);
 
   useEffect(() => {
@@ -413,6 +451,7 @@ export function WorkItemPreviewPanel({
     if (!selectedItem) return;
     setAssigneeOpen(true);
     setStatePickerOpen(false);
+    setReasonEditorOpen(false);
     setPriorityPickerOpen(false);
     setAssigneeQuery("");
   }, [openAssigneeRequest, selectedItem]);
@@ -428,6 +467,7 @@ export function WorkItemPreviewPanel({
     if (!selectedItem) return;
     setStatePickerOpen(true);
     setAssigneeOpen(false);
+    setReasonEditorOpen(false);
     setPriorityPickerOpen(false);
   }, [openStateRequest, selectedItem]);
 
@@ -442,6 +482,7 @@ export function WorkItemPreviewPanel({
     if (!selectedItem) return;
     setPriorityPickerOpen(true);
     setAssigneeOpen(false);
+    setReasonEditorOpen(false);
     setStatePickerOpen(false);
   }, [openPriorityRequest, selectedItem]);
 
@@ -526,12 +567,14 @@ export function WorkItemPreviewPanel({
       if (!selectedItem) return;
       setStatePickerOpen(true);
       setAssigneeOpen(false);
+      setReasonEditorOpen(false);
       setPriorityPickerOpen(false);
     }
     function openAssignee() {
       if (!selectedItem) return;
       setAssigneeOpen(true);
       setStatePickerOpen(false);
+      setReasonEditorOpen(false);
       setPriorityPickerOpen(false);
       setAssigneeQuery("");
     }
@@ -539,6 +582,7 @@ export function WorkItemPreviewPanel({
       if (!selectedItem) return;
       setPriorityPickerOpen(true);
       setAssigneeOpen(false);
+      setReasonEditorOpen(false);
       setStatePickerOpen(false);
     }
     function focusComment() {
@@ -578,18 +622,27 @@ export function WorkItemPreviewPanel({
       event.preventDefault();
       setStatePickerOpen(true);
       setAssigneeOpen(false);
+      setReasonEditorOpen(false);
       setPriorityPickerOpen(false);
     } else if (event.key === "a" || event.key === "A") {
       event.preventDefault();
       setAssigneeOpen(true);
       setStatePickerOpen(false);
+      setReasonEditorOpen(false);
       setPriorityPickerOpen(false);
       setAssigneeQuery("");
     } else if (event.key === "p" || event.key === "P") {
       event.preventDefault();
       setPriorityPickerOpen(true);
       setAssigneeOpen(false);
+      setReasonEditorOpen(false);
       setStatePickerOpen(false);
+    } else if (event.key === "r" || event.key === "R") {
+      event.preventDefault();
+      setReasonEditorOpen(true);
+      setAssigneeOpen(false);
+      setStatePickerOpen(false);
+      setPriorityPickerOpen(false);
     } else if (event.key === "m" || event.key === "M") {
       event.preventDefault();
       textareaRef.current?.focus();
@@ -659,9 +712,36 @@ export function WorkItemPreviewPanel({
                 preview={preview}
                 selectedFieldKeys={selectedPreviewFieldKeys}
                 onSelectedFieldKeysChange={setSelectedPreviewFieldKeys}
+                reasonControl={
+                  <ReasonEditor
+                    current={preview.reason}
+                    error={reasonMutation.isError ? commandErrorMessage(reasonMutation.error) : null}
+                    onOpenChange={(open) => {
+                      setReasonEditorOpen(open);
+                      if (open) {
+                        setAssigneeOpen(false);
+                        setPriorityPickerOpen(false);
+                        setStatePickerOpen(false);
+                      }
+                    }}
+                    onSubmit={(reason) => {
+                      if (!selectedItem) return;
+                      reasonMutation.mutate({
+                        organizationId: selectedItem.organizationId,
+                        projectId: selectedItem.projectId,
+                        workItemId: selectedItem.id,
+                        reason,
+                      });
+                    }}
+                    open={reasonEditorOpen}
+                    pending={reasonMutation.isPending}
+                    shortcut="R"
+                  />
+                }
                 priorityControl={
                   <PriorityPicker
                     current={preview.priority}
+                    error={priorityMutation.isError ? commandErrorMessage(priorityMutation.error) : null}
                     onOpenChange={(open) => {
                       setPriorityPickerOpen(open);
                       if (open) {
@@ -679,6 +759,7 @@ export function WorkItemPreviewPanel({
                 stateControl={
                   <StatePicker
                     current={preview.state}
+                    error={stateMutation.isError ? commandErrorMessage(stateMutation.error) : null}
                     loading={statesQuery.isFetching}
                     onOpenChange={(open) => {
                       setStatePickerOpen(open);
@@ -711,7 +792,8 @@ export function WorkItemPreviewPanel({
                         ? commandErrorMessage(assigneeOptionsQuery.error)
                         : null
                     }
-                    loading={assigneeOptionsQuery.isFetching}
+                    mutationError={assignMutation.isError ? commandErrorMessage(assignMutation.error) : null}
+                    loading={assigneeDefaultQuery.isFetching || assigneeOptionsQuery.isFetching}
                     onOpenChange={(open) => {
                       setAssigneeOpen(open);
                       if (open) setPriorityPickerOpen(false);
@@ -819,10 +901,11 @@ export function WorkItemPreviewPanel({
                         <ShortcutHint>Ctrl+Enter</ShortcutHint>
                       </span>
                       {commentMutation.isSuccess ? (
-                        <span className="text-xs text-muted-foreground">Posted</span>
+                        <span className="text-xs text-muted-foreground">Comment posted</span>
                       ) : null}
                       <button
                         type="submit"
+                        aria-label="Post comment"
                         disabled={!commentText.trim() || commentMutation.isPending}
                         className="inline-flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                       >
@@ -859,6 +942,7 @@ function WorkItemPreviewDetails({
   onDeleteComment,
   onSelectedFieldKeysChange,
   priorityControl,
+  reasonControl,
   resolveImageSource,
   selectedFieldKeys,
   stateControl,
@@ -872,6 +956,7 @@ function WorkItemPreviewDetails({
   onDeleteComment: (commentId: number) => void;
   onSelectedFieldKeysChange: (keys: PreviewFieldKey[]) => void;
   priorityControl: ReactNode;
+  reasonControl: ReactNode;
   resolveImageSource: (url: string) => Promise<string | null>;
   selectedFieldKeys: PreviewFieldKey[];
   stateControl: ReactNode;
@@ -884,8 +969,8 @@ function WorkItemPreviewDetails({
   );
   const selectedFieldDefinitions = selectedPreviewFieldDefinitions(selectedFieldKeys);
 
-  const descriptionHtml = normalizeRichHtml(preview.descriptionHtml);
-  const acceptanceCriteriaHtml = normalizeRichHtml(preview.acceptanceCriteriaHtml);
+  const descriptionHtml = richFieldHtml(preview.descriptionHtml);
+  const acceptanceCriteriaHtml = richFieldHtml(preview.acceptanceCriteriaHtml);
 
   function toggleField(key: PreviewFieldKey) {
     onSelectedFieldKeysChange(
@@ -905,6 +990,9 @@ function WorkItemPreviewDetails({
       tabIndex={-1}
     >
       <div className="border-b border-border pb-1">
+        <h2 className="mb-1 truncate text-sm font-semibold leading-5 text-foreground">
+          {preview.title}
+        </h2>
         <div className="flex items-center justify-between gap-2">
           <span className="text-[10px] font-semibold uppercase leading-4 text-muted-foreground">
             Fields
@@ -995,6 +1083,10 @@ function WorkItemPreviewDetails({
             ) : field.editable === "priority" ? (
               <PreviewControl key={field.key} label={field.label} shortcut={field.shortcut}>
                 {priorityControl}
+              </PreviewControl>
+            ) : field.editable === "reason" ? (
+              <PreviewControl key={field.key} label={field.label} shortcut={field.shortcut}>
+                {reasonControl}
               </PreviewControl>
             ) : (
               <PreviewField
@@ -1141,7 +1233,7 @@ function CollapsibleComment({
           )}
         </button>
       </div>
-      <div className="px-2.5 py-2">
+      <div className="px-3 py-2.5">
         <div className={expanded ? "" : "max-h-32 overflow-hidden"}>
           <RichHtmlFrame
             baseUrl={baseUrl}
@@ -1397,9 +1489,9 @@ function buildRichHtmlDocument(
   html: string,
   density: "compact" | "comfortable" = "compact",
 ): string {
-  const fontSize = density === "comfortable" ? 13 : 12;
-  const lineHeight = density === "comfortable" ? 1.45 : 1.35;
-  const paragraphMargin = density === "comfortable" ? 8 : 6;
+  const fontSize = density === "comfortable" ? 14 : 12;
+  const lineHeight = density === "comfortable" ? 1.55 : 1.35;
+  const paragraphMargin = density === "comfortable" ? 10 : 6;
   return `<!doctype html>
 <html>
 <head>
@@ -1417,8 +1509,8 @@ function buildRichHtmlDocument(
     * { box-sizing: border-box; }
     p { margin: 0 0 ${paragraphMargin}px; }
     p:last-child, ul:last-child, ol:last-child, table:last-child, pre:last-child { margin-bottom: 0; }
-    ul, ol { margin: 0 0 6px 18px; padding: 0; }
-    li { margin: 1px 0; }
+    ul, ol { margin: 0 0 ${paragraphMargin}px 20px; padding: 0; }
+    li { margin: 3px 0; }
     a { color: #2563eb; text-decoration: none; }
     a:hover { text-decoration: underline; }
     img, video { max-width: 100%; height: auto; border: 1px solid #dbe3ef; border-radius: 4px; }
@@ -1432,8 +1524,8 @@ function buildRichHtmlDocument(
       border: 1px solid #fecaca;
       border-radius: 4px;
     }
-    table { width: 100%; margin: 0 0 6px; border-collapse: collapse; font-size: 12px; }
-    th, td { border: 1px solid #dbe3ef; padding: 3px 5px; text-align: left; vertical-align: top; }
+    table { width: 100%; margin: 0 0 ${paragraphMargin}px; border-collapse: collapse; font-size: ${fontSize}px; }
+    th, td { border: 1px solid #dbe3ef; padding: 5px 7px; text-align: left; vertical-align: top; }
     th { background: #f8fafc; font-weight: 600; }
     pre, code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; }
     pre { margin: 0 0 6px; padding: 6px; overflow: auto; border: 1px solid #dbe3ef; border-radius: 4px; background: #f8fafc; }
@@ -1447,10 +1539,14 @@ function buildRichHtmlDocument(
 function normalizeRichHtml(value: string | null | undefined): string | null {
   const html = decodeEscapedRichHtml(value)?.trim();
   if (!html) return null;
-  if (htmlToText(html) || /<(img|video|table|pre|blockquote|ul|ol|li|a)\b/i.test(html)) {
+  if (/<\/?[a-z][^>]*>/i.test(html) || /<(img|video|table|pre|blockquote|ul|ol|li|a)\b/i.test(html)) {
     return html;
   }
   return null;
+}
+
+function richFieldHtml(value: string | null | undefined): string | null {
+  return normalizeRichHtml(value) ?? markdownishTextToHtml(value);
 }
 
 function decodeEscapedRichHtml(value: string | null | undefined): string | null {
@@ -1479,9 +1575,107 @@ function commentRichHtml(
   return (
     normalizeRichHtml(rendered) ??
     normalizeRichHtml(plain) ??
-    escapeHtml(plain) ??
+    markdownishTextToHtml(plain) ??
     "No text"
   );
+}
+
+function markdownishTextToHtml(value: string | null | undefined): string | null {
+  const text = value?.trim();
+  if (!text) return null;
+
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  const blocks: string[] = [];
+  let listItems: string[] = [];
+  let tableRows: string[][] = [];
+  let codeLines: string[] = [];
+  let inCode = false;
+
+  const flushList = () => {
+    if (listItems.length === 0) return;
+    blocks.push(`<ul>${listItems.map((item) => `<li>${formatInlineMarkdown(item)}</li>`).join("")}</ul>`);
+    listItems = [];
+  };
+  const flushTable = () => {
+    if (tableRows.length === 0) return;
+    const [head, ...body] = tableRows;
+    blocks.push(
+      `<table><thead><tr>${head.map((cell) => `<th>${formatInlineMarkdown(cell)}</th>`).join("")}</tr></thead><tbody>${body
+        .map((row) => `<tr>${row.map((cell) => `<td>${formatInlineMarkdown(cell)}</td>`).join("")}</tr>`)
+        .join("")}</tbody></table>`,
+    );
+    tableRows = [];
+  };
+  const flushCode = () => {
+    if (codeLines.length === 0) return;
+    blocks.push(`<pre><code>${escapeHtml(codeLines.join("\n")) ?? ""}</code></pre>`);
+    codeLines = [];
+  };
+
+  for (const line of lines) {
+    if (/^\s*```/.test(line)) {
+      if (inCode) {
+        inCode = false;
+        flushCode();
+      } else {
+        flushList();
+        flushTable();
+        inCode = true;
+      }
+      continue;
+    }
+    if (inCode) {
+      codeLines.push(line);
+      continue;
+    }
+
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushList();
+      flushTable();
+      continue;
+    }
+
+    const listMatch = /^[-*]\s+(.+)$/.exec(trimmed);
+    if (listMatch) {
+      flushTable();
+      listItems.push(listMatch[1]);
+      continue;
+    }
+
+    if (isMarkdownTableRow(trimmed)) {
+      flushList();
+      if (!/^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?$/.test(trimmed)) {
+        tableRows.push(splitMarkdownTableRow(trimmed));
+      }
+      continue;
+    }
+
+    flushList();
+    flushTable();
+    blocks.push(`<p>${formatInlineMarkdown(trimmed)}</p>`);
+  }
+
+  flushList();
+  flushTable();
+  flushCode();
+  return blocks.join("");
+}
+
+function isMarkdownTableRow(value: string): boolean {
+  return value.includes("|") && splitMarkdownTableRow(value).length >= 2;
+}
+
+function splitMarkdownTableRow(value: string): string[] {
+  return value.replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
+}
+
+function formatInlineMarkdown(value: string): string {
+  let html = escapeHtml(value) ?? "";
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>');
+  return html;
 }
 
 function commentAuthorInitials(name: string | null | undefined): string {
@@ -1579,8 +1773,98 @@ function useCloseOnOutsidePointer<T extends HTMLElement>(
   return ref;
 }
 
+function ReasonEditor({
+  current,
+  error,
+  onOpenChange,
+  onSubmit,
+  open,
+  pending,
+  shortcut,
+}: {
+  current: string | null;
+  error?: string | null;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (reason: string) => void;
+  open: boolean;
+  pending: boolean;
+  shortcut?: string;
+}) {
+  const [draft, setDraft] = useState(current ?? "");
+  const editorRef = useCloseOnOutsidePointer<HTMLDivElement>(open, () =>
+    onOpenChange(false),
+  );
+
+  useEffect(() => {
+    if (open) setDraft(current ?? "");
+  }, [current, open]);
+
+  function save() {
+    const reason = draft.trim();
+    if (!reason || reason === (current ?? "").trim() || pending) return;
+    onSubmit(reason);
+  }
+
+  return (
+    <div ref={editorRef} className="relative min-w-0">
+      <button
+        type="button"
+        aria-label="Change reason"
+        aria-keyshortcuts={shortcut}
+        disabled={pending}
+        onClick={() => onOpenChange(!open)}
+        className="max-w-full truncate rounded px-1 text-left text-xs leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+        title={current ?? "—"}
+      >
+        {pending ? "Updating..." : (current ?? "—")}
+      </button>
+      {error && (
+        <p className="mt-0.5 text-[10px] text-destructive">{error}</p>
+      )}
+      {open ? (
+        <div className="absolute left-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-white p-2 shadow-lg">
+          <input
+            autoFocus
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                onOpenChange(false);
+              } else if (event.key === "Enter") {
+                event.preventDefault();
+                save();
+              }
+            }}
+            placeholder="Reason"
+            className="h-7 w-full rounded border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
+          />
+          <div className="mt-2 flex items-center justify-end gap-1">
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              className="rounded px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={!draft.trim() || draft.trim() === (current ?? "").trim() || pending}
+              onClick={save}
+              className="rounded bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function StatePicker({
   current,
+  error,
   loading,
   onOpenChange,
   onSelect,
@@ -1590,6 +1874,7 @@ function StatePicker({
   shortcut,
 }: {
   current: string | null;
+  error?: string | null;
   loading: boolean;
   onOpenChange: (open: boolean) => void;
   onSelect: (state: string) => void;
@@ -1615,6 +1900,9 @@ function StatePicker({
       >
         {pending ? "Updating..." : (current ?? "—")}
       </button>
+      {error && (
+        <p className="mt-0.5 text-[10px] text-destructive">{error}</p>
+      )}
       {open ? (
         <div className="absolute left-0 top-full z-30 mt-1 min-w-[120px] rounded-md border border-border bg-white py-1 shadow-lg">
           {loading ? (
@@ -1655,6 +1943,7 @@ function StatePicker({
 
 function PriorityPicker({
   current,
+  error,
   onOpenChange,
   onSelect,
   open,
@@ -1662,6 +1951,7 @@ function PriorityPicker({
   shortcut,
 }: {
   current: string | null;
+  error?: string | null;
   onOpenChange: (open: boolean) => void;
   onSelect: (priority: number) => void;
   open: boolean;
@@ -1686,6 +1976,9 @@ function PriorityPicker({
       >
         {pending ? "Updating..." : (current ?? "—")}
       </button>
+      {error && (
+        <p className="mt-0.5 text-[10px] text-destructive">{error}</p>
+      )}
       {open ? (
         <div className="absolute left-0 top-full z-30 mt-1 min-w-[96px] rounded-md border border-border bg-white py-1 shadow-lg">
           {options.map((priority, index) => {
@@ -1724,6 +2017,7 @@ function PriorityPicker({
 function AssigneePicker({
   current,
   error,
+  mutationError,
   loading,
   onOpenChange,
   onQueryChange,
@@ -1736,6 +2030,7 @@ function AssigneePicker({
 }: {
   current: string | null;
   error: string | null;
+  mutationError?: string | null;
   loading: boolean;
   onOpenChange: (open: boolean) => void;
   onQueryChange: (query: string) => void;
@@ -1763,6 +2058,9 @@ function AssigneePicker({
       >
         {pending ? "Updating..." : current ?? "Unassigned"}
       </button>
+      {mutationError && (
+        <p className="mt-0.5 text-[10px] text-destructive">{mutationError}</p>
+      )}
       {open ? (
         <div className="absolute left-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-white p-1 shadow-lg">
           <input
@@ -1814,16 +2112,6 @@ function AssigneePicker({
   );
 }
 
-function htmlToText(value: string | null | undefined): string {
-  if (!value) return "";
-  if (typeof document === "undefined") {
-    return value.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-  }
-  const element = document.createElement("div");
-  element.innerHTML = value;
-  return (element.textContent ?? "").replace(/\s+/g, " ").trim();
-}
-
 function recentWorkItemMentionCandidates(
   preview: WorkItemPreview | null,
 ): MentionCandidate[] {
@@ -1866,10 +2154,13 @@ function rankMentionCandidates({
   const priority = new Map(priorityNames.map((name, index) => [name, index]));
   const candidates = new Map<string, MentionCandidate>();
 
+  const seenDisplayNames = new Set<string>();
   for (const candidate of [...recent, ...remote]) {
     const key = candidate.id || candidate.uniqueName || candidate.displayName;
-    if (!candidates.has(key)) {
+    const nameKey = candidate.displayName.toLowerCase();
+    if (!candidates.has(key) && !seenDisplayNames.has(nameKey)) {
       candidates.set(key, candidate);
+      seenDisplayNames.add(nameKey);
     }
   }
 

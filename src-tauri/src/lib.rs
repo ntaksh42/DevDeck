@@ -40,8 +40,9 @@ use work_items::{
     GetWorkItemPreviewInput, ListMyWorkItemsInput, ListWorkItemProjectsInput,
     ListWorkItemTypeStatesInput, MentionCandidate, RunWorkItemQueryInput, SavedQueryResult,
     SearchWorkItemMentionsInput, SearchWorkItemsInput, SetWorkItemPriorityInput,
-    SetWorkItemStateInput, SetWorkItemsPriorityInput, SetWorkItemsStateInput, WorkItemComment,
-    WorkItemImage, WorkItemPreview, WorkItemProjectOption, WorkItemService, WorkItemSummary,
+    SetWorkItemReasonInput, SetWorkItemStateInput, SetWorkItemsPriorityInput,
+    SetWorkItemsStateInput, WorkItemComment, WorkItemImage, WorkItemPreview, WorkItemProjectOption,
+    WorkItemService, WorkItemSummary,
 };
 
 #[derive(Clone)]
@@ -239,6 +240,15 @@ async fn set_work_item_state(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn set_work_item_reason(
+    input: SetWorkItemReasonInput,
+    state: State<'_, AppState>,
+) -> Result<WorkItemPreview> {
+    state.work_items.set_reason(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn set_work_item_priority(
     input: SetWorkItemPriorityInput,
     state: State<'_, AppState>,
@@ -413,6 +423,7 @@ pub fn run() {
             delete_work_item_comment,
             assign_work_item,
             set_work_item_state,
+            set_work_item_reason,
             set_work_item_priority,
             list_work_item_type_states,
             get_saved_query,

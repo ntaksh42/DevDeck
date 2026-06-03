@@ -316,8 +316,11 @@ const WorkItemGridRow = forwardRef<
         type="checkbox"
         checked={checked}
         aria-label={`Select #${item.id}`}
-        onChange={(e) => onCheckedChange(e.target.checked, e.nativeEvent instanceof MouseEvent ? (e.nativeEvent as MouseEvent).shiftKey : false)}
-        onClick={(e) => e.stopPropagation()}
+        onChange={() => {}}
+        onClick={(e) => {
+          e.stopPropagation();
+          onCheckedChange(e.currentTarget.checked, e.shiftKey);
+        }}
         className="h-3.5 w-3.5 cursor-pointer rounded border-gray-300"
       />
     </div>
@@ -401,6 +404,8 @@ export function WorkItemsGrid({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const gridScrollRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const gridHadFocusRef = useRef(false);
+  const previousResultKeysRef = useRef<string | null>(null);
   const [gridViewport, setGridViewport] = useState({ height: 0, scrollTop: 0 });
   const queryClient = useQueryClient();
 
@@ -482,6 +487,11 @@ export function WorkItemsGrid({
   }, [sorted, columnFilters]);
 
   const selectedItem = displayed[selectedIndex] ?? null;
+  const selectedItemKey = selectedItem ? workItemSummaryKey(selectedItem) : null;
+  const resultKeysSignature = useMemo(
+    () => results.map((item) => workItemSummaryKey(item)).join("|"),
+    [results],
+  );
   const previewQuery = useQuery({
     queryKey: workItemQueryKeys.preview(
       selectedItem?.organizationId,
@@ -605,6 +615,10 @@ export function WorkItemsGrid({
       showBulkToast(results);
       invalidateWorkItemMutationCaches(queryClient);
     },
+    onError: (e) => {
+      setBulkToast(commandErrorMessage(e));
+      window.setTimeout(() => setBulkToast(null), 3000);
+    },
   });
 
   const bulkAssignMutation = useMutation({
@@ -635,6 +649,10 @@ export function WorkItemsGrid({
       showBulkToast(results);
       invalidateWorkItemMutationCaches(queryClient);
     },
+    onError: (e) => {
+      setBulkToast(commandErrorMessage(e));
+      window.setTimeout(() => setBulkToast(null), 3000);
+    },
   });
 
   const bulkPriorityMutation = useMutation({
@@ -664,6 +682,10 @@ export function WorkItemsGrid({
       showBulkToast(results);
       invalidateWorkItemMutationCaches(queryClient);
     },
+    onError: (e) => {
+      setBulkToast(commandErrorMessage(e));
+      window.setTimeout(() => setBulkToast(null), 3000);
+    },
   });
 
   useEffect(() => {
@@ -671,8 +693,16 @@ export function WorkItemsGrid({
   }, [autoFocus]);
 
   useEffect(() => {
-    setSelectedIndex((i) => Math.min(i, Math.max(displayed.length - 1, 0)));
-  }, [displayed.length]);
+    setSelectedIndex((current) => {
+      if (selectedItemKey) {
+        const preservedIndex = displayed.findIndex(
+          (item) => workItemSummaryKey(item) === selectedItemKey,
+        );
+        if (preservedIndex >= 0) return preservedIndex;
+      }
+      return Math.min(current, Math.max(displayed.length - 1, 0));
+    });
+  }, [displayed, displayed.length, selectedItemKey]);
 
   useEffect(() => {
     const scroller = gridScrollRef.current;
@@ -698,12 +728,22 @@ export function WorkItemsGrid({
   }, []);
 
   useEffect(() => {
+    const previous = previousResultKeysRef.current;
+    previousResultKeysRef.current = resultKeysSignature;
+    if (previous === null || previous === resultKeysSignature) return;
     setItemOverrides(new Map());
     setCheckedIds(new Set());
     setLastCheckedIndex(null);
     setColumnFilters({});
     setOpenFilterCol(null);
-  }, [results]);
+  }, [resultKeysSignature]);
+
+  useEffect(() => {
+    if (!gridHadFocusRef.current) return;
+    window.setTimeout(() => {
+      rowRefs.current[selectedIndex]?.focus();
+    }, 0);
+  }, [selectedIndex, resultKeysSignature]);
 
   function handlePreviewUpdated(preview: WorkItemPreview) {
     const key = workItemSummaryKey(preview);
@@ -946,6 +986,21 @@ export function WorkItemsGrid({
       className="flex min-h-0 flex-1 flex-col outline-none"
       tabIndex={-1}
       onKeyDown={handleKeyDown}
+      onFocusCapture={(event) => {
+        const target = event.target;
+        gridHadFocusRef.current =
+          target instanceof HTMLElement &&
+          Boolean(target.closest('[role="grid"], [role="row"]'));
+      }}
+      onBlurCapture={(event) => {
+        const nextTarget = event.relatedTarget;
+        if (
+          !(nextTarget instanceof HTMLElement) ||
+          !nextTarget.closest('[role="grid"], [role="row"]')
+        ) {
+          gridHadFocusRef.current = false;
+        }
+      }}
     >
       {copyToast || bulkToast ? (
         <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1 text-xs text-background shadow-lg">
