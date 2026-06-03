@@ -57,7 +57,6 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Filter: All / My / Approved / Rejected</span><kbd className={kbd}>1–4</kbd></div>
           <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>Enter</kbd></div>
           <div className={row}><span>Show drafts</span><kbd className={kbd}>D</kbd></div>
-          <div className={row}><span>Refresh</span><kbd className={kbd}>R</kbd></div>
           <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
           <div className={row}><span>Move row</span><kbd className={kbd}>↑ ↓ PgUp PgDn Home End</kbd></div>
 
@@ -81,7 +80,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <p className={section}>Work Item Views</p>
           <div className={row}><span>Move view card</span><kbd className={kbd}>← → ↑ ↓</kbd></div>
           <div className={row}><span>Add / edit view</span><kbd className={kbd}>N / E</kbd></div>
-          <div className={row}><span>Refresh / delete</span><kbd className={kbd}>R / Del</kbd></div>
+          <div className={row}><span>Run views / delete</span><kbd className={kbd}>R / Del</kbd></div>
           <div className={row}><span>Save (in dialog)</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
 
           <p className={section}>General</p>

@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, ArrowRight, Copy, Download, Eye, EyeOff, Loader2, Pin, PinOff, Plus, RefreshCw, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Copy, Download, Eye, EyeOff, Loader2, Pin, PinOff, Play, Plus, Trash2, Upload, X } from 'lucide-react';
 import {
   getSavedQuery,
   countWorkItemQuery,
@@ -615,11 +615,11 @@ export function WorkItemViewsPanel({
       openEditDialog();
     } else if (event.key === "r" || event.key === "R") {
       event.preventDefault();
-      refreshViews();
+      runViews();
     }
   }
 
-  const refreshViews = () => {
+  const runViews = () => {
     invalidateWorkItemQueryViews(queryClient, selectedOrganizationId);
   };
 
@@ -794,11 +794,11 @@ export function WorkItemViewsPanel({
             <button
               type="button"
               disabled={views.length === 0}
-              onClick={refreshViews}
-              title="Refresh all views (R)"
+              onClick={runViews}
+              title="Run all views (R)"
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+              <Play className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
             <button
               type="button"

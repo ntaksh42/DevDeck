@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Loader2, RefreshCw, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { listMyWorkItems, commandErrorMessage, type Organization } from '@/lib/azdoCommands';
 import { matchesAllSearchTerms, splitSearchTerms } from '@/lib/utils';
 import { ErrorState } from '@/components/StateDisplay';
@@ -85,19 +85,6 @@ export function MyWorkItemsPanel({ organizations }: { organizations: Organizatio
           </select>
         ) : null}
 
-        <button
-          type="button"
-          disabled={query.isFetching}
-          onClick={() => query.refetch()}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {query.isFetching ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-          ) : (
-            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-          )}
-          Refresh
-        </button>
       </div>
       {query.isError ? (
         <ErrorState message={commandErrorMessage(query.error)} />

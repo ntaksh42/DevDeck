@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronDown, ChevronUp, FileText, Loader2, RefreshCw, Search, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, FileText, Loader2, Search, X } from 'lucide-react';
 import {
   listMyReviewPullRequests,
   getReviewResultPreview,
@@ -504,11 +504,6 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
       setSelectedIndex(0);
       return;
     }
-    if (e.key === "r" || e.key === "R") {
-      e.preventDefault();
-      void query.refetch();
-      return;
-    }
     if (e.key === "c" || e.key === "C") {
       e.preventDefault();
       const pr = sortedPrs[selectedIndex];
@@ -694,17 +689,6 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
           Show Drafts
         </label>
 
-        {/* Refresh button */}
-        <button
-          type="button"
-          onClick={() => void query.refetch()}
-          disabled={query.isFetching}
-          className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-white px-2.5 text-xs font-medium text-muted-foreground hover:bg-secondary disabled:opacity-50"
-          aria-label="Refresh"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${query.isFetching ? "animate-spin" : ""}`} aria-hidden="true" />
-          Refresh
-        </button>
       </div>
 
       <div
