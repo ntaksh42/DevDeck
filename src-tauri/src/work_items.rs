@@ -507,22 +507,25 @@ impl WorkItemService {
             }
         }
 
-        // DBキャッシュから最近アクティブなアサイン済みユーザーを補完
-        let recent_names = self
+        // DBキャッシュから頻度の高いアサイン済みユーザーを補完
+        let recent_assignees = self
             .db
             .get_recent_assignees(&organization.id)
             .unwrap_or_default();
-        for name in recent_names {
-            let name = name.trim().to_string();
-            if name.is_empty() {
+        for (display_name, unique_name) in recent_assignees {
+            let display_name = display_name.trim().to_string();
+            if display_name.is_empty() {
                 continue;
             }
             push_unique_mention_candidate(
                 &mut candidates,
                 MentionCandidate {
-                    id: name.clone(),
-                    display_name: name,
-                    unique_name: None,
+                    id: unique_name
+                        .as_deref()
+                        .unwrap_or(&display_name)
+                        .to_string(),
+                    display_name,
+                    unique_name,
                 },
             );
             if candidates.len() >= 8 {
@@ -1262,6 +1265,17 @@ fn identity_field(work_item: &WorkItem, field: &str) -> Option<String> {
     }
 }
 
+fn identity_unique_name_field(work_item: &WorkItem, field: &str) -> Option<String> {
+    match work_item.fields.get(field)? {
+        Value::Object(map) => map
+            .get("uniqueName")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+            .map(ToString::to_string),
+        _ => None,
+    }
+}
+
 fn normalize_image_content_type(content_type: &str) -> Option<&'static str> {
     let media_type = content_type
         .split(';')
@@ -1339,6 +1353,7 @@ fn work_item_to_cached(
         work_item_type: string_field(wi, "System.WorkItemType"),
         state: string_field(wi, "System.State"),
         assigned_to: identity_field(wi, "System.AssignedTo"),
+        assigned_to_unique_name: identity_unique_name_field(wi, "System.AssignedTo"),
         changed_date: string_field(wi, "System.ChangedDate"),
         web_url: Some(web_url),
     }

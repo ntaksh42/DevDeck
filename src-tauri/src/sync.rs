@@ -266,6 +266,7 @@ mod tests {
             work_item_type: Some("Issue".to_string()),
             state: state.map(str::to_string),
             assigned_to: Some("Test User".to_string()),
+            assigned_to_unique_name: None,
             changed_date: Some("2026-06-03T00:00:00Z".to_string()),
             web_url: Some(format!(
                 "https://dev.azure.com/org/project/_workitems/edit/{id}"

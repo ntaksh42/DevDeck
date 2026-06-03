@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, Result};
 
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 
 // ── Existing public types ────────────────────────────────────────────────────
 
@@ -111,6 +111,7 @@ pub struct CachedWorkItem {
     pub work_item_type: Option<String>,
     pub state: Option<String>,
     pub assigned_to: Option<String>,
+    pub assigned_to_unique_name: Option<String>,
     pub changed_date: Option<String>,
     pub web_url: Option<String>,
 }
@@ -432,14 +433,19 @@ impl AppDatabase {
         Ok(())
     }
 
-    pub fn get_recent_assignees(&self, org_id: &str) -> Result<Vec<String>> {
+    pub fn get_recent_assignees(&self, org_id: &str) -> Result<Vec<(String, Option<String>)>> {
         let conn = self.open()?;
         let mut stmt = conn.prepare(
-            "SELECT DISTINCT assigned_to FROM work_items \
+            "SELECT assigned_to, MAX(assigned_to_unique_name) \
+             FROM work_items \
              WHERE org_id = ?1 AND assigned_to IS NOT NULL AND assigned_to != '' \
-             ORDER BY changed_date DESC LIMIT 20",
+             GROUP BY assigned_to \
+             ORDER BY COUNT(*) DESC \
+             LIMIT 20",
         )?;
-        let rows = stmt.query_map([org_id], |row| row.get::<_, String>(0))?;
+        let rows = stmt.query_map([org_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+        })?;
         let mut result = Vec::new();
         for row in rows {
             result.push(row?);
@@ -645,6 +651,15 @@ pub fn migrate(conn: &Connection) -> Result<()> {
                 ON my_work_items(org_id, changed_date DESC);
 
             PRAGMA user_version = 3;
+            "#,
+        )?;
+    }
+    if current < 4 {
+        conn.execute_batch(
+            r#"
+            ALTER TABLE work_items ADD COLUMN assigned_to_unique_name TEXT;
+            ALTER TABLE my_work_items ADD COLUMN assigned_to_unique_name TEXT;
+            PRAGMA user_version = 4;
             "#,
         )?;
     }
@@ -998,8 +1013,9 @@ fn upsert_work_items(conn: &Connection, items: &[CachedWorkItem]) -> Result<()> 
         r#"
         INSERT OR REPLACE INTO work_items(
             org_id, project_id, project_name, id, title,
-            work_item_type, state, assigned_to, changed_date, web_url
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+            work_item_type, state, assigned_to, changed_date, web_url,
+            assigned_to_unique_name
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
         "#,
     )?;
     for item in items {
@@ -1013,7 +1029,8 @@ fn upsert_work_items(conn: &Connection, items: &[CachedWorkItem]) -> Result<()> 
             item.state,
             item.assigned_to,
             item.changed_date,
-            item.web_url
+            item.web_url,
+            item.assigned_to_unique_name
         ])?;
     }
     Ok(())
@@ -1088,8 +1105,9 @@ fn upsert_my_work_items(conn: &Connection, items: &[CachedWorkItem]) -> Result<(
         r#"
         INSERT OR REPLACE INTO my_work_items(
             org_id, project_id, project_name, id, title,
-            work_item_type, state, assigned_to, changed_date, web_url
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+            work_item_type, state, assigned_to, changed_date, web_url,
+            assigned_to_unique_name
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
         "#,
     )?;
     for item in items {
@@ -1103,7 +1121,8 @@ fn upsert_my_work_items(conn: &Connection, items: &[CachedWorkItem]) -> Result<(
             item.state,
             item.assigned_to,
             item.changed_date,
-            item.web_url
+            item.web_url,
+            item.assigned_to_unique_name
         ])?;
     }
     Ok(())
@@ -1325,6 +1344,7 @@ fn map_cached_work_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<CachedWorkI
         assigned_to: row.get(7)?,
         changed_date: row.get(8)?,
         web_url: row.get(9)?,
+        assigned_to_unique_name: None,
     })
 }
 
@@ -1445,6 +1465,10 @@ mod tests {
         conn.execute_batch(
             r#"
             CREATE TABLE organizations(id TEXT PRIMARY KEY);
+            CREATE TABLE work_items(
+                org_id TEXT NOT NULL, project_id TEXT NOT NULL, project_name TEXT NOT NULL,
+                id INTEGER NOT NULL, title TEXT NOT NULL, work_item_type TEXT, state TEXT,
+                assigned_to TEXT, changed_date TEXT, web_url TEXT, PRIMARY KEY (org_id, id));
             PRAGMA user_version = 2;
             "#,
         )
@@ -1736,6 +1760,7 @@ mod tests {
             work_item_type: None,
             state: None,
             assigned_to: None,
+            assigned_to_unique_name: None,
             changed_date: None,
             web_url: None,
         };
@@ -1757,6 +1782,98 @@ mod tests {
         let my = db.list_my_work_items("org1").unwrap();
         assert_eq!(my.len(), 1);
         assert_eq!(my[0].id, 20, "my_work_items should contain only my-B");
+    }
+
+    #[test]
+    fn migrate_v3_db_upgrades_to_v4() {
+        let tf = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        {
+            let conn = db.open().unwrap();
+            // Bring the DB to v3 manually
+            conn.pragma_update_and_check(None, "journal_mode", "WAL", |_| Ok(())).unwrap();
+            conn.execute_batch(
+                r#"
+                CREATE TABLE app_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
+                CREATE TABLE organizations(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE,
+                    display_name TEXT, base_url TEXT NOT NULL, auth_provider TEXT NOT NULL,
+                    credential_key TEXT NOT NULL, authenticated_user_id TEXT,
+                    authenticated_user_display_name TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+                CREATE TABLE work_items(
+                    org_id TEXT NOT NULL, project_id TEXT NOT NULL, project_name TEXT NOT NULL,
+                    id INTEGER NOT NULL, title TEXT NOT NULL, work_item_type TEXT, state TEXT,
+                    assigned_to TEXT, changed_date TEXT, web_url TEXT, PRIMARY KEY (org_id, id));
+                CREATE TABLE my_work_items(
+                    org_id TEXT NOT NULL, project_id TEXT NOT NULL, project_name TEXT NOT NULL,
+                    id INTEGER NOT NULL, title TEXT NOT NULL, work_item_type TEXT, state TEXT,
+                    assigned_to TEXT, changed_date TEXT, web_url TEXT, PRIMARY KEY (org_id, id));
+                INSERT INTO organizations VALUES('org1','org1',NULL,'https://dev.azure.com/org1','pat','key',NULL,NULL,'2024-01-01','2024-01-01');
+                INSERT INTO work_items(org_id, project_id, project_name, id, title, assigned_to)
+                    VALUES('org1', 'p1', 'P1', 1, 'Old item', 'Alice');
+                PRAGMA user_version = 3;
+                "#,
+            )
+            .unwrap();
+        }
+        db.initialize().unwrap();
+
+        let version: i64 = db
+            .open()
+            .unwrap()
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+
+        // Pre-existing row survived and assigned_to_unique_name defaulted to NULL
+        let results = db.search_work_items("org1", None, None, None, None).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].assigned_to.as_deref(), Some("Alice"));
+    }
+
+    #[test]
+    fn get_recent_assignees_ranks_by_frequency_and_returns_unique_name() {
+        let tf = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        let make_item = |id: i64, name: &str, email: Option<&str>| CachedWorkItem {
+            org_id: "org1".to_string(),
+            project_id: "p1".to_string(),
+            project_name: "P1".to_string(),
+            id,
+            title: format!("item-{id}"),
+            work_item_type: None,
+            state: None,
+            assigned_to: Some(name.to_string()),
+            assigned_to_unique_name: email.map(|s| s.to_string()),
+            changed_date: None,
+            web_url: None,
+        };
+
+        // Alice on 3 items, Bob on 1 — Alice should rank first
+        db.replace_work_items(
+            "org1",
+            &[
+                make_item(1, "Alice", Some("alice@example.com")),
+                make_item(2, "Alice", Some("alice@example.com")),
+                make_item(3, "Alice", None), // one row without email
+                make_item(4, "Bob", Some("bob@example.com")),
+            ],
+            &[],
+        )
+        .unwrap();
+
+        let assignees = db.get_recent_assignees("org1").unwrap();
+        assert_eq!(assignees.len(), 2);
+        assert_eq!(assignees[0].0, "Alice", "Alice should rank first (higher count)");
+        assert_eq!(
+            assignees[0].1.as_deref(),
+            Some("alice@example.com"),
+            "MAX picks email even when one row has NULL"
+        );
+        assert_eq!(assignees[1].0, "Bob");
+        assert_eq!(assignees[1].1.as_deref(), Some("bob@example.com"));
     }
 
     #[test]
