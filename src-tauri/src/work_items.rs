@@ -520,10 +520,7 @@ impl WorkItemService {
             push_unique_mention_candidate(
                 &mut candidates,
                 MentionCandidate {
-                    id: unique_name
-                        .as_deref()
-                        .unwrap_or(&display_name)
-                        .to_string(),
+                    id: unique_name.as_deref().unwrap_or(&display_name).to_string(),
                     display_name,
                     unique_name,
                 },

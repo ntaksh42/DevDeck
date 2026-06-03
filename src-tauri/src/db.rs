@@ -1791,7 +1791,8 @@ mod tests {
         {
             let conn = db.open().unwrap();
             // Bring the DB to v3 manually
-            conn.pragma_update_and_check(None, "journal_mode", "WAL", |_| Ok(())).unwrap();
+            conn.pragma_update_and_check(None, "journal_mode", "WAL", |_| Ok(()))
+                .unwrap();
             conn.execute_batch(
                 r#"
                 CREATE TABLE app_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
@@ -1825,7 +1826,9 @@ mod tests {
         assert_eq!(version, SCHEMA_VERSION);
 
         // Pre-existing row survived and assigned_to_unique_name defaulted to NULL
-        let results = db.search_work_items("org1", None, None, None, None).unwrap();
+        let results = db
+            .search_work_items("org1", None, None, None, None)
+            .unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].assigned_to.as_deref(), Some("Alice"));
     }
@@ -1866,7 +1869,10 @@ mod tests {
 
         let assignees = db.get_recent_assignees("org1").unwrap();
         assert_eq!(assignees.len(), 2);
-        assert_eq!(assignees[0].0, "Alice", "Alice should rank first (higher count)");
+        assert_eq!(
+            assignees[0].0, "Alice",
+            "Alice should rank first (higher count)"
+        );
         assert_eq!(
             assignees[0].1.as_deref(),
             Some("alice@example.com"),
