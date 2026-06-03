@@ -224,8 +224,7 @@ mod tests {
         };
         let current = vec![work_item(1, "New item", Some("To Do"))];
 
-        assert!(work_item_notification_items(&[], &current, &settings)
-            .is_empty());
+        assert!(work_item_notification_items(&[], &current, &settings).is_empty());
     }
 
     #[test]
@@ -247,7 +246,10 @@ mod tests {
         let notifications = work_item_notification_items(&previous, &current, &settings);
 
         assert_eq!(notifications.len(), 2);
-        assert_eq!(notifications[0].kind, WorkItemNotificationKind::StateChanged);
+        assert_eq!(
+            notifications[0].kind,
+            WorkItemNotificationKind::StateChanged
+        );
         assert_eq!(notifications[0].previous_state.as_deref(), Some("To Do"));
         assert_eq!(notifications[0].state.as_deref(), Some("Done"));
         assert_eq!(notifications[1].kind, WorkItemNotificationKind::Assigned);
