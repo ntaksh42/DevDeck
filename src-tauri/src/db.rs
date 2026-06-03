@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, Result};
 
-const SCHEMA_VERSION: i64 = 4;
+const SCHEMA_VERSION: i64 = 5;
 
 // ── Existing public types ────────────────────────────────────────────────────
 
@@ -298,6 +298,27 @@ impl AppDatabase {
     pub fn list_my_work_items(&self, org_id: &str) -> Result<Vec<CachedWorkItem>> {
         let conn = self.open()?;
         list_my_work_items(&conn, org_id)
+    }
+
+    pub fn update_my_work_item_if_present(&self, item: &CachedWorkItem) -> Result<()> {
+        let conn = self.open()?;
+        conn.execute(
+            "UPDATE my_work_items SET title=?3, work_item_type=?4, state=?5, \
+             assigned_to=?6, assigned_to_unique_name=?7, changed_date=?8, web_url=?9 \
+             WHERE org_id=?1 AND id=?2",
+            rusqlite::params![
+                item.org_id,
+                item.id,
+                item.title,
+                item.work_item_type,
+                item.state,
+                item.assigned_to,
+                item.assigned_to_unique_name,
+                item.changed_date,
+                item.web_url
+            ],
+        )?;
+        Ok(())
     }
 
     pub fn replace_work_items(
@@ -660,6 +681,47 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             ALTER TABLE work_items ADD COLUMN assigned_to_unique_name TEXT;
             ALTER TABLE my_work_items ADD COLUMN assigned_to_unique_name TEXT;
             PRAGMA user_version = 4;
+            "#,
+        )?;
+    }
+    if current < 5 {
+        conn.execute_batch(
+            r#"
+            DROP TRIGGER IF EXISTS work_items_fts_au;
+            DROP TRIGGER IF EXISTS work_items_fts_ad;
+            DROP TRIGGER IF EXISTS work_items_fts_ai;
+            DROP TABLE IF EXISTS work_items_fts;
+
+            CREATE VIRTUAL TABLE work_items_fts USING fts5(
+                org_id UNINDEXED,
+                item_id UNINDEXED,
+                title,
+                work_item_type,
+                assigned_to
+            );
+
+            CREATE TRIGGER work_items_fts_ai
+                AFTER INSERT ON work_items BEGIN
+                    INSERT INTO work_items_fts(rowid, org_id, item_id, title, work_item_type, assigned_to)
+                    VALUES (new.rowid, new.org_id, new.id, new.title, new.work_item_type, new.assigned_to);
+                END;
+
+            CREATE TRIGGER work_items_fts_ad
+                AFTER DELETE ON work_items BEGIN
+                    DELETE FROM work_items_fts WHERE rowid = old.rowid;
+                END;
+
+            CREATE TRIGGER work_items_fts_au
+                AFTER UPDATE ON work_items BEGIN
+                    DELETE FROM work_items_fts WHERE rowid = old.rowid;
+                    INSERT INTO work_items_fts(rowid, org_id, item_id, title, work_item_type, assigned_to)
+                    VALUES (new.rowid, new.org_id, new.id, new.title, new.work_item_type, new.assigned_to);
+                END;
+
+            INSERT INTO work_items_fts(rowid, org_id, item_id, title, work_item_type, assigned_to)
+                SELECT rowid, org_id, id, title, work_item_type, assigned_to FROM work_items;
+
+            PRAGMA user_version = 5;
             "#,
         )?;
     }
@@ -1828,6 +1890,71 @@ mod tests {
         // Pre-existing row survived and assigned_to_unique_name defaulted to NULL
         let results = db
             .search_work_items("org1", None, None, None, None)
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].assigned_to.as_deref(), Some("Alice"));
+    }
+
+    #[test]
+    fn migrate_v4_db_upgrades_to_v5() {
+        let tf = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        {
+            let conn = db.open().unwrap();
+            conn.pragma_update_and_check(None, "journal_mode", "WAL", |_| Ok(())).unwrap();
+            conn.execute_batch(
+                r#"
+                CREATE TABLE app_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
+                CREATE TABLE organizations(id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE,
+                    display_name TEXT, base_url TEXT NOT NULL, auth_provider TEXT NOT NULL,
+                    credential_key TEXT NOT NULL, authenticated_user_id TEXT,
+                    authenticated_user_display_name TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+                CREATE TABLE work_items(
+                    org_id TEXT NOT NULL, project_id TEXT NOT NULL, project_name TEXT NOT NULL,
+                    id INTEGER NOT NULL, title TEXT NOT NULL, work_item_type TEXT, state TEXT,
+                    assigned_to TEXT, changed_date TEXT, web_url TEXT,
+                    assigned_to_unique_name TEXT,
+                    PRIMARY KEY (org_id, id));
+                CREATE TABLE my_work_items(
+                    org_id TEXT NOT NULL, project_id TEXT NOT NULL, project_name TEXT NOT NULL,
+                    id INTEGER NOT NULL, title TEXT NOT NULL, work_item_type TEXT, state TEXT,
+                    assigned_to TEXT, changed_date TEXT, web_url TEXT,
+                    assigned_to_unique_name TEXT,
+                    PRIMARY KEY (org_id, id));
+                CREATE VIRTUAL TABLE work_items_fts USING fts5(
+                    org_id UNINDEXED, item_id UNINDEXED, title);
+                CREATE TRIGGER work_items_fts_ai AFTER INSERT ON work_items BEGIN
+                    INSERT INTO work_items_fts(rowid, org_id, item_id, title)
+                    VALUES (new.rowid, new.org_id, new.id, new.title);
+                END;
+                CREATE TRIGGER work_items_fts_ad AFTER DELETE ON work_items BEGIN
+                    DELETE FROM work_items_fts WHERE rowid = old.rowid;
+                END;
+                CREATE TRIGGER work_items_fts_au AFTER UPDATE ON work_items BEGIN
+                    DELETE FROM work_items_fts WHERE rowid = old.rowid;
+                    INSERT INTO work_items_fts(rowid, org_id, item_id, title)
+                    VALUES (new.rowid, new.org_id, new.id, new.title);
+                END;
+                INSERT INTO organizations VALUES('org1','org1',NULL,'https://dev.azure.com/org1','pat','key',NULL,NULL,'2024-01-01','2024-01-01');
+                INSERT INTO work_items(org_id, project_id, project_name, id, title, work_item_type, assigned_to)
+                    VALUES('org1', 'p1', 'P1', 1, 'Fix login', 'Bug', 'Alice');
+                PRAGMA user_version = 4;
+                "#,
+            )
+            .unwrap();
+        }
+        db.initialize().unwrap();
+
+        let version: i64 = db
+            .open()
+            .unwrap()
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+
+        // Pre-existing row is still present and searchable by assignee name via FTS
+        let results = db
+            .search_work_items_fts("org1", "Alice")
             .unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].assigned_to.as_deref(), Some("Alice"));

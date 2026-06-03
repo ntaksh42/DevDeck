@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::auth::client_for_organization;
+use crate::commits::encode_path_segment;
 use crate::db::{AppDatabase, CachedWorkItem, Organization};
 use crate::error::{AppError, Result};
 use crate::secrets::SecretStore;
@@ -610,8 +611,11 @@ impl WorkItemService {
             .update_work_item_assigned_to(&project.id, input.work_item_id, assigned_to)
             .await?;
         let cached = work_item_to_cached(&organization, &project.id, &project.name, &work_item);
-        if let Err(e) = self.db.upsert_work_items(&[cached]) {
+        if let Err(e) = self.db.upsert_work_items(std::slice::from_ref(&cached)) {
             tracing::warn!(error = %e, "failed to update work item cache after assign");
+        }
+        if let Err(e) = self.db.update_my_work_item_if_present(&cached) {
+            tracing::warn!(error = %e, "failed to update my_work_items cache after assign");
         }
         let comments = client
             .list_work_item_comments(
@@ -652,8 +656,11 @@ impl WorkItemService {
             .update_work_item_state(&project.id, input.work_item_id, &state)
             .await?;
         let cached = work_item_to_cached(&organization, &project.id, &project.name, &work_item);
-        if let Err(e) = self.db.upsert_work_items(&[cached]) {
+        if let Err(e) = self.db.upsert_work_items(std::slice::from_ref(&cached)) {
             tracing::warn!(error = %e, "failed to update work item cache after set_state");
+        }
+        if let Err(e) = self.db.update_my_work_item_if_present(&cached) {
+            tracing::warn!(error = %e, "failed to update my_work_items cache after set_state");
         }
         let comments = client
             .list_work_item_comments(
@@ -694,8 +701,11 @@ impl WorkItemService {
             .update_work_item_reason(&project.id, input.work_item_id, &reason)
             .await?;
         let cached = work_item_to_cached(&organization, &project.id, &project.name, &work_item);
-        if let Err(e) = self.db.upsert_work_items(&[cached]) {
+        if let Err(e) = self.db.upsert_work_items(std::slice::from_ref(&cached)) {
             tracing::warn!(error = %e, "failed to update work item cache after set_reason");
+        }
+        if let Err(e) = self.db.update_my_work_item_if_present(&cached) {
+            tracing::warn!(error = %e, "failed to update my_work_items cache after set_reason");
         }
         let comments = client
             .list_work_item_comments(
@@ -737,8 +747,11 @@ impl WorkItemService {
             .update_work_item_priority(&project.id, input.work_item_id, input.priority)
             .await?;
         let cached = work_item_to_cached(&organization, &project.id, &project.name, &work_item);
-        if let Err(e) = self.db.upsert_work_items(&[cached]) {
+        if let Err(e) = self.db.upsert_work_items(std::slice::from_ref(&cached)) {
             tracing::warn!(error = %e, "failed to update work item cache after set_priority");
+        }
+        if let Err(e) = self.db.update_my_work_item_if_present(&cached) {
+            tracing::warn!(error = %e, "failed to update my_work_items cache after set_priority");
         }
         let comments = client
             .list_work_item_comments(
@@ -797,8 +810,11 @@ impl WorkItemService {
                 Ok(wi) => {
                     let cached =
                         work_item_to_cached(&organization, &project.id, &project.name, &wi);
-                    if let Err(e) = self.db.upsert_work_items(&[cached]) {
+                    if let Err(e) = self.db.upsert_work_items(std::slice::from_ref(&cached)) {
                         tracing::warn!(error = %e, "failed to update work item cache after set_items_state");
+                    }
+                    if let Err(e) = self.db.update_my_work_item_if_present(&cached) {
+                        tracing::warn!(error = %e, "failed to update my_work_items cache after set_items_state");
                     }
                     results.push(BulkWorkItemResult { id, error: None });
                 }
@@ -842,8 +858,11 @@ impl WorkItemService {
                 Ok(wi) => {
                     let cached =
                         work_item_to_cached(&organization, &project.id, &project.name, &wi);
-                    if let Err(e) = self.db.upsert_work_items(&[cached]) {
+                    if let Err(e) = self.db.upsert_work_items(std::slice::from_ref(&cached)) {
                         tracing::warn!(error = %e, "failed to update work item cache after assign_items");
+                    }
+                    if let Err(e) = self.db.update_my_work_item_if_present(&cached) {
+                        tracing::warn!(error = %e, "failed to update my_work_items cache after assign_items");
                     }
                     results.push(BulkWorkItemResult { id, error: None });
                 }
@@ -888,8 +907,11 @@ impl WorkItemService {
                 Ok(wi) => {
                     let cached =
                         work_item_to_cached(&organization, &project.id, &project.name, &wi);
-                    if let Err(e) = self.db.upsert_work_items(&[cached]) {
+                    if let Err(e) = self.db.upsert_work_items(std::slice::from_ref(&cached)) {
                         tracing::warn!(error = %e, "failed to update work item cache after set_items_priority");
+                    }
+                    if let Err(e) = self.db.update_my_work_item_if_present(&cached) {
+                        tracing::warn!(error = %e, "failed to update my_work_items cache after set_items_priority");
                     }
                     results.push(BulkWorkItemResult { id, error: None });
                 }
@@ -1308,10 +1330,6 @@ fn image_content_type_from_url(url: &str) -> Option<&'static str> {
     } else {
         None
     }
-}
-
-fn encode_path_segment(value: &str) -> String {
-    value.replace(' ', "%20")
 }
 
 fn cached_wi_to_summary(wi: CachedWorkItem) -> WorkItemSummary {

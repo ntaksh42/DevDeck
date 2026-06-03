@@ -283,7 +283,7 @@ fn commit_web_url(
     )
 }
 
-fn encode_path_segment(value: &str) -> String {
+pub(crate) fn encode_path_segment(value: &str) -> String {
     let mut encoded = String::new();
     for byte in value.as_bytes() {
         match byte {
