@@ -288,8 +288,7 @@ async fn do_sync_prs(db: &AppDatabase, client: &AdoClient, org: &Organization) -
         }
     }
 
-    db.clear_pull_requests(&org.id)?;
-    db.upsert_pull_requests(&cached_prs)?;
+    db.replace_pull_requests(&org.id, &cached_prs)?;
 
     if let Some(user_id) = &org.authenticated_user_id {
         let mut cached_reviews: Vec<CachedReviewPr> = Vec::new();
@@ -358,8 +357,7 @@ async fn do_sync_prs(db: &AppDatabase, client: &AdoClient, org: &Organization) -
             }
         }
 
-        db.clear_review_pull_requests(&org.id)?;
-        db.upsert_review_pull_requests(&cached_reviews)?;
+        db.replace_review_pull_requests(&org.id, &cached_reviews)?;
     }
 
     Ok(())

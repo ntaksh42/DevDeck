@@ -437,9 +437,10 @@ async fn do_sync_commits(db: &AppDatabase, client: &AdoClient, org: &Organizatio
                     )
                 })
                 .collect();
-            db.upsert_commits(&cached)?;
+            db.replace_commits_for_repo(&org.id, &repository.id, &cached)?;
         }
     }
+    db.purge_old_commits(&org.id, &from_date)?;
     tracing::info!(org = %org.name, "commit sync completed");
     Ok(())
 }

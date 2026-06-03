@@ -46,8 +46,8 @@ $env:PATH += ";$env:USERPROFILE\.cargo\bin"
 ## Runtime Boundaries
 
 Do not assume Tauri APIs exist when the app is launched with `pnpm dev`. The
-browser dev path is intentional: `azdoCommands.ts` checks the runtime and sends
-commands to `demoInvoke()` when Tauri is unavailable. Removing that fallback
+browser dev path is intentional: `azdoCommands.ts` checks the runtime with
+`isTauriRuntime()` and sends commands to `demoInvoke()` when Tauri is unavailable. Removing that fallback
 breaks normal browser development because `invoke()` is only available in the
 desktop runtime.
 
@@ -111,24 +111,26 @@ XService {
 }
 ```
 
-`settings.rs` only needs the database. `AppDatabase` is a cloneable path wrapper
-that opens SQLite connections per call. Schema migrations live in
-`src-tauri/src/db.rs` and use `PRAGMA user_version`; the current schema version
-is `1`.
+`settings.rs` only needs the database. `AppDatabase` is a cloneable path wrapper that opens SQLite connections per call
+via `rusqlite`. Schema migrations live in `src-tauri/src/db.rs:migrate()` and
+use `PRAGMA user_version`; the current schema version is `3`.
 
 `AppError` in `src-tauri/src/error.rs` is the IPC-facing error type. It
 serializes to JSON containing a `message`, and the frontend should read that via
-`commandErrorMessage()` in `azdoCommands.ts`.
+`commandErrorMessage()` in `azdoCommands.ts`. `AppError` converts from
+`AdoError`, `keyring::Error`, `rusqlite::Error`, and `std::io::Error`.
 
 The `azdo-client` crate should remain a reusable REST client. Route HTTP calls
 through `AdoClient::get_json` and `post_json` so retry behavior, 401 handling,
-429 `Retry-After`, and 5xx retries stay consistent.
+429 `Retry-After`, and 5xx retries stay consistent. Default: 3 attempts, 250ms
+base delay.
 
 ## Authentication And Secrets
 
 Organizations use `auth_provider` values of exactly `pat` or `azure_cli`.
-Preserve the underscore form: `client_for_organization()` matches it exactly.
-The hyphenated `azure-cli` string is only used as part of a credential key.
+Preserve the underscore form: `client_for_organization()` in
+`src-tauri/src/auth.rs` matches it exactly. The hyphenated `azure-cli` string
+is only used as part of a credential key.
 
 Secret rules:
 

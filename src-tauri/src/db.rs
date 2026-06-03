@@ -228,33 +228,35 @@ impl AppDatabase {
         search_pull_requests(&conn, org_id, project_id, repository_id, status)
     }
 
-    pub fn clear_pull_requests(&self, org_id: &str) -> Result<()> {
+    pub fn replace_pull_requests(&self, org_id: &str, prs: &[CachedPr]) -> Result<()> {
         let conn = self.open()?;
-        conn.execute("DELETE FROM pull_requests WHERE org_id = ?1", [org_id])?;
+        let tx = conn.unchecked_transaction()?;
+        tx.execute("DELETE FROM pull_requests WHERE org_id = ?1", [org_id])?;
+        upsert_pull_requests(&tx, prs)?;
+        tx.commit()?;
         Ok(())
     }
 
     // ── Review PRs cache ──────────────────────────────────────────────────────
-
-    pub fn upsert_review_pull_requests(&self, prs: &[CachedReviewPr]) -> Result<()> {
-        if prs.is_empty() {
-            return Ok(());
-        }
-        let conn = self.open()?;
-        upsert_review_pull_requests(&conn, prs)
-    }
 
     pub fn list_review_pull_requests(&self, org_id: &str) -> Result<Vec<CachedReviewPr>> {
         let conn = self.open()?;
         list_review_pull_requests(&conn, org_id)
     }
 
-    pub fn clear_review_pull_requests(&self, org_id: &str) -> Result<()> {
+    pub fn replace_review_pull_requests(
+        &self,
+        org_id: &str,
+        prs: &[CachedReviewPr],
+    ) -> Result<()> {
         let conn = self.open()?;
-        conn.execute(
+        let tx = conn.unchecked_transaction()?;
+        tx.execute(
             "DELETE FROM review_pull_requests WHERE org_id = ?1",
             [org_id],
         )?;
+        upsert_review_pull_requests(&tx, prs)?;
+        tx.commit()?;
         Ok(())
     }
 
@@ -292,42 +294,30 @@ impl AppDatabase {
         search_work_items_fts(&conn, org_id, query)
     }
 
-    pub fn clear_work_items(&self, org_id: &str) -> Result<()> {
-        let conn = self.open()?;
-        conn.execute("DELETE FROM work_items WHERE org_id = ?1", [org_id])?;
-        Ok(())
-    }
-
     // ── My work items cache ───────────────────────────────────────────────────
-
-    pub fn upsert_my_work_items(&self, items: &[CachedWorkItem]) -> Result<()> {
-        if items.is_empty() {
-            return Ok(());
-        }
-        let conn = self.open()?;
-        upsert_my_work_items(&conn, items)
-    }
 
     pub fn list_my_work_items(&self, org_id: &str) -> Result<Vec<CachedWorkItem>> {
         let conn = self.open()?;
         list_my_work_items(&conn, org_id)
     }
 
-    pub fn clear_my_work_items(&self, org_id: &str) -> Result<()> {
+    pub fn replace_work_items(
+        &self,
+        org_id: &str,
+        all_items: &[CachedWorkItem],
+        my_items: &[CachedWorkItem],
+    ) -> Result<()> {
         let conn = self.open()?;
-        conn.execute("DELETE FROM my_work_items WHERE org_id = ?1", [org_id])?;
+        let tx = conn.unchecked_transaction()?;
+        tx.execute("DELETE FROM work_items WHERE org_id = ?1", [org_id])?;
+        upsert_work_items(&tx, all_items)?;
+        tx.execute("DELETE FROM my_work_items WHERE org_id = ?1", [org_id])?;
+        upsert_my_work_items(&tx, my_items)?;
+        tx.commit()?;
         Ok(())
     }
 
     // ── Commits cache ─────────────────────────────────────────────────────────
-
-    pub fn upsert_commits(&self, commits: &[CachedCommit]) -> Result<()> {
-        if commits.is_empty() {
-            return Ok(());
-        }
-        let conn = self.open()?;
-        upsert_commits(&conn, commits)
-    }
 
     pub fn search_commits(
         &self,
@@ -366,6 +356,32 @@ impl AppDatabase {
     pub fn clear_commits(&self, org_id: &str) -> Result<()> {
         let conn = self.open()?;
         conn.execute("DELETE FROM commits WHERE org_id = ?1", [org_id])?;
+        Ok(())
+    }
+
+    pub fn replace_commits_for_repo(
+        &self,
+        org_id: &str,
+        repository_id: &str,
+        commits: &[CachedCommit],
+    ) -> Result<()> {
+        let conn = self.open()?;
+        let tx = conn.unchecked_transaction()?;
+        tx.execute(
+            "DELETE FROM commits WHERE org_id = ?1 AND repository_id = ?2",
+            rusqlite::params![org_id, repository_id],
+        )?;
+        upsert_commits(&tx, commits)?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn purge_old_commits(&self, org_id: &str, before_date: &str) -> Result<()> {
+        let conn = self.open()?;
+        conn.execute(
+            "DELETE FROM commits WHERE org_id = ?1 AND author_date < ?2",
+            rusqlite::params![org_id, before_date],
+        )?;
         Ok(())
     }
 
@@ -416,6 +432,21 @@ impl AppDatabase {
             params![scope, org_id, last_synced_at, error_count, last_error],
         )?;
         Ok(())
+    }
+
+    pub fn get_recent_assignees(&self, org_id: &str) -> Result<Vec<String>> {
+        let conn = self.open()?;
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT assigned_to FROM work_items \
+             WHERE org_id = ?1 AND assigned_to IS NOT NULL AND assigned_to != '' \
+             ORDER BY changed_date DESC LIMIT 20",
+        )?;
+        let rows = stmt.query_map([org_id], |row| row.get::<_, String>(0))?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
     }
 }
 
@@ -723,11 +754,7 @@ fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
             "notification_content_preview_enabled",
             true,
         )?,
-        notify_work_item_assignments: get_bool_setting(
-            conn,
-            "notify_work_item_assignments",
-            true,
-        )?,
+        notify_work_item_assignments: get_bool_setting(conn, "notify_work_item_assignments", true)?,
         notify_work_item_state_changes: get_bool_setting(
             conn,
             "notify_work_item_state_changes",
@@ -1681,5 +1708,127 @@ mod tests {
         let state = db.get_sync_state("prs:org1").unwrap().unwrap();
         assert_eq!(state.error_count, 2);
         assert_eq!(state.last_error.as_deref(), Some("timeout"));
+    }
+
+    #[test]
+    fn replace_work_items_clears_and_repopulates_both_tables() {
+        let tf = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        let make_item = |id: i64, title: &str| CachedWorkItem {
+            org_id: "org1".to_string(),
+            project_id: "p1".to_string(),
+            project_name: "P1".to_string(),
+            id,
+            title: title.to_string(),
+            work_item_type: None,
+            state: None,
+            assigned_to: None,
+            changed_date: None,
+            web_url: None,
+        };
+
+        // Seed both tables (distinct IDs per table: work=1, my=10)
+        db.replace_work_items("org1", &[make_item(1, "all-A")], &[make_item(10, "my-A")])
+            .unwrap();
+
+        // Replace with B-rows (work=2, my=20); A-rows must disappear
+        db.replace_work_items("org1", &[make_item(2, "all-B")], &[make_item(20, "my-B")])
+            .unwrap();
+
+        let all = db.search_work_items("org1", None, None, None, None).unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].id, 2, "work_items should contain only all-B");
+
+        let my = db.list_my_work_items("org1").unwrap();
+        assert_eq!(my.len(), 1);
+        assert_eq!(my[0].id, 20, "my_work_items should contain only my-B");
+    }
+
+    #[test]
+    fn replace_commits_for_repo_scopes_to_repository() {
+        let tf = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        let make_commit = |repo_id: &str, commit_id: &str| CachedCommit {
+            org_id: "org1".to_string(),
+            project_id: "p1".to_string(),
+            project_name: "P1".to_string(),
+            repository_id: repo_id.to_string(),
+            repository_name: repo_id.to_string(),
+            commit_id: commit_id.to_string(),
+            comment: "msg".to_string(),
+            author_name: None,
+            author_email: None,
+            author_date: None,
+            web_url: None,
+        };
+
+        // Seed both repos
+        db.replace_commits_for_repo("org1", "repoA", &[make_commit("repoA", "a1")])
+            .unwrap();
+        db.replace_commits_for_repo("org1", "repoB", &[make_commit("repoB", "b1")])
+            .unwrap();
+
+        // Replace repoA only
+        db.replace_commits_for_repo("org1", "repoA", &[make_commit("repoA", "a2")])
+            .unwrap();
+
+        let a = db
+            .search_commits("org1", Some("repoA"), None, None, None)
+            .unwrap();
+        assert_eq!(a.len(), 1);
+        assert_eq!(a[0].commit_id, "a2", "repoA should contain only a2");
+
+        let b = db
+            .search_commits("org1", Some("repoB"), None, None, None)
+            .unwrap();
+        assert_eq!(b.len(), 1);
+        assert_eq!(b[0].commit_id, "b1", "repoB should be untouched");
+    }
+
+    #[test]
+    fn purge_old_commits_removes_dated_rows_only() {
+        let tf = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        let make_commit_dated = |commit_id: &str, date: Option<&str>| CachedCommit {
+            org_id: "org1".to_string(),
+            project_id: "p1".to_string(),
+            project_name: "P1".to_string(),
+            repository_id: "repo1".to_string(),
+            repository_name: "Repo1".to_string(),
+            commit_id: commit_id.to_string(),
+            comment: "msg".to_string(),
+            author_name: None,
+            author_email: None,
+            author_date: date.map(|s| s.to_string()),
+            web_url: None,
+        };
+
+        db.replace_commits_for_repo(
+            "org1",
+            "repo1",
+            &[
+                make_commit_dated("old", Some("2020-01-01T00:00:00+00:00")),
+                make_commit_dated("new", Some("2030-01-01T00:00:00+00:00")),
+            ],
+        )
+        .unwrap();
+
+        db.purge_old_commits("org1", "2025-01-01T00:00:00+00:00")
+            .unwrap();
+
+        let remaining = db
+            .search_commits("org1", None, None, None, None)
+            .unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].commit_id, "new");
     }
 }
