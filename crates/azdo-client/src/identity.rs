@@ -69,24 +69,23 @@ impl AdoClient {
 
     pub async fn search_identities(&self, query: &str, top: usize) -> Result<Vec<Identity>> {
         let query = query.trim();
-        if query.is_empty() {
+        if query.is_empty() || top == 0 {
             return Ok(Vec::new());
         }
 
         let mut identities = Vec::new();
-        for search_filter in ["General", "DisplayName", "MailAddress", "AccountName"] {
+        for search_filter in identity_search_filters(query) {
             let batch = self
                 .search_identities_with_filter(search_filter, query)
                 .await?;
             for identity in batch {
                 if !identity_is_duplicate(&identities, &identity) {
                     identities.push(identity);
-                    if identities.len() >= top {
-                        return Ok(identities);
-                    }
                 }
             }
         }
+        identities.sort_by_key(|identity| identity_search_rank(identity, query));
+        identities.truncate(top);
         Ok(identities)
     }
 
@@ -111,6 +110,47 @@ impl AdoClient {
             IdentitySearchResponse::List(value) => value,
         })
     }
+}
+
+fn identity_search_filters(query: &str) -> &'static [&'static str] {
+    if query.contains('@') {
+        &["MailAddress", "General", "AccountName", "DisplayName"]
+    } else {
+        &["General", "DisplayName", "MailAddress", "AccountName"]
+    }
+}
+
+fn identity_search_rank(identity: &Identity, query: &str) -> usize {
+    let query = query.trim().to_ascii_lowercase();
+    if query.is_empty() {
+        return 0;
+    }
+
+    let values = [
+        identity.provider_display_name.as_deref(),
+        identity.custom_display_name.as_deref(),
+        identity.display_name.as_deref(),
+        identity.unique_name.as_deref(),
+        identity.property_value("Mail"),
+        identity.property_value("Account"),
+        identity.property_value("Alias"),
+    ];
+
+    if values
+        .iter()
+        .flatten()
+        .any(|value| value.eq_ignore_ascii_case(&query))
+    {
+        return 0;
+    }
+    if values
+        .iter()
+        .flatten()
+        .any(|value| value.to_ascii_lowercase().starts_with(&query))
+    {
+        return 1;
+    }
+    2
 }
 
 fn identity_is_duplicate(existing: &[Identity], candidate: &Identity) -> bool {
@@ -164,23 +204,58 @@ mod tests {
             .with_base_url(base_url)
     }
 
-    #[tokio::test]
-    async fn search_identities_uses_general_filter() {
-        let server = MockServer::start().await;
+    async fn mock_identity_search(
+        server: &MockServer,
+        search_filter: &str,
+        query: &str,
+        body: serde_json::Value,
+    ) {
         Mock::given(method("GET"))
             .and(path("/testorg/_apis/identities"))
             .and(query_param("api-version", "7.1"))
-            .and(query_param("searchFilter", "General"))
-            .and(query_param("filterValue", "alice"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+            .and(query_param("searchFilter", search_filter))
+            .and(query_param("filterValue", query))
+            .and(query_param("queryMembership", "None"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(body))
+            .mount(server)
+            .await;
+    }
+
+    async fn mock_empty_identity_search_filters(server: &MockServer, query: &str, except: &[&str]) {
+        for search_filter in ["General", "DisplayName", "MailAddress", "AccountName"] {
+            if except.contains(&search_filter) {
+                continue;
+            }
+            mock_identity_search(
+                server,
+                search_filter,
+                query,
+                serde_json::json!({
+                    "count": 0,
+                    "value": []
+                }),
+            )
+            .await;
+        }
+    }
+
+    #[tokio::test]
+    async fn search_identities_uses_general_filter() {
+        let server = MockServer::start().await;
+        mock_identity_search(
+            &server,
+            "General",
+            "alice",
+            serde_json::json!([
                 {
                     "id": "user-1",
                     "providerDisplayName": "Alice Johnson",
                     "uniqueName": "alice@example.com"
                 }
-            ])))
-            .mount(&server)
-            .await;
+            ]),
+        )
+        .await;
+        mock_empty_identity_search_filters(&server, "alice", &["General"]).await;
 
         let identities = test_client(&server)
             .await
@@ -198,25 +273,12 @@ mod tests {
     #[tokio::test]
     async fn search_identities_falls_back_to_display_name_filter() {
         let server = MockServer::start().await;
-        Mock::given(method("GET"))
-            .and(path("/testorg/_apis/identities"))
-            .and(query_param("api-version", "7.1"))
-            .and(query_param("searchFilter", "General"))
-            .and(query_param("filterValue", "alice"))
-            .and(query_param("queryMembership", "None"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "count": 0,
-                "value": []
-            })))
-            .mount(&server)
-            .await;
-        Mock::given(method("GET"))
-            .and(path("/testorg/_apis/identities"))
-            .and(query_param("api-version", "7.1"))
-            .and(query_param("searchFilter", "DisplayName"))
-            .and(query_param("filterValue", "alice"))
-            .and(query_param("queryMembership", "None"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+        mock_empty_identity_search_filters(&server, "alice", &["DisplayName"]).await;
+        mock_identity_search(
+            &server,
+            "DisplayName",
+            "alice",
+            serde_json::json!({
                 "count": 1,
                 "value": [{
                     "id": "user-1",
@@ -225,9 +287,9 @@ mod tests {
                         "Mail": { "$value": "alice@example.com" }
                     }
                 }]
-            })))
-            .mount(&server)
-            .await;
+            }),
+        )
+        .await;
 
         let identities = test_client(&server)
             .await
@@ -244,37 +306,34 @@ mod tests {
     #[tokio::test]
     async fn search_identities_keeps_searching_after_general_matches() {
         let server = MockServer::start().await;
-        Mock::given(method("GET"))
-            .and(path("/testorg/_apis/identities"))
-            .and(query_param("api-version", "7.1"))
-            .and(query_param("searchFilter", "General"))
-            .and(query_param("filterValue", "alice"))
-            .and(query_param("queryMembership", "None"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+        mock_identity_search(
+            &server,
+            "General",
+            "alice",
+            serde_json::json!({
                 "count": 1,
                 "value": [{
                     "id": "group-1",
                     "providerDisplayName": "Alice Team"
                 }]
-            })))
-            .mount(&server)
-            .await;
-        Mock::given(method("GET"))
-            .and(path("/testorg/_apis/identities"))
-            .and(query_param("api-version", "7.1"))
-            .and(query_param("searchFilter", "DisplayName"))
-            .and(query_param("filterValue", "alice"))
-            .and(query_param("queryMembership", "None"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            }),
+        )
+        .await;
+        mock_identity_search(
+            &server,
+            "DisplayName",
+            "alice",
+            serde_json::json!({
                 "count": 1,
                 "value": [{
                     "id": "user-1",
                     "providerDisplayName": "Alice Johnson",
                     "uniqueName": "alice@example.com"
                 }]
-            })))
-            .mount(&server)
-            .await;
+            }),
+        )
+        .await;
+        mock_empty_identity_search_filters(&server, "alice", &["General", "DisplayName"]).await;
 
         let identities = test_client(&server)
             .await
@@ -283,5 +342,61 @@ mod tests {
             .unwrap();
         assert_eq!(identities.len(), 2);
         assert_eq!(identities[1].id.as_deref(), Some("user-1"));
+    }
+
+    #[tokio::test]
+    async fn search_identities_prioritizes_mail_filter_for_email_queries() {
+        let server = MockServer::start().await;
+        mock_identity_search(
+            &server,
+            "MailAddress",
+            "alice@example.com",
+            serde_json::json!({
+                "count": 1,
+                "value": [{
+                    "id": "user-1",
+                    "providerDisplayName": "Alice Johnson",
+                    "properties": {
+                        "Mail": { "$value": "alice@example.com" }
+                    }
+                }]
+            }),
+        )
+        .await;
+        mock_empty_identity_search_filters(&server, "alice@example.com", &["MailAddress"]).await;
+
+        let identities = test_client(&server)
+            .await
+            .search_identities("alice@example.com", 1)
+            .await
+            .unwrap();
+        assert_eq!(identities.len(), 1);
+        assert_eq!(identities[0].id.as_deref(), Some("user-1"));
+    }
+
+    #[test]
+    fn identity_search_rank_prefers_exact_and_prefix_matches() {
+        let exact = Identity {
+            id: Some("user-1".to_string()),
+            descriptor: None,
+            subject_descriptor: None,
+            provider_display_name: Some("Alice Johnson".to_string()),
+            custom_display_name: None,
+            display_name: None,
+            unique_name: None,
+            properties: None,
+        };
+        let loose = Identity {
+            id: Some("user-2".to_string()),
+            descriptor: None,
+            subject_descriptor: None,
+            provider_display_name: Some("Team Alice Support".to_string()),
+            custom_display_name: None,
+            display_name: None,
+            unique_name: None,
+            properties: None,
+        };
+
+        assert!(identity_search_rank(&exact, "Alice") < identity_search_rank(&loose, "Alice"));
     }
 }

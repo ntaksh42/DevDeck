@@ -934,6 +934,9 @@ impl WorkItemService {
 }
 
 fn summarize_mention_candidate(identity: Identity) -> Option<MentionCandidate> {
+    if !is_user_like_identity(&identity) {
+        return None;
+    }
     let id = identity
         .id
         .clone()
@@ -954,6 +957,34 @@ fn summarize_mention_candidate(identity: Identity) -> Option<MentionCandidate> {
         display_name,
         unique_name,
     })
+}
+
+fn is_user_like_identity(identity: &Identity) -> bool {
+    let schema = identity.property_value("SchemaClassName");
+    let special_type = identity.property_value("SpecialType");
+    let meta_type = identity.property_value("MetaType");
+    let has_mail_or_account = identity.property_value("Mail").is_some()
+        || identity.property_value("Account").is_some()
+        || identity
+            .unique_name
+            .as_deref()
+            .is_some_and(|value| value.contains('@'));
+
+    if schema.is_some_and(|value| !value.eq_ignore_ascii_case("User")) {
+        return false;
+    }
+    if special_type.is_some_and(|value| {
+        value.eq_ignore_ascii_case("Application") || value.eq_ignore_ascii_case("ServicePrincipal")
+    }) {
+        return false;
+    }
+    if meta_type.is_some_and(|value| {
+        value.eq_ignore_ascii_case("Application") || value.eq_ignore_ascii_case("ServicePrincipal")
+    }) {
+        return false;
+    }
+
+    schema.is_some() || has_mail_or_account || identity.id.is_some()
 }
 
 fn authenticated_user_mention_candidate(
@@ -1681,6 +1712,30 @@ mod tests {
         assert_eq!(candidate.id, "aad.descriptor-1");
         assert_eq!(candidate.display_name, "Naoto Akashi");
         assert_eq!(candidate.unique_name.as_deref(), Some("naoto@example.com"));
+    }
+
+    #[test]
+    fn summarize_mention_candidate_skips_group_identity() {
+        let mut properties = HashMap::new();
+        properties.insert(
+            "SchemaClassName".to_string(),
+            azdo_client::identity::IdentityProperty {
+                value: Some("Group".to_string()),
+            },
+        );
+
+        let candidate = summarize_mention_candidate(Identity {
+            id: Some("group-1".to_string()),
+            descriptor: None,
+            subject_descriptor: None,
+            provider_display_name: Some("Project Collection Valid Users".to_string()),
+            custom_display_name: None,
+            display_name: None,
+            unique_name: None,
+            properties: Some(properties),
+        });
+
+        assert!(candidate.is_none());
     }
 
     #[test]
