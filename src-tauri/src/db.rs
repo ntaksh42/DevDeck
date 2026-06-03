@@ -1901,7 +1901,8 @@ mod tests {
         let db = AppDatabase::new(tf.path().to_path_buf());
         {
             let conn = db.open().unwrap();
-            conn.pragma_update_and_check(None, "journal_mode", "WAL", |_| Ok(())).unwrap();
+            conn.pragma_update_and_check(None, "journal_mode", "WAL", |_| Ok(()))
+                .unwrap();
             conn.execute_batch(
                 r#"
                 CREATE TABLE app_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
@@ -1953,9 +1954,7 @@ mod tests {
         assert_eq!(version, SCHEMA_VERSION);
 
         // Pre-existing row is still present and searchable by assignee name via FTS
-        let results = db
-            .search_work_items_fts("org1", "Alice")
-            .unwrap();
+        let results = db.search_work_items_fts("org1", "Alice").unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].assigned_to.as_deref(), Some("Alice"));
     }
