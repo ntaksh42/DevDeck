@@ -575,6 +575,22 @@ export function WorkItemsGrid({
     enabled: bulkAssignOpen && !!firstCheckedItem && bulkAssignQuery.trim().length > 0,
     staleTime: 60_000,
   });
+  const bulkDefaultMentionsQuery = useQuery({
+    queryKey: workItemQueryKeys.mentions(firstCheckedItem?.organizationId, ""),
+    queryFn: () =>
+      searchWorkItemMentions({
+        organizationId: firstCheckedItem?.organizationId,
+        query: "",
+      }),
+    enabled: bulkAssignOpen && !!firstCheckedItem,
+    staleTime: 60_000,
+  });
+  const bulkAssignOptions = bulkAssignQuery.trim()
+    ? (bulkMentionsQuery.data ?? [])
+    : (bulkDefaultMentionsQuery.data ?? []);
+  const bulkAssignLoading = bulkAssignQuery.trim()
+    ? bulkMentionsQuery.isFetching
+    : bulkDefaultMentionsQuery.isFetching;
 
   function showBulkToast(results: BulkWorkItemResult[]) {
     const failed = results.filter((r) => r.error).length;
@@ -1034,8 +1050,8 @@ export function WorkItemsGrid({
           }}
           assignQuery={bulkAssignQuery}
           onAssignQueryChange={setBulkAssignQuery}
-          assignOptions={bulkMentionsQuery.data ?? []}
-          assignLoading={bulkMentionsQuery.isFetching}
+          assignOptions={bulkAssignOptions}
+          assignLoading={bulkAssignLoading}
           assignPending={bulkAssignMutation.isPending}
           onAssignSelect={(candidate) => bulkAssignMutation.mutate(candidate.uniqueName ?? candidate.displayName)}
           priorityOpen={bulkPriorityOpen}
@@ -1580,7 +1596,7 @@ function BulkActionBar({
                   ))
                 ) : (
                   <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                    {assignQuery.trim() ? "No matches" : "Type to search"}
+                    {assignQuery.trim() ? "No matches" : "No recent assignees"}
                   </div>
                 )}
               </div>

@@ -4,6 +4,22 @@ All notable changes to AzDoDeck are documented here.
 
 ## [Unreleased]
 
+## [0.1.5] — 2026-06-04
+
+### Added
+- Pull Request grids now support per-column filters for review and search
+  workflows.
+
+### Fixed
+- Bulk Work Item assignment now shows default assignee candidates as soon as
+  the picker opens.
+
+## [0.1.4] — 2026-06-02
+
+### Fixed
+- Work Item assignee lookup now searches broader identity fields for better
+  Azure DevOps user matching.
+
 ## [0.1.3] — 2026-06-02
 
 ### Added

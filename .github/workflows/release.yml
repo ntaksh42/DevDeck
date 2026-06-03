@@ -4,9 +4,23 @@ on:
   push:
     tags:
       - 'v*'
+  schedule:
+    # 08:00 JST every day.
+    - cron: '0 23 * * *'
+  workflow_dispatch:
+    inputs:
+      force_release:
+        description: 'Create a release even when master has no commits after the latest v* tag'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-windows-x64
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -14,48 +28,164 @@ jobs:
     runs-on: windows-latest
     env:
       CARGO_BUILD_TARGET: x86_64-pc-windows-msvc
+      FORCE_RELEASE: ${{ inputs.force_release || 'false' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Plan release
+        id: release
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          git fetch --force --tags origin
+
+          $isTagBuild = "${{ github.ref_type }}" -eq "tag"
+          if ($isTagBuild) {
+            $tag = "${{ github.ref_name }}"
+            if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
+              throw "Release tags must look like vX.Y.Z. Got: $tag"
+            }
+
+            "should_release=true" >> $env:GITHUB_OUTPUT
+            "create_tag=false" >> $env:GITHUB_OUTPUT
+            "tag=$tag" >> $env:GITHUB_OUTPUT
+            "version=$($tag.Substring(1))" >> $env:GITHUB_OUTPUT
+            "commits_since_previous=tag-push" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+
+          git checkout master
+          git pull --ff-only origin master
+
+          $latestTag = git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | Select-Object -First 1
+          if ($latestTag) {
+            $commitsSincePrevious = [int](git rev-list --count "$latestTag..HEAD")
+          } else {
+            $commitsSincePrevious = [int](git rev-list --count HEAD)
+          }
+
+          if ($commitsSincePrevious -eq 0 -and $env:FORCE_RELEASE -ne "true") {
+            "should_release=false" >> $env:GITHUB_OUTPUT
+            "create_tag=false" >> $env:GITHUB_OUTPUT
+            "commits_since_previous=0" >> $env:GITHUB_OUTPUT
+            Write-Host "master has not advanced since $latestTag; skipping release."
+            exit 0
+          }
+
+          if ($latestTag -and $latestTag -match '^v(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)$') {
+            $major = [int]$Matches.major
+            $minor = [int]$Matches.minor
+            $patch = [int]$Matches.patch + 1
+            $version = "$major.$minor.$patch"
+          } else {
+            $packageJson = Get-Content package.json -Raw | ConvertFrom-Json
+            $version = $packageJson.version
+          }
+
+          $tag = "v$version"
+          if (git rev-parse --verify --quiet "refs/tags/$tag") {
+            throw "Tag $tag already exists, but master has unreleased commits. Create the next version tag manually or delete the stale tag."
+          }
+
+          "should_release=true" >> $env:GITHUB_OUTPUT
+          "create_tag=true" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "commits_since_previous=$commitsSincePrevious" >> $env:GITHUB_OUTPUT
+
+      - name: Stop when there is nothing to release
+        if: steps.release.outputs.should_release != 'true'
+        shell: pwsh
+        run: Write-Host "No release needed."
+
+      - name: Apply release version
+        if: steps.release.outputs.should_release == 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = "${{ steps.release.outputs.version }}"
+
+          $packageJson = Get-Content package.json -Raw | ConvertFrom-Json
+          $packageJson.version = $version
+          $packageJson | ConvertTo-Json -Depth 100 | Set-Content package.json -Encoding utf8
+
+          $tauriConfig = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
+          $tauriConfig.version = $version
+          $tauriConfig | ConvertTo-Json -Depth 100 | Set-Content src-tauri/tauri.conf.json -Encoding utf8
+
+          $cargoToml = Get-Content src-tauri/Cargo.toml -Raw
+          $cargoToml = $cargoToml -replace '(?m)^version = "[^"]+"', "version = `"$version`""
+          Set-Content src-tauri/Cargo.toml -Value $cargoToml -Encoding utf8
+
+      - name: Create release tag
+        if: steps.release.outputs.create_tag == 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          $versionChanges = git status --short -- package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml
+          if ($versionChanges) {
+            git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml
+            git commit -m "Release ${{ steps.release.outputs.tag }}"
+          }
+
+          git tag -a "${{ steps.release.outputs.tag }}" -m "Release ${{ steps.release.outputs.tag }}"
+          git push origin "${{ steps.release.outputs.tag }}"
 
       - uses: dtolnay/rust-toolchain@stable
+        if: steps.release.outputs.should_release == 'true'
         with:
           targets: x86_64-pc-windows-msvc
 
       - uses: Swatinem/rust-cache@v2
+        if: steps.release.outputs.should_release == 'true'
         with:
           key: windows-x64-installer
 
       - uses: pnpm/action-setup@v4
+        if: steps.release.outputs.should_release == 'true'
         with:
           version: 11
 
       - uses: actions/setup-node@v4
+        if: steps.release.outputs.should_release == 'true'
         with:
           node-version: 22
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile
+      - if: steps.release.outputs.should_release == 'true'
+        run: pnpm install --frozen-lockfile
 
       - name: Check frontend
+        if: steps.release.outputs.should_release == 'true'
         run: pnpm build
 
       - name: Check Rust
+        if: steps.release.outputs.should_release == 'true'
         run: cargo test --workspace --target x86_64-pc-windows-msvc
 
       - name: Build and publish release
+        if: steps.release.outputs.should_release == 'true'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: AzDoDeck ${{ github.ref_name }}
+          tagName: ${{ steps.release.outputs.tag }}
+          releaseName: AzDoDeck ${{ steps.release.outputs.tag }}
           releaseBody: |
             Windows x64 installers are attached below.
 
             - `*.exe`: NSIS installer, recommended for most users.
             - `*.msi`: MSI installer for managed Windows environments.
 
-            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/CHANGELOG.md) for what changed in this release.
+            This release was built from `master` after ${{ steps.release.outputs.commits_since_previous }} commit(s) since the previous release tag.
+
+            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ steps.release.outputs.tag }}/CHANGELOG.md) for what changed in this release.
 
             > **Windows SmartScreen warning**: Because this release is not code-signed yet, Windows may show a SmartScreen prompt. Click "More info" → "Run anyway" to proceed. This warning disappears once enough users install the app.
           releaseDraft: false
@@ -63,6 +193,7 @@ jobs:
           args: --target x86_64-pc-windows-msvc --bundles nsis,msi
 
       - name: Upload Windows installer artifacts
+        if: steps.release.outputs.should_release == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: AzDoDeck-windows-x64-installers

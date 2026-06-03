@@ -7,7 +7,7 @@ import {
   useState,
 } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Loader2, Search } from 'lucide-react';
+import { Filter, Loader2, Search } from 'lucide-react';
 import {
   searchPullRequests,
   listCommitRepositories,
@@ -26,6 +26,15 @@ const DEFAULT_PR_SEARCH_COLUMN_WIDTHS = [56, 70, 220, 130, 104, 64, 120];
 const PR_SEARCH_COLUMN_MIN_WIDTHS = [52, 64, 160, 104, 86, 58, 100];
 const PR_SEARCH_COLUMN_MAX_WIDTHS = [120, 140, 720, 360, 280, 120, 360];
 const PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY = 'azdodeck:layout:prSearchGridColumnWidths:v2';
+type PrSearchFilterableColumn = "status" | "repository" | "createdBy" | "branch";
+
+const PR_SEARCH_FILTERABLE_COLUMNS: Record<PrSearchFilterableColumn, (pr: PullRequestSummary) => string> = {
+  status: (pr) => pr.status,
+  repository: (pr) => `${pr.projectName} / ${pr.repositoryName}`,
+  createdBy: (pr) => pr.createdBy ?? "Unknown",
+  branch: (pr) => `${pr.sourceRefName} -> ${pr.targetRefName}`,
+};
+
 export function PullRequestSearch({
   organizations,
 }: {
@@ -174,7 +183,15 @@ export function PullRequestSearch({
   );
 }
 
-const PR_SEARCH_HEADER_LABELS = ["PR#", "Status", "Title", "Repository", "Author", "Date", "Branch"];
+const PR_SEARCH_COLUMNS: { label: string; filterKey?: PrSearchFilterableColumn }[] = [
+  { label: "PR#" },
+  { label: "Status", filterKey: "status" },
+  { label: "Title" },
+  { label: "Repository", filterKey: "repository" },
+  { label: "Author", filterKey: "createdBy" },
+  { label: "Date" },
+  { label: "Branch", filterKey: "branch" },
+];
 
 function PullRequestResults({
   loading,
@@ -194,6 +211,9 @@ function PullRequestResults({
       PR_SEARCH_COLUMN_MAX_WIDTHS,
     ),
   );
+  const [columnFilters, setColumnFilters] = useState<Partial<Record<PrSearchFilterableColumn, Set<string>>>>({});
+  const [openFilterCol, setOpenFilterCol] = useState<PrSearchFilterableColumn | null>(null);
+  const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -201,35 +221,114 @@ function PullRequestResults({
     localStorage.setItem(PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
   }, [columnWidths]);
 
-  useEffect(() => {
-    setSelectedIndex((index) => Math.min(index, Math.max(results.length - 1, 0)));
-  }, [results.length]);
-
   const columnTemplate = gridColumnTemplate(columnWidths, 2);
+
+  const columnUniqueValues = useMemo(() => {
+    const map = {} as Record<PrSearchFilterableColumn, string[]>;
+    for (const col of Object.keys(PR_SEARCH_FILTERABLE_COLUMNS) as PrSearchFilterableColumn[]) {
+      map[col] = [...new Set(results.map(PR_SEARCH_FILTERABLE_COLUMNS[col]))].sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: "base" }),
+      );
+    }
+    return map;
+  }, [results]);
+
+  const filteredResults = useMemo(() => {
+    const hasFilters = (Object.values(columnFilters) as (Set<string> | undefined)[]).some(
+      (values) => values && values.size > 0,
+    );
+    if (!hasFilters) return results;
+    return results.filter((pr) => {
+      for (const col of Object.keys(columnFilters) as PrSearchFilterableColumn[]) {
+        const activeValues = columnFilters[col];
+        if (!activeValues || activeValues.size === 0) continue;
+        if (!activeValues.has(PR_SEARCH_FILTERABLE_COLUMNS[col](pr))) return false;
+      }
+      return true;
+    });
+  }, [columnFilters, results]);
+
+  const hasActiveColumnFilters = (Object.values(columnFilters) as (Set<string> | undefined)[]).some(
+    (values) => values && values.size > 0,
+  );
+
+  useEffect(() => {
+    setSelectedIndex((index) => Math.min(index, Math.max(filteredResults.length - 1, 0)));
+  }, [filteredResults.length]);
 
   const countLabel = useMemo(() => {
     if (loading) return "Searching";
     if (!searched) return "Ready";
+    if (hasActiveColumnFilters) {
+      return `${filteredResults.length} of ${results.length} pull request${results.length === 1 ? "" : "s"}`;
+    }
     return `${results.length} pull request${results.length === 1 ? "" : "s"}`;
-  }, [loading, results.length, searched]);
+  }, [filteredResults.length, hasActiveColumnFilters, loading, results.length, searched]);
 
   function moveSelection(delta: number) {
     setSelectedIndex((prev) => {
-      const next = clamp(prev + delta, 0, results.length - 1);
+      const next = clamp(prev + delta, 0, filteredResults.length - 1);
       rowRefs.current[next]?.focus();
       return next;
     });
   }
 
+  function openFilter(col: PrSearchFilterableColumn, anchorEl: HTMLButtonElement) {
+    setFilterAnchorRect(anchorEl.getBoundingClientRect());
+    setOpenFilterCol(col);
+  }
+
+  function toggleFilter(col: PrSearchFilterableColumn, value: string) {
+    const allValues = columnUniqueValues[col] ?? [];
+    setColumnFilters((prev) => {
+      const current = prev[col];
+      if (!current || current.size === 0) {
+        const next = new Set(allValues.filter((candidate) => candidate !== value));
+        if (next.size === 0) return prev;
+        return { ...prev, [col]: next };
+      }
+      const next = new Set(current);
+      if (next.has(value)) {
+        next.delete(value);
+        if (next.size === 0) {
+          const { [col]: _, ...rest } = prev;
+          return rest;
+        }
+      } else {
+        next.add(value);
+        if (next.size === allValues.length) {
+          const { [col]: _, ...rest } = prev;
+          return rest;
+        }
+      }
+      return { ...prev, [col]: next };
+    });
+    setSelectedIndex(0);
+  }
+
+  function clearColumnFilter(col: PrSearchFilterableColumn) {
+    setColumnFilters((prev) => {
+      const { [col]: _, ...rest } = prev;
+      return rest;
+    });
+    setSelectedIndex(0);
+  }
+
   function handleKeyDown(e: React.KeyboardEvent) {
     if (isEditableTarget(e.target)) return;
-    if (results.length === 0) return;
+    if (e.key === "Escape" && openFilterCol) {
+      e.preventDefault();
+      setOpenFilterCol(null);
+      setFilterAnchorRect(null);
+      return;
+    }
+    if (filteredResults.length === 0) return;
     if (e.key === "ArrowDown") { e.preventDefault(); moveSelection(1); }
     else if (e.key === "ArrowUp") { e.preventDefault(); moveSelection(-1); }
     else if (e.key === "Home") { e.preventDefault(); setSelectedIndex(0); rowRefs.current[0]?.focus(); }
     else if (e.key === "End") {
       e.preventDefault();
-      const last = results.length - 1;
+      const last = filteredResults.length - 1;
       setSelectedIndex(last);
       rowRefs.current[last]?.focus();
     }
@@ -237,12 +336,12 @@ function PullRequestResults({
     else if (e.key === "PageUp") { e.preventDefault(); moveSelection(-10); }
     else if (e.key === "Enter") {
       e.preventDefault();
-      const pr = results[selectedIndex];
+      const pr = filteredResults[selectedIndex];
       if (pr?.webUrl) openExternalUrl(pr.webUrl);
     }
     else if (e.key === "c" || e.key === "C") {
       e.preventDefault();
-      const pr = results[selectedIndex];
+      const pr = filteredResults[selectedIndex];
       if (pr?.webUrl) {
         void navigator.clipboard.writeText(pr.webUrl).then(() => {
           setCopyToast("URL copied");
@@ -283,10 +382,26 @@ function PullRequestResults({
             className="grid border-b border-border bg-muted/40 px-2 py-1 text-xs font-medium text-muted-foreground"
             style={{ gridTemplateColumns: columnTemplate }}
           >
-            {PR_SEARCH_HEADER_LABELS.map((label, i) => (
-              <div key={label} role="columnheader" className="relative min-w-0 truncate px-1">
-                {label}
-                {i < PR_SEARCH_HEADER_LABELS.length - 1 && (
+            {PR_SEARCH_COLUMNS.map((column, i) => (
+              <div key={column.label} role="columnheader" className="relative min-w-0 px-1">
+                <div className="flex min-w-0 items-center">
+                  <span className="truncate">{column.label}</span>
+                  {column.filterKey ? (
+                    <button
+                      type="button"
+                      aria-label={`Filter by ${column.label}`}
+                      onClick={(event) => openFilter(column.filterKey!, event.currentTarget)}
+                      className={`ml-1 shrink-0 rounded p-0.5 focus:outline-none focus:ring-1 focus:ring-ring ${
+                        columnFilters[column.filterKey]?.size
+                          ? "text-primary"
+                          : "text-muted-foreground/40 hover:text-muted-foreground"
+                      }`}
+                    >
+                      <Filter className="h-3 w-3" aria-hidden="true" />
+                    </button>
+                  ) : null}
+                </div>
+                {i < PR_SEARCH_COLUMNS.length - 1 && (
                   <ColumnResizeHandle
                     columnIndex={i}
                     widths={columnWidths}
@@ -302,8 +417,22 @@ function PullRequestResults({
             <div className="flex min-h-32 items-center justify-center">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden="true" />
             </div>
+          ) : filteredResults.length === 0 ? (
+            <div className="flex min-h-24 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+              <span>No results match the active filters.</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setColumnFilters({});
+                  setSelectedIndex(0);
+                }}
+                className="rounded border border-border px-2 py-0.5 text-xs hover:bg-secondary"
+              >
+                Clear filters
+              </button>
+            </div>
           ) : (
-            results.map((pr, index) => (
+            filteredResults.map((pr, index) => (
               <PrSearchRow
                 key={`${pr.repositoryId}:${pr.pullRequestId}`}
                 ref={(el) => { rowRefs.current[index] = el; }}
@@ -321,6 +450,116 @@ function PullRequestResults({
           {copyToast}
         </div>
       )}
+      {openFilterCol && filterAnchorRect ? (
+        <ColumnFilterDropdown
+          anchorRect={filterAnchorRect}
+          allValues={columnUniqueValues[openFilterCol] ?? []}
+          activeValues={columnFilters[openFilterCol]}
+          onToggle={(value) => toggleFilter(openFilterCol, value)}
+          onClearAll={() => clearColumnFilter(openFilterCol)}
+          onClose={() => {
+            setOpenFilterCol(null);
+            setFilterAnchorRect(null);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ColumnFilterDropdown({
+  anchorRect,
+  allValues,
+  activeValues,
+  onToggle,
+  onClearAll,
+  onClose,
+}: {
+  anchorRect: DOMRect;
+  allValues: string[];
+  activeValues: Set<string> | undefined;
+  onToggle: (value: string) => void;
+  onClearAll: () => void;
+  onClose: () => void;
+}) {
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    function onMouseDown(e: MouseEvent) {
+      if (!dropdownRef.current?.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [onClose]);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+      }
+    }
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [onClose]);
+
+  const isAllChecked = !activeValues || activeValues.size === 0;
+  const filteredValues = search.trim()
+    ? allValues.filter((value) => value.toLowerCase().includes(search.trim().toLowerCase()))
+    : allValues;
+  const top = Math.min(anchorRect.bottom + 2, window.innerHeight - 280);
+  const left = Math.min(anchorRect.left, window.innerWidth - 208);
+
+  return (
+    <div
+      ref={dropdownRef}
+      className="fixed z-50 w-52 rounded-md border border-border bg-white shadow-lg"
+      style={{ top, left }}
+    >
+      <div className="border-b border-border p-1.5">
+        <input
+          autoFocus
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search..."
+          className="w-full rounded border border-input bg-background px-2 py-0.5 text-xs outline-none focus:ring-1 focus:ring-ring"
+        />
+      </div>
+      <div className="border-b border-border p-1">
+        <button
+          type="button"
+          onClick={onClearAll}
+          className={`w-full rounded px-2 py-0.5 text-left text-xs hover:bg-secondary ${
+            isAllChecked ? "font-medium text-foreground" : "text-muted-foreground"
+          }`}
+        >
+          (All)
+        </button>
+      </div>
+      <div className="max-h-44 overflow-auto p-1">
+        {filteredValues.length === 0 ? (
+          <p className="px-2 py-1 text-xs text-muted-foreground">No values</p>
+        ) : (
+          filteredValues.map((value) => {
+            const checked = isAllChecked || (activeValues?.has(value) ?? false);
+            return (
+              <label
+                key={value}
+                className="flex cursor-pointer select-none items-center gap-1.5 rounded px-2 py-0.5 text-xs hover:bg-secondary"
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => onToggle(value)}
+                  className="h-3 w-3"
+                />
+                <span className="truncate">{value || "(empty)"}</span>
+              </label>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }

@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronDown, ChevronUp, FileText, Loader2, Search, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, FileText, Filter, Loader2, Search, X } from 'lucide-react';
 import {
   listMyReviewPullRequests,
   getReviewResultPreview,
@@ -240,11 +240,15 @@ function SortHeaderButton({
   sort,
   onSort,
   resizeHandle,
+  filterActive,
+  onFilterOpen,
 }: {
   column: SortKey;
   sort: SortState;
   onSort: (column: SortKey) => void;
   resizeHandle?: ReactNode;
+  filterActive?: boolean;
+  onFilterOpen?: (anchorEl: HTMLButtonElement) => void;
 }) {
   const active = sort.key === column;
   const label = sortLabels[column];
@@ -255,28 +259,63 @@ function SortHeaderButton({
       aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
       className="relative min-w-0"
     >
-      <button
-        type="button"
-        aria-label={`Sort by ${label}`}
-        onClick={() => onSort(column)}
-        className={`flex w-full min-w-0 items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring ${
-          active ? "text-foreground" : ""
-        }`}
-      >
-        <span className="truncate">{label}</span>
-        {active ? (
-          sort.direction === "asc" ? (
-            <ChevronUp className="h-3 w-3 shrink-0" aria-hidden="true" />
+      <div className="flex min-w-0 items-center">
+        <button
+          type="button"
+          aria-label={`Sort by ${label}`}
+          onClick={() => onSort(column)}
+          className={`flex min-w-0 flex-1 items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring ${
+            active ? "text-foreground" : ""
+          }`}
+        >
+          <span className="truncate">{label}</span>
+          {active ? (
+            sort.direction === "asc" ? (
+              <ChevronUp className="h-3 w-3 shrink-0" aria-hidden="true" />
+            ) : (
+              <ChevronDown className="h-3 w-3 shrink-0" aria-hidden="true" />
+            )
           ) : (
-            <ChevronDown className="h-3 w-3 shrink-0" aria-hidden="true" />
-          )
-        ) : (
-          <span className="h-3 w-3 shrink-0" aria-hidden="true" />
-        )}
-      </button>
+            <span className="h-3 w-3 shrink-0" aria-hidden="true" />
+          )}
+        </button>
+        {onFilterOpen ? (
+          <button
+            type="button"
+            aria-label={`Filter by ${label}`}
+            onClick={(e) => onFilterOpen(e.currentTarget)}
+            className={`shrink-0 rounded p-0.5 focus:outline-none focus:ring-1 focus:ring-ring ${
+              filterActive
+                ? "text-primary"
+                : "text-muted-foreground/40 hover:text-muted-foreground"
+            }`}
+          >
+            <Filter className="h-3 w-3" aria-hidden="true" />
+          </button>
+        ) : null}
+      </div>
       {resizeHandle}
     </div>
   );
+}
+
+type FilterableColumn =
+  | "repositoryName"
+  | "createdBy"
+  | "targetRefName"
+  | "myIsRequired"
+  | "myVote";
+
+const FILTERABLE_COLUMNS: Record<FilterableColumn, (pr: ReviewPullRequestSummary) => string> = {
+  repositoryName: (pr) => pr.repositoryName,
+  createdBy: (pr) => pr.createdBy ?? "Unknown",
+  targetRefName: (pr) => pr.targetRefName,
+  myIsRequired: (pr) => (pr.myIsRequired ? "Required" : "Optional"),
+  myVote: (pr) => pr.myVoteLabel,
+};
+
+function isFilterableColumn(column: SortKey): column is FilterableColumn {
+  return column in FILTERABLE_COLUMNS;
 }
 
 export function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
@@ -294,6 +333,9 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
   const [showDrafts, setShowDrafts] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [sort, setSort] = useState<SortState>({ key: "creationDate", direction: "desc" });
+  const [columnFilters, setColumnFilters] = useState<Partial<Record<FilterableColumn, Set<string>>>>({});
+  const [openFilterCol, setOpenFilterCol] = useState<FilterableColumn | null>(null);
+  const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
   const [columnWidths, setColumnWidths] = useState(() =>
     storedNumbers(
       PR_GRID_COLUMN_WIDTHS_STORAGE_KEY,
@@ -323,7 +365,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
 
   const allPrs = query.data ?? [];
 
-  const filtered = useMemo(() => {
+  const baseFiltered = useMemo(() => {
     const terms = splitSearchTerms(textFilter);
     return allPrs.filter((pr) => {
       if (!showDrafts && pr.isDraft) return false;
@@ -343,6 +385,31 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     });
   }, [allPrs, textFilter, voteFilter, showDrafts]);
 
+  const columnUniqueValues = useMemo(() => {
+    const map = {} as Record<FilterableColumn, string[]>;
+    for (const col of Object.keys(FILTERABLE_COLUMNS) as FilterableColumn[]) {
+      map[col] = [...new Set(baseFiltered.map(FILTERABLE_COLUMNS[col]))].sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: "base" }),
+      );
+    }
+    return map;
+  }, [baseFiltered]);
+
+  const filtered = useMemo(() => {
+    const hasFilters = (Object.values(columnFilters) as (Set<string> | undefined)[]).some(
+      (values) => values && values.size > 0,
+    );
+    if (!hasFilters) return baseFiltered;
+    return baseFiltered.filter((pr) => {
+      for (const col of Object.keys(columnFilters) as FilterableColumn[]) {
+        const activeValues = columnFilters[col];
+        if (!activeValues || activeValues.size === 0) continue;
+        if (!activeValues.has(FILTERABLE_COLUMNS[col](pr))) return false;
+      }
+      return true;
+    });
+  }, [baseFiltered, columnFilters]);
+
   const sortedPrs = useMemo(() => {
     return filtered
       .map((pr, index) => ({ pr, index }))
@@ -356,7 +423,10 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
 
   const visiblePrs = allPrs.filter((pr) => showDrafts || !pr.isDraft);
   const noVoteCount = visiblePrs.filter((pr) => pr.myVote === 0).length;
-  const isFiltered = !!textFilter || voteFilter !== "all";
+  const hasActiveColumnFilters = (Object.values(columnFilters) as (Set<string> | undefined)[]).some(
+    (values) => values && values.size > 0,
+  );
+  const isFiltered = !!textFilter || voteFilter !== "all" || hasActiveColumnFilters;
   const selectedPr = sortedPrs[selectedIndex] ?? null;
 
   const settingsQuery = useQuery({
@@ -440,6 +510,48 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     applyVoteFilter(voteFilterOptions[nextIndex].value);
   }
 
+  function openFilter(col: FilterableColumn, anchorEl: HTMLButtonElement) {
+    setFilterAnchorRect(anchorEl.getBoundingClientRect());
+    setOpenFilterCol(col);
+  }
+
+  function toggleFilter(col: FilterableColumn, value: string) {
+    const allValues = columnUniqueValues[col] ?? [];
+    setColumnFilters((prev) => {
+      const current = prev[col];
+      if (!current || current.size === 0) {
+        const next = new Set(allValues.filter((candidate) => candidate !== value));
+        if (next.size === 0) return prev;
+        return { ...prev, [col]: next };
+      }
+
+      const next = new Set(current);
+      if (next.has(value)) {
+        next.delete(value);
+        if (next.size === 0) {
+          const { [col]: _, ...rest } = prev;
+          return rest;
+        }
+      } else {
+        next.add(value);
+        if (next.size === allValues.length) {
+          const { [col]: _, ...rest } = prev;
+          return rest;
+        }
+      }
+      return { ...prev, [col]: next };
+    });
+    setSelectedIndex(0);
+  }
+
+  function clearColumnFilter(col: FilterableColumn) {
+    setColumnFilters((prev) => {
+      const { [col]: _, ...rest } = prev;
+      return rest;
+    });
+    setSelectedIndex(0);
+  }
+
   function handleKeyDown(e: React.KeyboardEvent) {
     const editable = isEditableTarget(e.target);
     const targetElement = e.target instanceof HTMLElement ? e.target : null;
@@ -517,8 +629,14 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     }
     if (e.key === "Escape") {
       e.preventDefault();
+      if (openFilterCol) {
+        setOpenFilterCol(null);
+        setFilterAnchorRect(null);
+        return;
+      }
       setTextFilter("");
       setVoteFilter("noVote");
+      setColumnFilters({});
       setSelectedIndex(0);
       return;
     }
@@ -711,6 +829,8 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
                     column={col}
                     sort={sort}
                     onSort={applySort}
+                    filterActive={isFilterableColumn(col) && !!columnFilters[col]?.size}
+                    onFilterOpen={isFilterableColumn(col) ? (el) => openFilter(col, el) : undefined}
                     resizeHandle={
                       <ColumnResizeHandle
                         columnIndex={i}
@@ -722,7 +842,13 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
                     }
                   />
                 ))}
-                <SortHeaderButton column="myVote" sort={sort} onSort={applySort} />
+                <SortHeaderButton
+                  column="myVote"
+                  sort={sort}
+                  onSort={applySort}
+                  filterActive={!!columnFilters.myVote?.size}
+                  onFilterOpen={(el) => openFilter("myVote", el)}
+                />
               </div>
 
               {query.isLoading ? (
@@ -730,8 +856,22 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
               ) : query.isError ? (
                 <ErrorState message={commandErrorMessage(query.error)} />
               ) : sortedPrs.length === 0 ? (
-                <div className="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
-                  {allPrs.length === 0 ? "No pull requests assigned to you." : "No results match the current filter."}
+                <div className="flex min-h-24 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <span>
+                    {allPrs.length === 0 ? "No pull requests assigned to you." : "No results match the current filter."}
+                  </span>
+                  {hasActiveColumnFilters ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setColumnFilters({});
+                        setSelectedIndex(0);
+                      }}
+                      className="rounded border border-border px-2 py-0.5 text-xs hover:bg-secondary"
+                    >
+                      Clear filters
+                    </button>
+                  ) : null}
                 </div>
               ) : (
                 <div
@@ -796,6 +936,116 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
           previewLoading={previewQuery.isFetching}
           previewError={previewQuery.isError ? commandErrorMessage(previewQuery.error) : null}
         />
+      </div>
+      {openFilterCol && filterAnchorRect ? (
+        <ColumnFilterDropdown
+          anchorRect={filterAnchorRect}
+          allValues={columnUniqueValues[openFilterCol] ?? []}
+          activeValues={columnFilters[openFilterCol]}
+          onToggle={(value) => toggleFilter(openFilterCol, value)}
+          onClearAll={() => clearColumnFilter(openFilterCol)}
+          onClose={() => {
+            setOpenFilterCol(null);
+            setFilterAnchorRect(null);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ColumnFilterDropdown({
+  anchorRect,
+  allValues,
+  activeValues,
+  onToggle,
+  onClearAll,
+  onClose,
+}: {
+  anchorRect: DOMRect;
+  allValues: string[];
+  activeValues: Set<string> | undefined;
+  onToggle: (value: string) => void;
+  onClearAll: () => void;
+  onClose: () => void;
+}) {
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    function onMouseDown(e: MouseEvent) {
+      if (!dropdownRef.current?.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [onClose]);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+      }
+    }
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [onClose]);
+
+  const isAllChecked = !activeValues || activeValues.size === 0;
+  const filteredValues = search.trim()
+    ? allValues.filter((value) => value.toLowerCase().includes(search.trim().toLowerCase()))
+    : allValues;
+  const top = Math.min(anchorRect.bottom + 2, window.innerHeight - 280);
+  const left = Math.min(anchorRect.left, window.innerWidth - 208);
+
+  return (
+    <div
+      ref={dropdownRef}
+      className="fixed z-50 w-52 rounded-md border border-border bg-white shadow-lg"
+      style={{ top, left }}
+    >
+      <div className="border-b border-border p-1.5">
+        <input
+          autoFocus
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search..."
+          className="w-full rounded border border-input bg-background px-2 py-0.5 text-xs outline-none focus:ring-1 focus:ring-ring"
+        />
+      </div>
+      <div className="border-b border-border p-1">
+        <button
+          type="button"
+          onClick={onClearAll}
+          className={`w-full rounded px-2 py-0.5 text-left text-xs hover:bg-secondary ${
+            isAllChecked ? "font-medium text-foreground" : "text-muted-foreground"
+          }`}
+        >
+          (All)
+        </button>
+      </div>
+      <div className="max-h-44 overflow-auto p-1">
+        {filteredValues.length === 0 ? (
+          <p className="px-2 py-1 text-xs text-muted-foreground">No values</p>
+        ) : (
+          filteredValues.map((value) => {
+            const checked = isAllChecked || (activeValues?.has(value) ?? false);
+            return (
+              <label
+                key={value}
+                className="flex cursor-pointer select-none items-center gap-1.5 rounded px-2 py-0.5 text-xs hover:bg-secondary"
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => onToggle(value)}
+                  className="h-3 w-3"
+                />
+                <span className="truncate">{value || "(empty)"}</span>
+              </label>
+            );
+          })
+        )}
       </div>
     </div>
   );
