@@ -60,18 +60,35 @@ const DEMO_PREVIEW_IMAGE_DATA_URL =
 let demoSettings: AppSettings = {
   reviewResultFolderPath: "C:\\reports\\azdo-reviews",
   showWindowHotkey: null,
+  readOnlyValidationModeEnabled: false,
   desktopNotificationsEnabled: false,
   notificationContentPreviewEnabled: true,
   notifyWorkItemAssignments: true,
   notifyWorkItemStateChanges: true,
 };
 const deletedDemoWorkItemComments = new Set<number>();
+const writeCommands = new Set([
+  "add_work_item_comment",
+  "delete_work_item_comment",
+  "assign_work_item",
+  "set_work_item_state",
+  "set_work_item_reason",
+  "set_work_item_priority",
+  "set_work_items_state",
+  "assign_work_items",
+  "set_work_items_priority",
+]);
 
 export async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
   await new Promise((resolve) => window.setTimeout(resolve, demoResponseDelayMs()));
 
   if (shouldFailDemoCommand(command)) {
     throw new Error(`Demo harness forced ${command} to fail`);
+  }
+  if (writeCommands.has(command) && demoSettings.readOnlyValidationModeEnabled) {
+    throw new Error(
+      "Read-only validation mode is enabled. Disable it in Settings to write to Azure DevOps.",
+    );
   }
 
   switch (command) {
@@ -91,6 +108,10 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
           input && "showWindowHotkey" in input
             ? input.showWindowHotkey?.trim() || null
             : demoSettings.showWindowHotkey,
+        readOnlyValidationModeEnabled:
+          input && "readOnlyValidationModeEnabled" in input
+            ? Boolean(input.readOnlyValidationModeEnabled)
+            : demoSettings.readOnlyValidationModeEnabled,
         desktopNotificationsEnabled:
           input && "desktopNotificationsEnabled" in input
             ? Boolean(input.desktopNotificationsEnabled)

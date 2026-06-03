@@ -23,6 +23,7 @@ export type Organization = z.infer<typeof organizationSchema>;
 const appSettingsSchema = z.object({
   reviewResultFolderPath: z.string().nullable(),
   showWindowHotkey: z.string().nullable().default(null),
+  readOnlyValidationModeEnabled: z.boolean().default(false),
   desktopNotificationsEnabled: z.boolean().default(false),
   notificationContentPreviewEnabled: z.boolean().default(true),
   notifyWorkItemAssignments: z.boolean().default(true),
@@ -212,6 +213,7 @@ export type DeleteOrganizationInput = {
 export type UpdateAppSettingsInput = {
   reviewResultFolderPath?: string | null;
   showWindowHotkey?: string | null;
+  readOnlyValidationModeEnabled?: boolean;
   desktopNotificationsEnabled?: boolean;
   notificationContentPreviewEnabled?: boolean;
   notifyWorkItemAssignments?: boolean;

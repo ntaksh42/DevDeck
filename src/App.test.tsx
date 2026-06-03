@@ -219,6 +219,7 @@ describe("App", () => {
         input: {
           reviewResultFolderPath: "D:\\azdo-review-results",
           showWindowHotkey: null,
+          readOnlyValidationModeEnabled: false,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
           notifyWorkItemAssignments: true,
@@ -271,6 +272,7 @@ describe("App", () => {
         input: {
           reviewResultFolderPath: "C:\\reports",
           showWindowHotkey: "Ctrl+Alt+D",
+          readOnlyValidationModeEnabled: false,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
           notifyWorkItemAssignments: true,
@@ -321,6 +323,7 @@ describe("App", () => {
         input: {
           reviewResultFolderPath: null,
           showWindowHotkey: null,
+          readOnlyValidationModeEnabled: false,
           desktopNotificationsEnabled: true,
           notificationContentPreviewEnabled: false,
           notifyWorkItemAssignments: true,
@@ -329,6 +332,56 @@ describe("App", () => {
       });
     });
     expect(await screen.findByText("Desktop notification settings saved.")).toBeTruthy();
+  });
+
+  it("saves read-only validation mode", async () => {
+    invokeMock.mockImplementation((command: string, args?: unknown) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve({
+          reviewResultFolderPath: null,
+          showWindowHotkey: null,
+          readOnlyValidationModeEnabled: false,
+          desktopNotificationsEnabled: false,
+          notificationContentPreviewEnabled: true,
+          notifyWorkItemAssignments: true,
+          notifyWorkItemStateChanges: true,
+        });
+      }
+      if (command === "update_app_settings") {
+        return Promise.resolve((args as { input: unknown }).input);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+
+    await screen.findByText("No pull requests assigned to you.");
+    fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    expect(await screen.findByRole("heading", { name: "Validation mode" })).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText("Read-only validation mode"));
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[3]);
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("update_app_settings", {
+        input: {
+          reviewResultFolderPath: null,
+          showWindowHotkey: null,
+          readOnlyValidationModeEnabled: true,
+          desktopNotificationsEnabled: false,
+          notificationContentPreviewEnabled: true,
+          notifyWorkItemAssignments: true,
+          notifyWorkItemStateChanges: true,
+        },
+      });
+    });
+    expect(await screen.findByText("Validation mode saved.")).toBeTruthy();
   });
 
   it("submits organization setup to the backend", async () => {

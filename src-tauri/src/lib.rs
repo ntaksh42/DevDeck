@@ -88,6 +88,16 @@ fn get_review_result_preview(
     state.settings.review_result_preview(input)
 }
 
+fn ensure_write_enabled(state: &State<'_, AppState>) -> Result<()> {
+    if state.settings.get()?.read_only_validation_mode_enabled {
+        return Err(AppError::InvalidInput(
+            "Read-only validation mode is enabled. Disable it in Settings to write to Azure DevOps."
+                .to_string(),
+        ));
+    }
+    Ok(())
+}
+
 #[tauri::command]
 #[tracing::instrument(skip(state))]
 fn delete_organization(id: String, state: State<'_, AppState>) -> Result<()> {
@@ -208,6 +218,7 @@ async fn add_work_item_comment(
     input: AddWorkItemCommentInput,
     state: State<'_, AppState>,
 ) -> Result<WorkItemComment> {
+    ensure_write_enabled(&state)?;
     state.work_items.add_comment(input).await
 }
 
@@ -217,6 +228,7 @@ async fn delete_work_item_comment(
     input: DeleteWorkItemCommentInput,
     state: State<'_, AppState>,
 ) -> Result<()> {
+    ensure_write_enabled(&state)?;
     state.work_items.delete_comment(input).await
 }
 
@@ -226,6 +238,7 @@ async fn assign_work_item(
     input: AssignWorkItemInput,
     state: State<'_, AppState>,
 ) -> Result<WorkItemPreview> {
+    ensure_write_enabled(&state)?;
     state.work_items.assign(input).await
 }
 
@@ -235,6 +248,7 @@ async fn set_work_item_state(
     input: SetWorkItemStateInput,
     state: State<'_, AppState>,
 ) -> Result<WorkItemPreview> {
+    ensure_write_enabled(&state)?;
     state.work_items.set_state(input).await
 }
 
@@ -244,6 +258,7 @@ async fn set_work_item_reason(
     input: SetWorkItemReasonInput,
     state: State<'_, AppState>,
 ) -> Result<WorkItemPreview> {
+    ensure_write_enabled(&state)?;
     state.work_items.set_reason(input).await
 }
 
@@ -253,6 +268,7 @@ async fn set_work_item_priority(
     input: SetWorkItemPriorityInput,
     state: State<'_, AppState>,
 ) -> Result<WorkItemPreview> {
+    ensure_write_enabled(&state)?;
     state.work_items.set_priority(input).await
 }
 
@@ -262,6 +278,7 @@ async fn set_work_items_state(
     input: SetWorkItemsStateInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<BulkWorkItemResult>> {
+    ensure_write_enabled(&state)?;
     state.work_items.set_items_state(input).await
 }
 
@@ -271,6 +288,7 @@ async fn assign_work_items(
     input: AssignWorkItemsInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<BulkWorkItemResult>> {
+    ensure_write_enabled(&state)?;
     state.work_items.assign_items(input).await
 }
 
@@ -280,6 +298,7 @@ async fn set_work_items_priority(
     input: SetWorkItemsPriorityInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<BulkWorkItemResult>> {
+    ensure_write_enabled(&state)?;
     state.work_items.set_items_priority(input).await
 }
 

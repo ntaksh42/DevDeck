@@ -1,6 +1,6 @@
 import { type FormEvent, type KeyboardEvent as ReactKeyboardEvent, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, Building2, Eye, EyeOff, FileText, Keyboard, Loader2, Plus, Send, Trash2 } from 'lucide-react';
+import { Bell, Building2, Eye, EyeOff, FileText, Keyboard, Loader2, Plus, Send, ShieldCheck, Trash2 } from 'lucide-react';
 import {
   addAzureCliOrganization,
   addPatOrganization,
@@ -38,6 +38,7 @@ export function OrganizationSettings({
       <DesktopNotificationSettings />
       <ReviewResultFolderSettings />
       <DataCacheSettings />
+      <ValidationModeSettings />
       <div className="overflow-hidden rounded-md border border-border bg-white">
         <div className="border-b border-border px-3 py-2">
           <h2 className="text-base font-semibold">Organizations</h2>
@@ -174,6 +175,8 @@ function settingsInput(
   return {
     reviewResultFolderPath: settings?.reviewResultFolderPath ?? null,
     showWindowHotkey: settings?.showWindowHotkey ?? null,
+    readOnlyValidationModeEnabled:
+      settings?.readOnlyValidationModeEnabled ?? false,
     desktopNotificationsEnabled: settings?.desktopNotificationsEnabled ?? false,
     notificationContentPreviewEnabled:
       settings?.notificationContentPreviewEnabled ?? true,
@@ -181,6 +184,97 @@ function settingsInput(
     notifyWorkItemStateChanges: settings?.notifyWorkItemStateChanges ?? true,
     ...input,
   };
+}
+
+function ValidationModeSettings() {
+  const queryClient = useQueryClient();
+  const settingsQuery = useQuery({
+    queryKey: ["appSettings"],
+    queryFn: getAppSettings,
+    staleTime: 5 * 60_000,
+  });
+  const [enabled, setEnabled] = useState(false);
+
+  useEffect(() => {
+    setEnabled(settingsQuery.data?.readOnlyValidationModeEnabled ?? false);
+  }, [settingsQuery.data?.readOnlyValidationModeEnabled]);
+
+  const mutation = useMutation({
+    mutationFn: updateAppSettings,
+    onSuccess: (settings) => {
+      queryClient.setQueryData(["appSettings"], settings);
+    },
+  });
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    mutation.mutate(
+      settingsInput(settingsQuery.data, {
+        readOnlyValidationModeEnabled: enabled,
+      }),
+    );
+  }
+
+  return (
+    <div className="rounded-md border border-border bg-white">
+      <div className="border-b border-border px-3 py-2">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
+            <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold">Validation mode</h2>
+            <p className="text-sm text-muted-foreground">
+              Use real sync, search, and previews while blocking Azure DevOps writes.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <form className="grid gap-3 p-3" onSubmit={onSubmit}>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(event) => setEnabled(event.target.checked)}
+            className="h-4 w-4 rounded border-input"
+          />
+          Read-only validation mode
+        </label>
+
+        {settingsQuery.isError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {commandErrorMessage(settingsQuery.error)}
+          </p>
+        ) : null}
+
+        {mutation.isError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {commandErrorMessage(mutation.error)}
+          </p>
+        ) : null}
+
+        {mutation.isSuccess ? (
+          <p className="text-sm text-green-700">Validation mode saved.</p>
+        ) : null}
+
+        <div>
+          <button
+            type="submit"
+            disabled={settingsQuery.isLoading || mutation.isPending}
+            className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {mutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+            )}
+            Save
+          </button>
+        </div>
+      </form>
+    </div>
+  );
 }
 
 function DesktopNotificationSettings() {

@@ -31,6 +31,7 @@ pub struct Organization {
 pub struct AppSettings {
     pub review_result_folder_path: Option<String>,
     pub show_window_hotkey: Option<String>,
+    pub read_only_validation_mode_enabled: bool,
     pub desktop_notifications_enabled: bool,
     pub notification_content_preview_enabled: bool,
     pub notify_work_item_assignments: bool,
@@ -42,6 +43,7 @@ impl Default for AppSettings {
         Self {
             review_result_folder_path: None,
             show_window_hotkey: None,
+            read_only_validation_mode_enabled: false,
             desktop_notifications_enabled: false,
             notification_content_preview_enabled: true,
             notify_work_item_assignments: true,
@@ -244,11 +246,7 @@ impl AppDatabase {
         list_review_pull_requests(&conn, org_id)
     }
 
-    pub fn replace_review_pull_requests(
-        &self,
-        org_id: &str,
-        prs: &[CachedReviewPr],
-    ) -> Result<()> {
+    pub fn replace_review_pull_requests(&self, org_id: &str, prs: &[CachedReviewPr]) -> Result<()> {
         let conn = self.open()?;
         let tx = conn.unchecked_transaction()?;
         tx.execute(
@@ -744,6 +742,11 @@ fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
     Ok(AppSettings {
         review_result_folder_path: get_setting(conn, "review_result_folder_path")?,
         show_window_hotkey: get_setting(conn, "show_window_hotkey")?,
+        read_only_validation_mode_enabled: get_bool_setting(
+            conn,
+            "read_only_validation_mode_enabled",
+            false,
+        )?,
         desktop_notifications_enabled: get_bool_setting(
             conn,
             "desktop_notifications_enabled",
@@ -773,6 +776,11 @@ fn update_app_settings(conn: &Connection, settings: AppSettings) -> Result<AppSe
         conn,
         "show_window_hotkey",
         settings.show_window_hotkey.as_deref(),
+    )?;
+    set_bool_setting(
+        conn,
+        "read_only_validation_mode_enabled",
+        settings.read_only_validation_mode_enabled,
     )?;
     set_bool_setting(
         conn,
@@ -1504,6 +1512,7 @@ mod tests {
             AppSettings {
                 review_result_folder_path: Some("C:/reports".to_string()),
                 show_window_hotkey: Some("Ctrl+Alt+D".to_string()),
+                read_only_validation_mode_enabled: true,
                 desktop_notifications_enabled: true,
                 notification_content_preview_enabled: false,
                 notify_work_item_assignments: true,
@@ -1516,6 +1525,7 @@ mod tests {
             Some("C:/reports")
         );
         assert_eq!(saved.show_window_hotkey.as_deref(), Some("Ctrl+Alt+D"));
+        assert!(saved.read_only_validation_mode_enabled);
         assert!(saved.desktop_notifications_enabled);
         assert!(!saved.notification_content_preview_enabled);
         assert!(saved.notify_work_item_assignments);
@@ -1738,7 +1748,9 @@ mod tests {
         db.replace_work_items("org1", &[make_item(2, "all-B")], &[make_item(20, "my-B")])
             .unwrap();
 
-        let all = db.search_work_items("org1", None, None, None, None).unwrap();
+        let all = db
+            .search_work_items("org1", None, None, None, None)
+            .unwrap();
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].id, 2, "work_items should contain only all-B");
 
@@ -1825,9 +1837,7 @@ mod tests {
         db.purge_old_commits("org1", "2025-01-01T00:00:00+00:00")
             .unwrap();
 
-        let remaining = db
-            .search_commits("org1", None, None, None, None)
-            .unwrap();
+        let remaining = db.search_commits("org1", None, None, None, None).unwrap();
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].commit_id, "new");
     }
