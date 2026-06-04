@@ -198,7 +198,6 @@ function AppShell() {
       keywords: ["pull request", "review"],
       label: "Go to My Reviews",
       run: () => setView("myReviews"),
-      shortcut: "Alt+1",
     },
     {
       disabled: organizations.length === 0,
@@ -207,7 +206,6 @@ function AppShell() {
       keywords: ["pull request", "search"],
       label: "Go to Pull Request Search",
       run: () => setView("pullRequestSearch"),
-      shortcut: "Alt+2",
     },
     {
       disabled: organizations.length === 0,
@@ -216,7 +214,6 @@ function AppShell() {
       keywords: ["work item", "assigned"],
       label: "Go to My Work Items",
       run: () => setView("myWorkItems"),
-      shortcut: "Alt+3",
     },
     {
       disabled: organizations.length === 0,
@@ -225,7 +222,6 @@ function AppShell() {
       keywords: ["wiql", "query", "saved"],
       label: "Go to Work Item Views",
       run: () => setView("workItemViews"),
-      shortcut: "Alt+4",
     },
     {
       disabled: organizations.length === 0,
@@ -234,7 +230,6 @@ function AppShell() {
       keywords: ["work item", "search"],
       label: "Go to Work Item Search",
       run: () => setView("workItems"),
-      shortcut: "Alt+5",
     },
     {
       disabled: organizations.length === 0,
@@ -243,7 +238,6 @@ function AppShell() {
       keywords: ["commit", "search"],
       label: "Go to Commits",
       run: () => setView("commits"),
-      shortcut: "Alt+6",
     },
     {
       group: "Navigation",
@@ -430,9 +424,11 @@ function AppShell() {
     let cleanup: (() => void) | undefined;
     listen("sync:updated", () => {
       invalidateSyncedDataQueries(queryClient);
-    }).then((unlisten) => {
-      cleanup = unlisten;
-    });
+    })
+      .then((unlisten) => {
+        cleanup = unlisten;
+      })
+      .catch((e) => console.error("sync:updated listen failed", e));
     return () => cleanup?.();
   }, [queryClient]);
 
@@ -443,9 +439,11 @@ function AppShell() {
       const settings = appSettingsRef.current;
       if (!settings) return;
       void showWorkItemNotificationEvent(event.payload, settings);
-    }).then((unlisten) => {
-      cleanup = unlisten;
-    });
+    })
+      .then((unlisten) => {
+        cleanup = unlisten;
+      })
+      .catch((e) => console.error("notifications:work-items listen failed", e));
     return () => cleanup?.();
   }, []);
 
@@ -566,25 +564,10 @@ function AppShell() {
         return;
       }
 
-      const nextViewByKey: Record<string, View> =
-        organizations.length === 0
-          ? { ",": "settings" }
-          : {
-              "1": "myReviews",
-              "2": "pullRequestSearch",
-              "3": "myWorkItems",
-              "4": "workItemViews",
-              "5": "workItems",
-              "6": "commits",
-              ",": "settings",
-            };
-      const nextView = nextViewByKey[event.key];
-      if (!nextView) {
-        return;
+      if (event.key === ",") {
+        event.preventDefault();
+        setView("settings");
       }
-
-      event.preventDefault();
-      setView(nextView);
     }
 
     window.addEventListener("keydown", onGlobalKeyDown);
@@ -626,14 +609,12 @@ function AppShell() {
                 active={activeView === "myReviews"}
                 disabled={organizations.length === 0}
                 label="My Reviews"
-                shortcut="Alt+1"
                 onClick={() => setView("myReviews")}
               />
               <NavSubItem
                 active={activeView === "pullRequestSearch"}
                 disabled={organizations.length === 0}
                 label="Search"
-                shortcut="Alt+2"
                 onClick={() => setView("pullRequestSearch")}
               />
             </NavSection>
@@ -649,14 +630,12 @@ function AppShell() {
                 active={activeView === "myWorkItems"}
                 disabled={organizations.length === 0}
                 label="My Items"
-                shortcut="Alt+3"
                 onClick={() => setView("myWorkItems")}
               />
               <NavSubItem
                 active={activeView === "workItemViews" && !activePinnedWorkItemView}
                 disabled={organizations.length === 0}
                 label="Views"
-                shortcut="Alt+4"
                 onClick={() => {
                   setActiveWorkItemViewId(null);
                   setSelectedWorkItemViewRequestId(null);
@@ -680,7 +659,6 @@ function AppShell() {
                 active={activeView === "workItems"}
                 disabled={organizations.length === 0}
                 label="Search"
-                shortcut="Alt+5"
                 onClick={() => setView("workItems")}
               />
             </NavSection>
@@ -689,7 +667,6 @@ function AppShell() {
               disabled={organizations.length === 0}
               icon={<GitCommitHorizontal className="h-4 w-4" aria-hidden="true" />}
               label="Commits"
-              shortcut="Alt+6"
               onClick={() => setView("commits")}
             />
           </div>

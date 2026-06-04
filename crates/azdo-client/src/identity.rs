@@ -52,7 +52,7 @@ pub struct IdentityPickerIdentity {
     pub subject_descriptor: Option<String>,
     #[serde(default, alias = "displayName")]
     pub display_name: Option<String>,
-    #[serde(default, alias = "mailAddress")]
+    #[serde(default, alias = "mailAddress", alias = "mail")]
     pub mail_address: Option<String>,
     #[serde(default, alias = "signInAddress")]
     pub sign_in_address: Option<String>,
@@ -242,6 +242,9 @@ fn identity_picker_identity_from_value(value: &Value) -> Option<IdentityPickerId
         identity.subject_descriptor = identity
             .subject_descriptor
             .or_else(|| picker_property(properties, "SubjectDescriptor"));
+        identity.active = identity
+            .active
+            .or_else(|| picker_bool_property(properties, "Active"));
     }
     Some(identity)
 }
@@ -259,6 +262,26 @@ fn picker_property(properties: &Value, name: &str) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToString::to_string)
+}
+
+fn picker_bool_property(properties: &Value, name: &str) -> Option<bool> {
+    let property = properties
+        .as_object()?
+        .iter()
+        .find_map(|(key, value)| key.eq_ignore_ascii_case(name).then_some(value))?;
+    property
+        .get("$value")
+        .or_else(|| property.get("value"))
+        .and_then(Value::as_bool)
+        .or_else(|| property.as_bool())
+        .or_else(|| {
+            property
+                .get("$value")
+                .or_else(|| property.get("value"))
+                .and_then(Value::as_str)
+                .or_else(|| property.as_str())
+                .and_then(|value| value.parse::<bool>().ok())
+        })
 }
 
 fn identity_search_filters(query: &str) -> &'static [&'static str] {
@@ -430,6 +453,7 @@ mod tests {
                                 "entityId": "entity-1",
                                 "displayName": "Alice Johnson",
                                 "properties": {
+                                    "Active": { "$value": true },
                                     "Mail": { "$value": "alice@example.com" },
                                     "SubjectDescriptor": { "$value": "aad.alice" }
                                 }
@@ -457,6 +481,7 @@ mod tests {
             identities[0].subject_descriptor.as_deref(),
             Some("aad.alice")
         );
+        assert_eq!(identities[0].active, Some(true));
     }
 
     #[tokio::test]

@@ -263,7 +263,12 @@ export function WorkItemPreviewPanel({
 
   // Load default candidates as soon as the picker opens.
   const assigneeDefaultQuery = useQuery({
-    queryKey: workItemQueryKeys.assignees(selectedItem?.organizationId, ""),
+    queryKey: workItemQueryKeys.assignees(
+      selectedItem?.organizationId,
+      selectedItem?.projectId,
+      selectedItem?.id,
+      "",
+    ),
     queryFn: () =>
       searchWorkItemAssignees({
         organizationId: selectedItem!.organizationId,
@@ -278,6 +283,8 @@ export function WorkItemPreviewPanel({
   const assigneeOptionsQuery = useQuery({
     queryKey: workItemQueryKeys.assignees(
       selectedItem?.organizationId,
+      selectedItem?.projectId,
+      selectedItem?.id,
       assigneeQuery,
     ),
     queryFn: () =>
@@ -2129,6 +2136,9 @@ function recentWorkItemMentionCandidates(
   const candidates = new Map<string, MentionCandidate>();
   for (const comment of preview.comments) {
     if (!comment.createdById || !comment.createdBy) continue;
+    if (isAzureDevOpsServiceIdentityName(comment.createdBy, comment.createdByUniqueName)) {
+      continue;
+    }
     candidates.set(comment.createdById, {
       id: comment.createdById,
       displayName: comment.createdBy,
@@ -2253,6 +2263,21 @@ function normalizedEquals(
 
 function isEmailLikeDisplay(value: string): boolean {
   return /^[^\s@<>]+@[^\s@<>]+$/.test(value.trim());
+}
+
+function isAzureDevOpsServiceIdentityName(
+  displayName: string,
+  uniqueName: string | null | undefined,
+): boolean {
+  const normalizedDisplayName = displayName.toLowerCase();
+  const normalizedUniqueName = uniqueName?.toLowerCase();
+  return (
+    normalizedDisplayName.includes(" build service (") ||
+    normalizedDisplayName.startsWith("agent pool service") ||
+    (normalizedUniqueName?.startsWith("build\\") ?? false) ||
+    (normalizedUniqueName?.startsWith("agentpool\\") ?? false) ||
+    normalizedUniqueName === "project collection build service"
+  );
 }
 
 function mentionCandidateMatches(candidate: MentionCandidate, term: string): boolean {

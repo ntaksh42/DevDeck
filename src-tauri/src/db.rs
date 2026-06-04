@@ -1109,7 +1109,8 @@ fn search_work_items(
     let mut stmt = conn.prepare(
         r#"
         SELECT org_id, project_id, project_name, id, title,
-               work_item_type, state, assigned_to, changed_date, web_url
+               work_item_type, state, assigned_to, changed_date, web_url,
+               assigned_to_unique_name
         FROM work_items
         WHERE org_id = ?1
           AND (?2 IS NULL OR project_id = ?2)
@@ -1143,7 +1144,8 @@ fn search_work_items_fts(
     let mut stmt = conn.prepare(
         r#"
         SELECT w.org_id, w.project_id, w.project_name, w.id, w.title,
-               w.work_item_type, w.state, w.assigned_to, w.changed_date, w.web_url
+               w.work_item_type, w.state, w.assigned_to, w.changed_date, w.web_url,
+               w.assigned_to_unique_name
         FROM work_items w
         WHERE w.org_id = ?2
           AND w.id IN (
@@ -1194,7 +1196,8 @@ fn list_my_work_items(conn: &Connection, org_id: &str) -> Result<Vec<CachedWorkI
     let mut stmt = conn.prepare(
         r#"
         SELECT org_id, project_id, project_name, id, title,
-               work_item_type, state, assigned_to, changed_date, web_url
+               work_item_type, state, assigned_to, changed_date, web_url,
+               assigned_to_unique_name
         FROM my_work_items
         WHERE org_id = ?1
         ORDER BY changed_date DESC
@@ -1406,7 +1409,7 @@ fn map_cached_work_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<CachedWorkI
         assigned_to: row.get(7)?,
         changed_date: row.get(8)?,
         web_url: row.get(9)?,
-        assigned_to_unique_name: None,
+        assigned_to_unique_name: row.get(10)?,
     })
 }
 

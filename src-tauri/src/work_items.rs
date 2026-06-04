@@ -1074,6 +1074,9 @@ fn identity_picker_display_names_by_unique_name(
 ) -> HashMap<String, String> {
     let mut names = HashMap::new();
     for identity in identities {
+        if identity.active == Some(false) {
+            continue;
+        }
         if identity
             .entity_type
             .as_deref()
@@ -1120,6 +1123,9 @@ fn prefer_identity_picker_mention_display(
 fn assignee_candidate_from_identity_picker(
     identity: IdentityPickerIdentity,
 ) -> Option<WorkItemAssigneeCandidate> {
+    if identity.active == Some(false) {
+        return None;
+    }
     if identity
         .entity_type
         .as_deref()
@@ -1138,6 +1144,9 @@ fn assignee_candidate_from_identity_picker(
         .or(identity.sign_in_address)
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
+    if is_azure_devops_service_identity_name(&display_name, unique_name.as_deref()) {
+        return None;
+    }
     let id = identity
         .subject_descriptor
         .or(identity.entity_id)
@@ -1182,6 +1191,9 @@ fn assignee_candidate_from_comment_identity(
         .unique_name
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
+    if is_azure_devops_service_identity_name(&display_name, unique_name.as_deref()) {
+        return None;
+    }
     let id = identity
         .id
         .or_else(|| unique_name.clone())
@@ -1209,6 +1221,9 @@ fn assignee_candidate_from_value(value: &Value) -> Option<WorkItemAssigneeCandid
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToString::to_string);
+    if is_azure_devops_service_identity_name(&display_name, unique_name.as_deref()) {
+        return None;
+    }
     let id = value
         .get("id")
         .or_else(|| value.get("Id"))
@@ -1238,6 +1253,9 @@ fn assignee_candidate_from_identity_string(value: &str) -> Option<WorkItemAssign
         (value.to_string(), None)
     };
     if display_name.is_empty() {
+        return None;
+    }
+    if is_azure_devops_service_identity_name(&display_name, unique_name.as_deref()) {
         return None;
     }
     Some(assignee_candidate_from_parts(
@@ -1303,13 +1321,22 @@ fn is_user_like_identity(identity: &Identity) -> bool {
     let schema = identity.property_value("SchemaClassName");
     let special_type = identity.property_value("SpecialType");
     let meta_type = identity.property_value("MetaType");
+    let active = identity.property_value("Active");
+    let domain = identity.property_value("Domain");
+    let account = identity.property_value("Account");
     let has_mail_or_account = identity.property_value("Mail").is_some()
-        || identity.property_value("Account").is_some()
+        || account.is_some()
         || identity
             .unique_name
             .as_deref()
             .is_some_and(|value| value.contains('@'));
 
+    if is_azure_devops_service_identity(identity, domain, account) {
+        return false;
+    }
+    if active.is_some_and(|value| value.eq_ignore_ascii_case("false")) {
+        return false;
+    }
     if schema.is_some_and(|value| !value.eq_ignore_ascii_case("User")) {
         return false;
     }
@@ -1325,6 +1352,44 @@ fn is_user_like_identity(identity: &Identity) -> bool {
     }
 
     schema.is_some() || has_mail_or_account || identity.id.is_some()
+}
+
+fn is_azure_devops_service_identity(
+    identity: &Identity,
+    domain: Option<&str>,
+    account: Option<&str>,
+) -> bool {
+    let service_domain = domain.is_some_and(|value| {
+        value.eq_ignore_ascii_case("Build") || value.eq_ignore_ascii_case("AgentPool")
+    });
+    let service_account = account.is_some_and(|value| {
+        let value = value.to_lowercase();
+        value.starts_with("build\\")
+            || value.starts_with("agentpool\\")
+            || value == "project collection build service"
+    });
+    let service_display = [
+        identity.provider_display_name.as_deref(),
+        identity.custom_display_name.as_deref(),
+        identity.display_name.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .any(|value| is_azure_devops_service_identity_name(value, None));
+
+    service_domain || service_account || service_display
+}
+
+fn is_azure_devops_service_identity_name(display_name: &str, unique_name: Option<&str>) -> bool {
+    let display_name = display_name.to_lowercase();
+    display_name.contains(" build service (")
+        || display_name.starts_with("agent pool service")
+        || unique_name.is_some_and(|value| {
+            let value = value.to_lowercase();
+            value.starts_with("build\\")
+                || value.starts_with("agentpool\\")
+                || value.eq_ignore_ascii_case("Project Collection Build Service")
+        })
 }
 
 fn authenticated_user_mention_candidate(
@@ -2079,6 +2144,42 @@ mod tests {
     }
 
     #[test]
+    fn assignee_candidates_from_updates_skip_service_identity_history() {
+        let mut fields = HashMap::new();
+        fields.insert(
+            "System.AssignedTo".to_string(),
+            azdo_client::work_items::WorkItemFieldUpdate {
+                old_value: Some(json!({
+                    "displayName": "Agent Pool Service (1)",
+                    "id": "0e8fc31f-c0d7-4b14-b430-76dfb6cf7b0f",
+                    "uniqueName": "AgentPool\\d67b727b-218f-4f2f-ae94-fd1d7ad5b42c"
+                })),
+                new_value: Some(json!({
+                    "displayName": "naoto akashi",
+                    "id": "eb38825c-2181-6ba9-85c2-3d28e9e68978",
+                    "uniqueName": "aksh0402@outlook.jp"
+                })),
+            },
+        );
+
+        let candidates = assignee_candidates_from_updates(vec![WorkItemUpdate {
+            revised_by: Some(azdo_client::work_items::CommentIdentityRef {
+                id: Some("0e8fc31f-c0d7-4b14-b430-76dfb6cf7b0f".to_string()),
+                display_name: Some("Agent Pool Service (1)".to_string()),
+                unique_name: Some("AgentPool\\d67b727b-218f-4f2f-ae94-fd1d7ad5b42c".to_string()),
+            }),
+            fields,
+        }]);
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].display_name, "naoto akashi");
+        assert_eq!(
+            candidates[0].unique_name.as_deref(),
+            Some("aksh0402@outlook.jp")
+        );
+    }
+
+    #[test]
     fn summarize_mention_candidate_accepts_descriptor_without_id() {
         let candidate = summarize_mention_candidate(Identity {
             id: None,
@@ -2115,6 +2216,60 @@ mod tests {
             custom_display_name: None,
             display_name: None,
             unique_name: None,
+            properties: Some(properties),
+        });
+
+        assert!(candidate.is_none());
+    }
+
+    #[test]
+    fn summarize_mention_candidate_skips_inactive_identity() {
+        let mut properties = HashMap::new();
+        properties.insert(
+            "Active".to_string(),
+            azdo_client::identity::IdentityProperty {
+                value: Some("false".to_string()),
+            },
+        );
+
+        let candidate = summarize_mention_candidate(Identity {
+            id: Some("inactive-user".to_string()),
+            descriptor: None,
+            subject_descriptor: None,
+            provider_display_name: Some("Inactive User".to_string()),
+            custom_display_name: None,
+            display_name: None,
+            unique_name: Some("inactive@example.com".to_string()),
+            properties: Some(properties),
+        });
+
+        assert!(candidate.is_none());
+    }
+
+    #[test]
+    fn summarize_mention_candidate_skips_azure_devops_service_identity() {
+        let mut properties = HashMap::new();
+        properties.insert(
+            "Domain".to_string(),
+            azdo_client::identity::IdentityProperty {
+                value: Some("AgentPool".to_string()),
+            },
+        );
+        properties.insert(
+            "Account".to_string(),
+            azdo_client::identity::IdentityProperty {
+                value: Some("AgentPool\\d67b727b-218f-4f2f-ae94-fd1d7ad5b42c".to_string()),
+            },
+        );
+
+        let candidate = summarize_mention_candidate(Identity {
+            id: Some("agent-pool-service".to_string()),
+            descriptor: None,
+            subject_descriptor: None,
+            provider_display_name: Some("Agent Pool Service (1)".to_string()),
+            custom_display_name: None,
+            display_name: None,
+            unique_name: Some("AgentPool\\d67b727b-218f-4f2f-ae94-fd1d7ad5b42c".to_string()),
             properties: Some(properties),
         });
 

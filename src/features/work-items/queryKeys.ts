@@ -52,8 +52,13 @@ export const workItemQueryKeys = {
   ) => ['workItemTypeStates', organizationId, projectId, workItemType] as const,
   mentions: (organizationId?: string, query?: string) =>
     ['workItemMentions', organizationId, query] as const,
-  assignees: (organizationId?: string, query?: string) =>
-    ['workItemAssignees', organizationId, query] as const,
+  assignees: (
+    organizationId?: string,
+    projectId?: string,
+    workItemId?: number,
+    query?: string,
+  ) => ['workItemAssignees', organizationId, projectId, workItemId, query] as const,
+  assigneesRoot: () => ['workItemAssignees'] as const,
 };
 
 export function invalidateWorkItemQueryViews(
@@ -72,4 +77,5 @@ export function invalidateWorkItemMutationCaches(queryClient: QueryClient): void
   void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot() });
   invalidateWorkItemQueryViews(queryClient);
   void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
+  void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.assigneesRoot() });
 }

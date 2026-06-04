@@ -344,6 +344,8 @@ export function WorkItemViewsPanel({
     staleTime: 5 * 60_000,
   });
   const selectedResults = selectedQuery?.data ?? [];
+  const selectedQueryInitialLoading =
+    !!selectedQuery && selectedQuery.isFetching && selectedQuery.data === undefined;
 
   useEffect(() => {
     onSelectedViewChange?.(selectedView?.id ?? null);
@@ -903,7 +905,7 @@ export function WorkItemViewsPanel({
           <WorkItemsGrid
             key={selectedView.id}
             dataUpdatedAt={selectedQuery?.dataUpdatedAt}
-            loading={!!selectedQuery?.isFetching}
+            loading={selectedQueryInitialLoading}
             results={selectedResults}
             searched={!!selectedQuery}
             autoFocus

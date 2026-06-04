@@ -475,7 +475,7 @@ describe("App", () => {
     const main = within(await screen.findByRole("main"));
 
     await screen.findByText("No pull requests assigned to you.");
-    fireEvent.keyDown(window, { key: "2", altKey: true });
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Primary navigation" })).getAllByRole("button", { name: "Search" })[0]);
 
     fireEvent.change(await main.findByPlaceholderText("title, author, branch…"), {
       target: { value: "search" },
@@ -690,7 +690,7 @@ describe("App", () => {
     const main = within(await screen.findByRole("main"));
 
     await screen.findByText("No pull requests assigned to you.");
-    fireEvent.keyDown(window, { key: "5", altKey: true });
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Primary navigation" })).getAllByRole("button", { name: "Search" })[1]);
     await main.findByText("Platform");
     fireEvent.change(await main.findByPlaceholderText("Search work items…"), {
       target: { value: "save" },
@@ -848,6 +848,23 @@ describe("App", () => {
   });
 
   it("saves a work item view and renders query results with preview", async () => {
+    const viewResults = [
+      {
+        organizationId: "contoso",
+        projectId: "project-1",
+        projectName: "Platform",
+        id: 321,
+        title: "Fix view query workflow",
+        workItemType: "Bug",
+        state: "Active",
+        assignedTo: "Test User",
+        changedDate: "2026-05-24T00:00:00Z",
+        webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/321",
+      },
+    ];
+    let runViewQueryCount = 0;
+    let holdRunViewRefetch = false;
+    let resolveRefetch: ((value: typeof viewResults) => void) | undefined;
     invokeMock.mockImplementation((command: string) => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
@@ -864,20 +881,13 @@ describe("App", () => {
         ]);
       }
       if (command === "run_work_item_query") {
-        return Promise.resolve([
-          {
-            organizationId: "contoso",
-            projectId: "project-1",
-            projectName: "Platform",
-            id: 321,
-            title: "Fix view query workflow",
-            workItemType: "Bug",
-            state: "Active",
-            assignedTo: "Test User",
-            changedDate: "2026-05-24T00:00:00Z",
-            webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/321",
-          },
-        ]);
+        runViewQueryCount += 1;
+        if (!holdRunViewRefetch) {
+          return Promise.resolve(viewResults);
+        }
+        return new Promise<typeof viewResults>((resolve) => {
+          resolveRefetch = resolve;
+        });
       }
       if (command === "get_work_item_preview") {
         return Promise.resolve({
@@ -912,7 +922,7 @@ describe("App", () => {
     const main = within(await screen.findByRole("main"));
 
     await screen.findByText("No pull requests assigned to you.");
-    fireEvent.keyDown(window, { key: "4", altKey: true });
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Primary navigation" })).getByRole("button", { name: "Views" }));
     fireEvent.click(await main.findByRole("button", { name: /Add/ }));
     await screen.findByRole("dialog", { name: "Add View" });
     await main.findByText("Platform");
@@ -945,6 +955,18 @@ describe("App", () => {
     expect(await screen.findByLabelText("Comment")).toBeTruthy();
     expect(screen.getByRole("option", { name: /Active Bugs/ })).toBeTruthy();
     expect(screen.getByRole("listbox", { name: "Saved work item views" })).toBeTruthy();
+    const viewWorkItemRow = screen.getByRole("row", {
+      name: /Fix view query workflow/,
+    });
+    viewWorkItemRow.focus();
+    expect(document.activeElement).toBe(viewWorkItemRow);
+    holdRunViewRefetch = true;
+    fireEvent.click(screen.getByTitle("Run all views (R)"));
+    await waitFor(() => expect(resolveRefetch).toBeDefined());
+    expect(screen.getByRole("row", { name: /Fix view query workflow/ })).toBeTruthy();
+    expect(screen.queryByText("Loading…")).toBeNull();
+    expect(document.activeElement).toBe(viewWorkItemRow);
+    resolveRefetch!(viewResults);
 
     fireEvent.click(screen.getByRole("button", { name: "Pin" }));
     expect(screen.getByRole("button", { name: "Active Bugs" })).toBeTruthy();
@@ -1262,7 +1284,7 @@ describe("App", () => {
     );
   });
 
-  it("navigates top-level sections with keyboard shortcuts", async () => {
+  it("navigates top-level sections", async () => {
     invokeMock.mockImplementation((command: string) => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
@@ -1278,13 +1300,15 @@ describe("App", () => {
 
     expect(await main.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
 
-    fireEvent.keyDown(window, { key: "4", altKey: true });
+    const nav = within(screen.getByRole("navigation", { name: "Primary navigation" }));
+
+    fireEvent.click(nav.getByRole("button", { name: "Views" }));
     expect(await main.findByRole("heading", { name: "Work Item Views" })).toBeTruthy();
 
-    fireEvent.keyDown(window, { key: "5", altKey: true });
+    fireEvent.click(nav.getAllByRole("button", { name: "Search" })[1]);
     expect(await main.findByRole("heading", { name: "Work Items" })).toBeTruthy();
 
-    fireEvent.keyDown(window, { key: "6", altKey: true });
+    fireEvent.click(nav.getByRole("button", { name: "Commits" }));
     expect(await main.findByRole("heading", { name: "Commits" })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: ",", altKey: true });
@@ -1358,7 +1382,7 @@ describe("App", () => {
     const main = within(await screen.findByRole("main"));
 
     expect(await main.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
-    fireEvent.keyDown(window, { key: "2", altKey: true });
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Primary navigation" })).getAllByRole("button", { name: "Search" })[0]);
 
     expect(
       await main.findByText("Run a search to load pull requests."),

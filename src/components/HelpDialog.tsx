@@ -34,12 +34,6 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
 
         <div className="text-sm">
           <p className={section}>Navigation</p>
-          <div className={row}><span>My Reviews</span><kbd className={kbd}>Alt+1</kbd></div>
-          <div className={row}><span>PR Search</span><kbd className={kbd}>Alt+2</kbd></div>
-          <div className={row}><span>My Work Items</span><kbd className={kbd}>Alt+3</kbd></div>
-          <div className={row}><span>Work Item Views</span><kbd className={kbd}>Alt+4</kbd></div>
-          <div className={row}><span>WI Search</span><kbd className={kbd}>Alt+5</kbd></div>
-          <div className={row}><span>Commits</span><kbd className={kbd}>Alt+6</kbd></div>
           <div className={row}><span>Settings</span><kbd className={kbd}>Alt+,</kbd></div>
           <div className={row}><span>Focus left navigation</span><kbd className={kbd}>Alt+N</kbd></div>
           <div className={row}><span>Move in left navigation</span><kbd className={kbd}>↑ ↓ Home End</kbd></div>

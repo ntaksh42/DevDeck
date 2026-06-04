@@ -565,6 +565,8 @@ export function WorkItemsGrid({
   const bulkAssigneesQuery = useQuery({
     queryKey: workItemQueryKeys.assignees(
       firstCheckedItem?.organizationId,
+      firstCheckedItem?.projectId,
+      firstCheckedItem?.id,
       bulkAssignQuery,
     ),
     queryFn: () =>
@@ -578,7 +580,12 @@ export function WorkItemsGrid({
     staleTime: 60_000,
   });
   const bulkDefaultAssigneesQuery = useQuery({
-    queryKey: workItemQueryKeys.assignees(firstCheckedItem?.organizationId, ""),
+    queryKey: workItemQueryKeys.assignees(
+      firstCheckedItem?.organizationId,
+      firstCheckedItem?.projectId,
+      firstCheckedItem?.id,
+      "",
+    ),
     queryFn: () =>
       searchWorkItemAssignees({
         organizationId: firstCheckedItem!.organizationId,

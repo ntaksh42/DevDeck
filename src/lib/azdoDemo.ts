@@ -685,7 +685,7 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
     workItemType: summary.workItemType,
     state: summary.state,
     assignedTo: summary.assignedTo,
-    createdBy: summary.assignedTo ?? "Demo User",
+    createdBy: "Demo User",
     createdDate: "2026-05-20T09:00:00Z",
     changedDate: summary.changedDate,
     areaPath: `${summary.projectName}\\Product`,
