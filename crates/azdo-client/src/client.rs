@@ -527,8 +527,7 @@ impl AdoClient {
         let base_path = self.base_url.path().trim_end_matches('/');
         if !base_path.is_empty()
             && base_path != "/"
-            && url.path() != base_path
-            && !url.path().starts_with(&format!("{base_path}/"))
+            && !url_path_is_within_base(url.path(), base_path)
         {
             return Err(AdoError::Auth(
                 "attachment URL is outside the Azure DevOps organization".to_string(),
@@ -547,6 +546,15 @@ impl AdoClient {
 
         Ok(())
     }
+}
+
+fn url_path_is_within_base(url_path: &str, base_path: &str) -> bool {
+    if url_path.eq_ignore_ascii_case(base_path) {
+        return true;
+    }
+    url_path.len() > base_path.len()
+        && url_path.as_bytes().get(base_path.len()) == Some(&b'/')
+        && url_path[..base_path.len()].eq_ignore_ascii_case(base_path)
 }
 
 fn vssps_base_url(base_url: &Url) -> Result<Url> {
@@ -664,6 +672,31 @@ mod tests {
             .get_attachment_bytes(&format!("{}/project-1/_apis/projects", server.uri()))
             .await
             .unwrap_err();
+
+        assert!(matches!(err, AdoError::Auth(_)));
+    }
+
+    #[test]
+    fn validate_attachment_url_accepts_org_path_case_variants() {
+        let client = AdoClient::new("contoso", Arc::new(PatProvider::new("test-pat")))
+            .unwrap()
+            .with_base_url(Url::parse("https://dev.azure.com/contoso/").unwrap());
+        let url =
+            Url::parse("https://dev.azure.com/Contoso/project-1/_apis/wit/attachments/image-1")
+                .unwrap();
+
+        client.validate_attachment_url(&url).unwrap();
+    }
+
+    #[test]
+    fn validate_attachment_url_rejects_other_org_prefixes() {
+        let client = AdoClient::new("contoso", Arc::new(PatProvider::new("test-pat")))
+            .unwrap()
+            .with_base_url(Url::parse("https://dev.azure.com/contoso/").unwrap());
+        let url = Url::parse("https://dev.azure.com/contoso-other/_apis/wit/attachments/image-1")
+            .unwrap();
+
+        let err = client.validate_attachment_url(&url).unwrap_err();
 
         assert!(matches!(err, AdoError::Auth(_)));
     }
