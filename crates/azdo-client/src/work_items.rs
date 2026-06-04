@@ -89,6 +89,28 @@ pub struct WorkItemCommentsList {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemUpdatesList {
+    #[serde(default)]
+    pub value: Vec<WorkItemUpdate>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemUpdate {
+    pub revised_by: Option<CommentIdentityRef>,
+    #[serde(default)]
+    pub fields: HashMap<String, WorkItemFieldUpdate>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemFieldUpdate {
+    pub old_value: Option<Value>,
+    pub new_value: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct WorkItemTypeState {
     pub name: String,
 }
@@ -192,6 +214,20 @@ impl AdoClient {
             )
             .await?;
         Ok(response.comments)
+    }
+
+    pub async fn list_work_item_updates(
+        &self,
+        project_id: &str,
+        work_item_id: i64,
+        top: u32,
+    ) -> Result<Vec<WorkItemUpdate>> {
+        let path = format!("{project_id}/_apis/wit/workItems/{work_item_id}/updates");
+        let top_str = top.to_string();
+        let response: WorkItemUpdatesList = self
+            .get_json(&path, &[("api-version", "7.1-preview"), ("$top", &top_str)])
+            .await?;
+        Ok(response.value)
     }
 
     pub async fn update_work_item_assigned_to(
@@ -462,6 +498,61 @@ mod tests {
                 .display_name
                 .as_deref(),
             Some("Bob")
+        );
+    }
+
+    #[tokio::test]
+    async fn list_work_item_updates_returns_revised_by_and_field_values() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/wit/workItems/10/updates"))
+            .and(query_param("api-version", "7.1-preview"))
+            .and(query_param("$top", "50"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 1,
+                "value": [
+                    {
+                        "id": 3,
+                        "rev": 3,
+                        "revisedBy": {
+                            "id": "user-1",
+                            "displayName": "Alice Johnson",
+                            "uniqueName": "alice@example.com"
+                        },
+                        "fields": {
+                            "System.AssignedTo": {
+                                "oldValue": "Bob Tanaka <bob@example.com>",
+                                "newValue": {
+                                    "displayName": "Alice Johnson",
+                                    "uniqueName": "alice@example.com"
+                                }
+                            }
+                        }
+                    }
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let updates = test_client(&server)
+            .await
+            .list_work_item_updates("project-1", 10, 50)
+            .await
+            .unwrap();
+
+        assert_eq!(updates.len(), 1);
+        assert_eq!(
+            updates[0]
+                .revised_by
+                .as_ref()
+                .unwrap()
+                .display_name
+                .as_deref(),
+            Some("Alice Johnson")
+        );
+        assert_eq!(
+            updates[0].fields["System.AssignedTo"].old_value.as_ref(),
+            Some(&serde_json::json!("Bob Tanaka <bob@example.com>"))
         );
     }
 

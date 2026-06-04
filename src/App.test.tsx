@@ -626,6 +626,16 @@ describe("App", () => {
           },
         ]);
       }
+      if (command === "search_work_item_assignees") {
+        return Promise.resolve([
+          {
+            id: "user-creator",
+            displayName: "Creator",
+            uniqueName: "creator@example.com",
+            assignValue: "Creator <creator@example.com>",
+          },
+        ]);
+      }
       if (command === "assign_work_item") {
         return Promise.resolve({
           organizationId: "contoso",
@@ -782,7 +792,7 @@ describe("App", () => {
           organizationId: "contoso",
           projectId: "project-1",
           workItemId: 123,
-          assignedTo: "creator@example.com",
+          assignedTo: "Creator <creator@example.com>",
         },
       });
     });

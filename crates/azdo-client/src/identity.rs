@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::client::AdoClient;
 use crate::error::Result;
@@ -36,6 +37,46 @@ pub struct Identity {
 pub struct IdentityProperty {
     #[serde(rename = "$value")]
     pub value: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct IdentityPickerIdentity {
+    #[serde(default, alias = "entityId")]
+    pub entity_id: Option<String>,
+    #[serde(default, alias = "originId")]
+    pub origin_id: Option<String>,
+    #[serde(default, alias = "localId")]
+    pub local_id: Option<String>,
+    #[serde(default, alias = "subjectDescriptor")]
+    pub subject_descriptor: Option<String>,
+    #[serde(default, alias = "displayName")]
+    pub display_name: Option<String>,
+    #[serde(default, alias = "mailAddress")]
+    pub mail_address: Option<String>,
+    #[serde(default, alias = "signInAddress")]
+    pub sign_in_address: Option<String>,
+    #[serde(default, alias = "entityType")]
+    pub entity_type: Option<String>,
+    #[serde(default)]
+    pub active: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct IdentityPickerRequest<'a> {
+    query: &'a str,
+    identity_types: [&'static str; 1],
+    operation_scopes: [&'static str; 2],
+    options: IdentityPickerOptions,
+    properties: [&'static str; 17],
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+struct IdentityPickerOptions {
+    min_results: usize,
+    max_results: usize,
 }
 
 impl Identity {
@@ -89,6 +130,57 @@ impl AdoClient {
         Ok(identities)
     }
 
+    pub async fn search_identity_picker(
+        &self,
+        query: &str,
+        top: usize,
+    ) -> Result<Vec<IdentityPickerIdentity>> {
+        if top == 0 {
+            return Ok(Vec::new());
+        }
+
+        let max_results = top.clamp(5, 40);
+        let response: Value = self
+            .post_json(
+                "_apis/IdentityPicker/Identities",
+                &[("api-version", "5.0-preview.1")],
+                &IdentityPickerRequest {
+                    query: query.trim(),
+                    identity_types: ["user"],
+                    operation_scopes: ["ims", "source"],
+                    options: IdentityPickerOptions {
+                        min_results: 5,
+                        max_results,
+                    },
+                    properties: [
+                        "DisplayName",
+                        "IsMru",
+                        "ScopeName",
+                        "SamAccountName",
+                        "Active",
+                        "SubjectDescriptor",
+                        "Department",
+                        "JobTitle",
+                        "Mail",
+                        "MailNickname",
+                        "PhysicalDeliveryOfficeName",
+                        "SignInAddress",
+                        "Surname",
+                        "Guest",
+                        "TelephoneNumber",
+                        "Manager",
+                        "Description",
+                    ],
+                },
+            )
+            .await?;
+
+        let mut identities = Vec::new();
+        collect_identity_picker_identities(&response, &mut identities);
+        identities.truncate(top);
+        Ok(identities)
+    }
+
     async fn search_identities_with_filter(
         &self,
         search_filter: &str,
@@ -110,6 +202,63 @@ impl AdoClient {
             IdentitySearchResponse::List(value) => value,
         })
     }
+}
+
+fn collect_identity_picker_identities(value: &Value, identities: &mut Vec<IdentityPickerIdentity>) {
+    match value {
+        Value::Array(items) => {
+            for item in items {
+                collect_identity_picker_identities(item, identities);
+            }
+        }
+        Value::Object(map) => {
+            if let Some(Value::Array(items)) = map.get("identities") {
+                for item in items {
+                    if let Some(identity) = identity_picker_identity_from_value(item) {
+                        identities.push(identity);
+                    }
+                }
+            }
+            for child in map.values() {
+                collect_identity_picker_identities(child, identities);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn identity_picker_identity_from_value(value: &Value) -> Option<IdentityPickerIdentity> {
+    let mut identity: IdentityPickerIdentity = serde_json::from_value(value.clone()).ok()?;
+    if let Some(properties) = value.get("properties") {
+        identity.display_name = identity
+            .display_name
+            .or_else(|| picker_property(properties, "DisplayName"));
+        identity.mail_address = identity
+            .mail_address
+            .or_else(|| picker_property(properties, "Mail"));
+        identity.sign_in_address = identity
+            .sign_in_address
+            .or_else(|| picker_property(properties, "SignInAddress"));
+        identity.subject_descriptor = identity
+            .subject_descriptor
+            .or_else(|| picker_property(properties, "SubjectDescriptor"));
+    }
+    Some(identity)
+}
+
+fn picker_property(properties: &Value, name: &str) -> Option<String> {
+    let property = properties
+        .as_object()?
+        .iter()
+        .find_map(|(key, value)| key.eq_ignore_ascii_case(name).then_some(value))?;
+    property
+        .get("$value")
+        .or_else(|| property.get("value"))
+        .and_then(Value::as_str)
+        .or_else(|| property.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
 }
 
 fn identity_search_filters(query: &str) -> &'static [&'static str] {
@@ -191,7 +340,7 @@ mod tests {
     use std::sync::Arc;
 
     use url::Url;
-    use wiremock::matchers::{method, path, query_param};
+    use wiremock::matchers::{body_json, method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
@@ -237,6 +386,77 @@ mod tests {
             )
             .await;
         }
+    }
+
+    #[tokio::test]
+    async fn search_identity_picker_posts_web_ui_payload_and_maps_properties() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/testorg/_apis/IdentityPicker/Identities"))
+            .and(query_param("api-version", "5.0-preview.1"))
+            .and(body_json(serde_json::json!({
+                "query": "alice",
+                "identityTypes": ["user"],
+                "operationScopes": ["ims", "source"],
+                "options": {
+                    "MinResults": 5,
+                    "MaxResults": 40
+                },
+                "properties": [
+                    "DisplayName",
+                    "IsMru",
+                    "ScopeName",
+                    "SamAccountName",
+                    "Active",
+                    "SubjectDescriptor",
+                    "Department",
+                    "JobTitle",
+                    "Mail",
+                    "MailNickname",
+                    "PhysicalDeliveryOfficeName",
+                    "SignInAddress",
+                    "Surname",
+                    "Guest",
+                    "TelephoneNumber",
+                    "Manager",
+                    "Description"
+                ]
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "results": [
+                    {
+                        "identities": [
+                            {
+                                "entityId": "entity-1",
+                                "displayName": "Alice Johnson",
+                                "properties": {
+                                    "Mail": { "$value": "alice@example.com" },
+                                    "SubjectDescriptor": { "$value": "aad.alice" }
+                                }
+                            }
+                        ]
+                    }
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let identities = test_client(&server)
+            .await
+            .search_identity_picker("alice", 40)
+            .await
+            .unwrap();
+
+        assert_eq!(identities.len(), 1);
+        assert_eq!(identities[0].display_name.as_deref(), Some("Alice Johnson"));
+        assert_eq!(
+            identities[0].mail_address.as_deref(),
+            Some("alice@example.com")
+        );
+        assert_eq!(
+            identities[0].subject_descriptor.as_deref(),
+            Some("aad.alice")
+        );
     }
 
     #[tokio::test]

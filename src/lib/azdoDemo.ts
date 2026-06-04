@@ -19,6 +19,7 @@ import type {
   ReviewResultPreview,
   RunWorkItemQueryInput,
   SearchCommitsInput,
+  SearchWorkItemAssigneesInput,
   SearchPullRequestsInput,
   SearchWorkItemMentionsInput,
   SearchWorkItemsInput,
@@ -29,6 +30,7 @@ import type {
   SetWorkItemStateInput,
   UpdateAppSettingsInput,
   WorkItemComment,
+  WorkItemAssigneeCandidate,
   WorkItemPreview,
   WorkItemProjectOption,
   WorkItemSummary,
@@ -194,6 +196,12 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         args as { input?: SearchWorkItemMentionsInput } | undefined
       )?.input;
       return demoMentionCandidates(input?.query);
+    }
+    case "search_work_item_assignees": {
+      const input = (
+        args as { input?: SearchWorkItemAssigneesInput } | undefined
+      )?.input;
+      return demoAssigneeCandidates(input?.query);
     }
     case "fetch_work_item_image": {
       return { dataUrl: DEMO_PREVIEW_IMAGE_DATA_URL };
@@ -730,7 +738,9 @@ function demoAssignWorkItem(input?: AssignWorkItemInput): WorkItemPreview {
   const person = demoMentionPeople.find(
     (candidate) =>
       candidate.uniqueName?.toLowerCase() === assignee.toLowerCase() ||
-      candidate.displayName.toLowerCase() === assignee.toLowerCase(),
+      candidate.displayName.toLowerCase() === assignee.toLowerCase() ||
+      `${candidate.displayName} <${candidate.uniqueName}>`.toLowerCase() ===
+        assignee.toLowerCase(),
   );
   return {
     ...preview,
@@ -815,10 +825,29 @@ const demoMentionPeople: MentionCandidate[] = [
   },
 ];
 
+const demoAssigneePeople: WorkItemAssigneeCandidate[] = demoMentionPeople.map(
+  (person) => ({
+    ...person,
+    assignValue: person.uniqueName
+      ? `${person.displayName} <${person.uniqueName}>`
+      : person.displayName,
+  }),
+);
+
 function demoMentionCandidates(query?: string): MentionCandidate[] {
   const term = query?.trim().toLowerCase() ?? "";
   if (!term) return demoMentionPeople;
   return demoMentionPeople.filter(
+    (person) =>
+      person.displayName.toLowerCase().includes(term) ||
+      person.uniqueName?.toLowerCase().includes(term),
+  );
+}
+
+function demoAssigneeCandidates(query?: string): WorkItemAssigneeCandidate[] {
+  const term = query?.trim().toLowerCase() ?? "";
+  if (!term) return demoAssigneePeople;
+  return demoAssigneePeople.filter(
     (person) =>
       person.displayName.toLowerCase().includes(term) ||
       person.uniqueName?.toLowerCase().includes(term),

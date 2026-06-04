@@ -14,11 +14,11 @@ import {
   assignWorkItems,
   setWorkItemsPriority,
   listWorkItemTypeStates,
-  searchWorkItemMentions,
+  searchWorkItemAssignees,
   getWorkItemPreview,
   commandErrorMessage,
   type BulkWorkItemResult,
-  type MentionCandidate,
+  type WorkItemAssigneeCandidate,
   type WorkItemPreview,
   type WorkItemSummary,
 } from '@/lib/azdoCommands';
@@ -562,35 +562,39 @@ export function WorkItemsGrid({
   });
   const bulkStateOptions = bulkStateType && bulkStatesQuery.data ? bulkStatesQuery.data : COMMON_STATES;
 
-  const bulkMentionsQuery = useQuery({
-    queryKey: workItemQueryKeys.mentions(
+  const bulkAssigneesQuery = useQuery({
+    queryKey: workItemQueryKeys.assignees(
       firstCheckedItem?.organizationId,
       bulkAssignQuery,
     ),
     queryFn: () =>
-      searchWorkItemMentions({
-        organizationId: firstCheckedItem?.organizationId,
+      searchWorkItemAssignees({
+        organizationId: firstCheckedItem!.organizationId,
+        projectId: firstCheckedItem!.projectId,
+        workItemId: firstCheckedItem!.id,
         query: bulkAssignQuery,
       }),
     enabled: bulkAssignOpen && !!firstCheckedItem && bulkAssignQuery.trim().length > 0,
     staleTime: 60_000,
   });
-  const bulkDefaultMentionsQuery = useQuery({
-    queryKey: workItemQueryKeys.mentions(firstCheckedItem?.organizationId, ""),
+  const bulkDefaultAssigneesQuery = useQuery({
+    queryKey: workItemQueryKeys.assignees(firstCheckedItem?.organizationId, ""),
     queryFn: () =>
-      searchWorkItemMentions({
-        organizationId: firstCheckedItem?.organizationId,
+      searchWorkItemAssignees({
+        organizationId: firstCheckedItem!.organizationId,
+        projectId: firstCheckedItem!.projectId,
+        workItemId: firstCheckedItem!.id,
         query: "",
       }),
     enabled: bulkAssignOpen && !!firstCheckedItem,
     staleTime: 60_000,
   });
   const bulkAssignOptions = bulkAssignQuery.trim()
-    ? (bulkMentionsQuery.data ?? [])
-    : (bulkDefaultMentionsQuery.data ?? []);
+    ? (bulkAssigneesQuery.data ?? [])
+    : (bulkDefaultAssigneesQuery.data ?? []);
   const bulkAssignLoading = bulkAssignQuery.trim()
-    ? bulkMentionsQuery.isFetching
-    : bulkDefaultMentionsQuery.isFetching;
+    ? bulkAssigneesQuery.isFetching
+    : bulkDefaultAssigneesQuery.isFetching;
 
   function showBulkToast(results: BulkWorkItemResult[]) {
     const failed = results.filter((r) => r.error).length;
@@ -1053,7 +1057,7 @@ export function WorkItemsGrid({
           assignOptions={bulkAssignOptions}
           assignLoading={bulkAssignLoading}
           assignPending={bulkAssignMutation.isPending}
-          onAssignSelect={(candidate) => bulkAssignMutation.mutate(candidate.uniqueName ?? candidate.displayName)}
+          onAssignSelect={(candidate) => bulkAssignMutation.mutate(candidate.assignValue)}
           priorityOpen={bulkPriorityOpen}
           onPriorityOpenChange={(open) => {
             setBulkPriorityOpen(open);
@@ -1505,10 +1509,10 @@ function BulkActionBar({
   onAssignOpenChange: (open: boolean) => void;
   assignQuery: string;
   onAssignQueryChange: (q: string) => void;
-  assignOptions: MentionCandidate[];
+  assignOptions: WorkItemAssigneeCandidate[];
   assignLoading: boolean;
   assignPending: boolean;
-  onAssignSelect: (candidate: MentionCandidate) => void;
+  onAssignSelect: (candidate: WorkItemAssigneeCandidate) => void;
   priorityOpen: boolean;
   onPriorityOpenChange: (open: boolean) => void;
   priorityPending: boolean;

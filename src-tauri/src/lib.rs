@@ -39,10 +39,10 @@ use work_items::{
     DeleteWorkItemCommentInput, FetchWorkItemImageInput, GetSavedQueryInput,
     GetWorkItemPreviewInput, ListMyWorkItemsInput, ListWorkItemProjectsInput,
     ListWorkItemTypeStatesInput, MentionCandidate, RunWorkItemQueryInput, SavedQueryResult,
-    SearchWorkItemMentionsInput, SearchWorkItemsInput, SetWorkItemPriorityInput,
-    SetWorkItemReasonInput, SetWorkItemStateInput, SetWorkItemsPriorityInput,
-    SetWorkItemsStateInput, WorkItemComment, WorkItemImage, WorkItemPreview, WorkItemProjectOption,
-    WorkItemService, WorkItemSummary,
+    SearchWorkItemAssigneesInput, SearchWorkItemMentionsInput, SearchWorkItemsInput,
+    SetWorkItemPriorityInput, SetWorkItemReasonInput, SetWorkItemStateInput,
+    SetWorkItemsPriorityInput, SetWorkItemsStateInput, WorkItemAssigneeCandidate, WorkItemComment,
+    WorkItemImage, WorkItemPreview, WorkItemProjectOption, WorkItemService, WorkItemSummary,
 };
 
 #[derive(Clone)]
@@ -201,6 +201,15 @@ async fn search_work_item_mentions(
     state: State<'_, AppState>,
 ) -> Result<Vec<MentionCandidate>> {
     state.work_items.search_mentions(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn search_work_item_assignees(
+    input: SearchWorkItemAssigneesInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<WorkItemAssigneeCandidate>> {
+    state.work_items.search_assignees(input).await
 }
 
 #[tauri::command]
@@ -437,6 +446,7 @@ pub fn run() {
             count_work_item_query,
             get_work_item_preview,
             search_work_item_mentions,
+            search_work_item_assignees,
             fetch_work_item_image,
             add_work_item_comment,
             delete_work_item_comment,

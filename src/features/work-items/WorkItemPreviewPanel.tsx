@@ -18,9 +18,11 @@ import {
   setWorkItemReason,
   setWorkItemPriority,
   listWorkItemTypeStates,
+  searchWorkItemAssignees,
   searchWorkItemMentions,
   commandErrorMessage,
   type MentionCandidate,
+  type WorkItemAssigneeCandidate,
   type WorkItemPreview,
   type WorkItemSummary,
 } from '@/lib/azdoCommands';
@@ -197,6 +199,10 @@ export function WorkItemPreviewPanel({
     () => recentWorkItemMentionCandidates(preview),
     [preview],
   );
+  const recentAssigneeOptions = useMemo(
+    () => recentWorkItemAssigneeCandidates(preview),
+    [preview],
+  );
   const commentMentionDisplayNames = useMemo(() => {
     const names = new Map<string, string>();
     for (const [id, displayName] of Object.entries(mentionDisplayNamesById)) {
@@ -259,8 +265,10 @@ export function WorkItemPreviewPanel({
   const assigneeDefaultQuery = useQuery({
     queryKey: workItemQueryKeys.assignees(selectedItem?.organizationId, ""),
     queryFn: () =>
-      searchWorkItemMentions({
-        organizationId: selectedItem?.organizationId,
+      searchWorkItemAssignees({
+        organizationId: selectedItem!.organizationId,
+        projectId: selectedItem!.projectId,
+        workItemId: selectedItem!.id,
         query: "",
       }),
     enabled: !!selectedItem && assigneeOpen,
@@ -273,8 +281,10 @@ export function WorkItemPreviewPanel({
       assigneeQuery,
     ),
     queryFn: () =>
-      searchWorkItemMentions({
-        organizationId: selectedItem?.organizationId,
+      searchWorkItemAssignees({
+        organizationId: selectedItem!.organizationId,
+        projectId: selectedItem!.projectId,
+        workItemId: selectedItem!.id,
         query: assigneeQuery,
       }),
     enabled: !!selectedItem && assigneeOpen && assigneeQuery.trim().length > 0,
@@ -283,7 +293,7 @@ export function WorkItemPreviewPanel({
   const assigneeOptions = useMemo(
     () =>
       rankMentionCandidates({
-        recent: [...recentMentionOptions, ...(assigneeDefaultQuery.data ?? [])],
+        recent: [...recentAssigneeOptions, ...(assigneeDefaultQuery.data ?? [])],
         remote: assigneeOptionsQuery.data ?? [],
         query: assigneeQuery,
         priorityNames: mentionPriorityNames,
@@ -293,7 +303,7 @@ export function WorkItemPreviewPanel({
       assigneeOptionsQuery.data,
       assigneeQuery,
       mentionPriorityNames,
-      recentMentionOptions,
+      recentAssigneeOptions,
     ],
   );
 
@@ -542,13 +552,13 @@ export function WorkItemPreviewPanel({
     });
   }
 
-  function assignTo(candidate: MentionCandidate) {
+  function assignTo(candidate: WorkItemAssigneeCandidate) {
     if (!selectedItem) return;
     assignMutation.mutate({
       organizationId: selectedItem.organizationId,
       projectId: selectedItem.projectId,
       workItemId: selectedItem.id,
-      assignedTo: candidate.uniqueName ?? candidate.displayName,
+      assignedTo: candidate.assignValue,
     });
   }
 
@@ -2034,9 +2044,9 @@ function AssigneePicker({
   loading: boolean;
   onOpenChange: (open: boolean) => void;
   onQueryChange: (query: string) => void;
-  onSelect: (candidate: MentionCandidate) => void;
+  onSelect: (candidate: WorkItemAssigneeCandidate) => void;
   open: boolean;
-  options: MentionCandidate[];
+  options: WorkItemAssigneeCandidate[];
   pending: boolean;
   query: string;
   shortcut?: string;
@@ -2128,6 +2138,18 @@ function recentWorkItemMentionCandidates(
   return [...candidates.values()];
 }
 
+function recentWorkItemAssigneeCandidates(
+  preview: WorkItemPreview | null,
+): WorkItemAssigneeCandidate[] {
+  if (!preview) return [];
+  return recentWorkItemMentionCandidates(preview)
+    .filter((candidate) => candidate.uniqueName)
+    .map((candidate) => ({
+      ...candidate,
+      assignValue: `${candidate.displayName} <${candidate.uniqueName}>`,
+    }));
+}
+
 function workItemMentionPriorityNames(preview: WorkItemPreview | null): string[] {
   if (!preview) return [];
   const names = [
@@ -2138,33 +2160,37 @@ function workItemMentionPriorityNames(preview: WorkItemPreview | null): string[]
   return uniqueNormalizedNames(names);
 }
 
-function rankMentionCandidates({
+function rankMentionCandidates<T extends MentionCandidate>({
   recent,
   remote,
   query,
   priorityNames,
 }: {
-  recent: MentionCandidate[];
-  remote: MentionCandidate[];
+  recent: T[];
+  remote: T[];
   query: string;
   priorityNames: string[];
-}): MentionCandidate[] {
+}): T[] {
   const term = query.trim().toLowerCase();
   const recentIds = new Map(recent.map((candidate, index) => [candidate.id, index]));
   const priority = new Map(priorityNames.map((name, index) => [name, index]));
-  const candidates = new Map<string, MentionCandidate>();
+  const candidates: T[] = [];
 
-  const seenDisplayNames = new Set<string>();
   for (const candidate of [...recent, ...remote]) {
-    const key = candidate.id || candidate.uniqueName || candidate.displayName;
-    const nameKey = candidate.displayName.toLowerCase();
-    if (!candidates.has(key) && !seenDisplayNames.has(nameKey)) {
-      candidates.set(key, candidate);
-      seenDisplayNames.add(nameKey);
+    const existingIndex = candidates.findIndex((existing) =>
+      isSameMentionCandidate(existing, candidate),
+    );
+    if (existingIndex === -1) {
+      candidates.push(candidate);
+    } else {
+      candidates[existingIndex] = preferMentionCandidate(
+        candidates[existingIndex],
+        candidate,
+      );
     }
   }
 
-  return [...candidates.values()]
+  return candidates
     .filter((candidate) => mentionCandidateMatches(candidate, term))
     .sort((left, right) => {
       const leftRecent = recentIds.get(left.id) ?? Number.MAX_SAFE_INTEGER;
@@ -2184,6 +2210,49 @@ function rankMentionCandidates({
       return left.displayName.localeCompare(right.displayName);
     })
     .slice(0, 8);
+}
+
+function isSameMentionCandidate(
+  left: MentionCandidate,
+  right: MentionCandidate,
+): boolean {
+  return (
+    normalizedEquals(left.id, right.id) ||
+    normalizedEquals(left.uniqueName, right.uniqueName) ||
+    normalizedEquals(left.displayName, right.displayName) ||
+    normalizedEquals(left.displayName, right.uniqueName) ||
+    normalizedEquals(left.uniqueName, right.displayName)
+  );
+}
+
+function preferMentionCandidate<T extends MentionCandidate>(left: T, right: T): T {
+  const preferred =
+    mentionCandidateDisplayScore(right) > mentionCandidateDisplayScore(left)
+      ? right
+      : left;
+  return {
+    ...preferred,
+    uniqueName: preferred.uniqueName ?? left.uniqueName ?? right.uniqueName,
+  };
+}
+
+function mentionCandidateDisplayScore(candidate: MentionCandidate): number {
+  if (isEmailLikeDisplay(candidate.displayName)) return 0;
+  if (candidate.uniqueName) return 2;
+  return 1;
+}
+
+function normalizedEquals(
+  left: string | null | undefined,
+  right: string | null | undefined,
+): boolean {
+  const normalizedLeft = normalizeMentionName(left);
+  const normalizedRight = normalizeMentionName(right);
+  return !!normalizedLeft && normalizedLeft === normalizedRight;
+}
+
+function isEmailLikeDisplay(value: string): boolean {
+  return /^[^\s@<>]+@[^\s@<>]+$/.test(value.trim());
 }
 
 function mentionCandidateMatches(candidate: MentionCandidate, term: string): boolean {

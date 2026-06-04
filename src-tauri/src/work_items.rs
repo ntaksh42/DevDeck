@@ -1,12 +1,13 @@
 use azdo_client::{
-    AdoClient, AdoError, AuthenticatedUser, Identity, WorkItem,
-    WorkItemComment as AzdoWorkItemComment,
+    AdoClient, AdoError, AuthenticatedUser, Identity, IdentityPickerIdentity, WorkItem,
+    WorkItemComment as AzdoWorkItemComment, WorkItemUpdate,
 };
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 
 use crate::auth::client_for_organization;
 use crate::commits::encode_path_segment;
@@ -92,6 +93,15 @@ pub struct GetWorkItemPreviewInput {
 #[serde(rename_all = "camelCase")]
 pub struct SearchWorkItemMentionsInput {
     pub organization_id: Option<String>,
+    pub query: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchWorkItemAssigneesInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_id: i64,
     pub query: String,
 }
 
@@ -276,6 +286,15 @@ pub struct MentionCandidate {
     pub id: String,
     pub display_name: String,
     pub unique_name: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemAssigneeCandidate {
+    pub id: String,
+    pub display_name: String,
+    pub unique_name: Option<String>,
+    pub assign_value: String,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -471,6 +490,13 @@ impl WorkItemService {
                 authenticated_user_mention_candidate(data.authenticated_user, query)
             })
         };
+        let picker_display_names = match client.search_identity_picker(query, 40).await {
+            Ok(identities) => identity_picker_display_names_by_unique_name(identities),
+            Err(error) => {
+                tracing::warn!(%error, "identity picker search failed while improving mention labels");
+                HashMap::new()
+            }
+        };
         let identities = client.search_identities(query, 8).await?;
         let mut candidates = Vec::new();
         if let Some(candidate) = current_user {
@@ -479,6 +505,9 @@ impl WorkItemService {
         for candidate in identities
             .into_iter()
             .filter_map(summarize_mention_candidate)
+            .map(|candidate| {
+                prefer_identity_picker_mention_display(candidate, &picker_display_names)
+            })
         {
             push_unique_mention_candidate(&mut candidates, candidate);
             if candidates.len() >= 8 {
@@ -486,6 +515,65 @@ impl WorkItemService {
             }
         }
         Ok(candidates)
+    }
+
+    pub async fn search_assignees(
+        &self,
+        input: SearchWorkItemAssigneesInput,
+    ) -> Result<Vec<WorkItemAssigneeCandidate>> {
+        let query = input.query.trim();
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let mut candidates = Vec::new();
+
+        match client
+            .list_work_item_updates(&input.project_id, input.work_item_id, 50)
+            .await
+        {
+            Ok(updates) => {
+                for candidate in assignee_candidates_from_updates(updates) {
+                    push_unique_assignee_candidate(&mut candidates, candidate);
+                }
+            }
+            Err(error) => {
+                tracing::warn!(%error, "failed to load work item updates for assignee candidates");
+            }
+        }
+
+        if let Some(candidate) = organization_authenticated_user_candidate(&organization, query)
+            .map(assignee_candidate_from_mention)
+        {
+            push_unique_assignee_candidate(&mut candidates, candidate);
+        }
+
+        if !query.is_empty() {
+            let picker_candidates = match client.search_identity_picker(query, 40).await {
+                Ok(identities) => identities
+                    .into_iter()
+                    .filter_map(assignee_candidate_from_identity_picker)
+                    .collect::<Vec<_>>(),
+                Err(error) => {
+                    tracing::warn!(%error, "identity picker search failed; falling back to identities API");
+                    client
+                        .search_identities(query, 40)
+                        .await?
+                        .into_iter()
+                        .filter_map(summarize_mention_candidate)
+                        .map(assignee_candidate_from_mention)
+                        .collect()
+                }
+            };
+            for candidate in picker_candidates {
+                push_unique_assignee_candidate(&mut candidates, candidate);
+            }
+        }
+
+        Ok(candidates
+            .into_iter()
+            .filter(|candidate| candidate.unique_name.is_some())
+            .filter(|candidate| assignee_candidate_matches_query(candidate, query))
+            .take(8)
+            .collect())
     }
 
     async fn default_mention_candidates(
@@ -981,6 +1069,236 @@ fn summarize_mention_candidate(identity: Identity) -> Option<MentionCandidate> {
     })
 }
 
+fn identity_picker_display_names_by_unique_name(
+    identities: Vec<IdentityPickerIdentity>,
+) -> HashMap<String, String> {
+    let mut names = HashMap::new();
+    for identity in identities {
+        if identity
+            .entity_type
+            .as_deref()
+            .is_some_and(|value| !value.eq_ignore_ascii_case("User"))
+        {
+            continue;
+        }
+        let Some(display_name) = identity
+            .display_name
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty() && !is_email_like_display(value))
+        else {
+            continue;
+        };
+        let Some(unique_name) = identity
+            .mail_address
+            .or(identity.sign_in_address)
+            .map(|value| value.trim().to_lowercase())
+            .filter(|value| !value.is_empty())
+        else {
+            continue;
+        };
+        names.entry(unique_name).or_insert(display_name);
+    }
+    names
+}
+
+fn prefer_identity_picker_mention_display(
+    mut candidate: MentionCandidate,
+    picker_display_names: &HashMap<String, String>,
+) -> MentionCandidate {
+    if !is_email_like_display(&candidate.display_name) {
+        return candidate;
+    }
+    let Some(unique_name) = candidate.unique_name.as_deref() else {
+        return candidate;
+    };
+    if let Some(display_name) = picker_display_names.get(&unique_name.to_lowercase()) {
+        candidate.display_name = display_name.clone();
+    }
+    candidate
+}
+
+fn assignee_candidate_from_identity_picker(
+    identity: IdentityPickerIdentity,
+) -> Option<WorkItemAssigneeCandidate> {
+    if identity
+        .entity_type
+        .as_deref()
+        .is_some_and(|value| !value.eq_ignore_ascii_case("User"))
+    {
+        return None;
+    }
+    let display_name = identity
+        .display_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?
+        .to_string();
+    let unique_name = identity
+        .mail_address
+        .or(identity.sign_in_address)
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let id = identity
+        .subject_descriptor
+        .or(identity.entity_id)
+        .or(identity.origin_id)
+        .or(identity.local_id)
+        .or_else(|| unique_name.clone())
+        .unwrap_or_else(|| display_name.clone());
+    Some(assignee_candidate_from_parts(id, display_name, unique_name))
+}
+
+fn assignee_candidates_from_updates(
+    updates: Vec<WorkItemUpdate>,
+) -> Vec<WorkItemAssigneeCandidate> {
+    let mut candidates = Vec::new();
+    for update in updates.into_iter().rev() {
+        if let Some(identity) = update.revised_by {
+            if let Some(candidate) = assignee_candidate_from_comment_identity(identity) {
+                push_unique_assignee_candidate(&mut candidates, candidate);
+            }
+        }
+        if let Some(field) = update.fields.get("System.AssignedTo") {
+            for value in [&field.new_value, &field.old_value].into_iter().flatten() {
+                if let Some(candidate) = assignee_candidate_from_value(value) {
+                    push_unique_assignee_candidate(&mut candidates, candidate);
+                }
+            }
+        }
+    }
+    candidates
+}
+
+fn assignee_candidate_from_comment_identity(
+    identity: azdo_client::work_items::CommentIdentityRef,
+) -> Option<WorkItemAssigneeCandidate> {
+    let display_name = identity
+        .display_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?
+        .to_string();
+    let unique_name = identity
+        .unique_name
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let id = identity
+        .id
+        .or_else(|| unique_name.clone())
+        .unwrap_or_else(|| display_name.clone());
+    Some(assignee_candidate_from_parts(id, display_name, unique_name))
+}
+
+fn assignee_candidate_from_value(value: &Value) -> Option<WorkItemAssigneeCandidate> {
+    if let Some(value) = value.as_str() {
+        return assignee_candidate_from_identity_string(value);
+    }
+    let display_name = value
+        .get("displayName")
+        .or_else(|| value.get("DisplayName"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?
+        .to_string();
+    let unique_name = value
+        .get("uniqueName")
+        .or_else(|| value.get("UniqueName"))
+        .or_else(|| value.get("mailAddress"))
+        .or_else(|| value.get("Mail"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string);
+    let id = value
+        .get("id")
+        .or_else(|| value.get("Id"))
+        .or_else(|| value.get("descriptor"))
+        .or_else(|| value.get("subjectDescriptor"))
+        .and_then(Value::as_str)
+        .map(ToString::to_string)
+        .or_else(|| unique_name.clone())
+        .unwrap_or_else(|| display_name.clone());
+    Some(assignee_candidate_from_parts(id, display_name, unique_name))
+}
+
+fn assignee_candidate_from_identity_string(value: &str) -> Option<WorkItemAssigneeCandidate> {
+    let value = value.trim();
+    if value.is_empty() {
+        return None;
+    }
+    let (display_name, unique_name) = if let Some((display_name, rest)) = value.rsplit_once('<') {
+        let unique_name = rest.strip_suffix('>').map(str::trim);
+        (
+            display_name.trim().to_string(),
+            unique_name
+                .filter(|value| !value.is_empty())
+                .map(ToString::to_string),
+        )
+    } else {
+        (value.to_string(), None)
+    };
+    if display_name.is_empty() {
+        return None;
+    }
+    Some(assignee_candidate_from_parts(
+        unique_name.clone().unwrap_or_else(|| display_name.clone()),
+        display_name,
+        unique_name,
+    ))
+}
+
+fn assignee_candidate_from_mention(candidate: MentionCandidate) -> WorkItemAssigneeCandidate {
+    assignee_candidate_from_parts(candidate.id, candidate.display_name, candidate.unique_name)
+}
+
+fn assignee_candidate_from_parts(
+    id: String,
+    display_name: String,
+    unique_name: Option<String>,
+) -> WorkItemAssigneeCandidate {
+    let assign_value = unique_name
+        .as_deref()
+        .map(|unique_name| format!("{display_name} <{unique_name}>"))
+        .unwrap_or_else(|| display_name.clone());
+    WorkItemAssigneeCandidate {
+        id,
+        display_name,
+        unique_name,
+        assign_value,
+    }
+}
+
+fn assignee_candidate_matches_query(candidate: &WorkItemAssigneeCandidate, query: &str) -> bool {
+    let query = query.trim().to_lowercase();
+    if query.is_empty() {
+        return true;
+    }
+    candidate.display_name.to_lowercase().contains(&query)
+        || candidate
+            .unique_name
+            .as_deref()
+            .is_some_and(|value| value.to_lowercase().contains(&query))
+}
+
+fn push_unique_assignee_candidate(
+    candidates: &mut Vec<WorkItemAssigneeCandidate>,
+    candidate: WorkItemAssigneeCandidate,
+) {
+    let duplicate = candidates.iter().any(|existing| {
+        existing.id.eq_ignore_ascii_case(&candidate.id)
+            || same_optional_mention_value(
+                existing.unique_name.as_deref(),
+                candidate.unique_name.as_deref(),
+            )
+            || existing
+                .assign_value
+                .eq_ignore_ascii_case(&candidate.assign_value)
+    });
+    if !duplicate {
+        candidates.push(candidate);
+    }
+}
+
 fn is_user_like_identity(identity: &Identity) -> bool {
     let schema = identity.property_value("SchemaClassName");
     let special_type = identity.property_value("SpecialType");
@@ -1075,6 +1393,18 @@ fn mention_candidate_matches_query(
         || unique_name
             .map(|value| value.to_lowercase().contains(&query))
             .unwrap_or(false)
+}
+
+fn is_email_like_display(value: &str) -> bool {
+    let value = value.trim();
+    let Some((local, domain)) = value.split_once('@') else {
+        return false;
+    };
+    !local.is_empty()
+        && !domain.is_empty()
+        && !value.contains(char::is_whitespace)
+        && !value.contains('<')
+        && !value.contains('>')
 }
 
 fn push_unique_mention_candidate(
@@ -1723,6 +2053,29 @@ mod tests {
         assert_eq!(candidate.id, "user-1");
         assert_eq!(candidate.display_name, "Alice Johnson");
         assert_eq!(candidate.unique_name.as_deref(), Some("alice@example.com"));
+    }
+
+    #[test]
+    fn prefer_identity_picker_mention_display_replaces_email_label() {
+        let mut picker_names = HashMap::new();
+        picker_names.insert(
+            "aksh0402@outlook.jp".to_string(),
+            "naoto akashi".to_string(),
+        );
+        let candidate = prefer_identity_picker_mention_display(
+            MentionCandidate {
+                id: "user-1".to_string(),
+                display_name: "aksh0402@outlook.jp".to_string(),
+                unique_name: Some("aksh0402@outlook.jp".to_string()),
+            },
+            &picker_names,
+        );
+
+        assert_eq!(candidate.display_name, "naoto akashi");
+        assert_eq!(
+            candidate.unique_name.as_deref(),
+            Some("aksh0402@outlook.jp")
+        );
     }
 
     #[test]

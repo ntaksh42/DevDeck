@@ -12,5 +12,5 @@ pub use git::{
     CommitSearchCriteria, GitCommitRef, GitPullRequest, GitRepository, GitUserDate, IdentityRef,
     IdentityRefWithVote, PullRequestStatus, TeamProject,
 };
-pub use identity::{AuthenticatedUser, ConnectionData, Identity};
-pub use work_items::{WorkItem, WorkItemComment, WorkItemReference};
+pub use identity::{AuthenticatedUser, ConnectionData, Identity, IdentityPickerIdentity};
+pub use work_items::{WorkItem, WorkItemComment, WorkItemReference, WorkItemUpdate};

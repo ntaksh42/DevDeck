@@ -159,6 +159,17 @@ const mentionCandidatesSchema = z.array(mentionCandidateSchema);
 
 export type MentionCandidate = z.infer<typeof mentionCandidateSchema>;
 
+const workItemAssigneeCandidateSchema = z.object({
+  id: z.string(),
+  displayName: z.string(),
+  uniqueName: z.string().nullable(),
+  assignValue: z.string(),
+});
+
+const workItemAssigneeCandidatesSchema = z.array(workItemAssigneeCandidateSchema);
+
+export type WorkItemAssigneeCandidate = z.infer<typeof workItemAssigneeCandidateSchema>;
+
 const savedQueryResultSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -267,6 +278,13 @@ export type GetWorkItemPreviewInput = {
 
 export type SearchWorkItemMentionsInput = {
   organizationId?: string;
+  query: string;
+};
+
+export type SearchWorkItemAssigneesInput = {
+  organizationId?: string;
+  projectId: string;
+  workItemId: number;
   query: string;
 };
 
@@ -481,6 +499,13 @@ export async function searchWorkItemMentions(
 ): Promise<MentionCandidate[]> {
   const result = await invokeCommand("search_work_item_mentions", { input });
   return mentionCandidatesSchema.parse(result);
+}
+
+export async function searchWorkItemAssignees(
+  input: SearchWorkItemAssigneesInput,
+): Promise<WorkItemAssigneeCandidate[]> {
+  const result = await invokeCommand("search_work_item_assignees", { input });
+  return workItemAssigneeCandidatesSchema.parse(result);
 }
 
 const workItemImageSchema = z.object({
