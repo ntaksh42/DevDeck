@@ -300,7 +300,8 @@ const WorkItemGridRow = forwardRef<
       if ((e.target as HTMLElement).closest("button,input")) return;
       if (e.key === "Enter") {
         e.stopPropagation();
-        focusPrimaryPreview();
+        if (e.ctrlKey && item.webUrl) openExternalUrl(item.webUrl);
+        else focusPrimaryPreview();
       } else if ((e.key === "o" || e.key === "O") && item.webUrl) {
         e.stopPropagation();
         openExternalUrl(item.webUrl);
@@ -918,7 +919,12 @@ export function WorkItemsGrid({
       moveSelection(selectedIndex - 10);
     } else if (e.key === "Enter") {
       e.preventDefault();
-      focusPrimaryPreview();
+      if (e.ctrlKey) {
+        const item = displayed[selectedIndex];
+        if (item?.webUrl) openExternalUrl(item.webUrl);
+      } else {
+        focusPrimaryPreview();
+      }
     } else if (e.key === "o" || e.key === "O") {
       e.preventDefault();
       const item = displayed[selectedIndex];

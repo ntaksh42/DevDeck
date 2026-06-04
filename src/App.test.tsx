@@ -1203,6 +1203,7 @@ describe("App", () => {
 
     fireEvent.keyDown(main.getByRole("grid", { name: "My review pull requests" }), {
       key: "Enter",
+      ctrlKey: true,
     });
 
     await waitFor(() => {

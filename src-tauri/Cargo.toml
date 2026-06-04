@@ -1,6 +1,6 @@
 [package]
 name = "azdo-dashboard"
-version = "0.1.5"
+version = "0.1.6"
 description = "AzDoDeck — Azure DevOps desktop dashboard"
 authors.workspace = true
 edition.workspace = true

@@ -29,6 +29,7 @@ import {
   isEditableTarget,
   formatDate,
   formatRelativeDate,
+  focusPrimaryPreview,
   type SortDirection,
 } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
@@ -98,9 +99,10 @@ const ReviewPrRow = forwardRef<
         if ((e.target as HTMLElement).closest("button")) {
           return;
         }
-        if (e.key === "Enter" && pr.webUrl) {
+        if (e.key === "Enter") {
           e.stopPropagation();
-          openExternalUrl(pr.webUrl);
+          if (e.ctrlKey && pr.webUrl) openExternalUrl(pr.webUrl);
+          else focusPrimaryPreview();
         }
       }}
       className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1 text-sm outline-none
@@ -672,7 +674,11 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     } else if (e.key === "Enter") {
       e.preventDefault();
       const pr = sortedPrs[selectedIndex];
-      if (pr?.webUrl) openExternalUrl(pr.webUrl);
+      if (e.ctrlKey) {
+        if (pr?.webUrl) openExternalUrl(pr.webUrl);
+      } else {
+        focusPrimaryPreview();
+      }
     }
   }
 
