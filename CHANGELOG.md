@@ -4,6 +4,26 @@ All notable changes to AzDoDeck are documented here.
 
 ## [Unreleased]
 
+## [0.1.8] — 2026-06-06
+
+### Changed
+- Work Item preview panel redesigned: compact layout, cleaner section boundaries with border separators, improved focus ring visibility across all preview panels.
+
+## [0.1.7] — 2026-06-05
+
+### Added
+- Work Item mentions now use an identity picker for consistent assignee lookup.
+
+### Changed
+- Grid view state (column widths, sort order) is now persisted across sessions.
+
+## [0.1.6] — 2026-06-04
+
+### Fixed
+- Work item view restores focus correctly after refresh.
+- Azure DevOps assignee candidates lookup broadened to match more user identity fields.
+- Organization name matching is now case-insensitive for WIT image URLs.
+
 ## [0.1.5] — 2026-06-04
 
 ### Added
