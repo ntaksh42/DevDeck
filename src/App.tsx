@@ -25,7 +25,9 @@ import {
   commandErrorMessage,
   getAppSettings,
   listOrganizations,
+  syncUpdatedEventSchema,
   triggerSync,
+  type SyncScope,
 } from "@/lib/azdoCommands";
 import { listen } from "@tauri-apps/api/event";
 import { isTauriRuntime } from "@/lib/runtime";
@@ -73,13 +75,34 @@ type NavSectionId = "pullRequests" | "workItems";
 
 const DEFAULT_SIDEBAR_WIDTH = 232;
 const SIDEBAR_WIDTH_STORAGE_KEY = "azdodeck:layout:sidebarWidth";
+const HOT_SYNC_FOCUS_MIN_INTERVAL_MS = 2 * 60_000;
 
-function invalidateSyncedDataQueries(queryClient: QueryClient): void {
-  void queryClient.invalidateQueries({ queryKey: ["myReviews"] });
-  void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot() });
-  invalidateWorkItemQueryViews(queryClient);
-  void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
+function invalidateSyncedDataQueries(
+  queryClient: QueryClient,
+  scopes: SyncScope[] = ["all"],
+): void {
+  void queryClient.invalidateQueries({ queryKey: ["syncStates"] });
+  const scopeSet = new Set(scopes);
+  const all = scopeSet.has("all");
+  const hot = scopeSet.has("hot");
+  if (all || hot || scopeSet.has("myReviews")) {
+    void queryClient.invalidateQueries({ queryKey: ["myReviews"] });
+  }
+  if (all || hot || scopeSet.has("myWorkItems")) {
+    void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot() });
+    invalidateWorkItemQueryViews(queryClient);
+    void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
+  }
+  if (all || scopeSet.has("commits")) {
+    void queryClient.invalidateQueries({ queryKey: ["commitRepositories"] });
+  }
 }
+
+function invalidationScopesForSyncScope(scope: SyncScope = "all"): SyncScope[] {
+  return scope === "hot" ? ["myReviews", "myWorkItems"] : [scope];
+}
+
+
 
 function AppShell() {
   const [view, setView] = useState<View>("myReviews");
@@ -100,6 +123,8 @@ function AppShell() {
   );
   const navRef = useRef<HTMLElement | null>(null);
   const appSettingsRef = useRef<Awaited<ReturnType<typeof getAppSettings>> | null>(null);
+  const startupHotSyncStartedRef = useRef(false);
+  const lastHotSyncRequestedAtRef = useRef(0);
   const navTypeaheadRef = useRef<{ value: string; timer: number | null }>({
     value: "",
     timer: null,
@@ -115,14 +140,14 @@ function AppShell() {
     queryFn: getAppSettings,
     staleTime: 5 * 60_000,
   });
+  const organizations = organizationsQuery.data ?? [];
   const syncMutation = useMutation({
-    mutationFn: triggerSync,
-    onSuccess: () => {
-      invalidateSyncedDataQueries(queryClient);
+    mutationFn: (input: { scope?: SyncScope }) => triggerSync(input),
+    onSuccess: (_data, input) => {
+      invalidateSyncedDataQueries(queryClient, invalidationScopesForSyncScope(input.scope ?? "all"));
     },
   });
 
-  const organizations = organizationsQuery.data ?? [];
   const activeView = organizations.length === 0 ? "settings" : view;
   const pinnedWorkItemViews = workItemNavViews.filter((item) => item.pinned);
   const activePinnedWorkItemView = pinnedWorkItemViews.find(
@@ -188,6 +213,35 @@ function AppShell() {
 
   function dispatchWorkItemCommand(command: string): void {
     window.dispatchEvent(new CustomEvent(`azdodeck:work-items:${command}`));
+  }
+
+  function currentViewSyncScope(): SyncScope {
+    if (activeView === "commits") return "commits";
+    if (
+      activeView === "workItems" ||
+      activeView === "myWorkItems" ||
+      activeView === "workItemViews"
+    ) {
+      return "myWorkItems";
+    }
+    if (activeView === "settings") return "all";
+    return "myReviews";
+  }
+
+  function refreshCurrentView(): void {
+    if (organizations.length > 0 && !syncMutation.isPending) {
+      syncMutation.mutate({ scope: currentViewSyncScope() });
+    }
+  }
+
+  function requestHotSync(reason: "startup" | "focus"): void {
+    if (organizations.length === 0 || syncMutation.isPending) return;
+    if (reason === "focus") {
+      const elapsed = Date.now() - lastHotSyncRequestedAtRef.current;
+      if (elapsed < HOT_SYNC_FOCUS_MIN_INTERVAL_MS) return;
+    }
+    lastHotSyncRequestedAtRef.current = Date.now();
+    syncMutation.mutate({ scope: "hot" });
   }
 
   const commandActions: CommandPaletteAction[] = [
@@ -347,8 +401,17 @@ function AppShell() {
       id: "general.sync",
       keywords: ["refresh"],
       label: "Sync now",
-      run: () => syncMutation.mutate(),
+      run: () => syncMutation.mutate({ scope: "all" }),
       shortcut: "Alt+S",
+    },
+    {
+      disabled: organizations.length === 0 || syncMutation.isPending,
+      group: "General",
+      id: "general.refreshCurrentView",
+      keywords: ["refresh", "current", "sync"],
+      label: "Refresh current view",
+      run: refreshCurrentView,
+      shortcut: "Ctrl+R",
     },
     {
       group: "General",
@@ -420,10 +483,35 @@ function AppShell() {
   }, [appSettingsQuery.data]);
 
   useEffect(() => {
+    if (startupHotSyncStartedRef.current || organizations.length === 0) return;
+    startupHotSyncStartedRef.current = true;
+    requestHotSync("startup");
+  }, [organizations.length, syncMutation.isPending]);
+
+  useEffect(() => {
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        requestHotSync("focus");
+      }
+    }
+    function onWindowFocus() {
+      requestHotSync("focus");
+    }
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("focus", onWindowFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("focus", onWindowFocus);
+    };
+  }, [organizations.length, syncMutation.isPending]);
+
+  useEffect(() => {
     if (!isTauriRuntime()) return;
     let cleanup: (() => void) | undefined;
-    listen("sync:updated", () => {
-      invalidateSyncedDataQueries(queryClient);
+    listen("sync:updated", (event) => {
+      const parsed = syncUpdatedEventSchema.safeParse(event.payload);
+      invalidateSyncedDataQueries(queryClient, parsed.success ? parsed.data.scopes : ["all"]);
     })
       .then((unlisten) => {
         cleanup = unlisten;
@@ -486,6 +574,18 @@ function AppShell() {
           filterInput.focus();
           filterInput.select();
         }
+        return;
+      }
+
+      if (
+        !event.defaultPrevented &&
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        !event.shiftKey &&
+        (event.key === "r" || event.key === "R")
+      ) {
+        event.preventDefault();
+        refreshCurrentView();
         return;
       }
 
@@ -559,7 +659,7 @@ function AppShell() {
       if (event.key === "s" || event.key === "S") {
         event.preventDefault();
         if (organizations.length > 0 && !syncMutation.isPending) {
-          syncMutation.mutate();
+          syncMutation.mutate({ scope: "all" });
         }
         return;
       }
@@ -737,20 +837,22 @@ function AppShell() {
             </p>
           </div>
           {organizations.length > 0 && (
-            <button
-              type="button"
-              disabled={syncMutation.isPending}
-              onClick={() => syncMutation.mutate()}
-              aria-keyshortcuts="Alt+S"
-              className="flex items-center gap-1.5 rounded-md border border-border bg-white px-3 py-1 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
-              title="Sync now"
-            >
-              <RefreshCw
-                className={`h-4 w-4 ${syncMutation.isPending ? "animate-spin" : ""}`}
-                aria-hidden="true"
-              />
-              Sync
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                disabled={syncMutation.isPending}
+                onClick={() => syncMutation.mutate({ scope: "all" })}
+                aria-keyshortcuts="Alt+S"
+                className="flex items-center gap-1.5 rounded-md border border-border bg-white px-3 py-1 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+                title="Sync now"
+              >
+                <RefreshCw
+                  className={`h-4 w-4 ${syncMutation.isPending ? "animate-spin" : ""}`}
+                  aria-hidden="true"
+                />
+                Sync
+              </button>
+            </div>
           )}
         </header>
 

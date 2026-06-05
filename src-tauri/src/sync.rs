@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::{interval_at, Instant};
@@ -18,7 +18,27 @@ pub struct SyncRunner {
     secrets: SecretStore,
 }
 
-pub type SyncTrigger = oneshot::Sender<()>;
+pub struct SyncTrigger {
+    pub scope: SyncScope,
+    pub done: oneshot::Sender<()>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum SyncScope {
+    All,
+    Hot,
+    MyReviews,
+    MyWorkItems,
+    Commits,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncUpdatedEvent {
+    pub org_id: String,
+    pub scopes: Vec<SyncScope>,
+}
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -64,24 +84,33 @@ impl SyncRunner {
             let mut waiters = Vec::new();
             tokio::select! {
                 _ = interval.tick() => {},
-                Some(waiter) = trigger_rx.recv() => {
-                    waiters.push(waiter);
-                    while let Ok(waiter) = trigger_rx.try_recv() {
-                        waiters.push(waiter);
+                Some(trigger) = trigger_rx.recv() => {
+                    waiters.push(trigger);
+                    while let Ok(trigger) = trigger_rx.try_recv() {
+                        waiters.push(trigger);
                     }
                 }
             }
-            self.sync_once(&handle).await;
-            if let Err(e) = handle.emit("sync:updated", ()) {
-                tracing::warn!(error = ?e, "failed to emit sync:updated");
+            let scope = combined_scope(&waiters);
+            self.sync_once(&handle, scope).await;
+            if matches!(scope, SyncScope::All) {
+                if let Err(e) = handle.emit(
+                    "sync:updated",
+                    SyncUpdatedEvent {
+                        org_id: "*".to_string(),
+                        scopes: vec![SyncScope::All],
+                    },
+                ) {
+                    tracing::warn!(error = ?e, "failed to emit sync:updated");
+                }
             }
-            for waiter in waiters {
-                let _ = waiter.send(());
+            for trigger in waiters {
+                let _ = trigger.done.send(());
             }
         }
     }
 
-    async fn sync_once(&self, handle: &AppHandle) {
+    async fn sync_once(&self, handle: &AppHandle, scope: SyncScope) {
         let settings = match self.db.get_app_settings() {
             Ok(settings) => settings,
             Err(e) => {
@@ -107,8 +136,15 @@ impl SyncRunner {
                     continue;
                 }
             };
-            if let Err(e) = sync_prs_for_org(&self.db, &client, &org).await {
-                tracing::error!(org = %org.name, error = ?e, "sync: PR sync failed");
+            if matches!(
+                scope,
+                SyncScope::All | SyncScope::Hot | SyncScope::MyReviews
+            ) {
+                if let Err(e) = sync_prs_for_org(&self.db, &client, &org).await {
+                    tracing::error!(org = %org.name, error = ?e, "sync: PR sync failed");
+                } else {
+                    emit_sync_updated(handle, &org.id, vec![SyncScope::MyReviews]);
+                }
             }
             let previous_my_work_items = if should_collect_work_item_notifications {
                 match self.db.list_my_work_items(&org.id) {
@@ -122,36 +158,78 @@ impl SyncRunner {
                 Vec::new()
             };
 
-            if let Err(e) = sync_work_items_for_org(&self.db, &client, &org).await {
-                tracing::error!(org = %org.name, error = ?e, "sync: WI sync failed");
-            } else if should_collect_work_item_notifications {
-                match self.db.list_my_work_items(&org.id) {
-                    Ok(current_my_work_items) => {
-                        let items = work_item_notification_items(
-                            &previous_my_work_items,
-                            &current_my_work_items,
-                            &settings,
-                        );
-                        if !items.is_empty() {
-                            let event = WorkItemNotificationEvent {
-                                organization_id: org.id.clone(),
-                                organization_name: org.name.clone(),
-                                items,
-                            };
-                            if let Err(e) = handle.emit("notifications:work-items", event) {
-                                tracing::warn!(org = %org.name, error = ?e, "sync: failed to emit work item notification event");
+            if matches!(
+                scope,
+                SyncScope::All | SyncScope::Hot | SyncScope::MyWorkItems
+            ) {
+                if let Err(e) = sync_work_items_for_org(&self.db, &client, &org).await {
+                    tracing::error!(org = %org.name, error = ?e, "sync: WI sync failed");
+                } else {
+                    emit_sync_updated(handle, &org.id, vec![SyncScope::MyWorkItems]);
+                    if should_collect_work_item_notifications {
+                        match self.db.list_my_work_items(&org.id) {
+                            Ok(current_my_work_items) => {
+                                let items = work_item_notification_items(
+                                    &previous_my_work_items,
+                                    &current_my_work_items,
+                                    &settings,
+                                );
+                                if !items.is_empty() {
+                                    let event = WorkItemNotificationEvent {
+                                        organization_id: org.id.clone(),
+                                        organization_name: org.name.clone(),
+                                        items,
+                                    };
+                                    if let Err(e) = handle.emit("notifications:work-items", event) {
+                                        tracing::warn!(org = %org.name, error = ?e, "sync: failed to emit work item notification event");
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(org = %org.name, error = ?e, "sync: failed to snapshot work items after sync");
                             }
                         }
                     }
-                    Err(e) => {
-                        tracing::warn!(org = %org.name, error = ?e, "sync: failed to snapshot work items after sync");
-                    }
                 }
             }
-            if let Err(e) = sync_commits_for_org(&self.db, &client, &org).await {
-                tracing::error!(org = %org.name, error = ?e, "sync: commit sync failed");
+            if matches!(scope, SyncScope::All | SyncScope::Commits) {
+                if let Err(e) = sync_commits_for_org(&self.db, &client, &org).await {
+                    tracing::error!(org = %org.name, error = ?e, "sync: commit sync failed");
+                } else {
+                    emit_sync_updated(handle, &org.id, vec![SyncScope::Commits]);
+                }
             }
         }
+    }
+}
+
+fn combined_scope(triggers: &[SyncTrigger]) -> SyncScope {
+    if triggers.is_empty()
+        || triggers
+            .iter()
+            .any(|trigger| trigger.scope == SyncScope::All)
+    {
+        return SyncScope::All;
+    }
+    let first = triggers[0].scope;
+    if triggers.iter().all(|trigger| trigger.scope == first) {
+        return first;
+    }
+    if triggers.len() > 1 {
+        return SyncScope::All;
+    }
+    first
+}
+
+fn emit_sync_updated(handle: &AppHandle, org_id: &str, scopes: Vec<SyncScope>) {
+    if let Err(e) = handle.emit(
+        "sync:updated",
+        SyncUpdatedEvent {
+            org_id: org_id.to_string(),
+            scopes,
+        },
+    ) {
+        tracing::warn!(error = ?e, "failed to emit sync:updated");
     }
 }
 

@@ -171,6 +171,24 @@ function viewExportFileName(): string {
   return `azdodeck-work-item-views-${stamp}.json`;
 }
 
+function viewCardColumnCount(container: HTMLElement): number {
+  const styles = window.getComputedStyle(container);
+  const templateColumns = styles.gridTemplateColumns;
+  if (templateColumns && templateColumns !== "none" && !templateColumns.includes("repeat(")) {
+    const columns = templateColumns.split(/\s+/).filter(Boolean).length;
+    if (columns > 0) return columns;
+  }
+
+  const columnGap = Number.parseFloat(styles.columnGap) || 0;
+  const minCardWidth = 180;
+  const width = container.clientWidth;
+  if (width > 0) {
+    return Math.max(1, Math.floor((width + columnGap) / (minCardWidth + columnGap)));
+  }
+
+  return 1;
+}
+
 export function WorkItemViewsPanel({
   organizations,
   selectedViewRequestId,
@@ -200,6 +218,7 @@ export function WorkItemViewsPanel({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewMessage, setViewMessage] = useState<string | null>(null);
   const viewButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const restoreViewFocusIndexRef = useRef<number | null>(null);
   const viewFormRef = useRef<HTMLFormElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -350,6 +369,13 @@ export function WorkItemViewsPanel({
   useEffect(() => {
     onSelectedViewChange?.(selectedView?.id ?? null);
   }, [onSelectedViewChange, selectedView?.id]);
+
+  useEffect(() => {
+    const index = restoreViewFocusIndexRef.current;
+    if (index === null) return;
+    restoreViewFocusIndexRef.current = null;
+    window.setTimeout(() => viewButtonRefs.current[index]?.focus(), 0);
+  }, [selectedViewId]);
 
   useEffect(() => {
     if (!selectedViewRequestId) return;
@@ -581,6 +607,7 @@ export function WorkItemViewsPanel({
     const nextIndex = clamp(index, 0, views.length - 1);
     const view = views[nextIndex];
     if (!view) return;
+    restoreViewFocusIndexRef.current = nextIndex;
     setSelectedViewId(view.id);
     loadDraft(view);
     viewButtonRefs.current[nextIndex]?.focus();
@@ -588,18 +615,25 @@ export function WorkItemViewsPanel({
 
   function handleViewListKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (isEditableTarget(event.target) || views.length === 0) return;
+    const columnCount = viewCardColumnCount(event.currentTarget);
     if (event.shiftKey && (event.key === "ArrowLeft" || event.key === "ArrowUp")) {
       event.preventDefault();
       moveSelectedView(-1);
     } else if (event.shiftKey && (event.key === "ArrowRight" || event.key === "ArrowDown")) {
       event.preventDefault();
       moveSelectedView(1);
-    } else if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+    } else if (event.key === "ArrowRight") {
       event.preventDefault();
       selectViewAt(selectedViewIndex + 1);
-    } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+    } else if (event.key === "ArrowLeft") {
       event.preventDefault();
       selectViewAt(selectedViewIndex - 1);
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      selectViewAt(selectedViewIndex + columnCount);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      selectViewAt(selectedViewIndex - columnCount);
     } else if (event.key === "Home") {
       event.preventDefault();
       selectViewAt(0);
@@ -855,7 +889,7 @@ export function WorkItemViewsPanel({
                     loadDraft(view);
                   }}
                   onDoubleClick={() => openEditDialog(view)}
-                  className={`min-h-[88px] rounded-md border p-3 text-left outline-none transition-colors focus:ring-2 focus:ring-ring ${
+                  className={`min-h-[88px] rounded-md border p-3 text-left outline-none transition-colors focus:ring-2 focus:ring-inset focus:ring-ring ${
                     selected
                       ? "border-primary bg-secondary"
                       : "border-border bg-white hover:bg-muted/60"

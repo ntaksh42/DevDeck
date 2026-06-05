@@ -1,10 +1,14 @@
-use azdo_client::{AdoClient, CommitSearchCriteria, GitCommitRef};
+use azdo_client::{AdoClient, CommitSearchCriteria, GitCommitRef, GitRepository, TeamProject};
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
+use tokio::task::JoinSet;
 
 use crate::db::{AppDatabase, CachedCommit, Organization};
 use crate::error::{AppError, Result};
 use crate::secrets::SecretStore;
+
+const COMMIT_SYNC_CONCURRENCY: usize = 4;
+type CommitSyncTaskResult = Result<Option<(String, Vec<CachedCommit>)>>;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -54,6 +58,7 @@ pub struct CommitSummary {
 #[derive(Debug, Clone)]
 pub struct CommitService {
     db: AppDatabase,
+    #[allow(dead_code)]
     secrets: SecretStore,
 }
 
@@ -188,15 +193,6 @@ fn normalize_optional(value: Option<String>) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-fn normalize_branch(value: Option<String>) -> Option<String> {
-    normalize_optional(value).map(|value| {
-        value
-            .strip_prefix("refs/heads/")
-            .unwrap_or(&value)
-            .to_string()
-    })
-}
-
 fn normalize_date(value: Option<&str>, end_of_day: bool) -> Result<Option<DateTime<Utc>>> {
     let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(None);
@@ -215,57 +211,6 @@ fn normalize_date(value: Option<&str>, end_of_day: bool) -> Result<Option<DateTi
     DateTime::parse_from_rfc3339(value)
         .map(|date| Some(date.with_timezone(&Utc)))
         .map_err(|_| AppError::InvalidInput(format!("invalid commit date: {value}")))
-}
-
-fn matches_optional_filter(value: &str, filter: Option<&str>) -> bool {
-    filter.is_none_or(|filter| filter == value)
-}
-
-fn summarize_commit(
-    organization: &Organization,
-    project_id: &str,
-    project_name: &str,
-    repository_id: &str,
-    repository_name: &str,
-    commit: GitCommitRef,
-) -> CommitSummary {
-    let author_name = commit
-        .author
-        .as_ref()
-        .and_then(|author| author.name.clone());
-    let author_email = commit
-        .author
-        .as_ref()
-        .and_then(|author| author.email.clone());
-    let author_date = commit
-        .author
-        .as_ref()
-        .and_then(|author| author.date.map(|date| date.to_rfc3339()));
-
-    let commit_id = commit.commit_id;
-    let web_url = commit.remote_url.or(commit.url).or_else(|| {
-        Some(commit_web_url(
-            organization,
-            project_name,
-            repository_name,
-            &commit_id,
-        ))
-    });
-
-    CommitSummary {
-        organization_id: organization.id.clone(),
-        project_id: project_id.to_string(),
-        project_name: project_name.to_string(),
-        repository_id: repository_id.to_string(),
-        repository_name: repository_name.to_string(),
-        short_commit_id: commit_id.chars().take(8).collect(),
-        commit_id,
-        comment: commit.comment.unwrap_or_else(|| "(no comment)".to_string()),
-        author_name,
-        author_email,
-        author_date,
-        web_url,
-    }
 }
 
 fn commit_web_url(
@@ -294,23 +239,6 @@ pub(crate) fn encode_path_segment(value: &str) -> String {
         }
     }
     encoded
-}
-
-fn matches_query(summary: &CommitSummary, query: &str) -> bool {
-    if query.is_empty() {
-        return true;
-    }
-
-    [
-        summary.comment.as_str(),
-        summary.project_name.as_str(),
-        summary.repository_name.as_str(),
-        summary.author_name.as_deref().unwrap_or_default(),
-        summary.author_email.as_deref().unwrap_or_default(),
-        summary.commit_id.as_str(),
-    ]
-    .iter()
-    .any(|value| value.to_ascii_lowercase().contains(query))
 }
 
 fn cached_commit_to_summary(c: CachedCommit) -> CommitSummary {
@@ -374,16 +302,31 @@ pub async fn sync_commits_for_org(
     client: &AdoClient,
     org: &Organization,
 ) -> Result<()> {
-    if let Err(e) = do_sync_commits(db, client, org).await {
-        tracing::error!(org = %org.name, error = %e, "commit sync failed");
-        return Err(e);
+    let scope = format!("commits:{}", org.id);
+    let error_count = db.get_sync_state(&scope)?.map_or(0, |s| s.error_count);
+
+    match do_sync_commits(db, client, org).await {
+        Ok(()) => {
+            let now = Utc::now().to_rfc3339();
+            db.update_sync_state(&scope, &org.id, Some(&now), 0, None)?;
+            Ok(())
+        }
+        Err(e) => {
+            if let Err(db_err) =
+                db.update_sync_state(&scope, &org.id, None, error_count + 1, Some(&e.to_string()))
+            {
+                tracing::warn!(error = ?db_err, "failed to persist sync error state");
+            }
+            tracing::error!(org = %org.name, error = %e, "commit sync failed");
+            Err(e)
+        }
     }
-    Ok(())
 }
 
 async fn do_sync_commits(db: &AppDatabase, client: &AdoClient, org: &Organization) -> Result<()> {
     let from_date = (Utc::now() - chrono::Duration::days(30)).to_rfc3339();
     let projects = client.list_projects().await?;
+    let mut tasks = JoinSet::new();
     for project in &projects {
         let repositories = match client.list_repositories(&project.id).await {
             Ok(repos) => repos,
@@ -398,46 +341,23 @@ async fn do_sync_commits(db: &AppDatabase, client: &AdoClient, org: &Organizatio
             }
         };
         for repository in repositories {
-            let commits = match client
-                .list_commits(
-                    &project.id,
-                    &repository.id,
-                    CommitSearchCriteria {
-                        author: None,
-                        branch: None,
-                        from_date: Some(from_date.clone()),
-                        to_date: None,
-                        top: Some(100),
-                    },
-                )
-                .await
-            {
-                Ok(c) => c,
-                Err(e) => {
-                    tracing::warn!(
-                        org = %org.name,
-                        project = %project.name,
-                        repository = %repository.name,
-                        error = %e,
-                        "failed to list commits, skipping repository"
-                    );
-                    continue;
+            while tasks.len() >= COMMIT_SYNC_CONCURRENCY {
+                if let Some((repository_id, cached)) = join_commit_task(&mut tasks).await? {
+                    db.replace_commits_for_repo(&org.id, &repository_id, &cached)?;
                 }
-            };
-            let cached: Vec<CachedCommit> = commits
-                .into_iter()
-                .map(|c| {
-                    commit_to_cached(
-                        org,
-                        &project.id,
-                        &project.name,
-                        &repository.id,
-                        &repository.name,
-                        c,
-                    )
-                })
-                .collect();
-            db.replace_commits_for_repo(&org.id, &repository.id, &cached)?;
+            }
+            tasks.spawn(fetch_commits_for_repo(
+                client.clone(),
+                org.clone(),
+                project.clone(),
+                repository,
+                from_date.clone(),
+            ));
+        }
+    }
+    while !tasks.is_empty() {
+        if let Some((repository_id, cached)) = join_commit_task(&mut tasks).await? {
+            db.replace_commits_for_repo(&org.id, &repository_id, &cached)?;
         }
     }
     db.purge_old_commits(&org.id, &from_date)?;
@@ -445,12 +365,67 @@ async fn do_sync_commits(db: &AppDatabase, client: &AdoClient, org: &Organizatio
     Ok(())
 }
 
+async fn join_commit_task(tasks: &mut JoinSet<CommitSyncTaskResult>) -> CommitSyncTaskResult {
+    tasks
+        .join_next()
+        .await
+        .expect("commit sync task set was unexpectedly empty")
+        .map_err(|e| AppError::AzureDevOps(format!("commit sync task failed: {e}")))?
+}
+
+async fn fetch_commits_for_repo(
+    client: AdoClient,
+    org: Organization,
+    project: TeamProject,
+    repository: GitRepository,
+    from_date: String,
+) -> Result<Option<(String, Vec<CachedCommit>)>> {
+    let repository_id = repository.id.clone();
+    let commits = match client
+        .list_commits(
+            &project.id,
+            &repository.id,
+            CommitSearchCriteria {
+                author: None,
+                branch: None,
+                from_date: Some(from_date),
+                to_date: None,
+                top: Some(100),
+            },
+        )
+        .await
+    {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(
+                org = %org.name,
+                project = %project.name,
+                repository = %repository.name,
+                error = %e,
+                "failed to list commits, skipping repository"
+            );
+            return Ok(None);
+        }
+    };
+    let cached: Vec<CachedCommit> = commits
+        .into_iter()
+        .map(|c| {
+            commit_to_cached(
+                &org,
+                &project.id,
+                &project.name,
+                &repository.id,
+                &repository.name,
+                c,
+            )
+        })
+        .collect();
+    Ok(Some((repository_id, cached)))
+}
+
 #[cfg(test)]
 mod tests {
-    use chrono::{TimeZone, Utc};
-
     use super::*;
-    use azdo_client::GitUserDate;
 
     #[test]
     fn normalize_optional_trims_empty_values() {
@@ -459,18 +434,6 @@ mod tests {
             Some("main".to_string())
         );
         assert_eq!(normalize_optional(Some(" ".to_string())), None);
-    }
-
-    #[test]
-    fn normalize_branch_strips_heads_prefix() {
-        assert_eq!(
-            normalize_branch(Some(" refs/heads/main ".to_string())),
-            Some("main".to_string())
-        );
-        assert_eq!(
-            normalize_branch(Some("release/1.0".to_string())),
-            Some("release/1.0".to_string())
-        );
     }
 
     #[test]
@@ -493,51 +456,11 @@ mod tests {
     }
 
     #[test]
-    fn summarize_commit_maps_author_and_short_id() {
-        let organization = Organization {
+    fn commit_web_url_encodes_spaces_and_trims_trailing_slash() {
+        let org = Organization {
             id: "contoso".to_string(),
             name: "contoso".to_string(),
-            display_name: Some("contoso".to_string()),
-            base_url: "https://dev.azure.com/contoso".to_string(),
-            auth_provider: "pat".to_string(),
-            credential_key: "azdodeck:org:contoso:pat".to_string(),
-            authenticated_user_id: None,
-            authenticated_user_display_name: None,
-            created_at: "2026-05-24T00:00:00Z".to_string(),
-            updated_at: "2026-05-24T00:00:00Z".to_string(),
-        };
-
-        let summary = summarize_commit(
-            &organization,
-            "project-1",
-            "Platform",
-            "repo-1",
-            "azdo-dashboard",
-            GitCommitRef {
-                commit_id: "abcdef123456".to_string(),
-                comment: Some("Add commits".to_string()),
-                author: Some(GitUserDate {
-                    name: Some("Test User".to_string()),
-                    email: Some("test@example.com".to_string()),
-                    date: Some(Utc.with_ymd_and_hms(2026, 5, 24, 0, 0, 0).unwrap()),
-                }),
-                committer: None,
-                remote_url: Some("https://example.test/commit".to_string()),
-                url: None,
-            },
-        );
-
-        assert_eq!(summary.short_commit_id, "abcdef12");
-        assert_eq!(summary.author_name.as_deref(), Some("Test User"));
-        assert!(matches_query(&summary, "commits"));
-    }
-
-    #[test]
-    fn summarize_commit_generates_web_url_when_api_url_is_missing() {
-        let organization = Organization {
-            id: "contoso".to_string(),
-            name: "contoso".to_string(),
-            display_name: Some("contoso".to_string()),
+            display_name: None,
             base_url: "https://dev.azure.com/contoso/".to_string(),
             auth_provider: "pat".to_string(),
             credential_key: "azdodeck:org:contoso:pat".to_string(),
@@ -546,26 +469,9 @@ mod tests {
             created_at: "2026-05-24T00:00:00Z".to_string(),
             updated_at: "2026-05-24T00:00:00Z".to_string(),
         };
-
-        let summary = summarize_commit(
-            &organization,
-            "project-1",
-            "Platform Team",
-            "repo-1",
-            "azdo dashboard",
-            GitCommitRef {
-                commit_id: "abcdef123456".to_string(),
-                comment: None,
-                author: None,
-                committer: None,
-                remote_url: None,
-                url: None,
-            },
-        );
-
         assert_eq!(
-            summary.web_url.as_deref(),
-            Some("https://dev.azure.com/contoso/Platform%20Team/_git/azdo%20dashboard/commit/abcdef123456")
+            commit_web_url(&org, "Platform Team", "azdo dashboard", "abcdef123456"),
+            "https://dev.azure.com/contoso/Platform%20Team/_git/azdo%20dashboard/commit/abcdef123456"
         );
     }
 }

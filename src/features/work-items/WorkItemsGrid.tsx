@@ -1603,6 +1603,11 @@ function BulkActionBar({
   priorityPending: boolean;
   onPrioritySelect: (priority: number) => void;
 }) {
+  const stateListRef = useRef<HTMLDivElement>(null);
+  const priorityListRef = useRef<HTMLDivElement>(null);
+  const assignInputRef = useRef<HTMLInputElement>(null);
+  const assignListRef = useRef<HTMLDivElement>(null);
+
   return (
     <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-1.5">
       <span className="text-xs font-medium text-foreground">
@@ -1622,7 +1627,7 @@ function BulkActionBar({
             <ChevronDown className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
           </button>
           {stateOpen ? (
-            <div className="absolute left-0 top-full z-30 mt-1 min-w-[130px] rounded-md border border-border bg-white py-1 shadow-lg">
+            <div ref={stateListRef} className="absolute left-0 top-full z-30 mt-1 min-w-[130px] rounded-md border border-border bg-white py-1 shadow-lg">
               {stateLoading ? (
                 <div className="flex items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground">
                   <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> Loading…
@@ -1634,7 +1639,17 @@ function BulkActionBar({
                     type="button"
                     autoFocus={index === 0}
                     onClick={() => { onStateSelect(s); onStateOpenChange(false); }}
-                    onKeyDown={(e) => { if (e.key === "Escape") onStateOpenChange(false); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") onStateOpenChange(false);
+                      else if (e.key === "Enter") { e.stopPropagation(); }
+                      else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                        e.preventDefault();
+                        const buttons = Array.from(stateListRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? []);
+                        const i = buttons.indexOf(e.currentTarget);
+                        if (e.key === "ArrowDown") buttons[i + 1]?.focus();
+                        else if (i > 0) buttons[i - 1].focus();
+                      }
+                    }}
                     className="flex w-full items-center px-3 py-1.5 text-left text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
                   >
                     {s}
@@ -1659,14 +1674,21 @@ function BulkActionBar({
           {assignOpen ? (
             <div className="absolute left-0 top-full z-30 mt-1 w-56 rounded-md border border-border bg-white p-1 shadow-lg">
               <input
+                ref={assignInputRef}
                 autoFocus
                 value={assignQuery}
                 onChange={(e) => onAssignQueryChange(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Escape") onAssignOpenChange(false); }}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") onAssignOpenChange(false);
+                  else if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    assignListRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+                  }
+                }}
                 placeholder="Search assignee..."
                 className="mb-1 h-7 w-full rounded border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
               />
-              <div className="max-h-44 overflow-auto">
+              <div ref={assignListRef} className="max-h-44 overflow-auto">
                 {assignLoading ? (
                   <div className="px-2 py-1.5 text-xs text-muted-foreground">Searching…</div>
                 ) : assignOptions.length > 0 ? (
@@ -1675,6 +1697,18 @@ function BulkActionBar({
                       key={c.id}
                       type="button"
                       onClick={() => onAssignSelect(c)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") onAssignOpenChange(false);
+                        else if (e.key === "Enter") { e.stopPropagation(); }
+                        else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                          e.preventDefault();
+                          const buttons = Array.from(assignListRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? []);
+                          const i = buttons.indexOf(e.currentTarget);
+                          if (e.key === "ArrowDown") buttons[i + 1]?.focus();
+                          else if (i > 0) buttons[i - 1].focus();
+                          else assignInputRef.current?.focus();
+                        }
+                      }}
                       className="flex w-full min-w-0 flex-col rounded px-2 py-1 text-left text-xs hover:bg-secondary"
                     >
                       <span className="truncate font-medium">{c.displayName}</span>
@@ -1704,7 +1738,7 @@ function BulkActionBar({
             <ChevronDown className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
           </button>
           {priorityOpen ? (
-            <div className="absolute left-0 top-full z-30 mt-1 min-w-[96px] rounded-md border border-border bg-white py-1 shadow-lg">
+            <div ref={priorityListRef} className="absolute left-0 top-full z-30 mt-1 min-w-[96px] rounded-md border border-border bg-white py-1 shadow-lg">
               {[1, 2, 3, 4].map((priority, index) => (
                 <button
                   key={priority}
@@ -1716,6 +1750,14 @@ function BulkActionBar({
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Escape") onPriorityOpenChange(false);
+                    else if (e.key === "Enter") { e.stopPropagation(); }
+                    else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                      e.preventDefault();
+                      const buttons = Array.from(priorityListRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? []);
+                      const i = buttons.indexOf(e.currentTarget);
+                      if (e.key === "ArrowDown") buttons[i + 1]?.focus();
+                      else if (i > 0) buttons[i - 1].focus();
+                    }
                   }}
                   className="flex w-full items-center px-3 py-1.5 text-left text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
                 >

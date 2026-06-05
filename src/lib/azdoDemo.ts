@@ -27,6 +27,7 @@ import type {
   SetWorkItemPriorityInput,
   SetWorkItemsPriorityInput,
   SetWorkItemsStateInput,
+  SyncState,
   SetWorkItemStateInput,
   UpdateAppSettingsInput,
   WorkItemComment,
@@ -69,6 +70,22 @@ let demoSettings: AppSettings = {
   notifyWorkItemStateChanges: true,
 };
 const deletedDemoWorkItemComments = new Set<number>();
+let demoSyncStates: SyncState[] = [
+  {
+    scope: "prs:contoso",
+    orgId: "contoso",
+    lastSyncedAt: "2026-05-27T08:00:00Z",
+    errorCount: 0,
+    lastError: null,
+  },
+  {
+    scope: "work_items:contoso",
+    orgId: "contoso",
+    lastSyncedAt: "2026-05-27T08:00:00Z",
+    errorCount: 0,
+    lastError: null,
+  },
+];
 const writeCommands = new Set([
   "add_work_item_comment",
   "delete_work_item_comment",
@@ -261,6 +278,8 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     }
     case "list_commit_repositories":
       return demoCommitRepositories();
+    case "list_sync_states":
+      return demoSyncStates;
     case "get_saved_query": {
       const input = (args as { input?: GetSavedQueryInput } | undefined)?.input;
       const queryId = input?.queryId ?? "";
@@ -275,6 +294,12 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     }
     case "delete_organization":
     case "trigger_sync":
+      demoSyncStates = demoSyncStates.map((state) => ({
+        ...state,
+        lastSyncedAt: new Date().toISOString(),
+        errorCount: 0,
+        lastError: null,
+      }));
       return null;
     default:
       throw new Error(`Unsupported demo command: ${command}`);
@@ -1192,5 +1217,4 @@ function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
     return true;
   });
 }
-
 

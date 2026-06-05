@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ExternalLink, Loader2, Send, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { Loader2, Send, SlidersHorizontal, Trash2 } from 'lucide-react';
 import {
   addWorkItemComment,
   assignWorkItem,
@@ -699,7 +699,7 @@ export function WorkItemPreviewPanel({
 
   return (
     <aside
-      className="flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-white shadow-sm"
+      className="flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-white shadow-sm focus-within:ring-2 focus-within:ring-ring"
       onKeyDown={handlePreviewPanelKeyDown}
     >
       {!selectedItem ? (
@@ -825,7 +825,7 @@ export function WorkItemPreviewPanel({
                   />
                 }
               />
-              <div className="border-t border-border bg-slate-50/70 p-2">
+              <div className="bg-slate-50/70 p-2">
                 <form className="space-y-1" onSubmit={submitComment}>
                   <div ref={mentionPickerRef} className="relative">
                     <textarea
@@ -1001,33 +1001,18 @@ function WorkItemPreviewDetails({
     <div
       aria-keyshortcuts="Alt+P"
       aria-label="Work item preview"
-      className="min-h-0 flex-1 overflow-auto bg-white px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-inset focus:ring-ring"
+      className="min-h-0 flex-1 overflow-auto bg-white px-2 py-1.5 text-xs outline-none"
       data-primary-preview="true"
       onKeyDown={stopPreviewNavigationKeyDown}
       tabIndex={-1}
     >
       <div className="border-b border-border pb-1">
-        <h2 className="mb-1 truncate text-sm font-semibold leading-5 text-foreground">
-          {preview.title}
-        </h2>
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[10px] font-semibold uppercase leading-4 text-muted-foreground">
-            Fields
-          </span>
+          <h2 className="flex min-w-0 items-baseline gap-1.5 text-sm font-semibold leading-5">
+            <span className="shrink-0 text-[11px] font-normal text-muted-foreground">#{preview.id}</span>
+            <span className="truncate text-foreground">{preview.title}</span>
+          </h2>
           <div className="flex shrink-0 items-center gap-1">
-            <ShortcutHint>Alt+P</ShortcutHint>
-            {preview.webUrl ? (
-              <a
-                href={preview.webUrl}
-                target="_blank"
-                rel="noreferrer"
-                aria-label="Open in Azure DevOps"
-                title="Open in Azure DevOps"
-                className="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground"
-              >
-                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-              </a>
-            ) : null}
             <div ref={fieldMenuRef} className="relative">
               <button
                 type="button"
@@ -1035,10 +1020,9 @@ function WorkItemPreviewDetails({
                 aria-label="Configure preview fields"
                 title="Configure preview fields"
                 onClick={() => setFieldMenuOpen((open) => !open)}
-                className="inline-flex h-5 items-center gap-1 rounded border border-border bg-white px-1.5 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+                className="inline-flex h-5 w-5 items-center justify-center rounded border border-border bg-white text-muted-foreground hover:bg-secondary hover:text-foreground"
               >
                 <SlidersHorizontal className="h-3 w-3" aria-hidden="true" />
-                Fields
               </button>
               {fieldMenuOpen ? (
                 <div className="absolute right-0 top-full z-30 mt-1 w-56 rounded-md border border-border bg-white p-1 shadow-lg">
@@ -1087,7 +1071,7 @@ function WorkItemPreviewDetails({
             </div>
           </div>
         </div>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-x-2 gap-y-0.5 pt-0.5">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(110px,1fr))] gap-x-1.5 gap-y-0 pt-0.5">
           {selectedFieldDefinitions.map((field) =>
             field.editable === "state" ? (
               <PreviewControl key={field.key} label={field.label} shortcut={field.shortcut}>
@@ -1110,6 +1094,7 @@ function WorkItemPreviewDetails({
                 key={field.key}
                 label={field.label}
                 value={previewFieldValue(preview, field.key) ?? "—"}
+                wide={isWidePreviewField(field.key)}
               />
             ),
           )}
@@ -1221,7 +1206,7 @@ function CollapsibleComment({
   const collapsible = commentHtml.length >= 700;
 
   return (
-    <article className="min-w-0 overflow-hidden rounded-md border border-border bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+    <article className="group min-w-0 overflow-hidden rounded-md border border-border bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
       <div className="flex min-w-0 items-center gap-1.5 border-b border-border bg-slate-50 px-2 py-1">
         <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[10px] font-semibold text-blue-700">
           {commentAuthorInitials(createdBy)}
@@ -1238,7 +1223,7 @@ function CollapsibleComment({
         <button
           type="button"
           aria-label={`Delete comment ${id}`}
-          className="ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-transparent text-muted-foreground hover:border-border hover:bg-white hover:text-destructive disabled:cursor-not-allowed disabled:opacity-60"
+          className={`ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-transparent text-muted-foreground transition-opacity hover:border-border hover:bg-white hover:text-destructive disabled:cursor-not-allowed ${deleting ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"}`}
           disabled={deletePending}
           title="Delete comment"
           onClick={() => onDelete(id)}
@@ -1280,6 +1265,10 @@ function CollapsibleComment({
 function selectedPreviewFieldDefinitions(keys: PreviewFieldKey[]): PreviewFieldDefinition[] {
   const selected = new Set(keys);
   return PREVIEW_FIELD_DEFINITIONS.filter((field) => selected.has(field.key));
+}
+
+function isWidePreviewField(key: PreviewFieldKey): boolean {
+  return key === "areaPath" || key === "iterationPath" || key === "tags";
 }
 
 function previewFieldValue(preview: WorkItemPreview, key: PreviewFieldKey): string | null {
@@ -1327,21 +1316,38 @@ function PreviewControl({
   shortcut?: string;
 }) {
   return (
-    <div className="grid min-w-0 grid-cols-[52px_minmax(0,1fr)_auto] items-center gap-1">
-      <span className="truncate text-[10px] font-semibold uppercase leading-4 text-muted-foreground">
+    <div className="flex min-w-0 items-center gap-1.5">
+      <span className="shrink-0 text-[10px] font-semibold uppercase leading-4 text-muted-foreground">
         {label}
       </span>
-      <div className="flex min-w-0 items-center leading-4">{children}</div>
+      <div className="flex min-w-0 flex-1 items-center leading-4">{children}</div>
       {shortcut ? <ShortcutHint>{shortcut}</ShortcutHint> : null}
     </div>
   );
 }
 
-function PreviewField({ label, value }: { label: string; value: string }) {
+function PreviewField({
+  label,
+  value,
+  wide = false,
+}: {
+  label: string;
+  value: string;
+  wide?: boolean;
+}) {
   return (
-    <div className="grid min-w-0 grid-cols-[44px_minmax(0,1fr)] items-baseline gap-1">
-      <dt className="truncate text-[10px] leading-4 text-muted-foreground">{label}</dt>
-      <dd className="truncate text-[12px] font-semibold leading-4 text-foreground" title={value}>
+    <div
+      className={`flex min-w-0 items-baseline gap-1.5 ${
+        wide ? "sm:col-span-2 2xl:col-span-3" : ""
+      }`}
+    >
+      <dt className="shrink-0 text-[10px] leading-4 text-muted-foreground">{label}</dt>
+      <dd
+        className={`min-w-0 flex-1 text-[12px] font-semibold leading-4 text-foreground ${
+          wide ? "break-words" : "truncate"
+        }`}
+        title={value}
+      >
         {value}
       </dd>
     </div>
@@ -1359,11 +1365,10 @@ function PreviewSection({
 }) {
   return (
     <section className={`min-w-0 ${className}`}>
-      <div className="mb-1 flex items-center gap-2">
-        <h3 className="text-[10px] font-semibold uppercase leading-3 tracking-normal text-muted-foreground">
+      <div className="mb-1 border-t border-border pt-1">
+        <h3 className="text-[11px] font-semibold leading-4 text-foreground/75">
           {title}
         </h3>
-        <div className="h-px min-w-0 flex-1 bg-border" />
       </div>
       {children}
     </section>
@@ -1903,10 +1908,18 @@ function StatePicker({
   const pickerRef = useCloseOnOutsidePointer<HTMLDivElement>(open, () =>
     onOpenChange(false),
   );
+  const listRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const wasOpenRef = useRef(false);
+  useEffect(() => {
+    if (wasOpenRef.current && !open) triggerRef.current?.focus();
+    wasOpenRef.current = open;
+  }, [open]);
 
   return (
     <div ref={pickerRef} className="relative min-w-0">
       <button
+        ref={triggerRef}
         type="button"
         aria-label="Change state"
         aria-keyshortcuts={shortcut}
@@ -1921,7 +1934,7 @@ function StatePicker({
         <p className="mt-0.5 text-[10px] text-destructive">{error}</p>
       )}
       {open ? (
-        <div className="absolute left-0 top-full z-30 mt-1 min-w-[120px] rounded-md border border-border bg-white py-1 shadow-lg">
+        <div ref={listRef} className="absolute left-0 top-full z-30 mt-1 min-w-[120px] rounded-md border border-border bg-white py-1 shadow-lg">
           {loading ? (
             <div className="flex items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground">
               <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
@@ -1938,6 +1951,14 @@ function StatePicker({
                 onClick={() => onSelect(state)}
                 onKeyDown={(e) => {
                   if (e.key === "Escape") { e.preventDefault(); onOpenChange(false); }
+                  else if (e.key === "Enter") { e.stopPropagation(); }
+                  else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                    e.preventDefault();
+                    const buttons = Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? []);
+                    const i = buttons.indexOf(e.currentTarget);
+                    if (e.key === "ArrowDown") buttons[i + 1]?.focus();
+                    else if (i > 0) buttons[i - 1].focus();
+                  }
                 }}
                 className={`flex w-full items-center gap-1.5 px-3 py-1 text-left text-xs ${
                   state === current
@@ -1978,11 +1999,19 @@ function PriorityPicker({
   const pickerRef = useCloseOnOutsidePointer<HTMLDivElement>(open, () =>
     onOpenChange(false),
   );
+  const listRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const wasOpenRef = useRef(false);
+  useEffect(() => {
+    if (wasOpenRef.current && !open) triggerRef.current?.focus();
+    wasOpenRef.current = open;
+  }, [open]);
   const options = [1, 2, 3, 4];
 
   return (
     <div ref={pickerRef} className="relative min-w-0">
       <button
+        ref={triggerRef}
         type="button"
         aria-label="Change priority"
         aria-keyshortcuts={shortcut}
@@ -1997,7 +2026,7 @@ function PriorityPicker({
         <p className="mt-0.5 text-[10px] text-destructive">{error}</p>
       )}
       {open ? (
-        <div className="absolute left-0 top-full z-30 mt-1 min-w-[96px] rounded-md border border-border bg-white py-1 shadow-lg">
+        <div ref={listRef} className="absolute left-0 top-full z-30 mt-1 min-w-[96px] rounded-md border border-border bg-white py-1 shadow-lg">
           {options.map((priority, index) => {
             const value = String(priority);
             return (
@@ -2006,10 +2035,15 @@ function PriorityPicker({
                 type="button"
                 autoFocus={index === 0}
                 onClick={() => onSelect(priority)}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") {
-                    event.preventDefault();
-                    onOpenChange(false);
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") { e.preventDefault(); onOpenChange(false); }
+                  else if (e.key === "Enter") { e.stopPropagation(); }
+                  else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                    e.preventDefault();
+                    const buttons = Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? []);
+                    const i = buttons.indexOf(e.currentTarget);
+                    if (e.key === "ArrowDown") buttons[i + 1]?.focus();
+                    else if (i > 0) buttons[i - 1].focus();
                   }
                 }}
                 className={`flex w-full items-center gap-1.5 px-3 py-1 text-left text-xs ${
@@ -2061,10 +2095,19 @@ function AssigneePicker({
   const pickerRef = useCloseOnOutsidePointer<HTMLDivElement>(open, () =>
     onOpenChange(false),
   );
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const wasOpenRef = useRef(false);
+  useEffect(() => {
+    if (wasOpenRef.current && !open) triggerRef.current?.focus();
+    wasOpenRef.current = open;
+  }, [open]);
 
   return (
     <div ref={pickerRef} className="relative min-w-0">
       <button
+        ref={triggerRef}
         type="button"
         aria-label="Change assignee"
         aria-keyshortcuts={shortcut}
@@ -2081,6 +2124,7 @@ function AssigneePicker({
       {open ? (
         <div className="absolute left-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-white p-1 shadow-lg">
           <input
+            ref={inputRef}
             autoFocus
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
@@ -2088,12 +2132,15 @@ function AssigneePicker({
               if (event.key === "Escape") {
                 event.preventDefault();
                 onOpenChange(false);
+              } else if (event.key === "ArrowDown") {
+                event.preventDefault();
+                listRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
               }
             }}
             placeholder="Search assignee..."
             className="mb-1 h-7 w-full rounded border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
           />
-          <div className="max-h-44 overflow-auto">
+          <div ref={listRef} className="max-h-44 overflow-auto">
             {error && query.trim() ? (
               <div className="mb-1 rounded border border-destructive/30 bg-destructive/5 px-2 py-1 text-[11px] text-destructive">
                 Search failed: {error}
@@ -2107,6 +2154,18 @@ function AssigneePicker({
                   key={candidate.id}
                   type="button"
                   onClick={() => onSelect(candidate)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") { e.preventDefault(); onOpenChange(false); }
+                    else if (e.key === "Enter") { e.stopPropagation(); }
+                    else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                      e.preventDefault();
+                      const buttons = Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? []);
+                      const i = buttons.indexOf(e.currentTarget);
+                      if (e.key === "ArrowDown") buttons[i + 1]?.focus();
+                      else if (i > 0) buttons[i - 1].focus();
+                      else inputRef.current?.focus();
+                    }
+                  }}
                   className="flex w-full min-w-0 flex-col rounded px-2 py-1 text-left text-xs hover:bg-secondary"
                 >
                   <span className="truncate font-medium">{candidate.displayName}</span>

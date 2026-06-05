@@ -47,10 +47,6 @@ impl SettingsService {
         self.db.get_app_settings()
     }
 
-    pub fn update(&self, input: UpdateAppSettingsInput) -> Result<AppSettings> {
-        self.update_normalized(normalize_app_settings(input))
-    }
-
     pub fn update_normalized(&self, settings: AppSettings) -> Result<AppSettings> {
         self.db.update_app_settings(settings)
     }

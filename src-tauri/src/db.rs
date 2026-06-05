@@ -139,7 +139,8 @@ pub struct CachedRepository {
     pub repository_name: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct SyncState {
     pub scope: String,
     pub org_id: String,
@@ -211,14 +212,6 @@ impl AppDatabase {
     }
 
     // ── Pull requests cache ───────────────────────────────────────────────────
-
-    pub fn upsert_pull_requests(&self, prs: &[CachedPr]) -> Result<()> {
-        if prs.is_empty() {
-            return Ok(());
-        }
-        let conn = self.open()?;
-        upsert_pull_requests(&conn, prs)
-    }
 
     pub fn search_pull_requests(
         &self,
@@ -373,12 +366,6 @@ impl AppDatabase {
         list_commit_repositories(&conn, org_id)
     }
 
-    pub fn clear_commits(&self, org_id: &str) -> Result<()> {
-        let conn = self.open()?;
-        conn.execute("DELETE FROM commits WHERE org_id = ?1", [org_id])?;
-        Ok(())
-    }
-
     pub fn replace_commits_for_repo(
         &self,
         org_id: &str,
@@ -418,17 +405,15 @@ impl AppDatabase {
             .optional()?)
     }
 
-    pub fn list_sync_states(&self, org_id: &str) -> Result<Vec<SyncState>> {
+    pub fn list_sync_states(&self) -> Result<Vec<SyncState>> {
         let conn = self.open()?;
         let mut stmt = conn.prepare(
-            "SELECT scope, org_id, last_synced_at, error_count, last_error FROM sync_state WHERE org_id = ?1",
+            "SELECT scope, org_id, last_synced_at, error_count, last_error FROM sync_state \
+             ORDER BY org_id, scope",
         )?;
-        let rows = stmt.query_map([org_id], map_sync_state)?;
-        let mut result = Vec::new();
-        for row in rows {
-            result.push(row?);
-        }
-        Ok(result)
+        let rows = stmt.query_map([], map_sync_state)?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Into::into)
     }
 
     pub fn update_sync_state(
@@ -1751,7 +1736,7 @@ mod tests {
     }
 
     #[test]
-    fn pull_requests_upsert_and_search() {
+    fn pull_requests_search() {
         let tf = NamedTempFile::new().unwrap();
         let db = AppDatabase::new(tf.path().to_path_buf());
         db.initialize().unwrap();
@@ -1772,7 +1757,7 @@ mod tests {
             target_ref_name: "refs/heads/main".to_string(),
             web_url: None,
         };
-        db.upsert_pull_requests(&[pr]).unwrap();
+        db.replace_pull_requests("org1", &[pr]).unwrap();
 
         let results = db
             .search_pull_requests("org1", None, None, Some("active"))

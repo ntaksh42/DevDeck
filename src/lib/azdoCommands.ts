@@ -208,6 +208,29 @@ const commitRepositoryOptionsSchema = z.array(commitRepositoryOptionSchema);
 
 export type CommitRepositoryOption = z.infer<typeof commitRepositoryOptionSchema>;
 
+const syncScopeSchema = z.enum(["all", "hot", "myReviews", "myWorkItems", "commits"]);
+
+export type SyncScope = z.infer<typeof syncScopeSchema>;
+
+const syncStateSchema = z.object({
+  scope: z.string(),
+  orgId: z.string(),
+  lastSyncedAt: z.string().nullable(),
+  errorCount: z.number(),
+  lastError: z.string().nullable(),
+});
+
+const syncStatesSchema = z.array(syncStateSchema);
+
+export type SyncState = z.infer<typeof syncStateSchema>;
+
+export const syncUpdatedEventSchema = z.object({
+  orgId: z.string(),
+  scopes: z.array(syncScopeSchema),
+});
+
+export type SyncUpdatedEvent = z.infer<typeof syncUpdatedEventSchema>;
+
 export type AddPatOrganizationInput = {
   organization: string;
   pat: string;
@@ -392,6 +415,10 @@ export type GetSavedQueryInput = {
 
 export type ListCommitRepositoriesInput = {
   organizationId?: string;
+};
+
+export type TriggerSyncInput = {
+  scope?: SyncScope;
 };
 
 export async function listOrganizations(): Promise<Organization[]> {
@@ -609,8 +636,13 @@ export async function listCommitRepositories(
   return commitRepositoryOptionsSchema.parse(result);
 }
 
-export async function triggerSync(): Promise<void> {
-  await invokeCommand("trigger_sync");
+export async function listSyncStates(): Promise<SyncState[]> {
+  const result = await invokeCommand("list_sync_states");
+  return syncStatesSchema.parse(result);
+}
+
+export async function triggerSync(input: TriggerSyncInput = {}): Promise<void> {
+  await invokeCommand("trigger_sync", { input });
 }
 
 async function invokeCommand(command: string, args?: unknown): Promise<unknown> {

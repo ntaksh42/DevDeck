@@ -5,7 +5,7 @@ import type {
   WorkItemSummary,
 } from "@/lib/azdoCommands";
 
-export const DEMO_SCENARIO_STORAGE_KEY = "azdodeck:demo:scenario";
+const DEMO_SCENARIO_STORAGE_KEY = "azdodeck:demo:scenario";
 
 type DemoScenario =
   | "default"

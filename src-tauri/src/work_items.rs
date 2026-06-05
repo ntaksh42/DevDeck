@@ -1505,42 +1505,6 @@ fn normalize_optional_filter(value: Option<String>) -> Option<String> {
         .filter(|value| !value.is_empty() && value != "all")
 }
 
-fn matches_optional_filter(value: &str, filter: Option<&str>) -> bool {
-    filter.is_none_or(|filter| filter == value)
-}
-
-fn build_wiql(query: &str, state: Option<&str>, work_item_type: Option<&str>) -> String {
-    let mut clauses = Vec::from(["[System.TeamProject] = @project".to_string()]);
-    let query = query.trim();
-    if !query.is_empty() {
-        clauses.push(format!(
-            "[System.Title] CONTAINS '{}'",
-            escape_wiql_string(query)
-        ));
-    }
-    if let Some(state) = state {
-        clauses.push(format!(
-            "[System.State] = '{}'",
-            escape_wiql_string(state.trim())
-        ));
-    }
-    if let Some(work_item_type) = work_item_type {
-        clauses.push(format!(
-            "[System.WorkItemType] = '{}'",
-            escape_wiql_string(work_item_type.trim())
-        ));
-    }
-
-    format!(
-        "SELECT [System.Id] FROM WorkItems WHERE {} ORDER BY [System.ChangedDate] DESC",
-        clauses.join(" AND ")
-    )
-}
-
-fn escape_wiql_string(value: &str) -> String {
-    value.replace('\'', "''")
-}
-
 fn summarize_work_item(
     organization: &Organization,
     project_id: &str,
@@ -1795,85 +1759,90 @@ async fn do_sync_work_items(
     let mut my_cached: Vec<CachedWorkItem> = Vec::new();
 
     for project in &projects {
-        let ids = match client.query_work_item_ids(&project.id, SYNC_WI_WIQL).await {
-            Ok(ids) => ids,
-            Err(e) if is_ado_not_found(&e) => {
-                tracing::warn!(
-                    org = %org.name,
-                    project = %project.name,
-                    error = %e,
-                    "work item query returned 404, skipping project"
-                );
-                continue;
-            }
-            Err(e) => return Err(e.into()),
-        };
-        let ids: Vec<i64> = ids.into_iter().take(200).collect();
-        if !ids.is_empty() {
-            let work_items = match client
-                .get_work_items_batch(&project.id, ids, fields.clone())
-                .await
-            {
-                Ok(work_items) => work_items,
-                Err(e) if is_ado_not_found(&e) => {
-                    tracing::warn!(
-                        org = %org.name,
-                        project = %project.name,
-                        error = %e,
-                        "work item batch returned 404, skipping project"
-                    );
-                    continue;
-                }
-                Err(e) => return Err(e.into()),
-            };
-            for wi in work_items {
-                all_cached.push(work_item_to_cached(org, &project.id, &project.name, &wi));
-            }
-        }
+        let (project_all_cached, project_my_cached) = tokio::try_join!(
+            fetch_sync_work_items(
+                client,
+                org,
+                &project.id,
+                &project.name,
+                SYNC_WI_WIQL,
+                fields.clone(),
+                "work item",
+            ),
+            fetch_sync_work_items(
+                client,
+                org,
+                &project.id,
+                &project.name,
+                SYNC_MY_WI_WIQL,
+                fields.clone(),
+                "my work item",
+            ),
+        )?;
 
-        let my_ids = match client
-            .query_work_item_ids(&project.id, SYNC_MY_WI_WIQL)
-            .await
-        {
-            Ok(ids) => ids,
-            Err(e) if is_ado_not_found(&e) => {
-                tracing::warn!(
-                    org = %org.name,
-                    project = %project.name,
-                    error = %e,
-                    "my work item query returned 404, skipping project"
-                );
-                continue;
-            }
-            Err(e) => return Err(e.into()),
+        let Some(project_all_cached) = project_all_cached else {
+            continue;
         };
-        let my_ids: Vec<i64> = my_ids.into_iter().take(200).collect();
-        if !my_ids.is_empty() {
-            let work_items = match client
-                .get_work_items_batch(&project.id, my_ids, fields.clone())
-                .await
-            {
-                Ok(work_items) => work_items,
-                Err(e) if is_ado_not_found(&e) => {
-                    tracing::warn!(
-                        org = %org.name,
-                        project = %project.name,
-                        error = %e,
-                        "my work item batch returned 404, skipping project"
-                    );
-                    continue;
-                }
-                Err(e) => return Err(e.into()),
-            };
-            for wi in work_items {
-                my_cached.push(work_item_to_cached(org, &project.id, &project.name, &wi));
-            }
+        all_cached.extend(project_all_cached);
+        if let Some(project_my_cached) = project_my_cached {
+            my_cached.extend(project_my_cached);
         }
     }
 
     db.replace_work_items(&org.id, &all_cached, &my_cached)?;
 
     Ok(())
+}
+
+async fn fetch_sync_work_items(
+    client: &AdoClient,
+    org: &Organization,
+    project_id: &str,
+    project_name: &str,
+    wiql: &str,
+    fields: Vec<String>,
+    label: &str,
+) -> Result<Option<Vec<CachedWorkItem>>> {
+    let ids = match client.query_work_item_ids(project_id, wiql).await {
+        Ok(ids) => ids,
+        Err(e) if is_ado_not_found(&e) => {
+            tracing::warn!(
+                org = %org.name,
+                project = %project_name,
+                error = %e,
+                "{} query returned 404, skipping project",
+                label
+            );
+            return Ok(None);
+        }
+        Err(e) => return Err(e.into()),
+    };
+    let ids: Vec<i64> = ids.into_iter().take(200).collect();
+    if ids.is_empty() {
+        return Ok(Some(Vec::new()));
+    }
+
+    let work_items = match client.get_work_items_batch(project_id, ids, fields).await {
+        Ok(work_items) => work_items,
+        Err(e) if is_ado_not_found(&e) => {
+            tracing::warn!(
+                org = %org.name,
+                project = %project_name,
+                error = %e,
+                "{} batch returned 404, skipping project",
+                label
+            );
+            return Ok(None);
+        }
+        Err(e) => return Err(e.into()),
+    };
+
+    Ok(Some(
+        work_items
+            .into_iter()
+            .map(|wi| work_item_to_cached(org, project_id, project_name, &wi))
+            .collect(),
+    ))
 }
 
 fn is_ado_not_found(error: &AdoError) -> bool {
@@ -1929,22 +1898,6 @@ mod tests {
             authenticated_user_id: None,
             authenticated_user_display_name: None,
         }
-    }
-
-    #[test]
-    fn matches_optional_filter_allows_none_and_matching_value() {
-        assert!(matches_optional_filter("platform", None));
-        assert!(matches_optional_filter("platform", Some("platform")));
-        assert!(!matches_optional_filter("platform", Some("mobile")));
-    }
-
-    #[test]
-    fn build_wiql_escapes_filters() {
-        let wiql = build_wiql("can't save", Some("Active"), Some("Bug"));
-
-        assert!(wiql.contains("[System.Title] CONTAINS 'can''t save'"));
-        assert!(wiql.contains("[System.State] = 'Active'"));
-        assert!(wiql.contains("[System.WorkItemType] = 'Bug'"));
     }
 
     #[test]

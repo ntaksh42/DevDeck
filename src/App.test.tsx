@@ -14,6 +14,7 @@ import App from "./App";
 const invokeMock = vi.fn();
 const openUrlMock = vi.fn();
 const writeClipboardTextMock = vi.fn();
+const tauriEventHandlers = new Map<string, (event: { payload: unknown }) => void>();
 
 const organization = {
   id: "contoso",
@@ -33,7 +34,12 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({
-  listen: () => Promise.resolve(() => {}),
+  listen: (eventName: string, handler: (event: { payload: unknown }) => void) => {
+    tauriEventHandlers.set(eventName, handler);
+    return Promise.resolve(() => {
+      tauriEventHandlers.delete(eventName);
+    });
+  },
 }));
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
@@ -73,6 +79,12 @@ describe("App", () => {
       }
       if (command === "get_review_result_preview") {
         return Promise.resolve(null);
+      }
+      if (command === "list_sync_states") {
+        return Promise.resolve([]);
+      }
+      if (command === "trigger_sync") {
+        return Promise.resolve(undefined);
       }
       return Promise.reject(new Error(`Unhandled command: ${command}`));
     });
@@ -177,6 +189,183 @@ describe("App", () => {
         ([command]) => command === "list_my_review_pull_requests",
       ).length;
       expect(reviewCallsAfterSync).toBeGreaterThan(reviewCallsBeforeSync);
+    });
+  });
+
+  it("starts a hot sync after organizations load", async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve({ reviewResultFolderPath: null });
+      }
+      if (command === "get_review_result_preview") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_sync_states") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
+      if (command === "trigger_sync") {
+        return Promise.resolve(undefined);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+
+    await screen.findByText("No pull requests assigned to you.");
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("trigger_sync", {
+        input: { scope: "hot" },
+      });
+    });
+  });
+
+  it("runs hot sync on window focus only after the cooldown", async () => {
+    const nowSpy = vi.spyOn(Date, "now");
+    nowSpy.mockReturnValue(1_000);
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve({ reviewResultFolderPath: null });
+      }
+      if (command === "get_review_result_preview") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_sync_states") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
+      if (command === "trigger_sync") {
+        return Promise.resolve(undefined);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+
+    await screen.findByText("No pull requests assigned to you.");
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("trigger_sync", {
+        input: { scope: "hot" },
+      });
+    });
+    const hotCallsAfterStartup = invokeMock.mock.calls.filter(
+      ([command, args]) =>
+        command === "trigger_sync" &&
+        (args as { input?: { scope?: string } } | undefined)?.input?.scope === "hot",
+    ).length;
+
+    window.dispatchEvent(new Event("focus"));
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(
+      invokeMock.mock.calls.filter(
+        ([command, args]) =>
+          command === "trigger_sync" &&
+          (args as { input?: { scope?: string } } | undefined)?.input?.scope === "hot",
+      ).length,
+    ).toBe(hotCallsAfterStartup);
+
+    nowSpy.mockReturnValue(1_000 + 3 * 60_000);
+    window.dispatchEvent(new Event("focus"));
+
+    await waitFor(() => {
+      expect(
+        invokeMock.mock.calls.filter(
+          ([command, args]) =>
+            command === "trigger_sync" &&
+            (args as { input?: { scope?: string } } | undefined)?.input?.scope === "hot",
+        ).length,
+      ).toBeGreaterThan(hotCallsAfterStartup);
+    });
+    nowSpy.mockRestore();
+  });
+
+  it("refreshes the current view with Ctrl+R", async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve({ reviewResultFolderPath: null });
+      }
+      if (command === "get_review_result_preview") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
+      if (command === "trigger_sync") {
+        return Promise.resolve(undefined);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+
+    await screen.findByText("No pull requests assigned to you.");
+    fireEvent.keyDown(window, { key: "r", ctrlKey: true });
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("trigger_sync", {
+        input: { scope: "myReviews" },
+      });
+    });
+  });
+
+
+  it("invalidates only queries affected by sync update scopes", async () => {
+    let reviewCallCount = 0;
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve({ reviewResultFolderPath: null });
+      }
+      if (command === "get_review_result_preview") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_sync_states") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_my_review_pull_requests") {
+        reviewCallCount += 1;
+        return Promise.resolve([]);
+      }
+      if (command === "trigger_sync") {
+        return Promise.resolve(undefined);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+
+    await screen.findByText("No pull requests assigned to you.");
+    await waitFor(() => expect(tauriEventHandlers.has("sync:updated")).toBe(true));
+    const callsBeforeWorkItemUpdate = reviewCallCount;
+
+    tauriEventHandlers.get("sync:updated")?.({
+      payload: { orgId: "contoso", scopes: ["myWorkItems"] },
+    });
+
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(reviewCallCount).toBe(callsBeforeWorkItemUpdate);
+
+    tauriEventHandlers.get("sync:updated")?.({
+      payload: { orgId: "contoso", scopes: ["myReviews"] },
+    });
+
+    await waitFor(() => {
+      expect(reviewCallCount).toBeGreaterThan(callsBeforeWorkItemUpdate);
     });
   });
 
@@ -954,7 +1143,22 @@ describe("App", () => {
     expect((await screen.findAllByText("Fix view query workflow")).length).toBeGreaterThan(0);
     expect(await screen.findByLabelText("Comment")).toBeTruthy();
     expect(screen.getByRole("option", { name: /Active Bugs/ })).toBeTruthy();
-    expect(screen.getByRole("listbox", { name: "Saved work item views" })).toBeTruthy();
+    const viewListbox = screen.getByRole("listbox", { name: "Saved work item views" });
+    expect(viewListbox).toBeTruthy();
+    Object.defineProperty(viewListbox, "clientWidth", {
+      configurable: true,
+      value: 560,
+    });
+    const viewCards = within(viewListbox).getAllByRole("option");
+    fireEvent.click(viewCards[0]);
+    viewCards[0].focus();
+    fireEvent.keyDown(viewListbox, { key: "ArrowDown" });
+    expect(viewCards[3].getAttribute("aria-selected")).toBe("true");
+    await waitFor(() => expect(document.activeElement).toBe(viewCards[3]));
+    fireEvent.keyDown(viewListbox, { key: "ArrowUp" });
+    expect(viewCards[0].getAttribute("aria-selected")).toBe("true");
+    await waitFor(() => expect(document.activeElement).toBe(viewCards[0]));
+    fireEvent.click(screen.getByRole("option", { name: /Active Bugs/ }));
     const viewWorkItemRow = screen.getByRole("row", {
       name: /Fix view query workflow/,
     });
@@ -1193,7 +1397,7 @@ describe("App", () => {
     expect(main.queryByRole("tab", { name: "Rejected" })).toBeNull();
 
     fireEvent.keyDown(main.getByRole("grid", { name: "My review pull requests" }), {
-      key: "3",
+      key: "2",
     });
 
     expect(await main.findByText("Waiting on author")).toBeTruthy();
@@ -1370,6 +1574,55 @@ describe("App", () => {
     expect(window.localStorage.getItem("azdodeck:layout:reviewPreviewWidth")).toBe("436");
     fireEvent.doubleClick(previewResize);
     expect(previewResize.getAttribute("aria-valuenow")).toBe("420");
+  });
+
+  it("stops review preview pointer resizing when the pointer is canceled", async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve({ reviewResultFolderPath: null });
+      }
+      if (command === "get_review_result_preview") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([
+          {
+            organizationId: "contoso",
+            projectId: "platform",
+            projectName: "Platform",
+            repositoryId: "api",
+            repositoryName: "api",
+            pullRequestId: 101,
+            title: "Needs review",
+            createdBy: "Alice",
+            creationDate: "2026-05-24T00:00:00Z",
+            targetRefName: "main",
+            webUrl: null,
+            myVote: 0,
+            myVoteLabel: "No Vote",
+            myIsRequired: true,
+            isDraft: false,
+          },
+        ]);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+
+    await screen.findByText("Needs review");
+    const previewResize = screen.getByRole("separator", { name: "Resize review preview" });
+
+    fireEvent.pointerDown(previewResize, { clientX: 100, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 84, pointerId: 1 });
+    expect(previewResize.getAttribute("aria-valuenow")).toBe("436");
+
+    fireEvent.pointerCancel(window, { pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 60, pointerId: 1 });
+    expect(previewResize.getAttribute("aria-valuenow")).toBe("436");
   });
 
   it("runs in browser preview mode without Tauri internals", async () => {

@@ -1,10 +1,13 @@
-use azdo_client::{AdoClient, AdoError, PullRequestStatus};
+use azdo_client::{AdoClient, AdoError, GitRepository, PullRequestStatus, TeamProject};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use tokio::task::JoinSet;
 
 use crate::db::{AppDatabase, CachedPr, CachedReviewPr, Organization};
 use crate::error::{AppError, Result};
 use crate::secrets::SecretStore;
+
+const PR_SYNC_CONCURRENCY: usize = 4;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -63,6 +66,7 @@ pub struct PullRequestSummary {
 #[derive(Debug, Clone)]
 pub struct PullRequestService {
     db: AppDatabase,
+    #[allow(dead_code)]
     secrets: SecretStore,
 }
 
@@ -231,6 +235,7 @@ pub async fn sync_prs_for_org(
 async fn do_sync_prs(db: &AppDatabase, client: &AdoClient, org: &Organization) -> Result<()> {
     let projects = client.list_projects().await?;
     let mut cached_prs: Vec<CachedPr> = Vec::new();
+    let mut pr_tasks = JoinSet::new();
 
     for project in &projects {
         let repos = match client.list_repositories(&project.id).await {
@@ -247,120 +252,188 @@ async fn do_sync_prs(db: &AppDatabase, client: &AdoClient, org: &Organization) -
             Err(e) => return Err(e.into()),
         };
         for repo in repos {
-            let prs = match client
-                .list_pull_requests(&project.id, &repo.id, PullRequestStatus::Active)
-                .await
-            {
-                Ok(prs) => prs,
-                Err(e) if is_ado_not_found(&e) => {
-                    tracing::warn!(
-                        org = %org.name,
-                        project = %project.name,
-                        repository = %repo.name,
-                        error = %e,
-                        "pull request list returned 404, skipping repository"
-                    );
-                    continue;
-                }
-                Err(e) => return Err(e.into()),
-            };
-            for pr in prs {
-                let web_url = format!(
-                    "{}/{}/_git/{}/pullrequest/{}",
-                    org.base_url, project.name, repo.name, pr.pull_request_id
-                );
-                cached_prs.push(CachedPr {
-                    org_id: org.id.clone(),
-                    project_id: project.id.clone(),
-                    project_name: project.name.clone(),
-                    repository_id: repo.id.clone(),
-                    repository_name: repo.name.clone(),
-                    pull_request_id: pr.pull_request_id,
-                    title: pr.title,
-                    status: pr.status,
-                    created_by: pr.created_by.and_then(|u| u.display_name.or(u.unique_name)),
-                    creation_date: pr.creation_date.to_rfc3339(),
-                    source_ref_name: short_ref(&pr.source_ref_name),
-                    target_ref_name: short_ref(&pr.target_ref_name),
-                    web_url: Some(web_url),
-                });
+            while pr_tasks.len() >= PR_SYNC_CONCURRENCY {
+                cached_prs.extend(join_pr_task(&mut pr_tasks).await?);
             }
+            pr_tasks.spawn(fetch_active_prs_for_repo(
+                client.clone(),
+                org.clone(),
+                project.clone(),
+                repo,
+            ));
         }
+    }
+    while !pr_tasks.is_empty() {
+        cached_prs.extend(join_pr_task(&mut pr_tasks).await?);
     }
 
     db.replace_pull_requests(&org.id, &cached_prs)?;
 
     if let Some(user_id) = &org.authenticated_user_id {
         let mut cached_reviews: Vec<CachedReviewPr> = Vec::new();
+        let mut review_tasks = JoinSet::new();
 
         for project in &projects {
-            let prs = match client
-                .list_pull_requests_by_reviewer(&project.id, user_id, 200)
-                .await
-            {
-                Ok(prs) => prs,
-                Err(e) if is_ado_not_found(&e) => {
-                    tracing::warn!(
-                        org = %org.name,
-                        project = %project.name,
-                        error = %e,
-                        "review pull request list returned 404, skipping project"
-                    );
-                    continue;
-                }
-                Err(e) => return Err(e.into()),
-            };
-            for pr in prs {
-                let Some(repo) = &pr.repository else { continue };
-                let repo_id = repo.id.clone();
-                let repo_name = repo.name.clone();
-                let (proj_id, proj_name) = repo
-                    .project
-                    .as_ref()
-                    .map(|p| (p.id.clone(), p.name.clone()))
-                    .unwrap_or_else(|| (project.id.clone(), project.name.clone()));
-
-                let reviewer = pr
-                    .reviewers
-                    .as_deref()
-                    .unwrap_or(&[])
-                    .iter()
-                    .find(|r| r.id.as_deref() == Some(user_id));
-                let (my_vote, my_is_required) = reviewer
-                    .map(|r| (r.vote, r.is_required))
-                    .unwrap_or((0, false));
-
-                let web_url = format!(
-                    "{}/{}/_git/{}/pullrequest/{}",
-                    org.base_url, proj_name, repo_name, pr.pull_request_id
-                );
-                cached_reviews.push(CachedReviewPr {
-                    org_id: org.id.clone(),
-                    project_id: proj_id,
-                    project_name: proj_name,
-                    repository_id: repo_id,
-                    repository_name: repo_name,
-                    pull_request_id: pr.pull_request_id,
-                    title: pr.title.clone(),
-                    created_by: pr
-                        .created_by
-                        .as_ref()
-                        .and_then(|u| u.display_name.clone().or(u.unique_name.clone())),
-                    creation_date: pr.creation_date.to_rfc3339(),
-                    target_ref_name: short_ref(&pr.target_ref_name),
-                    web_url: Some(web_url),
-                    my_vote,
-                    my_vote_label: vote_label(my_vote).to_string(),
-                    my_is_required,
-                    is_draft: pr.is_draft.unwrap_or(false),
-                });
+            while review_tasks.len() >= PR_SYNC_CONCURRENCY {
+                cached_reviews.extend(join_review_task(&mut review_tasks).await?);
             }
+            review_tasks.spawn(fetch_review_prs_for_project(
+                client.clone(),
+                org.clone(),
+                project.clone(),
+                user_id.clone(),
+            ));
+        }
+        while !review_tasks.is_empty() {
+            cached_reviews.extend(join_review_task(&mut review_tasks).await?);
         }
 
         db.replace_review_pull_requests(&org.id, &cached_reviews)?;
     }
 
     Ok(())
+}
+
+async fn join_pr_task(tasks: &mut JoinSet<Result<Vec<CachedPr>>>) -> Result<Vec<CachedPr>> {
+    tasks
+        .join_next()
+        .await
+        .expect("PR sync task set was unexpectedly empty")
+        .map_err(|e| AppError::AzureDevOps(format!("PR sync task failed: {e}")))?
+}
+
+async fn join_review_task(
+    tasks: &mut JoinSet<Result<Vec<CachedReviewPr>>>,
+) -> Result<Vec<CachedReviewPr>> {
+    tasks
+        .join_next()
+        .await
+        .expect("review PR sync task set was unexpectedly empty")
+        .map_err(|e| AppError::AzureDevOps(format!("review PR sync task failed: {e}")))?
+}
+
+async fn fetch_active_prs_for_repo(
+    client: AdoClient,
+    org: Organization,
+    project: TeamProject,
+    repo: GitRepository,
+) -> Result<Vec<CachedPr>> {
+    let prs = match client
+        .list_pull_requests(&project.id, &repo.id, PullRequestStatus::Active)
+        .await
+    {
+        Ok(prs) => prs,
+        Err(e) if is_ado_not_found(&e) => {
+            tracing::warn!(
+                org = %org.name,
+                project = %project.name,
+                repository = %repo.name,
+                error = %e,
+                "pull request list returned 404, skipping repository"
+            );
+            return Ok(Vec::new());
+        }
+        Err(e) => return Err(e.into()),
+    };
+
+    Ok(prs
+        .into_iter()
+        .map(|pr| {
+            let web_url = format!(
+                "{}/{}/_git/{}/pullrequest/{}",
+                org.base_url, project.name, repo.name, pr.pull_request_id
+            );
+            CachedPr {
+                org_id: org.id.clone(),
+                project_id: project.id.clone(),
+                project_name: project.name.clone(),
+                repository_id: repo.id.clone(),
+                repository_name: repo.name.clone(),
+                pull_request_id: pr.pull_request_id,
+                title: pr.title,
+                status: pr.status,
+                created_by: pr.created_by.and_then(|u| u.display_name.or(u.unique_name)),
+                creation_date: pr.creation_date.to_rfc3339(),
+                source_ref_name: short_ref(&pr.source_ref_name),
+                target_ref_name: short_ref(&pr.target_ref_name),
+                web_url: Some(web_url),
+            }
+        })
+        .collect())
+}
+
+async fn fetch_review_prs_for_project(
+    client: AdoClient,
+    org: Organization,
+    project: TeamProject,
+    user_id: String,
+) -> Result<Vec<CachedReviewPr>> {
+    let prs = match client
+        .list_pull_requests_by_reviewer(&project.id, &user_id, 200)
+        .await
+    {
+        Ok(prs) => prs,
+        Err(e) if is_ado_not_found(&e) => {
+            tracing::warn!(
+                org = %org.name,
+                project = %project.name,
+                error = %e,
+                "review pull request list returned 404, skipping project"
+            );
+            return Ok(Vec::new());
+        }
+        Err(e) => return Err(e.into()),
+    };
+
+    let mut cached_reviews = Vec::new();
+    for pr in prs {
+        let Some(repo) = &pr.repository else {
+            continue;
+        };
+        let repo_id = repo.id.clone();
+        let repo_name = repo.name.clone();
+        let (proj_id, proj_name) = repo
+            .project
+            .as_ref()
+            .map(|p| (p.id.clone(), p.name.clone()))
+            .unwrap_or_else(|| (project.id.clone(), project.name.clone()));
+
+        let reviewer = pr
+            .reviewers
+            .as_deref()
+            .unwrap_or(&[])
+            .iter()
+            .find(|r| r.id.as_deref() == Some(user_id.as_str()));
+        let (my_vote, my_is_required) = reviewer
+            .map(|r| (r.vote, r.is_required))
+            .unwrap_or((0, false));
+
+        let web_url = format!(
+            "{}/{}/_git/{}/pullrequest/{}",
+            org.base_url, proj_name, repo_name, pr.pull_request_id
+        );
+        cached_reviews.push(CachedReviewPr {
+            org_id: org.id.clone(),
+            project_id: proj_id,
+            project_name: proj_name,
+            repository_id: repo_id,
+            repository_name: repo_name,
+            pull_request_id: pr.pull_request_id,
+            title: pr.title.clone(),
+            created_by: pr
+                .created_by
+                .as_ref()
+                .and_then(|u| u.display_name.clone().or(u.unique_name.clone())),
+            creation_date: pr.creation_date.to_rfc3339(),
+            target_ref_name: short_ref(&pr.target_ref_name),
+            web_url: Some(web_url),
+            my_vote,
+            my_vote_label: vote_label(my_vote).to_string(),
+            my_is_required,
+            is_draft: pr.is_draft.unwrap_or(false),
+        });
+    }
+    Ok(cached_reviews)
 }
 
 #[cfg(test)]

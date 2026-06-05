@@ -393,8 +393,8 @@ function storeMyReviewsGridViewState(state: MyReviewsGridViewState) {
 
 const voteFilterOptions: { value: VoteFilter; label: string }[] = [
   { value: "noVote", label: "No Vote" },
-  { value: "approved", label: "Approved" },
   { value: "waitingAuthor", label: "Waiting Author" },
+  { value: "approved", label: "Approved" },
   { value: "all", label: "All" },
 ];
 
@@ -701,12 +701,12 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     }
     if (e.key === "2") {
       e.preventDefault();
-      applyVoteFilter("approved");
+      applyVoteFilter("waitingAuthor");
       return;
     }
     if (e.key === "3") {
       e.preventDefault();
-      applyVoteFilter("waitingAuthor");
+      applyVoteFilter("approved");
       return;
     }
     if (e.key === "4") {
@@ -1170,7 +1170,7 @@ function ReviewResultPreviewPanel({
   const hasFolder = !!settings?.reviewResultFolderPath;
 
   return (
-    <aside className="flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-white">
+    <aside className="flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-white focus-within:ring-2 focus-within:ring-ring">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -1215,7 +1215,7 @@ function ReviewResultPreviewPanel({
             aria-keyshortcuts="Alt+P"
             sandbox=""
             srcDoc={preview.html}
-            className="min-h-0 flex-1 bg-white outline-none focus:ring-2 focus:ring-inset focus:ring-ring"
+            className="min-h-0 flex-1 bg-white outline-none"
             data-primary-preview="true"
             tabIndex={-1}
           />

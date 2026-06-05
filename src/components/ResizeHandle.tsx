@@ -17,21 +17,39 @@ export function beginHorizontalResize(
   },
 ) {
   event.preventDefault();
+  const target = event.currentTarget;
+  const pointerId = event.pointerId;
   const startX = event.clientX;
   const startValue = options.value;
 
   function onPointerMove(moveEvent: PointerEvent) {
+    if (moveEvent.pointerId !== pointerId) return;
     const delta = (moveEvent.clientX - startX) * options.direction;
     options.onChange(clamp(startValue + delta, options.min, options.max));
   }
 
-  function onPointerUp() {
+  function cleanup() {
     window.removeEventListener("pointermove", onPointerMove);
-    window.removeEventListener("pointerup", onPointerUp);
+    window.removeEventListener("pointerup", onPointerEnd);
+    window.removeEventListener("pointercancel", onPointerEnd);
+    window.removeEventListener("blur", cleanup);
+    target.removeEventListener("lostpointercapture", cleanup);
+    if (target.hasPointerCapture?.(pointerId)) {
+      target.releasePointerCapture(pointerId);
+    }
   }
 
+  function onPointerEnd(endEvent: PointerEvent) {
+    if (endEvent.pointerId !== pointerId) return;
+    cleanup();
+  }
+
+  target.setPointerCapture?.(pointerId);
   window.addEventListener("pointermove", onPointerMove);
-  window.addEventListener("pointerup", onPointerUp);
+  window.addEventListener("pointerup", onPointerEnd);
+  window.addEventListener("pointercancel", onPointerEnd);
+  window.addEventListener("blur", cleanup);
+  target.addEventListener("lostpointercapture", cleanup);
 }
 
 export function ColumnResizeHandle({

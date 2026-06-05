@@ -1,7 +1,6 @@
-// Cache/sync scaffolding can land before all call sites; keep builds warning-free.
-#![allow(dead_code)]
-
 use std::str::FromStr;
+
+use serde::Deserialize;
 
 mod auth;
 mod commits;
@@ -18,7 +17,7 @@ use commits::{
     CommitRepositoryOption, CommitService, CommitSummary, ListCommitRepositoriesInput,
     SearchCommitsInput,
 };
-use db::{AppDatabase, AppSettings, Organization};
+use db::{AppDatabase, AppSettings, Organization, SyncState};
 use error::{AppError, Result};
 use orgs::{AddAzureCliOrganizationInput, AddPatOrganizationInput, OrganizationService};
 use prs::{
@@ -30,7 +29,7 @@ use settings::{
     normalize_app_settings, GetReviewResultPreviewInput, ReviewResultPreview, SettingsService,
     UpdateAppSettingsInput,
 };
-use sync::{SyncRunner, SyncTrigger};
+use sync::{SyncRunner, SyncScope, SyncTrigger};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tokio::sync::{mpsc, oneshot};
@@ -47,12 +46,19 @@ use work_items::{
 
 #[derive(Clone)]
 struct AppState {
+    db: AppDatabase,
     organizations: OrganizationService,
     pull_requests: PullRequestService,
     work_items: WorkItemService,
     commits: CommitService,
     settings: SettingsService,
     sync_trigger: mpsc::Sender<SyncTrigger>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TriggerSyncInput {
+    scope: Option<SyncScope>,
 }
 
 #[tauri::command]
@@ -86,6 +92,12 @@ fn get_review_result_preview(
     state: State<'_, AppState>,
 ) -> Result<Option<ReviewResultPreview>> {
     state.settings.review_result_preview(input)
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+fn list_sync_states(state: State<'_, AppState>) -> Result<Vec<SyncState>> {
+    state.db.list_sync_states()
 }
 
 fn ensure_write_enabled(state: &State<'_, AppState>) -> Result<()> {
@@ -349,11 +361,16 @@ fn list_commit_repositories(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
-async fn trigger_sync(state: State<'_, AppState>) -> Result<()> {
+async fn trigger_sync(input: Option<TriggerSyncInput>, state: State<'_, AppState>) -> Result<()> {
     let (tx, rx) = oneshot::channel();
     state
         .sync_trigger
-        .send(tx)
+        .send(SyncTrigger {
+            scope: input
+                .and_then(|input| input.scope)
+                .unwrap_or(SyncScope::All),
+            done: tx,
+        })
         .await
         .map_err(|error| AppError::InvalidInput(format!("sync runner stopped: {error}")))?;
     rx.await
@@ -417,6 +434,7 @@ pub fn run() {
             configure_show_window_hotkey(app.handle(), settings.show_window_hotkey.as_deref())?;
             let (sync_tx, sync_rx) = SyncRunner::channel();
             app.manage(AppState {
+                db: db.clone(),
                 organizations: OrganizationService::new(db.clone(), SecretStore),
                 pull_requests: PullRequestService::new(db.clone(), SecretStore),
                 work_items: WorkItemService::new(db.clone(), SecretStore),
@@ -434,6 +452,7 @@ pub fn run() {
             get_app_settings,
             update_app_settings,
             get_review_result_preview,
+            list_sync_states,
             delete_organization,
             add_pat_organization,
             add_azure_cli_organization,
@@ -470,6 +489,7 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn parse_show_window_hotkey_validates_before_registration_changes() {
@@ -478,5 +498,17 @@ mod tests {
             .is_some());
         assert!(parse_show_window_hotkey(Some("   ")).unwrap().is_none());
         assert!(parse_show_window_hotkey(Some("not a shortcut")).is_err());
+    }
+
+    #[test]
+    fn trigger_sync_input_rejects_unknown_scope() {
+        assert!(serde_json::from_value::<TriggerSyncInput>(json!({
+            "scope": "myReviews"
+        }))
+        .is_ok());
+        assert!(serde_json::from_value::<TriggerSyncInput>(json!({
+            "scope": "notARealScope"
+        }))
+        .is_err());
     }
 }

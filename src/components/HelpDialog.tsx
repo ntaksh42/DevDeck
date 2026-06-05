@@ -41,6 +41,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Open focused navigation item</span><kbd className={kbd}>Enter</kbd></div>
           <div className={row}><span>Typeahead in navigation</span><kbd className={kbd}>A–Z</kbd></div>
           <div className={row}><span>Sync now</span><kbd className={kbd}>Alt+S</kbd></div>
+          <div className={row}><span>Refresh current view</span><kbd className={kbd}>Ctrl+R</kbd></div>
           <div className={row}><span>Command palette</span><kbd className={kbd}>Ctrl+K</kbd></div>
           <div className={row}><span>Focus grid</span><kbd className={kbd}>Alt+G</kbd></div>
           <div className={row}><span>Focus preview</span><kbd className={kbd}>Alt+P</kbd></div>

@@ -58,6 +58,7 @@ impl Default for RetryPolicy {
     }
 }
 
+#[derive(Clone)]
 pub struct AdoClient {
     http: reqwest::Client,
     base_url: Url,

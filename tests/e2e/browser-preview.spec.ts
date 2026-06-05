@@ -31,8 +31,13 @@ test.describe("browser preview", () => {
     await main.getByRole("button", { name: "Sort by PR#" }).click();
     await expect(reviewGrid.getByRole("row").first()).toContainText("#101");
 
-    await page.keyboard.press("3");
+    await page.keyboard.press("2");
     await expect(main.getByText("Fix crash on back press during payment flow")).toBeVisible();
+    await expect(main.getByText("Upgrade EKS cluster to 1.29")).toHaveCount(0);
+
+    await page.keyboard.press("3");
+    await expect(main.getByText("Dark mode support for settings screen")).toBeVisible();
+    await expect(main.getByText("Add OpenTelemetry tracing support")).toBeVisible();
     await expect(main.getByText("Upgrade EKS cluster to 1.29")).toHaveCount(0);
     await page.keyboard.press("4");
 
@@ -73,6 +78,8 @@ test.describe("browser preview", () => {
     await page.getByRole("button", { name: "Settings" }).click();
     await expect(main.getByRole("heading", { name: "Organizations" })).toBeVisible();
     await expect(main.getByRole("heading", { name: "Review result previews" })).toBeVisible();
+    await expect(main.getByRole("heading", { name: "Sync health" })).toBeVisible();
+    await expect(main.getByText("Pull requests / My Reviews")).toBeVisible();
     await expect(main.getByText("https://dev.azure.com/contoso")).toBeVisible();
   });
 
