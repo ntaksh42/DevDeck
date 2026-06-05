@@ -42,6 +42,8 @@ const WI_COLUMN_MIN_WIDTHS = [44, 58, 56, 150, 70, 74, 60];
 const WI_COLUMN_MAX_WIDTHS = [120, 200, 180, 720, 300, 260, 160];
 const WI_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:wiSearchGridColumnWidths:v2";
 const WI_VISIBLE_COLUMNS_STORAGE_KEY = "azdodeck:layout:wiSearchGridVisibleColumns:v1";
+const WI_SORT_STORAGE_KEY = "azdodeck:view:wiSearchGridSort:v1";
+const WI_COLUMN_FILTERS_STORAGE_KEY = "azdodeck:view:wiSearchGridColumnFilters:v1";
 const DEFAULT_WORK_ITEM_PREVIEW_WIDTH = 440;
 const WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY = "azdodeck:layout:workItemPreviewWidth";
 const WI_GRID_ROW_HEIGHT = 29;
@@ -178,6 +180,58 @@ function loadVisibleWorkItemColumns(key: string): WiSortKey[] {
   } catch {
     return [...WI_GRID_KEYS];
   }
+}
+
+function defaultWorkItemSort(): WiSortState {
+  return { key: "changedDate", direction: "desc" };
+}
+
+function loadWorkItemSort(key: string, fallback: WiSortState): WiSortState {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(key) ?? "null");
+    if (
+      !parsed ||
+      !WI_GRID_KEYS.includes(parsed.key) ||
+      (parsed.direction !== "asc" && parsed.direction !== "desc")
+    ) {
+      return fallback;
+    }
+    return { key: parsed.key, direction: parsed.direction };
+  } catch {
+    return fallback;
+  }
+}
+
+function loadWorkItemColumnFilters(
+  key: string,
+): Partial<Record<FilterableColumn, Set<string>>> {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(key) ?? "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const filters: Partial<Record<FilterableColumn, Set<string>>> = {};
+    for (const column of Object.keys(FILTERABLE_COLUMNS) as FilterableColumn[]) {
+      const values = parsed[column];
+      if (Array.isArray(values)) {
+        const cleaned = values.filter((value): value is string => typeof value === "string");
+        if (cleaned.length > 0) filters[column] = new Set(cleaned);
+      }
+    }
+    return filters;
+  } catch {
+    return {};
+  }
+}
+
+function storeWorkItemColumnFilters(
+  key: string,
+  filters: Partial<Record<FilterableColumn, Set<string>>>,
+) {
+  const serialized: Partial<Record<FilterableColumn, string[]>> = {};
+  for (const column of Object.keys(FILTERABLE_COLUMNS) as FilterableColumn[]) {
+    const values = filters[column];
+    if (values && values.size > 0) serialized[column] = [...values];
+  }
+  window.localStorage.setItem(key, JSON.stringify(serialized));
 }
 
 function workItemCellValue(item: WorkItemSummary, column: WiSortKey): ReactNode {
@@ -363,12 +417,18 @@ export function WorkItemsGrid({
   const visibleColumnsStorageKey = storageKeyScope
     ? `${WI_VISIBLE_COLUMNS_STORAGE_KEY}:${storageKeyScope}`
     : WI_VISIBLE_COLUMNS_STORAGE_KEY;
+  const sortStorageKey = storageKeyScope
+    ? `${WI_SORT_STORAGE_KEY}:${storageKeyScope}`
+    : WI_SORT_STORAGE_KEY;
+  const columnFiltersStorageKey = storageKeyScope
+    ? `${WI_COLUMN_FILTERS_STORAGE_KEY}:${storageKeyScope}`
+    : WI_COLUMN_FILTERS_STORAGE_KEY;
   const previewWidthStorageKey = storageKeyScope
     ? `${WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY}:${storageKeyScope}`
     : WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY;
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [sort, setWiSort] = useState<WiSortState>(
-    initialSort ?? { key: "changedDate", direction: "desc" },
+    initialSort ?? loadWorkItemSort(sortStorageKey, defaultWorkItemSort()),
   );
   const [columnWidths, setColumnWidths] = useState(() =>
     storedNumbers(columnWidthsStorageKey, DEFAULT_WI_COLUMN_WIDTHS, WI_COLUMN_MIN_WIDTHS, WI_COLUMN_MAX_WIDTHS),
@@ -399,7 +459,9 @@ export function WorkItemsGrid({
   const [openStateRequest, setOpenStateRequest] = useState(0);
   const [openPriorityRequest, setOpenPriorityRequest] = useState(0);
   const [itemOverrides, setItemOverrides] = useState<Map<string, Partial<WorkItemSummary>>>(new Map());
-  const [columnFilters, setColumnFilters] = useState<Partial<Record<FilterableColumn, Set<string>>>>({});
+  const [columnFilters, setColumnFilters] = useState<Partial<Record<FilterableColumn, Set<string>>>>(
+    () => loadWorkItemColumnFilters(columnFiltersStorageKey),
+  );
   const [openFilterCol, setOpenFilterCol] = useState<FilterableColumn | null>(null);
   const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -411,14 +473,15 @@ export function WorkItemsGrid({
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    setWiSort(initialSort ?? { key: "changedDate", direction: "desc" });
-  }, [initialSort?.direction, initialSort?.key]);
+    setWiSort(initialSort ?? loadWorkItemSort(sortStorageKey, defaultWorkItemSort()));
+  }, [initialSort?.direction, initialSort?.key, sortStorageKey]);
 
   useEffect(() => {
     setColumnWidths(
       storedNumbers(columnWidthsStorageKey, DEFAULT_WI_COLUMN_WIDTHS, WI_COLUMN_MIN_WIDTHS, WI_COLUMN_MAX_WIDTHS),
     );
     setVisibleColumns(loadVisibleWorkItemColumns(visibleColumnsStorageKey));
+    setColumnFilters(loadWorkItemColumnFilters(columnFiltersStorageKey));
     setPreviewWidth(
       storedNumber(
         previewWidthStorageKey,
@@ -427,7 +490,7 @@ export function WorkItemsGrid({
         860,
       ),
     );
-  }, [columnWidthsStorageKey, previewWidthStorageKey, visibleColumnsStorageKey]);
+  }, [columnFiltersStorageKey, columnWidthsStorageKey, previewWidthStorageKey, visibleColumnsStorageKey]);
 
   useEffect(() => {
     localStorage.setItem(columnWidthsStorageKey, JSON.stringify(columnWidths));
@@ -436,6 +499,16 @@ export function WorkItemsGrid({
   useEffect(() => {
     localStorage.setItem(visibleColumnsStorageKey, JSON.stringify(visibleColumns));
   }, [visibleColumns, visibleColumnsStorageKey]);
+
+  useEffect(() => {
+    if (!initialSort) {
+      localStorage.setItem(sortStorageKey, JSON.stringify(sort));
+    }
+  }, [initialSort, sort, sortStorageKey]);
+
+  useEffect(() => {
+    storeWorkItemColumnFilters(columnFiltersStorageKey, columnFilters);
+  }, [columnFilters, columnFiltersStorageKey]);
 
   useEffect(() => {
     localStorage.setItem(
@@ -762,7 +835,6 @@ export function WorkItemsGrid({
     setItemOverrides(new Map());
     setCheckedIds(new Set());
     setLastCheckedIndex(null);
-    setColumnFilters({});
     setOpenFilterCol(null);
   }, [resultKeysSignature]);
 

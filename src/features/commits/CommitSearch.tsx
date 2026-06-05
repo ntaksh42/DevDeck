@@ -35,16 +35,67 @@ const DEFAULT_COMMIT_COLUMN_WIDTHS = [72, 80, 220, 140, 120];
 const COMMIT_COLUMN_MIN_WIDTHS = [66, 72, 160, 110, 96];
 const COMMIT_COLUMN_MAX_WIDTHS = [140, 160, 720, 380, 340];
 const COMMIT_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:commitGridColumnWidths:v2";
+const COMMIT_SEARCH_VIEW_STORAGE_KEY = "azdodeck:view:commitSearch:v1";
+const COMMIT_SORT_STORAGE_KEY = "azdodeck:view:commitGridSort:v1";
+
+type CommitSearchViewState = {
+  author: string;
+  branch: string;
+  fromDate: string;
+  organizationId: string;
+  projectId: string;
+  query: string;
+  repositoryId: string;
+  toDate: string;
+};
+
+function loadCommitSearchViewState(): CommitSearchViewState {
+  const fallback: CommitSearchViewState = {
+    author: "",
+    branch: "",
+    fromDate: "",
+    organizationId: "",
+    projectId: "",
+    query: "",
+    repositoryId: "",
+    toDate: "",
+  };
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(COMMIT_SEARCH_VIEW_STORAGE_KEY) ?? "null");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return fallback;
+    return {
+      author: typeof parsed.author === "string" ? parsed.author : "",
+      branch: typeof parsed.branch === "string" ? parsed.branch : "",
+      fromDate: typeof parsed.fromDate === "string" ? parsed.fromDate : "",
+      organizationId: typeof parsed.organizationId === "string" ? parsed.organizationId : "",
+      projectId: typeof parsed.projectId === "string" ? parsed.projectId : "",
+      query: typeof parsed.query === "string" ? parsed.query : "",
+      repositoryId: typeof parsed.repositoryId === "string" ? parsed.repositoryId : "",
+      toDate: typeof parsed.toDate === "string" ? parsed.toDate : "",
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function storeCommitSearchViewState(state: CommitSearchViewState) {
+  window.localStorage.setItem(COMMIT_SEARCH_VIEW_STORAGE_KEY, JSON.stringify(state));
+}
 
 export function CommitSearch({ organizations }: { organizations: Organization[] }) {
-  const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
-  const [query, setQuery] = useState("");
-  const [author, setAuthor] = useState("");
-  const [branch, setBranch] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [projectId, setProjectId] = useState("");
-  const [repositoryId, setRepositoryId] = useState("");
+  const initialViewState = useMemo(() => loadCommitSearchViewState(), []);
+  const [organizationId, setOrganizationId] = useState(() =>
+    organizations.some((organization) => organization.id === initialViewState.organizationId)
+      ? initialViewState.organizationId
+      : organizations[0]?.id ?? "",
+  );
+  const [query, setQuery] = useState(initialViewState.query);
+  const [author, setAuthor] = useState(initialViewState.author);
+  const [branch, setBranch] = useState(initialViewState.branch);
+  const [fromDate, setFromDate] = useState(initialViewState.fromDate);
+  const [toDate, setToDate] = useState(initialViewState.toDate);
+  const [projectId, setProjectId] = useState(initialViewState.projectId);
+  const [repositoryId, setRepositoryId] = useState(initialViewState.repositoryId);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const mutation = useMutation({
@@ -68,6 +119,25 @@ export function CommitSearch({ organizations }: { organizations: Organization[] 
     [projectId, repositoryOptions],
   );
   const results = mutation.data ?? [];
+
+  useEffect(() => {
+    if (!organizationId && organizations[0]) {
+      setOrganizationId(organizations[0].id);
+    }
+  }, [organizationId, organizations]);
+
+  useEffect(() => {
+    storeCommitSearchViewState({
+      author,
+      branch,
+      fromDate,
+      organizationId: selectedOrganizationId,
+      projectId,
+      query,
+      repositoryId,
+      toDate,
+    });
+  }, [author, branch, fromDate, projectId, query, repositoryId, selectedOrganizationId, toDate]);
 
   useEffect(() => {
     if (
@@ -319,6 +389,23 @@ function defaultCommitSortDir(key: CommitSortKey): "asc" | "desc" {
   return key === "date" ? "desc" : "asc";
 }
 
+function loadCommitSort(): CommitSortState {
+  const fallback: CommitSortState = { key: "date", direction: "desc" };
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(COMMIT_SORT_STORAGE_KEY) ?? "null");
+    if (
+      !parsed ||
+      !COMMIT_GRID_KEYS.includes(parsed.key) ||
+      (parsed.direction !== "asc" && parsed.direction !== "desc")
+    ) {
+      return fallback;
+    }
+    return { key: parsed.key, direction: parsed.direction };
+  } catch {
+    return fallback;
+  }
+}
+
 function compareCommitsByKey(a: CommitSummary, b: CommitSummary, key: CommitSortKey): number {
   switch (key) {
     case "date":
@@ -441,7 +528,7 @@ function CommitResults({
   results: CommitSummary[];
   searched: boolean;
 }) {
-  const [sort, setCommitSort] = useState<CommitSortState>({ key: "date", direction: "desc" });
+  const [sort, setCommitSort] = useState<CommitSortState>(() => loadCommitSort());
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [columnWidths, setColumnWidths] = useState(() =>
     storedNumbers(COMMIT_COLUMN_WIDTHS_STORAGE_KEY, DEFAULT_COMMIT_COLUMN_WIDTHS, COMMIT_COLUMN_MIN_WIDTHS, COMMIT_COLUMN_MAX_WIDTHS),
@@ -452,6 +539,10 @@ function CommitResults({
   useEffect(() => {
     localStorage.setItem(COMMIT_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
   }, [columnWidths]);
+
+  useEffect(() => {
+    localStorage.setItem(COMMIT_SORT_STORAGE_KEY, JSON.stringify(sort));
+  }, [sort]);
 
   const commitColTemplate = gridColumnTemplate(columnWidths, 2);
 

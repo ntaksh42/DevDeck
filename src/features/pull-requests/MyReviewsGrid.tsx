@@ -43,6 +43,7 @@ const DEFAULT_PR_GRID_COLUMN_WIDTHS = [52, 110, 180, 82, 56, 76, 68, 78];
 const PR_GRID_COLUMN_MIN_WIDTHS = [48, 96, 150, 72, 50, 68, 62, 70];
 const PR_GRID_COLUMN_MAX_WIDTHS = [120, 520, 960, 240, 120, 240, 180, 240];
 const PR_GRID_COLUMN_WIDTHS_STORAGE_KEY = 'azdodeck:layout:myReviewsGridColumnWidths:v2';
+const PR_GRID_VIEW_STORAGE_KEY = "azdodeck:view:myReviewsGrid:v1";
 const PR_GRID_ROW_HEIGHT = 29;
 const PR_GRID_OVERSCAN = 8;
 type VoteValue = -10 | -5 | 0 | 5 | 10 | number;
@@ -320,8 +321,90 @@ function isFilterableColumn(column: SortKey): column is FilterableColumn {
   return column in FILTERABLE_COLUMNS;
 }
 
+type MyReviewsGridViewState = {
+  columnFilters: Partial<Record<FilterableColumn, Set<string>>>;
+  organizationId: string;
+  showDrafts: boolean;
+  sort: SortState;
+  textFilter: string;
+  voteFilter: VoteFilter;
+};
+
+function defaultMyReviewsGridViewState(): MyReviewsGridViewState {
+  return {
+    columnFilters: {},
+    organizationId: "",
+    showDrafts: false,
+    sort: { key: "creationDate", direction: "desc" },
+    textFilter: "",
+    voteFilter: "noVote",
+  };
+}
+
+function loadMyReviewsGridViewState(): MyReviewsGridViewState {
+  const fallback = defaultMyReviewsGridViewState();
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(PR_GRID_VIEW_STORAGE_KEY) ?? "null");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return fallback;
+    const sort =
+      parsed.sort &&
+      Object.keys(sortLabels).includes(parsed.sort.key) &&
+      (parsed.sort.direction === "asc" || parsed.sort.direction === "desc")
+        ? { key: parsed.sort.key as SortKey, direction: parsed.sort.direction as SortDirection }
+        : fallback.sort;
+    const voteFilter = voteFilterOptions.some((option) => option.value === parsed.voteFilter)
+      ? (parsed.voteFilter as VoteFilter)
+      : fallback.voteFilter;
+    const columnFilters: Partial<Record<FilterableColumn, Set<string>>> = {};
+    const parsedFilters = parsed.columnFilters;
+    if (parsedFilters && typeof parsedFilters === "object" && !Array.isArray(parsedFilters)) {
+      for (const column of Object.keys(FILTERABLE_COLUMNS) as FilterableColumn[]) {
+        const values = parsedFilters[column];
+        if (Array.isArray(values)) {
+          const cleaned = values.filter((value): value is string => typeof value === "string");
+          if (cleaned.length > 0) columnFilters[column] = new Set(cleaned);
+        }
+      }
+    }
+    return {
+      columnFilters,
+      organizationId: typeof parsed.organizationId === "string" ? parsed.organizationId : "",
+      showDrafts: typeof parsed.showDrafts === "boolean" ? parsed.showDrafts : fallback.showDrafts,
+      sort,
+      textFilter: typeof parsed.textFilter === "string" ? parsed.textFilter : fallback.textFilter,
+      voteFilter,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function storeMyReviewsGridViewState(state: MyReviewsGridViewState) {
+  const columnFilters: Partial<Record<FilterableColumn, string[]>> = {};
+  for (const column of Object.keys(FILTERABLE_COLUMNS) as FilterableColumn[]) {
+    const values = state.columnFilters[column];
+    if (values && values.size > 0) columnFilters[column] = [...values];
+  }
+  window.localStorage.setItem(
+    PR_GRID_VIEW_STORAGE_KEY,
+    JSON.stringify({ ...state, columnFilters }),
+  );
+}
+
+const voteFilterOptions: { value: VoteFilter; label: string }[] = [
+  { value: "noVote", label: "No Vote" },
+  { value: "approved", label: "Approved" },
+  { value: "waitingAuthor", label: "Waiting Author" },
+  { value: "all", label: "All" },
+];
+
 export function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
-  const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
+  const initialViewState = useMemo(() => loadMyReviewsGridViewState(), []);
+  const [organizationId, setOrganizationId] = useState(() =>
+    organizations.some((organization) => organization.id === initialViewState.organizationId)
+      ? initialViewState.organizationId
+      : organizations[0]?.id ?? "",
+  );
 
   const query = useQuery({
     queryKey: ["myReviews", organizationId],
@@ -330,12 +413,14 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     staleTime: 5 * 60_000,
   });
 
-  const [textFilter, setTextFilter] = useState("");
-  const [voteFilter, setVoteFilter] = useState<VoteFilter>("noVote");
-  const [showDrafts, setShowDrafts] = useState(false);
+  const [textFilter, setTextFilter] = useState(initialViewState.textFilter);
+  const [voteFilter, setVoteFilter] = useState<VoteFilter>(initialViewState.voteFilter);
+  const [showDrafts, setShowDrafts] = useState(initialViewState.showDrafts);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [sort, setSort] = useState<SortState>({ key: "creationDate", direction: "desc" });
-  const [columnFilters, setColumnFilters] = useState<Partial<Record<FilterableColumn, Set<string>>>>({});
+  const [sort, setSort] = useState<SortState>(initialViewState.sort);
+  const [columnFilters, setColumnFilters] = useState<Partial<Record<FilterableColumn, Set<string>>>>(
+    initialViewState.columnFilters,
+  );
   const [openFilterCol, setOpenFilterCol] = useState<FilterableColumn | null>(null);
   const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
   const [columnWidths, setColumnWidths] = useState(() =>
@@ -364,6 +449,23 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
   useEffect(() => {
     localStorage.setItem(PR_GRID_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
   }, [columnWidths]);
+
+  useEffect(() => {
+    if (!organizationId && organizations[0]) {
+      setOrganizationId(organizations[0].id);
+    }
+  }, [organizationId, organizations]);
+
+  useEffect(() => {
+    storeMyReviewsGridViewState({
+      columnFilters,
+      organizationId,
+      showDrafts,
+      sort,
+      textFilter,
+      voteFilter,
+    });
+  }, [columnFilters, organizationId, showDrafts, sort, textFilter, voteFilter]);
 
   const allPrs = query.data ?? [];
 
@@ -691,13 +793,6 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     });
     setSelectedIndex(0);
   }
-
-  const voteFilterOptions: { value: VoteFilter; label: string }[] = [
-    { value: "noVote", label: "No Vote" },
-    { value: "approved", label: "Approved" },
-    { value: "waitingAuthor", label: "Waiting Author" },
-    { value: "all", label: "All" },
-  ];
 
   const COLS = gridColumnTemplate(columnWidths, 2);
   const firstVirtualRow = Math.max(
