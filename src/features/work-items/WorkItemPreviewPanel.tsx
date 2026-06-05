@@ -699,7 +699,7 @@ export function WorkItemPreviewPanel({
 
   return (
     <aside
-      className="flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-white shadow-sm focus-within:ring-2 focus-within:ring-ring"
+      className="flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-white shadow-sm transition-[border-color,box-shadow] focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/25"
       onKeyDown={handlePreviewPanelKeyDown}
     >
       {!selectedItem ? (
@@ -850,7 +850,7 @@ export function WorkItemPreviewPanel({
                       aria-keyshortcuts="M Alt+M Control+Enter Meta+Enter"
                       placeholder="Add a comment..."
                       rows={2}
-                      className="min-h-[36px] w-full resize-none rounded-md border border-input bg-white px-2 py-1.5 text-sm outline-none transition-[min-height] focus:min-h-[64px] focus:ring-2 focus:ring-ring"
+                      className="min-h-[36px] w-full resize-none rounded-md border border-input bg-white px-2 py-1.5 text-sm outline-none transition-[border-color,box-shadow,min-height] focus:min-h-[64px] focus:border-primary focus:ring-4 focus:ring-primary/20"
                     />
                     {showMentionOptions ? (
                       <div className="absolute bottom-full left-0 z-20 mb-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-white py-1 shadow-lg">
@@ -1001,7 +1001,7 @@ function WorkItemPreviewDetails({
     <div
       aria-keyshortcuts="Alt+P"
       aria-label="Work item preview"
-      className="min-h-0 flex-1 overflow-auto bg-white px-2 py-1.5 text-xs outline-none"
+      className="min-h-0 flex-1 overflow-auto bg-white px-2 py-1.5 text-xs outline-none focus:bg-primary/[0.02] focus:ring-2 focus:ring-inset focus:ring-primary"
       data-primary-preview="true"
       onKeyDown={stopPreviewNavigationKeyDown}
       tabIndex={-1}
