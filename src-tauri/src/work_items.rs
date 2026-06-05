@@ -7,7 +7,6 @@ use base64::Engine;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
 
 use crate::auth::client_for_organization;
 use crate::commits::encode_path_segment;
@@ -490,25 +489,26 @@ impl WorkItemService {
                 authenticated_user_mention_candidate(data.authenticated_user, query)
             })
         };
-        let picker_display_names = match client.search_identity_picker(query, 40).await {
-            Ok(identities) => identity_picker_display_names_by_unique_name(identities),
+        let picker_candidates = match client.search_identity_picker(query, 40).await {
+            Ok(identities) => identities
+                .into_iter()
+                .filter_map(mention_candidate_from_identity_picker)
+                .collect::<Vec<_>>(),
             Err(error) => {
-                tracing::warn!(%error, "identity picker search failed while improving mention labels");
-                HashMap::new()
+                tracing::warn!(%error, "identity picker search failed; falling back to identities API");
+                client
+                    .search_identities(query, 40)
+                    .await?
+                    .into_iter()
+                    .filter_map(summarize_mention_candidate)
+                    .collect()
             }
         };
-        let identities = client.search_identities(query, 8).await?;
         let mut candidates = Vec::new();
         if let Some(candidate) = current_user {
             push_unique_mention_candidate(&mut candidates, candidate);
         }
-        for candidate in identities
-            .into_iter()
-            .filter_map(summarize_mention_candidate)
-            .map(|candidate| {
-                prefer_identity_picker_mention_display(candidate, &picker_display_names)
-            })
-        {
+        for candidate in picker_candidates {
             push_unique_mention_candidate(&mut candidates, candidate);
             if candidates.len() >= 8 {
                 break;
@@ -1069,55 +1069,45 @@ fn summarize_mention_candidate(identity: Identity) -> Option<MentionCandidate> {
     })
 }
 
-fn identity_picker_display_names_by_unique_name(
-    identities: Vec<IdentityPickerIdentity>,
-) -> HashMap<String, String> {
-    let mut names = HashMap::new();
-    for identity in identities {
-        if identity.active == Some(false) {
-            continue;
-        }
-        if identity
-            .entity_type
-            .as_deref()
-            .is_some_and(|value| !value.eq_ignore_ascii_case("User"))
-        {
-            continue;
-        }
-        let Some(display_name) = identity
-            .display_name
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty() && !is_email_like_display(value))
-        else {
-            continue;
-        };
-        let Some(unique_name) = identity
-            .mail_address
-            .or(identity.sign_in_address)
-            .map(|value| value.trim().to_lowercase())
-            .filter(|value| !value.is_empty())
-        else {
-            continue;
-        };
-        names.entry(unique_name).or_insert(display_name);
+fn mention_candidate_from_identity_picker(
+    identity: IdentityPickerIdentity,
+) -> Option<MentionCandidate> {
+    if identity.active == Some(false) {
+        return None;
     }
-    names
-}
-
-fn prefer_identity_picker_mention_display(
-    mut candidate: MentionCandidate,
-    picker_display_names: &HashMap<String, String>,
-) -> MentionCandidate {
-    if !is_email_like_display(&candidate.display_name) {
-        return candidate;
+    if identity
+        .entity_type
+        .as_deref()
+        .is_some_and(|value| !value.eq_ignore_ascii_case("User"))
+    {
+        return None;
     }
-    let Some(unique_name) = candidate.unique_name.as_deref() else {
-        return candidate;
-    };
-    if let Some(display_name) = picker_display_names.get(&unique_name.to_lowercase()) {
-        candidate.display_name = display_name.clone();
+    let display_name = identity
+        .display_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?
+        .to_string();
+    let unique_name = identity
+        .mail_address
+        .or(identity.sign_in_address)
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    if is_azure_devops_service_identity_name(&display_name, unique_name.as_deref()) {
+        return None;
     }
-    candidate
+    let id = identity
+        .subject_descriptor
+        .or(identity.entity_id)
+        .or(identity.origin_id)
+        .or(identity.local_id)
+        .or_else(|| unique_name.clone())
+        .unwrap_or_else(|| display_name.clone());
+    Some(MentionCandidate {
+        id,
+        display_name,
+        unique_name,
+    })
 }
 
 fn assignee_candidate_from_identity_picker(
@@ -1458,18 +1448,6 @@ fn mention_candidate_matches_query(
         || unique_name
             .map(|value| value.to_lowercase().contains(&query))
             .unwrap_or(false)
-}
-
-fn is_email_like_display(value: &str) -> bool {
-    let value = value.trim();
-    let Some((local, domain)) = value.split_once('@') else {
-        return false;
-    };
-    !local.is_empty()
-        && !domain.is_empty()
-        && !value.contains(char::is_whitespace)
-        && !value.contains('<')
-        && !value.contains('>')
 }
 
 fn push_unique_mention_candidate(
@@ -2121,21 +2099,21 @@ mod tests {
     }
 
     #[test]
-    fn prefer_identity_picker_mention_display_replaces_email_label() {
-        let mut picker_names = HashMap::new();
-        picker_names.insert(
-            "aksh0402@outlook.jp".to_string(),
-            "naoto akashi".to_string(),
-        );
-        let candidate = prefer_identity_picker_mention_display(
-            MentionCandidate {
-                id: "user-1".to_string(),
-                display_name: "aksh0402@outlook.jp".to_string(),
-                unique_name: Some("aksh0402@outlook.jp".to_string()),
-            },
-            &picker_names,
-        );
+    fn mention_candidate_from_identity_picker_uses_display_name_and_descriptor() {
+        let candidate = mention_candidate_from_identity_picker(IdentityPickerIdentity {
+            entity_id: Some("entity-1".to_string()),
+            origin_id: Some("origin-1".to_string()),
+            local_id: Some("local-1".to_string()),
+            subject_descriptor: Some("aad.subject-1".to_string()),
+            display_name: Some("naoto akashi".to_string()),
+            mail_address: Some("aksh0402@outlook.jp".to_string()),
+            sign_in_address: None,
+            entity_type: Some("User".to_string()),
+            active: Some(true),
+        })
+        .unwrap();
 
+        assert_eq!(candidate.id, "aad.subject-1");
         assert_eq!(candidate.display_name, "naoto akashi");
         assert_eq!(
             candidate.unique_name.as_deref(),
