@@ -163,6 +163,9 @@ export function WorkItemPreviewPanel({
     () => loadPreviewFieldKeys(),
   );
   const [selectedMentions, setSelectedMentions] = useState<SelectedMention[]>([]);
+  const mentionsToRecordRef = useRef<
+    Array<{ id: string; displayName: string; uniqueName: string; organizationId: string }>
+  >([]);
   const [mentionDisplayNamesById, setMentionDisplayNamesById] = useState<
     Record<string, string>
   >({});
@@ -329,6 +332,15 @@ export function WorkItemPreviewPanel({
   const commentMutation = useMutation({
     mutationFn: addWorkItemComment,
     onSuccess: () => {
+      for (const mention of mentionsToRecordRef.current) {
+        void recordMentionInteraction({
+          organizationId: mention.organizationId,
+          userId: mention.id,
+          displayName: mention.displayName,
+          uniqueName: mention.uniqueName,
+        });
+      }
+      mentionsToRecordRef.current = [];
       setCommentText("");
       setSelectedMentions([]);
       setMentionQuery("");
@@ -534,16 +546,18 @@ export function WorkItemPreviewPanel({
 
   function postComment() {
     if (!selectedItem || !commentText.trim() || commentMutation.isPending) return;
-    for (const mention of selectedMentions) {
-      if (mention.uniqueName) {
-        void recordMentionInteraction({
-          organizationId: selectedItem.organizationId,
-          userId: mention.id,
-          displayName: mention.displayName,
-          uniqueName: mention.uniqueName,
-        });
-      }
-    }
+    mentionsToRecordRef.current = selectedMentions
+      .filter(
+        (m) =>
+          m.uniqueName &&
+          new RegExp(`@${escapeRegExp(m.displayName)}(?=\\s|$)`).test(commentText),
+      )
+      .map((m) => ({
+        id: m.id,
+        displayName: m.displayName,
+        uniqueName: m.uniqueName!,
+        organizationId: selectedItem.organizationId,
+      }));
     commentMutation.mutate({
       organizationId: selectedItem.organizationId,
       projectId: selectedItem.projectId,
