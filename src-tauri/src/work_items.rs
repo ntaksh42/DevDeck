@@ -695,7 +695,7 @@ impl WorkItemService {
         }
 
         // 履歴が少ない場合はアサイン頻度の高いユーザーで補完
-        if candidates.len() < 4 {
+        if candidates.len() < 5 {
             let recent_assignees = self
                 .db
                 .get_recent_assignees(&organization.id)
