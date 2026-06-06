@@ -91,8 +91,10 @@ export function MyWorkItemsPanel({ organizations }: { organizations: Organizatio
       ) : null}
 
       <WorkItemsGrid
+        activeExternalFilterCount={filter.trim() ? 1 : 0}
         dataUpdatedAt={query.dataUpdatedAt}
         loading={query.isFetching}
+        onClearExternalFilters={() => setFilter("")}
         results={results}
         searched={query.isSuccess || query.isFetching}
         autoFocus

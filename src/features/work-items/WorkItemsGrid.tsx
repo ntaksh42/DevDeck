@@ -239,6 +239,14 @@ function storeWorkItemColumnFilters(
   window.localStorage.setItem(key, JSON.stringify(serialized));
 }
 
+function activeColumnFilterCount(
+  filters: Partial<Record<FilterableColumn, Set<string>>>,
+): number {
+  return (Object.values(filters) as (Set<string> | undefined)[]).filter(
+    (values) => values && values.size > 0,
+  ).length;
+}
+
 function workItemCellValue(item: WorkItemSummary, column: WiSortKey): ReactNode {
   switch (column) {
     case "id":
@@ -400,7 +408,9 @@ export function WorkItemsGrid({
   autoFocus = false,
   emptyMessage,
   dataUpdatedAt,
+  activeExternalFilterCount = 0,
   initialSort,
+  onClearExternalFilters,
   onSortChange,
   previewVisible = true,
   storageKeyScope,
@@ -411,7 +421,9 @@ export function WorkItemsGrid({
   autoFocus?: boolean;
   emptyMessage?: string;
   dataUpdatedAt?: number;
+  activeExternalFilterCount?: number;
   initialSort?: WiSortState;
+  onClearExternalFilters?: () => void;
   onSortChange?: (sort: WiSortState) => void;
   previewVisible?: boolean;
   storageKeyScope?: string;
@@ -954,6 +966,14 @@ export function WorkItemsGrid({
     });
   }
 
+  function clearAllFilters() {
+    setColumnFilters({});
+    setOpenFilterCol(null);
+    setFilterAnchorRect(null);
+    onClearExternalFilters?.();
+    setSelectedIndex(0);
+  }
+
   function applyWiSort(column: WiSortKey) {
     setWiSort((current) => {
       const next: WiSortState =
@@ -1085,7 +1105,10 @@ export function WorkItemsGrid({
   );
   const wiFlexibleIndex = Math.max(0, visibleColumns.indexOf("title"));
   const wiColTemplate = gridColumnTemplate(visibleColumnWidths, wiFlexibleIndex, ["28px"]);
-  const hasActiveFilters = (Object.values(columnFilters) as (Set<string> | undefined)[]).some(v => v && v.size > 0);
+  const columnFilterCount = activeColumnFilterCount(columnFilters);
+  const activeFilterCount = Math.max(0, activeExternalFilterCount) + columnFilterCount;
+  const hasActiveColumnFilters = columnFilterCount > 0;
+  const hasActiveFilters = activeFilterCount > 0;
   const firstVirtualRow = Math.max(
     0,
     Math.floor(gridViewport.scrollTop / WI_GRID_ROW_HEIGHT) - WI_GRID_OVERSCAN,
@@ -1255,7 +1278,7 @@ export function WorkItemsGrid({
                   <span>No items match the active filters.</span>
                   <button
                     type="button"
-                    onClick={() => setColumnFilters({})}
+                    onClick={clearAllFilters}
                     className="rounded border border-border px-2 py-0.5 text-xs hover:bg-secondary"
                   >
                     Clear filters
@@ -1302,13 +1325,25 @@ export function WorkItemsGrid({
               {loading
                 ? "Loading…"
                 : searched
-                  ? hasActiveFilters
+                  ? hasActiveColumnFilters
                     ? `${displayed.length} of ${sorted.length} item${sorted.length === 1 ? "" : "s"}`
                     : `${displayed.length} item${displayed.length === 1 ? "" : "s"}`
                   : "Ready"}
               {dataUpdatedAt ? ` · data ${formatRelativeDate(new Date(dataUpdatedAt).toISOString())}` : ""}
             </span>
             <span className="flex items-center gap-2">
+              {hasActiveFilters ? (
+                <>
+                  <span>{activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"} active</span>
+                  <button
+                    type="button"
+                    onClick={clearAllFilters}
+                    className="rounded border border-border bg-white px-2 py-0.5 text-xs hover:bg-secondary"
+                  >
+                    Clear filters
+                  </button>
+                </>
+              ) : null}
               <button
                 type="button"
                 onClick={(event) => setColumnMenuRect(event.currentTarget.getBoundingClientRect())}

@@ -119,6 +119,14 @@ export function CommitSearch({ organizations }: { organizations: Organization[] 
     [projectId, repositoryOptions],
   );
   const results = mutation.data ?? [];
+  const activeSearchFilterCount =
+    (query.trim() ? 1 : 0) +
+    (author.trim() ? 1 : 0) +
+    (branch.trim() ? 1 : 0) +
+    (fromDate ? 1 : 0) +
+    (toDate ? 1 : 0) +
+    (projectId ? 1 : 0) +
+    (repositoryId ? 1 : 0);
 
   useEffect(() => {
     if (!organizationId && organizations[0]) {
@@ -166,6 +174,29 @@ export function CommitSearch({ organizations }: { organizations: Organization[] 
       projectId,
       repositoryId,
     });
+  }
+
+  function clearSearchFilters() {
+    setQuery("");
+    setAuthor("");
+    setBranch("");
+    setFromDate("");
+    setToDate("");
+    setProjectId("");
+    setRepositoryId("");
+    setValidationError(null);
+    if (mutation.isSuccess) {
+      mutation.mutate({
+        organizationId: selectedOrganizationId,
+        query: "",
+        author: "",
+        branch: "",
+        fromDate: "",
+        toDate: "",
+        projectId: "",
+        repositoryId: "",
+      });
+    }
   }
 
   return (
@@ -357,7 +388,13 @@ export function CommitSearch({ organizations }: { organizations: Organization[] 
         <ErrorState message={commandErrorMessage(mutation.error)} />
       ) : null}
 
-      <CommitResults loading={mutation.isPending} results={results} searched={mutation.isSuccess} />
+      <CommitResults
+        activeExternalFilterCount={activeSearchFilterCount}
+        loading={mutation.isPending}
+        onClearExternalFilters={clearSearchFilters}
+        results={results}
+        searched={mutation.isSuccess}
+      />
     </div>
   );
 }
@@ -520,11 +557,15 @@ const CommitGridRow = forwardRef<
 CommitGridRow.displayName = "CommitGridRow";
 
 function CommitResults({
+  activeExternalFilterCount = 0,
   loading,
+  onClearExternalFilters,
   results,
   searched,
 }: {
+  activeExternalFilterCount?: number;
   loading: boolean;
+  onClearExternalFilters?: () => void;
   results: CommitSummary[];
   searched: boolean;
 }) {
@@ -608,6 +649,8 @@ function CommitResults({
     if (!searched) return "Ready";
     return `${results.length} commit${results.length === 1 ? "" : "s"}`;
   }, [loading, results.length, searched]);
+  const activeFilterCount = Math.max(0, activeExternalFilterCount);
+  const hasActiveFilters = activeFilterCount > 0;
 
   return (
     <div className="overflow-hidden rounded-md border border-border bg-white">
@@ -615,6 +658,18 @@ function CommitResults({
         <h2 className="text-base font-semibold">Results</h2>
         <span className="flex items-center gap-2 text-sm text-muted-foreground">
           {countLabel}
+          {hasActiveFilters ? (
+            <>
+              <span>{activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"} active</span>
+              <button
+                type="button"
+                onClick={onClearExternalFilters}
+                className="rounded border border-border bg-white px-2 py-0.5 text-xs hover:bg-secondary"
+              >
+                Clear filters
+              </button>
+            </>
+          ) : null}
           <ShortcutHint>Alt+G</ShortcutHint>
         </span>
       </div>

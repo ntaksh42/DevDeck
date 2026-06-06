@@ -391,6 +391,14 @@ function storeMyReviewsGridViewState(state: MyReviewsGridViewState) {
   );
 }
 
+function activeColumnFilterCount(
+  filters: Partial<Record<FilterableColumn, Set<string>>>,
+): number {
+  return (Object.values(filters) as (Set<string> | undefined)[]).filter(
+    (values) => values && values.size > 0,
+  ).length;
+}
+
 const voteFilterOptions: { value: VoteFilter; label: string }[] = [
   { value: "noVote", label: "No Vote" },
   { value: "waitingAuthor", label: "Waiting Author" },
@@ -527,10 +535,10 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
 
   const visiblePrs = allPrs.filter((pr) => showDrafts || !pr.isDraft);
   const noVoteCount = visiblePrs.filter((pr) => pr.myVote === 0).length;
-  const hasActiveColumnFilters = (Object.values(columnFilters) as (Set<string> | undefined)[]).some(
-    (values) => values && values.size > 0,
-  );
-  const isFiltered = !!textFilter || voteFilter !== "all" || hasActiveColumnFilters;
+  const columnFilterCount = activeColumnFilterCount(columnFilters);
+  const activeFilterCount =
+    (textFilter.trim() ? 1 : 0) + (voteFilter !== "all" ? 1 : 0) + columnFilterCount;
+  const isFiltered = activeFilterCount > 0;
   const selectedPr = sortedPrs[selectedIndex] ?? null;
 
   const settingsQuery = useQuery({
@@ -656,6 +664,15 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     setSelectedIndex(0);
   }
 
+  function clearAllFilters() {
+    setTextFilter("");
+    setVoteFilter("all");
+    setColumnFilters({});
+    setOpenFilterCol(null);
+    setFilterAnchorRect(null);
+    setSelectedIndex(0);
+  }
+
   function handleKeyDown(e: React.KeyboardEvent) {
     const editable = isEditableTarget(e.target);
     const targetElement = e.target instanceof HTMLElement ? e.target : null;
@@ -738,10 +755,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
         setFilterAnchorRect(null);
         return;
       }
-      setTextFilter("");
-      setVoteFilter("noVote");
-      setColumnFilters({});
-      setSelectedIndex(0);
+      clearAllFilters();
       return;
     }
     if (e.key === "ArrowRight") {
@@ -961,13 +975,10 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
                   <span>
                     {allPrs.length === 0 ? "No pull requests assigned to you." : "No results match the current filter."}
                   </span>
-                  {hasActiveColumnFilters ? (
+                  {isFiltered ? (
                     <button
                       type="button"
-                      onClick={() => {
-                        setColumnFilters({});
-                        setSelectedIndex(0);
-                      }}
+                      onClick={clearAllFilters}
                       className="rounded border border-border px-2 py-0.5 text-xs hover:bg-secondary"
                     >
                       Clear filters
@@ -1012,7 +1023,19 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
               <span className="font-medium text-foreground">{noVoteCount}</span> not voted
             </span>
             <span className="flex items-center gap-2">
-              {isFiltered ? <span>Filtered: {sortedPrs.length} shown</span> : null}
+              {isFiltered ? (
+                <>
+                  <span>{activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"} active</span>
+                  <span>{sortedPrs.length} shown</span>
+                  <button
+                    type="button"
+                    onClick={clearAllFilters}
+                    className="rounded border border-border bg-white px-2 py-0.5 text-xs hover:bg-secondary"
+                  >
+                    Clear filters
+                  </button>
+                </>
+              ) : null}
               <ShortcutHint>Alt+G</ShortcutHint>
             </span>
           </div>

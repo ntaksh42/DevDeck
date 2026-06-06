@@ -72,6 +72,7 @@ export function PullRequestSearch({
 
   const mutation = useMutation({ mutationFn: searchPullRequests });
   const results = mutation.data ?? [];
+  const activeSearchFilterCount = (query.trim() ? 1 : 0) + (projectId ? 1 : 0) + (repositoryId ? 1 : 0);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -82,6 +83,21 @@ export function PullRequestSearch({
       projectId: projectId || undefined,
       repositoryId: repositoryId || undefined,
     });
+  }
+
+  function clearSearchFilters() {
+    setQuery("");
+    setProjectId("");
+    setRepositoryId("");
+    if (mutation.isSuccess) {
+      mutation.mutate({
+        organizationId,
+        query: "",
+        status,
+        projectId: undefined,
+        repositoryId: undefined,
+      });
+    }
   }
 
   return (
@@ -178,9 +194,23 @@ export function PullRequestSearch({
 
       {mutation.isError && <ErrorState message={commandErrorMessage(mutation.error)} />}
 
-      <PullRequestResults loading={mutation.isPending} results={results} searched={mutation.isSuccess} />
+      <PullRequestResults
+        activeExternalFilterCount={activeSearchFilterCount}
+        loading={mutation.isPending}
+        onClearExternalFilters={clearSearchFilters}
+        results={results}
+        searched={mutation.isSuccess}
+      />
     </div>
   );
+}
+
+function activeColumnFilterCount(
+  filters: Partial<Record<PrSearchFilterableColumn, Set<string>>>,
+): number {
+  return (Object.values(filters) as (Set<string> | undefined)[]).filter(
+    (values) => values && values.size > 0,
+  ).length;
 }
 
 const PR_SEARCH_COLUMNS: { label: string; filterKey?: PrSearchFilterableColumn }[] = [
@@ -194,11 +224,15 @@ const PR_SEARCH_COLUMNS: { label: string; filterKey?: PrSearchFilterableColumn }
 ];
 
 function PullRequestResults({
+  activeExternalFilterCount = 0,
   loading,
+  onClearExternalFilters,
   results,
   searched,
 }: {
+  activeExternalFilterCount?: number;
   loading: boolean;
+  onClearExternalFilters?: () => void;
   results: PullRequestSummary[];
   searched: boolean;
 }) {
@@ -248,9 +282,10 @@ function PullRequestResults({
     });
   }, [columnFilters, results]);
 
-  const hasActiveColumnFilters = (Object.values(columnFilters) as (Set<string> | undefined)[]).some(
-    (values) => values && values.size > 0,
-  );
+  const columnFilterCount = activeColumnFilterCount(columnFilters);
+  const hasActiveColumnFilters = columnFilterCount > 0;
+  const activeFilterCount = Math.max(0, activeExternalFilterCount) + columnFilterCount;
+  const hasActiveFilters = activeFilterCount > 0;
 
   useEffect(() => {
     setSelectedIndex((index) => Math.min(index, Math.max(filteredResults.length - 1, 0)));
@@ -314,6 +349,14 @@ function PullRequestResults({
     setSelectedIndex(0);
   }
 
+  function clearAllFilters() {
+    setColumnFilters({});
+    setOpenFilterCol(null);
+    setFilterAnchorRect(null);
+    onClearExternalFilters?.();
+    setSelectedIndex(0);
+  }
+
   function handleKeyDown(e: React.KeyboardEvent) {
     if (isEditableTarget(e.target)) return;
     if (e.key === "Escape" && openFilterCol) {
@@ -357,6 +400,18 @@ function PullRequestResults({
         <h2 className="text-base font-semibold">Results</h2>
         <span className="flex items-center gap-2 text-sm text-muted-foreground">
           {countLabel}
+          {hasActiveFilters ? (
+            <>
+              <span>{activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"} active</span>
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="rounded border border-border bg-white px-2 py-0.5 text-xs hover:bg-secondary"
+              >
+                Clear filters
+              </button>
+            </>
+          ) : null}
           <ShortcutHint>Alt+G</ShortcutHint>
         </span>
       </div>
@@ -422,10 +477,7 @@ function PullRequestResults({
               <span>No results match the active filters.</span>
               <button
                 type="button"
-                onClick={() => {
-                  setColumnFilters({});
-                  setSelectedIndex(0);
-                }}
+                onClick={clearAllFilters}
                 className="rounded border border-border px-2 py-0.5 text-xs hover:bg-secondary"
               >
                 Clear filters
