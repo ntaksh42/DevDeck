@@ -872,6 +872,9 @@ describe("App", () => {
           createdDate: "2026-05-24T00:00:00Z",
         });
       }
+      if (command === "record_mention_interaction") {
+        return Promise.resolve(null);
+      }
       return Promise.reject(new Error(`Unhandled command: ${command}`));
     });
 

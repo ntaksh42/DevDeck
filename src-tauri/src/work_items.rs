@@ -10,7 +10,7 @@ use serde_json::Value;
 
 use crate::auth::client_for_organization;
 use crate::commits::encode_path_segment;
-use crate::db::{AppDatabase, CachedWorkItem, Organization};
+use crate::db::{AppDatabase, CachedWorkItem, MentionHistoryEntry, Organization};
 use crate::error::{AppError, Result};
 use crate::secrets::SecretStore;
 
@@ -93,6 +93,15 @@ pub struct GetWorkItemPreviewInput {
 pub struct SearchWorkItemMentionsInput {
     pub organization_id: Option<String>,
     pub query: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordMentionInteractionInput {
+    pub organization_id: Option<String>,
+    pub user_id: Option<String>,
+    pub display_name: String,
+    pub unique_name: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -468,6 +477,26 @@ impl WorkItemService {
         ))
     }
 
+    pub fn record_mention_interaction(
+        &self,
+        input: RecordMentionInteractionInput,
+    ) -> Result<()> {
+        let unique_name = input.unique_name.trim();
+        let display_name = input.display_name.trim();
+        if unique_name.is_empty() || display_name.is_empty() {
+            return Ok(());
+        }
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let now = Utc::now().to_rfc3339();
+        self.db.record_mention_interaction(
+            &organization.id,
+            unique_name,
+            display_name,
+            input.user_id.as_deref(),
+            &now,
+        )
+    }
+
     pub async fn search_mentions(
         &self,
         input: SearchWorkItemMentionsInput,
@@ -504,11 +533,31 @@ impl WorkItemService {
                     .collect()
             }
         };
+
+        let history = self.db.get_mention_history(&organization.id).unwrap_or_default();
+        let history_index: std::collections::HashMap<String, usize> = history
+            .iter()
+            .enumerate()
+            .map(|(i, h)| (h.unique_name.clone(), i))
+            .collect();
+
+        let history_rank = |c: &MentionCandidate| -> usize {
+            c.unique_name
+                .as_deref()
+                .and_then(|un| history_index.get(&un.to_lowercase()).copied())
+                .unwrap_or(usize::MAX)
+        };
+
+        let (mut history_matches, rest): (Vec<_>, Vec<_>) = picker_candidates
+            .into_iter()
+            .partition(|c| history_rank(c) < usize::MAX);
+        history_matches.sort_by_key(|c| history_rank(c));
+
         let mut candidates = Vec::new();
         if let Some(candidate) = current_user {
             push_unique_mention_candidate(&mut candidates, candidate);
         }
-        for candidate in picker_candidates {
+        for candidate in history_matches.into_iter().chain(rest) {
             push_unique_mention_candidate(&mut candidates, candidate);
             if candidates.len() >= 8 {
                 break;
@@ -596,26 +645,47 @@ impl WorkItemService {
             }
         }
 
-        // DBキャッシュから頻度の高いアサイン済みユーザーを補完
-        let recent_assignees = self
+        // メンション履歴（実際にメンションした人）を優先
+        let history = self
             .db
-            .get_recent_assignees(&organization.id)
+            .get_mention_history(&organization.id)
             .unwrap_or_default();
-        for (display_name, unique_name) in recent_assignees {
-            let display_name = display_name.trim().to_string();
-            if display_name.is_empty() {
-                continue;
-            }
+        for MentionHistoryEntry { unique_name, display_name, user_id } in &history {
             push_unique_mention_candidate(
                 &mut candidates,
                 MentionCandidate {
-                    id: unique_name.as_deref().unwrap_or(&display_name).to_string(),
-                    display_name,
-                    unique_name,
+                    id: user_id.as_deref().unwrap_or(unique_name).to_string(),
+                    display_name: display_name.clone(),
+                    unique_name: Some(unique_name.clone()),
                 },
             );
             if candidates.len() >= 8 {
                 break;
+            }
+        }
+
+        // 履歴が少ない場合はアサイン頻度の高いユーザーで補完
+        if candidates.len() < 4 {
+            let recent_assignees = self
+                .db
+                .get_recent_assignees(&organization.id)
+                .unwrap_or_default();
+            for (display_name, unique_name) in recent_assignees {
+                let display_name = display_name.trim().to_string();
+                if display_name.is_empty() {
+                    continue;
+                }
+                push_unique_mention_candidate(
+                    &mut candidates,
+                    MentionCandidate {
+                        id: unique_name.as_deref().unwrap_or(&display_name).to_string(),
+                        display_name,
+                        unique_name,
+                    },
+                );
+                if candidates.len() >= 8 {
+                    break;
+                }
             }
         }
 
@@ -1097,10 +1167,10 @@ fn mention_candidate_from_identity_picker(
         return None;
     }
     let id = identity
-        .subject_descriptor
-        .or(identity.entity_id)
+        .entity_id
         .or(identity.origin_id)
         .or(identity.local_id)
+        .or(identity.subject_descriptor)
         .or_else(|| unique_name.clone())
         .unwrap_or_else(|| display_name.clone());
     Some(MentionCandidate {
@@ -2052,7 +2122,7 @@ mod tests {
     }
 
     #[test]
-    fn mention_candidate_from_identity_picker_uses_display_name_and_descriptor() {
+    fn mention_candidate_from_identity_picker_uses_display_name_and_entity_id() {
         let candidate = mention_candidate_from_identity_picker(IdentityPickerIdentity {
             entity_id: Some("entity-1".to_string()),
             origin_id: Some("origin-1".to_string()),
@@ -2066,7 +2136,7 @@ mod tests {
         })
         .unwrap();
 
-        assert_eq!(candidate.id, "aad.subject-1");
+        assert_eq!(candidate.id, "entity-1");
         assert_eq!(candidate.display_name, "naoto akashi");
         assert_eq!(
             candidate.unique_name.as_deref(),

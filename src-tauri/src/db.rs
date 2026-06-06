@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, Result};
 
-const SCHEMA_VERSION: i64 = 5;
+const SCHEMA_VERSION: i64 = 6;
 
 // ── Existing public types ────────────────────────────────────────────────────
 
@@ -64,6 +64,13 @@ pub struct OrganizationDraft {
 }
 
 // ── Cache row types ───────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone)]
+pub struct MentionHistoryEntry {
+    pub unique_name: String,
+    pub display_name: String,
+    pub user_id: Option<String>,
+}
 
 #[derive(Debug, Clone)]
 pub struct CachedPr {
@@ -439,6 +446,52 @@ impl AppDatabase {
         Ok(())
     }
 
+    pub fn record_mention_interaction(
+        &self,
+        org_id: &str,
+        unique_name: &str,
+        display_name: &str,
+        user_id: Option<&str>,
+        now: &str,
+    ) -> Result<()> {
+        let unique_name_lower = unique_name.to_lowercase();
+        let conn = self.open()?;
+        conn.execute(
+            "INSERT INTO mention_history(org_id, unique_name, display_name, user_id, interaction_count, last_used_at)
+             VALUES (?1, ?2, ?3, ?4, 1, ?5)
+             ON CONFLICT(org_id, unique_name) DO UPDATE SET
+                 display_name = excluded.display_name,
+                 user_id = COALESCE(excluded.user_id, user_id),
+                 interaction_count = interaction_count + 1,
+                 last_used_at = excluded.last_used_at",
+            params![org_id, unique_name_lower, display_name, user_id, now],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_mention_history(&self, org_id: &str) -> Result<Vec<MentionHistoryEntry>> {
+        let conn = self.open()?;
+        let mut stmt = conn.prepare(
+            "SELECT unique_name, display_name, user_id \
+             FROM mention_history \
+             WHERE org_id = ?1 \
+             ORDER BY interaction_count DESC, last_used_at DESC \
+             LIMIT 40",
+        )?;
+        let rows = stmt.query_map([org_id], |row| {
+            Ok(MentionHistoryEntry {
+                unique_name: row.get(0)?,
+                display_name: row.get(1)?,
+                user_id: row.get(2)?,
+            })
+        })?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
     pub fn get_recent_assignees(&self, org_id: &str) -> Result<Vec<(String, Option<String>)>> {
         let conn = self.open()?;
         let mut stmt = conn.prepare(
@@ -707,6 +760,25 @@ pub fn migrate(conn: &Connection) -> Result<()> {
                 SELECT rowid, org_id, id, title, work_item_type, assigned_to FROM work_items;
 
             PRAGMA user_version = 5;
+            "#,
+        )?;
+    }
+    if current < 6 {
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS mention_history(
+                org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                unique_name TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                user_id TEXT,
+                interaction_count INTEGER NOT NULL DEFAULT 1,
+                last_used_at TEXT NOT NULL,
+                PRIMARY KEY (org_id, unique_name)
+            );
+            CREATE INDEX IF NOT EXISTS idx_mention_history_rank
+                ON mention_history(org_id, interaction_count DESC, last_used_at DESC);
+
+            PRAGMA user_version = 6;
             "#,
         )?;
     }
@@ -2077,5 +2149,32 @@ mod tests {
         let remaining = db.search_commits("org1", None, None, None, None).unwrap();
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].commit_id, "new");
+    }
+
+    #[test]
+    fn mention_history_deduplicates_by_lowercase_unique_name_and_ranks_by_frequency() {
+        let tf = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        let now = "2026-06-01T00:00:00Z";
+
+        // Same person, different casing — must collapse into one row
+        db.record_mention_interaction("org1", "Taro.Yamada@example.com", "Taro Yamada", Some("uid-taro"), now).unwrap();
+        db.record_mention_interaction("org1", "taro.yamada@example.com", "Taro Yamada", Some("uid-taro"), now).unwrap();
+
+        // Different person
+        db.record_mention_interaction("org1", "hanako@example.com", "Hanako Suzuki", None, now).unwrap();
+
+        let history = db.get_mention_history("org1").unwrap();
+        assert_eq!(history.len(), 2, "same person with different casing must be one row");
+
+        let taro = history.iter().find(|h| h.unique_name == "taro.yamada@example.com").unwrap();
+        assert_eq!(taro.display_name, "Taro Yamada");
+        assert_eq!(taro.user_id.as_deref(), Some("uid-taro"));
+
+        // Taro has interaction_count=2, Hanako=1 — Taro must rank first
+        assert_eq!(history[0].unique_name, "taro.yamada@example.com", "higher interaction count must rank first");
     }
 }

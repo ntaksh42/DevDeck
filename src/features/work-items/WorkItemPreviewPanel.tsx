@@ -20,6 +20,7 @@ import {
   listWorkItemTypeStates,
   searchWorkItemAssignees,
   searchWorkItemMentions,
+  recordMentionInteraction,
   commandErrorMessage,
   type MentionCandidate,
   type WorkItemAssigneeCandidate,
@@ -533,6 +534,16 @@ export function WorkItemPreviewPanel({
 
   function postComment() {
     if (!selectedItem || !commentText.trim() || commentMutation.isPending) return;
+    for (const mention of selectedMentions) {
+      if (mention.uniqueName) {
+        void recordMentionInteraction({
+          organizationId: selectedItem.organizationId,
+          userId: mention.id,
+          displayName: mention.displayName,
+          uniqueName: mention.uniqueName,
+        });
+      }
+    }
     commentMutation.mutate({
       organizationId: selectedItem.organizationId,
       projectId: selectedItem.projectId,
@@ -2243,6 +2254,7 @@ function rankMentionCandidates<T extends MentionCandidate>({
   const term = query.trim().toLowerCase();
   const recentIds = new Map(recent.map((candidate, index) => [candidate.id, index]));
   const priority = new Map(priorityNames.map((name, index) => [name, index]));
+  const remoteIndex = new Map(remote.map((candidate, index) => [candidate.id, index]));
   const candidates: T[] = [];
 
   for (const candidate of [...recent, ...remote]) {
@@ -2275,6 +2287,10 @@ function rankMentionCandidates<T extends MentionCandidate>({
       const leftStarts = mentionCandidateStartsWith(left, term) ? 0 : 1;
       const rightStarts = mentionCandidateStartsWith(right, term) ? 0 : 1;
       if (leftStarts !== rightStarts) return leftStarts - rightStarts;
+
+      const leftRemote = remoteIndex.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+      const rightRemote = remoteIndex.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+      if (leftRemote !== rightRemote) return leftRemote - rightRemote;
 
       return left.displayName.localeCompare(right.displayName);
     })
@@ -2374,6 +2390,7 @@ function normalizeMentionName(value: string | null | undefined): string {
 type SelectedMention = {
   id: string;
   displayName: string;
+  uniqueName: string | null;
 };
 
 function activeMentionAt(
@@ -2398,7 +2415,7 @@ function addSelectedMention(
   }
   return [
     ...mentions,
-    { id: candidate.id, displayName: candidate.displayName },
+    { id: candidate.id, displayName: candidate.displayName, uniqueName: candidate.uniqueName },
   ];
 }
 

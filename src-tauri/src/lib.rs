@@ -37,11 +37,12 @@ use work_items::{
     AddWorkItemCommentInput, AssignWorkItemInput, AssignWorkItemsInput, BulkWorkItemResult,
     DeleteWorkItemCommentInput, FetchWorkItemImageInput, GetSavedQueryInput,
     GetWorkItemPreviewInput, ListMyWorkItemsInput, ListWorkItemProjectsInput,
-    ListWorkItemTypeStatesInput, MentionCandidate, RunWorkItemQueryInput, SavedQueryResult,
-    SearchWorkItemAssigneesInput, SearchWorkItemMentionsInput, SearchWorkItemsInput,
-    SetWorkItemPriorityInput, SetWorkItemReasonInput, SetWorkItemStateInput,
-    SetWorkItemsPriorityInput, SetWorkItemsStateInput, WorkItemAssigneeCandidate, WorkItemComment,
-    WorkItemImage, WorkItemPreview, WorkItemProjectOption, WorkItemService, WorkItemSummary,
+    ListWorkItemTypeStatesInput, MentionCandidate, RecordMentionInteractionInput,
+    RunWorkItemQueryInput, SavedQueryResult, SearchWorkItemAssigneesInput,
+    SearchWorkItemMentionsInput, SearchWorkItemsInput, SetWorkItemPriorityInput,
+    SetWorkItemReasonInput, SetWorkItemStateInput, SetWorkItemsPriorityInput,
+    SetWorkItemsStateInput, WorkItemAssigneeCandidate, WorkItemComment, WorkItemImage,
+    WorkItemPreview, WorkItemProjectOption, WorkItemService, WorkItemSummary,
 };
 
 #[derive(Clone)]
@@ -213,6 +214,15 @@ async fn search_work_item_mentions(
     state: State<'_, AppState>,
 ) -> Result<Vec<MentionCandidate>> {
     state.work_items.search_mentions(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+fn record_mention_interaction(
+    input: RecordMentionInteractionInput,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    state.work_items.record_mention_interaction(input)
 }
 
 #[tauri::command]
@@ -465,6 +475,7 @@ pub fn run() {
             count_work_item_query,
             get_work_item_preview,
             search_work_item_mentions,
+            record_mention_interaction,
             search_work_item_assignees,
             fetch_work_item_image,
             add_work_item_comment,

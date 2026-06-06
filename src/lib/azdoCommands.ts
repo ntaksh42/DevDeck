@@ -304,6 +304,13 @@ export type SearchWorkItemMentionsInput = {
   query: string;
 };
 
+export type RecordMentionInteractionInput = {
+  organizationId?: string;
+  userId?: string;
+  displayName: string;
+  uniqueName: string;
+};
+
 export type SearchWorkItemAssigneesInput = {
   organizationId?: string;
   projectId: string;
@@ -526,6 +533,12 @@ export async function searchWorkItemMentions(
 ): Promise<MentionCandidate[]> {
   const result = await invokeCommand("search_work_item_mentions", { input });
   return mentionCandidatesSchema.parse(result);
+}
+
+export async function recordMentionInteraction(
+  input: RecordMentionInteractionInput,
+): Promise<void> {
+  await invokeCommand("record_mention_interaction", { input });
 }
 
 export async function searchWorkItemAssignees(
