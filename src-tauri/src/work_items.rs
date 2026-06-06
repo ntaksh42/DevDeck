@@ -1224,10 +1224,10 @@ fn mention_candidate_from_identity_picker(
         return None;
     }
     let id = identity
-        .entity_id
+        .subject_descriptor
+        .or(identity.entity_id)
         .or(identity.origin_id)
         .or(identity.local_id)
-        .or(identity.subject_descriptor)
         .or_else(|| unique_name.clone())
         .unwrap_or_else(|| display_name.clone());
     Some(MentionCandidate {
@@ -2239,7 +2239,7 @@ mod tests {
     }
 
     #[test]
-    fn mention_candidate_from_identity_picker_uses_display_name_and_entity_id() {
+    fn mention_candidate_from_identity_picker_uses_display_name_and_descriptor() {
         let candidate = mention_candidate_from_identity_picker(IdentityPickerIdentity {
             entity_id: Some("entity-1".to_string()),
             origin_id: Some("origin-1".to_string()),
@@ -2253,7 +2253,7 @@ mod tests {
         })
         .unwrap();
 
-        assert_eq!(candidate.id, "entity-1");
+        assert_eq!(candidate.id, "aad.subject-1");
         assert_eq!(candidate.display_name, "naoto akashi");
         assert_eq!(
             candidate.unique_name.as_deref(),
