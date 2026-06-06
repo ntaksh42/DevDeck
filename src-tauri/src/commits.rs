@@ -107,10 +107,10 @@ impl CommitService {
             rows.retain(|c| {
                 from_rfc
                     .as_deref()
-                    .is_none_or(|f| c.author_date.as_deref().is_some_and(|d| d >= f))
+                    .is_none_or(|f| c.author_date.as_deref().is_none_or(|d| d >= f))
                     && to_rfc
                         .as_deref()
-                        .is_none_or(|t| c.author_date.as_deref().is_some_and(|d| d <= t))
+                        .is_none_or(|t| c.author_date.as_deref().is_none_or(|d| d <= t))
             });
             rows
         };
