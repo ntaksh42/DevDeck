@@ -8,12 +8,13 @@ import {
   useState,
 } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Send, SlidersHorizontal, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Send, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import {
   addWorkItemComment,
   assignWorkItem,
   deleteWorkItemComment,
   fetchWorkItemImage,
+  listWorkItemFields,
   setWorkItemState,
   setWorkItemReason,
   setWorkItemPriority,
@@ -24,6 +25,7 @@ import {
   commandErrorMessage,
   type MentionCandidate,
   type WorkItemAssigneeCandidate,
+  type WorkItemFieldOption,
   type WorkItemPreview,
   type WorkItemSummary,
 } from '@/lib/azdoCommands';
@@ -31,25 +33,16 @@ import { formatRelativeDate, isEditableTarget } from '@/lib/utils';
 import { PreviewEmptyState } from '@/components/StateDisplay';
 import { ShortcutHint } from '@/components/ShortcutHint';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from './queryKeys';
+import {
+  DEFAULT_PREVIEW_FIELD_KEYS,
+  isValidFieldReferenceName,
+  loadPreviewFieldKeys,
+  storeCustomPreviewFields,
+  storePreviewFieldKeys,
+  type CustomPreviewField,
+  type PreviewFieldKey,
+} from './previewFieldsStorage';
 const SAVED_REPLIES_STORAGE_KEY = "azdodeck:workItems:savedReplies";
-const PREVIEW_FIELDS_STORAGE_KEY = "azdodeck:workItems:previewFields";
-
-type PreviewFieldKey =
-  | "state"
-  | "assignedTo"
-  | "priority"
-  | "areaPath"
-  | "iterationPath"
-  | "reason"
-  | "severity"
-  | "storyPoints"
-  | "remainingWork"
-  | "tags"
-  | "workItemType"
-  | "projectName"
-  | "createdBy"
-  | "createdDate"
-  | "changedDate";
 
 type PreviewFieldDefinition = {
   editable?: "state" | "assignee" | "priority" | "reason";
@@ -76,19 +69,6 @@ const PREVIEW_FIELD_DEFINITIONS: PreviewFieldDefinition[] = [
   { key: "changedDate", label: "Changed" },
 ];
 
-const DEFAULT_PREVIEW_FIELD_KEYS: PreviewFieldKey[] = [
-  "state",
-  "assignedTo",
-  "priority",
-  "areaPath",
-  "iterationPath",
-  "reason",
-];
-
-const PREVIEW_FIELD_KEY_SET = new Set<PreviewFieldKey>(
-  PREVIEW_FIELD_DEFINITIONS.map((field) => field.key),
-);
-
 function loadSavedReplies(): string[] {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(SAVED_REPLIES_STORAGE_KEY) ?? "[]");
@@ -100,24 +80,6 @@ function loadSavedReplies(): string[] {
 
 function storeSavedReplies(replies: string[]) {
   window.localStorage.setItem(SAVED_REPLIES_STORAGE_KEY, JSON.stringify(replies.slice(0, 20)));
-}
-
-function loadPreviewFieldKeys(): PreviewFieldKey[] {
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(PREVIEW_FIELDS_STORAGE_KEY) ?? "[]");
-    if (!Array.isArray(parsed)) return DEFAULT_PREVIEW_FIELD_KEYS;
-    const keys = parsed.filter(
-      (value): value is PreviewFieldKey =>
-        typeof value === "string" && PREVIEW_FIELD_KEY_SET.has(value as PreviewFieldKey),
-    );
-    return keys.length > 0 ? keys : DEFAULT_PREVIEW_FIELD_KEYS;
-  } catch {
-    return DEFAULT_PREVIEW_FIELD_KEYS;
-  }
-}
-
-function storePreviewFieldKeys(keys: PreviewFieldKey[]) {
-  window.localStorage.setItem(PREVIEW_FIELDS_STORAGE_KEY, JSON.stringify(keys));
 }
 
 function stopPreviewNavigationKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
@@ -137,20 +99,24 @@ function stopPreviewNavigationKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
 }
 
 export function WorkItemPreviewPanel({
+  customPreviewFields,
   focusCommentRequest,
   openAssigneeRequest,
   openPriorityRequest,
   openStateRequest,
+  onCustomPreviewFieldsChange,
   preview,
   previewError,
   previewLoading,
   selectedItem,
   onPreviewUpdated,
 }: {
+  customPreviewFields: CustomPreviewField[];
   focusCommentRequest?: number;
   openAssigneeRequest?: number;
   openPriorityRequest?: number;
   openStateRequest?: number;
+  onCustomPreviewFieldsChange: (fields: CustomPreviewField[]) => void;
   preview: WorkItemPreview | null;
   previewError: string | null;
   previewLoading: boolean;
@@ -387,6 +353,7 @@ export function WorkItemPreviewPanel({
         ),
         updatedPreview,
       );
+      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
       void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot() });
       invalidateWorkItemQueryViews(queryClient);
     },
@@ -405,6 +372,7 @@ export function WorkItemPreviewPanel({
         ),
         updatedPreview,
       );
+      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
       void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot() });
       invalidateWorkItemQueryViews(queryClient);
     },
@@ -423,6 +391,7 @@ export function WorkItemPreviewPanel({
         ),
         updatedPreview,
       );
+      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
       void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot() });
       invalidateWorkItemQueryViews(queryClient);
     },
@@ -441,6 +410,7 @@ export function WorkItemPreviewPanel({
         ),
         updatedPreview,
       );
+      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
       void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot() });
       invalidateWorkItemQueryViews(queryClient);
     },
@@ -738,6 +708,7 @@ export function WorkItemPreviewPanel({
           ) : preview ? (
             <>
               <WorkItemPreviewDetails
+                customPreviewFields={customPreviewFields}
                 deleteCommentError={
                   deleteCommentMutation.isError
                     ? commandErrorMessage(deleteCommentMutation.error)
@@ -750,6 +721,7 @@ export function WorkItemPreviewPanel({
                 }
                 deletePending={deleteCommentMutation.isPending}
                 mentionDisplayNames={commentMentionDisplayNames}
+                onCustomPreviewFieldsChange={onCustomPreviewFieldsChange}
                 onDeleteComment={deleteComment}
                 preview={preview}
                 selectedFieldKeys={selectedPreviewFieldKeys}
@@ -975,12 +947,14 @@ export function WorkItemPreviewPanel({
 }
 
 function WorkItemPreviewDetails({
+  customPreviewFields,
   preview,
   assigneeControl,
   deleteCommentError,
   deletingCommentId,
   deletePending,
   mentionDisplayNames,
+  onCustomPreviewFieldsChange,
   onDeleteComment,
   onSelectedFieldKeysChange,
   priorityControl,
@@ -989,12 +963,14 @@ function WorkItemPreviewDetails({
   selectedFieldKeys,
   stateControl,
 }: {
+  customPreviewFields: CustomPreviewField[];
   preview: WorkItemPreview;
   assigneeControl: ReactNode;
   deleteCommentError: string | null;
   deletingCommentId: number | null;
   deletePending: boolean;
   mentionDisplayNames: ReadonlyMap<string, string>;
+  onCustomPreviewFieldsChange: (fields: CustomPreviewField[]) => void;
   onDeleteComment: (commentId: number) => void;
   onSelectedFieldKeysChange: (keys: PreviewFieldKey[]) => void;
   priorityControl: ReactNode;
@@ -1005,11 +981,34 @@ function WorkItemPreviewDetails({
 }) {
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [fieldMenuOpen, setFieldMenuOpen] = useState(false);
+  const [customFieldLabel, setCustomFieldLabel] = useState("");
+  const [customFieldReferenceName, setCustomFieldReferenceName] = useState("");
+  const [customFieldSearch, setCustomFieldSearch] = useState("");
+  const [customFieldError, setCustomFieldError] = useState<string | null>(null);
   const fieldMenuRef = useCloseOnOutsidePointer<HTMLDivElement>(
     fieldMenuOpen,
     () => setFieldMenuOpen(false),
   );
   const selectedFieldDefinitions = selectedPreviewFieldDefinitions(selectedFieldKeys);
+  const fieldOptionsQuery = useQuery({
+    queryKey: workItemQueryKeys.fields(preview.organizationId, preview.projectId),
+    queryFn: () =>
+      listWorkItemFields({
+        organizationId: preview.organizationId,
+        projectId: preview.projectId,
+      }),
+    enabled: fieldMenuOpen,
+    staleTime: 10 * 60_000,
+  });
+  const customFieldOptions = useMemo(
+    () =>
+      filterCustomFieldOptions(
+        fieldOptionsQuery.data ?? [],
+        customPreviewFields,
+        customFieldSearch,
+      ),
+    [customFieldSearch, customPreviewFields, fieldOptionsQuery.data],
+  );
 
   const descriptionHtml = richFieldHtml(preview.descriptionHtml);
   const acceptanceCriteriaHtml = richFieldHtml(preview.acceptanceCriteriaHtml);
@@ -1020,6 +1019,43 @@ function WorkItemPreviewDetails({
         ? selectedFieldKeys.filter((value) => value !== key)
         : [...selectedFieldKeys, key],
     );
+  }
+
+  function addCustomField(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const referenceName = customFieldReferenceName.trim();
+    const label = customFieldLabel.trim() || referenceName;
+    if (!isValidFieldReferenceName(referenceName)) {
+      setCustomFieldError("Use a field reference name like Custom.ReleaseTrain.");
+      return;
+    }
+    if (customPreviewFields.some((field) => field.referenceName.toLowerCase() === referenceName.toLowerCase())) {
+      setCustomFieldError("That field is already shown.");
+      return;
+    }
+    const next = [...customPreviewFields, { referenceName, label }];
+    storeCustomPreviewFields(next);
+    onCustomPreviewFieldsChange(next);
+    setCustomFieldLabel("");
+    setCustomFieldReferenceName("");
+    setCustomFieldError(null);
+  }
+
+  function addCustomFieldOption(option: WorkItemFieldOption) {
+    const next = [
+      ...customPreviewFields,
+      { referenceName: option.referenceName, label: option.name || option.referenceName },
+    ];
+    storeCustomPreviewFields(next);
+    onCustomPreviewFieldsChange(next);
+    setCustomFieldSearch("");
+    setCustomFieldError(null);
+  }
+
+  function removeCustomField(referenceName: string) {
+    const next = customPreviewFields.filter((field) => field.referenceName !== referenceName);
+    storeCustomPreviewFields(next);
+    onCustomPreviewFieldsChange(next);
   }
 
   return (
@@ -1075,6 +1111,105 @@ function WorkItemPreviewDetails({
                       </label>
                     ))}
                   </div>
+                  <div className="mt-1 border-t border-border px-2 py-1.5">
+                    <div className="mb-1 text-[11px] font-semibold text-muted-foreground">
+                      Custom attributes
+                    </div>
+                    <input
+                      value={customFieldSearch}
+                      onChange={(event) => setCustomFieldSearch(event.target.value)}
+                      placeholder="Search fields from Azure DevOps"
+                      className="mb-1 h-7 w-full rounded border border-input bg-background px-2 text-[11px] outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <div className="mb-1.5 max-h-28 overflow-auto rounded border border-border bg-slate-50">
+                      {fieldOptionsQuery.isFetching ? (
+                        <div className="flex items-center gap-1.5 px-2 py-1.5 text-[11px] text-muted-foreground">
+                          <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                          Loading fields...
+                        </div>
+                      ) : fieldOptionsQuery.isError ? (
+                        <div className="px-2 py-1.5 text-[11px] text-destructive">
+                          {commandErrorMessage(fieldOptionsQuery.error)}
+                        </div>
+                      ) : customFieldOptions.length > 0 ? (
+                        customFieldOptions.map((field) => (
+                          <button
+                            key={field.referenceName}
+                            type="button"
+                            onClick={() => addCustomFieldOption(field)}
+                            className="flex w-full min-w-0 items-center gap-2 px-2 py-1 text-left text-[11px] hover:bg-white"
+                          >
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate font-medium">{field.name}</span>
+                              <span className="block truncate font-mono text-[10px] text-muted-foreground">
+                                {field.referenceName}
+                              </span>
+                            </span>
+                            <span className="shrink-0 rounded border border-border bg-white px-1 text-[10px] text-muted-foreground">
+                              {field.fieldType}
+                            </span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-2 py-1.5 text-[11px] text-muted-foreground">
+                          {fieldOptionsQuery.isSuccess ? "No matching fields" : "Open to load fields"}
+                        </div>
+                      )}
+                    </div>
+                    {customPreviewFields.length > 0 ? (
+                      <div className="mb-1.5 grid gap-1">
+                        {customPreviewFields.map((field) => (
+                          <div
+                            key={field.referenceName}
+                            className="flex min-w-0 items-center gap-1 rounded bg-muted px-1.5 py-1"
+                          >
+                            <span className="min-w-0 flex-1 truncate text-[11px]" title={field.referenceName}>
+                              {field.label}
+                            </span>
+                            <button
+                              type="button"
+                              aria-label={`Remove ${field.label}`}
+                              title="Remove"
+                              onClick={() => removeCustomField(field.referenceName)}
+                              className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-white hover:text-foreground"
+                            >
+                              <X className="h-3 w-3" aria-hidden="true" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    <form className="grid gap-1" onSubmit={addCustomField}>
+                      <input
+                        value={customFieldReferenceName}
+                        onChange={(event) => {
+                          setCustomFieldReferenceName(event.target.value);
+                          setCustomFieldError(null);
+                        }}
+                        placeholder="Custom.ReleaseTrain"
+                        className="h-7 rounded border border-input bg-background px-2 font-mono text-[11px] outline-none focus:ring-2 focus:ring-ring"
+                      />
+                      <div className="flex items-center gap-1">
+                        <input
+                          value={customFieldLabel}
+                          onChange={(event) => setCustomFieldLabel(event.target.value)}
+                          placeholder="Label"
+                          className="h-7 min-w-0 flex-1 rounded border border-input bg-background px-2 text-[11px] outline-none focus:ring-2 focus:ring-ring"
+                        />
+                        <button
+                          type="submit"
+                          title="Add custom field"
+                          aria-label="Add custom field"
+                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-border hover:bg-secondary"
+                        >
+                          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                        </button>
+                      </div>
+                      {customFieldError ? (
+                        <p className="text-[10px] leading-3 text-destructive">{customFieldError}</p>
+                      ) : null}
+                    </form>
+                  </div>
                   <div className="mt-1 flex items-center justify-between border-t border-border pt-1">
                     <button
                       type="button"
@@ -1123,6 +1258,14 @@ function WorkItemPreviewDetails({
               />
             ),
           )}
+          {customPreviewFields.map((field) => (
+            <PreviewField
+              key={field.referenceName}
+              label={field.label}
+              value={customPreviewFieldValue(preview, field.referenceName) ?? "—"}
+              wide
+            />
+          ))}
         </div>
       </div>
 
@@ -1329,6 +1472,36 @@ function previewFieldValue(preview: WorkItemPreview, key: PreviewFieldKey): stri
     case "changedDate":
       return preview.changedDate ? formatRelativeDate(preview.changedDate) : null;
   }
+}
+
+function customPreviewFieldValue(preview: WorkItemPreview, referenceName: string): string | null {
+  return (
+    preview.customFields.find(
+      (field) => field.referenceName.toLowerCase() === referenceName.toLowerCase(),
+    )?.value ?? null
+  );
+}
+
+function filterCustomFieldOptions(
+  options: WorkItemFieldOption[],
+  selectedFields: CustomPreviewField[],
+  query: string,
+): WorkItemFieldOption[] {
+  const selected = new Set(selectedFields.map((field) => field.referenceName.toLowerCase()));
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  return options
+    .filter((option) => !selected.has(option.referenceName.toLowerCase()))
+    .filter((option) => {
+      if (terms.length === 0) return option.custom;
+      const haystack = `${option.name} ${option.referenceName} ${option.fieldType}`.toLowerCase();
+      return terms.every((term) => haystack.includes(term));
+    })
+    .sort((left, right) =>
+      Number(right.custom) - Number(left.custom) ||
+      left.name.localeCompare(right.name) ||
+      left.referenceName.localeCompare(right.referenceName),
+    )
+    .slice(0, 20);
 }
 
 function PreviewControl({
@@ -2254,7 +2427,7 @@ function workItemMentionPriorityNames(preview: WorkItemPreview | null): string[]
   return uniqueNormalizedNames(names);
 }
 
-function rankMentionCandidates<T extends MentionCandidate>({
+export function rankMentionCandidates<T extends MentionCandidate>({
   recent,
   remote,
   query,
@@ -2266,7 +2439,7 @@ function rankMentionCandidates<T extends MentionCandidate>({
   priorityNames: string[];
 }): T[] {
   const term = query.trim().toLowerCase();
-  const recentIds = new Map(recent.map((candidate, index) => [candidate.id, index]));
+  const recentIndexes = buildMentionCandidateIndex(recent);
   const priority = new Map(priorityNames.map((name, index) => [name, index]));
   const remoteIndex = new Map(remote.map((candidate, index) => [candidate.id, index]));
   const candidates: T[] = [];
@@ -2288,8 +2461,8 @@ function rankMentionCandidates<T extends MentionCandidate>({
   return candidates
     .filter((candidate) => mentionCandidateMatches(candidate, term))
     .sort((left, right) => {
-      const leftRecent = recentIds.get(left.id) ?? Number.MAX_SAFE_INTEGER;
-      const rightRecent = recentIds.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+      const leftRecent = mentionCandidateIndexValue(recentIndexes, left);
+      const rightRecent = mentionCandidateIndexValue(recentIndexes, right);
       if (leftRecent !== rightRecent) return leftRecent - rightRecent;
 
       const leftPriority =
@@ -2309,6 +2482,35 @@ function rankMentionCandidates<T extends MentionCandidate>({
       return left.displayName.localeCompare(right.displayName);
     })
     .slice(0, 8);
+}
+
+function buildMentionCandidateIndex(
+  candidates: MentionCandidate[],
+): Map<string, number> {
+  const index = new Map<string, number>();
+  candidates.forEach((candidate, candidateIndex) => {
+    for (const key of mentionCandidateIdentityKeys(candidate)) {
+      if (!index.has(key)) index.set(key, candidateIndex);
+    }
+  });
+  return index;
+}
+
+function mentionCandidateIndexValue(
+  index: Map<string, number>,
+  candidate: MentionCandidate,
+): number {
+  let best = Number.MAX_SAFE_INTEGER;
+  for (const key of mentionCandidateIdentityKeys(candidate)) {
+    best = Math.min(best, index.get(key) ?? Number.MAX_SAFE_INTEGER);
+  }
+  return best;
+}
+
+function mentionCandidateIdentityKeys(candidate: MentionCandidate): string[] {
+  return [candidate.id, candidate.uniqueName]
+    .map(normalizeMentionName)
+    .filter((key): key is string => Boolean(key));
 }
 
 function isSameMentionCandidate(

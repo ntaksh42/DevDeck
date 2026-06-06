@@ -36,13 +36,14 @@ use tokio::sync::{mpsc, oneshot};
 use work_items::{
     AddWorkItemCommentInput, AssignWorkItemInput, AssignWorkItemsInput, BulkWorkItemResult,
     DeleteWorkItemCommentInput, FetchWorkItemImageInput, GetSavedQueryInput,
-    GetWorkItemPreviewInput, ListMyWorkItemsInput, ListWorkItemProjectsInput,
-    ListWorkItemTypeStatesInput, MentionCandidate, RecordMentionInteractionInput,
-    RunWorkItemQueryInput, SavedQueryResult, SearchWorkItemAssigneesInput,
-    SearchWorkItemMentionsInput, SearchWorkItemsInput, SetWorkItemPriorityInput,
-    SetWorkItemReasonInput, SetWorkItemStateInput, SetWorkItemsPriorityInput,
-    SetWorkItemsStateInput, WorkItemAssigneeCandidate, WorkItemComment, WorkItemImage,
-    WorkItemPreview, WorkItemProjectOption, WorkItemService, WorkItemSummary,
+    GetWorkItemPreviewInput, ListMyWorkItemsInput, ListWorkItemFieldsInput,
+    ListWorkItemProjectsInput, ListWorkItemTypeStatesInput, MentionCandidate,
+    RecordMentionInteractionInput, RunWorkItemQueryInput, SavedQueryResult,
+    SearchWorkItemAssigneesInput, SearchWorkItemMentionsInput, SearchWorkItemsInput,
+    SetWorkItemPriorityInput, SetWorkItemReasonInput, SetWorkItemStateInput,
+    SetWorkItemsPriorityInput, SetWorkItemsStateInput, WorkItemAssigneeCandidate, WorkItemComment,
+    WorkItemFieldOption, WorkItemImage, WorkItemPreview, WorkItemProjectOption, WorkItemService,
+    WorkItemSummary,
 };
 
 #[derive(Clone)]
@@ -344,6 +345,15 @@ async fn list_work_item_type_states(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn list_work_item_fields(
+    input: ListWorkItemFieldsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<WorkItemFieldOption>> {
+    state.work_items.list_fields(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn get_saved_query(
     input: GetSavedQueryInput,
     state: State<'_, AppState>,
@@ -485,6 +495,7 @@ pub fn run() {
             set_work_item_reason,
             set_work_item_priority,
             list_work_item_type_states,
+            list_work_item_fields,
             get_saved_query,
             set_work_items_state,
             assign_work_items,

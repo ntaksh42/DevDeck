@@ -147,11 +147,19 @@ Produces an MSI and NSIS installer in `target/release/bundle/`.
 
 ### Publishing Windows installers
 
-Release installers are built by GitHub Actions when a version tag is pushed:
+Release installers are built by GitHub Actions when a version tag is pushed. Use
+the release helper to update version files, run checks, commit, tag, push,
+create the GitHub Release, and wait for the installer workflow:
 
-```sh
-git tag v0.1.5
-git push origin v0.1.5
+```powershell
+pnpm release -- 0.1.8
+```
+
+By default the helper stops if the working tree already has changes. To include
+current uncommitted work in the release commit:
+
+```powershell
+pnpm release -- 0.1.8 -IncludeDirty
 ```
 
 The release workflow builds Windows x64 only and publishes both installer

@@ -86,6 +86,7 @@ pub struct GetWorkItemPreviewInput {
     pub organization_id: Option<String>,
     pub project_id: String,
     pub work_item_id: i64,
+    pub custom_fields: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -190,6 +191,13 @@ pub struct ListWorkItemTypeStatesInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ListWorkItemFieldsInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetSavedQueryInput {
     pub organization_id: Option<String>,
     pub project_id: String,
@@ -284,8 +292,25 @@ pub struct WorkItemPreview {
     pub remaining_work: Option<String>,
     pub description_html: Option<String>,
     pub acceptance_criteria_html: Option<String>,
+    pub custom_fields: Vec<WorkItemCustomField>,
     pub web_url: Option<String>,
     pub comments: Vec<WorkItemComment>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemCustomField {
+    pub reference_name: String,
+    pub value: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemFieldOption {
+    pub name: String,
+    pub reference_name: String,
+    pub field_type: String,
+    pub custom: bool,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -451,9 +476,9 @@ impl WorkItemService {
             .ok_or_else(|| {
                 AppError::InvalidInput(format!("project not found: {}", input.project_id))
             })?;
-        let fields = WORK_ITEM_PREVIEW_FIELDS
+        let fields = preview_fields(input.custom_fields.as_deref())
             .iter()
-            .map(|field| field.to_string())
+            .map(ToString::to_string)
             .collect();
         let (work_items_result, comments_result) = tokio::join!(
             client.get_work_items_batch(&project.id, vec![input.work_item_id], fields),
@@ -477,10 +502,7 @@ impl WorkItemService {
         ))
     }
 
-    pub fn record_mention_interaction(
-        &self,
-        input: RecordMentionInteractionInput,
-    ) -> Result<()> {
+    pub fn record_mention_interaction(&self, input: RecordMentionInteractionInput) -> Result<()> {
         let unique_name = input.unique_name.trim();
         let display_name = input.display_name.trim();
         if unique_name.is_empty() || display_name.is_empty() {
@@ -534,7 +556,10 @@ impl WorkItemService {
             }
         };
 
-        let history = self.db.get_mention_history(&organization.id).unwrap_or_default();
+        let history = self
+            .db
+            .get_mention_history(&organization.id)
+            .unwrap_or_default();
         let history_index: std::collections::HashMap<String, usize> = history
             .iter()
             .enumerate()
@@ -650,7 +675,12 @@ impl WorkItemService {
             .db
             .get_mention_history(&organization.id)
             .unwrap_or_default();
-        for MentionHistoryEntry { unique_name, display_name, user_id } in &history {
+        for MentionHistoryEntry {
+            unique_name,
+            display_name,
+            user_id,
+        } in &history
+        {
             push_unique_mention_candidate(
                 &mut candidates,
                 MentionCandidate {
@@ -938,6 +968,33 @@ impl WorkItemService {
         Ok(client
             .list_work_item_type_states(&input.project_id, &input.work_item_type)
             .await?)
+    }
+
+    pub async fn list_fields(
+        &self,
+        input: ListWorkItemFieldsInput,
+    ) -> Result<Vec<WorkItemFieldOption>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let mut fields = client
+            .list_work_item_fields(&input.project_id)
+            .await?
+            .into_iter()
+            .filter(|field| is_valid_field_reference_name(&field.reference_name))
+            .map(|field| WorkItemFieldOption {
+                custom: field.reference_name.starts_with("Custom."),
+                name: field.name,
+                reference_name: field.reference_name,
+                field_type: field.field_type,
+            })
+            .collect::<Vec<_>>();
+        fields.sort_by(|left, right| {
+            right
+                .custom
+                .cmp(&left.custom)
+                .then_with(|| left.name.cmp(&right.name))
+        });
+        Ok(fields)
     }
 
     pub async fn set_items_state(
@@ -1604,6 +1661,8 @@ fn summarize_work_item_preview(
 ) -> WorkItemPreview {
     let web_url = work_item_web_url(organization, project_name, work_item.id, &work_item);
 
+    let custom_fields = custom_work_item_fields(&work_item);
+
     WorkItemPreview {
         organization_id: organization.id.clone(),
         project_id: project_id.to_string(),
@@ -1636,12 +1695,70 @@ fn summarize_work_item_preview(
             &work_item,
             "Microsoft.VSTS.Common.AcceptanceCriteria",
         ),
+        custom_fields,
         web_url,
         comments: comments
             .into_iter()
             .map(summarize_work_item_comment)
             .collect(),
     }
+}
+
+fn preview_fields(custom_fields: Option<&[String]>) -> Vec<String> {
+    let mut fields: Vec<String> = WORK_ITEM_PREVIEW_FIELDS
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    if let Some(custom_fields) = custom_fields {
+        for field in custom_fields {
+            let field = field.trim();
+            if !is_valid_field_reference_name(field) {
+                continue;
+            }
+            if fields
+                .iter()
+                .any(|existing| existing.eq_ignore_ascii_case(field))
+            {
+                continue;
+            }
+            fields.push(field.to_string());
+            if fields.len() >= WORK_ITEM_PREVIEW_FIELDS.len() + 20 {
+                break;
+            }
+        }
+    }
+    fields
+}
+
+fn custom_work_item_fields(work_item: &WorkItem) -> Vec<WorkItemCustomField> {
+    let mut fields = work_item
+        .fields
+        .keys()
+        .filter(|field| {
+            !WORK_ITEM_PREVIEW_FIELDS
+                .iter()
+                .any(|standard| standard.eq_ignore_ascii_case(field))
+        })
+        .filter(|field| is_valid_field_reference_name(field))
+        .map(|reference_name| WorkItemCustomField {
+            reference_name: reference_name.clone(),
+            value: string_field(work_item, reference_name),
+        })
+        .collect::<Vec<_>>();
+    fields.sort_by(|left, right| left.reference_name.cmp(&right.reference_name));
+    fields
+}
+
+fn is_valid_field_reference_name(value: &str) -> bool {
+    let value = value.trim();
+    if value.is_empty() || value.len() > 128 || !value.contains('.') {
+        return false;
+    }
+    value.split('.').all(|part| {
+        let mut chars = part.chars();
+        matches!(chars.next(), Some(first) if first.is_ascii_alphabetic())
+            && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+    })
 }
 
 fn work_item_web_url(

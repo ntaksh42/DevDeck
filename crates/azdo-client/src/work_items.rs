@@ -120,6 +120,15 @@ pub struct WorkItemTypeStatesList {
     pub value: Vec<WorkItemTypeState>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemFieldDefinition {
+    pub name: String,
+    pub reference_name: String,
+    #[serde(rename = "type")]
+    pub field_type: String,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct SavedQuery {
     pub id: String,
@@ -321,6 +330,17 @@ impl AdoClient {
             .get_json(&path, &[("api-version", "7.1-preview.1")])
             .await?;
         Ok(response.value.into_iter().map(|s| s.name).collect())
+    }
+
+    pub async fn list_work_item_fields(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<WorkItemFieldDefinition>> {
+        let path = format!("{project_id}/_apis/wit/fields");
+        let response: crate::git::ListResponse<WorkItemFieldDefinition> = self
+            .get_json(&path, &[("api-version", "7.1-preview")])
+            .await?;
+        Ok(response.value)
     }
 
     pub async fn get_saved_query(&self, project_id: &str, query_id: &str) -> Result<SavedQuery> {
@@ -789,6 +809,34 @@ mod tests {
             .unwrap();
 
         assert_eq!(states, vec!["New", "Active", "Resolved"]);
+    }
+
+    #[tokio::test]
+    async fn list_work_item_fields_returns_definitions() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/wit/fields"))
+            .and(query_param("api-version", "7.1-preview"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "value": [{
+                    "name": "Release Train",
+                    "referenceName": "Custom.ReleaseTrain",
+                    "type": "string"
+                }]
+            })))
+            .mount(&server)
+            .await;
+
+        let fields = test_client(&server)
+            .await
+            .list_work_item_fields("project-1")
+            .await
+            .unwrap();
+
+        assert_eq!(fields.len(), 1);
+        assert_eq!(fields[0].name, "Release Train");
+        assert_eq!(fields[0].reference_name, "Custom.ReleaseTrain");
+        assert_eq!(fields[0].field_type, "string");
     }
 
     #[test]

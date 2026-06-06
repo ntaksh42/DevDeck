@@ -119,4 +119,25 @@ test.describe("browser preview", () => {
       }),
     ).toBeVisible();
   });
+
+  test("can mention the current demo user when posting a work item comment", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const main = page.getByRole("main");
+    const sidebar = page.getByRole("complementary").first();
+
+    await sidebar.getByRole("button", { name: "Search" }).nth(1).click();
+    await main.getByPlaceholder("Search work items…").fill("onboarding");
+    await main.getByRole("button", { name: "Search" }).click();
+
+    const commentInput = main.getByRole("textbox", { name: "Comment" });
+    await commentInput.fill("@Demo");
+    await main.getByRole("button", { name: /Demo User/ }).click();
+    await expect(commentInput).toHaveValue(/^@Demo User /);
+
+    await commentInput.fill("@Demo User checking mention flow");
+    await main.getByRole("button", { name: "Post comment" }).click();
+    await expect(main.getByText("Comment posted")).toBeVisible();
+  });
 });

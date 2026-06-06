@@ -13,4 +13,6 @@ pub use git::{
     IdentityRefWithVote, PullRequestStatus, TeamProject,
 };
 pub use identity::{AuthenticatedUser, ConnectionData, Identity, IdentityPickerIdentity};
-pub use work_items::{WorkItem, WorkItemComment, WorkItemReference, WorkItemUpdate};
+pub use work_items::{
+    WorkItem, WorkItemComment, WorkItemFieldDefinition, WorkItemReference, WorkItemUpdate,
+};

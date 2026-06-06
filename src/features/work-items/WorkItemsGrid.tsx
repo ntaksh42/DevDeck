@@ -37,6 +37,11 @@ import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { LoadingState } from '@/components/StateDisplay';
 import { WorkItemPreviewPanel } from './WorkItemPreviewPanel';
 import { invalidateWorkItemMutationCaches, workItemQueryKeys } from './queryKeys';
+import {
+  loadCustomPreviewFields,
+  storeCustomPreviewFields,
+  type CustomPreviewField,
+} from './previewFieldsStorage';
 const DEFAULT_WI_COLUMN_WIDTHS = [46, 64, 60, 180, 82, 84, 68];
 const WI_COLUMN_MIN_WIDTHS = [44, 58, 56, 150, 70, 74, 60];
 const WI_COLUMN_MAX_WIDTHS = [120, 200, 180, 720, 300, 260, 160];
@@ -459,6 +464,9 @@ export function WorkItemsGrid({
   const [openStateRequest, setOpenStateRequest] = useState(0);
   const [openPriorityRequest, setOpenPriorityRequest] = useState(0);
   const [itemOverrides, setItemOverrides] = useState<Map<string, Partial<WorkItemSummary>>>(new Map());
+  const [customPreviewFields, setCustomPreviewFields] = useState<CustomPreviewField[]>(
+    () => loadCustomPreviewFields(),
+  );
   const [columnFilters, setColumnFilters] = useState<Partial<Record<FilterableColumn, Set<string>>>>(
     () => loadWorkItemColumnFilters(columnFiltersStorageKey),
   );
@@ -561,6 +569,11 @@ export function WorkItemsGrid({
   }, [sorted, columnFilters]);
 
   const selectedItem = displayed[selectedIndex] ?? null;
+  const customPreviewFieldRefs = useMemo(
+    () => customPreviewFields.map((field) => field.referenceName),
+    [customPreviewFields],
+  );
+  const customPreviewFieldSignature = customPreviewFieldRefs.join("|");
   const selectedItemKey = selectedItem ? workItemSummaryKey(selectedItem) : null;
   const resultKeysSignature = useMemo(
     () => results.map((item) => workItemSummaryKey(item)).join("|"),
@@ -571,12 +584,14 @@ export function WorkItemsGrid({
       selectedItem?.organizationId,
       selectedItem?.projectId,
       selectedItem?.id,
+      customPreviewFieldSignature,
     ),
     queryFn: () =>
       getWorkItemPreview({
         organizationId: selectedItem?.organizationId,
         projectId: selectedItem?.projectId ?? "",
         workItemId: selectedItem?.id ?? 0,
+        customFields: customPreviewFieldRefs,
       }),
     enabled: !!selectedItem,
     staleTime: 30_000,
@@ -605,17 +620,19 @@ export function WorkItemsGrid({
           item.organizationId,
           item.projectId,
           item.id,
+          customPreviewFieldSignature,
         ),
         queryFn: () =>
           getWorkItemPreview({
             organizationId: item.organizationId,
             projectId: item.projectId,
             workItemId: item.id,
+            customFields: customPreviewFieldRefs,
           }),
         staleTime: 30_000,
       });
     }
-  }, [displayed, queryClient, selectedIndex]);
+  }, [customPreviewFieldRefs, customPreviewFieldSignature, displayed, queryClient, selectedIndex]);
 
   const COMMON_STATES = ["New", "Active", "Resolved", "Closed", "To Do", "Doing", "Done"];
 
@@ -1318,7 +1335,12 @@ export function WorkItemsGrid({
             />
 
             <WorkItemPreviewPanel
+              customPreviewFields={customPreviewFields}
               focusCommentRequest={focusCommentRequest}
+              onCustomPreviewFieldsChange={(fields) => {
+                storeCustomPreviewFields(fields);
+                setCustomPreviewFields(fields);
+              }}
               openAssigneeRequest={openAssigneeRequest}
               openPriorityRequest={openPriorityRequest}
               openStateRequest={openStateRequest}

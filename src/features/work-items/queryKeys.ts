@@ -42,14 +42,21 @@ export const workItemQueryKeys = {
     organizationId
       ? (['workItemQueryView', organizationId] as const)
       : (['workItemQueryView'] as const),
-  preview: (organizationId?: string, projectId?: string, workItemId?: number) =>
-    ['workItemPreview', organizationId, projectId, workItemId] as const,
+  preview: (
+    organizationId?: string,
+    projectId?: string,
+    workItemId?: number,
+    customFieldsSignature?: string,
+  ) =>
+    ['workItemPreview', organizationId, projectId, workItemId, customFieldsSignature] as const,
   previewRoot: () => ['workItemPreview'] as const,
   typeStates: (
     organizationId?: string,
     projectId?: string,
     workItemType?: string | null,
   ) => ['workItemTypeStates', organizationId, projectId, workItemType] as const,
+  fields: (organizationId?: string, projectId?: string | null) =>
+    ['workItemFields', organizationId, projectId] as const,
   mentions: (organizationId?: string, query?: string) =>
     ['workItemMentions', organizationId, query] as const,
   assignees: (

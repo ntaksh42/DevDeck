@@ -10,6 +10,7 @@
     "test": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "release": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/release.ps1",
     "tauri": "tauri"
   },
   "dependencies": {

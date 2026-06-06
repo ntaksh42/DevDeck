@@ -12,6 +12,7 @@ import type {
   GetSavedQueryInput,
   GetWorkItemPreviewInput,
   ListWorkItemTypeStatesInput,
+  ListWorkItemFieldsInput,
   MentionCandidate,
   Organization,
   PullRequestSummary,
@@ -32,6 +33,7 @@ import type {
   UpdateAppSettingsInput,
   WorkItemComment,
   WorkItemAssigneeCandidate,
+  WorkItemFieldOption,
   WorkItemPreview,
   WorkItemProjectOption,
   WorkItemSummary,
@@ -258,6 +260,10 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       const input = (args as { input?: ListWorkItemTypeStatesInput } | undefined)
         ?.input;
       return demoListWorkItemTypeStates(input);
+    }
+    case "list_work_item_fields": {
+      const input = (args as { input?: ListWorkItemFieldsInput } | undefined)?.input;
+      return demoListWorkItemFields(input);
     }
     case "set_work_items_state": {
       const input = (args as { input?: SetWorkItemsStateInput } | undefined)?.input;
@@ -725,6 +731,15 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
     descriptionHtml: `<p>Review background and expected behavior for ${escapeDemoHtml(summary.title)}.</p><ul><li>Fetch detail fields from Azure DevOps</li><li>Display in the right-side preview pane</li></ul><p><img alt="Demo preview image" src="https://dev.azure.com/contoso/${encodeURIComponent(summary.projectName)}/_apis/wit/attachments/demo-preview-image?fileName=preview.svg"></p>`,
     acceptanceCriteriaHtml:
       "<ul><li>Selected work item syncs with the preview pane</li><li>HTML fields are rendered in a sandbox</li></ul>",
+    customFields: (input?.customFields ?? []).map((referenceName, index) => ({
+      referenceName,
+      value:
+        referenceName === "Custom.ReleaseTrain"
+          ? "Tokyo"
+          : referenceName === "Custom.CustomerImpact"
+            ? "High"
+            : `Demo value ${index + 1}`,
+    })),
     webUrl: summary.webUrl,
     comments: [
       {
@@ -826,6 +841,17 @@ const DEMO_STATES_FALLBACK = ["New", "Active", "Resolved", "Closed"];
 function demoListWorkItemTypeStates(input?: ListWorkItemTypeStatesInput): string[] {
   if (!input?.workItemType) return DEMO_STATES_FALLBACK;
   return DEMO_STATES_BY_TYPE[input.workItemType] ?? DEMO_STATES_FALLBACK;
+}
+
+function demoListWorkItemFields(_input?: ListWorkItemFieldsInput): WorkItemFieldOption[] {
+  return [
+    { name: "Release Train", referenceName: "Custom.ReleaseTrain", fieldType: "string", custom: true },
+    { name: "Customer Impact", referenceName: "Custom.CustomerImpact", fieldType: "string", custom: true },
+    { name: "Escalation", referenceName: "Custom.Escalation", fieldType: "boolean", custom: true },
+    { name: "Priority", referenceName: "Microsoft.VSTS.Common.Priority", fieldType: "integer", custom: false },
+    { name: "Severity", referenceName: "Microsoft.VSTS.Common.Severity", fieldType: "string", custom: false },
+    { name: "Story Points", referenceName: "Microsoft.VSTS.Scheduling.StoryPoints", fieldType: "double", custom: false },
+  ];
 }
 
 const demoMentionPeople: MentionCandidate[] = [
@@ -1218,4 +1244,3 @@ function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
     return true;
   });
 }
-

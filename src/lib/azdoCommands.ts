@@ -109,6 +109,17 @@ const workItemProjectOptionsSchema = z.array(workItemProjectOptionSchema);
 
 export type WorkItemProjectOption = z.infer<typeof workItemProjectOptionSchema>;
 
+const workItemFieldOptionSchema = z.object({
+  name: z.string(),
+  referenceName: z.string(),
+  fieldType: z.string(),
+  custom: z.boolean(),
+});
+
+const workItemFieldOptionsSchema = z.array(workItemFieldOptionSchema);
+
+export type WorkItemFieldOption = z.infer<typeof workItemFieldOptionSchema>;
+
 const workItemCommentSchema = z.object({
   id: z.number(),
   text: z.string().nullable(),
@@ -120,6 +131,11 @@ const workItemCommentSchema = z.object({
 });
 
 export type WorkItemComment = z.infer<typeof workItemCommentSchema>;
+
+const workItemCustomFieldSchema = z.object({
+  referenceName: z.string(),
+  value: z.string().nullable(),
+});
 
 const workItemPreviewSchema = z.object({
   organizationId: z.string(),
@@ -143,6 +159,7 @@ const workItemPreviewSchema = z.object({
   remainingWork: z.string().nullable(),
   descriptionHtml: z.string().nullable(),
   acceptanceCriteriaHtml: z.string().nullable(),
+  customFields: z.array(workItemCustomFieldSchema).default([]),
   webUrl: z.string().nullable(),
   comments: z.array(workItemCommentSchema).default([]),
 });
@@ -297,6 +314,7 @@ export type GetWorkItemPreviewInput = {
   organizationId?: string;
   projectId: string;
   workItemId: number;
+  customFields?: string[];
 };
 
 export type SearchWorkItemMentionsInput = {
@@ -369,6 +387,11 @@ export type ListWorkItemTypeStatesInput = {
   organizationId?: string;
   projectId: string;
   workItemType: string;
+};
+
+export type ListWorkItemFieldsInput = {
+  organizationId?: string;
+  projectId: string;
 };
 
 export type BulkWorkItemResult = {
@@ -607,6 +630,13 @@ export async function listWorkItemTypeStates(
   return z.array(z.string()).parse(result);
 }
 
+export async function listWorkItemFields(
+  input: ListWorkItemFieldsInput,
+): Promise<WorkItemFieldOption[]> {
+  const result = await invokeCommand("list_work_item_fields", { input });
+  return workItemFieldOptionsSchema.parse(result);
+}
+
 export async function setWorkItemsState(
   input: SetWorkItemsStateInput,
 ): Promise<BulkWorkItemResult[]> {
@@ -680,4 +710,3 @@ export function commandErrorMessage(error: unknown): string {
   }
   return "Unexpected error";
 }
-
