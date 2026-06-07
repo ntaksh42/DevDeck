@@ -2161,20 +2161,45 @@ mod tests {
         let now = "2026-06-01T00:00:00Z";
 
         // Same person, different casing — must collapse into one row
-        db.record_mention_interaction("org1", "Taro.Yamada@example.com", "Taro Yamada", Some("uid-taro"), now).unwrap();
-        db.record_mention_interaction("org1", "taro.yamada@example.com", "Taro Yamada", Some("uid-taro"), now).unwrap();
+        db.record_mention_interaction(
+            "org1",
+            "Taro.Yamada@example.com",
+            "Taro Yamada",
+            Some("uid-taro"),
+            now,
+        )
+        .unwrap();
+        db.record_mention_interaction(
+            "org1",
+            "taro.yamada@example.com",
+            "Taro Yamada",
+            Some("uid-taro"),
+            now,
+        )
+        .unwrap();
 
         // Different person
-        db.record_mention_interaction("org1", "hanako@example.com", "Hanako Suzuki", None, now).unwrap();
+        db.record_mention_interaction("org1", "hanako@example.com", "Hanako Suzuki", None, now)
+            .unwrap();
 
         let history = db.get_mention_history("org1").unwrap();
-        assert_eq!(history.len(), 2, "same person with different casing must be one row");
+        assert_eq!(
+            history.len(),
+            2,
+            "same person with different casing must be one row"
+        );
 
-        let taro = history.iter().find(|h| h.unique_name == "taro.yamada@example.com").unwrap();
+        let taro = history
+            .iter()
+            .find(|h| h.unique_name == "taro.yamada@example.com")
+            .unwrap();
         assert_eq!(taro.display_name, "Taro Yamada");
         assert_eq!(taro.user_id.as_deref(), Some("uid-taro"));
 
         // Taro has interaction_count=2, Hanako=1 — Taro must rank first
-        assert_eq!(history[0].unique_name, "taro.yamada@example.com", "higher interaction count must rank first");
+        assert_eq!(
+            history[0].unique_name, "taro.yamada@example.com",
+            "higher interaction count must rank first"
+        );
     }
 }
