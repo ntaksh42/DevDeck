@@ -97,6 +97,7 @@ export function CommitSearch({ organizations }: { organizations: Organization[] 
   const [projectId, setProjectId] = useState(initialViewState.projectId);
   const [repositoryId, setRepositoryId] = useState(initialViewState.repositoryId);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [targetCommitId, setTargetCommitId] = useState<string | null>(null);
 
   const mutation = useMutation({
     mutationFn: searchCommits,
@@ -155,6 +156,37 @@ export function CommitSearch({ organizations }: { organizations: Organization[] 
       setRepositoryId("");
     }
   }, [filteredRepositoryOptions, repositoryId]);
+
+  useEffect(() => {
+    function onNavigate(event: Event) {
+      const detail = (event as CustomEvent).detail;
+      if (!detail || detail.type !== "commit") return;
+      const nextOrganizationId = detail.organizationId || selectedOrganizationId;
+      setOrganizationId(nextOrganizationId);
+      setProjectId(detail.projectId ?? "");
+      setRepositoryId(detail.repositoryId ?? "");
+      setQuery(detail.title ?? "");
+      setAuthor("");
+      setBranch("");
+      setFromDate("");
+      setToDate("");
+      setValidationError(null);
+      setTargetCommitId(detail.commitId);
+      mutation.mutate({
+        organizationId: nextOrganizationId,
+        query: detail.title ?? "",
+        author: "",
+        branch: "",
+        fromDate: "",
+        toDate: "",
+        projectId: detail.projectId,
+        repositoryId: detail.repositoryId,
+      });
+    }
+
+    window.addEventListener("azdodeck:navigate-selection", onNavigate);
+    return () => window.removeEventListener("azdodeck:navigate-selection", onNavigate);
+  }, [mutation, selectedOrganizationId]);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -392,8 +424,10 @@ export function CommitSearch({ organizations }: { organizations: Organization[] 
         activeExternalFilterCount={activeSearchFilterCount}
         loading={mutation.isPending}
         onClearExternalFilters={clearSearchFilters}
+        onTargetCommitHandled={() => setTargetCommitId(null)}
         results={results}
         searched={mutation.isSuccess}
+        targetCommitId={targetCommitId}
       />
     </div>
   );
@@ -560,14 +594,18 @@ function CommitResults({
   activeExternalFilterCount = 0,
   loading,
   onClearExternalFilters,
+  onTargetCommitHandled,
   results,
   searched,
+  targetCommitId,
 }: {
   activeExternalFilterCount?: number;
   loading: boolean;
   onClearExternalFilters?: () => void;
+  onTargetCommitHandled?: () => void;
   results: CommitSummary[];
   searched: boolean;
+  targetCommitId?: string | null;
 }) {
   const [sort, setCommitSort] = useState<CommitSortState>(() => loadCommitSort());
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -599,6 +637,15 @@ function CommitResults({
   useEffect(() => {
     setSelectedIndex((i) => Math.min(i, Math.max(sorted.length - 1, 0)));
   }, [sorted.length]);
+
+  useEffect(() => {
+    if (!targetCommitId) return;
+    const index = sorted.findIndex((commit) => commit.commitId === targetCommitId);
+    if (index < 0) return;
+    setSelectedIndex(index);
+    window.setTimeout(() => rowRefs.current[index]?.focus(), 0);
+    onTargetCommitHandled?.();
+  }, [onTargetCommitHandled, sorted, targetCommitId]);
 
   function applySort(key: CommitSortKey) {
     setCommitSort((current) => {

@@ -45,6 +45,7 @@ export function PullRequestSearch({
   const [status, setStatus] = useState<SearchPullRequestsInput["status"]>("active");
   const [projectId, setProjectId] = useState("");
   const [repositoryId, setRepositoryId] = useState("");
+  const [targetPullRequestId, setTargetPullRequestId] = useState<number | null>(null);
 
   const repositoriesQuery = useQuery({
     queryKey: ["prRepositories", organizationId],
@@ -73,6 +74,30 @@ export function PullRequestSearch({
   const mutation = useMutation({ mutationFn: searchPullRequests });
   const results = mutation.data ?? [];
   const activeSearchFilterCount = (query.trim() ? 1 : 0) + (projectId ? 1 : 0) + (repositoryId ? 1 : 0);
+
+  useEffect(() => {
+    function onNavigate(event: Event) {
+      const detail = (event as CustomEvent).detail;
+      if (!detail || detail.type !== "pullRequest") return;
+      const nextOrganizationId = detail.organizationId || organizationId;
+      setOrganizationId(nextOrganizationId);
+      setProjectId(detail.projectId ?? "");
+      setRepositoryId(detail.repositoryId ?? "");
+      setStatus("active");
+      setQuery(detail.title ?? "");
+      setTargetPullRequestId(detail.pullRequestId);
+      mutation.mutate({
+        organizationId: nextOrganizationId,
+        query: detail.title ?? "",
+        status: "active",
+        projectId: detail.projectId,
+        repositoryId: detail.repositoryId,
+      });
+    }
+
+    window.addEventListener("azdodeck:navigate-selection", onNavigate);
+    return () => window.removeEventListener("azdodeck:navigate-selection", onNavigate);
+  }, [mutation, organizationId]);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -198,8 +223,10 @@ export function PullRequestSearch({
         activeExternalFilterCount={activeSearchFilterCount}
         loading={mutation.isPending}
         onClearExternalFilters={clearSearchFilters}
+        onTargetPullRequestHandled={() => setTargetPullRequestId(null)}
         results={results}
         searched={mutation.isSuccess}
+        targetPullRequestId={targetPullRequestId}
       />
     </div>
   );
@@ -227,14 +254,18 @@ function PullRequestResults({
   activeExternalFilterCount = 0,
   loading,
   onClearExternalFilters,
+  onTargetPullRequestHandled,
   results,
   searched,
+  targetPullRequestId,
 }: {
   activeExternalFilterCount?: number;
   loading: boolean;
   onClearExternalFilters?: () => void;
+  onTargetPullRequestHandled?: () => void;
   results: PullRequestSummary[];
   searched: boolean;
+  targetPullRequestId?: number | null;
 }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [columnWidths, setColumnWidths] = useState(() =>
@@ -290,6 +321,15 @@ function PullRequestResults({
   useEffect(() => {
     setSelectedIndex((index) => Math.min(index, Math.max(filteredResults.length - 1, 0)));
   }, [filteredResults.length]);
+
+  useEffect(() => {
+    if (!targetPullRequestId) return;
+    const index = filteredResults.findIndex((pr) => pr.pullRequestId === targetPullRequestId);
+    if (index < 0) return;
+    setSelectedIndex(index);
+    window.setTimeout(() => rowRefs.current[index]?.focus(), 0);
+    onTargetPullRequestHandled?.();
+  }, [filteredResults, onTargetPullRequestHandled, targetPullRequestId]);
 
   const countLabel = useMemo(() => {
     if (loading) return "Searching";

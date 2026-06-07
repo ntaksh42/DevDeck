@@ -7,6 +7,7 @@ import type {
   AssignWorkItemsInput,
   CommitRepositoryOption,
   CommitSummary,
+  CommandPaletteSearchResults,
   DeleteWorkItemCommentInput,
   GetReviewResultPreviewInput,
   GetSavedQueryInput,
@@ -282,6 +283,11 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         ?.input;
       return demoCommits(input);
     }
+    case "search_command_palette": {
+      const input = (args as { input?: { organizationId?: string; query?: string } } | undefined)
+        ?.input;
+      return demoCommandPaletteSearch(input?.query ?? "");
+    }
     case "list_commit_repositories":
       return demoCommitRepositories();
     case "list_sync_states":
@@ -311,6 +317,26 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     default:
       throw new Error(`Unsupported demo command: ${command}`);
   }
+}
+
+function demoCommandPaletteSearch(query: string): CommandPaletteSearchResults {
+  const term = query.trim().toLowerCase();
+  if (term.length < 2) {
+    return { workItems: [], pullRequests: [], commits: [] };
+  }
+  const directId = term.startsWith("#") ? Number(term.slice(1)) : NaN;
+  return {
+    workItems: demoWorkItems({ query: Number.isFinite(directId) ? undefined : term })
+      .filter((item) => !Number.isFinite(directId) || item.id === directId)
+      .slice(0, 10),
+    pullRequests: demoPullRequests({
+      query: Number.isFinite(directId) ? undefined : term,
+      status: "all",
+    })
+      .filter((pr) => !Number.isFinite(directId) || pr.pullRequestId === directId)
+      .slice(0, 10),
+    commits: Number.isFinite(directId) ? [] : demoCommits({ query: term }).slice(0, 10),
+  };
 }
 
 function demoReviewResultPreview(

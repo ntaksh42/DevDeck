@@ -8,6 +8,7 @@ mod db;
 mod error;
 mod orgs;
 mod prs;
+mod search;
 mod secrets;
 mod settings;
 mod sync;
@@ -25,6 +26,7 @@ use prs::{
     ReviewPullRequestSummary, SearchPullRequestsInput,
 };
 use secrets::SecretStore;
+use search::{CommandPaletteSearchInput, CommandPaletteSearchResults, SearchService};
 use settings::{
     normalize_app_settings, GetReviewResultPreviewInput, ReviewResultPreview, SettingsService,
     UpdateAppSettingsInput,
@@ -53,6 +55,7 @@ struct AppState {
     pull_requests: PullRequestService,
     work_items: WorkItemService,
     commits: CommitService,
+    search: SearchService,
     settings: SettingsService,
     sync_trigger: mpsc::Sender<SyncTrigger>,
 }
@@ -152,6 +155,15 @@ fn list_my_review_pull_requests(
     state: State<'_, AppState>,
 ) -> Result<Vec<ReviewPullRequestSummary>> {
     state.pull_requests.list_my_reviews(input)
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+fn search_command_palette(
+    input: CommandPaletteSearchInput,
+    state: State<'_, AppState>,
+) -> Result<CommandPaletteSearchResults> {
+    state.search.command_palette(input)
 }
 
 #[tauri::command]
@@ -459,6 +471,7 @@ pub fn run() {
                 pull_requests: PullRequestService::new(db.clone(), SecretStore),
                 work_items: WorkItemService::new(db.clone(), SecretStore),
                 commits: CommitService::new(db.clone(), SecretStore),
+                search: SearchService::new(db.clone()),
                 settings: SettingsService::new(db.clone()),
                 sync_trigger: sync_tx,
             });
@@ -478,6 +491,7 @@ pub fn run() {
             add_azure_cli_organization,
             search_pull_requests,
             list_my_review_pull_requests,
+            search_command_palette,
             search_work_items,
             list_my_work_items,
             list_work_item_projects,

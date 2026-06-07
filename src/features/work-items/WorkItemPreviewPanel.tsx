@@ -1472,6 +1472,7 @@ function previewFieldValue(preview: WorkItemPreview, key: PreviewFieldKey): stri
     case "changedDate":
       return preview.changedDate ? formatRelativeDate(preview.changedDate) : null;
   }
+  return null;
 }
 
 function customPreviewFieldValue(preview: WorkItemPreview, referenceName: string): string | null {

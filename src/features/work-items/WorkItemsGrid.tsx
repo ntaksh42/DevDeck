@@ -412,8 +412,10 @@ export function WorkItemsGrid({
   initialSort,
   onClearExternalFilters,
   onSortChange,
+  onTargetWorkItemHandled,
   previewVisible = true,
   storageKeyScope,
+  targetWorkItemId,
 }: {
   results: WorkItemSummary[];
   loading: boolean;
@@ -425,8 +427,10 @@ export function WorkItemsGrid({
   initialSort?: WiSortState;
   onClearExternalFilters?: () => void;
   onSortChange?: (sort: WiSortState) => void;
+  onTargetWorkItemHandled?: () => void;
   previewVisible?: boolean;
   storageKeyScope?: string;
+  targetWorkItemId?: number | null;
 }) {
   const columnWidthsStorageKey = storageKeyScope
     ? `${WI_COLUMN_WIDTHS_STORAGE_KEY}:${storageKeyScope}`
@@ -903,6 +907,14 @@ export function WorkItemsGrid({
     }
     window.setTimeout(() => rowRefs.current[next]?.focus(), 0);
   }
+
+  useEffect(() => {
+    if (!targetWorkItemId) return;
+    const index = displayed.findIndex((item) => item.id === targetWorkItemId);
+    if (index < 0) return;
+    moveSelection(index);
+    onTargetWorkItemHandled?.();
+  }, [displayed, onTargetWorkItemHandled, targetWorkItemId]);
 
   function handleCheckboxChange(index: number, checked: boolean, shiftKey: boolean) {
     const item = displayed[index];

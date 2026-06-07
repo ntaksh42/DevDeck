@@ -214,6 +214,50 @@ const commitSummariesSchema = z.array(commitSummarySchema);
 
 export type CommitSummary = z.infer<typeof commitSummarySchema>;
 
+const commandPaletteSearchResultsSchema = z.object({
+  workItems: z.array(
+    z.object({
+      organizationId: z.string(),
+      projectId: z.string(),
+      projectName: z.string(),
+      id: z.number(),
+      title: z.string(),
+      workItemType: z.string().nullable(),
+      state: z.string().nullable(),
+      webUrl: z.string().nullable(),
+    }),
+  ),
+  pullRequests: z.array(
+    z.object({
+      organizationId: z.string(),
+      projectId: z.string(),
+      projectName: z.string(),
+      repositoryId: z.string(),
+      repositoryName: z.string(),
+      pullRequestId: z.number(),
+      title: z.string(),
+      status: z.string(),
+      webUrl: z.string().nullable(),
+    }),
+  ),
+  commits: z.array(
+    z.object({
+      organizationId: z.string(),
+      projectId: z.string(),
+      projectName: z.string(),
+      repositoryId: z.string(),
+      repositoryName: z.string(),
+      commitId: z.string(),
+      shortCommitId: z.string(),
+      comment: z.string(),
+      authorName: z.string().nullable(),
+      webUrl: z.string().nullable(),
+    }),
+  ),
+});
+
+export type CommandPaletteSearchResults = z.infer<typeof commandPaletteSearchResultsSchema>;
+
 const commitRepositoryOptionSchema = z.object({
   projectId: z.string(),
   projectName: z.string(),
@@ -435,6 +479,11 @@ export type SearchCommitsInput = {
   toDate?: string;
   projectId?: string;
   repositoryId?: string;
+};
+
+export type SearchCommandPaletteInput = {
+  organizationId?: string;
+  query: string;
 };
 
 export type GetSavedQueryInput = {
@@ -670,6 +719,13 @@ export async function searchCommits(
 ): Promise<CommitSummary[]> {
   const result = await invokeCommand("search_commits", { input });
   return commitSummariesSchema.parse(result);
+}
+
+export async function searchCommandPalette(
+  input: SearchCommandPaletteInput,
+): Promise<CommandPaletteSearchResults> {
+  const result = await invokeCommand("search_command_palette", { input });
+  return commandPaletteSearchResultsSchema.parse(result);
 }
 
 export async function listCommitRepositories(

@@ -44,7 +44,11 @@ import { LoadingState, ErrorState } from "@/components/StateDisplay";
 import { NavButton, NavSection, NavSubItem } from "@/components/Nav";
 import { HelpDialog } from "@/components/HelpDialog";
 import { UserGuideDialog } from "@/components/UserGuideDialog";
-import { CommandPalette, type CommandPaletteAction } from "@/components/CommandPalette";
+import {
+  CommandPalette,
+  type CommandPaletteAction,
+  type CommandPaletteSearchSelection,
+} from "@/components/CommandPalette";
 import { CommitSearch } from "@/features/commits/CommitSearch";
 import { WorkItemSearch } from '@/features/work-items/WorkItemSearch';
 import { WorkItemViewsPanel } from '@/features/work-items/WorkItemViewsPanel';
@@ -213,6 +217,27 @@ function AppShell() {
 
   function dispatchWorkItemCommand(command: string): void {
     window.dispatchEvent(new CustomEvent(`azdodeck:work-items:${command}`));
+  }
+
+  function dispatchNavigationSelection(selection: CommandPaletteSearchSelection): void {
+    window.setTimeout(() => {
+      window.dispatchEvent(
+        new CustomEvent("azdodeck:navigate-selection", { detail: selection }),
+      );
+    }, 50);
+  }
+
+  function handleCommandPaletteSearchSelection(selection: CommandPaletteSearchSelection): void {
+    if (selection.type === "workItem") {
+      setNavSectionExpanded("workItems", true);
+      setView("workItems");
+    } else if (selection.type === "pullRequest") {
+      setNavSectionExpanded("pullRequests", true);
+      setView("pullRequestSearch");
+    } else {
+      setView("commits");
+    }
+    dispatchNavigationSelection(selection);
   }
 
   function currentViewSyncScope(): SyncScope {
@@ -896,7 +921,9 @@ function AppShell() {
       {commandPaletteOpen && (
         <CommandPalette
           actions={commandActions}
+          organizationId={organizations[0]?.id}
           onClose={() => setCommandPaletteOpen(false)}
+          onSearchResultSelect={handleCommandPaletteSearchSelection}
         />
       )}
       {userGuideOpen && <UserGuideDialog onClose={() => setUserGuideOpen(false)} />}

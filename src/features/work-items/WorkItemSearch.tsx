@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Info, Loader2, Search } from "lucide-react";
 import {
@@ -17,6 +17,7 @@ export function WorkItemSearch({ organizations }: { organizations: Organization[
   const [state, setState] = useState("all");
   const [workItemType, setWorkItemType] = useState("");
   const [projectId, setProjectId] = useState("");
+  const [targetWorkItemId, setTargetWorkItemId] = useState<number | null>(null);
 
   const projectsQuery = useQuery({
     queryKey: workItemQueryKeys.searchProjects(organizationId),
@@ -28,6 +29,30 @@ export function WorkItemSearch({ organizations }: { organizations: Organization[
 
   const mutation = useMutation({ mutationFn: searchWorkItems });
   const results = mutation.data ?? [];
+
+  useEffect(() => {
+    function onNavigate(event: Event) {
+      const detail = (event as CustomEvent).detail;
+      if (!detail || detail.type !== "workItem") return;
+      const nextOrganizationId = detail.organizationId || organizationId;
+      setOrganizationId(nextOrganizationId);
+      setProjectId(detail.projectId ?? "");
+      setState("all");
+      setWorkItemType("");
+      setQuery(detail.title ?? "");
+      setTargetWorkItemId(detail.id);
+      mutation.mutate({
+        organizationId: nextOrganizationId,
+        query: detail.title ?? "",
+        state: "all",
+        workItemType: "",
+        projectId: detail.projectId,
+      });
+    }
+
+    window.addEventListener("azdodeck:navigate-selection", onNavigate);
+    return () => window.removeEventListener("azdodeck:navigate-selection", onNavigate);
+  }, [mutation, organizationId]);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -127,7 +152,13 @@ export function WorkItemSearch({ organizations }: { organizations: Organization[
         <ErrorState message={commandErrorMessage(mutation.error)} />
       ) : null}
 
-      <WorkItemsGrid loading={mutation.isPending} results={results} searched={mutation.isSuccess} />
+      <WorkItemsGrid
+        loading={mutation.isPending}
+        results={results}
+        searched={mutation.isSuccess}
+        targetWorkItemId={targetWorkItemId}
+        onTargetWorkItemHandled={() => setTargetWorkItemId(null)}
+      />
     </div>
   );
 }
