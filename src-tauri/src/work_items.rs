@@ -1908,6 +1908,16 @@ const SYNC_MY_WI_WIQL: &str =
     "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project \
      AND [System.AssignedTo] = @Me \
      ORDER BY [System.ChangedDate] DESC";
+const SYNC_WORK_ITEM_BATCH_SIZE: usize = 200;
+
+struct SyncWorkItemsResult {
+    warning: Option<String>,
+}
+
+struct SyncWorkItemFetchResult {
+    items: Vec<CachedWorkItem>,
+    queried_count: usize,
+}
 
 pub async fn sync_work_items_for_org(
     db: &AppDatabase,
@@ -1918,16 +1928,28 @@ pub async fn sync_work_items_for_org(
     let error_count = db.get_sync_state(&scope)?.map_or(0, |s| s.error_count);
 
     match do_sync_work_items(db, client, org).await {
-        Ok(()) => {
+        Ok(result) => {
             let now = Utc::now().to_rfc3339();
-            db.update_sync_state(&scope, &org.id, Some(&now), 0, None)?;
+            db.update_sync_state(
+                &scope,
+                &org.id,
+                Some(&now),
+                0,
+                None,
+                result.warning.as_deref(),
+            )?;
             tracing::info!(org = %org.name, "work item sync completed");
             Ok(())
         }
         Err(e) => {
-            if let Err(db_err) =
-                db.update_sync_state(&scope, &org.id, None, error_count + 1, Some(&e.to_string()))
-            {
+            if let Err(db_err) = db.update_sync_state(
+                &scope,
+                &org.id,
+                None,
+                error_count + 1,
+                Some(&e.to_string()),
+                None,
+            ) {
                 tracing::warn!(error = ?db_err, "failed to persist sync error state");
             }
             Err(e)
@@ -1939,11 +1961,13 @@ async fn do_sync_work_items(
     db: &AppDatabase,
     client: &AdoClient,
     org: &Organization,
-) -> Result<()> {
+) -> Result<SyncWorkItemsResult> {
     let projects = client.list_projects().await?;
     let fields: Vec<String> = WORK_ITEM_FIELDS.iter().map(ToString::to_string).collect();
     let mut all_cached: Vec<CachedWorkItem> = Vec::new();
     let mut my_cached: Vec<CachedWorkItem> = Vec::new();
+    let mut large_query_count = 0usize;
+    let mut largest_query_result = 0usize;
 
     for project in &projects {
         let (project_all_cached, project_my_cached) = tokio::try_join!(
@@ -1970,15 +1994,29 @@ async fn do_sync_work_items(
         let Some(project_all_cached) = project_all_cached else {
             continue;
         };
-        all_cached.extend(project_all_cached);
+        if project_all_cached.queried_count > SYNC_WORK_ITEM_BATCH_SIZE {
+            large_query_count += 1;
+            largest_query_result = largest_query_result.max(project_all_cached.queried_count);
+        }
+        all_cached.extend(project_all_cached.items);
         if let Some(project_my_cached) = project_my_cached {
-            my_cached.extend(project_my_cached);
+            if project_my_cached.queried_count > SYNC_WORK_ITEM_BATCH_SIZE {
+                large_query_count += 1;
+                largest_query_result = largest_query_result.max(project_my_cached.queried_count);
+            }
+            my_cached.extend(project_my_cached.items);
         }
     }
 
     db.replace_work_items(&org.id, &all_cached, &my_cached)?;
 
-    Ok(())
+    let warning = (large_query_count > 0).then(|| {
+        format!(
+            "Work item sync fetched more than {SYNC_WORK_ITEM_BATCH_SIZE} IDs in {large_query_count} query result(s); largest result had {largest_query_result} IDs and was loaded in batches."
+        )
+    });
+
+    Ok(SyncWorkItemsResult { warning })
 }
 
 async fn fetch_sync_work_items(
@@ -1989,7 +2027,7 @@ async fn fetch_sync_work_items(
     wiql: &str,
     fields: Vec<String>,
     label: &str,
-) -> Result<Option<Vec<CachedWorkItem>>> {
+) -> Result<Option<SyncWorkItemFetchResult>> {
     let ids = match client.query_work_item_ids(project_id, wiql).await {
         Ok(ids) => ids,
         Err(e) if is_ado_not_found(&e) => {
@@ -2004,32 +2042,43 @@ async fn fetch_sync_work_items(
         }
         Err(e) => return Err(e.into()),
     };
-    let ids: Vec<i64> = ids.into_iter().take(200).collect();
+    let queried_count = ids.len();
     if ids.is_empty() {
-        return Ok(Some(Vec::new()));
+        return Ok(Some(SyncWorkItemFetchResult {
+            items: Vec::new(),
+            queried_count,
+        }));
     }
 
-    let work_items = match client.get_work_items_batch(project_id, ids, fields).await {
-        Ok(work_items) => work_items,
-        Err(e) if is_ado_not_found(&e) => {
-            tracing::warn!(
-                org = %org.name,
-                project = %project_name,
-                error = %e,
-                "{} batch returned 404, skipping project",
-                label
-            );
-            return Ok(None);
-        }
-        Err(e) => return Err(e.into()),
-    };
+    let mut work_items = Vec::new();
+    for chunk in ids.chunks(SYNC_WORK_ITEM_BATCH_SIZE) {
+        let chunk_work_items = match client
+            .get_work_items_batch(project_id, chunk.to_vec(), fields.clone())
+            .await
+        {
+            Ok(work_items) => work_items,
+            Err(e) if is_ado_not_found(&e) => {
+                tracing::warn!(
+                    org = %org.name,
+                    project = %project_name,
+                    error = %e,
+                    "{} batch returned 404, skipping project",
+                    label
+                );
+                return Ok(None);
+            }
+            Err(e) => return Err(e.into()),
+        };
+        work_items.extend(chunk_work_items);
+    }
 
-    Ok(Some(
-        work_items
+    Ok(Some(SyncWorkItemFetchResult {
+        items: work_items
             .into_iter()
             .map(|wi| work_item_to_cached(org, project_id, project_name, &wi))
             .collect(),
-    ))
+        queried_count,
+    }))
 }
 
 fn is_ado_not_found(error: &AdoError) -> bool {
@@ -2061,7 +2110,7 @@ mod tests {
     use azdo_client::PatProvider;
     use serde_json::json;
     use url::Url;
-    use wiremock::matchers::{method, path, query_param};
+    use wiremock::matchers::{body_string_contains, method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
@@ -2494,5 +2543,89 @@ mod tests {
         let my_cached = db.list_my_work_items(&org.id).unwrap();
         assert_eq!(my_cached.len(), 1);
         assert_eq!(my_cached[0].title, "Keep synced item");
+    }
+
+    #[tokio::test]
+    async fn sync_work_items_batches_more_than_two_hundred_ids() {
+        let server = MockServer::start().await;
+        let refs: Vec<_> = (1..=201).map(|id| json!({ "id": id })).collect();
+
+        Mock::given(method("GET"))
+            .and(path("/_apis/projects"))
+            .and(query_param("api-version", "7.1-preview"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "count": 1,
+                "value": [{ "id": "project-ok", "name": "Platform" }]
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/project-ok/_apis/wit/wiql"))
+            .and(query_param("api-version", "7.1-preview"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "workItems": refs
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/project-ok/_apis/wit/workitemsbatch"))
+            .and(query_param("api-version", "7.1-preview"))
+            .and(body_string_contains("\"ids\":[1,2,3"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "count": 1,
+                "value": [{
+                    "id": 1,
+                    "fields": {
+                        "System.Title": "First batch item",
+                        "System.WorkItemType": "Task",
+                        "System.State": "Active",
+                        "System.ChangedDate": "2026-05-24T00:00:00Z"
+                    }
+                }]
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/project-ok/_apis/wit/workitemsbatch"))
+            .and(query_param("api-version", "7.1-preview"))
+            .and(body_string_contains("\"ids\":[201]"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "count": 1,
+                "value": [{
+                    "id": 201,
+                    "fields": {
+                        "System.Title": "Second batch item",
+                        "System.WorkItemType": "Task",
+                        "System.State": "Active",
+                        "System.ChangedDate": "2026-05-23T00:00:00Z"
+                    }
+                }]
+            })))
+            .mount(&server)
+            .await;
+
+        let db_file = tempfile::NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(db_file.path().to_path_buf());
+        db.initialize().unwrap();
+        let org = db.upsert_organization(make_org_draft()).unwrap();
+        let client = test_client(&server).await;
+
+        sync_work_items_for_org(&db, &client, &org).await.unwrap();
+
+        let cached = db
+            .search_work_items(&org.id, None, None, None, None)
+            .unwrap();
+        assert_eq!(cached.len(), 2);
+        assert!(cached.iter().any(|item| item.id == 1));
+        assert!(cached.iter().any(|item| item.id == 201));
+        let state = db
+            .get_sync_state(&format!("work_items:{}", org.id))
+            .unwrap()
+            .unwrap();
+        assert_eq!(state.error_count, 0);
+        assert!(state
+            .last_warning
+            .as_deref()
+            .is_some_and(|warning| warning.contains("more than 200 IDs")));
     }
 }

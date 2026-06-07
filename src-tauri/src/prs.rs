@@ -217,14 +217,19 @@ pub async fn sync_prs_for_org(
     match do_sync_prs(db, client, org).await {
         Ok(()) => {
             let now = Utc::now().to_rfc3339();
-            db.update_sync_state(&scope, &org.id, Some(&now), 0, None)?;
+            db.update_sync_state(&scope, &org.id, Some(&now), 0, None, None)?;
             tracing::info!(org = %org.name, "PR sync completed");
             Ok(())
         }
         Err(e) => {
-            if let Err(db_err) =
-                db.update_sync_state(&scope, &org.id, None, error_count + 1, Some(&e.to_string()))
-            {
+            if let Err(db_err) = db.update_sync_state(
+                &scope,
+                &org.id,
+                None,
+                error_count + 1,
+                Some(&e.to_string()),
+                None,
+            ) {
                 tracing::warn!(error = ?db_err, "failed to persist sync error state");
             }
             Err(e)

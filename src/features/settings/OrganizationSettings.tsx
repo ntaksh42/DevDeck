@@ -166,6 +166,7 @@ function SyncHealthSettings({ organizations }: { organizations: Organization[] }
           <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
             {states.map((state) => {
               const hasError = state.errorCount > 0;
+              const hasWarning = !hasError && Boolean(state.lastWarning);
               return (
                 <div
                   key={state.scope}
@@ -183,8 +184,16 @@ function SyncHealthSettings({ organizations }: { organizations: Organization[] }
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Status</p>
-                    <p className={hasError ? "font-medium text-destructive" : "font-medium text-green-700"}>
-                      {hasError ? `${state.errorCount} failed` : "Healthy"}
+                    <p
+                      className={
+                        hasError
+                          ? "font-medium text-destructive"
+                          : hasWarning
+                            ? "font-medium text-amber-700"
+                            : "font-medium text-green-700"
+                      }
+                    >
+                      {hasError ? `${state.errorCount} failed` : hasWarning ? "Limited" : "Healthy"}
                     </p>
                   </div>
                   <div className="flex items-center justify-end gap-2">
@@ -194,6 +203,14 @@ function SyncHealthSettings({ organizations }: { organizations: Organization[] }
                         title={state.lastError}
                       >
                         {state.lastError}
+                      </span>
+                    ) : null}
+                    {!state.lastError && state.lastWarning ? (
+                      <span
+                        className="max-w-52 truncate text-xs text-amber-700"
+                        title={state.lastWarning}
+                      >
+                        {state.lastWarning}
                       </span>
                     ) : null}
                     <button

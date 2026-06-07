@@ -79,6 +79,7 @@ let demoSyncStates: SyncState[] = [
     lastSyncedAt: "2026-05-27T08:00:00Z",
     errorCount: 0,
     lastError: null,
+    lastWarning: null,
   },
   {
     scope: "work_items:contoso",
@@ -86,6 +87,8 @@ let demoSyncStates: SyncState[] = [
     lastSyncedAt: "2026-05-27T08:00:00Z",
     errorCount: 0,
     lastError: null,
+    lastWarning:
+      "Work item sync fetched more than 200 IDs in 1 query result(s); largest result had 248 IDs and was loaded in batches.",
   },
 ];
 const writeCommands = new Set([
@@ -306,6 +309,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         lastSyncedAt: new Date().toISOString(),
         errorCount: 0,
         lastError: null,
+        lastWarning: null,
       }));
       return null;
     default:
