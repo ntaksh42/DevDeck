@@ -1062,7 +1062,7 @@ function WorkItemPreviewDetails({
     <div
       aria-keyshortcuts="Alt+P"
       aria-label="Work item preview"
-      className="min-h-0 flex-1 overflow-auto bg-white px-2 py-1.5 text-xs outline-none focus:bg-primary/[0.02] focus:ring-2 focus:ring-inset focus:ring-primary"
+      className="min-h-0 flex-1 overflow-auto bg-white px-2.5 pb-2 pt-1.5 text-xs outline-none focus:bg-primary/[0.02] focus:ring-2 focus:ring-inset focus:ring-primary"
       data-primary-preview="true"
       onKeyDown={stopPreviewNavigationKeyDown}
       tabIndex={-1}
