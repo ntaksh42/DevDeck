@@ -219,6 +219,8 @@ export function WorkItemPreviewPanel({
     ],
   );
   const showMentionOptions = mentionStart !== null && mentionOptions.length > 0;
+  const showMentionError =
+    mentionStart !== null && mentionOptionsQuery.isError && mentionOptions.length === 0;
   const mentionPickerRef = useCloseOnOutsidePointer<HTMLDivElement>(
     showMentionOptions,
     () => {
@@ -802,9 +804,13 @@ export function WorkItemPreviewPanel({
                   <AssigneePicker
                     current={preview.assignedTo}
                     error={
-                      assigneeOptionsQuery.isError
-                        ? commandErrorMessage(assigneeOptionsQuery.error)
-                        : null
+                      assigneeQuery.trim()
+                        ? assigneeOptionsQuery.isError
+                          ? commandErrorMessage(assigneeOptionsQuery.error)
+                          : null
+                        : assigneeDefaultQuery.isError
+                          ? commandErrorMessage(assigneeDefaultQuery.error)
+                          : null
                     }
                     mutationError={assignMutation.isError ? commandErrorMessage(assignMutation.error) : null}
                     loading={assigneeDefaultQuery.isFetching || assigneeOptionsQuery.isFetching}
@@ -871,6 +877,10 @@ export function WorkItemPreviewPanel({
                             ) : null}
                           </button>
                         ))}
+                      </div>
+                    ) : showMentionError ? (
+                      <div className="absolute bottom-full left-0 z-20 mb-1 w-full rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-[11px] text-destructive shadow-lg">
+                        Search failed: {commandErrorMessage(mentionOptionsQuery.error)}
                       </div>
                     ) : null}
                   </div>
@@ -2339,7 +2349,7 @@ function AssigneePicker({
             className="mb-1 h-7 w-full rounded border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
           />
           <div ref={listRef} className="max-h-44 overflow-auto">
-            {error && query.trim() ? (
+            {error ? (
               <div className="mb-1 rounded border border-destructive/30 bg-destructive/5 px-2 py-1 text-[11px] text-destructive">
                 Search failed: {error}
               </div>
