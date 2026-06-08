@@ -1556,9 +1556,13 @@ fn push_unique_mention_candidate(
                 existing.unique_name.as_deref(),
                 candidate.unique_name.as_deref(),
             )
-            || existing
+            || (existing
                 .display_name
                 .eq_ignore_ascii_case(&candidate.display_name)
+                && !both_unique_names_differ(
+                    existing.unique_name.as_deref(),
+                    candidate.unique_name.as_deref(),
+                ))
     });
     if !duplicate {
         candidates.push(candidate);
@@ -1568,6 +1572,15 @@ fn push_unique_mention_candidate(
 fn same_optional_mention_value(left: Option<&str>, right: Option<&str>) -> bool {
     match (left, right) {
         (Some(left), Some(right)) => left.eq_ignore_ascii_case(right),
+        _ => false,
+    }
+}
+
+/// Returns true only when both sides have a unique_name and they differ — the only
+/// case where same display_name candidates are definitively distinct people.
+fn both_unique_names_differ(left: Option<&str>, right: Option<&str>) -> bool {
+    match (left, right) {
+        (Some(l), Some(r)) => !l.eq_ignore_ascii_case(r),
         _ => false,
     }
 }
@@ -2596,5 +2609,66 @@ mod tests {
             .last_warning
             .as_deref()
             .is_some_and(|warning| warning.contains("more than 200 IDs")));
+    }
+
+    // ---- push_unique_mention_candidate dedup tests ----
+
+    fn mc(id: &str, display_name: &str, unique_name: Option<&str>) -> MentionCandidate {
+        MentionCandidate {
+            id: id.to_string(),
+            display_name: display_name.to_string(),
+            unique_name: unique_name.map(|s| s.to_string()),
+        }
+    }
+
+    #[test]
+    fn test_dedup_same_id() {
+        let mut candidates = vec![mc("id-1", "Alice", Some("alice@corp.com"))];
+        push_unique_mention_candidate(&mut candidates, mc("id-1", "Alice Duplicate", None));
+        assert_eq!(candidates.len(), 1);
+    }
+
+    #[test]
+    fn test_dedup_same_unique_name() {
+        let mut candidates = vec![mc("id-1", "Alice", Some("alice@corp.com"))];
+        push_unique_mention_candidate(
+            &mut candidates,
+            mc("id-2", "Alice Smith", Some("alice@corp.com")),
+        );
+        assert_eq!(candidates.len(), 1);
+    }
+
+    #[test]
+    fn test_dedup_same_display_name_no_unique_name() {
+        // Can't tell apart two "Alice" candidates with no unique_name — treat as duplicate.
+        let mut candidates = vec![mc("id-1", "Alice", None)];
+        push_unique_mention_candidate(&mut candidates, mc("id-2", "Alice", None));
+        assert_eq!(candidates.len(), 1);
+    }
+
+    #[test]
+    fn test_dedup_same_display_name_one_missing_unique_name() {
+        // One side lacks unique_name — can't confirm they're distinct, so treat as duplicate.
+        let mut candidates = vec![mc("id-1", "Alice", Some("alice@corp.com"))];
+        push_unique_mention_candidate(&mut candidates, mc("id-2", "Alice", None));
+        assert_eq!(candidates.len(), 1);
+    }
+
+    #[test]
+    fn test_keep_same_display_name_different_unique_names() {
+        // Both sides have distinct unique_names — these are provably different people.
+        let mut candidates = vec![mc("id-1", "Alice", Some("alice@corp.com"))];
+        push_unique_mention_candidate(
+            &mut candidates,
+            mc("id-2", "Alice", Some("alice.other@corp.com")),
+        );
+        assert_eq!(candidates.len(), 2);
+    }
+
+    #[test]
+    fn test_keep_entirely_different_candidate() {
+        let mut candidates = vec![mc("id-1", "Alice", Some("alice@corp.com"))];
+        push_unique_mention_candidate(&mut candidates, mc("id-2", "Bob", Some("bob@corp.com")));
+        assert_eq!(candidates.len(), 2);
     }
 }

@@ -1030,6 +1030,17 @@ describe("App", () => {
       });
     });
 
+    // Verify switching work items clears the unsent comment draft.
+    const draftBox = screen.getByLabelText("Comment") as HTMLTextAreaElement;
+    fireEvent.change(draftBox, { target: { value: "unsent draft" } });
+    expect(draftBox.value).toBe("unsent draft");
+    fireEvent.click(
+      within(workItemsGrid).getByRole("row", { name: /Review save workflow/ }),
+    );
+    await waitFor(() => {
+      expect((screen.getByLabelText("Comment") as HTMLTextAreaElement).value).toBe("");
+    });
+
     fireEvent.click(screen.getByRole("button", { name: "#123" }));
 
     await waitFor(() => {

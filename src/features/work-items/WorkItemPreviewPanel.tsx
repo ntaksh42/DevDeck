@@ -428,6 +428,11 @@ export function WorkItemPreviewPanel({
     reasonMutation.reset();
     assignMutation.reset();
     priorityMutation.reset();
+    setCommentText("");
+    setSelectedMentions([]);
+    setMentionQuery("");
+    setMentionStart(null);
+    setActiveMentionIndex(0);
   }, [selectedItem?.id]);
 
   useEffect(() => {
@@ -2645,12 +2650,15 @@ function addSelectedMention(
   ];
 }
 
-function renderAzureMentionMarkdown(
+export function renderAzureMentionMarkdown(
   text: string,
   mentions: SelectedMention[],
 ): string {
   let markdown = text;
-  for (const mention of mentions) {
+  const sorted = [...mentions].sort(
+    (a, b) => b.displayName.length - a.displayName.length,
+  );
+  for (const mention of sorted) {
     markdown = markdown.replace(
       new RegExp(`@${escapeRegExp(mention.displayName)}(?=\\s|$)`, "g"),
       `@<${mention.id}>`,
