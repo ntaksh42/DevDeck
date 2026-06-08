@@ -246,7 +246,17 @@ fn identity_picker_identity_from_value(value: &Value) -> Option<IdentityPickerId
             .active
             .or_else(|| picker_bool_property(properties, "Active"));
     }
-    Some(identity)
+    identity_picker_identity_is_user(&identity).then_some(identity)
+}
+
+fn identity_picker_identity_is_user(identity: &IdentityPickerIdentity) -> bool {
+    let user_type = identity
+        .entity_type
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_none_or(|value| value.eq_ignore_ascii_case("user"));
+    user_type && identity.active != Some(false)
 }
 
 fn picker_property(properties: &Value, name: &str) -> Option<String> {
@@ -482,6 +492,58 @@ mod tests {
             Some("aad.alice")
         );
         assert_eq!(identities[0].active, Some(true));
+    }
+
+    #[tokio::test]
+    async fn search_identity_picker_filters_non_user_and_inactive_identities() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/testorg/_apis/IdentityPicker/Identities"))
+            .and(query_param("api-version", "5.0-preview.1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "results": [
+                    {
+                        "identities": [
+                            {
+                                "entityId": "wiki-1",
+                                "displayName": "Project Wiki",
+                                "entityType": "Wiki",
+                                "properties": {
+                                    "Active": { "$value": true }
+                                }
+                            },
+                            {
+                                "entityId": "inactive-1",
+                                "displayName": "Inactive User",
+                                "entityType": "User",
+                                "properties": {
+                                    "Active": { "$value": false }
+                                }
+                            },
+                            {
+                                "entityId": "user-1",
+                                "displayName": "Alice Johnson",
+                                "entityType": "User",
+                                "properties": {
+                                    "Active": { "$value": true },
+                                    "SubjectDescriptor": { "$value": "aad.alice" }
+                                }
+                            }
+                        ]
+                    }
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let identities = test_client(&server)
+            .await
+            .search_identity_picker("alice", 40)
+            .await
+            .unwrap();
+
+        assert_eq!(identities.len(), 1);
+        assert_eq!(identities[0].display_name.as_deref(), Some("Alice Johnson"));
     }
 
     #[tokio::test]

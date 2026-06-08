@@ -517,8 +517,8 @@ impl AdoClient {
 
     fn validate_attachment_url(&self, url: &Url) -> Result<()> {
         if url.scheme() != self.base_url.scheme()
-            || url.host_str() != self.base_url.host_str()
             || url.port_or_known_default() != self.base_url.port_or_known_default()
+            || !same_azure_devops_organization_url(url, &self.base_url)
         {
             return Err(AdoError::Auth(
                 "attachment URL is outside the Azure DevOps organization".to_string(),
@@ -526,7 +526,8 @@ impl AdoClient {
         }
 
         let base_path = self.base_url.path().trim_end_matches('/');
-        if !base_path.is_empty()
+        if !is_legacy_visualstudio_org_url(url, &self.base_url)
+            && !base_path.is_empty()
             && base_path != "/"
             && !url_path_is_within_base(url.path(), base_path)
         {
@@ -556,6 +557,32 @@ fn url_path_is_within_base(url_path: &str, base_path: &str) -> bool {
     url_path.len() > base_path.len()
         && url_path.as_bytes().get(base_path.len()) == Some(&b'/')
         && url_path[..base_path.len()].eq_ignore_ascii_case(base_path)
+}
+
+fn same_azure_devops_organization_url(url: &Url, base_url: &Url) -> bool {
+    if url.host_str() == base_url.host_str() {
+        return true;
+    }
+    is_legacy_visualstudio_org_url(url, base_url)
+}
+
+fn is_legacy_visualstudio_org_url(url: &Url, base_url: &Url) -> bool {
+    let Some(url_host) = url.host_str() else {
+        return false;
+    };
+    let Some(base_host) = base_url.host_str() else {
+        return false;
+    };
+    if !base_host.eq_ignore_ascii_case("dev.azure.com") {
+        return false;
+    }
+    let org = base_url
+        .path_segments()
+        .and_then(|mut segments| segments.find(|segment| !segment.is_empty()));
+    let Some(org) = org else {
+        return false;
+    };
+    url_host.eq_ignore_ascii_case(&format!("{org}.visualstudio.com"))
 }
 
 fn vssps_base_url(base_url: &Url) -> Result<Url> {
@@ -685,6 +712,19 @@ mod tests {
         let url =
             Url::parse("https://dev.azure.com/Contoso/project-1/_apis/wit/attachments/image-1")
                 .unwrap();
+
+        client.validate_attachment_url(&url).unwrap();
+    }
+
+    #[test]
+    fn validate_attachment_url_accepts_legacy_visualstudio_org_host() {
+        let client = AdoClient::new("contoso", Arc::new(PatProvider::new("test-pat")))
+            .unwrap()
+            .with_base_url(Url::parse("https://dev.azure.com/contoso/").unwrap());
+        let url = Url::parse(
+            "https://contoso.visualstudio.com/OtherProject/_apis/wit/attachments/image-1",
+        )
+        .unwrap();
 
         client.validate_attachment_url(&url).unwrap();
     }

@@ -50,6 +50,7 @@ const WI_VISIBLE_COLUMNS_STORAGE_KEY = "azdodeck:layout:wiSearchGridVisibleColum
 const WI_SORT_STORAGE_KEY = "azdodeck:view:wiSearchGridSort:v1";
 const WI_COLUMN_FILTERS_STORAGE_KEY = "azdodeck:view:wiSearchGridColumnFilters:v1";
 const DEFAULT_WORK_ITEM_PREVIEW_WIDTH = 440;
+const MAX_WORK_ITEM_PREVIEW_WIDTH = 1280;
 const WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY = "azdodeck:layout:workItemPreviewWidth";
 const WI_GRID_ROW_HEIGHT = 29;
 const WI_GRID_OVERSCAN = 8;
@@ -458,7 +459,7 @@ export function WorkItemsGrid({
       previewWidthStorageKey,
       DEFAULT_WORK_ITEM_PREVIEW_WIDTH,
       300,
-      860,
+      MAX_WORK_ITEM_PREVIEW_WIDTH,
     ),
   );
   const [copyToast, setCopyToast] = useState<string | null>(null);
@@ -507,7 +508,7 @@ export function WorkItemsGrid({
         previewWidthStorageKey,
         DEFAULT_WORK_ITEM_PREVIEW_WIDTH,
         300,
-        860,
+        MAX_WORK_ITEM_PREVIEW_WIDTH,
       ),
     );
   }, [columnFiltersStorageKey, columnWidthsStorageKey, previewWidthStorageKey, visibleColumnsStorageKey]);
@@ -752,7 +753,7 @@ export function WorkItemsGrid({
   });
 
   const bulkAssignMutation = useMutation({
-    mutationFn: async (assignedTo: string) => {
+    mutationFn: async (candidate: WorkItemAssigneeCandidate) => {
       const groups = new Map<string, typeof checkedItems>();
       for (const item of checkedItems) {
         const key = `${item.organizationId}:${item.projectId}`;
@@ -765,13 +766,28 @@ export function WorkItemsGrid({
           organizationId: items[0].organizationId,
           projectId: items[0].projectId,
           workItemIds: items.map((i) => i.id),
-          assignedTo,
+          assignedTo: candidate.assignValue,
         });
         allResults.push(...r);
       }
       return allResults;
     },
-    onSuccess: (results) => {
+    onSuccess: (results, candidate) => {
+      const succeededIds = new Set(results.filter((result) => !result.error).map((result) => result.id));
+      if (succeededIds.size > 0) {
+        setItemOverrides((current) => {
+          const next = new Map(current);
+          for (const item of checkedItems) {
+            if (!succeededIds.has(item.id)) continue;
+            const key = workItemSummaryKey(item);
+            next.set(key, {
+              ...(next.get(key) ?? {}),
+              assignedTo: candidate.displayName,
+            });
+          }
+          return next;
+        });
+      }
       setBulkAssignOpen(false);
       setBulkAssignQuery("");
       setCheckedIds(new Set());
@@ -1109,6 +1125,7 @@ export function WorkItemsGrid({
   const activeFilterCount = Math.max(0, activeExternalFilterCount) + columnFilterCount;
   const hasActiveColumnFilters = columnFilterCount > 0;
   const hasActiveFilters = activeFilterCount > 0;
+  const showBlockingLoading = loading && sorted.length === 0;
   const firstVirtualRow = Math.max(
     0,
     Math.floor(gridViewport.scrollTop / WI_GRID_ROW_HEIGHT) - WI_GRID_OVERSCAN,
@@ -1182,7 +1199,7 @@ export function WorkItemsGrid({
           assignOptions={bulkAssignOptions}
           assignLoading={bulkAssignLoading}
           assignPending={bulkAssignMutation.isPending}
-          onAssignSelect={(candidate) => bulkAssignMutation.mutate(candidate.assignValue)}
+          onAssignSelect={(candidate) => bulkAssignMutation.mutate(candidate)}
           priorityOpen={bulkPriorityOpen}
           onPriorityOpenChange={(open) => {
             setBulkPriorityOpen(open);
@@ -1263,7 +1280,7 @@ export function WorkItemsGrid({
                 ))}
               </div>
 
-              {loading ? (
+              {showBlockingLoading ? (
                 <LoadingState />
               ) : !searched ? (
                 <div className="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
@@ -1362,7 +1379,7 @@ export function WorkItemsGrid({
               ariaLabel="Resize work item preview"
               className="hidden xl:flex"
               direction={-1}
-              max={860}
+              max={MAX_WORK_ITEM_PREVIEW_WIDTH}
               min={300}
               onChange={setPreviewWidth}
               onReset={() => setPreviewWidth(DEFAULT_WORK_ITEM_PREVIEW_WIDTH)}

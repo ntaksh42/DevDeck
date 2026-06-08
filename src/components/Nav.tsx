@@ -35,7 +35,6 @@ export function NavButton({
       data-nav-item="true"
       data-nav-active={active ? "true" : undefined}
       data-nav-label={label}
-      title={shortcut ? `${label} (${shortcut})` : label}
       className={`group flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2.5 text-left text-sm font-medium outline-none focus:ring-2 focus:ring-ring ${
         active ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-secondary"
       } disabled:cursor-not-allowed disabled:opacity-50`}
@@ -115,7 +114,6 @@ export function NavSubItem({
       data-nav-item="true"
       data-nav-active={active ? "true" : undefined}
       data-nav-label={label}
-      title={shortcut ? `${label} (${shortcut})` : label}
       className={`group flex h-7 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm outline-none focus:ring-2 focus:ring-ring ${
         active ? "bg-secondary font-medium text-foreground" : "text-muted-foreground hover:bg-secondary"
       } disabled:cursor-not-allowed disabled:opacity-50`}

@@ -235,6 +235,7 @@ const syncStateSchema = z.object({
   lastSyncedAt: z.string().nullable(),
   errorCount: z.number(),
   lastError: z.string().nullable(),
+  lastWarning: z.string().nullable().default(null),
 });
 
 const syncStatesSchema = z.array(syncStateSchema);

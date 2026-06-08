@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, Result};
 
-const SCHEMA_VERSION: i64 = 6;
+const SCHEMA_VERSION: i64 = 7;
 
 // ── Existing public types ────────────────────────────────────────────────────
 
@@ -154,6 +154,7 @@ pub struct SyncState {
     pub last_synced_at: Option<String>,
     pub error_count: i64,
     pub last_error: Option<String>,
+    pub last_warning: Option<String>,
 }
 
 // ── AppDatabase ───────────────────────────────────────────────────────────────
@@ -405,7 +406,7 @@ impl AppDatabase {
         let conn = self.open()?;
         Ok(conn
             .query_row(
-                "SELECT scope, org_id, last_synced_at, error_count, last_error FROM sync_state WHERE scope = ?1",
+                "SELECT scope, org_id, last_synced_at, error_count, last_error, last_warning FROM sync_state WHERE scope = ?1",
                 [scope],
                 map_sync_state,
             )
@@ -415,7 +416,7 @@ impl AppDatabase {
     pub fn list_sync_states(&self) -> Result<Vec<SyncState>> {
         let conn = self.open()?;
         let mut stmt = conn.prepare(
-            "SELECT scope, org_id, last_synced_at, error_count, last_error FROM sync_state \
+            "SELECT scope, org_id, last_synced_at, error_count, last_error, last_warning FROM sync_state \
              ORDER BY org_id, scope",
         )?;
         let rows = stmt.query_map([], map_sync_state)?;
@@ -430,18 +431,27 @@ impl AppDatabase {
         last_synced_at: Option<&str>,
         error_count: i64,
         last_error: Option<&str>,
+        last_warning: Option<&str>,
     ) -> Result<()> {
         let conn = self.open()?;
         conn.execute(
             r#"
-            INSERT INTO sync_state(scope, org_id, last_synced_at, error_count, last_error)
-            VALUES (?1, ?2, ?3, ?4, ?5)
+            INSERT INTO sync_state(scope, org_id, last_synced_at, error_count, last_error, last_warning)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             ON CONFLICT(scope) DO UPDATE SET
                 last_synced_at = excluded.last_synced_at,
                 error_count = excluded.error_count,
-                last_error = excluded.last_error
+                last_error = excluded.last_error,
+                last_warning = excluded.last_warning
             "#,
-            params![scope, org_id, last_synced_at, error_count, last_error],
+            params![
+                scope,
+                org_id,
+                last_synced_at,
+                error_count,
+                last_error,
+                last_warning
+            ],
         )?;
         Ok(())
     }
@@ -782,7 +792,37 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             "#,
         )?;
     }
+    if current < 7 {
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS sync_state(
+                scope TEXT PRIMARY KEY,
+                org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                last_synced_at TEXT,
+                error_count INTEGER NOT NULL DEFAULT 0,
+                last_error TEXT,
+                last_warning TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_sync_state_org ON sync_state(org_id);
+            "#,
+        )?;
+        if !table_column_exists(conn, "sync_state", "last_warning")? {
+            conn.execute_batch("ALTER TABLE sync_state ADD COLUMN last_warning TEXT;")?;
+        }
+        conn.execute_batch("PRAGMA user_version = 7;")?;
+    }
     Ok(())
+}
+
+fn table_column_exists(conn: &Connection, table: &str, column: &str) -> Result<bool> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let columns = stmt.query_map([], |row| row.get::<_, String>(1))?;
+    for name in columns {
+        if name? == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 // ── Private helpers — organizations ──────────────────────────────────────────
@@ -1493,6 +1533,7 @@ fn map_sync_state(row: &rusqlite::Row<'_>) -> rusqlite::Result<SyncState> {
         last_synced_at: row.get(2)?,
         error_count: row.get(3)?,
         last_error: row.get(4)?,
+        last_warning: row.get(5)?,
     })
 }
 
@@ -1850,20 +1891,29 @@ mod tests {
         db.initialize().unwrap();
         db.upsert_organization(make_org_draft("org1")).unwrap();
 
-        db.update_sync_state("prs:org1", "org1", Some("2024-01-01T00:00:00Z"), 0, None)
-            .unwrap();
+        db.update_sync_state(
+            "prs:org1",
+            "org1",
+            Some("2024-01-01T00:00:00Z"),
+            0,
+            None,
+            Some("warning"),
+        )
+        .unwrap();
         let state = db.get_sync_state("prs:org1").unwrap().unwrap();
         assert_eq!(state.error_count, 0);
         assert_eq!(
             state.last_synced_at.as_deref(),
             Some("2024-01-01T00:00:00Z")
         );
+        assert_eq!(state.last_warning.as_deref(), Some("warning"));
 
-        db.update_sync_state("prs:org1", "org1", None, 2, Some("timeout"))
+        db.update_sync_state("prs:org1", "org1", None, 2, Some("timeout"), None)
             .unwrap();
         let state = db.get_sync_state("prs:org1").unwrap().unwrap();
         assert_eq!(state.error_count, 2);
         assert_eq!(state.last_error.as_deref(), Some("timeout"));
+        assert_eq!(state.last_warning, None);
     }
 
     #[test]
