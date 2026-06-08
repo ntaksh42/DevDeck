@@ -38,12 +38,57 @@ impl serde::Serialize for AppError {
 
 impl From<azdo_client::AdoError> for AppError {
     fn from(value: azdo_client::AdoError) -> Self {
-        Self::AzureDevOps(value.to_string())
+        Self::AzureDevOps(format_ado_error(value))
     }
 }
 
 impl From<keyring::Error> for AppError {
     fn from(value: keyring::Error) -> Self {
         Self::Secret(value.to_string())
+    }
+}
+
+fn format_ado_error(error: azdo_client::AdoError) -> String {
+    match error {
+        azdo_client::AdoError::Api { status, body } => {
+            let message =
+                azure_devops_error_message(&body).unwrap_or_else(|| body.trim().to_string());
+            if message.is_empty() {
+                format!("API request failed with status {status}")
+            } else {
+                format!("API request failed with status {status}: {message}")
+            }
+        }
+        other => other.to_string(),
+    }
+}
+
+fn azure_devops_error_message(body: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(body).ok()?;
+    value
+        .get("message")
+        .or_else(|| value.pointer("/value/Message"))
+        .or_else(|| value.pointer("/value/message"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|message| !message.is_empty())
+        .map(ToString::to_string)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn app_error_from_ado_api_error_extracts_message() {
+        let error = AppError::from(azdo_client::AdoError::Api {
+            status: 400,
+            body: r#"{"message":"TF401232: Project does not exist."}"#.to_string(),
+        });
+
+        assert_eq!(
+            error.to_string(),
+            "Azure DevOps error: API request failed with status 400: TF401232: Project does not exist."
+        );
     }
 }
