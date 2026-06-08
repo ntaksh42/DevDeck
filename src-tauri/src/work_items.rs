@@ -1240,38 +1240,7 @@ fn mention_candidate_from_identity_picker(
 fn assignee_candidate_from_identity_picker(
     identity: IdentityPickerIdentity,
 ) -> Option<WorkItemAssigneeCandidate> {
-    if identity.active == Some(false) {
-        return None;
-    }
-    if identity
-        .entity_type
-        .as_deref()
-        .is_some_and(|value| !value.eq_ignore_ascii_case("User"))
-    {
-        return None;
-    }
-    let display_name = identity
-        .display_name
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())?
-        .to_string();
-    let unique_name = identity
-        .mail_address
-        .or(identity.sign_in_address)
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
-    if is_azure_devops_service_identity_name(&display_name, unique_name.as_deref()) {
-        return None;
-    }
-    let id = identity
-        .subject_descriptor
-        .or(identity.entity_id)
-        .or(identity.origin_id)
-        .or(identity.local_id)
-        .or_else(|| unique_name.clone())
-        .unwrap_or_else(|| display_name.clone());
-    Some(assignee_candidate_from_parts(id, display_name, unique_name))
+    mention_candidate_from_identity_picker(identity).map(assignee_candidate_from_mention)
 }
 
 fn assignee_candidates_from_updates(
