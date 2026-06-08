@@ -1948,11 +1948,14 @@ async fn do_sync_work_items(
     let fields: Vec<String> = WORK_ITEM_FIELDS.iter().map(ToString::to_string).collect();
     let mut all_cached: Vec<CachedWorkItem> = Vec::new();
     let mut my_cached: Vec<CachedWorkItem> = Vec::new();
+    let mut synced_project_ids: Vec<String> = Vec::new();
+    let mut skipped_projects: Vec<String> = Vec::new();
+    let mut last_skip_error: Option<AppError> = None;
     let mut large_query_count = 0usize;
     let mut largest_query_result = 0usize;
 
     for project in &projects {
-        let (project_all_cached, project_my_cached) = tokio::try_join!(
+        let (all_result, my_result) = tokio::join!(
             fetch_sync_work_items(
                 client,
                 org,
@@ -1971,32 +1974,84 @@ async fn do_sync_work_items(
                 fields.clone(),
                 "my work item",
             ),
-        )?;
+        );
 
-        let Some(project_all_cached) = project_all_cached else {
-            continue;
-        };
-        if project_all_cached.queried_count > SYNC_WORK_ITEM_BATCH_SIZE {
-            large_query_count += 1;
-            largest_query_result = largest_query_result.max(project_all_cached.queried_count);
-        }
-        all_cached.extend(project_all_cached.items);
-        if let Some(project_my_cached) = project_my_cached {
-            if project_my_cached.queried_count > SYNC_WORK_ITEM_BATCH_SIZE {
-                large_query_count += 1;
-                largest_query_result = largest_query_result.max(project_my_cached.queried_count);
+        let project_all = match all_result {
+            Ok(Some(r)) => r,
+            Ok(None) => continue,
+            Err(e) => {
+                tracing::warn!(
+                    org = %org.name,
+                    project = %project.name,
+                    error = %e,
+                    "work item sync failed for project, preserving cached data"
+                );
+                skipped_projects.push(project.name.clone());
+                last_skip_error = Some(e);
+                continue;
             }
-            my_cached.extend(project_my_cached.items);
+        };
+
+        let project_my = match my_result {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::warn!(
+                    org = %org.name,
+                    project = %project.name,
+                    error = %e,
+                    "my work item sync failed for project, preserving cached data"
+                );
+                skipped_projects.push(project.name.clone());
+                last_skip_error = Some(e);
+                continue;
+            }
+        };
+
+        synced_project_ids.push(project.id.clone());
+
+        if project_all.queried_count > SYNC_WORK_ITEM_BATCH_SIZE {
+            large_query_count += 1;
+            largest_query_result = largest_query_result.max(project_all.queried_count);
+        }
+        all_cached.extend(project_all.items);
+        if let Some(project_my_result) = project_my {
+            if project_my_result.queried_count > SYNC_WORK_ITEM_BATCH_SIZE {
+                large_query_count += 1;
+                largest_query_result = largest_query_result.max(project_my_result.queried_count);
+            }
+            my_cached.extend(project_my_result.items);
         }
     }
 
-    db.replace_work_items(&org.id, &all_cached, &my_cached)?;
+    // If every project failed with a real error (not 404), surface it rather than
+    // recording a spurious success with no cache update.
+    if synced_project_ids.is_empty() {
+        if let Some(e) = last_skip_error {
+            return Err(e);
+        }
+    }
 
-    let warning = (large_query_count > 0).then(|| {
-        format!(
+    let synced_ids: Vec<&str> = synced_project_ids.iter().map(String::as_str).collect();
+    db.replace_work_items(&org.id, &synced_ids, &all_cached, &my_cached)?;
+
+    let mut warning_parts: Vec<String> = Vec::new();
+    if !skipped_projects.is_empty() {
+        warning_parts.push(format!(
+            "{} project(s) skipped due to sync errors: {}.",
+            skipped_projects.len(),
+            skipped_projects.join(", ")
+        ));
+    }
+    if large_query_count > 0 {
+        warning_parts.push(format!(
             "Work item sync fetched more than {SYNC_WORK_ITEM_BATCH_SIZE} IDs in {large_query_count} query result(s); largest result had {largest_query_result} IDs and was loaded in batches."
-        )
-    });
+        ));
+    }
+    let warning = if warning_parts.is_empty() {
+        None
+    } else {
+        Some(warning_parts.join(" "))
+    };
 
     Ok(SyncWorkItemsResult { warning })
 }

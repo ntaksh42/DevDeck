@@ -28,3 +28,11 @@ test-results/
 *.njsproj
 *.sln
 *.sw?
+
+# Local tooling and artifacts
+scripts/
+.claude/
+entity_id
+local_id
+origin_id
+azdodeck-*.png

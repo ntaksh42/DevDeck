@@ -325,14 +325,23 @@ impl AppDatabase {
     pub fn replace_work_items(
         &self,
         org_id: &str,
+        synced_project_ids: &[&str],
         all_items: &[CachedWorkItem],
         my_items: &[CachedWorkItem],
     ) -> Result<()> {
         let conn = self.open()?;
         let tx = conn.unchecked_transaction()?;
-        tx.execute("DELETE FROM work_items WHERE org_id = ?1", [org_id])?;
+        for &project_id in synced_project_ids {
+            tx.execute(
+                "DELETE FROM work_items WHERE org_id = ?1 AND project_id = ?2",
+                rusqlite::params![org_id, project_id],
+            )?;
+            tx.execute(
+                "DELETE FROM my_work_items WHERE org_id = ?1 AND project_id = ?2",
+                rusqlite::params![org_id, project_id],
+            )?;
+        }
         upsert_work_items(&tx, all_items)?;
-        tx.execute("DELETE FROM my_work_items WHERE org_id = ?1", [org_id])?;
         upsert_my_work_items(&tx, my_items)?;
         tx.commit()?;
         Ok(())
@@ -1938,12 +1947,22 @@ mod tests {
         };
 
         // Seed both tables (distinct IDs per table: work=1, my=10)
-        db.replace_work_items("org1", &[make_item(1, "all-A")], &[make_item(10, "my-A")])
-            .unwrap();
+        db.replace_work_items(
+            "org1",
+            &["p1"],
+            &[make_item(1, "all-A")],
+            &[make_item(10, "my-A")],
+        )
+        .unwrap();
 
         // Replace with B-rows (work=2, my=20); A-rows must disappear
-        db.replace_work_items("org1", &[make_item(2, "all-B")], &[make_item(20, "my-B")])
-            .unwrap();
+        db.replace_work_items(
+            "org1",
+            &["p1"],
+            &[make_item(2, "all-B")],
+            &[make_item(20, "my-B")],
+        )
+        .unwrap();
 
         let all = db
             .search_work_items("org1", None, None, None, None)
@@ -1954,6 +1973,66 @@ mod tests {
         let my = db.list_my_work_items("org1").unwrap();
         assert_eq!(my.len(), 1);
         assert_eq!(my[0].id, 20, "my_work_items should contain only my-B");
+    }
+
+    #[test]
+    fn replace_work_items_preserves_unsynced_project_rows() {
+        let tf = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        let make_item = |id: i64, project_id: &str| CachedWorkItem {
+            org_id: "org1".to_string(),
+            project_id: project_id.to_string(),
+            project_name: project_id.to_uppercase(),
+            id,
+            title: format!("item-{id}"),
+            work_item_type: None,
+            state: None,
+            assigned_to: None,
+            assigned_to_unique_name: None,
+            changed_date: None,
+            web_url: None,
+        };
+
+        // Seed p1 and p2
+        db.replace_work_items(
+            "org1",
+            &["p1", "p2"],
+            &[make_item(1, "p1"), make_item(2, "p2")],
+            &[make_item(10, "p1"), make_item(20, "p2")],
+        )
+        .unwrap();
+
+        // Re-sync only p1 — p2 must be preserved
+        db.replace_work_items(
+            "org1",
+            &["p1"],
+            &[make_item(3, "p1")],
+            &[make_item(30, "p1")],
+        )
+        .unwrap();
+
+        let all_ids: Vec<i64> = db
+            .search_work_items("org1", None, None, None, None)
+            .unwrap()
+            .iter()
+            .map(|w| w.id)
+            .collect();
+        assert!(!all_ids.contains(&1), "old p1 row must be replaced");
+        assert!(all_ids.contains(&2), "p2 row must be preserved");
+        assert!(all_ids.contains(&3), "new p1 row must be present");
+
+        let my_ids: Vec<i64> = db
+            .list_my_work_items("org1")
+            .unwrap()
+            .iter()
+            .map(|w| w.id)
+            .collect();
+        assert!(!my_ids.contains(&10), "old p1 my row must be replaced");
+        assert!(my_ids.contains(&20), "p2 my row must be preserved");
+        assert!(my_ids.contains(&30), "new p1 my row must be present");
     }
 
     #[test]
@@ -2093,6 +2172,7 @@ mod tests {
         // Alice on 3 items, Bob on 1 — Alice should rank first
         db.replace_work_items(
             "org1",
+            &["p1"],
             &[
                 make_item(1, "Alice", Some("alice@example.com")),
                 make_item(2, "Alice", Some("alice@example.com")),
