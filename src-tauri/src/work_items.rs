@@ -1,5 +1,5 @@
 use azdo_client::{
-    AdoClient, AdoError, AuthenticatedUser, Identity, IdentityPickerIdentity, WorkItem,
+    AdoClient, AdoError, Identity, IdentityPickerIdentity, WorkItem,
     WorkItemComment as AzdoWorkItemComment, WorkItemUpdate,
 };
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
@@ -10,7 +10,7 @@ use serde_json::Value;
 
 use crate::auth::client_for_organization;
 use crate::commits::encode_path_segment;
-use crate::db::{AppDatabase, CachedWorkItem, MentionHistoryEntry, Organization};
+use crate::db::{AppDatabase, CachedWorkItem, Organization};
 use crate::error::{AppError, Result};
 use crate::secrets::SecretStore;
 
@@ -93,6 +93,8 @@ pub struct GetWorkItemPreviewInput {
 #[serde(rename_all = "camelCase")]
 pub struct SearchWorkItemMentionsInput {
     pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_id: i64,
     pub query: String,
 }
 
@@ -525,70 +527,62 @@ impl WorkItemService {
     ) -> Result<Vec<MentionCandidate>> {
         let query = input.query.trim();
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
-
-        if query.is_empty() {
-            return self.default_mention_candidates(&organization).await;
-        }
-
         let client = client_for_organization(&organization, &self.secrets)?;
-        let current_user = if let Some(candidate) =
-            organization_authenticated_user_candidate(&organization, query)
-        {
-            Some(candidate)
-        } else {
-            client.connection_data().await.ok().and_then(|data| {
-                authenticated_user_mention_candidate(data.authenticated_user, query)
-            })
-        };
-        let picker_candidates = match client.search_identity_picker(query, 40).await {
-            Ok(identities) => identities
-                .into_iter()
-                .filter_map(mention_candidate_from_identity_picker)
-                .collect::<Vec<_>>(),
-            Err(error) => {
-                tracing::warn!(%error, "identity picker search failed; falling back to identities API");
-                client
-                    .search_identities(query, 40)
-                    .await?
-                    .into_iter()
-                    .filter_map(summarize_mention_candidate)
-                    .collect()
-            }
-        };
-
-        let history = self
-            .db
-            .get_mention_history(&organization.id)
-            .unwrap_or_default();
-        let history_index: std::collections::HashMap<String, usize> = history
-            .iter()
-            .enumerate()
-            .map(|(i, h)| (h.unique_name.clone(), i))
-            .collect();
-
-        let history_rank = |c: &MentionCandidate| -> usize {
-            c.unique_name
-                .as_deref()
-                .and_then(|un| history_index.get(&un.to_lowercase()).copied())
-                .unwrap_or(usize::MAX)
-        };
-
-        let (mut history_matches, rest): (Vec<_>, Vec<_>) = picker_candidates
-            .into_iter()
-            .partition(|c| history_rank(c) < usize::MAX);
-        history_matches.sort_by_key(|c| history_rank(c));
-
         let mut candidates = Vec::new();
-        if let Some(candidate) = current_user {
-            push_unique_mention_candidate(&mut candidates, candidate);
-        }
-        for candidate in history_matches.into_iter().chain(rest) {
-            push_unique_mention_candidate(&mut candidates, candidate);
-            if candidates.len() >= 8 {
-                break;
+
+        match client
+            .list_work_item_updates(&input.project_id, input.work_item_id, 50)
+            .await
+        {
+            Ok(updates) => {
+                for candidate in assignee_candidates_from_updates(updates)
+                    .into_iter()
+                    .map(mention_candidate_from_assignee)
+                {
+                    push_unique_mention_candidate(&mut candidates, candidate);
+                }
+            }
+            Err(error) => {
+                tracing::warn!(%error, "failed to load work item updates for mention candidates");
             }
         }
-        Ok(candidates)
+
+        if !query.is_empty() {
+            let picker_candidates = match client.search_identity_picker(query, 40).await {
+                Ok(identities) => identities
+                    .into_iter()
+                    .filter_map(mention_candidate_from_identity_picker)
+                    .collect::<Vec<_>>(),
+                Err(error) => {
+                    tracing::warn!(%error, "identity picker search failed; falling back to identities API");
+                    client
+                        .search_identities(query, 40)
+                        .await?
+                        .into_iter()
+                        .filter_map(summarize_mention_candidate)
+                        .collect()
+                }
+            };
+            for candidate in picker_candidates {
+                push_unique_mention_candidate(&mut candidates, candidate);
+            }
+        }
+
+        Ok(candidates
+            .into_iter()
+            .filter(|c| {
+                !is_authenticated_user(
+                    &c.id,
+                    &c.display_name,
+                    c.unique_name.as_deref(),
+                    &organization,
+                )
+            })
+            .filter(|c| {
+                mention_candidate_matches_query(&c.display_name, c.unique_name.as_deref(), query)
+            })
+            .take(8)
+            .collect())
     }
 
     pub async fn search_assignees(
@@ -612,12 +606,6 @@ impl WorkItemService {
             Err(error) => {
                 tracing::warn!(%error, "failed to load work item updates for assignee candidates");
             }
-        }
-
-        if let Some(candidate) = organization_authenticated_user_candidate(&organization, query)
-            .map(assignee_candidate_from_mention)
-        {
-            push_unique_assignee_candidate(&mut candidates, candidate);
         }
 
         if !query.is_empty() {
@@ -644,83 +632,20 @@ impl WorkItemService {
 
         Ok(candidates
             .into_iter()
+            .filter(|c| {
+                !is_authenticated_user(
+                    &c.id,
+                    &c.display_name,
+                    c.unique_name.as_deref(),
+                    &organization,
+                )
+            })
             .filter(|candidate| candidate.unique_name.is_some())
             .filter(|candidate| assignee_candidate_matches_query(candidate, query))
             .take(8)
             .collect())
     }
 
-    async fn default_mention_candidates(
-        &self,
-        organization: &Organization,
-    ) -> Result<Vec<MentionCandidate>> {
-        let mut candidates = Vec::new();
-
-        // 認証済みユーザーを先頭に（DBキャッシュ優先、なければ connection_data）
-        if let Some(candidate) = organization_authenticated_user_candidate(organization, "") {
-            push_unique_mention_candidate(&mut candidates, candidate);
-        } else {
-            let client = client_for_organization(organization, &self.secrets)?;
-            if let Some(candidate) =
-                client.connection_data().await.ok().and_then(|data| {
-                    authenticated_user_mention_candidate(data.authenticated_user, "")
-                })
-            {
-                push_unique_mention_candidate(&mut candidates, candidate);
-            }
-        }
-
-        // メンション履歴（実際にメンションした人）を優先
-        let history = self
-            .db
-            .get_mention_history(&organization.id)
-            .unwrap_or_default();
-        for MentionHistoryEntry {
-            unique_name,
-            display_name,
-            user_id,
-        } in &history
-        {
-            push_unique_mention_candidate(
-                &mut candidates,
-                MentionCandidate {
-                    id: user_id.as_deref().unwrap_or(unique_name).to_string(),
-                    display_name: display_name.clone(),
-                    unique_name: Some(unique_name.clone()),
-                },
-            );
-            if candidates.len() >= 8 {
-                break;
-            }
-        }
-
-        // 履歴が少ない場合はアサイン頻度の高いユーザーで補完
-        if candidates.len() < 5 {
-            let recent_assignees = self
-                .db
-                .get_recent_assignees(&organization.id)
-                .unwrap_or_default();
-            for (display_name, unique_name) in recent_assignees {
-                let display_name = display_name.trim().to_string();
-                if display_name.is_empty() {
-                    continue;
-                }
-                push_unique_mention_candidate(
-                    &mut candidates,
-                    MentionCandidate {
-                        id: unique_name.as_deref().unwrap_or(&display_name).to_string(),
-                        display_name,
-                        unique_name,
-                    },
-                );
-                if candidates.len() >= 8 {
-                    break;
-                }
-            }
-        }
-
-        Ok(candidates)
-    }
 
     pub async fn fetch_image(&self, input: FetchWorkItemImageInput) -> Result<WorkItemImage> {
         let url = input.url.trim();
@@ -1355,6 +1280,28 @@ fn assignee_candidate_from_mention(candidate: MentionCandidate) -> WorkItemAssig
     assignee_candidate_from_parts(candidate.id, candidate.display_name, candidate.unique_name)
 }
 
+fn mention_candidate_from_assignee(candidate: WorkItemAssigneeCandidate) -> MentionCandidate {
+    MentionCandidate {
+        id: candidate.id,
+        display_name: candidate.display_name,
+        unique_name: candidate.unique_name,
+    }
+}
+
+fn is_authenticated_user(
+    id: &str,
+    display_name: &str,
+    unique_name: Option<&str>,
+    organization: &Organization,
+) -> bool {
+    let uid = organization.authenticated_user_id.as_deref().unwrap_or("");
+    let dn = organization.authenticated_user_display_name.as_deref().unwrap_or("");
+    (!uid.is_empty() && id.eq_ignore_ascii_case(uid))
+        || (!uid.is_empty()
+            && unique_name.is_some_and(|un| un.eq_ignore_ascii_case(uid)))
+        || (!dn.is_empty() && display_name.eq_ignore_ascii_case(dn))
+}
+
 fn assignee_candidate_from_parts(
     id: String,
     display_name: String,
@@ -1478,58 +1425,6 @@ fn is_azure_devops_service_identity_name(display_name: &str, unique_name: Option
         })
 }
 
-fn authenticated_user_mention_candidate(
-    user: AuthenticatedUser,
-    query: &str,
-) -> Option<MentionCandidate> {
-    let id = user
-        .id
-        .trim()
-        .is_empty()
-        .then_some(user.descriptor)
-        .flatten()
-        .unwrap_or(user.id);
-    mention_candidate_from_parts(id, user.provider_display_name, None, query)
-}
-
-fn organization_authenticated_user_candidate(
-    organization: &Organization,
-    query: &str,
-) -> Option<MentionCandidate> {
-    mention_candidate_from_parts(
-        organization.authenticated_user_id.clone()?,
-        organization.authenticated_user_display_name.clone(),
-        None,
-        query,
-    )
-}
-
-fn mention_candidate_from_parts(
-    id: String,
-    display_name: Option<String>,
-    unique_name: Option<String>,
-    query: &str,
-) -> Option<MentionCandidate> {
-    let id = id.trim().to_string();
-    if id.is_empty() {
-        return None;
-    }
-    let display_name = display_name
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| id.clone());
-    let unique_name = unique_name
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
-    if !mention_candidate_matches_query(&display_name, unique_name.as_deref(), query) {
-        return None;
-    }
-    Some(MentionCandidate {
-        id,
-        display_name,
-        unique_name,
-    })
-}
 
 fn mention_candidate_matches_query(
     display_name: &str,
@@ -2480,41 +2375,65 @@ mod tests {
         assert!(candidate.is_none());
     }
 
-    #[test]
-    fn authenticated_user_mention_candidate_matches_display_name() {
-        let candidate = authenticated_user_mention_candidate(
-            AuthenticatedUser {
-                id: "user-1".to_string(),
-                provider_display_name: Some("naoto akashi".to_string()),
-                descriptor: Some("aad.user-1".to_string()),
-            },
-            "n",
-        )
-        .unwrap();
-
-        assert_eq!(candidate.id, "user-1");
-        assert_eq!(candidate.display_name, "naoto akashi");
-    }
-
-    #[test]
-    fn organization_authenticated_user_candidate_matches_saved_user() {
-        let organization = Organization {
+    fn test_org(
+        authenticated_user_id: Option<&str>,
+        authenticated_user_display_name: Option<&str>,
+    ) -> Organization {
+        Organization {
             id: "contoso".to_string(),
             name: "contoso".to_string(),
-            display_name: Some("contoso".to_string()),
+            display_name: None,
             base_url: "https://dev.azure.com/contoso".to_string(),
             auth_provider: "pat".to_string(),
             credential_key: "azdodeck:org:contoso:pat".to_string(),
-            authenticated_user_id: Some("user-1".to_string()),
-            authenticated_user_display_name: Some("naoto akashi".to_string()),
+            authenticated_user_id: authenticated_user_id.map(ToString::to_string),
+            authenticated_user_display_name: authenticated_user_display_name
+                .map(ToString::to_string),
             created_at: "2026-05-24T00:00:00Z".to_string(),
             updated_at: "2026-05-24T00:00:00Z".to_string(),
-        };
+        }
+    }
 
-        let candidate = organization_authenticated_user_candidate(&organization, "n").unwrap();
+    #[test]
+    fn is_authenticated_user_matches_by_id() {
+        let org = test_org(Some("user-1"), Some("naoto akashi"));
+        assert!(is_authenticated_user("user-1", "someone else", None, &org));
+        assert!(is_authenticated_user("USER-1", "someone else", None, &org));
+    }
 
-        assert_eq!(candidate.id, "user-1");
-        assert_eq!(candidate.display_name, "naoto akashi");
+    #[test]
+    fn is_authenticated_user_matches_by_display_name() {
+        let org = test_org(Some("user-1"), Some("naoto akashi"));
+        assert!(is_authenticated_user("descriptor-xyz", "naoto akashi", None, &org));
+        assert!(is_authenticated_user("descriptor-xyz", "Naoto Akashi", None, &org));
+    }
+
+    #[test]
+    fn is_authenticated_user_matches_by_unique_name() {
+        let org = test_org(Some("user-1"), Some("naoto akashi"));
+        assert!(is_authenticated_user(
+            "descriptor-xyz",
+            "someone else",
+            Some("user-1"),
+            &org
+        ));
+    }
+
+    #[test]
+    fn is_authenticated_user_does_not_match_different_person() {
+        let org = test_org(Some("user-1"), Some("naoto akashi"));
+        assert!(!is_authenticated_user(
+            "user-2",
+            "other person",
+            Some("other@example.com"),
+            &org
+        ));
+    }
+
+    #[test]
+    fn is_authenticated_user_no_stored_user_never_matches() {
+        let org = test_org(None, None);
+        assert!(!is_authenticated_user("user-1", "naoto akashi", None, &org));
     }
 
     #[tokio::test]

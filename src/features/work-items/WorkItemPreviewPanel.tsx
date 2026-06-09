@@ -14,6 +14,7 @@ import {
   assignWorkItem,
   deleteWorkItemComment,
   fetchWorkItemImage,
+  listOrganizations,
   listWorkItemFields,
   setWorkItemState,
   setWorkItemReason,
@@ -24,6 +25,7 @@ import {
   recordMentionInteraction,
   commandErrorMessage,
   type MentionCandidate,
+  type Organization,
   type WorkItemAssigneeCandidate,
   type WorkItemFieldOption,
   type WorkItemPreview,
@@ -165,6 +167,15 @@ export function WorkItemPreviewPanel({
     enabled: statePickerOpen && !!preview?.workItemType,
     staleTime: Infinity,
   });
+  const organizationsQuery = useQuery({
+    queryKey: ["organizations"],
+    queryFn: listOrganizations,
+    staleTime: 5 * 60_000,
+  });
+  const selfOrg = useMemo(
+    () => organizationsQuery.data?.find((org) => org.id === selectedItem?.organizationId),
+    [organizationsQuery.data, selectedItem?.organizationId],
+  );
   const recentMentionOptions = useMemo(
     () => recentWorkItemMentionCandidates(preview),
     [preview],
@@ -193,11 +204,15 @@ export function WorkItemPreviewPanel({
   const mentionOptionsQuery = useQuery({
     queryKey: workItemQueryKeys.mentions(
       selectedItem?.organizationId,
+      selectedItem?.projectId,
+      selectedItem?.id,
       mentionQuery,
     ),
     queryFn: () =>
       searchWorkItemMentions({
-        organizationId: selectedItem?.organizationId,
+        organizationId: selectedItem!.organizationId,
+        projectId: selectedItem!.projectId,
+        workItemId: selectedItem!.id,
         query: mentionQuery,
       }),
     enabled: !!selectedItem && mentionStart !== null,
@@ -206,8 +221,8 @@ export function WorkItemPreviewPanel({
   const mentionOptions = useMemo(
     () =>
       rankMentionCandidates({
-        recent: recentMentionOptions,
-        remote: mentionOptionsQuery.data ?? [],
+        recent: recentMentionOptions.filter((c) => !isSelfIdentity(c, selfOrg)),
+        remote: (mentionOptionsQuery.data ?? []).filter((c) => !isSelfIdentity(c, selfOrg)),
         query: mentionQuery,
         priorityNames: mentionPriorityNames,
       }),
@@ -216,6 +231,7 @@ export function WorkItemPreviewPanel({
       mentionPriorityNames,
       mentionQuery,
       recentMentionOptions,
+      selfOrg,
     ],
   );
   const showMentionOptions = mentionStart !== null && mentionOptions.length > 0;
@@ -272,8 +288,8 @@ export function WorkItemPreviewPanel({
   const assigneeOptions = useMemo(
     () =>
       rankMentionCandidates({
-        recent: [...recentAssigneeOptions, ...(assigneeDefaultQuery.data ?? [])],
-        remote: assigneeOptionsQuery.data ?? [],
+        recent: [...recentAssigneeOptions, ...(assigneeDefaultQuery.data ?? [])].filter((c) => !isSelfIdentity(c, selfOrg)),
+        remote: (assigneeOptionsQuery.data ?? []).filter((c) => !isSelfIdentity(c, selfOrg)),
         query: assigneeQuery,
         priorityNames: mentionPriorityNames,
       }),
@@ -283,6 +299,7 @@ export function WorkItemPreviewPanel({
       assigneeQuery,
       mentionPriorityNames,
       recentAssigneeOptions,
+      selfOrg,
     ],
   );
 
@@ -2430,6 +2447,22 @@ function recentWorkItemAssigneeCandidates(
       ...candidate,
       assignValue: `${candidate.displayName} <${candidate.uniqueName}>`,
     }));
+}
+
+function isSelfIdentity(
+  candidate: MentionCandidate,
+  org: Organization | undefined,
+): boolean {
+  if (!org) return false;
+  const uid = org.authenticatedUserId?.toLowerCase() ?? "";
+  const dn = org.authenticatedUserDisplayName?.toLowerCase() ?? "";
+  const cid = candidate.id.toLowerCase();
+  const cdisplay = candidate.displayName.toLowerCase();
+  const cunique = candidate.uniqueName?.toLowerCase() ?? "";
+  return (
+    (uid !== "" && (cid === uid || (cunique !== "" && cunique === uid))) ||
+    (dn !== "" && cdisplay === dn)
+  );
 }
 
 function workItemMentionPriorityNames(preview: WorkItemPreview | null): string[] {

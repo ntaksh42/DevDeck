@@ -320,6 +320,8 @@ export type GetWorkItemPreviewInput = {
 
 export type SearchWorkItemMentionsInput = {
   organizationId?: string;
+  projectId: string;
+  workItemId: number;
   query: string;
 };
 

@@ -66,13 +66,6 @@ pub struct OrganizationDraft {
 // ── Cache row types ───────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
-pub struct MentionHistoryEntry {
-    pub unique_name: String,
-    pub display_name: String,
-    pub user_id: Option<String>,
-}
-
-#[derive(Debug, Clone)]
 pub struct CachedPr {
     pub org_id: String,
     pub project_id: String,
@@ -488,48 +481,6 @@ impl AppDatabase {
         Ok(())
     }
 
-    pub fn get_mention_history(&self, org_id: &str) -> Result<Vec<MentionHistoryEntry>> {
-        let conn = self.open()?;
-        let mut stmt = conn.prepare(
-            "SELECT unique_name, display_name, user_id \
-             FROM mention_history \
-             WHERE org_id = ?1 \
-             ORDER BY interaction_count DESC, last_used_at DESC \
-             LIMIT 40",
-        )?;
-        let rows = stmt.query_map([org_id], |row| {
-            Ok(MentionHistoryEntry {
-                unique_name: row.get(0)?,
-                display_name: row.get(1)?,
-                user_id: row.get(2)?,
-            })
-        })?;
-        let mut result = Vec::new();
-        for row in rows {
-            result.push(row?);
-        }
-        Ok(result)
-    }
-
-    pub fn get_recent_assignees(&self, org_id: &str) -> Result<Vec<(String, Option<String>)>> {
-        let conn = self.open()?;
-        let mut stmt = conn.prepare(
-            "SELECT assigned_to, MAX(assigned_to_unique_name) \
-             FROM work_items \
-             WHERE org_id = ?1 AND assigned_to IS NOT NULL AND assigned_to != '' \
-             GROUP BY assigned_to \
-             ORDER BY COUNT(*) DESC \
-             LIMIT 20",
-        )?;
-        let rows = stmt.query_map([org_id], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
-        })?;
-        let mut result = Vec::new();
-        for row in rows {
-            result.push(row?);
-        }
-        Ok(result)
-    }
 }
 
 // ── Migration ─────────────────────────────────────────────────────────────────
@@ -2148,55 +2099,6 @@ mod tests {
         assert_eq!(results[0].assigned_to.as_deref(), Some("Alice"));
     }
 
-    #[test]
-    fn get_recent_assignees_ranks_by_frequency_and_returns_unique_name() {
-        let tf = NamedTempFile::new().unwrap();
-        let db = AppDatabase::new(tf.path().to_path_buf());
-        db.initialize().unwrap();
-        db.upsert_organization(make_org_draft("org1")).unwrap();
-
-        let make_item = |id: i64, name: &str, email: Option<&str>| CachedWorkItem {
-            org_id: "org1".to_string(),
-            project_id: "p1".to_string(),
-            project_name: "P1".to_string(),
-            id,
-            title: format!("item-{id}"),
-            work_item_type: None,
-            state: None,
-            assigned_to: Some(name.to_string()),
-            assigned_to_unique_name: email.map(|s| s.to_string()),
-            changed_date: None,
-            web_url: None,
-        };
-
-        // Alice on 3 items, Bob on 1 — Alice should rank first
-        db.replace_work_items(
-            "org1",
-            &["p1"],
-            &[
-                make_item(1, "Alice", Some("alice@example.com")),
-                make_item(2, "Alice", Some("alice@example.com")),
-                make_item(3, "Alice", None), // one row without email
-                make_item(4, "Bob", Some("bob@example.com")),
-            ],
-            &[],
-        )
-        .unwrap();
-
-        let assignees = db.get_recent_assignees("org1").unwrap();
-        assert_eq!(assignees.len(), 2);
-        assert_eq!(
-            assignees[0].0, "Alice",
-            "Alice should rank first (higher count)"
-        );
-        assert_eq!(
-            assignees[0].1.as_deref(),
-            Some("alice@example.com"),
-            "MAX picks email even when one row has NULL"
-        );
-        assert_eq!(assignees[1].0, "Bob");
-        assert_eq!(assignees[1].1.as_deref(), Some("bob@example.com"));
-    }
 
     #[test]
     fn replace_commits_for_repo_scopes_to_repository() {
@@ -2281,55 +2183,4 @@ mod tests {
         assert_eq!(remaining[0].commit_id, "new");
     }
 
-    #[test]
-    fn mention_history_deduplicates_by_lowercase_unique_name_and_ranks_by_frequency() {
-        let tf = NamedTempFile::new().unwrap();
-        let db = AppDatabase::new(tf.path().to_path_buf());
-        db.initialize().unwrap();
-        db.upsert_organization(make_org_draft("org1")).unwrap();
-
-        let now = "2026-06-01T00:00:00Z";
-
-        // Same person, different casing — must collapse into one row
-        db.record_mention_interaction(
-            "org1",
-            "Taro.Yamada@example.com",
-            "Taro Yamada",
-            Some("uid-taro"),
-            now,
-        )
-        .unwrap();
-        db.record_mention_interaction(
-            "org1",
-            "taro.yamada@example.com",
-            "Taro Yamada",
-            Some("uid-taro"),
-            now,
-        )
-        .unwrap();
-
-        // Different person
-        db.record_mention_interaction("org1", "hanako@example.com", "Hanako Suzuki", None, now)
-            .unwrap();
-
-        let history = db.get_mention_history("org1").unwrap();
-        assert_eq!(
-            history.len(),
-            2,
-            "same person with different casing must be one row"
-        );
-
-        let taro = history
-            .iter()
-            .find(|h| h.unique_name == "taro.yamada@example.com")
-            .unwrap();
-        assert_eq!(taro.display_name, "Taro Yamada");
-        assert_eq!(taro.user_id.as_deref(), Some("uid-taro"));
-
-        // Taro has interaction_count=2, Hanako=1 — Taro must rank first
-        assert_eq!(
-            history[0].unique_name, "taro.yamada@example.com",
-            "higher interaction count must rank first"
-        );
-    }
 }

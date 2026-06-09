@@ -57,8 +57,12 @@ export const workItemQueryKeys = {
   ) => ['workItemTypeStates', organizationId, projectId, workItemType] as const,
   fields: (organizationId?: string, projectId?: string | null) =>
     ['workItemFields', organizationId, projectId] as const,
-  mentions: (organizationId?: string, query?: string) =>
-    ['workItemMentions', organizationId, query] as const,
+  mentions: (
+    organizationId?: string,
+    projectId?: string,
+    workItemId?: number,
+    query?: string,
+  ) => ['workItemMentions', organizationId, projectId, workItemId, query] as const,
   assignees: (
     organizationId?: string,
     projectId?: string,
