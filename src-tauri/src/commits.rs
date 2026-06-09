@@ -471,6 +471,7 @@ mod tests {
             credential_key: "azdodeck:org:contoso:pat".to_string(),
             authenticated_user_id: None,
             authenticated_user_display_name: None,
+            authenticated_user_unique_name: None,
             created_at: "2026-05-24T00:00:00Z".to_string(),
             updated_at: "2026-05-24T00:00:00Z".to_string(),
         };

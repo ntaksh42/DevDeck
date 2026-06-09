@@ -113,7 +113,7 @@ XService {
 
 `settings.rs` only needs the database. `AppDatabase` is a cloneable path wrapper that opens SQLite connections per call
 via `rusqlite`. Schema migrations live in `src-tauri/src/db.rs:migrate()` and
-use `PRAGMA user_version`; the current schema version is `3`.
+use `PRAGMA user_version`; the current schema version is `8`.
 
 `AppError` in `src-tauri/src/error.rs` is the IPC-facing error type. It
 serializes to JSON containing a `message`, and the frontend should read that via

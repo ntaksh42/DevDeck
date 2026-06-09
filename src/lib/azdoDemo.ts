@@ -55,6 +55,7 @@ const demoOrganization: Organization = {
   credentialKey: "azdodeck:org:contoso:pat",
   authenticatedUserId: "demo-user",
   authenticatedUserDisplayName: "Demo User",
+  authenticatedUserUniqueName: "demo.user@example.com",
   createdAt: "2026-05-24T00:00:00Z",
   updatedAt: "2026-05-24T00:00:00Z",
 };

@@ -542,9 +542,7 @@ export function WorkItemPreviewPanel({
     if (!selectedItem || !commentText.trim() || commentMutation.isPending) return;
     mentionsToRecordRef.current = selectedMentions
       .filter(
-        (m) =>
-          m.uniqueName &&
-          new RegExp(`@${escapeRegExp(m.displayName)}(?=\\s|$)`).test(commentText),
+        (m) => m.uniqueName && mentionTokenPattern(m.displayName).test(commentText),
       )
       .map((m) => ({
         id: m.id,
@@ -2455,14 +2453,25 @@ export function isSelfIdentity(
 ): boolean {
   if (!org) return false;
   const uid = org.authenticatedUserId?.toLowerCase() ?? "";
+  const selfUnique = org.authenticatedUserUniqueName?.toLowerCase() ?? "";
   const dn = org.authenticatedUserDisplayName?.toLowerCase() ?? "";
   const cid = candidate.id.toLowerCase();
   const cdisplay = candidate.displayName.toLowerCase();
   const cunique = candidate.uniqueName?.toLowerCase() ?? "";
-  return (
-    (uid !== "" && (cid === uid || (cunique !== "" && cunique === uid))) ||
-    (dn !== "" && cdisplay === dn)
-  );
+  if (uid !== "" && (cid === uid || (cunique !== "" && cunique === uid))) {
+    return true;
+  }
+  if (selfUnique !== "" && cunique !== "" && cunique === selfUnique) {
+    return true;
+  }
+  if (dn !== "" && cdisplay === dn) {
+    // Same display name but a unique name that belongs to someone else:
+    // a namesake colleague must stay in the candidate list.
+    const provablyDifferent =
+      selfUnique !== "" && cunique !== "" && cunique !== selfUnique;
+    return !provablyDifferent;
+  }
+  return false;
 }
 
 function workItemMentionPriorityNames(preview: WorkItemPreview | null): string[] {
@@ -2565,13 +2574,31 @@ function isSameMentionCandidate(
   left: MentionCandidate,
   right: MentionCandidate,
 ): boolean {
-  return (
+  if (
     normalizedEquals(left.id, right.id) ||
-    normalizedEquals(left.uniqueName, right.uniqueName) ||
+    normalizedEquals(left.uniqueName, right.uniqueName)
+  ) {
+    return true;
+  }
+  // Two candidates with distinct unique names are provably different people,
+  // even when they share a display name (namesakes).
+  if (bothUniqueNamesDiffer(left.uniqueName, right.uniqueName)) {
+    return false;
+  }
+  return (
     normalizedEquals(left.displayName, right.displayName) ||
     normalizedEquals(left.displayName, right.uniqueName) ||
     normalizedEquals(left.uniqueName, right.displayName)
   );
+}
+
+function bothUniqueNamesDiffer(
+  left: string | null | undefined,
+  right: string | null | undefined,
+): boolean {
+  const normalizedLeft = normalizeMentionName(left);
+  const normalizedRight = normalizeMentionName(right);
+  return !!normalizedLeft && !!normalizedRight && normalizedLeft !== normalizedRight;
 }
 
 function preferMentionCandidate<T extends MentionCandidate>(left: T, right: T): T {
@@ -2657,12 +2684,15 @@ type SelectedMention = {
   uniqueName: string | null;
 };
 
-function activeMentionAt(
+export function activeMentionAt(
   text: string,
   cursor: number,
 ): { start: number; query: string } | null {
   const beforeCursor = text.slice(0, cursor);
-  const match = /(^|\s)@([^\s@<>]{0,40})$/.exec(beforeCursor);
+  // Allow one internal space so "姓 名" style full names remain searchable.
+  // The second word needs at least one character so a trailing space (as
+  // inserted right after applying a mention) closes the picker.
+  const match = /(^|\s)@([^\s@<>]{1,40}(?: [^\s@<>]{1,40})?|)$/.exec(beforeCursor);
   if (!match) return null;
   return {
     start: beforeCursor.length - (match[2].length + 1),
@@ -2693,11 +2723,18 @@ export function renderAzureMentionMarkdown(
   );
   for (const mention of sorted) {
     markdown = markdown.replace(
-      new RegExp(`@${escapeRegExp(mention.displayName)}(?=\\s|$)`, "g"),
+      mentionTokenPattern(mention.displayName),
       `@<${mention.id}>`,
     );
   }
   return markdown;
+}
+
+// Boundary: the next char must not extend a Latin word, so "@Tom" never
+// matches inside "@Tomato", while punctuation and CJK text ("@田中さん",
+// "@Alice,") still terminate the mention.
+function mentionTokenPattern(displayName: string): RegExp {
+  return new RegExp(`@${escapeRegExp(displayName)}(?=$|[^A-Za-z0-9_])`, "g");
 }
 
 function escapeRegExp(value: string): string {

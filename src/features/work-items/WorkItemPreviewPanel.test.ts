@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MentionCandidate, Organization } from "@/lib/azdoCommands";
 import {
+  activeMentionAt,
   isSelfIdentity,
   rankMentionCandidates,
   renderAzureMentionMarkdown,
@@ -9,6 +10,7 @@ import {
 function makeOrg(overrides: {
   authenticatedUserId: string | null;
   authenticatedUserDisplayName: string | null;
+  authenticatedUserUniqueName?: string | null;
 }): Organization {
   return {
     id: "contoso",
@@ -19,6 +21,7 @@ function makeOrg(overrides: {
     credentialKey: "azdodeck:org:contoso:pat",
     authenticatedUserId: overrides.authenticatedUserId,
     authenticatedUserDisplayName: overrides.authenticatedUserDisplayName,
+    authenticatedUserUniqueName: overrides.authenticatedUserUniqueName ?? null,
     createdAt: "2026-05-24T00:00:00Z",
     updatedAt: "2026-05-24T00:00:00Z",
   };
@@ -59,6 +62,33 @@ describe("isSelfIdentity", () => {
   it("returns false when org is undefined", () => {
     expect(isSelfIdentity(self, undefined)).toBe(false);
   });
+
+  it("matches by stored unique name", () => {
+    const org = makeOrg({
+      authenticatedUserId: "other-guid",
+      authenticatedUserDisplayName: "Other",
+      authenticatedUserUniqueName: "jane.doe@contoso.example",
+    });
+    expect(isSelfIdentity(self, org)).toBe(true);
+  });
+
+  it("keeps a namesake with a different unique name", () => {
+    const org = makeOrg({
+      authenticatedUserId: "other-guid",
+      authenticatedUserDisplayName: "Jane Doe",
+      authenticatedUserUniqueName: "jane.doe@contoso.example",
+    });
+    const namesake: MentionCandidate = {
+      id: "user-guid-2",
+      displayName: "Jane Doe",
+      uniqueName: "jane.doe.2@contoso.example",
+    };
+    expect(isSelfIdentity(namesake, org)).toBe(false);
+    // Without a unique name the namesake cannot be told apart; keep filtering.
+    expect(
+      isSelfIdentity({ ...namesake, uniqueName: null }, org),
+    ).toBe(true);
+  });
 });
 
 describe("rankMentionCandidates", () => {
@@ -96,6 +126,58 @@ describe("rankMentionCandidates", () => {
       uniqueName: "alice@corp.com",
     });
   });
+
+  it("keeps namesakes with different unique names as separate candidates", () => {
+    const remote: MentionCandidate[] = [
+      {
+        id: "alice-guid-1",
+        displayName: "Alice",
+        uniqueName: "alice@corp.com",
+      },
+      {
+        id: "alice-guid-2",
+        displayName: "Alice",
+        uniqueName: "alice.other@corp.com",
+      },
+    ];
+
+    const ranked = rankMentionCandidates({
+      recent: [],
+      remote,
+      query: "",
+      priorityNames: [],
+    });
+
+    expect(ranked).toHaveLength(2);
+    expect(new Set(ranked.map((candidate) => candidate.id))).toEqual(
+      new Set(["alice-guid-1", "alice-guid-2"]),
+    );
+  });
+});
+
+describe("activeMentionAt", () => {
+  it("captures a single-word query", () => {
+    const text = "hello @ali";
+    expect(activeMentionAt(text, text.length)).toEqual({ start: 6, query: "ali" });
+  });
+
+  it("allows one internal space for full names", () => {
+    const text = "cc @山田 太";
+    expect(activeMentionAt(text, text.length)).toEqual({
+      start: 3,
+      query: "山田 太",
+    });
+  });
+
+  it("closes on a trailing space after a completed mention", () => {
+    const text = "cc @Alice ";
+    expect(activeMentionAt(text, text.length)).toBeNull();
+  });
+
+  it("closes after a second space", () => {
+    const text = "cc @山田 太郎 です";
+    expect(activeMentionAt(text, text.length)).toBeNull();
+  });
 });
 
 describe("renderAzureMentionMarkdown", () => {
@@ -110,5 +192,32 @@ describe("renderAzureMentionMarkdown", () => {
     ];
     const result = renderAzureMentionMarkdown("@Tom Smith and @Tom", mentions);
     expect(result).toBe("@<tom-smith-id> and @<tom-id>");
+  });
+
+  it("converts mentions followed by punctuation", () => {
+    const mentions = [
+      { id: "alice-id", displayName: "Alice", uniqueName: "alice@corp.com" },
+    ];
+    expect(renderAzureMentionMarkdown("@Alice, please review", mentions)).toBe(
+      "@<alice-id>, please review",
+    );
+  });
+
+  it("converts mentions followed by CJK text", () => {
+    const mentions = [
+      { id: "tanaka-id", displayName: "田中", uniqueName: "tanaka@corp.com" },
+    ];
+    expect(renderAzureMentionMarkdown("@田中さん確認お願いします", mentions)).toBe(
+      "@<tanaka-id>さん確認お願いします",
+    );
+  });
+
+  it("does not convert inside longer Latin words", () => {
+    const mentions = [
+      { id: "tom-id", displayName: "Tom", uniqueName: "tom@corp.com" },
+    ];
+    expect(renderAzureMentionMarkdown("@Tomato is not Tom", mentions)).toBe(
+      "@Tomato is not Tom",
+    );
   });
 });

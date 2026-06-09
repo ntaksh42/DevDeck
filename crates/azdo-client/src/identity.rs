@@ -18,6 +18,13 @@ pub struct AuthenticatedUser {
     pub id: String,
     pub provider_display_name: Option<String>,
     pub descriptor: Option<String>,
+    pub properties: Option<HashMap<String, IdentityProperty>>,
+}
+
+impl AuthenticatedUser {
+    pub fn property_value(&self, name: &str) -> Option<&str> {
+        property_value(self.properties.as_ref()?, name)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -81,18 +88,24 @@ struct IdentityPickerOptions {
 
 impl Identity {
     pub fn property_value(&self, name: &str) -> Option<&str> {
-        let properties = self.properties.as_ref()?;
-        properties
-            .get(name)
-            .or_else(|| {
-                properties
-                    .iter()
-                    .find(|(key, _)| key.eq_ignore_ascii_case(name))
-                    .map(|(_, value)| value)
-            })
-            .and_then(|property| property.value.as_deref())
-            .filter(|value| !value.trim().is_empty())
+        property_value(self.properties.as_ref()?, name)
     }
+}
+
+fn property_value<'a>(
+    properties: &'a HashMap<String, IdentityProperty>,
+    name: &str,
+) -> Option<&'a str> {
+    properties
+        .get(name)
+        .or_else(|| {
+            properties
+                .iter()
+                .find(|(key, _)| key.eq_ignore_ascii_case(name))
+                .map(|(_, value)| value)
+        })
+        .and_then(|property| property.value.as_deref())
+        .filter(|value| !value.trim().is_empty())
 }
 
 #[derive(Debug, Deserialize)]

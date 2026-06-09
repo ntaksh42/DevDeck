@@ -4,6 +4,20 @@ All notable changes to AzDoDeck are documented here.
 
 ## [Unreleased]
 
+## [0.1.11] — 2026-06-10
+
+### Fixed
+- Work item sync no longer fails on large projects: WIQL sync queries now cap results with `$top` (most recently changed 2,000 items per project), avoiding Azure DevOps' VS402337 20,000-item limit.
+- A failed sync pass no longer erases the "last synced" timestamp.
+- Work item sync no longer wipes cached "my work items" for a project whose assigned-items query returns 404.
+- Desktop notifications no longer report old work items as newly assigned when they re-enter the 200-item snapshot window.
+- Mention and assignee pickers keep namesakes (same display name, different e-mail) as separate candidates, both in ranking and in the self-exclusion filter. The signed-in user's e-mail is now stored per organization (re-add or update the organization to populate it).
+- Frequently mentioned people are suggested again: mention history is read when building @mention candidates (it had become write-only).
+- Mentions followed by punctuation or Japanese text (e.g. `@田中さん`) are now converted to real Azure DevOps mentions instead of being posted as plain text.
+- @mention search accepts one space so "姓 名" style full names can be filtered.
+- Work item search falls back to substring matching when full-text search cannot tokenize the query (Japanese substrings now match).
+- Azure CLI auth: the access token cache is shared across commands and the `az` call runs off the async runtime, removing a per-command shell-out and UI stalls.
+
 ## [0.1.8] — 2026-06-06
 
 ### Changed

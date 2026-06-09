@@ -137,12 +137,23 @@ pub struct SavedQuery {
 }
 
 impl AdoClient {
-    pub async fn query_work_item_ids(&self, project_id: &str, wiql: &str) -> Result<Vec<i64>> {
+    pub async fn query_work_item_ids(
+        &self,
+        project_id: &str,
+        wiql: &str,
+        top: Option<usize>,
+    ) -> Result<Vec<i64>> {
         let path = format!("{project_id}/_apis/wit/wiql");
+        let top_string;
+        let mut params: Vec<(&str, &str)> = vec![("api-version", "7.1-preview")];
+        if let Some(top) = top {
+            top_string = top.to_string();
+            params.push(("$top", &top_string));
+        }
         let response: WiqlResponse = self
             .post_json(
                 &path,
-                &[("api-version", "7.1-preview")],
+                &params,
                 &WiqlRequest {
                     query: wiql.to_string(),
                 },
@@ -398,10 +409,31 @@ mod tests {
 
         let ids = test_client(&server)
             .await
-            .query_work_item_ids("project-1", "SELECT [System.Id] FROM WorkItems")
+            .query_work_item_ids("project-1", "SELECT [System.Id] FROM WorkItems", None)
             .await
             .unwrap();
         assert_eq!(ids, vec![10, 11]);
+    }
+
+    #[tokio::test]
+    async fn query_work_item_ids_sends_top_parameter() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/project-1/_apis/wit/wiql"))
+            .and(query_param("api-version", "7.1-preview"))
+            .and(query_param("$top", "2000"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "workItems": [{ "id": 10 }]
+            })))
+            .mount(&server)
+            .await;
+
+        let ids = test_client(&server)
+            .await
+            .query_work_item_ids("project-1", "SELECT [System.Id] FROM WorkItems", Some(2000))
+            .await
+            .unwrap();
+        assert_eq!(ids, vec![10]);
     }
 
     #[tokio::test]

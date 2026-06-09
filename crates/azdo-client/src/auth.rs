@@ -66,7 +66,11 @@ impl AdoCredentialProvider for AzureCliProvider {
             return Ok(format!("Bearer {token}"));
         }
 
-        let token = self.token_source.access_token()?;
+        // `az` shells out synchronously; run it off the async worker thread.
+        let token_source = Arc::clone(&self.token_source);
+        let token = tokio::task::spawn_blocking(move || token_source.access_token())
+            .await
+            .map_err(|error| AdoError::Auth(format!("Azure CLI token task failed: {error}")))??;
         if token.trim().is_empty() {
             return Err(AdoError::Auth(
                 "Azure CLI returned an empty access token".to_string(),

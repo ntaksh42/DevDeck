@@ -12,6 +12,7 @@ const organizationSchema = z.object({
   credentialKey: z.string(),
   authenticatedUserId: z.string().nullable(),
   authenticatedUserDisplayName: z.string().nullable(),
+  authenticatedUserUniqueName: z.string().nullish(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

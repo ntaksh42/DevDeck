@@ -4,11 +4,11 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{mpsc, oneshot};
-use tokio::time::{interval_at, Instant};
+use tokio::time::{interval_at, Instant, MissedTickBehavior};
 
 use crate::auth::client_for_organization;
 use crate::commits::sync_commits_for_org;
-use crate::db::{AppDatabase, AppSettings, CachedWorkItem};
+use crate::db::{AppDatabase, AppSettings, CachedWorkItem, MY_WORK_ITEMS_LIMIT};
 use crate::prs::sync_prs_for_org;
 use crate::secrets::SecretStore;
 use crate::work_items::sync_work_items_for_org;
@@ -80,6 +80,8 @@ impl SyncRunner {
 
     pub async fn run(self, handle: AppHandle, mut trigger_rx: mpsc::Receiver<SyncTrigger>) {
         let mut interval = interval_at(Instant::now(), Duration::from_secs(300));
+        // A sync pass can outlast the interval; don't burst-fire missed ticks.
+        interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
         loop {
             let mut waiters = Vec::new();
             tokio::select! {
@@ -245,6 +247,17 @@ fn work_item_notification_items(
     let previous_by_id: HashMap<i64, &CachedWorkItem> =
         previous.iter().map(|item| (item.id, item)).collect();
     let can_notify_assignments = settings.notify_work_item_assignments && !previous.is_empty();
+    // The snapshots are capped at MY_WORK_ITEMS_LIMIT rows. When the previous
+    // snapshot was full, an old item can re-enter the window without being
+    // newly assigned; only treat items changed after the window edge as new.
+    let previous_window_edge = if previous.len() >= MY_WORK_ITEMS_LIMIT {
+        previous
+            .iter()
+            .filter_map(|item| item.changed_date.as_deref())
+            .min()
+    } else {
+        None
+    };
 
     current
         .iter()
@@ -261,11 +274,17 @@ fn work_item_notification_items(
             }
 
             if can_notify_assignments {
-                return Some(work_item_notification_item(
-                    item,
-                    WorkItemNotificationKind::Assigned,
-                    None,
-                ));
+                let reentered_window = match (item.changed_date.as_deref(), previous_window_edge) {
+                    (Some(changed), Some(edge)) => changed < edge,
+                    _ => false,
+                };
+                if !reentered_window {
+                    return Some(work_item_notification_item(
+                        item,
+                        WorkItemNotificationKind::Assigned,
+                        None,
+                    ));
+                }
             }
             None
         })
@@ -332,6 +351,51 @@ mod tests {
         assert_eq!(notifications[0].state.as_deref(), Some("Done"));
         assert_eq!(notifications[1].kind, WorkItemNotificationKind::Assigned);
         assert_eq!(notifications[1].id, 3);
+    }
+
+    #[test]
+    fn work_item_notification_items_skips_items_reentering_full_window() {
+        let settings = AppSettings {
+            desktop_notifications_enabled: true,
+            ..AppSettings::default()
+        };
+        // Previous snapshot is at the cap; its oldest change is 2026-06-02.
+        let previous: Vec<CachedWorkItem> = (1..=MY_WORK_ITEMS_LIMIT as i64)
+            .map(|id| work_item_changed(id, "Existing", Some("To Do"), "2026-06-02T00:00:00Z"))
+            .collect();
+        let mut current = previous.clone();
+        current.pop();
+        // Older than the window edge: re-entered, not newly assigned.
+        current.push(work_item_changed(
+            9001,
+            "Re-entered",
+            Some("To Do"),
+            "2026-06-01T00:00:00Z",
+        ));
+        // Newer than the window edge: genuinely new assignment.
+        current.push(work_item_changed(
+            9002,
+            "Fresh",
+            Some("To Do"),
+            "2026-06-03T00:00:00Z",
+        ));
+
+        let notifications = work_item_notification_items(&previous, &current, &settings);
+
+        assert_eq!(notifications.len(), 1);
+        assert_eq!(notifications[0].id, 9002);
+    }
+
+    fn work_item_changed(
+        id: i64,
+        title: &str,
+        state: Option<&str>,
+        changed_date: &str,
+    ) -> CachedWorkItem {
+        CachedWorkItem {
+            changed_date: Some(changed_date.to_string()),
+            ..work_item(id, title, state)
+        }
     }
 
     fn work_item(id: i64, title: &str, state: Option<&str>) -> CachedWorkItem {

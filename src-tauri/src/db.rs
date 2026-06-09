@@ -7,7 +7,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, Result};
 
-const SCHEMA_VERSION: i64 = 7;
+const SCHEMA_VERSION: i64 = 8;
+
+/// Max rows kept in the my_work_items snapshot queries; sync notification
+/// diffing must know this cap to avoid treating re-entering rows as new.
+pub const MY_WORK_ITEMS_LIMIT: usize = 200;
 
 // ── Existing public types ────────────────────────────────────────────────────
 
@@ -22,6 +26,7 @@ pub struct Organization {
     pub credential_key: String,
     pub authenticated_user_id: Option<String>,
     pub authenticated_user_display_name: Option<String>,
+    pub authenticated_user_unique_name: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -61,6 +66,7 @@ pub struct OrganizationDraft {
     pub credential_key: String,
     pub authenticated_user_id: Option<String>,
     pub authenticated_user_display_name: Option<String>,
+    pub authenticated_user_unique_name: Option<String>,
 }
 
 // ── Cache row types ───────────────────────────────────────────────────────────
@@ -137,6 +143,13 @@ pub struct CachedRepository {
     pub project_name: String,
     pub repository_id: String,
     pub repository_name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct MentionHistoryEntry {
+    pub unique_name: String,
+    pub display_name: String,
+    pub user_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -441,7 +454,7 @@ impl AppDatabase {
             INSERT INTO sync_state(scope, org_id, last_synced_at, error_count, last_error, last_warning)
             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             ON CONFLICT(scope) DO UPDATE SET
-                last_synced_at = excluded.last_synced_at,
+                last_synced_at = COALESCE(excluded.last_synced_at, last_synced_at),
                 error_count = excluded.error_count,
                 last_error = excluded.last_error,
                 last_warning = excluded.last_warning
@@ -456,6 +469,29 @@ impl AppDatabase {
             ],
         )?;
         Ok(())
+    }
+
+    pub fn list_mention_history(
+        &self,
+        org_id: &str,
+        limit: usize,
+    ) -> Result<Vec<MentionHistoryEntry>> {
+        let conn = self.open()?;
+        let mut stmt = conn.prepare(
+            "SELECT unique_name, display_name, user_id FROM mention_history \
+             WHERE org_id = ?1 \
+             ORDER BY interaction_count DESC, last_used_at DESC \
+             LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(params![org_id, limit as i64], |row| {
+            Ok(MentionHistoryEntry {
+                unique_name: row.get(0)?,
+                display_name: row.get(1)?,
+                user_id: row.get(2)?,
+            })
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Into::into)
     }
 
     pub fn record_mention_interaction(
@@ -480,7 +516,6 @@ impl AppDatabase {
         )?;
         Ok(())
     }
-
 }
 
 // ── Migration ─────────────────────────────────────────────────────────────────
@@ -771,6 +806,14 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         }
         conn.execute_batch("PRAGMA user_version = 7;")?;
     }
+    if current < 8 {
+        if !table_column_exists(conn, "organizations", "authenticated_user_unique_name")? {
+            conn.execute_batch(
+                "ALTER TABLE organizations ADD COLUMN authenticated_user_unique_name TEXT;",
+            )?;
+        }
+        conn.execute_batch("PRAGMA user_version = 8;")?;
+    }
     Ok(())
 }
 
@@ -791,7 +834,8 @@ fn list_organizations(conn: &Connection) -> Result<Vec<Organization>> {
     let mut stmt = conn.prepare(
         r#"
         SELECT id, name, display_name, base_url, auth_provider, credential_key,
-               authenticated_user_id, authenticated_user_display_name, created_at, updated_at
+               authenticated_user_id, authenticated_user_display_name,
+               authenticated_user_unique_name, created_at, updated_at
         FROM organizations
         ORDER BY name ASC
         "#,
@@ -809,7 +853,8 @@ fn get_organization(conn: &Connection, id: &str) -> Result<Option<Organization>>
         .query_row(
             r#"
             SELECT id, name, display_name, base_url, auth_provider, credential_key,
-                   authenticated_user_id, authenticated_user_display_name, created_at, updated_at
+                   authenticated_user_id, authenticated_user_display_name,
+                   authenticated_user_unique_name, created_at, updated_at
             FROM organizations WHERE id = ?1
             "#,
             [id],
@@ -825,9 +870,10 @@ fn upsert_organization(conn: &Connection, draft: OrganizationDraft) -> Result<Or
         r#"
         INSERT INTO organizations(
             id, name, display_name, base_url, auth_provider, credential_key,
-            authenticated_user_id, authenticated_user_display_name, created_at, updated_at
+            authenticated_user_id, authenticated_user_display_name,
+            authenticated_user_unique_name, created_at, updated_at
         )
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
         ON CONFLICT(id) DO UPDATE SET
             name = excluded.name,
             display_name = excluded.display_name,
@@ -836,6 +882,7 @@ fn upsert_organization(conn: &Connection, draft: OrganizationDraft) -> Result<Or
             credential_key = excluded.credential_key,
             authenticated_user_id = excluded.authenticated_user_id,
             authenticated_user_display_name = excluded.authenticated_user_display_name,
+            authenticated_user_unique_name = excluded.authenticated_user_unique_name,
             updated_at = excluded.updated_at
         "#,
         params![
@@ -847,6 +894,7 @@ fn upsert_organization(conn: &Connection, draft: OrganizationDraft) -> Result<Or
             draft.credential_key,
             draft.authenticated_user_id,
             draft.authenticated_user_display_name,
+            draft.authenticated_user_unique_name,
             created_at,
             now
         ],
@@ -1218,7 +1266,47 @@ fn search_work_items_fts(
     for row in rows {
         result.push(row?);
     }
+    if result.is_empty() {
+        // FTS tokenization cannot match substrings inside CJK text; fall back
+        // to a LIKE scan so Japanese queries still find cached work items.
+        return search_work_items_like(conn, org_id, query);
+    }
     Ok(result)
+}
+
+fn search_work_items_like(
+    conn: &Connection,
+    org_id: &str,
+    query: &str,
+) -> Result<Vec<CachedWorkItem>> {
+    let pattern = format!("%{}%", escape_like_pattern(query));
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT org_id, project_id, project_name, id, title,
+               work_item_type, state, assigned_to, changed_date, web_url,
+               assigned_to_unique_name
+        FROM work_items
+        WHERE org_id = ?1
+          AND (title LIKE ?2 ESCAPE '\'
+               OR work_item_type LIKE ?2 ESCAPE '\'
+               OR assigned_to LIKE ?2 ESCAPE '\')
+        ORDER BY changed_date DESC
+        LIMIT 200
+        "#,
+    )?;
+    let rows = stmt.query_map(params![org_id, pattern], map_cached_work_item)?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
+fn escape_like_pattern(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
 }
 
 fn upsert_my_work_items(conn: &Connection, items: &[CachedWorkItem]) -> Result<()> {
@@ -1258,10 +1346,13 @@ fn list_my_work_items(conn: &Connection, org_id: &str) -> Result<Vec<CachedWorkI
         FROM my_work_items
         WHERE org_id = ?1
         ORDER BY changed_date DESC
-        LIMIT 200
+        LIMIT ?2
         "#,
     )?;
-    let rows = stmt.query_map([org_id], map_cached_work_item)?;
+    let rows = stmt.query_map(
+        params![org_id, MY_WORK_ITEMS_LIMIT as i64],
+        map_cached_work_item,
+    )?;
     let mut result = Vec::new();
     for row in rows {
         result.push(row?);
@@ -1411,8 +1502,9 @@ fn map_organization(row: &rusqlite::Row<'_>) -> rusqlite::Result<Organization> {
         credential_key: row.get(5)?,
         authenticated_user_id: row.get(6)?,
         authenticated_user_display_name: row.get(7)?,
-        created_at: row.get(8)?,
-        updated_at: row.get(9)?,
+        authenticated_user_unique_name: row.get(8)?,
+        created_at: row.get(9)?,
+        updated_at: row.get(10)?,
     })
 }
 
@@ -1514,6 +1606,7 @@ mod tests {
             credential_key: format!("azdodeck:org:{id}:pat"),
             authenticated_user_id: None,
             authenticated_user_display_name: None,
+            authenticated_user_unique_name: None,
         }
     }
 
@@ -1874,6 +1967,66 @@ mod tests {
         assert_eq!(state.error_count, 2);
         assert_eq!(state.last_error.as_deref(), Some("timeout"));
         assert_eq!(state.last_warning, None);
+        // A failed sync must not erase the last successful sync timestamp.
+        assert_eq!(
+            state.last_synced_at.as_deref(),
+            Some("2024-01-01T00:00:00Z")
+        );
+    }
+
+    #[test]
+    fn list_mention_history_ranks_by_interaction_count() {
+        let tf = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        db.record_mention_interaction(
+            "org1",
+            "alice@corp.com",
+            "Alice",
+            None,
+            "2026-06-01T00:00:00Z",
+        )
+        .unwrap();
+        db.record_mention_interaction(
+            "org1",
+            "bob@corp.com",
+            "Bob",
+            Some("bob-id"),
+            "2026-06-02T00:00:00Z",
+        )
+        .unwrap();
+        db.record_mention_interaction("org1", "bob@corp.com", "Bob", None, "2026-06-03T00:00:00Z")
+            .unwrap();
+
+        let entries = db.list_mention_history("org1", 10).unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].unique_name, "bob@corp.com");
+        assert_eq!(entries[0].display_name, "Bob");
+        assert_eq!(entries[0].user_id.as_deref(), Some("bob-id"));
+        assert_eq!(entries[1].unique_name, "alice@corp.com");
+    }
+
+    #[test]
+    fn search_work_items_fts_falls_back_to_like_for_cjk_substrings() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        upsert_organization(&conn, make_org_draft("org1")).unwrap();
+
+        conn.execute(
+            "INSERT OR REPLACE INTO work_items(org_id, project_id, project_name, id, title) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params!["org1", "p1", "Project One", 7_i64, "ユーザーログイン機能を修正"],
+        )
+        .unwrap();
+
+        // Mid-string CJK term: FTS prefix queries cannot match, LIKE fallback should.
+        let results = search_work_items_fts(&conn, "org1", "修正").unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, 7);
+
+        let results = search_work_items_fts(&conn, "org1", "存在しない語").unwrap();
+        assert!(results.is_empty());
     }
 
     #[test]
@@ -2099,7 +2252,6 @@ mod tests {
         assert_eq!(results[0].assigned_to.as_deref(), Some("Alice"));
     }
 
-
     #[test]
     fn replace_commits_for_repo_scopes_to_repository() {
         let tf = NamedTempFile::new().unwrap();
@@ -2182,5 +2334,4 @@ mod tests {
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].commit_id, "new");
     }
-
 }

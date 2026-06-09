@@ -428,7 +428,7 @@ impl WorkItemService {
 
         let limit = work_item_query_limit(input.limit);
         let ids = client
-            .query_work_item_ids(&project.id, wiql)
+            .query_work_item_ids(&project.id, wiql, Some(limit))
             .await?
             .into_iter()
             .take(limit)
@@ -459,7 +459,7 @@ impl WorkItemService {
         let client = client_for_organization(&organization, &self.secrets)?;
         let limit = work_item_query_limit(input.limit);
         let count = client
-            .query_work_item_ids(&input.project_id, wiql)
+            .query_work_item_ids(&input.project_id, wiql, Some(limit))
             .await?
             .into_iter()
             .take(limit)
@@ -544,6 +544,20 @@ impl WorkItemService {
             }
             Err(error) => {
                 tracing::warn!(%error, "failed to load work item updates for mention candidates");
+            }
+        }
+
+        match self.db.list_mention_history(&organization.id, 20) {
+            Ok(entries) => {
+                for entry in entries {
+                    push_unique_mention_candidate(
+                        &mut candidates,
+                        mention_candidate_from_history(entry),
+                    );
+                }
+            }
+            Err(error) => {
+                tracing::warn!(%error, "failed to load mention history for mention candidates");
             }
         }
 
@@ -645,7 +659,6 @@ impl WorkItemService {
             .take(8)
             .collect())
     }
-
 
     pub async fn fetch_image(&self, input: FetchWorkItemImageInput) -> Result<WorkItemImage> {
         let url = input.url.trim();
@@ -1288,6 +1301,14 @@ fn mention_candidate_from_assignee(candidate: WorkItemAssigneeCandidate) -> Ment
     }
 }
 
+fn mention_candidate_from_history(entry: crate::db::MentionHistoryEntry) -> MentionCandidate {
+    MentionCandidate {
+        id: entry.user_id.unwrap_or_else(|| entry.unique_name.clone()),
+        display_name: entry.display_name,
+        unique_name: Some(entry.unique_name),
+    }
+}
+
 fn is_authenticated_user(
     id: &str,
     display_name: &str,
@@ -1295,11 +1316,32 @@ fn is_authenticated_user(
     organization: &Organization,
 ) -> bool {
     let uid = organization.authenticated_user_id.as_deref().unwrap_or("");
-    let dn = organization.authenticated_user_display_name.as_deref().unwrap_or("");
-    (!uid.is_empty() && id.eq_ignore_ascii_case(uid))
-        || (!uid.is_empty()
-            && unique_name.is_some_and(|un| un.eq_ignore_ascii_case(uid)))
-        || (!dn.is_empty() && display_name.eq_ignore_ascii_case(dn))
+    let self_unique = organization
+        .authenticated_user_unique_name
+        .as_deref()
+        .unwrap_or("");
+    let dn = organization
+        .authenticated_user_display_name
+        .as_deref()
+        .unwrap_or("");
+    if !uid.is_empty()
+        && (id.eq_ignore_ascii_case(uid)
+            || unique_name.is_some_and(|un| un.eq_ignore_ascii_case(uid)))
+    {
+        return true;
+    }
+    if !self_unique.is_empty() && unique_name.is_some_and(|un| un.eq_ignore_ascii_case(self_unique))
+    {
+        return true;
+    }
+    if !dn.is_empty() && display_name.eq_ignore_ascii_case(dn) {
+        // Same display name, but a unique name that provably belongs to
+        // someone else: do not treat a namesake as the authenticated user.
+        let provably_different = !self_unique.is_empty()
+            && unique_name.is_some_and(|un| !un.eq_ignore_ascii_case(self_unique));
+        return !provably_different;
+    }
+    false
 }
 
 fn assignee_candidate_from_parts(
@@ -1424,7 +1466,6 @@ fn is_azure_devops_service_identity_name(display_name: &str, unique_name: Option
                 || value.eq_ignore_ascii_case("Project Collection Build Service")
         })
 }
-
 
 fn mention_candidate_matches_query(
     display_name: &str,
@@ -1786,6 +1827,10 @@ const SYNC_MY_WI_WIQL: &str =
      AND [System.AssignedTo] = @Me \
      ORDER BY [System.ChangedDate] DESC";
 const SYNC_WORK_ITEM_BATCH_SIZE: usize = 200;
+// WIQL fails with VS402337 when a query would return more than 20,000 items.
+// Cap sync queries well below that; ORDER BY ChangedDate DESC keeps the most
+// recently changed items.
+const SYNC_WORK_ITEM_QUERY_TOP: usize = 2000;
 
 struct SyncWorkItemsResult {
     warning: Option<String>,
@@ -1888,7 +1933,10 @@ async fn do_sync_work_items(
         };
 
         let project_my = match my_result {
-            Ok(r) => r,
+            Ok(Some(r)) => r,
+            // The "my" query 404ing means the project itself is unreachable;
+            // skip it entirely so its cached my_work_items rows survive.
+            Ok(None) => continue,
             Err(e) => {
                 tracing::warn!(
                     org = %org.name,
@@ -1909,13 +1957,11 @@ async fn do_sync_work_items(
             largest_query_result = largest_query_result.max(project_all.queried_count);
         }
         all_cached.extend(project_all.items);
-        if let Some(project_my_result) = project_my {
-            if project_my_result.queried_count > SYNC_WORK_ITEM_BATCH_SIZE {
-                large_query_count += 1;
-                largest_query_result = largest_query_result.max(project_my_result.queried_count);
-            }
-            my_cached.extend(project_my_result.items);
+        if project_my.queried_count > SYNC_WORK_ITEM_BATCH_SIZE {
+            large_query_count += 1;
+            largest_query_result = largest_query_result.max(project_my.queried_count);
         }
+        my_cached.extend(project_my.items);
     }
 
     // If every project failed with a real error (not 404), surface it rather than
@@ -1960,7 +2006,10 @@ async fn fetch_sync_work_items(
     fields: Vec<String>,
     label: &str,
 ) -> Result<Option<SyncWorkItemFetchResult>> {
-    let ids = match client.query_work_item_ids(project_id, wiql).await {
+    let ids = match client
+        .query_work_item_ids(project_id, wiql, Some(SYNC_WORK_ITEM_QUERY_TOP))
+        .await
+    {
         Ok(ids) => ids,
         Err(e) if is_ado_not_found(&e) => {
             tracing::warn!(
@@ -2065,6 +2114,7 @@ mod tests {
             credential_key: "azdodeck:org:contoso:pat".to_string(),
             authenticated_user_id: None,
             authenticated_user_display_name: None,
+            authenticated_user_unique_name: None,
         }
     }
 
@@ -2079,6 +2129,7 @@ mod tests {
             credential_key: "azdodeck:org:contoso:pat".to_string(),
             authenticated_user_id: None,
             authenticated_user_display_name: None,
+            authenticated_user_unique_name: None,
             created_at: "2026-05-24T00:00:00Z".to_string(),
             updated_at: "2026-05-24T00:00:00Z".to_string(),
         };
@@ -2121,6 +2172,7 @@ mod tests {
             credential_key: "azdodeck:org:contoso:pat".to_string(),
             authenticated_user_id: None,
             authenticated_user_display_name: None,
+            authenticated_user_unique_name: None,
             created_at: "2026-05-24T00:00:00Z".to_string(),
             updated_at: "2026-05-24T00:00:00Z".to_string(),
         };
@@ -2164,6 +2216,7 @@ mod tests {
             credential_key: "azdodeck:org:contoso:pat".to_string(),
             authenticated_user_id: None,
             authenticated_user_display_name: None,
+            authenticated_user_unique_name: None,
             created_at: "2026-05-24T00:00:00Z".to_string(),
             updated_at: "2026-05-24T00:00:00Z".to_string(),
         };
@@ -2379,6 +2432,14 @@ mod tests {
         authenticated_user_id: Option<&str>,
         authenticated_user_display_name: Option<&str>,
     ) -> Organization {
+        test_org_with_unique_name(authenticated_user_id, authenticated_user_display_name, None)
+    }
+
+    fn test_org_with_unique_name(
+        authenticated_user_id: Option<&str>,
+        authenticated_user_display_name: Option<&str>,
+        authenticated_user_unique_name: Option<&str>,
+    ) -> Organization {
         Organization {
             id: "contoso".to_string(),
             name: "contoso".to_string(),
@@ -2389,6 +2450,7 @@ mod tests {
             authenticated_user_id: authenticated_user_id.map(ToString::to_string),
             authenticated_user_display_name: authenticated_user_display_name
                 .map(ToString::to_string),
+            authenticated_user_unique_name: authenticated_user_unique_name.map(ToString::to_string),
             created_at: "2026-05-24T00:00:00Z".to_string(),
             updated_at: "2026-05-24T00:00:00Z".to_string(),
         }
@@ -2404,8 +2466,18 @@ mod tests {
     #[test]
     fn is_authenticated_user_matches_by_display_name() {
         let org = test_org(Some("user-1"), Some("naoto akashi"));
-        assert!(is_authenticated_user("descriptor-xyz", "naoto akashi", None, &org));
-        assert!(is_authenticated_user("descriptor-xyz", "Naoto Akashi", None, &org));
+        assert!(is_authenticated_user(
+            "descriptor-xyz",
+            "naoto akashi",
+            None,
+            &org
+        ));
+        assert!(is_authenticated_user(
+            "descriptor-xyz",
+            "Naoto Akashi",
+            None,
+            &org
+        ));
     }
 
     #[test]
@@ -2434,6 +2506,44 @@ mod tests {
     fn is_authenticated_user_no_stored_user_never_matches() {
         let org = test_org(None, None);
         assert!(!is_authenticated_user("user-1", "naoto akashi", None, &org));
+    }
+
+    #[test]
+    fn is_authenticated_user_matches_by_stored_unique_name() {
+        let org = test_org_with_unique_name(
+            Some("user-1"),
+            Some("naoto akashi"),
+            Some("naoto@example.com"),
+        );
+        assert!(is_authenticated_user(
+            "descriptor-xyz",
+            "someone else",
+            Some("Naoto@Example.com"),
+            &org
+        ));
+    }
+
+    #[test]
+    fn is_authenticated_user_keeps_namesake_with_different_unique_name() {
+        let org = test_org_with_unique_name(
+            Some("user-1"),
+            Some("naoto akashi"),
+            Some("naoto@example.com"),
+        );
+        // Same display name but a different e-mail: this is another person.
+        assert!(!is_authenticated_user(
+            "descriptor-other",
+            "naoto akashi",
+            Some("other.naoto@example.com"),
+            &org
+        ));
+        // Without a unique name we cannot prove it's someone else; keep filtering.
+        assert!(is_authenticated_user(
+            "descriptor-other",
+            "naoto akashi",
+            None,
+            &org
+        ));
     }
 
     #[tokio::test]

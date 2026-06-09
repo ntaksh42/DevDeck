@@ -55,6 +55,8 @@ impl OrganizationService {
         let credential_key = credential_key(&organization);
         self.secrets.set_pat(&credential_key, pat)?;
 
+        let authenticated_user_unique_name =
+            authenticated_user_unique_name(&connection_data.authenticated_user);
         self.db.upsert_organization(OrganizationDraft {
             id: organization.clone(),
             name: organization.clone(),
@@ -66,6 +68,7 @@ impl OrganizationService {
             authenticated_user_display_name: connection_data
                 .authenticated_user
                 .provider_display_name,
+            authenticated_user_unique_name,
         })
     }
 
@@ -92,6 +95,8 @@ impl OrganizationService {
         let connection_data = client.connection_data().await?;
         let credential_key = azure_cli_credential_key(&organization);
 
+        let authenticated_user_unique_name =
+            authenticated_user_unique_name(&connection_data.authenticated_user);
         self.db.upsert_organization(OrganizationDraft {
             id: organization.clone(),
             name: organization.clone(),
@@ -103,8 +108,15 @@ impl OrganizationService {
             authenticated_user_display_name: connection_data
                 .authenticated_user
                 .provider_display_name,
+            authenticated_user_unique_name,
         })
     }
+}
+
+fn authenticated_user_unique_name(user: &azdo_client::AuthenticatedUser) -> Option<String> {
+    user.property_value("Account")
+        .or_else(|| user.property_value("Mail"))
+        .map(ToString::to_string)
 }
 
 fn normalize_organization(value: &str) -> Result<String> {
