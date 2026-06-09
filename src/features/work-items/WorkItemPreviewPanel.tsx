@@ -2449,7 +2449,7 @@ function recentWorkItemAssigneeCandidates(
     }));
 }
 
-function isSelfIdentity(
+export function isSelfIdentity(
   candidate: MentionCandidate,
   org: Organization | undefined,
 ): boolean {
