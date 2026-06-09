@@ -274,8 +274,11 @@ fn work_item_notification_items(
             }
 
             if can_notify_assignments {
+                // <= because an item changed exactly at the window edge is
+                // indistinguishable from one that re-entered; prefer missing
+                // that rare notification over a false "Assigned" alert.
                 let reentered_window = match (item.changed_date.as_deref(), previous_window_edge) {
-                    (Some(changed), Some(edge)) => changed < edge,
+                    (Some(changed), Some(edge)) => changed <= edge,
                     _ => false,
                 };
                 if !reentered_window {
@@ -371,6 +374,13 @@ mod tests {
             "Re-entered",
             Some("To Do"),
             "2026-06-01T00:00:00Z",
+        ));
+        // Exactly at the window edge: also treated as re-entered.
+        current.push(work_item_changed(
+            9003,
+            "At edge",
+            Some("To Do"),
+            "2026-06-02T00:00:00Z",
         ));
         // Newer than the window edge: genuinely new assignment.
         current.push(work_item_changed(
