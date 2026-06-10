@@ -4,6 +4,22 @@ All notable changes to AzDoDeck are documented here.
 
 ## [Unreleased]
 
+## [0.1.14] — 2026-06-11
+
+### Added
+- **Cross-entity search in the command palette (Ctrl+K).** Typing a query now searches work items, active pull requests, and commits from the local cache and shows them grouped under the command actions. Filter by kind with `wi:` / `pr:` / `c:`, press Enter to open the result inside the app (the target tab is opened with the item selected), or Ctrl+Enter to open it in Azure DevOps. "Show all N …" rows carry the query into the full search tab.
+- Numeric queries match IDs: work item search matches work item IDs (exact match first, then prefix) and PR search matches pull request numbers by prefix.
+
+### Changed
+- **Performance.** Database-backed commands now run off the main thread, so the UI no longer stalls while searching or loading cached data. SQLite connections use `busy_timeout` and `synchronous=NORMAL`, removing spurious "database is busy" failures when a background sync overlaps a read.
+- **Sync writes far less.** Cache updates skip rows that have not changed (full-text index churn is eliminated), and work item sync only fetches items changed since the last sync, with a full reconcile at most every 24 hours. Note: work items deleted in Azure DevOps can remain visible for up to 24 hours until the next full sync.
+- Pull request search and commit search grids are virtualized and scroll inside the results pane, keeping large result sets smooth.
+- Command palette search keeps the previous results visible while typing instead of flashing empty, and background sync no longer refetches data while the window is hidden (it refreshes on focus).
+
+### Fixed
+- Command palette arrow keys now move the selection regardless of where focus is inside the palette, the highlighted row scrolls into view, and Tab focus stays in sync with the Enter target.
+- The work item preview focus ring no longer draws over comment cards, and the comment box no longer shows the `Alt+M` / `Ctrl+Enter` badges.
+
 ## [0.1.13] — 2026-06-10
 
 ### Fixed
