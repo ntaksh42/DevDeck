@@ -37,8 +37,12 @@ const PR_SEARCH_FILTERABLE_COLUMNS: Record<PrSearchFilterableColumn, (pr: PullRe
 
 export function PullRequestSearch({
   organizations,
+  externalSearch,
+  onExternalSearchHandled,
 }: {
   organizations: Organization[];
+  externalSearch?: { query: string; requestId: number } | null;
+  onExternalSearchHandled?: () => void;
 }) {
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
   const [query, setQuery] = useState("");
@@ -73,6 +77,23 @@ export function PullRequestSearch({
   const mutation = useMutation({ mutationFn: searchPullRequests });
   const results = mutation.data ?? [];
   const activeSearchFilterCount = (query.trim() ? 1 : 0) + (projectId ? 1 : 0) + (repositoryId ? 1 : 0);
+
+  useEffect(() => {
+    if (!externalSearch) return;
+    setQuery(externalSearch.query);
+    setStatus("active");
+    setProjectId("");
+    setRepositoryId("");
+    mutation.mutate({
+      organizationId,
+      query: externalSearch.query,
+      status: "active",
+      projectId: undefined,
+      repositoryId: undefined,
+    });
+    onExternalSearchHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalSearch?.requestId]);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

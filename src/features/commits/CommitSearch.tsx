@@ -82,7 +82,15 @@ function storeCommitSearchViewState(state: CommitSearchViewState) {
   window.localStorage.setItem(COMMIT_SEARCH_VIEW_STORAGE_KEY, JSON.stringify(state));
 }
 
-export function CommitSearch({ organizations }: { organizations: Organization[] }) {
+export function CommitSearch({
+  organizations,
+  externalSearch,
+  onExternalSearchHandled,
+}: {
+  organizations: Organization[];
+  externalSearch?: { query: string; requestId: number } | null;
+  onExternalSearchHandled?: () => void;
+}) {
   const initialViewState = useMemo(() => loadCommitSearchViewState(), []);
   const [organizationId, setOrganizationId] = useState(() =>
     organizations.some((organization) => organization.id === initialViewState.organizationId)
@@ -155,6 +163,31 @@ export function CommitSearch({ organizations }: { organizations: Organization[] 
       setRepositoryId("");
     }
   }, [filteredRepositoryOptions, repositoryId]);
+
+  useEffect(() => {
+    if (!externalSearch) return;
+    mutation.reset();
+    setQuery(externalSearch.query);
+    setAuthor("");
+    setBranch("");
+    setFromDate("");
+    setToDate("");
+    setProjectId("");
+    setRepositoryId("");
+    setValidationError(null);
+    mutation.mutate({
+      organizationId: selectedOrganizationId,
+      query: externalSearch.query,
+      author: "",
+      branch: "",
+      fromDate: "",
+      toDate: "",
+      projectId: "",
+      repositoryId: "",
+    });
+    onExternalSearchHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalSearch?.requestId]);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

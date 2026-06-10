@@ -251,6 +251,19 @@ const commitSummariesSchema = z.array(commitSummarySchema);
 
 export type CommitSummary = z.infer<typeof commitSummarySchema>;
 
+const searchAllResultSchema = z.object({
+  workItems: workItemSummariesSchema,
+  pullRequests: pullRequestSummariesSchema,
+  commits: commitSummariesSchema,
+  totals: z.object({
+    workItems: z.number(),
+    pullRequests: z.number(),
+    commits: z.number(),
+  }),
+});
+
+export type SearchAllResult = z.infer<typeof searchAllResultSchema>;
+
 const commitRepositoryOptionSchema = z.object({
   projectId: z.string(),
   projectName: z.string(),
@@ -323,6 +336,12 @@ export type SearchPullRequestsInput = {
 
 export type ListMyReviewPullRequestsInput = {
   organizationId?: string;
+};
+
+export type SearchAllInput = {
+  organizationId?: string;
+  query: string;
+  limitPerKind?: number;
 };
 
 export type SearchWorkItemsInput = {
@@ -576,6 +595,11 @@ export async function listMyReviewPullRequests(
 ): Promise<ReviewPullRequestSummary[]> {
   const result = await invokeCommand("list_my_review_pull_requests", { input });
   return reviewPullRequestSummariesSchema.parse(result);
+}
+
+export async function searchAll(input: SearchAllInput): Promise<SearchAllResult> {
+  const result = await invokeCommand("search_all", { input });
+  return searchAllResultSchema.parse(result);
 }
 
 export async function searchWorkItems(

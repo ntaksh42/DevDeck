@@ -1677,4 +1677,128 @@ describe("App", () => {
     expect(openUrlMock).not.toHaveBeenCalled();
     windowOpenSpy.mockRestore();
   });
+
+  it("searches across entities from the command palette and opens a work item in app", async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve({ reviewResultFolderPath: null });
+      }
+      if (command === "list_sync_states") {
+        return Promise.resolve([]);
+      }
+      if (command === "trigger_sync") {
+        return Promise.resolve(undefined);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_work_item_projects") {
+        return Promise.resolve([]);
+      }
+      if (command === "search_all") {
+        return Promise.resolve({
+          workItems: [
+            {
+              organizationId: "contoso",
+              projectId: "project-1",
+              projectName: "Platform",
+              id: 123,
+              title: "Fix save workflow",
+              workItemType: "Bug",
+              state: "Active",
+              assignedTo: "Test User",
+              changedDate: "2026-05-24T00:00:00Z",
+              webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/123",
+            },
+          ],
+          pullRequests: [
+            {
+              organizationId: "contoso",
+              projectId: "project-1",
+              projectName: "Platform",
+              repositoryId: "repo-1",
+              repositoryName: "azdo-dashboard",
+              pullRequestId: 1230,
+              title: "Add retry backoff",
+              status: "active",
+              createdBy: "Alice",
+              creationDate: "2026-05-24T00:00:00Z",
+              sourceRefName: "feature/retry",
+              targetRefName: "main",
+              webUrl: null,
+            },
+          ],
+          commits: [
+            {
+              organizationId: "contoso",
+              projectId: "project-1",
+              projectName: "Platform",
+              repositoryId: "repo-1",
+              repositoryName: "azdo-dashboard",
+              commitId: "abcdef1234567890",
+              shortCommitId: "abcdef12",
+              comment: "Fix 123 retry delays",
+              authorName: "Alice",
+              authorEmail: null,
+              authorDate: "2026-05-24T00:00:00Z",
+              webUrl: null,
+            },
+          ],
+          totals: { workItems: 1, pullRequests: 1, commits: 1 },
+        });
+      }
+      if (command === "search_work_items") {
+        return Promise.resolve([
+          {
+            organizationId: "contoso",
+            projectId: "project-1",
+            projectName: "Platform",
+            id: 123,
+            title: "Fix save workflow",
+            workItemType: "Bug",
+            state: "Active",
+            assignedTo: "Test User",
+            changedDate: "2026-05-24T00:00:00Z",
+            webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/123",
+          },
+        ]);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+    await screen.findByText("No pull requests assigned to you.");
+
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    const paletteInput = await screen.findByPlaceholderText("Type a command or search…");
+    fireEvent.change(paletteInput, { target: { value: "123" } });
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("search_all", {
+        input: { organizationId: "contoso", query: "123" },
+      });
+    });
+    expect(await screen.findByText("#123 Fix save workflow")).toBeTruthy();
+    expect(screen.getByText("PR 1230 Add retry backoff")).toBeTruthy();
+    expect(screen.getByText("abcdef12 Fix 123 retry delays")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("#123 Fix save workflow"));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("search_work_items", {
+        input: {
+          organizationId: "contoso",
+          query: "123",
+          state: "all",
+          workItemType: "",
+          projectId: undefined,
+        },
+      });
+    });
+    const main = within(await screen.findByRole("main"));
+    expect((await main.findAllByText("Fix save workflow")).length).toBeGreaterThan(0);
+  });
 });

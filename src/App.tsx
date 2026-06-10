@@ -2,6 +2,7 @@ import {
   CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -25,10 +26,12 @@ import {
   commandErrorMessage,
   getAppSettings,
   listOrganizations,
+  searchAll,
   syncUpdatedEventSchema,
   triggerSync,
   type SyncScope,
 } from "@/lib/azdoCommands";
+import { openExternalUrl } from "@/lib/openExternal";
 import { listen } from "@tauri-apps/api/event";
 import { isTauriRuntime } from "@/lib/runtime";
 import {
@@ -44,7 +47,11 @@ import { LoadingState, ErrorState } from "@/components/StateDisplay";
 import { NavButton, NavSection, NavSubItem } from "@/components/Nav";
 import { HelpDialog } from "@/components/HelpDialog";
 import { UserGuideDialog } from "@/components/UserGuideDialog";
-import { CommandPalette, type CommandPaletteAction } from "@/components/CommandPalette";
+import {
+  CommandPalette,
+  type CommandPaletteAction,
+  type CommandPaletteSearchItem,
+} from "@/components/CommandPalette";
 import { CommitSearch } from "@/features/commits/CommitSearch";
 import { WorkItemSearch } from '@/features/work-items/WorkItemSearch';
 import { WorkItemViewsPanel } from '@/features/work-items/WorkItemViewsPanel';
@@ -102,6 +109,26 @@ function invalidationScopesForSyncScope(scope: SyncScope = "all"): SyncScope[] {
   return scope === "hot" ? ["myReviews", "myWorkItems"] : [scope];
 }
 
+type PaletteSearchKind = "workItems" | "pullRequests" | "commits";
+
+type ExternalSearchRequest = { query: string; requestId: number };
+
+function parsePaletteSearch(text: string): { kind: PaletteSearchKind | null; query: string } {
+  const match = /^(wi|pr|c):\s*(.*)$/i.exec(text.trim());
+  if (match) {
+    const prefix = match[1].toLowerCase();
+    const kind: PaletteSearchKind =
+      prefix === "wi" ? "workItems" : prefix === "pr" ? "pullRequests" : "commits";
+    return { kind, query: match[2].trim() };
+  }
+  return { kind: null, query: text.trim() };
+}
+
+function commitFirstLine(text: string): string {
+  const index = text.indexOf("\n");
+  return index === -1 ? text : text.slice(0, index);
+}
+
 
 
 function AppShell() {
@@ -149,6 +176,146 @@ function AppShell() {
   });
 
   const activeView = organizations.length === 0 ? "settings" : view;
+
+  const [paletteSearchText, setPaletteSearchText] = useState("");
+  const [debouncedPaletteSearchText, setDebouncedPaletteSearchText] = useState("");
+  const [workItemSearchRequest, setWorkItemSearchRequest] =
+    useState<ExternalSearchRequest | null>(null);
+  const [pullRequestSearchRequest, setPullRequestSearchRequest] =
+    useState<ExternalSearchRequest | null>(null);
+  const [commitSearchRequest, setCommitSearchRequest] =
+    useState<ExternalSearchRequest | null>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedPaletteSearchText(paletteSearchText), 200);
+    return () => window.clearTimeout(timer);
+  }, [paletteSearchText]);
+
+  const paletteSearch = parsePaletteSearch(debouncedPaletteSearchText);
+  const paletteOrganizationId = organizations[0]?.id ?? "";
+  const paletteSearchEnabled =
+    commandPaletteOpen &&
+    !!paletteOrganizationId &&
+    (/^\d+$/.test(paletteSearch.query)
+      ? paletteSearch.query.length >= 1
+      : paletteSearch.query.length >= 2);
+  const searchAllQuery = useQuery({
+    queryKey: ["searchAll", paletteOrganizationId, paletteSearch.query],
+    queryFn: () =>
+      searchAll({ organizationId: paletteOrganizationId, query: paletteSearch.query }),
+    enabled: paletteSearchEnabled,
+    staleTime: 30_000,
+  });
+
+  const paletteSearchItems = useMemo<CommandPaletteSearchItem[]>(() => {
+    const data = paletteSearchEnabled ? searchAllQuery.data : undefined;
+    if (!data) return [];
+    const items: CommandPaletteSearchItem[] = [];
+    const kind = paletteSearch.kind;
+    const rawQuery = paletteSearch.query;
+
+    if (!kind || kind === "workItems") {
+      for (const item of data.workItems) {
+        items.push({
+          id: `wi:${item.organizationId}:${item.id}`,
+          group: "Work Items",
+          label: `#${item.id} ${item.title}`,
+          detail: [item.workItemType, item.state, item.assignedTo].filter(Boolean).join(" · "),
+          run: () => {
+            setWorkItemSearchRequest({ query: String(item.id), requestId: Date.now() });
+            setView("workItems");
+          },
+          runAlt: item.webUrl
+            ? () => {
+                void openExternalUrl(item.webUrl as string);
+              }
+            : undefined,
+        });
+      }
+      if (data.totals.workItems > data.workItems.length) {
+        items.push({
+          id: "wi:more",
+          group: "Work Items",
+          label: `Show all ${data.totals.workItems} work items…`,
+          run: () => {
+            setWorkItemSearchRequest({ query: rawQuery, requestId: Date.now() });
+            setView("workItems");
+          },
+        });
+      }
+    }
+    if (!kind || kind === "pullRequests") {
+      for (const pr of data.pullRequests) {
+        items.push({
+          id: `pr:${pr.organizationId}:${pr.repositoryId}:${pr.pullRequestId}`,
+          group: "Pull Requests (active)",
+          label: `PR ${pr.pullRequestId} ${pr.title}`,
+          detail: [pr.repositoryName, pr.createdBy].filter(Boolean).join(" · "),
+          run: () => {
+            setPullRequestSearchRequest({
+              query: String(pr.pullRequestId),
+              requestId: Date.now(),
+            });
+            setView("pullRequestSearch");
+          },
+          runAlt: pr.webUrl
+            ? () => {
+                void openExternalUrl(pr.webUrl as string);
+              }
+            : undefined,
+        });
+      }
+      if (data.totals.pullRequests > data.pullRequests.length) {
+        items.push({
+          id: "pr:more",
+          group: "Pull Requests (active)",
+          label: `Show all ${data.totals.pullRequests} pull requests…`,
+          run: () => {
+            setPullRequestSearchRequest({ query: rawQuery, requestId: Date.now() });
+            setView("pullRequestSearch");
+          },
+        });
+      }
+    }
+    if (!kind || kind === "commits") {
+      for (const commit of data.commits) {
+        items.push({
+          id: `c:${commit.organizationId}:${commit.repositoryId}:${commit.commitId}`,
+          group: "Commits",
+          label: `${commit.shortCommitId} ${commitFirstLine(commit.comment)}`,
+          detail: [commit.repositoryName, commit.authorName].filter(Boolean).join(" · "),
+          run: () => {
+            setCommitSearchRequest({ query: rawQuery, requestId: Date.now() });
+            setView("commits");
+          },
+          runAlt: commit.webUrl
+            ? () => {
+                void openExternalUrl(commit.webUrl as string);
+              }
+            : undefined,
+        });
+      }
+      if (data.totals.commits > data.commits.length) {
+        items.push({
+          id: "c:more",
+          group: "Commits",
+          label: `Show all ${data.totals.commits} commits…`,
+          run: () => {
+            setCommitSearchRequest({ query: rawQuery, requestId: Date.now() });
+            setView("commits");
+          },
+        });
+      }
+    }
+    return items;
+  }, [paletteSearch.kind, paletteSearch.query, paletteSearchEnabled, searchAllQuery.data]);
+
+  function closeCommandPalette(): void {
+    setCommandPaletteOpen(false);
+    setPaletteSearchText("");
+    setDebouncedPaletteSearchText("");
+  }
+
   const pinnedWorkItemViews = workItemNavViews.filter((item) => item.pinned);
   const activePinnedWorkItemView = pinnedWorkItemViews.find(
     (item) => item.id === activeWorkItemViewId,
@@ -609,7 +776,7 @@ function AppShell() {
           return;
         }
         setHelpOpen(false);
-        setCommandPaletteOpen(false);
+        closeCommandPalette();
         setUserGuideOpen(false);
         return;
       }
@@ -868,11 +1035,19 @@ function AppShell() {
           ) : organizationsQuery.isError ? (
             <ErrorState message={commandErrorMessage(organizationsQuery.error)} />
           ) : activeView === "pullRequestSearch" ? (
-            <PullRequestSearch organizations={organizations} />
+            <PullRequestSearch
+              organizations={organizations}
+              externalSearch={pullRequestSearchRequest}
+              onExternalSearchHandled={() => setPullRequestSearchRequest(null)}
+            />
           ) : activeView === "myReviews" ? (
             <MyReviewsGrid organizations={organizations} />
           ) : activeView === "workItems" ? (
-            <WorkItemSearch organizations={organizations} />
+            <WorkItemSearch
+              organizations={organizations}
+              externalSearch={workItemSearchRequest}
+              onExternalSearchHandled={() => setWorkItemSearchRequest(null)}
+            />
           ) : activeView === "myWorkItems" ? (
             <MyWorkItemsPanel organizations={organizations} />
           ) : activeView === "workItemViews" ? (
@@ -884,7 +1059,11 @@ function AppShell() {
               onViewsChange={setWorkItemNavViews}
             />
           ) : activeView === "commits" ? (
-            <CommitSearch organizations={organizations} />
+            <CommitSearch
+              organizations={organizations}
+              externalSearch={commitSearchRequest}
+              onExternalSearchHandled={() => setCommitSearchRequest(null)}
+            />
           ) : organizations.length === 0 ? (
             <SetupPanel />
           ) : (
@@ -896,7 +1075,16 @@ function AppShell() {
       {commandPaletteOpen && (
         <CommandPalette
           actions={commandActions}
-          onClose={() => setCommandPaletteOpen(false)}
+          onClose={closeCommandPalette}
+          search={
+            organizations.length > 0
+              ? {
+                  items: paletteSearchItems,
+                  pending: paletteSearchEnabled && searchAllQuery.isFetching,
+                  onQueryChange: setPaletteSearchText,
+                }
+              : undefined
+          }
         />
       )}
       {userGuideOpen && <UserGuideDialog onClose={() => setUserGuideOpen(false)} />}

@@ -1068,10 +1068,6 @@ export function WorkItemPreviewPanel({
                       </button>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <span className="flex items-center gap-0.5">
-                        <ShortcutHint>Alt+M</ShortcutHint>
-                        <ShortcutHint>Ctrl+Enter</ShortcutHint>
-                      </span>
                       {commentMutation.isSuccess ? (
                         <span className="text-xs text-muted-foreground">Comment posted</span>
                       ) : null}
@@ -1226,7 +1222,7 @@ function WorkItemPreviewDetails({
     <div
       aria-keyshortcuts="Alt+P"
       aria-label="Work item preview"
-      className="min-h-0 flex-1 overflow-auto bg-white px-2.5 pb-2 pt-1.5 text-xs outline-none focus:bg-primary/[0.02] focus:ring-2 focus:ring-inset focus:ring-primary"
+      className="min-h-0 flex-1 overflow-auto bg-white px-2.5 pb-2 pt-1.5 text-xs outline-none focus:bg-primary/[0.02]"
       data-primary-preview="true"
       onKeyDown={stopPreviewNavigationKeyDown}
       tabIndex={-1}

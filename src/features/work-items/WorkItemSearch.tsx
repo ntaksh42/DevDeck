@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Info, Loader2, Search } from "lucide-react";
 import {
@@ -11,7 +11,15 @@ import { ErrorState } from "@/components/StateDisplay";
 import { WorkItemsGrid } from "./WorkItemsGrid";
 import { workItemQueryKeys } from "./queryKeys";
 
-export function WorkItemSearch({ organizations }: { organizations: Organization[] }) {
+export function WorkItemSearch({
+  organizations,
+  externalSearch,
+  onExternalSearchHandled,
+}: {
+  organizations: Organization[];
+  externalSearch?: { query: string; requestId: number } | null;
+  onExternalSearchHandled?: () => void;
+}) {
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
   const [query, setQuery] = useState("");
   const [state, setState] = useState("all");
@@ -28,6 +36,23 @@ export function WorkItemSearch({ organizations }: { organizations: Organization[
 
   const mutation = useMutation({ mutationFn: searchWorkItems });
   const results = mutation.data ?? [];
+
+  useEffect(() => {
+    if (!externalSearch) return;
+    setQuery(externalSearch.query);
+    setState("all");
+    setWorkItemType("");
+    setProjectId("");
+    mutation.mutate({
+      organizationId,
+      query: externalSearch.query,
+      state: "all",
+      workItemType: "",
+      projectId: undefined,
+    });
+    onExternalSearchHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalSearch?.requestId]);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

@@ -1254,9 +1254,15 @@ fn search_work_items_fts(
     org_id: &str,
     query: &str,
 ) -> Result<Vec<CachedWorkItem>> {
+    // Numeric queries also match work item IDs (exact match first, then prefix).
+    let mut result = if !query.is_empty() && query.bytes().all(|b| b.is_ascii_digit()) {
+        search_work_items_by_id_prefix(conn, org_id, query)?
+    } else {
+        Vec::new()
+    };
     let fts_query = fts5_query(query);
     if fts_query.is_empty() {
-        return Ok(Vec::new());
+        return Ok(result);
     }
     let mut stmt = conn.prepare(
         r#"
@@ -1274,14 +1280,51 @@ fn search_work_items_fts(
         "#,
     )?;
     let rows = stmt.query_map(params![fts_query, org_id], map_cached_work_item)?;
+    let mut text_matches = Vec::new();
+    for row in rows {
+        text_matches.push(row?);
+    }
+    if text_matches.is_empty() {
+        // FTS tokenization cannot match substrings inside CJK text; fall back
+        // to a LIKE scan so Japanese queries still find cached work items.
+        text_matches = search_work_items_like(conn, org_id, query)?;
+    }
+    if result.is_empty() {
+        return Ok(text_matches);
+    }
+    for item in text_matches {
+        if !result
+            .iter()
+            .any(|r| r.id == item.id && r.project_id == item.project_id)
+        {
+            result.push(item);
+        }
+    }
+    Ok(result)
+}
+
+fn search_work_items_by_id_prefix(
+    conn: &Connection,
+    org_id: &str,
+    digits: &str,
+) -> Result<Vec<CachedWorkItem>> {
+    let pattern = format!("{digits}%");
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT org_id, project_id, project_name, id, title,
+               work_item_type, state, assigned_to, changed_date, web_url,
+               assigned_to_unique_name
+        FROM work_items
+        WHERE org_id = ?1
+          AND CAST(id AS TEXT) LIKE ?2
+        ORDER BY (CAST(id AS TEXT) = ?3) DESC, changed_date DESC
+        LIMIT 200
+        "#,
+    )?;
+    let rows = stmt.query_map(params![org_id, pattern, digits], map_cached_work_item)?;
     let mut result = Vec::new();
     for row in rows {
         result.push(row?);
-    }
-    if result.is_empty() {
-        // FTS tokenization cannot match substrings inside CJK text; fall back
-        // to a LIKE scan so Japanese queries still find cached work items.
-        return search_work_items_like(conn, org_id, query);
     }
     Ok(result)
 }
@@ -1826,6 +1869,33 @@ mod tests {
         let results = search_work_items_fts(&conn, "org1", "timeout").unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].title, "fix the login timeout bug");
+    }
+
+    #[test]
+    fn search_work_items_fts_matches_numeric_query_by_id() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        upsert_organization(&conn, make_org_draft("org1")).unwrap();
+
+        for (id, title) in [
+            (42_i64, "fix the login bug"),
+            (421_i64, "label 42 spike"),
+            (9_i64, "error 42 cascade"),
+        ] {
+            conn.execute(
+                "INSERT OR REPLACE INTO work_items(org_id, project_id, project_name, id, title) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params!["org1", "p1", "Project One", id, title],
+            )
+            .unwrap();
+        }
+
+        let results = search_work_items_fts(&conn, "org1", "42").unwrap();
+        let ids: Vec<i64> = results.iter().map(|item| item.id).collect();
+        // Exact ID match first, prefix and title matches follow without duplicates.
+        assert_eq!(ids[0], 42);
+        assert!(ids.contains(&421));
+        assert!(ids.contains(&9));
+        assert_eq!(ids.len(), 3);
     }
 
     #[test]

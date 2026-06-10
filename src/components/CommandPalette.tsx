@@ -1,5 +1,11 @@
-import { Search, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Loader2, Search, X } from "lucide-react";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 export type CommandPaletteAction = {
   disabled?: boolean;
@@ -8,6 +14,31 @@ export type CommandPaletteAction = {
   keywords?: string[];
   label: string;
   run: () => void;
+  shortcut?: string;
+};
+
+export type CommandPaletteSearchItem = {
+  detail?: string;
+  group: string;
+  id: string;
+  label: string;
+  run: () => void;
+  runAlt?: () => void;
+};
+
+export type CommandPaletteSearch = {
+  items: CommandPaletteSearchItem[];
+  onQueryChange: (query: string) => void;
+  pending: boolean;
+};
+
+type PaletteRow = {
+  detail?: string;
+  group: string;
+  id: string;
+  label: string;
+  onRun: () => void;
+  onRunAlt?: () => void;
   shortcut?: string;
 };
 
@@ -31,14 +62,17 @@ function recordCommandUsage(id: string) {
 export function CommandPalette({
   actions,
   onClose,
+  search,
 }: {
   actions: CommandPaletteAction[];
   onClose: () => void;
+  search?: CommandPaletteSearch;
 }) {
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const [usage, setUsage] = useState<Record<string, number>>(() => loadCommandUsage());
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const rowRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const filteredActions = useMemo(() => {
     const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -60,6 +94,41 @@ export function CommandPalette({
       .sort((left, right) => (usage[right.id] ?? 0) - (usage[left.id] ?? 0));
   }, [actions, query, usage]);
 
+  const rows = useMemo<PaletteRow[]>(() => {
+    const actionRows: PaletteRow[] = filteredActions.map((action) => ({
+      group: action.group,
+      id: `action:${action.id}`,
+      label: action.label,
+      shortcut: action.shortcut,
+      onRun: () => {
+        recordCommandUsage(action.id);
+        setUsage(loadCommandUsage());
+        onClose();
+        window.setTimeout(action.run, 0);
+      },
+    }));
+    const searchRows: PaletteRow[] = (search?.items ?? []).map((item) => {
+      const runAlt = item.runAlt;
+      return {
+        detail: item.detail,
+        group: item.group,
+        id: `search:${item.id}`,
+        label: item.label,
+        onRun: () => {
+          onClose();
+          window.setTimeout(item.run, 0);
+        },
+        onRunAlt: runAlt
+          ? () => {
+              onClose();
+              window.setTimeout(runAlt, 0);
+            }
+          : undefined,
+      };
+    });
+    return [...actionRows, ...searchRows];
+  }, [filteredActions, onClose, search?.items]);
+
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
@@ -68,13 +137,44 @@ export function CommandPalette({
     setActiveIndex(0);
   }, [query]);
 
-  function runActiveAction(index = activeIndex) {
-    const action = filteredActions[index];
-    if (!action) return;
-    recordCommandUsage(action.id);
-    setUsage(loadCommandUsage());
-    onClose();
-    window.setTimeout(action.run, 0);
+  useEffect(() => {
+    setActiveIndex((index) => Math.min(index, Math.max(rows.length - 1, 0)));
+  }, [rows.length]);
+
+  useEffect(() => {
+    rowRefs.current[activeIndex]?.scrollIntoView?.({ block: "nearest" });
+  }, [activeIndex, rows.length]);
+
+  function runActiveRow(index = activeIndex, alt = false) {
+    const row = rows[index];
+    if (!row) return;
+    if (alt) {
+      row.onRunAlt?.();
+      return;
+    }
+    row.onRun();
+  }
+
+  function handleDialogKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveIndex((index) => Math.min(index + 1, Math.max(rows.length - 1, 0)));
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveIndex((index) => Math.max(index - 1, 0));
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      runActiveRow(activeIndex, event.ctrlKey || event.metaKey);
+    }
   }
 
   return (
@@ -89,39 +189,23 @@ export function CommandPalette({
         aria-label="Command palette"
         className="w-full max-w-xl overflow-hidden rounded-lg border border-border bg-white shadow-xl"
         onClick={(event) => event.stopPropagation()}
+        onKeyDown={handleDialogKeyDown}
       >
         <div className="flex items-center gap-2 border-b border-border px-3 py-2">
           <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <input
             ref={inputRef}
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.preventDefault();
-                onClose();
-                return;
-              }
-              if (event.key === "ArrowDown") {
-                event.preventDefault();
-                setActiveIndex((index) =>
-                  Math.min(index + 1, Math.max(filteredActions.length - 1, 0)),
-                );
-                return;
-              }
-              if (event.key === "ArrowUp") {
-                event.preventDefault();
-                setActiveIndex((index) => Math.max(index - 1, 0));
-                return;
-              }
-              if (event.key === "Enter") {
-                event.preventDefault();
-                runActiveAction();
-              }
+            onChange={(event) => {
+              setQuery(event.target.value);
+              search?.onQueryChange(event.target.value);
             }}
-            placeholder="Type a command..."
+            placeholder={search ? "Type a command or search…" : "Type a command..."}
             className="h-8 min-w-0 flex-1 bg-transparent text-sm outline-none"
           />
+          {search?.pending ? (
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" aria-hidden="true" />
+          ) : null}
           <button
             type="button"
             aria-label="Close command palette"
@@ -132,33 +216,42 @@ export function CommandPalette({
           </button>
         </div>
         <div className="max-h-[50vh] overflow-auto p-1">
-          {filteredActions.length === 0 ? (
+          {rows.length === 0 ? (
             <div className="px-3 py-8 text-center text-sm text-muted-foreground">
-              No commands found.
+              {search?.pending ? "Searching…" : "No commands found."}
             </div>
           ) : (
-            filteredActions.map((action, index) => {
-              const previous = filteredActions[index - 1];
-              const showGroup = !previous || previous.group !== action.group;
+            rows.map((row, index) => {
+              const previous = rows[index - 1];
+              const showGroup = !previous || previous.group !== row.group;
               return (
-                <div key={action.id}>
+                <div key={row.id}>
                   {showGroup ? (
                     <div className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase text-muted-foreground">
-                      {action.group}
+                      {row.group}
                     </div>
                   ) : null}
                   <button
                     type="button"
+                    ref={(element) => {
+                      rowRefs.current[index] = element;
+                    }}
                     onMouseEnter={() => setActiveIndex(index)}
-                    onClick={() => runActiveAction(index)}
+                    onFocus={() => setActiveIndex(index)}
+                    onClick={() => runActiveRow(index)}
                     className={`flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-sm ${
                       index === activeIndex ? "bg-secondary text-foreground" : "hover:bg-muted"
                     }`}
                   >
-                    <span className="truncate">{action.label}</span>
-                    {action.shortcut ? (
+                    <span className="min-w-0 truncate">
+                      {row.label}
+                      {row.detail ? (
+                        <span className="ml-2 text-xs text-muted-foreground">{row.detail}</span>
+                      ) : null}
+                    </span>
+                    {row.shortcut ? (
                       <kbd className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
-                        {action.shortcut}
+                        {row.shortcut}
                       </kbd>
                     ) : null}
                   </button>
@@ -167,6 +260,15 @@ export function CommandPalette({
             })
           )}
         </div>
+        {search ? (
+          <div className="border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
+            Search work items, PRs, and commits — filter with{" "}
+            <kbd className="rounded bg-muted px-1 font-mono">wi:</kbd>{" "}
+            <kbd className="rounded bg-muted px-1 font-mono">pr:</kbd>{" "}
+            <kbd className="rounded bg-muted px-1 font-mono">c:</kbd> · open in browser with{" "}
+            <kbd className="rounded bg-muted px-1 font-mono">Ctrl+Enter</kbd>
+          </div>
+        ) : null}
       </div>
     </div>
   );

@@ -19,6 +19,8 @@ import type {
   ReviewPullRequestSummary,
   ReviewResultPreview,
   RunWorkItemQueryInput,
+  SearchAllInput,
+  SearchAllResult,
   SearchCommitsInput,
   SearchWorkItemAssigneesInput,
   SearchPullRequestsInput,
@@ -200,6 +202,32 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     case "search_work_items": {
       const input = (args as { input?: SearchWorkItemsInput } | undefined)?.input;
       return demoWorkItems(input);
+    }
+    case "search_all": {
+      const input = (args as { input?: SearchAllInput } | undefined)?.input;
+      const query = input?.query.trim() ?? "";
+      const limit = input?.limitPerKind ?? 5;
+      if (!query) {
+        return {
+          workItems: [],
+          pullRequests: [],
+          commits: [],
+          totals: { workItems: 0, pullRequests: 0, commits: 0 },
+        } satisfies SearchAllResult;
+      }
+      const workItems = demoWorkItems({ query });
+      const pullRequests = demoPullRequests({ query });
+      const commits = demoCommits({ query });
+      return {
+        workItems: workItems.slice(0, limit),
+        pullRequests: pullRequests.slice(0, limit),
+        commits: commits.slice(0, limit),
+        totals: {
+          workItems: workItems.length,
+          pullRequests: pullRequests.length,
+          commits: commits.length,
+        },
+      } satisfies SearchAllResult;
     }
     case "list_my_work_items":
       return demoMyWorkItems();
@@ -484,13 +512,13 @@ function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[]
     if (input?.projectId && pr.projectId !== input.projectId) return false;
     if (input?.repositoryId && pr.repositoryId !== input.repositoryId) return false;
     if (statusFilter !== "all" && pr.status !== statusFilter) return false;
-    if (
-      query &&
-      ![pr.title, pr.projectName, pr.repositoryName, pr.createdBy ?? "", pr.sourceRefName, pr.targetRefName].some(
+    if (query) {
+      const textMatch = [pr.title, pr.projectName, pr.repositoryName, pr.createdBy ?? "", pr.sourceRefName, pr.targetRefName].some(
         (v) => v.toLowerCase().includes(query),
-      )
-    )
-      return false;
+      );
+      const idMatch = /^\d+$/.test(query) && String(pr.pullRequestId).startsWith(query);
+      if (!textMatch && !idMatch) return false;
+    }
     return true;
   });
 }
@@ -621,13 +649,13 @@ function demoWorkItems(input?: SearchWorkItemsInput): WorkItemSummary[] {
     if (input?.projectId && item.projectId !== input.projectId) return false;
     if (stateFilter && item.state !== stateFilter) return false;
     if (typeFilter && item.workItemType !== typeFilter) return false;
-    if (
-      query &&
-      ![item.title, item.projectName, item.workItemType ?? "", item.state ?? "", item.assignedTo ?? ""].some(
+    if (query) {
+      const textMatch = [item.title, item.projectName, item.workItemType ?? "", item.state ?? "", item.assignedTo ?? ""].some(
         (v) => v.toLowerCase().includes(query),
-      )
-    )
-      return false;
+      );
+      const idMatch = /^\d+$/.test(query) && String(item.id).startsWith(query);
+      if (!textMatch && !idMatch) return false;
+    }
     return true;
   });
 }

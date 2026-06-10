@@ -189,6 +189,13 @@ fn matches_query(summary: &PullRequestSummary, query: &str) -> bool {
         return true;
     }
 
+    // Numeric queries also match the PR number by prefix.
+    if query.bytes().all(|b| b.is_ascii_digit())
+        && summary.pull_request_id.to_string().starts_with(query)
+    {
+        return true;
+    }
+
     [
         summary.title.as_str(),
         summary.project_name.as_str(),
@@ -762,6 +769,29 @@ mod tests {
         assert!(matches_query(&summary, "test user"));
         assert!(matches_query(&summary, "pr-search"));
         assert!(!matches_query(&summary, "work item"));
+    }
+
+    #[test]
+    fn matches_query_matches_pr_number_by_prefix() {
+        let summary = PullRequestSummary {
+            organization_id: "contoso".to_string(),
+            project_id: "project-1".to_string(),
+            project_name: "Platform".to_string(),
+            repository_id: "repo-1".to_string(),
+            repository_name: "azdo-dashboard".to_string(),
+            pull_request_id: 421,
+            title: "Add pull request search".to_string(),
+            status: "active".to_string(),
+            created_by: Some("Test User".to_string()),
+            creation_date: "2026-05-24T00:00:00Z".to_string(),
+            source_ref_name: "feature/pr-search".to_string(),
+            target_ref_name: "main".to_string(),
+            web_url: None,
+        };
+
+        assert!(matches_query(&summary, "421"));
+        assert!(matches_query(&summary, "42"));
+        assert!(!matches_query(&summary, "21"));
     }
 
     #[test]

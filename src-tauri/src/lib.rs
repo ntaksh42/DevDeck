@@ -8,6 +8,7 @@ mod db;
 mod error;
 mod orgs;
 mod prs;
+mod search;
 mod secrets;
 mod settings;
 mod sync;
@@ -24,6 +25,7 @@ use prs::{
     ListMyReviewPullRequestsInput, PullRequestService, PullRequestSummary,
     ReviewPullRequestSummary, SearchPullRequestsInput,
 };
+use search::{SearchAllInput, SearchAllResult};
 use secrets::SecretStore;
 use settings::{
     normalize_app_settings, GetReviewResultPreviewInput, ReviewResultPreview, SettingsService,
@@ -153,6 +155,17 @@ fn list_my_review_pull_requests(
     state: State<'_, AppState>,
 ) -> Result<Vec<ReviewPullRequestSummary>> {
     state.pull_requests.list_my_reviews(input)
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+fn search_all(input: SearchAllInput, state: State<'_, AppState>) -> Result<SearchAllResult> {
+    search::search_all(
+        &state.work_items,
+        &state.pull_requests,
+        &state.commits,
+        input,
+    )
 }
 
 #[tauri::command]
@@ -517,6 +530,7 @@ pub fn run() {
             add_azure_cli_organization,
             search_pull_requests,
             list_my_review_pull_requests,
+            search_all,
             search_work_items,
             list_my_work_items,
             list_work_item_projects,
