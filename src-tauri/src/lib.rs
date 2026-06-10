@@ -36,11 +36,11 @@ use tokio::sync::{mpsc, oneshot};
 use work_items::{
     AddWorkItemCommentInput, AssignWorkItemInput, AssignWorkItemsInput, BulkWorkItemResult,
     DeleteWorkItemCommentInput, FetchWorkItemImageInput, GetSavedQueryInput,
-    GetWorkItemPreviewInput, ListMyWorkItemsInput, ListWorkItemFieldsInput,
-    ListWorkItemProjectsInput, ListWorkItemTypeStatesInput, MentionCandidate,
-    RecordMentionInteractionInput, RunWorkItemQueryInput, SavedQueryResult,
+    GetWorkItemPreviewInput, ListMyWorkItemsInput, ListWorkItemFieldAllowedValuesInput,
+    ListWorkItemFieldsInput, ListWorkItemProjectsInput, ListWorkItemTypeStatesInput,
+    MentionCandidate, RecordMentionInteractionInput, RunWorkItemQueryInput, SavedQueryResult,
     SearchWorkItemAssigneesInput, SearchWorkItemMentionsInput, SearchWorkItemsInput,
-    SetWorkItemPriorityInput, SetWorkItemReasonInput, SetWorkItemStateInput,
+    SetWorkItemFieldInput, SetWorkItemPriorityInput, SetWorkItemReasonInput, SetWorkItemStateInput,
     SetWorkItemsPriorityInput, SetWorkItemsStateInput, WorkItemAssigneeCandidate, WorkItemComment,
     WorkItemFieldOption, WorkItemImage, WorkItemPreview, WorkItemProjectOption, WorkItemService,
     WorkItemSummary,
@@ -336,6 +336,25 @@ async fn set_work_items_priority(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn set_work_item_field(
+    input: SetWorkItemFieldInput,
+    state: State<'_, AppState>,
+) -> Result<WorkItemPreview> {
+    ensure_write_enabled(&state)?;
+    state.work_items.set_field(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn list_work_item_field_allowed_values(
+    input: ListWorkItemFieldAllowedValuesInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>> {
+    state.work_items.list_field_allowed_values(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn list_work_item_type_states(
     input: ListWorkItemTypeStatesInput,
     state: State<'_, AppState>,
@@ -494,6 +513,8 @@ pub fn run() {
             set_work_item_state,
             set_work_item_reason,
             set_work_item_priority,
+            set_work_item_field,
+            list_work_item_field_allowed_values,
             list_work_item_type_states,
             list_work_item_fields,
             get_saved_query,

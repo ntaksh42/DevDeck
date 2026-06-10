@@ -38,6 +38,8 @@ import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { LoadingState, ErrorState, PreviewEmptyState } from '@/components/StateDisplay';
 
 const DEFAULT_REVIEW_PREVIEW_WIDTH = 420;
+const MIN_REVIEW_PREVIEW_WIDTH = 280;
+const MAX_REVIEW_PREVIEW_WIDTH = 1280;
 const REVIEW_PREVIEW_WIDTH_STORAGE_KEY = 'azdodeck:layout:reviewPreviewWidth';
 const DEFAULT_PR_GRID_COLUMN_WIDTHS = [52, 110, 180, 82, 56, 76, 68, 78];
 const PR_GRID_COLUMN_MIN_WIDTHS = [48, 96, 150, 72, 50, 68, 62, 70];
@@ -443,8 +445,8 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     storedNumber(
       REVIEW_PREVIEW_WIDTH_STORAGE_KEY,
       DEFAULT_REVIEW_PREVIEW_WIDTH,
-      280,
-      820,
+      MIN_REVIEW_PREVIEW_WIDTH,
+      MAX_REVIEW_PREVIEW_WIDTH,
     ),
   );
   const [copyToast, setCopyToast] = useState<string | null>(null);
@@ -1045,8 +1047,8 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
           ariaLabel="Resize review preview"
           className="hidden xl:flex"
           direction={-1}
-          max={820}
-          min={280}
+          max={MAX_REVIEW_PREVIEW_WIDTH}
+          min={MIN_REVIEW_PREVIEW_WIDTH}
           onChange={setPreviewWidth}
           onReset={() => setPreviewWidth(DEFAULT_REVIEW_PREVIEW_WIDTH)}
           value={previewWidth}

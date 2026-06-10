@@ -3,6 +3,7 @@ import type { MentionCandidate, Organization } from "@/lib/azdoCommands";
 import {
   activeMentionAt,
   isSelfIdentity,
+  markdownWithHardLineBreaks,
   rankMentionCandidates,
   renderAzureMentionMarkdown,
   sortSelfLast,
@@ -170,6 +171,30 @@ describe("rankMentionCandidates", () => {
     expect(new Set(ranked.map((candidate) => candidate.id))).toEqual(
       new Set(["alice-guid-1", "alice-guid-2"]),
     );
+  });
+});
+
+describe("markdownWithHardLineBreaks", () => {
+  it("turns single newlines into markdown hard breaks", () => {
+    expect(markdownWithHardLineBreaks("@田中 太郎\nこんにちは")).toBe(
+      "@田中 太郎  \nこんにちは",
+    );
+  });
+
+  it("leaves paragraph breaks (blank lines) untouched", () => {
+    expect(markdownWithHardLineBreaks("first\n\nsecond")).toBe(
+      "first\n\nsecond",
+    );
+  });
+
+  it("does not add trailing spaces inside fenced code blocks", () => {
+    expect(markdownWithHardLineBreaks("before\n```\nlet a = 1;\nlet b = 2;\n```\nafter")).toBe(
+      "before  \n```\nlet a = 1;\nlet b = 2;\n```\nafter",
+    );
+  });
+
+  it("normalizes CRLF and keeps the last line unchanged", () => {
+    expect(markdownWithHardLineBreaks("a\r\nb")).toBe("a  \nb");
   });
 });
 

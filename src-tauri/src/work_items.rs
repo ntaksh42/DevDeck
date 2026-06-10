@@ -185,6 +185,25 @@ pub struct SetWorkItemPriorityInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SetWorkItemFieldInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_id: i64,
+    pub field_reference_name: String,
+    pub value: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListWorkItemFieldAllowedValuesInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_type: String,
+    pub field_reference_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListWorkItemTypeStatesInput {
     pub organization_id: Option<String>,
     pub project_id: String,
@@ -902,6 +921,70 @@ impl WorkItemService {
             work_item,
             comments,
         ))
+    }
+
+    pub async fn set_field(&self, input: SetWorkItemFieldInput) -> Result<WorkItemPreview> {
+        let field = validate_editable_field_reference_name(&input.field_reference_name)?;
+        let value = input.value.trim();
+        if value.is_empty() {
+            return Err(AppError::InvalidInput("value is required".to_string()));
+        }
+
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = client
+            .list_projects()
+            .await?
+            .into_iter()
+            .find(|p| p.id == input.project_id)
+            .ok_or_else(|| {
+                AppError::InvalidInput(format!("project not found: {}", input.project_id))
+            })?;
+
+        let work_item = client
+            .update_work_item_field(&project.id, input.work_item_id, field, value)
+            .await?;
+        let cached = work_item_to_cached(&organization, &project.id, &project.name, &work_item);
+        if let Err(e) = self.db.upsert_work_items(std::slice::from_ref(&cached)) {
+            tracing::warn!(error = %e, "failed to update work item cache after set_field");
+        }
+        if let Err(e) = self.db.update_my_work_item_if_present(&cached) {
+            tracing::warn!(error = %e, "failed to update my_work_items cache after set_field");
+        }
+        let comments = client
+            .list_work_item_comments(
+                &project.id,
+                input.work_item_id,
+                WORK_ITEM_PREVIEW_COMMENT_LIMIT,
+            )
+            .await
+            .unwrap_or_default();
+
+        Ok(summarize_work_item_preview(
+            &organization,
+            &project.id,
+            &project.name,
+            work_item,
+            comments,
+        ))
+    }
+
+    pub async fn list_field_allowed_values(
+        &self,
+        input: ListWorkItemFieldAllowedValuesInput,
+    ) -> Result<Vec<String>> {
+        let field = validate_editable_field_reference_name(&input.field_reference_name)?;
+        let work_item_type = input.work_item_type.trim();
+        if work_item_type.is_empty() {
+            return Err(AppError::InvalidInput(
+                "work item type is required".to_string(),
+            ));
+        }
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        Ok(client
+            .list_work_item_type_field_allowed_values(&input.project_id, work_item_type, field)
+            .await?)
     }
 
     pub async fn list_type_states(
@@ -1690,6 +1773,23 @@ fn custom_work_item_fields(work_item: &WorkItem) -> Vec<WorkItemCustomField> {
         .collect::<Vec<_>>();
     fields.sort_by(|left, right| left.reference_name.cmp(&right.reference_name));
     fields
+}
+
+/// Generic field updates are restricted to non-System fields; System.* edits
+/// go through the dedicated state/assignee/reason commands.
+fn validate_editable_field_reference_name(value: &str) -> Result<&str> {
+    let field = value.trim();
+    if !is_valid_field_reference_name(field) {
+        return Err(AppError::InvalidInput(format!(
+            "invalid field reference name: {value}"
+        )));
+    }
+    if field.to_ascii_lowercase().starts_with("system.") {
+        return Err(AppError::InvalidInput(
+            "System fields cannot be edited as custom fields".to_string(),
+        ));
+    }
+    Ok(field)
 }
 
 fn is_valid_field_reference_name(value: &str) -> bool {
@@ -2766,6 +2866,22 @@ mod tests {
             .last_warning
             .as_deref()
             .is_some_and(|warning| warning.contains("more than 200 IDs")));
+    }
+
+    #[test]
+    fn validate_editable_field_reference_name_rules() {
+        assert_eq!(
+            validate_editable_field_reference_name(" Custom.ReleaseTrain ").unwrap(),
+            "Custom.ReleaseTrain"
+        );
+        assert_eq!(
+            validate_editable_field_reference_name("Microsoft.VSTS.Common.Severity").unwrap(),
+            "Microsoft.VSTS.Common.Severity"
+        );
+        assert!(validate_editable_field_reference_name("System.Title").is_err());
+        assert!(validate_editable_field_reference_name("system.state").is_err());
+        assert!(validate_editable_field_reference_name("no-dot").is_err());
+        assert!(validate_editable_field_reference_name("Custom.bad name").is_err());
     }
 
     // ---- push_unique_mention_candidate dedup tests ----

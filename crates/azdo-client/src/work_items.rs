@@ -59,7 +59,7 @@ pub struct WorkItemCommentCreate {
 #[derive(Debug, Serialize)]
 pub struct WorkItemPatchOperation {
     pub op: &'static str,
-    pub path: &'static str,
+    pub path: String,
     pub value: Value,
 }
 
@@ -127,6 +127,13 @@ pub struct WorkItemFieldDefinition {
     pub reference_name: String,
     #[serde(rename = "type")]
     pub field_type: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkItemTypeFieldValues {
+    #[serde(default)]
+    allowed_values: Vec<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -263,7 +270,7 @@ impl AdoClient {
             "application/json-patch+json",
             &[WorkItemPatchOperation {
                 op: "add",
-                path: "/fields/System.AssignedTo",
+                path: "/fields/System.AssignedTo".to_string(),
                 value: json!(assigned_to),
             }],
         )
@@ -283,7 +290,7 @@ impl AdoClient {
             "application/json-patch+json",
             &[WorkItemPatchOperation {
                 op: "add",
-                path: "/fields/System.State",
+                path: "/fields/System.State".to_string(),
                 value: json!(state),
             }],
         )
@@ -303,7 +310,7 @@ impl AdoClient {
             "application/json-patch+json",
             &[WorkItemPatchOperation {
                 op: "add",
-                path: "/fields/System.Reason",
+                path: "/fields/System.Reason".to_string(),
                 value: json!(reason),
             }],
         )
@@ -323,11 +330,61 @@ impl AdoClient {
             "application/json-patch+json",
             &[WorkItemPatchOperation {
                 op: "add",
-                path: "/fields/Microsoft.VSTS.Common.Priority",
+                path: "/fields/Microsoft.VSTS.Common.Priority".to_string(),
                 value: json!(priority),
             }],
         )
         .await
+    }
+
+    pub async fn update_work_item_field(
+        &self,
+        project_id: &str,
+        work_item_id: i64,
+        field_reference_name: &str,
+        value: &str,
+    ) -> Result<WorkItem> {
+        let path = format!("{project_id}/_apis/wit/workItems/{work_item_id}");
+        self.patch_json(
+            &path,
+            &[("api-version", "7.1-preview")],
+            "application/json-patch+json",
+            &[WorkItemPatchOperation {
+                op: "add",
+                path: format!("/fields/{field_reference_name}"),
+                value: json!(value),
+            }],
+        )
+        .await
+    }
+
+    /// Returns the picklist values defined for a field on a work item type;
+    /// empty when the field has no constrained value list.
+    pub async fn list_work_item_type_field_allowed_values(
+        &self,
+        project_id: &str,
+        work_item_type: &str,
+        field_reference_name: &str,
+    ) -> Result<Vec<String>> {
+        let encoded_type = encode_path_segment(work_item_type);
+        let encoded_field = encode_path_segment(field_reference_name);
+        let path =
+            format!("{project_id}/_apis/wit/workitemtypes/{encoded_type}/fields/{encoded_field}");
+        let response: WorkItemTypeFieldValues = self
+            .get_json(
+                &path,
+                &[("api-version", "7.1-preview"), ("$expand", "allowedValues")],
+            )
+            .await?;
+        Ok(response
+            .allowed_values
+            .into_iter()
+            .filter_map(|value| match value {
+                Value::String(value) => Some(value),
+                value if value.is_number() || value.is_boolean() => Some(value.to_string()),
+                _ => None,
+            })
+            .collect())
     }
 
     pub async fn list_work_item_type_states(
@@ -874,5 +931,88 @@ mod tests {
     #[test]
     fn encode_path_segment_handles_special_characters() {
         assert_eq!(encode_path_segment("Bug & Feature"), "Bug%20%26%20Feature");
+    }
+
+    #[tokio::test]
+    async fn update_work_item_field_patches_custom_field() {
+        let server = MockServer::start().await;
+        Mock::given(method("PATCH"))
+            .and(path("/project-1/_apis/wit/workItems/10"))
+            .and(query_param("api-version", "7.1-preview"))
+            .and(body_json(serde_json::json!([
+                {
+                    "op": "add",
+                    "path": "/fields/Custom.ReleaseTrain",
+                    "value": "Wave 2"
+                }
+            ])))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 10,
+                "fields": {
+                    "System.Title": "Fix bug",
+                    "Custom.ReleaseTrain": "Wave 2"
+                }
+            })))
+            .mount(&server)
+            .await;
+
+        let item = test_client(&server)
+            .await
+            .update_work_item_field("project-1", 10, "Custom.ReleaseTrain", "Wave 2")
+            .await
+            .unwrap();
+
+        assert_eq!(item.fields["Custom.ReleaseTrain"].as_str(), Some("Wave 2"));
+    }
+
+    #[tokio::test]
+    async fn list_work_item_type_field_allowed_values_maps_strings_and_numbers() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/project-1/_apis/wit/workitemtypes/User%20Story/fields/Custom.ReleaseTrain",
+            ))
+            .and(query_param("api-version", "7.1-preview"))
+            .and(query_param("$expand", "allowedValues"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "referenceName": "Custom.ReleaseTrain",
+                "allowedValues": ["Wave 1", "Wave 2", 3]
+            })))
+            .mount(&server)
+            .await;
+
+        let values = test_client(&server)
+            .await
+            .list_work_item_type_field_allowed_values(
+                "project-1",
+                "User Story",
+                "Custom.ReleaseTrain",
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(values, vec!["Wave 1", "Wave 2", "3"]);
+    }
+
+    #[tokio::test]
+    async fn list_work_item_type_field_allowed_values_defaults_to_empty() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/project-1/_apis/wit/workitemtypes/Bug/fields/Custom.FreeText",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "referenceName": "Custom.FreeText"
+            })))
+            .mount(&server)
+            .await;
+
+        let values = test_client(&server)
+            .await
+            .list_work_item_type_field_allowed_values("project-1", "Bug", "Custom.FreeText")
+            .await
+            .unwrap();
+
+        assert!(values.is_empty());
     }
 }

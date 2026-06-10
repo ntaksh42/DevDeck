@@ -340,6 +340,21 @@ export type SearchWorkItemAssigneesInput = {
   query: string;
 };
 
+export type SetWorkItemFieldInput = {
+  organizationId?: string;
+  projectId: string;
+  workItemId: number;
+  fieldReferenceName: string;
+  value: string;
+};
+
+export type ListWorkItemFieldAllowedValuesInput = {
+  organizationId?: string;
+  projectId: string;
+  workItemType: string;
+  fieldReferenceName: string;
+};
+
 export type FetchWorkItemImageInput = {
   organizationId?: string;
   url: string;
@@ -625,6 +640,22 @@ export async function setWorkItemPriority(
 ): Promise<WorkItemPreview> {
   const result = await invokeCommand("set_work_item_priority", { input });
   return workItemPreviewSchema.parse(result);
+}
+
+export async function setWorkItemField(
+  input: SetWorkItemFieldInput,
+): Promise<WorkItemPreview> {
+  const result = await invokeCommand("set_work_item_field", { input });
+  return workItemPreviewSchema.parse(result);
+}
+
+export async function listWorkItemFieldAllowedValues(
+  input: ListWorkItemFieldAllowedValuesInput,
+): Promise<string[]> {
+  const result = await invokeCommand("list_work_item_field_allowed_values", {
+    input,
+  });
+  return z.array(z.string()).parse(result);
 }
 
 export async function listWorkItemTypeStates(

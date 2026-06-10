@@ -1,5 +1,6 @@
 import {
   type FormEvent,
+  Fragment,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   useEffect,
@@ -20,6 +21,8 @@ import {
   setWorkItemReason,
   setWorkItemPriority,
   listWorkItemTypeStates,
+  listWorkItemFieldAllowedValues,
+  setWorkItemField,
   searchWorkItemAssignees,
   searchWorkItemMentions,
   recordMentionInteraction,
@@ -147,6 +150,7 @@ export function WorkItemPreviewPanel({
   const [statePickerOpen, setStatePickerOpen] = useState(false);
   const [reasonEditorOpen, setReasonEditorOpen] = useState(false);
   const [priorityPickerOpen, setPriorityPickerOpen] = useState(false);
+  const [customFieldEditor, setCustomFieldEditor] = useState<string | null>(null);
   const handledFocusCommentRequest = useRef(0);
   const handledOpenAssigneeRequest = useRef(0);
   const handledOpenPriorityRequest = useRef(0);
@@ -165,6 +169,23 @@ export function WorkItemPreviewPanel({
         workItemType: preview?.workItemType ?? "",
       }),
     enabled: statePickerOpen && !!preview?.workItemType,
+    staleTime: Infinity,
+  });
+  const customFieldValuesQuery = useQuery({
+    queryKey: workItemQueryKeys.fieldAllowedValues(
+      selectedItem?.organizationId,
+      selectedItem?.projectId,
+      preview?.workItemType,
+      customFieldEditor,
+    ),
+    queryFn: () =>
+      listWorkItemFieldAllowedValues({
+        organizationId: selectedItem?.organizationId,
+        projectId: selectedItem?.projectId ?? "",
+        workItemType: preview?.workItemType ?? "",
+        fieldReferenceName: customFieldEditor ?? "",
+      }),
+    enabled: customFieldEditor !== null && !!selectedItem && !!preview?.workItemType,
     staleTime: Infinity,
   });
   const organizationsQuery = useQuery({
@@ -424,6 +445,25 @@ export function WorkItemPreviewPanel({
     },
   });
 
+  const customFieldMutation = useMutation({
+    mutationFn: setWorkItemField,
+    onSuccess: (updatedPreview) => {
+      onPreviewUpdated?.(updatedPreview);
+      setCustomFieldEditor(null);
+      queryClient.setQueryData(
+        workItemQueryKeys.preview(
+          updatedPreview.organizationId,
+          updatedPreview.projectId,
+          updatedPreview.id,
+        ),
+        updatedPreview,
+      );
+      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
+      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot() });
+      invalidateWorkItemQueryViews(queryClient);
+    },
+  });
+
   const priorityMutation = useMutation({
     mutationFn: setWorkItemPriority,
     onSuccess: (updatedPreview) => {
@@ -449,10 +489,12 @@ export function WorkItemPreviewPanel({
     setStatePickerOpen(false);
     setReasonEditorOpen(false);
     setPriorityPickerOpen(false);
+    setCustomFieldEditor(null);
     stateMutation.reset();
     reasonMutation.reset();
     assignMutation.reset();
     priorityMutation.reset();
+    customFieldMutation.reset();
     setCommentText("");
     setSelectedMentions([]);
     setMentionQuery("");
@@ -565,7 +607,9 @@ export function WorkItemPreviewPanel({
       organizationId: selectedItem.organizationId,
       projectId: selectedItem.projectId,
       workItemId: selectedItem.id,
-      markdown: renderAzureMentionMarkdown(commentText, selectedMentions),
+      markdown: markdownWithHardLineBreaks(
+        renderAzureMentionMarkdown(commentText, selectedMentions),
+      ),
     });
   }
 
@@ -802,6 +846,43 @@ export function WorkItemPreviewPanel({
                     shortcut="P"
                   />
                 }
+                renderCustomFieldControl={(field) => (
+                  <CustomFieldPicker
+                    label={field.label}
+                    current={customPreviewFieldValue(preview, field.referenceName)}
+                    error={
+                      customFieldEditor === field.referenceName &&
+                      customFieldMutation.isError
+                        ? commandErrorMessage(customFieldMutation.error)
+                        : null
+                    }
+                    loading={customFieldValuesQuery.isLoading}
+                    onOpenChange={(open) => {
+                      setCustomFieldEditor(open ? field.referenceName : null);
+                      customFieldMutation.reset();
+                    }}
+                    onSelect={(value) => {
+                      if (!selectedItem || customFieldMutation.isPending) return;
+                      customFieldMutation.mutate({
+                        organizationId: selectedItem.organizationId,
+                        projectId: selectedItem.projectId,
+                        workItemId: selectedItem.id,
+                        fieldReferenceName: field.referenceName,
+                        value,
+                      });
+                    }}
+                    open={customFieldEditor === field.referenceName}
+                    options={
+                      customFieldEditor === field.referenceName
+                        ? (customFieldValuesQuery.data ?? [])
+                        : []
+                    }
+                    pending={
+                      customFieldMutation.isPending &&
+                      customFieldEditor === field.referenceName
+                    }
+                  />
+                )}
                 resolveImageSource={resolvePreviewImage}
                 stateControl={
                   <StatePicker
@@ -1005,6 +1086,7 @@ function WorkItemPreviewDetails({
   onSelectedFieldKeysChange,
   priorityControl,
   reasonControl,
+  renderCustomFieldControl,
   resolveImageSource,
   selectedFieldKeys,
   stateControl,
@@ -1021,6 +1103,7 @@ function WorkItemPreviewDetails({
   onSelectedFieldKeysChange: (keys: PreviewFieldKey[]) => void;
   priorityControl: ReactNode;
   reasonControl: ReactNode;
+  renderCustomFieldControl: (field: CustomPreviewField) => ReactNode;
   resolveImageSource: (url: string) => Promise<string | null>;
   selectedFieldKeys: PreviewFieldKey[];
   stateControl: ReactNode;
@@ -1305,12 +1388,9 @@ function WorkItemPreviewDetails({
             ),
           )}
           {customPreviewFields.map((field) => (
-            <PreviewField
-              key={field.referenceName}
-              label={field.label}
-              value={customPreviewFieldValue(preview, field.referenceName) ?? "—"}
-              wide
-            />
+            <Fragment key={field.referenceName}>
+              {renderCustomFieldControl(field)}
+            </Fragment>
           ))}
         </div>
       </div>
@@ -1779,6 +1859,7 @@ function buildRichHtmlDocument(
     li { margin: 3px 0; }
     a { color: #2563eb; text-decoration: none; }
     a:hover { text-decoration: underline; }
+    .azdo-mention { color: #2563eb; font-weight: 500; }
     img, video { max-width: 100%; height: auto; border: 1px solid #dbe3ef; border-radius: 4px; }
     img { cursor: zoom-in; }
     .azdo-image-error {
@@ -1830,20 +1911,14 @@ function commentRichHtml(
   plainText: string | null | undefined,
   mentionDisplayNames: ReadonlyMap<string, string>,
 ): string {
-  const rendered = replaceAzureMentionDisplayNamesInHtml(
-    renderedText,
-    mentionDisplayNames,
-  );
-  const plain = replaceAzureMentionDisplayNamesInText(
-    plainText,
-    mentionDisplayNames,
-  );
-  return (
-    normalizeRichHtml(rendered) ??
-    normalizeRichHtml(plain) ??
-    markdownishTextToHtml(plain) ??
-    "No text"
-  );
+  // Substitute mention tokens on the final HTML so both the rendered-HTML
+  // path and the escaped plain-text path produce the same styled mention.
+  const html =
+    normalizeRichHtml(renderedText) ??
+    normalizeRichHtml(plainText) ??
+    markdownishTextToHtml(plainText) ??
+    "No text";
+  return replaceAzureMentionDisplayNamesInHtml(html, mentionDisplayNames) ?? html;
 }
 
 function markdownishTextToHtml(value: string | null | undefined): string | null {
@@ -1966,20 +2041,13 @@ function replaceAzureMentionDisplayNamesInHtml(
         mentionDisplayNames,
         encodedId,
       );
-      return displayName ? `@${escapeHtml(displayName) ?? displayName}` : token;
+      // Mention-styled span so client-side substitutions look the same as
+      // mentions resolved by Azure DevOps itself.
+      return displayName
+        ? `<span class="azdo-mention">@${escapeHtml(displayName) ?? displayName}</span>`
+        : token;
     },
   );
-}
-
-function replaceAzureMentionDisplayNamesInText(
-  value: string | null | undefined,
-  mentionDisplayNames: ReadonlyMap<string, string>,
-): string | null | undefined {
-  if (!value || mentionDisplayNames.size === 0) return value;
-  return value.replace(/@<([^>]+)>/g, (token, id: string) => {
-    const displayName = mentionDisplayNameForId(mentionDisplayNames, id);
-    return displayName ? `@${displayName}` : token;
-  });
 }
 
 function mentionDisplayNameForId(
@@ -2124,6 +2192,138 @@ function ReasonEditor({
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function CustomFieldPicker({
+  current,
+  error,
+  label,
+  loading,
+  onOpenChange,
+  onSelect,
+  open,
+  options,
+  pending,
+}: {
+  current: string | null;
+  error?: string | null;
+  label: string;
+  loading: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSelect: (value: string) => void;
+  open: boolean;
+  options: string[];
+  pending: boolean;
+}) {
+  const pickerRef = useCloseOnOutsidePointer<HTMLDivElement>(open, () =>
+    onOpenChange(false),
+  );
+  const listRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const wasOpenRef = useRef(false);
+  const [customValue, setCustomValue] = useState("");
+  useEffect(() => {
+    if (wasOpenRef.current && !open) triggerRef.current?.focus();
+    if (!open) setCustomValue("");
+    wasOpenRef.current = open;
+  }, [open]);
+
+  return (
+    <div className="flex min-w-0 items-baseline gap-1.5 sm:col-span-2 2xl:col-span-3">
+      <dt className="shrink-0 text-[10px] leading-4 text-muted-foreground">{label}</dt>
+      <dd ref={pickerRef} className="relative min-w-0 flex-1">
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-label={`Change ${label}`}
+          disabled={pending}
+          onClick={() => onOpenChange(!open)}
+          className="max-w-full truncate rounded px-1 text-left text-[12px] font-semibold leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+          title={current ?? "—"}
+        >
+          {pending ? "Updating..." : (current ?? "—")}
+        </button>
+        {error && <p className="mt-0.5 text-[10px] text-destructive">{error}</p>}
+        {open ? (
+          <div
+            ref={listRef}
+            className="absolute left-0 top-full z-30 mt-1 max-h-56 min-w-[160px] overflow-auto rounded-md border border-border bg-white py-1 shadow-lg"
+          >
+            {loading ? (
+              <div className="flex items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                Loading…
+              </div>
+            ) : (
+              <>
+                {options.length === 0 ? (
+                  <div className="px-3 py-1.5 text-xs text-muted-foreground">
+                    No defined values
+                  </div>
+                ) : (
+                  options.map((value, index) => (
+                    <button
+                      key={value}
+                      type="button"
+                      autoFocus={index === 0}
+                      onClick={() => onSelect(value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") { e.preventDefault(); onOpenChange(false); }
+                        else if (e.key === "Enter") { e.stopPropagation(); }
+                        else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                          e.preventDefault();
+                          const buttons = Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? []);
+                          const i = buttons.indexOf(e.currentTarget);
+                          if (e.key === "ArrowDown") buttons[i + 1]?.focus();
+                          else if (i > 0) buttons[i - 1].focus();
+                        }
+                      }}
+                      className={`flex w-full items-center gap-1.5 px-3 py-1 text-left text-xs ${
+                        value === current
+                          ? "font-semibold text-foreground"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      }`}
+                    >
+                      <span
+                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${value === current ? "bg-primary" : "bg-transparent"}`}
+                      />
+                      <span className="truncate">{value}</span>
+                    </button>
+                  ))
+                )}
+                <form
+                  className="flex items-center gap-1 border-t border-border px-2 py-1.5"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const value = customValue.trim();
+                    if (value) onSelect(value);
+                  }}
+                >
+                  <input
+                    value={customValue}
+                    onChange={(event) => setCustomValue(event.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") { e.preventDefault(); onOpenChange(false); }
+                    }}
+                    placeholder="Custom value"
+                    aria-label={`Custom value for ${label}`}
+                    className="h-6 min-w-0 flex-1 rounded border border-input bg-white px-1.5 text-xs outline-none focus:border-primary"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!customValue.trim()}
+                    className="h-6 rounded border border-border bg-white px-2 text-xs hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Set
+                  </button>
+                </form>
+              </>
+            )}
+          </div>
+        ) : null}
+      </dd>
     </div>
   );
 }
@@ -2753,6 +2953,28 @@ const MENTION_RESOLVABLE_ID_PATTERN =
 
 export function isMentionResolvableId(id: string): boolean {
   return MENTION_RESOLVABLE_ID_PATTERN.test(id);
+}
+
+// Markdown collapses single newlines into spaces (soft breaks). The comment
+// box behaves like the Azure DevOps web UI, where Enter is a visible line
+// break, so add hard-break markers outside fenced code blocks.
+export function markdownWithHardLineBreaks(text: string): string {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  let inCode = false;
+  return lines
+    .map((line, index) => {
+      if (/^\s*```/.test(line)) {
+        inCode = !inCode;
+        return line;
+      }
+      if (inCode || index === lines.length - 1) return line;
+      const next = lines[index + 1];
+      // Blank lines already separate paragraphs; only single newlines
+      // between two text lines need a hard break.
+      if (line.trim() === "" || next.trim() === "") return line;
+      return `${line}  `;
+    })
+    .join("\n");
 }
 
 export function renderAzureMentionMarkdown(

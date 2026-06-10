@@ -24,6 +24,8 @@ import type {
   SearchPullRequestsInput,
   SearchWorkItemMentionsInput,
   SearchWorkItemsInput,
+  SetWorkItemFieldInput,
+  ListWorkItemFieldAllowedValuesInput,
   SetWorkItemReasonInput,
   SetWorkItemPriorityInput,
   SetWorkItemsPriorityInput,
@@ -99,6 +101,7 @@ const writeCommands = new Set([
   "set_work_item_state",
   "set_work_item_reason",
   "set_work_item_priority",
+  "set_work_item_field",
   "set_work_items_state",
   "assign_work_items",
   "set_work_items_priority",
@@ -259,6 +262,16 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       const input = (args as { input?: SetWorkItemPriorityInput } | undefined)
         ?.input;
       return demoSetWorkItemPriority(input);
+    }
+    case "set_work_item_field": {
+      const input = (args as { input?: SetWorkItemFieldInput } | undefined)?.input;
+      return demoSetWorkItemField(input);
+    }
+    case "list_work_item_field_allowed_values": {
+      const input = (
+        args as { input?: ListWorkItemFieldAllowedValuesInput } | undefined
+      )?.input;
+      return demoListWorkItemFieldAllowedValues(input);
     }
     case "list_work_item_type_states": {
       const input = (args as { input?: ListWorkItemTypeStatesInput } | undefined)
@@ -813,6 +826,42 @@ function demoSetWorkItemReason(input?: SetWorkItemReasonInput): WorkItemPreview 
   );
   if (!input?.reason?.trim()) return preview;
   return { ...preview, reason: input.reason.trim(), changedDate: new Date().toISOString() };
+}
+
+function demoSetWorkItemField(input?: SetWorkItemFieldInput): WorkItemPreview {
+  const preview = demoWorkItemPreview(
+    input
+      ? {
+          organizationId: input.organizationId,
+          projectId: input.projectId,
+          workItemId: input.workItemId,
+          customFields: [input.fieldReferenceName],
+        }
+      : undefined,
+  );
+  const referenceName = input?.fieldReferenceName?.trim();
+  const value = input?.value?.trim();
+  if (!referenceName || !value) return preview;
+  const others = preview.customFields.filter(
+    (field) => field.referenceName.toLowerCase() !== referenceName.toLowerCase(),
+  );
+  return {
+    ...preview,
+    changedDate: new Date().toISOString(),
+    customFields: [...others, { referenceName, value }],
+  };
+}
+
+function demoListWorkItemFieldAllowedValues(
+  input?: ListWorkItemFieldAllowedValuesInput,
+): string[] {
+  if (input?.fieldReferenceName === "Custom.CustomerImpact") {
+    return ["Low", "Medium", "High"];
+  }
+  if (input?.fieldReferenceName === "Custom.ReleaseTrain") {
+    return ["Tokyo", "Osaka", "Nagoya"];
+  }
+  return [];
 }
 
 function demoSetWorkItemPriority(input?: SetWorkItemPriorityInput): WorkItemPreview {

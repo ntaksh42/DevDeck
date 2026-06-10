@@ -947,7 +947,11 @@ describe("App", () => {
       false,
     );
     expect(
-      commentSrcDocs.some((srcDoc) => srcDoc.includes("@Creator Earlier context")),
+      commentSrcDocs.some((srcDoc) =>
+        srcDoc.includes(
+          '<span class="azdo-mention">@Creator</span> Earlier context',
+        ),
+      ),
     ).toBe(true);
     expect(
       commentSrcDocs.some((srcDoc) => srcDoc.includes("@&lt;9ce68702-0694-6ef4-b9fa-0f3143502233&gt;")),
