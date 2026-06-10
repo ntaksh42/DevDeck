@@ -78,7 +78,7 @@ Expected scope:
 
 ### M6 - Auth And Reliability Hardening
 
-Status: In progress.
+Status: Done. See [M6 Retry](M6_retry-handoff.md), [M6 Azure CLI Auth](M6_azure-cli-auth-handoff.md), and [M6 Tracing](M6_tracing-handoff.md).
 
 Add Azure CLI authentication provider, retry/backoff, throttling behavior, logging, and better diagnostics.
 
@@ -91,7 +91,7 @@ Expected scope:
 
 ### M7 - Background Sync
 
-Status: Planned.
+Status: Done. Implemented in `src-tauri/src/sync.rs` (scheduled refresh on a 5-minute interval, per-scope sync state, sync events to the frontend).
 
 Add scheduled refresh, cache freshness indicators, and cancellation.
 

@@ -15,8 +15,10 @@ This folder is the working handoff area for future Codex sessions.
   - [M4](M4_codex-handoff.md): work item search with WIQL and batch field loading.
   - [M5](M5_codex-handoff.md): commit search across projects and repositories.
   - [M5 Result Actions](M5_result-actions_codex-handoff.md): open Azure DevOps web URLs from result rows.
+  - M6: auth and reliability hardening. Retry/backoff in [M6 Retry](M6_retry-handoff.md), Azure CLI auth in [M6 Azure CLI Auth](M6_azure-cli-auth-handoff.md), and backend tracing in [M6 Tracing](M6_tracing-handoff.md).
+  - M7: background sync (`src-tauri/src/sync.rs`), scheduled refresh with per-scope sync state and frontend sync events.
 - Next milestone:
-  - M6: auth and reliability hardening. Retry/backoff is implemented in [M6 Retry](M6_retry-handoff.md), Azure CLI auth is implemented in [M6 Azure CLI Auth](M6_azure-cli-auth-handoff.md), and backend tracing is implemented in [M6 Tracing](M6_tracing-handoff.md). Traversal scaling remains next.
+  - M8: OSS readiness. See [ROADMAP.md](ROADMAP.md).
 
 ## How To Resume
 

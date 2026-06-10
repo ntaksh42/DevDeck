@@ -1,8 +1,8 @@
 import { clamp, type SortDirection } from "@/lib/utils";
 import { isValidFieldReferenceName } from "./previewFieldsStorage";
 
-export const WI_QUERY_VIEWS_STORAGE_KEY = "azdodeck:workItemQueryViews";
-export const WI_QUERY_VIEWS_EXPORT_SCHEMA = "azdodeck.workItemViews";
+const WI_QUERY_VIEWS_STORAGE_KEY = "azdodeck:workItemQueryViews";
+const WI_QUERY_VIEWS_EXPORT_SCHEMA = "azdodeck.workItemViews";
 export const WI_VIEW_COUNT_BASELINES_STORAGE_KEY = "azdodeck:workItems:viewCountBaselines";
 
 export const MIN_VIEW_REFRESH_INTERVAL_SEC = 15;
@@ -23,7 +23,7 @@ export type WorkItemQueryView = {
   extraColumns?: string[];
 };
 
-export const MAX_VIEW_EXTRA_COLUMNS = 20;
+const MAX_VIEW_EXTRA_COLUMNS = 20;
 
 export function normalizeViewExtraColumns(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -46,7 +46,7 @@ export type WorkItemQueryViewsExport = {
   views: WorkItemQueryView[];
 };
 
-export function isWorkItemSortKey(value: unknown): value is NonNullable<WorkItemQueryView["sortKey"]> {
+function isWorkItemSortKey(value: unknown): value is NonNullable<WorkItemQueryView["sortKey"]> {
   return (
     value === "id" ||
     value === "workItemType" ||

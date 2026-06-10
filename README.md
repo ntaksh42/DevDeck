@@ -2,7 +2,7 @@
 
 A Windows desktop dashboard for Azure DevOps. Search pull requests, work items, and commits across every project in your organization from a single window — and jump straight to the browser for anything that needs action.
 
-> **Status**: Pre-release (v0.x). Core search features work; background caching and auto-updates are on the roadmap.
+> **Status**: Pre-release (v0.x). Core search features and background sync work; auto-updates are on the roadmap.
 
 ---
 
@@ -147,20 +147,16 @@ Produces an MSI and NSIS installer in `target/release/bundle/`.
 
 ### Publishing Windows installers
 
-Release installers are built by GitHub Actions when a version tag is pushed. Use
-the release helper to update version files, run checks, commit, tag, push,
-create the GitHub Release, and wait for the installer workflow:
+Release installers are built and published by the GitHub Actions release
+workflow (`.github/workflows/release.yml`). It runs:
 
-```powershell
-pnpm release -- 0.1.8
-```
-
-By default the helper stops if the working tree already has changes. To include
-current uncommitted work in the release commit:
-
-```powershell
-pnpm release -- 0.1.8 -IncludeDirty
-```
+- **Nightly (08:00 JST)** — if `master` has new commits since the latest `v*`
+  tag, the workflow bumps the patch version, updates `package.json`,
+  `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`, commits, tags, and
+  publishes a GitHub Release automatically.
+- **On pushing a `vX.Y.Z` tag** — builds and publishes that exact version.
+- **Manually via `workflow_dispatch`** — with an optional `force_release` input
+  to release even when `master` has no new commits.
 
 The release workflow builds Windows x64 only and publishes both installer
 formats to the GitHub Release:
@@ -202,7 +198,7 @@ Pull requests are welcome. Please open an issue first for significant changes.
 
 - Rust code: `cargo fmt` + `cargo clippy -D warnings` must pass.
 - TypeScript: `pnpm tsc --noEmit` must pass.
-- All new Tauri commands must be added in all four places: `lib.rs`, domain service, `azdoCommands.ts`, and `App.tsx` (see `CLAUDE.md` for details).
+- All new Tauri commands must be added in all four places: `lib.rs`, domain service, `azdoCommands.ts`, and the relevant React feature/component (see `AGENTS.md` for details).
 
 ---
 

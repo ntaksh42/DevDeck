@@ -21,5 +21,5 @@ Make search results directly usable by opening Azure DevOps web URLs from pull r
 
 ## Deferred
 
-- Copy-to-clipboard actions remain unimplemented.
+- Copy-to-clipboard actions remain unimplemented. (Since shipped: `C` copies the row URL in the PR, work item, and commit grids.)
 - Real Azure DevOps link opening was not manually verified because it requires an interactive desktop session.
