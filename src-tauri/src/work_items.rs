@@ -549,11 +549,11 @@ impl WorkItemService {
 
         match self.db.list_mention_history(&organization.id, 20) {
             Ok(entries) => {
-                for entry in entries {
-                    push_unique_mention_candidate(
-                        &mut candidates,
-                        mention_candidate_from_history(entry),
-                    );
+                for candidate in entries
+                    .into_iter()
+                    .filter_map(mention_candidate_from_history)
+                {
+                    push_unique_mention_candidate(&mut candidates, candidate);
                 }
             }
             Err(error) => {
@@ -1161,11 +1161,14 @@ fn mention_candidate_from_identity_picker(
     if is_azure_devops_service_identity_name(&display_name, unique_name.as_deref()) {
         return None;
     }
+    // Markdown mentions are only resolved by Azure DevOps when the token is
+    // the identity's storage-key GUID (localId); descriptors like "aad.xxx"
+    // are silently dropped from the posted comment. Prefer GUID-shaped ids.
     let id = identity
-        .subject_descriptor
+        .local_id
         .or(identity.entity_id)
         .or(identity.origin_id)
-        .or(identity.local_id)
+        .or(identity.subject_descriptor)
         .or_else(|| unique_name.clone())
         .unwrap_or_else(|| display_name.clone());
     Some(MentionCandidate {
@@ -1301,12 +1304,27 @@ fn mention_candidate_from_assignee(candidate: WorkItemAssigneeCandidate) -> Ment
     }
 }
 
-fn mention_candidate_from_history(entry: crate::db::MentionHistoryEntry) -> MentionCandidate {
-    MentionCandidate {
-        id: entry.user_id.unwrap_or_else(|| entry.unique_name.clone()),
+fn mention_candidate_from_history(
+    entry: crate::db::MentionHistoryEntry,
+) -> Option<MentionCandidate> {
+    // Only entries with a storage-key GUID produce working @<id> mentions;
+    // legacy rows recorded with descriptors or e-mails must not shadow
+    // identity-picker results that carry a usable id.
+    let id = entry.user_id.filter(|id| is_mention_resolvable_id(id))?;
+    Some(MentionCandidate {
+        id,
         display_name: entry.display_name,
         unique_name: Some(entry.unique_name),
-    }
+    })
+}
+
+/// Azure DevOps resolves markdown mentions only for storage-key GUIDs.
+fn is_mention_resolvable_id(id: &str) -> bool {
+    id.len() == 36
+        && id.char_indices().all(|(index, c)| match index {
+            8 | 13 | 18 | 23 => c == '-',
+            _ => c.is_ascii_hexdigit(),
+        })
 }
 
 fn is_authenticated_user(
@@ -2273,11 +2291,11 @@ mod tests {
     }
 
     #[test]
-    fn mention_candidate_from_identity_picker_uses_display_name_and_descriptor() {
+    fn mention_candidate_from_identity_picker_prefers_local_id_guid() {
         let candidate = mention_candidate_from_identity_picker(IdentityPickerIdentity {
             entity_id: Some("entity-1".to_string()),
             origin_id: Some("origin-1".to_string()),
-            local_id: Some("local-1".to_string()),
+            local_id: Some("d6245f20-2af8-44f4-9451-8107cb2767db".to_string()),
             subject_descriptor: Some("aad.subject-1".to_string()),
             display_name: Some("naoto akashi".to_string()),
             mail_address: Some("aksh0402@outlook.jp".to_string()),
@@ -2287,12 +2305,60 @@ mod tests {
         })
         .unwrap();
 
-        assert_eq!(candidate.id, "aad.subject-1");
+        // The id is embedded into @<id> markdown mentions; only the
+        // storage-key GUID (localId) is resolved by Azure DevOps.
+        assert_eq!(candidate.id, "d6245f20-2af8-44f4-9451-8107cb2767db");
         assert_eq!(candidate.display_name, "naoto akashi");
         assert_eq!(
             candidate.unique_name.as_deref(),
             Some("aksh0402@outlook.jp")
         );
+    }
+
+    #[test]
+    fn mention_candidate_from_identity_picker_falls_back_to_descriptor() {
+        let candidate = mention_candidate_from_identity_picker(IdentityPickerIdentity {
+            entity_id: None,
+            origin_id: None,
+            local_id: None,
+            subject_descriptor: Some("aad.subject-1".to_string()),
+            display_name: Some("naoto akashi".to_string()),
+            mail_address: None,
+            sign_in_address: None,
+            entity_type: Some("User".to_string()),
+            active: Some(true),
+        })
+        .unwrap();
+
+        assert_eq!(candidate.id, "aad.subject-1");
+    }
+
+    #[test]
+    fn mention_candidate_from_history_requires_guid_user_id() {
+        let guid_entry = crate::db::MentionHistoryEntry {
+            unique_name: "alice@corp.com".to_string(),
+            display_name: "Alice".to_string(),
+            user_id: Some("d6245f20-2af8-44f4-9451-8107cb2767db".to_string()),
+        };
+        let candidate = mention_candidate_from_history(guid_entry).unwrap();
+        assert_eq!(candidate.id, "d6245f20-2af8-44f4-9451-8107cb2767db");
+        assert_eq!(candidate.unique_name.as_deref(), Some("alice@corp.com"));
+
+        // Descriptor or missing ids would post @<id> tokens that Azure DevOps
+        // silently drops; such history rows must be skipped.
+        let descriptor_entry = crate::db::MentionHistoryEntry {
+            unique_name: "bob@corp.com".to_string(),
+            display_name: "Bob".to_string(),
+            user_id: Some("aad.subject-2".to_string()),
+        };
+        assert!(mention_candidate_from_history(descriptor_entry).is_none());
+
+        let missing_entry = crate::db::MentionHistoryEntry {
+            unique_name: "carol@corp.com".to_string(),
+            display_name: "Carol".to_string(),
+            user_id: None,
+        };
+        assert!(mention_candidate_from_history(missing_entry).is_none());
     }
 
     #[test]

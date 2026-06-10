@@ -180,44 +180,61 @@ describe("activeMentionAt", () => {
   });
 });
 
+const TOM_ID = "11111111-1111-4111-8111-111111111111";
+const TOM_SMITH_ID = "22222222-2222-4222-8222-222222222222";
+const ALICE_ID = "33333333-3333-4333-8333-333333333333";
+const TANAKA_ID = "44444444-4444-4444-8444-444444444444";
+
 describe("renderAzureMentionMarkdown", () => {
   it("processes longer display names first to avoid prefix corruption", () => {
     const mentions = [
-      { id: "tom-id", displayName: "Tom", uniqueName: "tom@corp.com" },
+      { id: TOM_ID, displayName: "Tom", uniqueName: "tom@corp.com" },
       {
-        id: "tom-smith-id",
+        id: TOM_SMITH_ID,
         displayName: "Tom Smith",
         uniqueName: "tom.smith@corp.com",
       },
     ];
     const result = renderAzureMentionMarkdown("@Tom Smith and @Tom", mentions);
-    expect(result).toBe("@<tom-smith-id> and @<tom-id>");
+    expect(result).toBe(`@<${TOM_SMITH_ID}> and @<${TOM_ID}>`);
   });
 
   it("converts mentions followed by punctuation", () => {
     const mentions = [
-      { id: "alice-id", displayName: "Alice", uniqueName: "alice@corp.com" },
+      { id: ALICE_ID, displayName: "Alice", uniqueName: "alice@corp.com" },
     ];
     expect(renderAzureMentionMarkdown("@Alice, please review", mentions)).toBe(
-      "@<alice-id>, please review",
+      `@<${ALICE_ID}>, please review`,
     );
   });
 
   it("converts mentions followed by CJK text", () => {
     const mentions = [
-      { id: "tanaka-id", displayName: "田中", uniqueName: "tanaka@corp.com" },
+      { id: TANAKA_ID, displayName: "田中", uniqueName: "tanaka@corp.com" },
     ];
     expect(renderAzureMentionMarkdown("@田中さん確認お願いします", mentions)).toBe(
-      "@<tanaka-id>さん確認お願いします",
+      `@<${TANAKA_ID}>さん確認お願いします`,
     );
   });
 
   it("does not convert inside longer Latin words", () => {
     const mentions = [
-      { id: "tom-id", displayName: "Tom", uniqueName: "tom@corp.com" },
+      { id: TOM_ID, displayName: "Tom", uniqueName: "tom@corp.com" },
     ];
     expect(renderAzureMentionMarkdown("@Tomato is not Tom", mentions)).toBe(
       "@Tomato is not Tom",
+    );
+  });
+
+  it("keeps the plain text when the id is not a resolvable GUID", () => {
+    // Azure DevOps silently deletes @<id> tokens it cannot resolve
+    // (descriptors, e-mails); the visible name must survive instead.
+    const mentions = [
+      { id: "aad.subject-1", displayName: "Alice", uniqueName: "alice@corp.com" },
+      { id: "bob@corp.com", displayName: "Bob", uniqueName: "bob@corp.com" },
+    ];
+    expect(renderAzureMentionMarkdown("@Alice and @Bob hi", mentions)).toBe(
+      "@Alice and @Bob hi",
     );
   });
 });

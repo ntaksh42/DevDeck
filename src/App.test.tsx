@@ -768,20 +768,20 @@ describe("App", () => {
           comments: [
             {
               id: 8,
-              text: '<div><a href="#" data-vss-mention="version:2.0,user-creator">@Creator</a>&nbsp;Posted from Azure</div>',
+              text: '<div><a href="#" data-vss-mention="version:2.0,9ce68702-0694-6ef4-b9fa-0f3143502233">@Creator</a>&nbsp;Posted from Azure</div>',
               renderedText:
-                '&lt;div&gt;&lt;a href=&quot;#&quot; data-vss-mention=&quot;version:2.0,user-creator&quot;&gt;@Creator&lt;/a&gt;&amp;nbsp;Posted from Azure&lt;/div&gt;',
+                '&lt;div&gt;&lt;a href=&quot;#&quot; data-vss-mention=&quot;version:2.0,9ce68702-0694-6ef4-b9fa-0f3143502233&quot;&gt;@Creator&lt;/a&gt;&amp;nbsp;Posted from Azure&lt;/div&gt;',
               createdBy: "Creator",
-              createdById: "user-creator",
+              createdById: "9ce68702-0694-6ef4-b9fa-0f3143502233",
               createdByUniqueName: "creator@example.com",
               createdDate: "2026-05-23T13:00:00Z",
             },
             {
               id: 7,
-              text: "@<user-creator> Earlier context",
-              renderedText: "<p>@&lt;user-creator&gt; Earlier context</p>",
+              text: "@<9ce68702-0694-6ef4-b9fa-0f3143502233> Earlier context",
+              renderedText: "<p>@&lt;9ce68702-0694-6ef4-b9fa-0f3143502233&gt; Earlier context</p>",
               createdBy: "Creator",
-              createdById: "user-creator",
+              createdById: "9ce68702-0694-6ef4-b9fa-0f3143502233",
               createdByUniqueName: "creator@example.com",
               createdDate: "2026-05-23T12:00:00Z",
             },
@@ -809,7 +809,7 @@ describe("App", () => {
       if (command === "search_work_item_mentions") {
         return Promise.resolve([
           {
-            id: "user-creator",
+            id: "9ce68702-0694-6ef4-b9fa-0f3143502233",
             displayName: "Creator",
             uniqueName: "creator@example.com",
           },
@@ -818,7 +818,7 @@ describe("App", () => {
       if (command === "search_work_item_assignees") {
         return Promise.resolve([
           {
-            id: "user-creator",
+            id: "9ce68702-0694-6ef4-b9fa-0f3143502233",
             displayName: "Creator",
             uniqueName: "creator@example.com",
             assignValue: "Creator <creator@example.com>",
@@ -856,7 +856,7 @@ describe("App", () => {
               text: "Earlier context",
               renderedText: "<p>Earlier context</p>",
               createdBy: "Creator",
-              createdById: "user-creator",
+              createdById: "9ce68702-0694-6ef4-b9fa-0f3143502233",
               createdByUniqueName: "creator@example.com",
               createdDate: "2026-05-23T12:00:00Z",
             },
@@ -866,7 +866,7 @@ describe("App", () => {
       if (command === "add_work_item_comment") {
         return Promise.resolve({
           id: 1,
-          text: "@<user-creator> please check",
+          text: "@<9ce68702-0694-6ef4-b9fa-0f3143502233> please check",
           renderedText: "<p>@Creator please check</p>",
           createdBy: "Test User",
           createdDate: "2026-05-24T00:00:00Z",
@@ -939,7 +939,7 @@ describe("App", () => {
     expect(
       commentSrcDocs.some(
         (srcDoc) =>
-          srcDoc.includes('data-vss-mention="version:2.0,user-creator"') &&
+          srcDoc.includes('data-vss-mention="version:2.0,9ce68702-0694-6ef4-b9fa-0f3143502233"') &&
           srcDoc.includes("@Creator</a>&nbsp;Posted from Azure"),
       ),
     ).toBe(true);
@@ -950,7 +950,7 @@ describe("App", () => {
       commentSrcDocs.some((srcDoc) => srcDoc.includes("@Creator Earlier context")),
     ).toBe(true);
     expect(
-      commentSrcDocs.some((srcDoc) => srcDoc.includes("@&lt;user-creator&gt;")),
+      commentSrcDocs.some((srcDoc) => srcDoc.includes("@&lt;9ce68702-0694-6ef4-b9fa-0f3143502233&gt;")),
     ).toBe(false);
     expect(
       [
@@ -1025,7 +1025,7 @@ describe("App", () => {
           organizationId: "contoso",
           projectId: "project-1",
           workItemId: 123,
-          markdown: "@<user-creator> please check",
+          markdown: "@<9ce68702-0694-6ef4-b9fa-0f3143502233> please check",
         },
       });
     });

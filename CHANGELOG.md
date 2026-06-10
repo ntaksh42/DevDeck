@@ -4,6 +4,14 @@ All notable changes to AzDoDeck are documented here.
 
 ## [Unreleased]
 
+## [0.1.12] — 2026-06-10
+
+### Fixed
+- **Mentions are no longer deleted from posted comments.** Azure DevOps only resolves `@<id>` markdown mentions when the id is the identity's storage-key GUID; identity-picker candidates previously carried `aad.…` subject descriptors, so the whole mention was silently dropped from the comment. Candidates now prefer the GUID (`localId`), mention-history entries without a usable GUID are skipped, and as a last resort the comment keeps the plain `@Name` text instead of losing it.
+- PR sync now isolates per-project/per-repository errors: one inaccessible project or repository no longer stops the whole organization's PR and review sync, and cached rows of failing repositories are preserved. Skipped items are surfaced as a sync warning.
+- Commit links no longer fall back to the REST API endpoint URL when `remoteUrl` is missing; a proper `_git/...` browser URL is constructed instead.
+- PR web links now percent-encode project and repository names (spaces, Japanese characters).
+
 ## [0.1.11] — 2026-06-10
 
 ### Fixed

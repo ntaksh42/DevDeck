@@ -274,7 +274,9 @@ fn commit_to_cached(
         .as_ref()
         .and_then(|a| a.date.map(|d| d.to_rfc3339()));
     let commit_id = commit.commit_id;
-    let web_url = commit.remote_url.or(commit.url).or_else(|| {
+    // commit.url is a REST endpoint, never a browser URL; only remoteUrl or a
+    // constructed _git link may be shown to the user.
+    let web_url = commit.remote_url.or_else(|| {
         Some(commit_web_url(
             org,
             project_name,

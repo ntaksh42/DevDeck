@@ -542,7 +542,10 @@ export function WorkItemPreviewPanel({
     if (!selectedItem || !commentText.trim() || commentMutation.isPending) return;
     mentionsToRecordRef.current = selectedMentions
       .filter(
-        (m) => m.uniqueName && mentionTokenPattern(m.displayName).test(commentText),
+        (m) =>
+          m.uniqueName &&
+          isMentionResolvableId(m.id) &&
+          mentionTokenPattern(m.displayName).test(commentText),
       )
       .map((m) => ({
         id: m.id,
@@ -2713,6 +2716,16 @@ function addSelectedMention(
   ];
 }
 
+// Azure DevOps only resolves @<id> markdown mentions for storage-key GUIDs;
+// any other token is silently dropped from the posted comment. Keeping the
+// plain "@Name" text is strictly better than losing it.
+const MENTION_RESOLVABLE_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isMentionResolvableId(id: string): boolean {
+  return MENTION_RESOLVABLE_ID_PATTERN.test(id);
+}
+
 export function renderAzureMentionMarkdown(
   text: string,
   mentions: SelectedMention[],
@@ -2722,6 +2735,7 @@ export function renderAzureMentionMarkdown(
     (a, b) => b.displayName.length - a.displayName.length,
   );
   for (const mention of sorted) {
+    if (!isMentionResolvableId(mention.id)) continue;
     markdown = markdown.replace(
       mentionTokenPattern(mention.displayName),
       `@<${mention.id}>`,

@@ -238,10 +238,22 @@ impl AppDatabase {
         search_pull_requests(&conn, org_id, project_id, repository_id, status)
     }
 
-    pub fn replace_pull_requests(&self, org_id: &str, prs: &[CachedPr]) -> Result<()> {
+    /// Replaces cached pull requests for the repositories that synced
+    /// successfully; rows of other repositories are preserved.
+    pub fn replace_pull_requests(
+        &self,
+        org_id: &str,
+        synced_repository_ids: &[&str],
+        prs: &[CachedPr],
+    ) -> Result<()> {
         let conn = self.open()?;
         let tx = conn.unchecked_transaction()?;
-        tx.execute("DELETE FROM pull_requests WHERE org_id = ?1", [org_id])?;
+        for &repository_id in synced_repository_ids {
+            tx.execute(
+                "DELETE FROM pull_requests WHERE org_id = ?1 AND repository_id = ?2",
+                rusqlite::params![org_id, repository_id],
+            )?;
+        }
         upsert_pull_requests(&tx, prs)?;
         tx.commit()?;
         Ok(())
@@ -1923,7 +1935,7 @@ mod tests {
             target_ref_name: "refs/heads/main".to_string(),
             web_url: None,
         };
-        db.replace_pull_requests("org1", &[pr]).unwrap();
+        db.replace_pull_requests("org1", &["repo1"], &[pr]).unwrap();
 
         let results = db
             .search_pull_requests("org1", None, None, Some("active"))
