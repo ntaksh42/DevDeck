@@ -84,6 +84,11 @@ const reviewPullRequestSummariesSchema = z.array(reviewPullRequestSummarySchema)
 
 export type ReviewPullRequestSummary = z.infer<typeof reviewPullRequestSummarySchema>;
 
+const workItemSummaryExtraFieldSchema = z.object({
+  referenceName: z.string(),
+  value: z.string().nullable(),
+});
+
 const workItemSummarySchema = z.object({
   organizationId: z.string(),
   projectId: z.string(),
@@ -95,6 +100,8 @@ const workItemSummarySchema = z.object({
   assignedTo: z.string().nullable(),
   changedDate: z.string().nullable(),
   webUrl: z.string().nullable(),
+  extraFields: z.array(workItemSummaryExtraFieldSchema).default([]),
+  depth: z.number().nullable().default(null),
 });
 
 const workItemSummariesSchema = z.array(workItemSummarySchema);
@@ -138,6 +145,17 @@ const workItemCustomFieldSchema = z.object({
   value: z.string().nullable(),
 });
 
+const workItemRelationSchema = z.object({
+  relationType: z.string(),
+  id: z.number(),
+  title: z.string().nullable(),
+  state: z.string().nullable(),
+  workItemType: z.string().nullable(),
+  webUrl: z.string().nullable(),
+});
+
+export type WorkItemRelation = z.infer<typeof workItemRelationSchema>;
+
 const workItemPreviewSchema = z.object({
   organizationId: z.string(),
   projectId: z.string(),
@@ -163,9 +181,27 @@ const workItemPreviewSchema = z.object({
   customFields: z.array(workItemCustomFieldSchema).default([]),
   webUrl: z.string().nullable(),
   comments: z.array(workItemCommentSchema).default([]),
+  relations: z.array(workItemRelationSchema).default([]),
 });
 
 export type WorkItemPreview = z.infer<typeof workItemPreviewSchema>;
+
+const workItemFieldChangeSchema = z.object({
+  referenceName: z.string(),
+  oldValue: z.string().nullable(),
+  newValue: z.string().nullable(),
+});
+
+const workItemUpdateSummarySchema = z.object({
+  id: z.number(),
+  revisedBy: z.string().nullable(),
+  revisedDate: z.string().nullable(),
+  changes: z.array(workItemFieldChangeSchema),
+});
+
+const workItemUpdateSummariesSchema = z.array(workItemUpdateSummarySchema);
+
+export type WorkItemUpdateSummary = z.infer<typeof workItemUpdateSummarySchema>;
 
 const mentionCandidateSchema = z.object({
   id: z.string(),
@@ -302,6 +338,7 @@ export type RunWorkItemQueryInput = {
   projectId: string;
   wiql: string;
   limit?: number;
+  extraFields?: string[];
 };
 
 export type ListWorkItemProjectsInput = {
@@ -346,6 +383,19 @@ export type SetWorkItemFieldInput = {
   workItemId: number;
   fieldReferenceName: string;
   value: string;
+};
+
+export type SetWorkItemTagsInput = {
+  organizationId?: string;
+  projectId: string;
+  workItemId: number;
+  tags: string[];
+};
+
+export type ListWorkItemUpdatesInput = {
+  organizationId?: string;
+  projectId: string;
+  workItemId: number;
 };
 
 export type ListWorkItemFieldAllowedValuesInput = {
@@ -647,6 +697,20 @@ export async function setWorkItemField(
 ): Promise<WorkItemPreview> {
   const result = await invokeCommand("set_work_item_field", { input });
   return workItemPreviewSchema.parse(result);
+}
+
+export async function setWorkItemTags(
+  input: SetWorkItemTagsInput,
+): Promise<WorkItemPreview> {
+  const result = await invokeCommand("set_work_item_tags", { input });
+  return workItemPreviewSchema.parse(result);
+}
+
+export async function listWorkItemUpdates(
+  input: ListWorkItemUpdatesInput,
+): Promise<WorkItemUpdateSummary[]> {
+  const result = await invokeCommand("list_work_item_updates", { input });
+  return workItemUpdateSummariesSchema.parse(result);
 }
 
 export async function listWorkItemFieldAllowedValues(

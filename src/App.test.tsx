@@ -908,7 +908,8 @@ describe("App", () => {
     expect((await screen.findAllByText("Fix save workflow")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Test User").length).toBeGreaterThan(0);
     expect(await screen.findByLabelText("Comment")).toBeTruthy();
-    expect(screen.getAllByTitle("Fix save workflow")).toHaveLength(1);
+    // Grid title cell plus the preview heading (which shows the full title on hover).
+    expect(screen.getAllByTitle("Fix save workflow")).toHaveLength(2);
     const previewLabels = [...document.querySelectorAll("dt")].map((node) =>
       node.textContent?.trim(),
     );
@@ -1155,6 +1156,7 @@ describe("App", () => {
           projectId: "project-1",
           wiql: "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project AND [System.WorkItemType] = 'Bug'",
           limit: 200,
+          extraFields: [],
         },
       });
     });

@@ -16,12 +16,28 @@ pub struct WiqlRequest {
 pub struct WiqlResponse {
     #[serde(default)]
     pub work_items: Vec<WorkItemReference>,
+    #[serde(default)]
+    pub work_item_relations: Vec<WiqlWorkItemRelation>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkItemReference {
     pub id: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WiqlWorkItemRelation {
+    pub source: Option<WorkItemReference>,
+    pub target: Option<WorkItemReference>,
+}
+
+/// One edge of a `FROM WorkItemLinks` query result; `source_id` is `None` for roots.
+#[derive(Debug, PartialEq, Eq)]
+pub struct WorkItemLink {
+    pub source_id: Option<i64>,
+    pub target_id: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -44,6 +60,21 @@ pub struct WorkItem {
 #[derive(Debug, Deserialize)]
 pub struct WorkItemLinks {
     pub html: Option<LinkRef>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemWithRelations {
+    pub id: i64,
+    #[serde(default)]
+    pub relations: Vec<WorkItemRelation>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemRelation {
+    pub rel: String,
+    pub url: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -98,7 +129,10 @@ pub struct WorkItemUpdatesList {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkItemUpdate {
+    #[serde(default)]
+    pub id: i64,
     pub revised_by: Option<CommentIdentityRef>,
+    pub revised_date: Option<String>,
     #[serde(default)]
     pub fields: HashMap<String, WorkItemFieldUpdate>,
 }
@@ -173,6 +207,42 @@ impl AdoClient {
             .collect())
     }
 
+    /// Runs a `FROM WorkItemLinks` WIQL query and returns the link edges in
+    /// the order Azure DevOps reports them (tree order for recursive queries).
+    pub async fn query_work_item_links(
+        &self,
+        project_id: &str,
+        wiql: &str,
+        top: Option<usize>,
+    ) -> Result<Vec<WorkItemLink>> {
+        let path = format!("{project_id}/_apis/wit/wiql");
+        let top_string;
+        let mut params: Vec<(&str, &str)> = vec![("api-version", "7.1-preview")];
+        if let Some(top) = top {
+            top_string = top.to_string();
+            params.push(("$top", &top_string));
+        }
+        let response: WiqlResponse = self
+            .post_json(
+                &path,
+                &params,
+                &WiqlRequest {
+                    query: wiql.to_string(),
+                },
+            )
+            .await?;
+        Ok(response
+            .work_item_relations
+            .into_iter()
+            .filter_map(|relation| {
+                relation.target.map(|target| WorkItemLink {
+                    source_id: relation.source.map(|source| source.id),
+                    target_id: target.id,
+                })
+            })
+            .collect())
+    }
+
     pub async fn get_work_items_batch(
         &self,
         project_id: &str,
@@ -192,6 +262,21 @@ impl AdoClient {
             )
             .await?;
         Ok(response.value)
+    }
+
+    pub async fn get_work_item_relations(
+        &self,
+        project_id: &str,
+        work_item_id: i64,
+    ) -> Result<Vec<WorkItemRelation>> {
+        let path = format!("{project_id}/_apis/wit/workitems/{work_item_id}");
+        let response: WorkItemWithRelations = self
+            .get_json(
+                &path,
+                &[("api-version", "7.1-preview"), ("$expand", "relations")],
+            )
+            .await?;
+        Ok(response.relations)
     }
 
     pub async fn add_work_item_comment(
@@ -491,6 +576,87 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(ids, vec![10]);
+    }
+
+    #[tokio::test]
+    async fn query_work_item_links_maps_relations() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/project-1/_apis/wit/wiql"))
+            .and(query_param("api-version", "7.1-preview"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "workItemRelations": [
+                    { "target": { "id": 1 } },
+                    { "rel": "System.LinkTypes.Hierarchy-Forward", "source": { "id": 1 }, "target": { "id": 2 } },
+                    { "rel": "System.LinkTypes.Hierarchy-Forward", "source": { "id": 2 }, "target": { "id": 3 } }
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let links = test_client(&server)
+            .await
+            .query_work_item_links(
+                "project-1",
+                "SELECT [System.Id] FROM WorkItemLinks MODE (Recursive)",
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            links,
+            vec![
+                WorkItemLink {
+                    source_id: None,
+                    target_id: 1
+                },
+                WorkItemLink {
+                    source_id: Some(1),
+                    target_id: 2
+                },
+                WorkItemLink {
+                    source_id: Some(2),
+                    target_id: 3
+                },
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn get_work_item_relations_expands_relations() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/wit/workitems/10"))
+            .and(query_param("api-version", "7.1-preview"))
+            .and(query_param("$expand", "relations"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 10,
+                "relations": [
+                    {
+                        "rel": "System.LinkTypes.Hierarchy-Reverse",
+                        "url": "https://dev.azure.com/testorg/_apis/wit/workItems/5",
+                        "attributes": { "name": "Parent" }
+                    },
+                    {
+                        "rel": "AttachedFile",
+                        "url": "https://dev.azure.com/testorg/_apis/wit/attachments/abc"
+                    }
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let relations = test_client(&server)
+            .await
+            .get_work_item_relations("project-1", 10)
+            .await
+            .unwrap();
+        assert_eq!(relations.len(), 2);
+        assert_eq!(relations[0].rel, "System.LinkTypes.Hierarchy-Reverse");
+        assert_eq!(
+            relations[0].url,
+            "https://dev.azure.com/testorg/_apis/wit/workItems/5"
+        );
     }
 
     #[tokio::test]

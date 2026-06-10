@@ -309,6 +309,18 @@ function workItemCellValue(item: WorkItemSummary, column: WiSortKey): ReactNode 
   }
 }
 
+function extraFieldValue(item: WorkItemSummary, referenceName: string): string | null {
+  return (
+    item.extraFields.find(
+      (field) => field.referenceName.toLowerCase() === referenceName.toLowerCase(),
+    )?.value ?? null
+  );
+}
+
+export function extraColumnLabel(referenceName: string): string {
+  return referenceName.split(".").pop() || referenceName;
+}
+
 type FilterableColumn = "workItemType" | "state" | "projectName" | "assignedTo";
 const FILTERABLE_COLUMNS: Record<FilterableColumn, (item: WorkItemSummary) => string> = {
   workItemType: (item) => item.workItemType ?? "(empty)",
@@ -354,10 +366,11 @@ const WorkItemGridRow = forwardRef<
     checked: boolean;
     columnTemplate: string;
     visibleColumns: WiSortKey[];
+    extraColumns: string[];
     onSelect: () => void;
     onCheckedChange: (checked: boolean, shiftKey: boolean) => void;
   }
->(({ item, selected, checked, columnTemplate, visibleColumns, onSelect, onCheckedChange }, ref) => (
+>(({ item, selected, checked, columnTemplate, visibleColumns, extraColumns, onSelect, onCheckedChange }, ref) => (
   <div
     ref={ref}
     tabIndex={selected ? 0 : -1}
@@ -394,10 +407,28 @@ const WorkItemGridRow = forwardRef<
       />
     </div>
     {visibleColumns.map((column) => (
-      <div key={column} className="min-w-0 truncate">
+      <div
+        key={column}
+        className="min-w-0 truncate"
+        style={
+          column === "title" && item.depth
+            ? { paddingLeft: Math.min(item.depth, 8) * 14 }
+            : undefined
+        }
+      >
         {workItemCellValue(item, column)}
       </div>
     ))}
+    {extraColumns.map((referenceName) => {
+      const value = extraFieldValue(item, referenceName);
+      return (
+        <div key={referenceName} className="min-w-0 truncate">
+          <span className="truncate text-xs text-muted-foreground" title={value ?? undefined}>
+            {value ?? "—"}
+          </span>
+        </div>
+      );
+    })}
   </div>
 ));
 WorkItemGridRow.displayName = "WorkItemGridRow";
@@ -410,6 +441,7 @@ export function WorkItemsGrid({
   emptyMessage,
   dataUpdatedAt,
   activeExternalFilterCount = 0,
+  extraColumns = [],
   initialSort,
   onClearExternalFilters,
   onSortChange,
@@ -423,6 +455,7 @@ export function WorkItemsGrid({
   emptyMessage?: string;
   dataUpdatedAt?: number;
   activeExternalFilterCount?: number;
+  extraColumns?: string[];
   initialSort?: WiSortState;
   onClearExternalFilters?: () => void;
   onSortChange?: (sort: WiSortState) => void;
@@ -1120,7 +1153,10 @@ export function WorkItemsGrid({
     (column) => columnWidths[WI_GRID_KEYS.indexOf(column)],
   );
   const wiFlexibleIndex = Math.max(0, visibleColumns.indexOf("title"));
-  const wiColTemplate = gridColumnTemplate(visibleColumnWidths, wiFlexibleIndex, ["28px"]);
+  const wiColTemplate = [
+    gridColumnTemplate(visibleColumnWidths, wiFlexibleIndex, ["28px"]),
+    ...extraColumns.map(() => "120px"),
+  ].join(" ");
   const columnFilterCount = activeColumnFilterCount(columnFilters);
   const activeFilterCount = Math.max(0, activeExternalFilterCount) + columnFilterCount;
   const hasActiveColumnFilters = columnFilterCount > 0;
@@ -1278,6 +1314,16 @@ export function WorkItemsGrid({
                     }
                   />
                 ))}
+                {extraColumns.map((referenceName) => (
+                  <div
+                    key={referenceName}
+                    role="columnheader"
+                    className="min-w-0 truncate px-1 py-0.5"
+                    title={referenceName}
+                  >
+                    {extraColumnLabel(referenceName)}
+                  </div>
+                ))}
               </div>
 
               {showBlockingLoading ? (
@@ -1324,6 +1370,7 @@ export function WorkItemsGrid({
                         checked={checkedIds.has(`${item.organizationId}:${item.projectId}:${item.id}`)}
                         columnTemplate={wiColTemplate}
                         visibleColumns={visibleColumns}
+                        extraColumns={extraColumns}
                         onSelect={() => setSelectedIndex(i)}
                         onCheckedChange={(checked, shiftKey) => handleCheckboxChange(i, checked, shiftKey)}
                       />

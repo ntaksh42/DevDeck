@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+
 use azdo_client::{
     AdoClient, AdoError, Identity, IdentityPickerIdentity, WorkItem,
-    WorkItemComment as AzdoWorkItemComment, WorkItemUpdate,
+    WorkItemComment as AzdoWorkItemComment, WorkItemRelation, WorkItemUpdate,
 };
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
@@ -66,6 +68,7 @@ pub struct RunWorkItemQueryInput {
     pub project_id: String,
     pub wiql: String,
     pub limit: Option<usize>,
+    pub extra_fields: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -87,6 +90,14 @@ pub struct GetWorkItemPreviewInput {
     pub project_id: String,
     pub work_item_id: i64,
     pub custom_fields: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListWorkItemUpdatesInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_id: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -181,6 +192,15 @@ pub struct SetWorkItemPriorityInput {
     pub project_id: String,
     pub work_item_id: i64,
     pub priority: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetWorkItemTagsInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_id: i64,
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -280,6 +300,9 @@ pub struct WorkItemSummary {
     pub assigned_to: Option<String>,
     pub changed_date: Option<String>,
     pub web_url: Option<String>,
+    pub extra_fields: Vec<WorkItemCustomField>,
+    /// Tree depth for `FROM WorkItemLinks` query results; `None` for flat queries.
+    pub depth: Option<u32>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -316,6 +339,35 @@ pub struct WorkItemPreview {
     pub custom_fields: Vec<WorkItemCustomField>,
     pub web_url: Option<String>,
     pub comments: Vec<WorkItemComment>,
+    pub relations: Vec<WorkItemRelationSummary>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemRelationSummary {
+    pub relation_type: String,
+    pub id: i64,
+    pub title: Option<String>,
+    pub state: Option<String>,
+    pub work_item_type: Option<String>,
+    pub web_url: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemUpdateSummary {
+    pub id: i64,
+    pub revised_by: Option<String>,
+    pub revised_date: Option<String>,
+    pub changes: Vec<WorkItemFieldChange>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemFieldChange {
+    pub reference_name: String,
+    pub old_value: Option<String>,
+    pub new_value: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -446,28 +498,53 @@ impl WorkItemService {
             })?;
 
         let limit = work_item_query_limit(input.limit);
-        let ids = client
-            .query_work_item_ids(&project.id, wiql, Some(limit))
-            .await?
-            .into_iter()
-            .take(limit)
-            .collect::<Vec<_>>();
+        let (ids, depths) = if is_link_wiql(wiql) {
+            let links = client
+                .query_work_item_links(&project.id, wiql, Some(limit + 1))
+                .await?;
+            let (ids, depth_by_id) = flatten_work_item_links(links, limit);
+            (ids, Some(depth_by_id))
+        } else {
+            let ids = client
+                .query_work_item_ids(&project.id, wiql, Some(limit))
+                .await?
+                .into_iter()
+                .take(limit)
+                .collect::<Vec<_>>();
+            (ids, None)
+        };
         if ids.is_empty() {
             return Ok(Vec::new());
         }
 
-        let fields = WORK_ITEM_FIELDS
+        let extra_fields = sanitize_extra_query_fields(input.extra_fields.as_deref());
+        let mut fields = WORK_ITEM_FIELDS
             .iter()
             .map(|field| field.to_string())
-            .collect();
+            .collect::<Vec<_>>();
+        fields.extend(extra_fields.iter().cloned());
         let work_items = client
-            .get_work_items_batch(&project.id, ids, fields)
+            .get_work_items_batch(&project.id, ids.clone(), fields)
             .await?;
 
-        Ok(work_items
+        // Preserve the query's row order (tree order for link queries).
+        let mut items_by_id: HashMap<i64, WorkItem> = work_items
             .into_iter()
+            .map(|work_item| (work_item.id, work_item))
+            .collect();
+        Ok(ids
+            .into_iter()
+            .filter_map(|id| items_by_id.remove(&id))
             .map(|work_item| {
-                summarize_work_item(&organization, &project.id, &project.name, work_item)
+                let extra = extra_work_item_fields(&work_item, &extra_fields);
+                let depth = depths
+                    .as_ref()
+                    .and_then(|depth_by_id| depth_by_id.get(&work_item.id).copied());
+                let mut summary =
+                    summarize_work_item(&organization, &project.id, &project.name, work_item);
+                summary.extra_fields = extra;
+                summary.depth = depth;
+                summary
             })
             .collect())
     }
@@ -477,12 +554,20 @@ impl WorkItemService {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
         let limit = work_item_query_limit(input.limit);
-        let count = client
-            .query_work_item_ids(&input.project_id, wiql, Some(limit))
-            .await?
-            .into_iter()
-            .take(limit)
-            .count();
+        // Fetch one extra id so the frontend can render "limit+" when results overflow.
+        let count = if is_link_wiql(wiql) {
+            let links = client
+                .query_work_item_links(&input.project_id, wiql, Some(limit + 1))
+                .await?;
+            flatten_work_item_links(links, limit + 1).0.len()
+        } else {
+            client
+                .query_work_item_ids(&input.project_id, wiql, Some(limit + 1))
+                .await?
+                .into_iter()
+                .take(limit + 1)
+                .count()
+        };
         Ok(count)
     }
 
@@ -501,26 +586,114 @@ impl WorkItemService {
             .iter()
             .map(ToString::to_string)
             .collect();
-        let (work_items_result, comments_result) = tokio::join!(
+        let (work_items_result, comments_result, relations_result) = tokio::join!(
             client.get_work_items_batch(&project.id, vec![input.work_item_id], fields),
             client.list_work_item_comments(
                 &project.id,
                 input.work_item_id,
                 WORK_ITEM_PREVIEW_COMMENT_LIMIT,
             ),
+            client.get_work_item_relations(&project.id, input.work_item_id),
         );
         let work_item = work_items_result?.into_iter().next().ok_or_else(|| {
             AppError::InvalidInput(format!("work item not found: {}", input.work_item_id))
         })?;
         let comments = comments_result.unwrap_or_default();
+        // Relations are a progressive enhancement; ignore failures.
+        let raw_relations = relations_result.unwrap_or_default();
 
-        Ok(summarize_work_item_preview(
+        let mut preview = summarize_work_item_preview(
             &organization,
             &project.id,
             &project.name,
             work_item,
             comments,
-        ))
+        );
+        preview.relations = self
+            .resolve_preview_relations(
+                &client,
+                &organization,
+                &project.id,
+                &project.name,
+                raw_relations,
+            )
+            .await;
+        Ok(preview)
+    }
+
+    async fn resolve_preview_relations(
+        &self,
+        client: &AdoClient,
+        organization: &Organization,
+        project_id: &str,
+        fallback_project_name: &str,
+        raw_relations: Vec<WorkItemRelation>,
+    ) -> Vec<WorkItemRelationSummary> {
+        let mut links: Vec<(String, u8, i64)> = raw_relations
+            .iter()
+            .filter_map(|relation| {
+                let id = related_work_item_id(&relation.url)?;
+                let (label, rank) = relation_type_label(&relation.rel);
+                Some((label, rank, id))
+            })
+            .take(MAX_PREVIEW_RELATIONS)
+            .collect();
+        if links.is_empty() {
+            return Vec::new();
+        }
+        links.sort_by_key(|link| (link.1, link.2));
+
+        let ids = links.iter().map(|(_, _, id)| *id).collect::<Vec<_>>();
+        let fields = vec![
+            "System.Title".to_string(),
+            "System.State".to_string(),
+            "System.WorkItemType".to_string(),
+            "System.TeamProject".to_string(),
+        ];
+        let related_items = client
+            .get_work_items_batch(project_id, ids, fields)
+            .await
+            .unwrap_or_default();
+
+        links
+            .into_iter()
+            .map(|(relation_type, _, id)| {
+                let item = related_items.iter().find(|item| item.id == id);
+                let project_name = item
+                    .and_then(|item| string_field(item, "System.TeamProject"))
+                    .unwrap_or_else(|| fallback_project_name.to_string());
+                WorkItemRelationSummary {
+                    relation_type,
+                    id,
+                    title: item.and_then(|item| string_field(item, "System.Title")),
+                    state: item.and_then(|item| string_field(item, "System.State")),
+                    work_item_type: item.and_then(|item| string_field(item, "System.WorkItemType")),
+                    web_url: Some(format!(
+                        "https://dev.azure.com/{}/{}/_workitems/edit/{}",
+                        organization.name,
+                        encode_path_segment(&project_name),
+                        id
+                    )),
+                }
+            })
+            .collect()
+    }
+
+    pub async fn list_updates(
+        &self,
+        input: ListWorkItemUpdatesInput,
+    ) -> Result<Vec<WorkItemUpdateSummary>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let updates = client
+            .list_work_item_updates(&input.project_id, input.work_item_id, 100)
+            .await?;
+        let mut summaries: Vec<WorkItemUpdateSummary> = updates
+            .into_iter()
+            .filter_map(summarize_work_item_update)
+            .collect();
+        summaries.sort_by_key(|summary| std::cmp::Reverse(summary.id));
+        Ok(summaries)
     }
 
     pub fn record_mention_interaction(&self, input: RecordMentionInteractionInput) -> Result<()> {
@@ -904,6 +1077,63 @@ impl WorkItemService {
         }
         if let Err(e) = self.db.update_my_work_item_if_present(&cached) {
             tracing::warn!(error = %e, "failed to update my_work_items cache after set_priority");
+        }
+        let comments = client
+            .list_work_item_comments(
+                &project.id,
+                input.work_item_id,
+                WORK_ITEM_PREVIEW_COMMENT_LIMIT,
+            )
+            .await
+            .unwrap_or_default();
+
+        Ok(summarize_work_item_preview(
+            &organization,
+            &project.id,
+            &project.name,
+            work_item,
+            comments,
+        ))
+    }
+
+    pub async fn set_tags(&self, input: SetWorkItemTagsInput) -> Result<WorkItemPreview> {
+        let mut tags: Vec<String> = Vec::new();
+        for tag in &input.tags {
+            let tag = tag.trim();
+            if tag.is_empty() || tag.contains(';') {
+                continue;
+            }
+            if tags
+                .iter()
+                .any(|existing| existing.eq_ignore_ascii_case(tag))
+            {
+                continue;
+            }
+            tags.push(tag.to_string());
+        }
+        // An empty list clears all tags.
+        let joined = tags.join("; ");
+
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = client
+            .list_projects()
+            .await?
+            .into_iter()
+            .find(|p| p.id == input.project_id)
+            .ok_or_else(|| {
+                AppError::InvalidInput(format!("project not found: {}", input.project_id))
+            })?;
+
+        let work_item = client
+            .update_work_item_field(&project.id, input.work_item_id, "System.Tags", &joined)
+            .await?;
+        let cached = work_item_to_cached(&organization, &project.id, &project.name, &work_item);
+        if let Err(e) = self.db.upsert_work_items(std::slice::from_ref(&cached)) {
+            tracing::warn!(error = %e, "failed to update work item cache after set_tags");
+        }
+        if let Err(e) = self.db.update_my_work_item_if_present(&cached) {
+            tracing::warn!(error = %e, "failed to update my_work_items cache after set_tags");
         }
         let comments = client
             .list_work_item_comments(
@@ -1675,7 +1905,121 @@ fn summarize_work_item(
         assigned_to: identity_field(&work_item, "System.AssignedTo"),
         changed_date: string_field(&work_item, "System.ChangedDate"),
         web_url: work_item_web_url(organization, project_name, work_item.id, &work_item),
+        extra_fields: Vec::new(),
+        depth: None,
     }
+}
+
+const MAX_EXTRA_QUERY_FIELDS: usize = 20;
+
+fn sanitize_extra_query_fields(extra_fields: Option<&[String]>) -> Vec<String> {
+    let mut fields: Vec<String> = Vec::new();
+    for field in extra_fields.unwrap_or_default() {
+        let field = field.trim();
+        if !is_valid_field_reference_name(field) {
+            continue;
+        }
+        if WORK_ITEM_FIELDS
+            .iter()
+            .any(|standard| standard.eq_ignore_ascii_case(field))
+            || fields
+                .iter()
+                .any(|existing| existing.eq_ignore_ascii_case(field))
+        {
+            continue;
+        }
+        fields.push(field.to_string());
+        if fields.len() >= MAX_EXTRA_QUERY_FIELDS {
+            break;
+        }
+    }
+    fields
+}
+
+fn extra_work_item_fields(
+    work_item: &WorkItem,
+    extra_fields: &[String],
+) -> Vec<WorkItemCustomField> {
+    extra_fields
+        .iter()
+        .map(|reference_name| WorkItemCustomField {
+            reference_name: reference_name.clone(),
+            value: string_field(work_item, reference_name)
+                .or_else(|| identity_field(work_item, reference_name)),
+        })
+        .collect()
+}
+
+/// Bookkeeping fields that change on every revision and add no review value.
+const WORK_ITEM_HISTORY_HIDDEN_FIELDS: &[&str] = &[
+    "System.Rev",
+    "System.AuthorizedDate",
+    "System.RevisedDate",
+    "System.Watermark",
+    "System.AuthorizedAs",
+    "System.PersonId",
+    "System.ChangedDate",
+    "System.ChangedBy",
+    "System.CommentCount",
+    "System.IterationId",
+    "System.AreaId",
+    "System.NodeName",
+];
+
+fn update_value_string(value: &Value) -> Option<String> {
+    match value {
+        Value::String(value) => Some(value.clone()),
+        value if value.is_number() || value.is_boolean() => Some(value.to_string()),
+        Value::Object(map) => map
+            .get("displayName")
+            .and_then(Value::as_str)
+            .or_else(|| map.get("uniqueName").and_then(Value::as_str))
+            .map(ToString::to_string),
+        _ => None,
+    }
+}
+
+fn summarize_work_item_update(update: WorkItemUpdate) -> Option<WorkItemUpdateSummary> {
+    let mut changes: Vec<WorkItemFieldChange> = update
+        .fields
+        .iter()
+        .filter(|(reference_name, _)| {
+            !WORK_ITEM_HISTORY_HIDDEN_FIELDS
+                .iter()
+                .any(|hidden| hidden.eq_ignore_ascii_case(reference_name))
+        })
+        .map(|(reference_name, change)| WorkItemFieldChange {
+            reference_name: reference_name.clone(),
+            old_value: change.old_value.as_ref().and_then(update_value_string),
+            new_value: change.new_value.as_ref().and_then(update_value_string),
+        })
+        .filter(|change| {
+            change.old_value != change.new_value
+                && (change.old_value.is_some() || change.new_value.is_some())
+        })
+        .collect();
+    if changes.is_empty() {
+        return None;
+    }
+    changes.sort_by(|a, b| a.reference_name.cmp(&b.reference_name));
+
+    // revisedDate is a 9999-01-01 sentinel on the latest revision; prefer the
+    // System.ChangedDate value recorded by the update itself.
+    let revised_date = update
+        .fields
+        .get("System.ChangedDate")
+        .and_then(|change| change.new_value.as_ref())
+        .and_then(update_value_string)
+        .or_else(|| update.revised_date.filter(|date| !date.starts_with("9999")));
+
+    Some(WorkItemUpdateSummary {
+        id: update.id,
+        revised_by: update
+            .revised_by
+            .and_then(|identity| identity.display_name.or(identity.unique_name)),
+        revised_date,
+        changes,
+    })
 }
 
 fn summarize_work_item_preview(
@@ -1727,7 +2071,30 @@ fn summarize_work_item_preview(
             .into_iter()
             .map(summarize_work_item_comment)
             .collect(),
+        relations: Vec::new(),
     }
+}
+
+const MAX_PREVIEW_RELATIONS: usize = 50;
+
+/// Maps an Azure DevOps link relation to (display label, sort rank).
+fn relation_type_label(rel: &str) -> (String, u8) {
+    match rel {
+        "System.LinkTypes.Hierarchy-Reverse" => ("Parent".to_string(), 0),
+        "System.LinkTypes.Hierarchy-Forward" => ("Child".to_string(), 1),
+        "System.LinkTypes.Related" => ("Related".to_string(), 2),
+        "System.LinkTypes.Dependency-Forward" => ("Successor".to_string(), 3),
+        "System.LinkTypes.Dependency-Reverse" => ("Predecessor".to_string(), 3),
+        other => (other.rsplit('.').next().unwrap_or(other).to_string(), 4),
+    }
+}
+
+fn related_work_item_id(url: &str) -> Option<i64> {
+    let lowered = url.to_ascii_lowercase();
+    if !lowered.contains("/_apis/wit/workitems/") {
+        return None;
+    }
+    url.rsplit('/').next()?.parse::<i64>().ok()
 }
 
 fn preview_fields(custom_fields: Option<&[String]>) -> Vec<String> {
@@ -1911,6 +2278,8 @@ fn cached_wi_to_summary(wi: CachedWorkItem) -> WorkItemSummary {
         assigned_to: wi.assigned_to,
         changed_date: wi.changed_date,
         web_url: wi.web_url,
+        extra_fields: Vec::new(),
+        depth: None,
     }
 }
 
@@ -2196,16 +2565,54 @@ fn validate_work_item_wiql(wiql: &str) -> Result<&str> {
     if wiql.is_empty() {
         return Err(AppError::InvalidInput("WIQL query is required".to_string()));
     }
-    if !wiql.to_ascii_lowercase().contains("from workitems") {
+    if !wiql_queries_source(wiql, "workitems") && !is_link_wiql(wiql) {
         return Err(AppError::InvalidInput(
-            "WIQL must query FROM WorkItems".to_string(),
+            "WIQL must query FROM WorkItems or FROM WorkItemLinks".to_string(),
         ));
     }
     Ok(wiql)
 }
 
+fn wiql_queries_source(wiql: &str, source: &str) -> bool {
+    let normalized = wiql.to_ascii_lowercase();
+    let words: Vec<&str> = normalized.split_whitespace().collect();
+    words
+        .windows(2)
+        .any(|pair| pair[0] == "from" && pair[1] == source)
+}
+
+fn is_link_wiql(wiql: &str) -> bool {
+    wiql_queries_source(wiql, "workitemlinks")
+}
+
 fn work_item_query_limit(limit: Option<usize>) -> usize {
     limit.unwrap_or(200).clamp(1, 500)
+}
+
+/// Flattens `FROM WorkItemLinks` edges into a deduplicated id list in tree
+/// order plus the depth of each id (roots have depth 0).
+fn flatten_work_item_links(
+    links: Vec<azdo_client::WorkItemLink>,
+    limit: usize,
+) -> (Vec<i64>, HashMap<i64, u32>) {
+    let mut ids: Vec<i64> = Vec::new();
+    let mut depth_by_id: HashMap<i64, u32> = HashMap::new();
+    for link in links {
+        if depth_by_id.contains_key(&link.target_id) {
+            continue;
+        }
+        let depth = link
+            .source_id
+            .and_then(|source_id| depth_by_id.get(&source_id).copied())
+            .map(|parent_depth| parent_depth + 1)
+            .unwrap_or(0);
+        depth_by_id.insert(link.target_id, depth);
+        ids.push(link.target_id);
+        if ids.len() >= limit {
+            break;
+        }
+    }
+    (ids, depth_by_id)
 }
 
 #[cfg(test)]
@@ -2488,11 +2895,13 @@ mod tests {
         );
 
         let candidates = assignee_candidates_from_updates(vec![WorkItemUpdate {
+            id: 1,
             revised_by: Some(azdo_client::work_items::CommentIdentityRef {
                 id: Some("0e8fc31f-c0d7-4b14-b430-76dfb6cf7b0f".to_string()),
                 display_name: Some("Agent Pool Service (1)".to_string()),
                 unique_name: Some("AgentPool\\d67b727b-218f-4f2f-ae94-fd1d7ad5b42c".to_string()),
             }),
+            revised_date: None,
             fields,
         }]);
 
@@ -2866,6 +3275,72 @@ mod tests {
             .last_warning
             .as_deref()
             .is_some_and(|warning| warning.contains("more than 200 IDs")));
+    }
+
+    #[test]
+    fn flatten_work_item_links_computes_depths_in_tree_order() {
+        use azdo_client::WorkItemLink;
+        let links = vec![
+            WorkItemLink {
+                source_id: None,
+                target_id: 1,
+            },
+            WorkItemLink {
+                source_id: Some(1),
+                target_id: 2,
+            },
+            WorkItemLink {
+                source_id: Some(2),
+                target_id: 3,
+            },
+            WorkItemLink {
+                source_id: None,
+                target_id: 4,
+            },
+            WorkItemLink {
+                source_id: Some(1),
+                target_id: 2,
+            },
+        ];
+        let (ids, depths) = flatten_work_item_links(links, 10);
+        assert_eq!(ids, vec![1, 2, 3, 4]);
+        assert_eq!(depths[&1], 0);
+        assert_eq!(depths[&2], 1);
+        assert_eq!(depths[&3], 2);
+        assert_eq!(depths[&4], 0);
+    }
+
+    #[test]
+    fn flatten_work_item_links_respects_limit() {
+        use azdo_client::WorkItemLink;
+        let links = vec![
+            WorkItemLink {
+                source_id: None,
+                target_id: 1,
+            },
+            WorkItemLink {
+                source_id: Some(1),
+                target_id: 2,
+            },
+            WorkItemLink {
+                source_id: Some(1),
+                target_id: 3,
+            },
+        ];
+        let (ids, _) = flatten_work_item_links(links, 2);
+        assert_eq!(ids, vec![1, 2]);
+    }
+
+    #[test]
+    fn validate_wiql_accepts_flat_and_link_sources() {
+        assert!(validate_work_item_wiql("SELECT [System.Id] FROM WorkItems").is_ok());
+        assert!(validate_work_item_wiql(
+            "SELECT [System.Id] FROM WorkItemLinks WHERE [System.Links.LinkType] = 'Child' MODE (Recursive)"
+        )
+        .is_ok());
+        assert!(validate_work_item_wiql("SELECT [System.Id]\nFROM\nWorkItems").is_ok());
+        assert!(validate_work_item_wiql("SELECT [System.Id] FROM Bugs").is_err());
+        assert!(validate_work_item_wiql("").is_err());
     }
 
     #[test]

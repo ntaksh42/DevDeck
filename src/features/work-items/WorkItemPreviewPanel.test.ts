@@ -7,6 +7,9 @@ import {
   rankMentionCandidates,
   renderAzureMentionMarkdown,
   sortSelfLast,
+  splitWorkItemTags,
+  workItemStateDotClass,
+  workItemTypeColor,
 } from "./WorkItemPreviewPanel";
 
 function makeOrg(overrides: {
@@ -171,6 +174,35 @@ describe("rankMentionCandidates", () => {
     expect(new Set(ranked.map((candidate) => candidate.id))).toEqual(
       new Set(["alice-guid-1", "alice-guid-2"]),
     );
+  });
+});
+
+describe("work item preview presentation helpers", () => {
+  it("maps known work item types to Azure DevOps colors", () => {
+    expect(workItemTypeColor("Bug")).toBe("#CC293D");
+    expect(workItemTypeColor("user story")).toBe("#009CCC");
+    expect(workItemTypeColor(" Task ")).toBe("#F2CB1D");
+    expect(workItemTypeColor("Custom Type")).toBe("#64748B");
+  });
+
+  it("maps states to colored dots with a fallback", () => {
+    expect(workItemStateDotClass("Done")).toBe("bg-green-500");
+    expect(workItemStateDotClass("closed")).toBe("bg-green-500");
+    expect(workItemStateDotClass("Resolved")).toBe("bg-amber-500");
+    expect(workItemStateDotClass("In Progress")).toBe("bg-blue-500");
+    expect(workItemStateDotClass("Removed")).toBe("bg-slate-300");
+    expect(workItemStateDotClass("New")).toBe("bg-slate-400");
+    expect(workItemStateDotClass("チーム独自状態")).toBe("bg-slate-400");
+  });
+
+  it("splits semicolon-separated tags and drops blanks", () => {
+    expect(splitWorkItemTags("save; bug; ")).toEqual(["save", "bug"]);
+    expect(splitWorkItemTags(null)).toEqual([]);
+    expect(splitWorkItemTags("  ")).toEqual([]);
+  });
+
+  it("deduplicates repeated tags", () => {
+    expect(splitWorkItemTags("save; bug; save")).toEqual(["save", "bug"]);
   });
 });
 

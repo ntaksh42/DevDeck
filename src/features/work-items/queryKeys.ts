@@ -6,6 +6,7 @@ type WorkItemQueryViewKeyInput = {
   projectId?: string | null;
   wiql?: string | null;
   limit?: number | null;
+  extraFieldsSignature?: string;
 };
 
 export const workItemQueryKeys = {
@@ -36,8 +37,17 @@ export const workItemQueryKeys = {
     projectId,
     wiql,
     limit,
+    extraFieldsSignature,
   }: WorkItemQueryViewKeyInput) =>
-    ['workItemQueryView', organizationId, viewId, projectId, wiql, limit] as const,
+    [
+      'workItemQueryView',
+      organizationId,
+      viewId,
+      projectId,
+      wiql,
+      limit,
+      extraFieldsSignature ?? '',
+    ] as const,
   queryViewRoot: (organizationId?: string) =>
     organizationId
       ? (['workItemQueryView', organizationId] as const)
@@ -50,6 +60,11 @@ export const workItemQueryKeys = {
   ) =>
     ['workItemPreview', organizationId, projectId, workItemId, customFieldsSignature] as const,
   previewRoot: () => ['workItemPreview'] as const,
+  updates: (
+    organizationId?: string,
+    projectId?: string,
+    workItemId?: number,
+  ) => ['workItemUpdates', organizationId, projectId, workItemId] as const,
   typeStates: (
     organizationId?: string,
     projectId?: string,

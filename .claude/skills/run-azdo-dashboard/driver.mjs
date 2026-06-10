@@ -16,20 +16,30 @@
  */
 
 import { chromium } from "@playwright/test";
+import http from "node:http";
 import { tmpdir } from "os";
 import { join } from "path";
 
 const BASE_URL = "http://127.0.0.1:1420";
 
-async function checkServer() {
-  try {
-    const res = await fetch(BASE_URL, { signal: AbortSignal.timeout(3000) });
-    if (!res.ok && res.status >= 500) throw new Error(`HTTP ${res.status}`);
-  } catch (e) {
-    console.error(`Dev server not reachable at ${BASE_URL}.`);
-    console.error("Start it first: pnpm dev --host 127.0.0.1 --port 1420");
-    process.exit(1);
-  }
+// Best-effort probe only: on some machines Node HTTP clients (fetch and
+// node:http alike) stall on loopback once @playwright/test is loaded, so a
+// failed probe must not abort — Chromium's own network stack decides.
+function checkServer() {
+  return new Promise((resolve) => {
+    const request = http.get(BASE_URL, { timeout: 3000 }, (res) => {
+      res.resume();
+      resolve();
+    });
+    request.on("timeout", () => request.destroy(new Error("timeout")));
+    request.on("error", (error) => {
+      console.warn(
+        `Warning: probe of ${BASE_URL} failed (${error.message}); continuing anyway.`,
+      );
+      console.warn("If navigation fails: pnpm dev --host 127.0.0.1 --port 1420");
+      resolve();
+    });
+  });
 }
 
 async function withPage(fn) {

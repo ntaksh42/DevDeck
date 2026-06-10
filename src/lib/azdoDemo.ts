@@ -25,6 +25,7 @@ import type {
   SearchWorkItemMentionsInput,
   SearchWorkItemsInput,
   SetWorkItemFieldInput,
+  SetWorkItemTagsInput,
   ListWorkItemFieldAllowedValuesInput,
   SetWorkItemReasonInput,
   SetWorkItemPriorityInput,
@@ -39,6 +40,7 @@ import type {
   WorkItemPreview,
   WorkItemProjectOption,
   WorkItemSummary,
+  WorkItemUpdateSummary,
 } from "@/lib/azdoCommands";
 import {
   applyPullRequestScenario,
@@ -102,6 +104,7 @@ const writeCommands = new Set([
   "set_work_item_reason",
   "set_work_item_priority",
   "set_work_item_field",
+  "set_work_item_tags",
   "set_work_items_state",
   "assign_work_items",
   "set_work_items_priority",
@@ -267,6 +270,12 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       const input = (args as { input?: SetWorkItemFieldInput } | undefined)?.input;
       return demoSetWorkItemField(input);
     }
+    case "set_work_item_tags": {
+      const input = (args as { input?: SetWorkItemTagsInput } | undefined)?.input;
+      return demoSetWorkItemTags(input);
+    }
+    case "list_work_item_updates":
+      return demoWorkItemUpdates();
     case "list_work_item_field_allowed_values": {
       const input = (
         args as { input?: ListWorkItemFieldAllowedValuesInput } | undefined
@@ -486,8 +495,14 @@ function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[]
   });
 }
 
+function withEmptyExtraFields(
+  items: Omit<WorkItemSummary, "extraFields" | "depth">[],
+): WorkItemSummary[] {
+  return items.map((item) => ({ ...item, extraFields: [], depth: null }));
+}
+
 function demoWorkItems(input?: SearchWorkItemsInput): WorkItemSummary[] {
-  const all: WorkItemSummary[] = [
+  const all: Omit<WorkItemSummary, "extraFields" | "depth">[] = [
     {
       organizationId: "contoso",
       projectId: "platform",
@@ -602,7 +617,7 @@ function demoWorkItems(input?: SearchWorkItemsInput): WorkItemSummary[] {
   const stateFilter = input?.state && input.state !== "all" ? input.state : undefined;
   const typeFilter = input?.workItemType?.trim() || undefined;
 
-  return applyWorkItemScenario(all).filter((item) => {
+  return applyWorkItemScenario(withEmptyExtraFields(all)).filter((item) => {
     if (input?.projectId && item.projectId !== input.projectId) return false;
     if (stateFilter && item.state !== stateFilter) return false;
     if (typeFilter && item.workItemType !== typeFilter) return false;
@@ -618,7 +633,7 @@ function demoWorkItems(input?: SearchWorkItemsInput): WorkItemSummary[] {
 }
 
 function demoMyWorkItems(): WorkItemSummary[] {
-  return applyWorkItemScenario([
+  return applyWorkItemScenario(withEmptyExtraFields([
     {
       organizationId: "contoso",
       projectId: "platform",
@@ -679,7 +694,7 @@ function demoMyWorkItems(): WorkItemSummary[] {
       changedDate: "2026-05-23T07:00:00Z",
       webUrl: "https://dev.azure.com/contoso/Infrastructure/_workitems/edit/51",
     },
-  ]);
+  ]));
 }
 
 function demoWorkItemProjects(): WorkItemProjectOption[] {
@@ -714,7 +729,26 @@ function demoRunWorkItemQuery(input?: RunWorkItemQueryInput): WorkItemSummary[] 
     results = results.filter((item) => item.title.toLowerCase().includes(term));
   }
 
-  return results.slice(0, input?.limit ?? 200);
+  const extraFields = input?.extraFields ?? [];
+  const isLinkQuery = /\bfrom\s+workitemlinks\b/.test(wiql);
+  return results.slice(0, input?.limit ?? 200).map((item, index) => ({
+    ...item,
+    extraFields: extraFields.map((referenceName) => ({
+      referenceName,
+      value: demoExtraFieldValue(referenceName, item),
+    })),
+    depth: isLinkQuery ? (index % 3 === 0 ? 0 : 1) : null,
+  }));
+}
+
+function demoExtraFieldValue(referenceName: string, item: WorkItemSummary): string | null {
+  const lower = referenceName.toLowerCase();
+  if (lower.endsWith(".priority")) return String((item.id % 4) + 1);
+  if (lower.endsWith(".storypoints")) return String((item.id % 8) + 1);
+  if (lower.endsWith(".severity")) return `${(item.id % 4) + 1} - Medium`;
+  if (lower === "system.areapath") return item.projectName;
+  if (lower === "system.iterationpath") return `${item.projectName}\\Sprint ${(item.id % 3) + 1}`;
+  return null;
 }
 
 function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
@@ -779,6 +813,32 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
         createdDate: "2026-05-26T09:00:00Z",
       },
     ].filter((comment) => !deletedDemoWorkItemComments.has(comment.id)),
+    relations: [
+      {
+        relationType: "Parent",
+        id: 90,
+        title: "Improve dashboard operations experience",
+        state: "Active",
+        workItemType: "Feature",
+        webUrl: `https://dev.azure.com/contoso/${encodeURIComponent(summary.projectName)}/_workitems/edit/90`,
+      },
+      {
+        relationType: "Child",
+        id: summary.id + 1000,
+        title: `Subtask for ${summary.title}`,
+        state: "New",
+        workItemType: "Task",
+        webUrl: `https://dev.azure.com/contoso/${encodeURIComponent(summary.projectName)}/_workitems/edit/${summary.id + 1000}`,
+      },
+      {
+        relationType: "Related",
+        id: 77,
+        title: "Track API rate limits in client retries",
+        state: "Closed",
+        workItemType: "Bug",
+        webUrl: `https://dev.azure.com/contoso/${encodeURIComponent(summary.projectName)}/_workitems/edit/77`,
+      },
+    ],
   });
 }
 
@@ -862,6 +922,63 @@ function demoListWorkItemFieldAllowedValues(
     return ["Tokyo", "Osaka", "Nagoya"];
   }
   return [];
+}
+
+function demoWorkItemUpdates(): WorkItemUpdateSummary[] {
+  return [
+    {
+      id: 3,
+      revisedBy: "Alice Johnson",
+      revisedDate: "2026-05-27T14:30:00Z",
+      changes: [
+        { referenceName: "System.State", oldValue: "New", newValue: "Active" },
+        { referenceName: "System.Reason", oldValue: "New", newValue: "Work started" },
+      ],
+    },
+    {
+      id: 2,
+      revisedBy: "Demo User",
+      revisedDate: "2026-05-26T10:15:00Z",
+      changes: [
+        {
+          referenceName: "System.AssignedTo",
+          oldValue: null,
+          newValue: "Demo User",
+        },
+        {
+          referenceName: "Microsoft.VSTS.Common.Priority",
+          oldValue: "3",
+          newValue: "2",
+        },
+      ],
+    },
+    {
+      id: 1,
+      revisedBy: "Demo User",
+      revisedDate: "2026-05-20T09:00:00Z",
+      changes: [
+        { referenceName: "System.Title", oldValue: null, newValue: "Created" },
+      ],
+    },
+  ];
+}
+
+function demoSetWorkItemTags(input?: SetWorkItemTagsInput): WorkItemPreview {
+  const preview = demoWorkItemPreview(
+    input
+      ? {
+          organizationId: input.organizationId,
+          projectId: input.projectId,
+          workItemId: input.workItemId,
+        }
+      : undefined,
+  );
+  if (!input) return preview;
+  return {
+    ...preview,
+    changedDate: new Date().toISOString(),
+    tags: input.tags.map((tag) => tag.trim()).filter(Boolean).join("; ") || null,
+  };
 }
 
 function demoSetWorkItemPriority(input?: SetWorkItemPriorityInput): WorkItemPreview {

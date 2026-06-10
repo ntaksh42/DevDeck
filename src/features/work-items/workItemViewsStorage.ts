@@ -1,7 +1,12 @@
 import { clamp, type SortDirection } from "@/lib/utils";
+import { isValidFieldReferenceName } from "./previewFieldsStorage";
 
 export const WI_QUERY_VIEWS_STORAGE_KEY = "azdodeck:workItemQueryViews";
 export const WI_QUERY_VIEWS_EXPORT_SCHEMA = "azdodeck.workItemViews";
+export const WI_VIEW_COUNT_BASELINES_STORAGE_KEY = "azdodeck:workItems:viewCountBaselines";
+
+export const MIN_VIEW_REFRESH_INTERVAL_SEC = 15;
+export const MAX_VIEW_REFRESH_INTERVAL_SEC = 3600;
 
 export type WorkItemQueryView = {
   id: string;
@@ -13,7 +18,26 @@ export type WorkItemQueryView = {
   sortKey?: "id" | "workItemType" | "state" | "title" | "projectName" | "assignedTo" | "changedDate";
   wiql: string;
   limit: number;
+  refreshIntervalSec?: number;
+  alertThreshold?: number;
+  extraColumns?: string[];
 };
+
+export const MAX_VIEW_EXTRA_COLUMNS = 20;
+
+export function normalizeViewExtraColumns(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const columns: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string") continue;
+    const trimmed = entry.trim();
+    if (!isValidFieldReferenceName(trimmed)) continue;
+    if (columns.some((existing) => existing.toLowerCase() === trimmed.toLowerCase())) continue;
+    columns.push(trimmed);
+    if (columns.length >= MAX_VIEW_EXTRA_COLUMNS) break;
+  }
+  return columns;
+}
 
 export type WorkItemQueryViewsExport = {
   schema: typeof WI_QUERY_VIEWS_EXPORT_SCHEMA;
@@ -115,6 +139,8 @@ export function normalizeWorkItemQueryView(value: unknown): WorkItemQueryView | 
 
   const view = value as WorkItemQueryView;
   const limit = Number(view.limit);
+  const refreshIntervalSec = Number(view.refreshIntervalSec);
+  const alertThreshold = Number(view.alertThreshold);
   return {
     id: view.id,
     name: view.name,
@@ -127,6 +153,19 @@ export function normalizeWorkItemQueryView(value: unknown): WorkItemQueryView | 
     sortKey: isWorkItemSortKey(view.sortKey) ? view.sortKey : "changedDate",
     wiql: view.wiql,
     limit: Number.isFinite(limit) ? clamp(limit, 1, 500) : 200,
+    refreshIntervalSec:
+      Number.isFinite(refreshIntervalSec) && refreshIntervalSec > 0
+        ? clamp(
+            Math.round(refreshIntervalSec),
+            MIN_VIEW_REFRESH_INTERVAL_SEC,
+            MAX_VIEW_REFRESH_INTERVAL_SEC,
+          )
+        : undefined,
+    alertThreshold:
+      Number.isFinite(alertThreshold) && alertThreshold >= 0
+        ? Math.round(alertThreshold)
+        : undefined,
+    extraColumns: normalizeViewExtraColumns(view.extraColumns),
   };
 }
 
@@ -147,6 +186,47 @@ export function loadWorkItemQueryViews(): WorkItemQueryView[] {
 
 export function saveWorkItemQueryViews(views: WorkItemQueryView[]): void {
   window.localStorage.setItem(WI_QUERY_VIEWS_STORAGE_KEY, JSON.stringify(views));
+}
+
+// Counts recorded at the end of the previous session, frozen once per session so
+// the delta badge keeps comparing against "last time I looked" while new counts
+// are persisted for the next session.
+let sessionCountBaselines: Record<string, number> | null = null;
+
+function loadStoredViewCounts(): Record<string, number> {
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(WI_VIEW_COUNT_BASELINES_STORAGE_KEY) ?? "{}",
+    );
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const counts: Record<string, number> = {};
+    for (const [id, count] of Object.entries(parsed)) {
+      if (typeof count === "number" && Number.isFinite(count)) counts[id] = count;
+    }
+    return counts;
+  } catch {
+    return {};
+  }
+}
+
+export function viewCountBaseline(viewId: string): number | null {
+  if (sessionCountBaselines === null) sessionCountBaselines = loadStoredViewCounts();
+  return sessionCountBaselines[viewId] ?? null;
+}
+
+export function recordViewCount(viewId: string, count: number, knownViewIds: string[]): void {
+  if (sessionCountBaselines === null) sessionCountBaselines = loadStoredViewCounts();
+  const stored = loadStoredViewCounts();
+  const next: Record<string, number> = {};
+  for (const id of knownViewIds) {
+    if (typeof stored[id] === "number") next[id] = stored[id];
+  }
+  next[viewId] = count;
+  window.localStorage.setItem(WI_VIEW_COUNT_BASELINES_STORAGE_KEY, JSON.stringify(next));
+}
+
+export function resetViewCountSessionForTests(): void {
+  sessionCountBaselines = null;
 }
 
 export function createWorkItemQueryViewsExport(views: WorkItemQueryView[]): WorkItemQueryViewsExport {

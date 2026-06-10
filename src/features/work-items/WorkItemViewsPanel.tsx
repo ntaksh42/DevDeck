@@ -12,6 +12,7 @@ import { ArrowLeft, ArrowRight, Copy, Download, Eye, EyeOff, Loader2, Pin, PinOf
 import {
   getSavedQuery,
   countWorkItemQuery,
+  listWorkItemFields,
   listWorkItemProjects,
   runWorkItemQuery,
   commandErrorMessage,
@@ -22,10 +23,15 @@ import { ErrorState } from '@/components/StateDisplay';
 import { WorkItemsGrid } from './WorkItemsGrid';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from './queryKeys';
 import {
+  MAX_VIEW_REFRESH_INTERVAL_SEC,
+  MIN_VIEW_REFRESH_INTERVAL_SEC,
   createWorkItemQueryViewsExport,
   loadWorkItemQueryViews,
+  normalizeViewExtraColumns,
   parseWorkItemQueryViewsImport,
+  recordViewCount,
   saveWorkItemQueryViews,
+  viewCountBaseline,
   type WorkItemQueryView,
 } from './workItemViewsStorage';
 
@@ -82,8 +88,8 @@ function validateWiql(value: string): { errors: string[]; warnings: string[] } {
   if (!normalized.startsWith("select ")) {
     errors.push("WIQL must start with SELECT.");
   }
-  if (!/\bfrom\s+workitems\b/.test(normalized)) {
-    errors.push("WIQL must include FROM WorkItems.");
+  if (!/\bfrom\s+(workitems|workitemlinks)\b/.test(normalized)) {
+    errors.push("WIQL must include FROM WorkItems or FROM WorkItemLinks.");
   }
   if (!/\bwhere\b/.test(normalized)) {
     warnings.push("Add a WHERE clause to avoid broad queries.");
@@ -107,10 +113,14 @@ function wiqlTokenRange(value: string, cursor: number): { start: number; end: nu
   };
 }
 
-function wiqlCompletionMatches(value: string, cursor: number): WiqlCompletion[] {
+function wiqlCompletionMatches(
+  value: string,
+  cursor: number,
+  pool: WiqlCompletion[],
+): WiqlCompletion[] {
   const token = wiqlTokenRange(value, cursor).token.toLowerCase();
   const normalizedToken = token.replace(/^\[/, "");
-  return WIQL_COMPLETIONS.filter((completion) => {
+  return pool.filter((completion) => {
     const haystack = `${completion.label} ${completion.value} ${completion.detail}`.toLowerCase();
     return !normalizedToken || haystack.includes(normalizedToken);
   }).slice(0, 8);
@@ -206,10 +216,22 @@ export function WorkItemViewsPanel({
   const [draftProjectId, setDraftProjectId] = useState(initialSelectedView?.projectId ?? "");
   const [draftWiql, setDraftWiql] = useState(initialSelectedView?.wiql ?? defaultWorkItemWiql());
   const [draftLimit, setDraftLimit] = useState(String(initialSelectedView?.limit ?? 200));
+  const [draftRefreshInterval, setDraftRefreshInterval] = useState(
+    initialSelectedView?.refreshIntervalSec ? String(initialSelectedView.refreshIntervalSec) : "",
+  );
+  const [draftAlertThreshold, setDraftAlertThreshold] = useState(
+    initialSelectedView?.alertThreshold !== undefined ? String(initialSelectedView.alertThreshold) : "",
+  );
+  const [draftExtraColumns, setDraftExtraColumns] = useState<string[]>(
+    initialSelectedView?.extraColumns ?? [],
+  );
   const draftNameRef = useRef(draftName);
   const draftProjectIdRef = useRef(draftProjectId);
   const draftWiqlRef = useRef(draftWiql);
   const draftLimitRef = useRef(draftLimit);
+  const draftRefreshIntervalRef = useRef(draftRefreshInterval);
+  const draftAlertThresholdRef = useRef(draftAlertThreshold);
+  const draftExtraColumnsRef = useRef(draftExtraColumns);
   const draftWiqlTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [wiqlCursor, setWiqlCursor] = useState(draftWiql.length);
   const [wiqlCompletionsOpen, setWiqlCompletionsOpen] = useState(false);
@@ -231,9 +253,30 @@ export function WorkItemViewsPanel({
   });
   const projectOptions = projectsQuery.data ?? [];
   const wiqlValidation = useMemo(() => validateWiql(draftWiql), [draftWiql]);
+  const fieldsQuery = useQuery({
+    queryKey: workItemQueryKeys.fields(selectedOrganizationId, draftProjectId || null),
+    queryFn: () =>
+      listWorkItemFields({
+        organizationId: selectedOrganizationId,
+        projectId: draftProjectId,
+      }),
+    enabled: dialogOpen && !!selectedOrganizationId && !!draftProjectId,
+    staleTime: 5 * 60_000,
+  });
+  const wiqlCompletionPool = useMemo(() => {
+    const known = new Set(WIQL_COMPLETIONS.map((completion) => completion.value.toLowerCase()));
+    const dynamic = (fieldsQuery.data ?? [])
+      .filter((field) => !known.has(`[${field.referenceName.toLowerCase()}]`))
+      .map((field) => ({
+        label: field.referenceName,
+        value: `[${field.referenceName}]`,
+        detail: field.name,
+      }));
+    return [...WIQL_COMPLETIONS, ...dynamic];
+  }, [fieldsQuery.data]);
   const wiqlCompletions = useMemo(
-    () => wiqlCompletionMatches(draftWiql, wiqlCursor),
-    [draftWiql, wiqlCursor],
+    () => wiqlCompletionMatches(draftWiql, wiqlCursor, wiqlCompletionPool),
+    [draftWiql, wiqlCursor, wiqlCompletionPool],
   );
 
   // URL parse: derived from draftUrl
@@ -331,8 +374,22 @@ export function WorkItemViewsPanel({
         }),
       enabled: !!selectedOrganizationId && !!(view.projectId || projectOptions[0]?.projectId) && !!view.wiql.trim(),
       staleTime: 5 * 60_000,
+      refetchInterval: view.refreshIntervalSec ? view.refreshIntervalSec * 1000 : (false as const),
     })),
   });
+
+  const viewCountsSignature = views
+    .map((view, index) => `${view.id}:${viewCountQueries[index]?.data ?? ""}`)
+    .join("|");
+  useEffect(() => {
+    const ids = views.map((view) => view.id);
+    views.forEach((view, index) => {
+      const count = viewCountQueries[index]?.data;
+      if (typeof count === "number") recordViewCount(view.id, count, ids);
+    });
+    // viewCountQueries is a fresh array each render; the signature captures the inputs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewCountsSignature]);
 
   const selectedViewIndex = Math.max(
     0,
@@ -340,6 +397,7 @@ export function WorkItemViewsPanel({
   );
   const selectedView = views[selectedViewIndex] ?? null;
   const selectedViewProjectId = selectedView?.projectId || projectOptions[0]?.projectId || "";
+  const selectedViewExtraColumns = selectedView?.extraColumns ?? [];
   const selectedQuery = useQuery({
     queryKey: workItemQueryKeys.queryView({
       organizationId: selectedOrganizationId,
@@ -347,6 +405,7 @@ export function WorkItemViewsPanel({
       projectId: selectedViewProjectId,
       wiql: selectedView?.wiql,
       limit: selectedView?.limit,
+      extraFieldsSignature: selectedViewExtraColumns.join("|"),
     }),
     queryFn: () =>
       runWorkItemQuery({
@@ -354,6 +413,7 @@ export function WorkItemViewsPanel({
         projectId: selectedViewProjectId,
         wiql: selectedView!.wiql,
         limit: selectedView!.limit,
+        extraFields: selectedViewExtraColumns,
       }),
     enabled:
       !!selectedView &&
@@ -361,6 +421,9 @@ export function WorkItemViewsPanel({
       !!selectedViewProjectId &&
       !!selectedView.wiql.trim(),
     staleTime: 5 * 60_000,
+    refetchInterval: selectedView?.refreshIntervalSec
+      ? selectedView.refreshIntervalSec * 1000
+      : false,
   });
   const selectedResults = selectedQuery?.data ?? [];
   const selectedQueryInitialLoading =
@@ -400,6 +463,15 @@ export function WorkItemViewsPanel({
     setWiqlCursor(view.wiql.length);
     setDraftLimit(String(view.limit));
     draftLimitRef.current = String(view.limit);
+    const refreshInterval = view.refreshIntervalSec ? String(view.refreshIntervalSec) : "";
+    setDraftRefreshInterval(refreshInterval);
+    draftRefreshIntervalRef.current = refreshInterval;
+    const alertThreshold = view.alertThreshold !== undefined ? String(view.alertThreshold) : "";
+    setDraftAlertThreshold(alertThreshold);
+    draftAlertThresholdRef.current = alertThreshold;
+    const extraColumns = view.extraColumns ?? [];
+    setDraftExtraColumns(extraColumns);
+    draftExtraColumnsRef.current = extraColumns;
     setDraftUrl("");
     setFormError(null);
   }
@@ -417,6 +489,12 @@ export function WorkItemViewsPanel({
     setWiqlCursor(defaultWiql.length);
     setDraftLimit("200");
     draftLimitRef.current = "200";
+    setDraftRefreshInterval("");
+    draftRefreshIntervalRef.current = "";
+    setDraftAlertThreshold("");
+    draftAlertThresholdRef.current = "";
+    setDraftExtraColumns([]);
+    draftExtraColumnsRef.current = [];
     setDraftUrl("");
     setFormError(null);
   }
@@ -502,6 +580,26 @@ export function WorkItemViewsPanel({
       setFormError("Limit must be a number.");
       return;
     }
+    const refreshIntervalInput = draftRefreshIntervalRef.current.trim();
+    if (refreshIntervalInput && !Number.isFinite(Number(refreshIntervalInput))) {
+      setFormError("Auto refresh must be a number of seconds.");
+      return;
+    }
+    const refreshIntervalSec = refreshIntervalInput
+      ? clamp(
+          Math.round(Number(refreshIntervalInput)),
+          MIN_VIEW_REFRESH_INTERVAL_SEC,
+          MAX_VIEW_REFRESH_INTERVAL_SEC,
+        )
+      : undefined;
+    const alertThresholdInput = draftAlertThresholdRef.current.trim();
+    if (alertThresholdInput && !Number.isFinite(Number(alertThresholdInput))) {
+      setFormError("Alert threshold must be a number.");
+      return;
+    }
+    const alertThreshold = alertThresholdInput
+      ? Math.max(0, Math.round(Number(alertThresholdInput)))
+      : undefined;
 
     const nextView: WorkItemQueryView = {
       id: editingViewId ?? newWorkItemViewId(),
@@ -513,6 +611,9 @@ export function WorkItemViewsPanel({
       sortKey: views.find((view) => view.id === editingViewId)?.sortKey ?? "changedDate",
       wiql,
       limit,
+      refreshIntervalSec,
+      alertThreshold,
+      extraColumns: draftExtraColumnsRef.current,
     };
     setViews((current) =>
       editingViewId && current.some((view) => view.id === editingViewId)
@@ -873,6 +974,17 @@ export function WorkItemViewsPanel({
             {views.map((view, index) => {
               const query = viewCountQueries[index];
               const count = query?.data ?? 0;
+              const overflow = typeof query?.data === "number" && query.data > view.limit;
+              const displayCount = overflow ? `${view.limit}+` : count;
+              const baseline = viewCountBaseline(view.id);
+              const delta =
+                typeof query?.data === "number" && baseline !== null
+                  ? query.data - baseline
+                  : null;
+              const alerting =
+                typeof view.alertThreshold === "number" &&
+                typeof query?.data === "number" &&
+                query.data >= view.alertThreshold;
               const selected = selectedView?.id === view.id;
               return (
                 <button
@@ -890,9 +1002,13 @@ export function WorkItemViewsPanel({
                   }}
                   onDoubleClick={() => openEditDialog(view)}
                   className={`min-h-[88px] rounded-md border p-3 text-left outline-none transition-colors focus:ring-2 focus:ring-inset focus:ring-ring ${
-                    selected
-                      ? "border-primary bg-secondary"
-                      : "border-border bg-white hover:bg-muted/60"
+                    alerting
+                      ? selected
+                        ? "border-destructive bg-secondary"
+                        : "border-destructive bg-destructive/5 hover:bg-destructive/10"
+                      : selected
+                        ? "border-primary bg-secondary"
+                        : "border-border bg-white hover:bg-muted/60"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -911,8 +1027,22 @@ export function WorkItemViewsPanel({
                       ) : null}
                     </span>
                   </div>
-                  <div className="mt-3 text-3xl font-semibold leading-none">
-                    {query?.isError ? "!" : count}
+                  <div className="mt-3 flex items-baseline gap-1.5">
+                    <span
+                      className={`text-3xl font-semibold leading-none ${
+                        alerting ? "text-destructive" : ""
+                      }`}
+                    >
+                      {query?.isError ? "!" : displayCount}
+                    </span>
+                    {delta !== null && delta !== 0 && !query?.isError ? (
+                      <span
+                        className="text-xs font-medium text-muted-foreground"
+                        title="Change since the previous session"
+                      >
+                        {delta > 0 ? `+${delta}` : delta}
+                      </span>
+                    ) : null}
                   </div>
                   <p className="mt-1 truncate text-xs text-muted-foreground">
                     {query?.isError
@@ -922,6 +1052,8 @@ export function WorkItemViewsPanel({
                   <p className="mt-1 truncate text-[11px] text-muted-foreground/80">
                     {(view.sortKey ?? "changedDate")} {(view.sortDirection ?? "desc").toUpperCase()}
                     {view.previewVisible === false ? " · preview off" : ""}
+                    {view.refreshIntervalSec ? ` · auto ${view.refreshIntervalSec}s` : ""}
+                    {view.alertThreshold !== undefined ? ` · alert ≥${view.alertThreshold}` : ""}
                   </p>
                 </button>
               );
@@ -956,6 +1088,7 @@ export function WorkItemViewsPanel({
             }
             previewVisible={selectedView.previewVisible !== false}
             storageKeyScope={selectedView.id}
+            extraColumns={selectedViewExtraColumns}
           />
         </div>
       ) : null}
@@ -1104,6 +1237,45 @@ export function WorkItemViewsPanel({
                 </label>
               </div>
 
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="grid gap-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Auto refresh (sec)
+                    <span className="ml-1 font-normal text-muted-foreground/70">(empty = off)</span>
+                  </span>
+                  <input
+                    type="number"
+                    min={MIN_VIEW_REFRESH_INTERVAL_SEC}
+                    max={MAX_VIEW_REFRESH_INTERVAL_SEC}
+                    placeholder="off"
+                    value={draftRefreshInterval}
+                    onChange={(event) => {
+                      setDraftRefreshInterval(event.target.value);
+                      draftRefreshIntervalRef.current = event.target.value;
+                    }}
+                    className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </label>
+
+                <label className="grid gap-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Alert when count ≥
+                    <span className="ml-1 font-normal text-muted-foreground/70">(empty = off)</span>
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="off"
+                    value={draftAlertThreshold}
+                    onChange={(event) => {
+                      setDraftAlertThreshold(event.target.value);
+                      draftAlertThresholdRef.current = event.target.value;
+                    }}
+                    className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </label>
+              </div>
+
               <div className="grid gap-1.5">
                 <div className="flex items-center justify-between gap-2">
                   <label
@@ -1180,6 +1352,68 @@ export function WorkItemViewsPanel({
                     ))}
                   </div>
                 ) : null}
+              </div>
+
+              <div className="grid gap-1.5">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Extra columns
+                  <span className="ml-1 font-normal text-muted-foreground/70">
+                    (shown after the standard columns)
+                  </span>
+                </span>
+                {draftExtraColumns.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {draftExtraColumns.map((referenceName) => (
+                      <span
+                        key={referenceName}
+                        className="inline-flex items-center gap-1 rounded border border-border bg-secondary px-1.5 py-0.5 font-mono text-[11px]"
+                        title={referenceName}
+                      >
+                        {referenceName}
+                        <button
+                          type="button"
+                          aria-label={`Remove column ${referenceName}`}
+                          onClick={() => {
+                            const next = draftExtraColumns.filter((c) => c !== referenceName);
+                            setDraftExtraColumns(next);
+                            draftExtraColumnsRef.current = next;
+                          }}
+                          className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                        >
+                          <X className="h-3 w-3" aria-hidden="true" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                <select
+                  value=""
+                  aria-label="Add extra column"
+                  disabled={fieldsQuery.isLoading}
+                  onChange={(event) => {
+                    const referenceName = event.target.value;
+                    if (!referenceName) return;
+                    const next = normalizeViewExtraColumns([...draftExtraColumns, referenceName]);
+                    setDraftExtraColumns(next);
+                    draftExtraColumnsRef.current = next;
+                  }}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+                >
+                  <option value="">Add column…</option>
+                  {(fieldsQuery.data ?? [])
+                    .filter(
+                      (field) =>
+                        !draftExtraColumns.some(
+                          (existing) =>
+                            existing.toLowerCase() === field.referenceName.toLowerCase(),
+                        ),
+                    )
+                    .map((field) => (
+                      <option key={field.referenceName} value={field.referenceName}>
+                        {field.name} ({field.referenceName})
+                      </option>
+                    ))}
+                </select>
               </div>
 
               {formError ? (

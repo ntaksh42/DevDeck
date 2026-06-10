@@ -14,5 +14,6 @@ pub use git::{
 };
 pub use identity::{AuthenticatedUser, ConnectionData, Identity, IdentityPickerIdentity};
 pub use work_items::{
-    WorkItem, WorkItemComment, WorkItemFieldDefinition, WorkItemReference, WorkItemUpdate,
+    WorkItem, WorkItemComment, WorkItemFieldDefinition, WorkItemLink, WorkItemReference,
+    WorkItemRelation, WorkItemUpdate,
 };

@@ -38,12 +38,13 @@ use work_items::{
     DeleteWorkItemCommentInput, FetchWorkItemImageInput, GetSavedQueryInput,
     GetWorkItemPreviewInput, ListMyWorkItemsInput, ListWorkItemFieldAllowedValuesInput,
     ListWorkItemFieldsInput, ListWorkItemProjectsInput, ListWorkItemTypeStatesInput,
-    MentionCandidate, RecordMentionInteractionInput, RunWorkItemQueryInput, SavedQueryResult,
-    SearchWorkItemAssigneesInput, SearchWorkItemMentionsInput, SearchWorkItemsInput,
-    SetWorkItemFieldInput, SetWorkItemPriorityInput, SetWorkItemReasonInput, SetWorkItemStateInput,
+    ListWorkItemUpdatesInput, MentionCandidate, RecordMentionInteractionInput,
+    RunWorkItemQueryInput, SavedQueryResult, SearchWorkItemAssigneesInput,
+    SearchWorkItemMentionsInput, SearchWorkItemsInput, SetWorkItemFieldInput,
+    SetWorkItemPriorityInput, SetWorkItemReasonInput, SetWorkItemStateInput, SetWorkItemTagsInput,
     SetWorkItemsPriorityInput, SetWorkItemsStateInput, WorkItemAssigneeCandidate, WorkItemComment,
     WorkItemFieldOption, WorkItemImage, WorkItemPreview, WorkItemProjectOption, WorkItemService,
-    WorkItemSummary,
+    WorkItemSummary, WorkItemUpdateSummary,
 };
 
 #[derive(Clone)]
@@ -306,6 +307,25 @@ async fn set_work_item_priority(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn list_work_item_updates(
+    input: ListWorkItemUpdatesInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<WorkItemUpdateSummary>> {
+    state.work_items.list_updates(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn set_work_item_tags(
+    input: SetWorkItemTagsInput,
+    state: State<'_, AppState>,
+) -> Result<WorkItemPreview> {
+    ensure_write_enabled(&state)?;
+    state.work_items.set_tags(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn set_work_items_state(
     input: SetWorkItemsStateInput,
     state: State<'_, AppState>,
@@ -513,7 +533,9 @@ pub fn run() {
             set_work_item_state,
             set_work_item_reason,
             set_work_item_priority,
+            set_work_item_tags,
             set_work_item_field,
+            list_work_item_updates,
             list_work_item_field_allowed_values,
             list_work_item_type_states,
             list_work_item_fields,

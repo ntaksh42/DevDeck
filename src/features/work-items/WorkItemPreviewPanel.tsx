@@ -17,9 +17,11 @@ import {
   fetchWorkItemImage,
   listOrganizations,
   listWorkItemFields,
+  listWorkItemUpdates,
   setWorkItemState,
   setWorkItemReason,
   setWorkItemPriority,
+  setWorkItemTags,
   listWorkItemTypeStates,
   listWorkItemFieldAllowedValues,
   setWorkItemField,
@@ -35,6 +37,7 @@ import {
   type WorkItemSummary,
 } from '@/lib/azdoCommands';
 import { formatRelativeDate, isEditableTarget } from '@/lib/utils';
+import { openExternalUrl } from '@/lib/openExternal';
 import { PreviewEmptyState } from '@/components/StateDisplay';
 import { ShortcutHint } from '@/components/ShortcutHint';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from './queryKeys';
@@ -464,6 +467,24 @@ export function WorkItemPreviewPanel({
     },
   });
 
+  const tagsMutation = useMutation({
+    mutationFn: setWorkItemTags,
+    onSuccess: (updatedPreview) => {
+      onPreviewUpdated?.(updatedPreview);
+      queryClient.setQueryData(
+        workItemQueryKeys.preview(
+          updatedPreview.organizationId,
+          updatedPreview.projectId,
+          updatedPreview.id,
+        ),
+        updatedPreview,
+      );
+      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
+      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot() });
+      invalidateWorkItemQueryViews(queryClient);
+    },
+  });
+
   const priorityMutation = useMutation({
     mutationFn: setWorkItemPriority,
     onSuccess: (updatedPreview) => {
@@ -495,6 +516,7 @@ export function WorkItemPreviewPanel({
     assignMutation.reset();
     priorityMutation.reset();
     customFieldMutation.reset();
+    tagsMutation.reset();
     setCommentText("");
     setSelectedMentions([]);
     setMentionQuery("");
@@ -803,6 +825,15 @@ export function WorkItemPreviewPanel({
                 preview={preview}
                 selectedFieldKeys={selectedPreviewFieldKeys}
                 onSelectedFieldKeysChange={setSelectedPreviewFieldKeys}
+                tagsPending={tagsMutation.isPending}
+                onTagsChange={(tags) =>
+                  tagsMutation.mutate({
+                    organizationId: preview.organizationId,
+                    projectId: preview.projectId,
+                    workItemId: preview.id,
+                    tags,
+                  })
+                }
                 reasonControl={
                   <ReasonEditor
                     current={preview.reason}
@@ -1090,6 +1121,8 @@ function WorkItemPreviewDetails({
   resolveImageSource,
   selectedFieldKeys,
   stateControl,
+  tagsPending,
+  onTagsChange,
 }: {
   customPreviewFields: CustomPreviewField[];
   preview: WorkItemPreview;
@@ -1107,6 +1140,8 @@ function WorkItemPreviewDetails({
   resolveImageSource: (url: string) => Promise<string | null>;
   selectedFieldKeys: PreviewFieldKey[];
   stateControl: ReactNode;
+  tagsPending: boolean;
+  onTagsChange: (tags: string[]) => void;
 }) {
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [fieldMenuOpen, setFieldMenuOpen] = useState(false);
@@ -1196,12 +1231,25 @@ function WorkItemPreviewDetails({
       onKeyDown={stopPreviewNavigationKeyDown}
       tabIndex={-1}
     >
-      <div className="border-b border-border pb-1">
+      <div className="border-b border-border pb-1.5">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="flex min-w-0 items-baseline gap-1.5 text-sm font-semibold leading-5">
-            <span className="shrink-0 text-[11px] font-normal text-muted-foreground">#{preview.id}</span>
-            <span className="truncate text-foreground">{preview.title}</span>
-          </h2>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="shrink-0 font-mono text-[11px] leading-5 text-muted-foreground">
+              #{preview.id}
+            </span>
+            {preview.workItemType ? (
+              <WorkItemTypeBadge type={preview.workItemType} />
+            ) : null}
+            {preview.state ? <WorkItemStatePill state={preview.state} /> : null}
+            {preview.changedDate ? (
+              <span
+                className="hidden shrink-0 truncate text-[10px] text-muted-foreground sm:inline"
+                title={preview.changedDate}
+              >
+                updated {formatRelativeDate(preview.changedDate)}
+              </span>
+            ) : null}
+          </div>
           <div className="flex shrink-0 items-center gap-1">
             <div ref={fieldMenuRef} className="relative">
               <button
@@ -1360,7 +1408,13 @@ function WorkItemPreviewDetails({
             </div>
           </div>
         </div>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(110px,1fr))] gap-x-1.5 gap-y-0 pt-0.5">
+        <h2
+          className="mt-0.5 line-clamp-2 text-sm font-semibold leading-5 text-foreground"
+          title={preview.title}
+        >
+          {preview.title}
+        </h2>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-x-2 gap-y-0.5 pt-1">
           {selectedFieldDefinitions.map((field) =>
             field.editable === "state" ? (
               <PreviewControl key={field.key} label={field.label} shortcut={field.shortcut}>
@@ -1378,6 +1432,14 @@ function WorkItemPreviewDetails({
               <PreviewControl key={field.key} label={field.label} shortcut={field.shortcut}>
                 {reasonControl}
               </PreviewControl>
+            ) : field.key === "tags" ? (
+              <PreviewTagsField
+                key={field.key}
+                label={field.label}
+                value={previewFieldValue(preview, field.key)}
+                pending={tagsPending}
+                onChange={onTagsChange}
+              />
             ) : (
               <PreviewField
                 key={field.key}
@@ -1422,6 +1484,38 @@ function WorkItemPreviewDetails({
         </div>
       )}
 
+      {preview.relations.length > 0 ? (
+        <PreviewSection className="mt-2" title={`Links (${preview.relations.length})`}>
+          <div className="space-y-1">
+            {preview.relations.map((relation) => (
+              <button
+                key={`${relation.relationType}:${relation.id}`}
+                type="button"
+                onClick={() => {
+                  if (relation.webUrl) openExternalUrl(relation.webUrl);
+                }}
+                className="flex w-full min-w-0 items-center gap-1.5 rounded border border-border bg-white px-1.5 py-1 text-left text-xs hover:bg-secondary"
+                title={relation.webUrl ?? undefined}
+              >
+                <span className="w-16 shrink-0 truncate text-[11px] text-muted-foreground">
+                  {relation.relationType}
+                </span>
+                {relation.workItemType ? (
+                  <WorkItemTypeBadge type={relation.workItemType} />
+                ) : null}
+                <span className="shrink-0 font-mono text-[11px] text-primary">
+                  #{relation.id}
+                </span>
+                <span className="min-w-0 flex-1 truncate">
+                  {relation.title ?? "(unresolved)"}
+                </span>
+                {relation.state ? <WorkItemStatePill state={relation.state} /> : null}
+              </button>
+            ))}
+          </div>
+        </PreviewSection>
+      ) : null}
+
       {preview.comments.length > 0 ? (
         <PreviewSection className="mt-2" title={`Comments (${preview.comments.length})`}>
           {deleteCommentError ? (
@@ -1429,7 +1523,7 @@ function WorkItemPreviewDetails({
               {deleteCommentError}
             </p>
           ) : null}
-          <div className="space-y-2">
+          <div className="space-y-1">
             {preview.comments.map((comment) => {
               const deleting = deletingCommentId === comment.id;
               return (
@@ -1455,6 +1549,7 @@ function WorkItemPreviewDetails({
           </div>
         </PreviewSection>
       ) : null}
+      <WorkItemHistorySection preview={preview} />
       {lightboxSrc ? (
         <button
           type="button"
@@ -1470,6 +1565,101 @@ function WorkItemPreviewDetails({
         </button>
       ) : null}
     </div>
+  );
+}
+
+function workItemFieldLabel(referenceName: string): string {
+  return referenceName.split(".").pop() || referenceName;
+}
+
+function WorkItemHistorySection({ preview }: { preview: WorkItemPreview }) {
+  const [open, setOpen] = useState(false);
+  const updatesQuery = useQuery({
+    queryKey: workItemQueryKeys.updates(
+      preview.organizationId,
+      preview.projectId,
+      preview.id,
+    ),
+    queryFn: () =>
+      listWorkItemUpdates({
+        organizationId: preview.organizationId,
+        projectId: preview.projectId,
+        workItemId: preview.id,
+      }),
+    enabled: open,
+    staleTime: 60_000,
+  });
+  const updates = updatesQuery.data ?? [];
+
+  return (
+    <section className="mt-2 min-w-0">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground"
+      >
+        History
+        <span aria-hidden="true">{open ? "▾" : "▸"}</span>
+        {open && updatesQuery.isFetching ? (
+          <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+        ) : null}
+      </button>
+      {open ? (
+        updatesQuery.isError ? (
+          <p className="mt-1 text-[11px] text-destructive">
+            {commandErrorMessage(updatesQuery.error)}
+          </p>
+        ) : updates.length === 0 && !updatesQuery.isFetching ? (
+          <p className="mt-1 text-[11px] text-muted-foreground">No field changes recorded.</p>
+        ) : (
+          <div className="mt-1 space-y-1.5">
+            {updates.map((update) => (
+              <article
+                key={update.id}
+                className="min-w-0 rounded border border-border bg-white px-1.5 py-1"
+              >
+                <div className="flex min-w-0 items-baseline gap-1.5 text-[11px]">
+                  <span className="min-w-0 truncate font-semibold">
+                    {update.revisedBy ?? "Unknown"}
+                  </span>
+                  {update.revisedDate ? (
+                    <span
+                      className="shrink-0 text-muted-foreground"
+                      title={new Date(update.revisedDate).toLocaleString()}
+                    >
+                      {formatRelativeDate(update.revisedDate)}
+                    </span>
+                  ) : null}
+                </div>
+                <ul className="mt-0.5 space-y-0.5">
+                  {update.changes.map((change) => (
+                    <li
+                      key={change.referenceName}
+                      className="flex min-w-0 flex-wrap items-baseline gap-1 text-[11px] leading-4"
+                      title={change.referenceName}
+                    >
+                      <span className="text-muted-foreground">
+                        {workItemFieldLabel(change.referenceName)}:
+                      </span>
+                      {change.oldValue ? (
+                        <>
+                          <span className="truncate text-muted-foreground line-through">
+                            {change.oldValue}
+                          </span>
+                          <span aria-hidden="true" className="text-muted-foreground">→</span>
+                        </>
+                      ) : null}
+                      <span className="truncate font-medium">{change.newValue ?? "(cleared)"}</span>
+                    </li>
+                  ))}
+                </ul>
+              </article>
+            ))}
+          </div>
+        )
+      ) : null}
+    </section>
   );
 }
 
@@ -1501,7 +1691,7 @@ function CollapsibleComment({
 
   return (
     <article className="group min-w-0 overflow-hidden rounded-md border border-border bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-      <div className="flex min-w-0 items-center gap-1.5 border-b border-border bg-slate-50 px-2 py-1">
+      <div className="flex min-w-0 items-center gap-1.5 border-b border-border bg-slate-50 px-1.5 py-0.5">
         <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[10px] font-semibold text-blue-700">
           {commentAuthorInitials(createdBy)}
         </span>
@@ -1510,7 +1700,10 @@ function CollapsibleComment({
         </span>
         <span className="hidden text-[11px] text-muted-foreground sm:inline">commented</span>
         {createdDate ? (
-          <span className="shrink-0 text-[11px] text-muted-foreground">
+          <span
+            className="shrink-0 text-[11px] text-muted-foreground"
+            title={new Date(createdDate).toLocaleString()}
+          >
             {formatRelativeDate(createdDate)}
           </span>
         ) : null}
@@ -1529,17 +1722,17 @@ function CollapsibleComment({
           )}
         </button>
       </div>
-      <div className="px-3 py-2.5">
+      <div className="px-1.5 py-1">
         <div className={expanded ? "" : "max-h-32 overflow-hidden"}>
           <RichHtmlFrame
             baseUrl={baseUrl}
-            density="comfortable"
+            density="compact"
             framed={false}
             html={commentHtml}
             title={`Comment by ${createdBy ?? "Unknown"}`}
             resolveImageSource={resolveImageSource}
             onImageOpen={onImageOpen}
-            minHeight={34}
+            minHeight={22}
           />
         </div>
         {collapsible ? (
@@ -1665,7 +1858,9 @@ function PreviewField({
         wide ? "sm:col-span-2 2xl:col-span-3" : ""
       }`}
     >
-      <dt className="shrink-0 text-[10px] leading-4 text-muted-foreground">{label}</dt>
+      <dt className="shrink-0 text-[10px] font-semibold uppercase leading-4 text-muted-foreground">
+        {label}
+      </dt>
       <dd
         className={`min-w-0 flex-1 text-[12px] font-semibold leading-4 text-foreground ${
           wide ? "break-words" : "truncate"
@@ -1689,13 +1884,162 @@ function PreviewSection({
 }) {
   return (
     <section className={`min-w-0 ${className}`}>
-      <div className="mb-1 border-t border-border pt-1">
+      <div className="sticky top-0 z-10 mb-1 border-t border-border bg-white/95 pb-0.5 pt-1 backdrop-blur-sm">
         <h3 className="text-[11px] font-semibold leading-4 text-foreground/75">
           {title}
         </h3>
       </div>
       {children}
     </section>
+  );
+}
+
+// Azure DevOps standard work item type colors, keyed by lowercase type name.
+const WORK_ITEM_TYPE_COLORS: Record<string, string> = {
+  bug: "#CC293D",
+  task: "#F2CB1D",
+  "user story": "#009CCC",
+  "product backlog item": "#009CCC",
+  requirement: "#009CCC",
+  feature: "#773B93",
+  epic: "#FF7B00",
+  issue: "#B4009E",
+  impediment: "#B4009E",
+  "test case": "#004B50",
+};
+
+export function workItemTypeColor(workItemType: string): string {
+  return WORK_ITEM_TYPE_COLORS[workItemType.trim().toLowerCase()] ?? "#64748B";
+}
+
+export function workItemStateDotClass(state: string): string {
+  const normalized = state.trim().toLowerCase();
+  if (["done", "closed", "completed", "inactive"].includes(normalized)) {
+    return "bg-green-500";
+  }
+  if (normalized === "resolved") return "bg-amber-500";
+  if (
+    ["active", "in progress", "doing", "committed", "open"].includes(normalized)
+  ) {
+    return "bg-blue-500";
+  }
+  if (normalized === "removed") return "bg-slate-300";
+  // New / To Do / Proposed / Approved and unknown custom states.
+  return "bg-slate-400";
+}
+
+function WorkItemTypeBadge({ type }: { type: string }) {
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1 rounded border border-border bg-white px-1.5 text-[11px] font-medium leading-[18px] text-foreground">
+      <span
+        aria-hidden="true"
+        className="h-2 w-2 shrink-0 rounded-[2px]"
+        style={{ backgroundColor: workItemTypeColor(type) }}
+      />
+      <span className="truncate">{type}</span>
+    </span>
+  );
+}
+
+function WorkItemStatePill({ state }: { state: string }) {
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1 rounded-full border border-border bg-white px-1.5 text-[11px] leading-[18px] text-foreground">
+      <span
+        aria-hidden="true"
+        className={`h-2 w-2 shrink-0 rounded-full ${workItemStateDotClass(state)}`}
+      />
+      <span className="truncate">{state}</span>
+    </span>
+  );
+}
+
+export function splitWorkItemTags(value: string | null | undefined): string[] {
+  // Deduplicate: repeated tags would collide as React keys in the chip list.
+  return [
+    ...new Set(
+      (value ?? "")
+        .split(";")
+        .map((tag) => tag.trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
+function PreviewTagsField({
+  label,
+  value,
+  pending = false,
+  onChange,
+}: {
+  label: string;
+  value: string | null;
+  pending?: boolean;
+  onChange?: (tags: string[]) => void;
+}) {
+  const tags = splitWorkItemTags(value);
+  const [draft, setDraft] = useState("");
+
+  function addDraftTag() {
+    const tag = draft.trim();
+    if (!tag || !onChange) return;
+    setDraft("");
+    if (tags.some((existing) => existing.toLowerCase() === tag.toLowerCase())) return;
+    onChange([...tags, tag]);
+  }
+
+  return (
+    <div className="flex min-w-0 items-baseline gap-1.5 sm:col-span-2 2xl:col-span-3">
+      <dt className="shrink-0 text-[10px] font-semibold uppercase leading-4 text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+        {tags.length === 0 && !onChange ? (
+          <span className="text-[12px] font-semibold leading-4 text-foreground">—</span>
+        ) : (
+          tags.map((tag) => (
+            <span
+              key={tag}
+              className="inline-flex max-w-full items-center gap-0.5 truncate rounded-sm border border-border bg-secondary px-1 text-[10px] font-medium leading-4 text-secondary-foreground"
+              title={tag}
+            >
+              {tag}
+              {onChange ? (
+                <button
+                  type="button"
+                  aria-label={`Remove tag ${tag}`}
+                  disabled={pending}
+                  onClick={() => onChange(tags.filter((existing) => existing !== tag))}
+                  className="rounded text-muted-foreground hover:text-foreground disabled:opacity-50"
+                >
+                  <X className="h-2.5 w-2.5" aria-hidden="true" />
+                </button>
+              ) : null}
+            </span>
+          ))
+        )}
+        {onChange ? (
+          <input
+            value={draft}
+            disabled={pending}
+            placeholder="+ tag"
+            aria-label="Add tag"
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              stopPreviewNavigationKeyDown(event);
+              if (event.key === "Enter") {
+                event.preventDefault();
+                addDraftTag();
+              }
+            }}
+            onBlur={addDraftTag}
+            className="w-16 min-w-0 rounded-sm border border-transparent bg-transparent px-1 text-[10px] leading-4 outline-none placeholder:text-muted-foreground/60 focus:border-input focus:bg-background disabled:opacity-50"
+          />
+        ) : null}
+        {pending ? (
+          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" aria-hidden="true" />
+        ) : null}
+      </dd>
+    </div>
   );
 }
 
@@ -2232,7 +2576,9 @@ function CustomFieldPicker({
 
   return (
     <div className="flex min-w-0 items-baseline gap-1.5 sm:col-span-2 2xl:col-span-3">
-      <dt className="shrink-0 text-[10px] leading-4 text-muted-foreground">{label}</dt>
+      <dt className="shrink-0 text-[10px] font-semibold uppercase leading-4 text-muted-foreground">
+        {label}
+      </dt>
       <dd ref={pickerRef} className="relative min-w-0 flex-1">
         <button
           ref={triggerRef}
