@@ -5,6 +5,7 @@ import {
   isSelfIdentity,
   rankMentionCandidates,
   renderAzureMentionMarkdown,
+  sortSelfLast,
 } from "./WorkItemPreviewPanel";
 
 function makeOrg(overrides: {
@@ -88,6 +89,23 @@ describe("isSelfIdentity", () => {
     expect(
       isSelfIdentity({ ...namesake, uniqueName: null }, org),
     ).toBe(true);
+  });
+});
+
+describe("sortSelfLast", () => {
+  it("keeps self in the list but moves it to the end", () => {
+    const org = makeOrg({
+      authenticatedUserId: "user-guid-1",
+      authenticatedUserDisplayName: "Jane Doe",
+    });
+    const other: MentionCandidate = {
+      id: "user-guid-2",
+      displayName: "Bob Smith",
+      uniqueName: "bob@contoso.example",
+    };
+    // In a single-member org the list must not become empty.
+    expect(sortSelfLast([self], org)).toEqual([self]);
+    expect(sortSelfLast([self, other], org)).toEqual([other, self]);
   });
 });
 

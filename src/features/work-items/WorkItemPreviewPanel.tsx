@@ -220,12 +220,17 @@ export function WorkItemPreviewPanel({
   });
   const mentionOptions = useMemo(
     () =>
-      rankMentionCandidates({
-        recent: recentMentionOptions.filter((c) => !isSelfIdentity(c, selfOrg)),
-        remote: (mentionOptionsQuery.data ?? []).filter((c) => !isSelfIdentity(c, selfOrg)),
-        query: mentionQuery,
-        priorityNames: mentionPriorityNames,
-      }),
+      // Self stays in the list but last: removing it entirely leaves the
+      // picker empty in single-member organizations.
+      sortSelfLast(
+        rankMentionCandidates({
+          recent: recentMentionOptions,
+          remote: mentionOptionsQuery.data ?? [],
+          query: mentionQuery,
+          priorityNames: mentionPriorityNames,
+        }),
+        selfOrg,
+      ),
     [
       mentionOptionsQuery.data,
       mentionPriorityNames,
@@ -287,12 +292,15 @@ export function WorkItemPreviewPanel({
   });
   const assigneeOptions = useMemo(
     () =>
-      rankMentionCandidates({
-        recent: [...recentAssigneeOptions, ...(assigneeDefaultQuery.data ?? [])].filter((c) => !isSelfIdentity(c, selfOrg)),
-        remote: (assigneeOptionsQuery.data ?? []).filter((c) => !isSelfIdentity(c, selfOrg)),
-        query: assigneeQuery,
-        priorityNames: mentionPriorityNames,
-      }),
+      sortSelfLast(
+        rankMentionCandidates({
+          recent: [...recentAssigneeOptions, ...(assigneeDefaultQuery.data ?? [])],
+          remote: assigneeOptionsQuery.data ?? [],
+          query: assigneeQuery,
+          priorityNames: mentionPriorityNames,
+        }),
+        selfOrg,
+      ),
     [
       assigneeDefaultQuery.data,
       assigneeOptionsQuery.data,
@@ -884,6 +892,11 @@ export function WorkItemPreviewPanel({
                           <button
                             key={candidate.id}
                             type="button"
+                            ref={
+                              index === activeMentionIndex
+                                ? scrollMentionOptionIntoView
+                                : undefined
+                            }
                             onMouseDown={(event) => event.preventDefault()}
                             onClick={() => applyMention(candidate)}
                             className={`flex w-full min-w-0 flex-col px-3 py-2 text-left text-sm ${
@@ -2450,6 +2463,16 @@ function recentWorkItemAssigneeCandidates(
     }));
 }
 
+export function sortSelfLast<T extends MentionCandidate>(
+  candidates: T[],
+  org: Organization | undefined,
+): T[] {
+  return [
+    ...candidates.filter((candidate) => !isSelfIdentity(candidate, org)),
+    ...candidates.filter((candidate) => isSelfIdentity(candidate, org)),
+  ];
+}
+
 export function isSelfIdentity(
   candidate: MentionCandidate,
   org: Organization | undefined,
@@ -2679,6 +2702,12 @@ function uniqueNormalizedNames(values: Array<string | null | undefined>): string
 
 function normalizeMentionName(value: string | null | undefined): string {
   return value?.trim().toLowerCase() ?? "";
+}
+
+// Attached to the active option only, so React re-runs it whenever the
+// arrow keys move the highlight and the option scrolls into view.
+function scrollMentionOptionIntoView(element: HTMLButtonElement | null) {
+  element?.scrollIntoView?.({ block: "nearest" });
 }
 
 type SelectedMention = {

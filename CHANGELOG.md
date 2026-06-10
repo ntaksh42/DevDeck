@@ -4,6 +4,14 @@ All notable changes to AzDoDeck are documented here.
 
 ## [Unreleased]
 
+## [0.1.13] — 2026-06-10
+
+### Fixed
+- Mention and assignee pickers no longer come up empty in single-member organizations: the signed-in user is shown at the end of the candidate list again instead of being removed entirely (regression introduced when self was filtered out of both pickers).
+
+### Changed
+- The @mention candidate list auto-scrolls to keep the highlighted entry visible while navigating with the arrow keys.
+
 ## [0.1.12] — 2026-06-10
 
 ### Fixed

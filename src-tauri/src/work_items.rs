@@ -582,21 +582,25 @@ impl WorkItemService {
             }
         }
 
-        Ok(candidates
+        // The signed-in user goes last instead of being removed: in a
+        // single-member organization removing self would leave the picker
+        // permanently empty, and mentioning yourself is legitimate.
+        let mut results: Vec<MentionCandidate> = candidates
             .into_iter()
-            .filter(|c| {
-                !is_authenticated_user(
-                    &c.id,
-                    &c.display_name,
-                    c.unique_name.as_deref(),
-                    &organization,
-                )
-            })
             .filter(|c| {
                 mention_candidate_matches_query(&c.display_name, c.unique_name.as_deref(), query)
             })
-            .take(8)
-            .collect())
+            .collect();
+        results.sort_by_key(|c| {
+            is_authenticated_user(
+                &c.id,
+                &c.display_name,
+                c.unique_name.as_deref(),
+                &organization,
+            )
+        });
+        results.truncate(8);
+        Ok(results)
     }
 
     pub async fn search_assignees(
@@ -644,20 +648,23 @@ impl WorkItemService {
             }
         }
 
-        Ok(candidates
+        // Keep self in the list (last) so assigning to yourself stays
+        // possible; see search_mentions for the rationale.
+        let mut results: Vec<WorkItemAssigneeCandidate> = candidates
             .into_iter()
-            .filter(|c| {
-                !is_authenticated_user(
-                    &c.id,
-                    &c.display_name,
-                    c.unique_name.as_deref(),
-                    &organization,
-                )
-            })
             .filter(|candidate| candidate.unique_name.is_some())
             .filter(|candidate| assignee_candidate_matches_query(candidate, query))
-            .take(8)
-            .collect())
+            .collect();
+        results.sort_by_key(|c| {
+            is_authenticated_user(
+                &c.id,
+                &c.display_name,
+                c.unique_name.as_deref(),
+                &organization,
+            )
+        });
+        results.truncate(8);
+        Ok(results)
     }
 
     pub async fn fetch_image(&self, input: FetchWorkItemImageInput) -> Result<WorkItemImage> {
