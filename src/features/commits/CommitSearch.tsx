@@ -37,6 +37,8 @@ const COMMIT_COLUMN_MAX_WIDTHS = [140, 160, 720, 380, 340];
 const COMMIT_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:commitGridColumnWidths:v2";
 const COMMIT_SEARCH_VIEW_STORAGE_KEY = "azdodeck:view:commitSearch:v1";
 const COMMIT_SORT_STORAGE_KEY = "azdodeck:view:commitGridSort:v1";
+const COMMIT_GRID_ROW_HEIGHT = 29;
+const COMMIT_GRID_OVERSCAN = 8;
 
 type CommitSearchViewState = {
   author: string;
@@ -233,8 +235,8 @@ export function CommitSearch({
   }
 
   return (
-    <div className="space-y-3">
-      <div className="rounded-md border border-border bg-white">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="shrink-0 rounded-md border border-border bg-white">
         <form className="grid gap-3 p-3" onSubmit={onSubmit}>
           <div className="grid gap-3 xl:grid-cols-[minmax(240px,1fr)_180px_180px_170px_auto]">
             <label className="grid gap-2">
@@ -556,7 +558,7 @@ const CommitGridRow = forwardRef<
           openExternalUrl(commit.webUrl);
         }
       }}
-      className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
+      className={`grid h-[29px] cursor-pointer select-none items-center gap-2 border-b border-border px-2 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
         selected ? "bg-secondary" : "hover:bg-muted/50"
       }`}
       style={{ gridTemplateColumns: columnTemplate }}
@@ -609,10 +611,34 @@ function CommitResults({
   );
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const restoreFocusRef = useRef(false);
+  const [scrollerEl, setScrollerEl] = useState<HTMLDivElement | null>(null);
+  const [gridViewport, setGridViewport] = useState({ height: 0, scrollTop: 0 });
 
   useEffect(() => {
     localStorage.setItem(COMMIT_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
   }, [columnWidths]);
+
+  useEffect(() => {
+    if (!scrollerEl) return;
+
+    function updateViewport() {
+      setGridViewport({
+        height: scrollerEl!.clientHeight,
+        scrollTop: scrollerEl!.scrollTop,
+      });
+    }
+
+    updateViewport();
+    scrollerEl.addEventListener("scroll", updateViewport, { passive: true });
+    const resizeObserver =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateViewport);
+    resizeObserver?.observe(scrollerEl);
+    return () => {
+      scrollerEl.removeEventListener("scroll", updateViewport);
+      resizeObserver?.disconnect();
+    };
+  }, [scrollerEl]);
 
   useEffect(() => {
     localStorage.setItem(COMMIT_SORT_STORAGE_KEY, JSON.stringify(sort));
@@ -641,25 +667,44 @@ function CommitResults({
     setSelectedIndex(0);
   }
 
-  function moveSelection(delta: number) {
-    setSelectedIndex((prev) => {
-      const next = clamp(prev + delta, 0, sorted.length - 1);
-      rowRefs.current[next]?.focus();
-      return next;
-    });
+  function scrollRowIntoView(index: number) {
+    if (!scrollerEl) return;
+    const rowTop = index * COMMIT_GRID_ROW_HEIGHT;
+    const rowBottom = rowTop + COMMIT_GRID_ROW_HEIGHT;
+    if (rowTop < scrollerEl.scrollTop) {
+      scrollerEl.scrollTop = rowTop;
+    } else if (rowBottom > scrollerEl.scrollTop + scrollerEl.clientHeight) {
+      scrollerEl.scrollTop = rowBottom - scrollerEl.clientHeight;
+    }
   }
+
+  function moveSelectionTo(index: number) {
+    const next = clamp(index, 0, sorted.length - 1);
+    restoreFocusRef.current = true;
+    scrollRowIntoView(next);
+    setSelectedIndex(next);
+  }
+
+  function moveSelection(delta: number) {
+    moveSelectionTo(selectedIndex + delta);
+  }
+
+  // Rows outside the virtual window unmount, so roving focus is restored once
+  // the row for the new selection is mounted again.
+  useEffect(() => {
+    if (!restoreFocusRef.current) return;
+    const row = rowRefs.current[selectedIndex];
+    if (!row) return;
+    restoreFocusRef.current = false;
+    row.focus({ preventScroll: true });
+  });
 
   function handleKeyDown(e: ReactKeyboardEvent) {
     if (isEditableTarget(e.target)) return;
     if (e.key === "ArrowDown") { e.preventDefault(); moveSelection(1); }
     else if (e.key === "ArrowUp") { e.preventDefault(); moveSelection(-1); }
-    else if (e.key === "Home") { e.preventDefault(); setSelectedIndex(0); rowRefs.current[0]?.focus(); }
-    else if (e.key === "End") {
-      e.preventDefault();
-      const last = sorted.length - 1;
-      setSelectedIndex(last);
-      rowRefs.current[last]?.focus();
-    }
+    else if (e.key === "Home") { e.preventDefault(); moveSelectionTo(0); }
+    else if (e.key === "End") { e.preventDefault(); moveSelectionTo(sorted.length - 1); }
     else if (e.key === "PageDown") { e.preventDefault(); moveSelection(10); }
     else if (e.key === "PageUp") { e.preventDefault(); moveSelection(-10); }
     else if (e.key === "Enter") {
@@ -685,8 +730,24 @@ function CommitResults({
   const activeFilterCount = Math.max(0, activeExternalFilterCount);
   const hasActiveFilters = activeFilterCount > 0;
 
+  const firstVirtualRow = Math.max(
+    0,
+    Math.floor(gridViewport.scrollTop / COMMIT_GRID_ROW_HEIGHT) - COMMIT_GRID_OVERSCAN,
+  );
+  const visibleRowCount = Math.ceil(
+    Math.max(gridViewport.height, COMMIT_GRID_ROW_HEIGHT) / COMMIT_GRID_ROW_HEIGHT,
+  );
+  const lastVirtualRow = Math.min(
+    sorted.length,
+    firstVirtualRow + visibleRowCount + COMMIT_GRID_OVERSCAN * 2,
+  );
+  const virtualRows = sorted.slice(firstVirtualRow, lastVirtualRow);
+  const virtualTopPadding = firstVirtualRow * COMMIT_GRID_ROW_HEIGHT;
+  const virtualBottomPadding =
+    Math.max(0, sorted.length - lastVirtualRow) * COMMIT_GRID_ROW_HEIGHT;
+
   return (
-    <div className="overflow-hidden rounded-md border border-border bg-white">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-white">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <h2 className="text-base font-semibold">Results</h2>
         <span className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -720,9 +781,10 @@ function CommitResults({
           aria-label="Commit search results"
           data-primary-grid="true"
           tabIndex={-1}
-          className="overflow-x-auto"
+          className="flex min-h-0 flex-1 flex-col outline-none"
           onKeyDown={handleKeyDown}
         >
+          <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-auto">
           <div className="min-w-[680px]">
             <div
               role="row"
@@ -758,17 +820,25 @@ function CommitResults({
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden="true" />
               </div>
             ) : (
-              sorted.map((commit, index) => (
-                <CommitGridRow
-                  key={`${commit.repositoryId}:${commit.commitId}`}
-                  ref={(el) => { rowRefs.current[index] = el; }}
-                  commit={commit}
-                  selected={index === selectedIndex}
-                  columnTemplate={commitColTemplate}
-                  onSelect={() => setSelectedIndex(index)}
-                />
-              ))
+              <>
+                {virtualTopPadding > 0 ? <div style={{ height: virtualTopPadding }} /> : null}
+                {virtualRows.map((commit, offset) => {
+                  const index = firstVirtualRow + offset;
+                  return (
+                    <CommitGridRow
+                      key={`${commit.repositoryId}:${commit.commitId}`}
+                      ref={(el) => { rowRefs.current[index] = el; }}
+                      commit={commit}
+                      selected={index === selectedIndex}
+                      columnTemplate={commitColTemplate}
+                      onSelect={() => setSelectedIndex(index)}
+                    />
+                  );
+                })}
+                {virtualBottomPadding > 0 ? <div style={{ height: virtualBottomPadding }} /> : null}
+              </>
             )}
+          </div>
           </div>
         </div>
       )}

@@ -6,7 +6,7 @@ use azdo_client::{
 };
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -2321,6 +2321,9 @@ const SYNC_MY_WI_WIQL: &str =
      AND [System.AssignedTo] = @Me \
      ORDER BY [System.ChangedDate] DESC";
 const SYNC_WORK_ITEM_BATCH_SIZE: usize = 200;
+// Between full syncs, only items whose ChangedDate moved past the last sync
+// are fetched. Deletions are reconciled by the next full sync.
+const FULL_WI_SYNC_INTERVAL_HOURS: i64 = 24;
 // WIQL fails with VS402337 when a query would return more than 20,000 items.
 // Cap sync queries well below that; ORDER BY ChangedDate DESC keeps the most
 // recently changed items.
@@ -2328,6 +2331,46 @@ const SYNC_WORK_ITEM_QUERY_TOP: usize = 2000;
 
 struct SyncWorkItemsResult {
     warning: Option<String>,
+    was_full_sync: bool,
+}
+
+fn full_sync_scope(org_id: &str) -> String {
+    format!("internal:wi_full_sync:{org_id}")
+}
+
+fn wiql_with_changed_date_filter(base: &str, since_date: &str) -> String {
+    base.replace(
+        " ORDER BY",
+        &format!(" AND [System.ChangedDate] >= '{since_date}' ORDER BY"),
+    )
+}
+
+// Returns the day-precision date for a delta sync, or None when a full sync
+// is due (no prior full sync, parse failure, or the interval has elapsed).
+fn delta_sync_since(db: &AppDatabase, org: &Organization) -> Option<String> {
+    let full_at = db
+        .get_sync_state(&full_sync_scope(&org.id))
+        .ok()??
+        .last_synced_at?;
+    let last_at = db
+        .get_sync_state(&format!("work_items:{}", org.id))
+        .ok()??
+        .last_synced_at?;
+    let full_time = DateTime::parse_from_rfc3339(&full_at)
+        .ok()?
+        .with_timezone(&Utc);
+    let last_time = DateTime::parse_from_rfc3339(&last_at)
+        .ok()?
+        .with_timezone(&Utc);
+    if Utc::now() - full_time >= chrono::Duration::hours(FULL_WI_SYNC_INTERVAL_HOURS) {
+        return None;
+    }
+    // WIQL date literals are day-precision; back off one extra day for safety.
+    Some(
+        (last_time - chrono::Duration::days(1))
+            .format("%Y-%m-%d")
+            .to_string(),
+    )
 }
 
 struct SyncWorkItemFetchResult {
@@ -2354,7 +2397,17 @@ pub async fn sync_work_items_for_org(
                 None,
                 result.warning.as_deref(),
             )?;
-            tracing::info!(org = %org.name, "work item sync completed");
+            if result.was_full_sync {
+                db.update_sync_state(
+                    &full_sync_scope(&org.id),
+                    &org.id,
+                    Some(&now),
+                    0,
+                    None,
+                    None,
+                )?;
+            }
+            tracing::info!(org = %org.name, full = result.was_full_sync, "work item sync completed");
             Ok(())
         }
         Err(e) => {
@@ -2380,6 +2433,11 @@ async fn do_sync_work_items(
 ) -> Result<SyncWorkItemsResult> {
     let projects = client.list_projects().await?;
     let fields: Vec<String> = WORK_ITEM_FIELDS.iter().map(ToString::to_string).collect();
+    let delta_since = delta_sync_since(db, org);
+    let all_wiql = match delta_since.as_deref() {
+        Some(since) => wiql_with_changed_date_filter(SYNC_WI_WIQL, since),
+        None => SYNC_WI_WIQL.to_string(),
+    };
     let mut all_cached: Vec<CachedWorkItem> = Vec::new();
     let mut my_cached: Vec<CachedWorkItem> = Vec::new();
     let mut synced_project_ids: Vec<String> = Vec::new();
@@ -2395,7 +2453,7 @@ async fn do_sync_work_items(
                 org,
                 &project.id,
                 &project.name,
-                SYNC_WI_WIQL,
+                &all_wiql,
                 fields.clone(),
                 "work item",
             ),
@@ -2467,7 +2525,12 @@ async fn do_sync_work_items(
     }
 
     let synced_ids: Vec<&str> = synced_project_ids.iter().map(String::as_str).collect();
-    db.replace_work_items(&org.id, &synced_ids, &all_cached, &my_cached)?;
+    let was_full_sync = delta_since.is_none();
+    if was_full_sync {
+        db.replace_work_items(&org.id, &synced_ids, &all_cached, &my_cached)?;
+    } else {
+        db.apply_work_items_delta(&org.id, &synced_ids, &all_cached, &my_cached)?;
+    }
 
     let mut warning_parts: Vec<String> = Vec::new();
     if !skipped_projects.is_empty() {
@@ -2488,7 +2551,10 @@ async fn do_sync_work_items(
         Some(warning_parts.join(" "))
     };
 
-    Ok(SyncWorkItemsResult { warning })
+    Ok(SyncWorkItemsResult {
+        warning,
+        was_full_sync,
+    })
 }
 
 async fn fetch_sync_work_items(
@@ -3191,6 +3257,148 @@ mod tests {
         let my_cached = db.list_my_work_items(&org.id).unwrap();
         assert_eq!(my_cached.len(), 1);
         assert_eq!(my_cached[0].title, "Keep synced item");
+    }
+
+    #[test]
+    fn wiql_with_changed_date_filter_inserts_condition_before_order_by() {
+        let filtered = wiql_with_changed_date_filter(SYNC_WI_WIQL, "2026-06-10");
+        assert_eq!(
+            filtered,
+            "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project \
+             AND [System.ChangedDate] >= '2026-06-10' ORDER BY [System.ChangedDate] DESC"
+        );
+    }
+
+    #[tokio::test]
+    async fn sync_work_items_delta_preserves_items_missing_from_window() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/_apis/projects"))
+            .and(query_param("api-version", "7.1-preview"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "count": 1,
+                "value": [{ "id": "project-ok", "name": "Platform" }]
+            })))
+            .mount(&server)
+            .await;
+        // The "all items" query must carry the ChangedDate delta filter; the
+        // "my items" query stays unfiltered. Without the filter no mock
+        // matches and the sync fails.
+        Mock::given(method("POST"))
+            .and(path("/project-ok/_apis/wit/wiql"))
+            .and(body_string_contains("[System.ChangedDate] >="))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "workItems": [{ "id": 10 }]
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/project-ok/_apis/wit/wiql"))
+            .and(body_string_contains("@Me"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "workItems": []
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/project-ok/_apis/wit/workitemsbatch"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "count": 1,
+                "value": [{
+                    "id": 10,
+                    "fields": {
+                        "System.Title": "Fresh change",
+                        "System.WorkItemType": "Task",
+                        "System.State": "Active",
+                        "System.ChangedDate": "2026-06-11T00:00:00Z"
+                    }
+                }]
+            })))
+            .mount(&server)
+            .await;
+
+        let db_file = tempfile::NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(db_file.path().to_path_buf());
+        db.initialize().unwrap();
+        let org = db.upsert_organization(make_org_draft()).unwrap();
+
+        // Cached item outside the delta window: a full sync would delete it.
+        db.upsert_work_items(&[CachedWorkItem {
+            org_id: org.id.clone(),
+            project_id: "project-ok".to_string(),
+            project_name: "Platform".to_string(),
+            id: 99,
+            title: "Old but alive".to_string(),
+            work_item_type: Some("Task".to_string()),
+            state: Some("Active".to_string()),
+            assigned_to: None,
+            assigned_to_unique_name: None,
+            changed_date: Some("2026-01-01T00:00:00Z".to_string()),
+            web_url: None,
+        }])
+        .unwrap();
+
+        let now = Utc::now().to_rfc3339();
+        db.update_sync_state(
+            &format!("work_items:{}", org.id),
+            &org.id,
+            Some(&now),
+            0,
+            None,
+            None,
+        )
+        .unwrap();
+        db.update_sync_state(
+            &full_sync_scope(&org.id),
+            &org.id,
+            Some(&now),
+            0,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let client = test_client(&server).await;
+        let result = do_sync_work_items(&db, &client, &org).await.unwrap();
+        assert!(!result.was_full_sync);
+
+        let cached = db
+            .search_work_items(&org.id, None, None, None, None)
+            .unwrap();
+        let mut ids: Vec<i64> = cached.iter().map(|item| item.id).collect();
+        ids.sort_unstable();
+        assert_eq!(ids, vec![10, 99]);
+    }
+
+    #[tokio::test]
+    async fn sync_work_items_runs_full_sync_when_interval_elapsed() {
+        let db_file = tempfile::NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(db_file.path().to_path_buf());
+        db.initialize().unwrap();
+        let org = db.upsert_organization(make_org_draft()).unwrap();
+
+        let now = Utc::now().to_rfc3339();
+        let stale_full = (Utc::now() - chrono::Duration::hours(25)).to_rfc3339();
+        db.update_sync_state(
+            &format!("work_items:{}", org.id),
+            &org.id,
+            Some(&now),
+            0,
+            None,
+            None,
+        )
+        .unwrap();
+        db.update_sync_state(
+            &full_sync_scope(&org.id),
+            &org.id,
+            Some(&stale_full),
+            0,
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert!(delta_sync_since(&db, &org).is_none());
     }
 
     #[tokio::test]

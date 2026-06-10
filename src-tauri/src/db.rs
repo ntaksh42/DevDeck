@@ -188,6 +188,10 @@ impl AppDatabase {
         let conn = Connection::open(&self.path)?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
         conn.pragma_update(None, "recursive_triggers", "ON")?;
+        // Wait instead of failing with SQLITE_BUSY when a sync write overlaps
+        // a UI read; NORMAL is durable enough under WAL and much faster.
+        conn.busy_timeout(std::time::Duration::from_secs(3))?;
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
         Ok(conn)
     }
 
@@ -349,9 +353,19 @@ impl AppDatabase {
     ) -> Result<()> {
         let conn = self.open()?;
         let tx = conn.unchecked_transaction()?;
+        // Delete only rows that left the snapshot instead of rewriting every
+        // row; unchanged rows keep their rowid so the FTS triggers stay idle.
+        tx.execute_batch("CREATE TEMP TABLE sync_work_item_ids(id INTEGER PRIMARY KEY) ")?;
+        {
+            let mut insert =
+                tx.prepare_cached("INSERT OR IGNORE INTO sync_work_item_ids(id) VALUES (?1)")?;
+            for item in all_items {
+                insert.execute([item.id])?;
+            }
+        }
         for &project_id in synced_project_ids {
             tx.execute(
-                "DELETE FROM work_items WHERE org_id = ?1 AND project_id = ?2",
+                "DELETE FROM work_items WHERE org_id = ?1 AND project_id = ?2 AND id NOT IN (SELECT id FROM sync_work_item_ids)",
                 rusqlite::params![org_id, project_id],
             )?;
             tx.execute(
@@ -360,6 +374,32 @@ impl AppDatabase {
             )?;
         }
         upsert_work_items(&tx, all_items)?;
+        upsert_my_work_items(&tx, my_items)?;
+        tx.execute_batch("DROP TABLE sync_work_item_ids")?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    // Delta sync: merge changed work items without touching rows that are
+    // absent from the snapshot. Deletions are reconciled by the periodic full
+    // sync via `replace_work_items`. The my_work_items view is always a full
+    // snapshot so assignment removals stay correct.
+    pub fn apply_work_items_delta(
+        &self,
+        org_id: &str,
+        synced_project_ids: &[&str],
+        delta_items: &[CachedWorkItem],
+        my_items: &[CachedWorkItem],
+    ) -> Result<()> {
+        let conn = self.open()?;
+        let tx = conn.unchecked_transaction()?;
+        upsert_work_items(&tx, delta_items)?;
+        for &project_id in synced_project_ids {
+            tx.execute(
+                "DELETE FROM my_work_items WHERE org_id = ?1 AND project_id = ?2",
+                rusqlite::params![org_id, project_id],
+            )?;
+        }
         upsert_my_work_items(&tx, my_items)?;
         tx.commit()?;
         Ok(())
@@ -409,11 +449,22 @@ impl AppDatabase {
     ) -> Result<()> {
         let conn = self.open()?;
         let tx = conn.unchecked_transaction()?;
+        // Same final state as delete-all + insert, but rows already in the
+        // snapshot are left untouched so the FTS triggers stay idle.
+        tx.execute_batch("CREATE TEMP TABLE sync_commit_ids(commit_id TEXT PRIMARY KEY)")?;
+        {
+            let mut insert =
+                tx.prepare_cached("INSERT OR IGNORE INTO sync_commit_ids(commit_id) VALUES (?1)")?;
+            for commit in commits {
+                insert.execute([&commit.commit_id])?;
+            }
+        }
         tx.execute(
-            "DELETE FROM commits WHERE org_id = ?1 AND repository_id = ?2",
+            "DELETE FROM commits WHERE org_id = ?1 AND repository_id = ?2 AND commit_id NOT IN (SELECT commit_id FROM sync_commit_ids)",
             rusqlite::params![org_id, repository_id],
         )?;
         upsert_commits(&tx, commits)?;
+        tx.execute_batch("DROP TABLE sync_commit_ids")?;
         tx.commit()?;
         Ok(())
     }
@@ -442,8 +493,11 @@ impl AppDatabase {
 
     pub fn list_sync_states(&self) -> Result<Vec<SyncState>> {
         let conn = self.open()?;
+        // `internal:` scopes are bookkeeping (e.g. last full work item sync)
+        // and are hidden from the settings UI.
         let mut stmt = conn.prepare(
             "SELECT scope, org_id, last_synced_at, error_count, last_error, last_warning FROM sync_state \
+             WHERE scope NOT LIKE 'internal:%' \
              ORDER BY org_id, scope",
         )?;
         let rows = stmt.query_map([], map_sync_state)?;
@@ -1188,13 +1242,27 @@ fn list_review_pull_requests(conn: &Connection, org_id: &str) -> Result<Vec<Cach
 // ── Private helpers — work items ──────────────────────────────────────────────
 
 fn upsert_work_items(conn: &Connection, items: &[CachedWorkItem]) -> Result<()> {
+    // Azure DevOps bumps System.ChangedDate on every revision, so it works as
+    // a version stamp: rows with an unchanged date are skipped entirely and
+    // the FTS update trigger never fires for them.
     let mut stmt = conn.prepare_cached(
         r#"
-        INSERT OR REPLACE INTO work_items(
+        INSERT INTO work_items(
             org_id, project_id, project_name, id, title,
             work_item_type, state, assigned_to, changed_date, web_url,
             assigned_to_unique_name
         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+        ON CONFLICT(org_id, id) DO UPDATE SET
+            project_id = excluded.project_id,
+            project_name = excluded.project_name,
+            title = excluded.title,
+            work_item_type = excluded.work_item_type,
+            state = excluded.state,
+            assigned_to = excluded.assigned_to,
+            changed_date = excluded.changed_date,
+            web_url = excluded.web_url,
+            assigned_to_unique_name = excluded.assigned_to_unique_name
+        WHERE excluded.changed_date IS NOT work_items.changed_date
         "#,
     )?;
     for item in items {
@@ -1418,12 +1486,22 @@ fn list_my_work_items(conn: &Connection, org_id: &str) -> Result<Vec<CachedWorkI
 // ── Private helpers — commits ─────────────────────────────────────────────────
 
 fn upsert_commits(conn: &Connection, commits: &[CachedCommit]) -> Result<()> {
+    // Commits are immutable; only project/repo display metadata can change
+    // (e.g. a repository rename), so unchanged rows are skipped.
     let mut stmt = conn.prepare_cached(
         r#"
-        INSERT OR REPLACE INTO commits(
+        INSERT INTO commits(
             org_id, project_id, project_name, repository_id, repository_name,
             commit_id, comment, author_name, author_email, author_date, web_url
         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+        ON CONFLICT(org_id, repository_id, commit_id) DO UPDATE SET
+            project_id = excluded.project_id,
+            project_name = excluded.project_name,
+            repository_name = excluded.repository_name,
+            web_url = excluded.web_url
+        WHERE excluded.project_name IS NOT commits.project_name
+           OR excluded.repository_name IS NOT commits.repository_name
+           OR excluded.web_url IS NOT commits.web_url
         "#,
     )?;
     for c in commits {
@@ -1666,6 +1744,27 @@ mod tests {
     }
 
     #[test]
+    fn open_applies_connection_pragmas() {
+        let db_file = tempfile::NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(db_file.path().to_path_buf());
+        db.initialize().unwrap();
+
+        let conn = db.open().unwrap();
+        let synchronous: i64 = conn
+            .query_row("PRAGMA synchronous", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(synchronous, 1, "synchronous should be NORMAL");
+        let busy_timeout: i64 = conn
+            .query_row("PRAGMA busy_timeout", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(busy_timeout, 3000);
+        let journal_mode: String = conn
+            .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(journal_mode, "wal");
+    }
+
+    #[test]
     fn migrate_is_repeatable() {
         let conn = Connection::open_in_memory().unwrap();
         migrate(&conn).unwrap();
@@ -1896,6 +1995,148 @@ mod tests {
         assert!(ids.contains(&421));
         assert!(ids.contains(&9));
         assert_eq!(ids.len(), 3);
+    }
+
+    fn make_cached_wi(id: i64, title: &str, changed: &str) -> CachedWorkItem {
+        CachedWorkItem {
+            org_id: "org1".to_string(),
+            project_id: "p1".to_string(),
+            project_name: "Project One".to_string(),
+            id,
+            title: title.to_string(),
+            work_item_type: Some("Task".to_string()),
+            state: Some("Active".to_string()),
+            assigned_to: None,
+            assigned_to_unique_name: None,
+            changed_date: Some(changed.to_string()),
+            web_url: None,
+        }
+    }
+
+    #[test]
+    fn replace_work_items_skips_unchanged_rows_and_deletes_stale() {
+        let db_file = tempfile::NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(db_file.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        db.replace_work_items(
+            "org1",
+            &["p1"],
+            &[
+                make_cached_wi(1, "first item", "2026-06-01T00:00:00Z"),
+                make_cached_wi(2, "second item", "2026-06-01T00:00:00Z"),
+            ],
+            &[],
+        )
+        .unwrap();
+
+        let conn = db.open().unwrap();
+        let rowid_query = "SELECT rowid FROM work_items WHERE org_id = 'org1' AND id = 1";
+        let rowid_before: i64 = conn.query_row(rowid_query, [], |row| row.get(0)).unwrap();
+
+        // Re-sync: item 1 is unchanged, item 2 has a new revision.
+        db.replace_work_items(
+            "org1",
+            &["p1"],
+            &[
+                make_cached_wi(1, "first item", "2026-06-01T00:00:00Z"),
+                make_cached_wi(2, "second item edited", "2026-06-02T00:00:00Z"),
+            ],
+            &[],
+        )
+        .unwrap();
+
+        let rowid_after: i64 = conn.query_row(rowid_query, [], |row| row.get(0)).unwrap();
+        assert_eq!(
+            rowid_before, rowid_after,
+            "unchanged rows must not be rewritten"
+        );
+        let results = search_work_items_fts(&conn, "org1", "edited").unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, 2);
+
+        // Items missing from the snapshot are deleted, including their FTS rows.
+        db.replace_work_items(
+            "org1",
+            &["p1"],
+            &[make_cached_wi(1, "first item", "2026-06-01T00:00:00Z")],
+            &[],
+        )
+        .unwrap();
+        let count: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM work_items WHERE org_id = 'org1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+        assert!(search_work_items_fts(&conn, "org1", "second")
+            .unwrap()
+            .is_empty());
+    }
+
+    fn make_cached_commit(commit_id: &str, comment: &str) -> CachedCommit {
+        CachedCommit {
+            org_id: "org1".to_string(),
+            project_id: "p1".to_string(),
+            project_name: "Project One".to_string(),
+            repository_id: "repo1".to_string(),
+            repository_name: "repo-one".to_string(),
+            commit_id: commit_id.to_string(),
+            comment: comment.to_string(),
+            author_name: Some("Alice".to_string()),
+            author_email: None,
+            author_date: Some("2026-06-01T00:00:00Z".to_string()),
+            web_url: None,
+        }
+    }
+
+    #[test]
+    fn replace_commits_skips_unchanged_rows_and_deletes_stale() {
+        let db_file = tempfile::NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(db_file.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        db.replace_commits_for_repo(
+            "org1",
+            "repo1",
+            &[
+                make_cached_commit("aaa111", "refactor auth middleware"),
+                make_cached_commit("bbb222", "tune retry delays"),
+            ],
+        )
+        .unwrap();
+
+        let conn = db.open().unwrap();
+        let rowid_query =
+            "SELECT rowid FROM commits WHERE org_id = 'org1' AND commit_id = 'aaa111'";
+        let rowid_before: i64 = conn.query_row(rowid_query, [], |row| row.get(0)).unwrap();
+
+        // Next sync window: aaa111 unchanged, bbb222 gone, ccc333 new.
+        db.replace_commits_for_repo(
+            "org1",
+            "repo1",
+            &[
+                make_cached_commit("aaa111", "refactor auth middleware"),
+                make_cached_commit("ccc333", "add palette search"),
+            ],
+        )
+        .unwrap();
+
+        let rowid_after: i64 = conn.query_row(rowid_query, [], |row| row.get(0)).unwrap();
+        assert_eq!(
+            rowid_before, rowid_after,
+            "unchanged rows must not be rewritten"
+        );
+        assert!(search_commits_fts(&conn, "org1", "retry", None)
+            .unwrap()
+            .is_empty());
+        let results = search_commits_fts(&conn, "org1", "palette", None).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].commit_id, "ccc333");
     }
 
     #[test]

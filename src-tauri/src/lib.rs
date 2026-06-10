@@ -66,16 +66,30 @@ struct TriggerSyncInput {
     scope: Option<SyncScope>,
 }
 
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-fn list_organizations(state: State<'_, AppState>) -> Result<Vec<Organization>> {
-    state.organizations.list()
+// Keeps SQLite and file I/O off the main thread, where synchronous Tauri
+// commands would otherwise block the UI event loop.
+async fn run_blocking<T, F>(task: F) -> Result<T>
+where
+    F: FnOnce() -> Result<T> + Send + 'static,
+    T: Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(task)
+        .await
+        .map_err(|error| AppError::Database(format!("background task failed: {error}")))?
 }
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
-fn get_app_settings(state: State<'_, AppState>) -> Result<AppSettings> {
-    state.settings.get()
+async fn list_organizations(state: State<'_, AppState>) -> Result<Vec<Organization>> {
+    let service = state.organizations.clone();
+    run_blocking(move || service.list()).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn get_app_settings(state: State<'_, AppState>) -> Result<AppSettings> {
+    let service = state.settings.clone();
+    run_blocking(move || service.get()).await
 }
 
 #[tauri::command]
@@ -92,17 +106,19 @@ fn update_app_settings(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
-fn get_review_result_preview(
+async fn get_review_result_preview(
     input: GetReviewResultPreviewInput,
     state: State<'_, AppState>,
 ) -> Result<Option<ReviewResultPreview>> {
-    state.settings.review_result_preview(input)
+    let service = state.settings.clone();
+    run_blocking(move || service.review_result_preview(input)).await
 }
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
-fn list_sync_states(state: State<'_, AppState>) -> Result<Vec<SyncState>> {
-    state.db.list_sync_states()
+async fn list_sync_states(state: State<'_, AppState>) -> Result<Vec<SyncState>> {
+    let db = state.db.clone();
+    run_blocking(move || db.list_sync_states()).await
 }
 
 fn ensure_write_enabled(state: &State<'_, AppState>) -> Result<()> {
@@ -117,8 +133,9 @@ fn ensure_write_enabled(state: &State<'_, AppState>) -> Result<()> {
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
-fn delete_organization(id: String, state: State<'_, AppState>) -> Result<()> {
-    state.organizations.delete(&id)
+async fn delete_organization(id: String, state: State<'_, AppState>) -> Result<()> {
+    let service = state.organizations.clone();
+    run_blocking(move || service.delete(&id)).await
 }
 
 #[tauri::command]
@@ -141,49 +158,51 @@ async fn add_azure_cli_organization(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
-fn search_pull_requests(
+async fn search_pull_requests(
     input: SearchPullRequestsInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<PullRequestSummary>> {
-    state.pull_requests.search(input)
+    let service = state.pull_requests.clone();
+    run_blocking(move || service.search(input)).await
 }
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
-fn list_my_review_pull_requests(
+async fn list_my_review_pull_requests(
     input: ListMyReviewPullRequestsInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<ReviewPullRequestSummary>> {
-    state.pull_requests.list_my_reviews(input)
+    let service = state.pull_requests.clone();
+    run_blocking(move || service.list_my_reviews(input)).await
 }
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
-fn search_all(input: SearchAllInput, state: State<'_, AppState>) -> Result<SearchAllResult> {
-    search::search_all(
-        &state.work_items,
-        &state.pull_requests,
-        &state.commits,
-        input,
-    )
+async fn search_all(input: SearchAllInput, state: State<'_, AppState>) -> Result<SearchAllResult> {
+    let work_items = state.work_items.clone();
+    let pull_requests = state.pull_requests.clone();
+    let commits = state.commits.clone();
+    run_blocking(move || search::search_all(&work_items, &pull_requests, &commits, input)).await
 }
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
-fn search_work_items(
+async fn search_work_items(
     input: SearchWorkItemsInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkItemSummary>> {
-    state.work_items.search(input)
+    let service = state.work_items.clone();
+    run_blocking(move || service.search(input)).await
 }
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
-fn list_my_work_items(
+async fn list_my_work_items(
     input: ListMyWorkItemsInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkItemSummary>> {
-    state.work_items.list_my(input)
+    let service = state.work_items.clone();
+    run_blocking(move || service.list_my(input)).await
 }
 
 #[tauri::command]
@@ -233,11 +252,12 @@ async fn search_work_item_mentions(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
-fn record_mention_interaction(
+async fn record_mention_interaction(
     input: RecordMentionInteractionInput,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    state.work_items.record_mention_interaction(input)
+    let service = state.work_items.clone();
+    run_blocking(move || service.record_mention_interaction(input)).await
 }
 
 #[tauri::command]
@@ -415,20 +435,22 @@ async fn get_saved_query(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
-fn search_commits(
+async fn search_commits(
     input: SearchCommitsInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<CommitSummary>> {
-    state.commits.search(input)
+    let service = state.commits.clone();
+    run_blocking(move || service.search(input)).await
 }
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
-fn list_commit_repositories(
+async fn list_commit_repositories(
     input: ListCommitRepositoriesInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<CommitRepositoryOption>> {
-    state.commits.list_repositories(input)
+    let service = state.commits.clone();
+    run_blocking(move || service.list_repositories(input)).await
 }
 
 #[tauri::command]

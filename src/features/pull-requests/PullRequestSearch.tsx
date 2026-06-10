@@ -26,6 +26,8 @@ const DEFAULT_PR_SEARCH_COLUMN_WIDTHS = [56, 70, 220, 130, 104, 64, 120];
 const PR_SEARCH_COLUMN_MIN_WIDTHS = [52, 64, 160, 104, 86, 58, 100];
 const PR_SEARCH_COLUMN_MAX_WIDTHS = [120, 140, 720, 360, 280, 120, 360];
 const PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY = 'azdodeck:layout:prSearchGridColumnWidths:v2';
+const PR_SEARCH_ROW_HEIGHT = 29;
+const PR_SEARCH_OVERSCAN = 8;
 type PrSearchFilterableColumn = "status" | "repository" | "createdBy" | "branch";
 
 const PR_SEARCH_FILTERABLE_COLUMNS: Record<PrSearchFilterableColumn, (pr: PullRequestSummary) => string> = {
@@ -122,8 +124,8 @@ export function PullRequestSearch({
   }
 
   return (
-    <div className="space-y-3">
-      <div className="rounded-md border border-border bg-white">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="shrink-0 rounded-md border border-border bg-white">
         <form className="grid gap-3 p-3" onSubmit={onSubmit}>
           {organizations.length > 1 && (
             <label className="grid gap-2">
@@ -271,10 +273,34 @@ function PullRequestResults({
   const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const restoreFocusRef = useRef(false);
+  const [scrollerEl, setScrollerEl] = useState<HTMLDivElement | null>(null);
+  const [gridViewport, setGridViewport] = useState({ height: 0, scrollTop: 0 });
 
   useEffect(() => {
     localStorage.setItem(PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
   }, [columnWidths]);
+
+  useEffect(() => {
+    if (!scrollerEl) return;
+
+    function updateViewport() {
+      setGridViewport({
+        height: scrollerEl!.clientHeight,
+        scrollTop: scrollerEl!.scrollTop,
+      });
+    }
+
+    updateViewport();
+    scrollerEl.addEventListener("scroll", updateViewport, { passive: true });
+    const resizeObserver =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateViewport);
+    resizeObserver?.observe(scrollerEl);
+    return () => {
+      scrollerEl.removeEventListener("scroll", updateViewport);
+      resizeObserver?.disconnect();
+    };
+  }, [scrollerEl]);
 
   const columnTemplate = gridColumnTemplate(columnWidths, 2);
 
@@ -321,13 +347,37 @@ function PullRequestResults({
     return `${results.length} pull request${results.length === 1 ? "" : "s"}`;
   }, [filteredResults.length, hasActiveColumnFilters, loading, results.length, searched]);
 
-  function moveSelection(delta: number) {
-    setSelectedIndex((prev) => {
-      const next = clamp(prev + delta, 0, filteredResults.length - 1);
-      rowRefs.current[next]?.focus();
-      return next;
-    });
+  function scrollRowIntoView(index: number) {
+    if (!scrollerEl) return;
+    const rowTop = index * PR_SEARCH_ROW_HEIGHT;
+    const rowBottom = rowTop + PR_SEARCH_ROW_HEIGHT;
+    if (rowTop < scrollerEl.scrollTop) {
+      scrollerEl.scrollTop = rowTop;
+    } else if (rowBottom > scrollerEl.scrollTop + scrollerEl.clientHeight) {
+      scrollerEl.scrollTop = rowBottom - scrollerEl.clientHeight;
+    }
   }
+
+  function moveSelectionTo(index: number) {
+    const next = clamp(index, 0, filteredResults.length - 1);
+    restoreFocusRef.current = true;
+    scrollRowIntoView(next);
+    setSelectedIndex(next);
+  }
+
+  function moveSelection(delta: number) {
+    moveSelectionTo(selectedIndex + delta);
+  }
+
+  // Rows outside the virtual window unmount, so roving focus is restored once
+  // the row for the new selection is mounted again.
+  useEffect(() => {
+    if (!restoreFocusRef.current) return;
+    const row = rowRefs.current[selectedIndex];
+    if (!row) return;
+    restoreFocusRef.current = false;
+    row.focus({ preventScroll: true });
+  });
 
   function openFilter(col: PrSearchFilterableColumn, anchorEl: HTMLButtonElement) {
     setFilterAnchorRect(anchorEl.getBoundingClientRect());
@@ -389,13 +439,8 @@ function PullRequestResults({
     if (filteredResults.length === 0) return;
     if (e.key === "ArrowDown") { e.preventDefault(); moveSelection(1); }
     else if (e.key === "ArrowUp") { e.preventDefault(); moveSelection(-1); }
-    else if (e.key === "Home") { e.preventDefault(); setSelectedIndex(0); rowRefs.current[0]?.focus(); }
-    else if (e.key === "End") {
-      e.preventDefault();
-      const last = filteredResults.length - 1;
-      setSelectedIndex(last);
-      rowRefs.current[last]?.focus();
-    }
+    else if (e.key === "Home") { e.preventDefault(); moveSelectionTo(0); }
+    else if (e.key === "End") { e.preventDefault(); moveSelectionTo(filteredResults.length - 1); }
     else if (e.key === "PageDown") { e.preventDefault(); moveSelection(10); }
     else if (e.key === "PageUp") { e.preventDefault(); moveSelection(-10); }
     else if (e.key === "Enter") {
@@ -415,8 +460,24 @@ function PullRequestResults({
     }
   }
 
+  const firstVirtualRow = Math.max(
+    0,
+    Math.floor(gridViewport.scrollTop / PR_SEARCH_ROW_HEIGHT) - PR_SEARCH_OVERSCAN,
+  );
+  const visibleRowCount = Math.ceil(
+    Math.max(gridViewport.height, PR_SEARCH_ROW_HEIGHT) / PR_SEARCH_ROW_HEIGHT,
+  );
+  const lastVirtualRow = Math.min(
+    filteredResults.length,
+    firstVirtualRow + visibleRowCount + PR_SEARCH_OVERSCAN * 2,
+  );
+  const virtualRows = filteredResults.slice(firstVirtualRow, lastVirtualRow);
+  const virtualTopPadding = firstVirtualRow * PR_SEARCH_ROW_HEIGHT;
+  const virtualBottomPadding =
+    Math.max(0, filteredResults.length - lastVirtualRow) * PR_SEARCH_ROW_HEIGHT;
+
   return (
-    <div className="overflow-hidden rounded-md border border-border bg-white">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-white">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <h2 className="text-base font-semibold">Results</h2>
         <span className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -450,9 +511,11 @@ function PullRequestResults({
           aria-label="Pull request search results"
           data-primary-grid="true"
           tabIndex={-1}
-          className="overflow-x-auto"
+          className="flex min-h-0 flex-1 flex-col outline-none"
           onKeyDown={handleKeyDown}
         >
+          <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-auto">
+          <div className="min-w-[680px]">
           <div
             role="row"
             className="grid border-b border-border bg-muted/40 px-2 py-1 text-xs font-medium text-muted-foreground"
@@ -505,17 +568,26 @@ function PullRequestResults({
               </button>
             </div>
           ) : (
-            filteredResults.map((pr, index) => (
-              <PrSearchRow
-                key={`${pr.repositoryId}:${pr.pullRequestId}`}
-                ref={(el) => { rowRefs.current[index] = el; }}
-                pr={pr}
-                selected={index === selectedIndex}
-                columnTemplate={columnTemplate}
-                onSelect={() => setSelectedIndex(index)}
-              />
-            ))
+            <>
+              {virtualTopPadding > 0 ? <div style={{ height: virtualTopPadding }} /> : null}
+              {virtualRows.map((pr, offset) => {
+                const index = firstVirtualRow + offset;
+                return (
+                  <PrSearchRow
+                    key={`${pr.repositoryId}:${pr.pullRequestId}`}
+                    ref={(el) => { rowRefs.current[index] = el; }}
+                    pr={pr}
+                    selected={index === selectedIndex}
+                    columnTemplate={columnTemplate}
+                    onSelect={() => setSelectedIndex(index)}
+                  />
+                );
+              })}
+              {virtualBottomPadding > 0 ? <div style={{ height: virtualBottomPadding }} /> : null}
+            </>
           )}
+          </div>
+          </div>
         </div>
       )}
       {copyToast && (
@@ -667,7 +739,7 @@ const PrSearchRow = forwardRef<
           openExternalUrl(pr.webUrl);
         }
       }}
-      className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
+      className={`grid h-[29px] cursor-pointer select-none items-center gap-2 border-b border-border px-2 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
         selected ? "bg-secondary" : "hover:bg-muted/50"
       }`}
       style={{ gridTemplateColumns: columnTemplate }}

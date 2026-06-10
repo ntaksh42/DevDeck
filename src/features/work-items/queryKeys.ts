@@ -103,12 +103,15 @@ export const workItemQueryKeys = {
 export function invalidateWorkItemQueryViews(
   queryClient: QueryClient,
   organizationId?: string,
+  refetchType: "active" | "none" = "active",
 ): void {
   void queryClient.invalidateQueries({
     queryKey: workItemQueryKeys.queryViewRoot(organizationId),
+    refetchType,
   });
   void queryClient.invalidateQueries({
     queryKey: workItemQueryKeys.queryCountRoot(organizationId),
+    refetchType,
   });
 }
 

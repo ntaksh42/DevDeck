@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import {
+  keepPreviousData,
   type QueryClient,
   useMutation,
   useQuery,
@@ -88,20 +89,24 @@ function invalidateSyncedDataQueries(
   queryClient: QueryClient,
   scopes: SyncScope[] = ["all"],
 ): void {
-  void queryClient.invalidateQueries({ queryKey: ["syncStates"] });
+  // While the window is hidden, mark queries stale without refetching; they
+  // refetch automatically when the window regains focus.
+  const refetchType =
+    document.visibilityState === "hidden" ? ("none" as const) : ("active" as const);
+  void queryClient.invalidateQueries({ queryKey: ["syncStates"], refetchType });
   const scopeSet = new Set(scopes);
   const all = scopeSet.has("all");
   const hot = scopeSet.has("hot");
   if (all || hot || scopeSet.has("myReviews")) {
-    void queryClient.invalidateQueries({ queryKey: ["myReviews"] });
+    void queryClient.invalidateQueries({ queryKey: ["myReviews"], refetchType });
   }
   if (all || hot || scopeSet.has("myWorkItems")) {
-    void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot() });
-    invalidateWorkItemQueryViews(queryClient);
-    void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
+    void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot(), refetchType });
+    invalidateWorkItemQueryViews(queryClient, undefined, refetchType);
+    void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot(), refetchType });
   }
   if (all || scopeSet.has("commits")) {
-    void queryClient.invalidateQueries({ queryKey: ["commitRepositories"] });
+    void queryClient.invalidateQueries({ queryKey: ["commitRepositories"], refetchType });
   }
 }
 
@@ -205,6 +210,9 @@ function AppShell() {
       searchAll({ organizationId: paletteOrganizationId, query: paletteSearch.query }),
     enabled: paletteSearchEnabled,
     staleTime: 30_000,
+    // Keep showing the previous results while the next keystroke's search
+    // runs, instead of flashing an empty list.
+    placeholderData: keepPreviousData,
   });
 
   const paletteSearchItems = useMemo<CommandPaletteSearchItem[]>(() => {
