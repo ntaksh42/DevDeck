@@ -33,6 +33,7 @@ import {
   type SortDirection,
 } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
+import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
 import { ShortcutHint } from '@/components/ShortcutHint';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { LoadingState, ErrorState, PreviewEmptyState } from '@/components/StateDisplay';
@@ -82,6 +83,16 @@ function reviewSectionOf(pr: ReviewPullRequestSummary): ReviewSection {
 type ReviewRow =
   | { kind: "header"; key: ReviewSection; label: string; count: number }
   | { kind: "pr"; pr: ReviewPullRequestSummary; prIndex: number };
+
+function reviewTriageKey(pr: ReviewPullRequestSummary): string {
+  return `${pr.repositoryId}:${pr.pullRequestId}`;
+}
+
+// Any visible change (vote, draft state, title) invalidates the snapshot and
+// brings the PR back to the inbox.
+function reviewTriageSnapshot(pr: ReviewPullRequestSummary): string {
+  return `${pr.myVote}|${pr.isDraft}|${pr.title}|${pr.creationDate}`;
+}
 
 function VoteBadge({ vote, label }: { vote: VoteValue; label: string }) {
   const colors: Record<number, string> = {
@@ -513,9 +524,22 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
 
   const allPrs = query.data ?? [];
 
+  // Local "done" triage: archived PRs leave the inbox until they change.
+  const [showDone, setShowDone] = useState(false);
+  const [triageVersion, setTriageVersion] = useState(0);
+  const triageScope = `myReviews:${organizationId || organizations[0]?.id || ""}`;
+  const archivedKeys = useMemo(() => {
+    const snapshots = new Map(
+      allPrs.map((pr) => [reviewTriageKey(pr), reviewTriageSnapshot(pr)]),
+    );
+    return activeArchivedKeys(triageScope, snapshots);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allPrs, triageScope, triageVersion]);
+
   const baseFiltered = useMemo(() => {
     const terms = splitSearchTerms(textFilter);
     return allPrs.filter((pr) => {
+      if (archivedKeys.has(reviewTriageKey(pr)) !== showDone) return false;
       if (!showDrafts && pr.isDraft) return false;
       if (!matchesAllSearchTerms(terms, [
         pr.pullRequestId,
@@ -531,7 +555,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
       if (voteFilter === "waitingAuthor" && pr.myVote !== -5) return false;
       return true;
     });
-  }, [allPrs, textFilter, voteFilter, showDrafts]);
+  }, [allPrs, archivedKeys, showDone, textFilter, voteFilter, showDrafts]);
 
   const columnUniqueValues = useMemo(() => {
     const map = {} as Record<FilterableColumn, string[]>;
@@ -824,6 +848,15 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
       e.preventDefault();
       setShowDrafts((value) => !value);
       setSelectedIndex(0);
+      return;
+    }
+    if (e.key === "e" || e.key === "E") {
+      e.preventDefault();
+      const pr = sortedPrs[selectedIndex];
+      if (pr) {
+        toggleTriageArchived(triageScope, reviewTriageKey(pr), reviewTriageSnapshot(pr));
+        setTriageVersion((value) => value + 1);
+      }
       return;
     }
     if (e.key === "c" || e.key === "C") {
@@ -1133,6 +1166,22 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
               <span className="font-medium text-foreground">{noVoteCount}</span> not voted
             </span>
             <span className="flex items-center gap-2">
+              <button
+                type="button"
+                aria-pressed={showDone}
+                title="Toggle done view (E marks the selected row done)"
+                onClick={() => {
+                  setShowDone((value) => !value);
+                  setSelectedIndex(0);
+                }}
+                className={`rounded border px-2 py-0.5 text-xs ${
+                  showDone
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-white hover:bg-secondary"
+                }`}
+              >
+                {showDone ? "Back to inbox" : `Done (${archivedKeys.size})`}
+              </button>
               {isFiltered ? (
                 <>
                   <span>{activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"} active</span>

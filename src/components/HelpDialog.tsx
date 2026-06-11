@@ -60,6 +60,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>Enter</kbd></div>
           <div className={row}><span>Move row</span><kbd className={kbd}>↑ ↓ Home End</kbd></div>
           <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
+          <div className={row}><span>Mark done / restore (My Reviews, My Items)</span><kbd className={kbd}>E</kbd></div>
 
           <p className={section}>Work Items</p>
           <div className={row}><span>Open detail preview</span><kbd className={kbd}>Enter</kbd></div>

@@ -33,6 +33,7 @@ import {
 } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
 import { ShortcutHint } from '@/components/ShortcutHint';
+import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { LoadingState } from '@/components/StateDisplay';
 import { WorkItemPreviewPanel } from './WorkItemPreviewPanel';
@@ -69,6 +70,12 @@ type WiSortState = { key: WiSortKey; direction: SortDirection };
 
 function workItemSummaryKey(item: Pick<WorkItemSummary, "organizationId" | "projectId" | "id">): string {
   return `${item.organizationId}:${item.projectId}:${item.id}`;
+}
+
+// ChangedDate bumps on every revision, so an archived item resurfaces as soon
+// as it changes in Azure DevOps.
+function workItemTriageSnapshot(item: WorkItemSummary): string {
+  return item.changedDate ?? "";
 }
 
 const wiSortLabels: Record<WiSortKey, string> = {
@@ -449,6 +456,7 @@ export function WorkItemsGrid({
   onSortChange,
   previewVisible = true,
   storageKeyScope,
+  triageScope,
 }: {
   results: WorkItemSummary[];
   loading: boolean;
@@ -463,6 +471,7 @@ export function WorkItemsGrid({
   onSortChange?: (sort: WiSortState) => void;
   previewVisible?: boolean;
   storageKeyScope?: string;
+  triageScope?: string;
 }) {
   const columnWidthsStorageKey = storageKeyScope
     ? `${WI_COLUMN_WIDTHS_STORAGE_KEY}:${storageKeyScope}`
@@ -573,13 +582,30 @@ export function WorkItemsGrid({
     );
   }, [previewWidth, previewWidthStorageKey]);
 
+  // Local "done" triage (only on views that pass a triageScope).
+  const [showDone, setShowDone] = useState(false);
+  const [triageVersion, setTriageVersion] = useState(0);
+  const archivedKeys = useMemo(() => {
+    if (!triageScope) return new Set<string>();
+    const snapshots = new Map(
+      results.map((item) => [workItemSummaryKey(item), workItemTriageSnapshot(item)]),
+    );
+    return activeArchivedKeys(triageScope, snapshots);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [results, triageScope, triageVersion]);
+
   const effectiveResults = useMemo(
     () =>
-      results.map((item) => ({
-        ...item,
-        ...(itemOverrides.get(workItemSummaryKey(item)) ?? {}),
-      })),
-    [itemOverrides, results],
+      results
+        .filter(
+          (item) =>
+            !triageScope || archivedKeys.has(workItemSummaryKey(item)) === showDone,
+        )
+        .map((item) => ({
+          ...item,
+          ...(itemOverrides.get(workItemSummaryKey(item)) ?? {}),
+        })),
+    [archivedKeys, itemOverrides, results, showDone, triageScope],
   );
 
   const sorted = useMemo(
@@ -1114,6 +1140,17 @@ export function WorkItemsGrid({
       setFocusCommentRequest((value) => value + 1);
     } else if (e.key === "u" || e.key === "U") {
       window.dispatchEvent(new CustomEvent("azdodeck:work-items:undo-apply"));
+    } else if ((e.key === "e" || e.key === "E") && triageScope) {
+      e.preventDefault();
+      const item = displayed[selectedIndex];
+      if (item) {
+        toggleTriageArchived(
+          triageScope,
+          workItemSummaryKey(item),
+          workItemTriageSnapshot(item),
+        );
+        setTriageVersion((value) => value + 1);
+      }
     } else if (e.key === "a" || e.key === "A") {
       e.preventDefault();
       if (checkedItems.length > 0) {
@@ -1405,6 +1442,24 @@ export function WorkItemsGrid({
               {dataUpdatedAt ? ` · data ${formatRelativeDate(new Date(dataUpdatedAt).toISOString())}` : ""}
             </span>
             <span className="flex items-center gap-2">
+              {triageScope ? (
+                <button
+                  type="button"
+                  aria-pressed={showDone}
+                  title="Toggle done view (E marks the selected row done)"
+                  onClick={() => {
+                    setShowDone((value) => !value);
+                    setSelectedIndex(0);
+                  }}
+                  className={`rounded border px-2 py-0.5 text-xs ${
+                    showDone
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-white hover:bg-secondary"
+                  }`}
+                >
+                  {showDone ? "Back to inbox" : `Done (${archivedKeys.size})`}
+                </button>
+              ) : null}
               {hasActiveFilters ? (
                 <>
                   <span>{activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"} active</span>

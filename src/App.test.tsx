@@ -1915,6 +1915,76 @@ describe("App", () => {
     expect(await main.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
   });
 
+  it("marks review rows done locally and restores them", async () => {
+    const makeReviewPr = (pullRequestId: number, title: string) => ({
+      organizationId: "contoso",
+      projectId: "project-1",
+      projectName: "Platform",
+      repositoryId: "repo-1",
+      repositoryName: "azdo-dashboard",
+      pullRequestId,
+      title,
+      createdBy: "Alice",
+      creationDate: "2026-06-10T00:00:00Z",
+      targetRefName: "main",
+      webUrl: null,
+      myVote: 0,
+      myVoteLabel: "No Vote",
+      myIsRequired: true,
+      isDraft: false,
+    });
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve({ reviewResultFolderPath: null });
+      }
+      if (command === "get_review_result_preview") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_sync_states") {
+        return Promise.resolve([]);
+      }
+      if (command === "trigger_sync") {
+        return Promise.resolve(undefined);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([
+          makeReviewPr(101, "Alpha review"),
+          makeReviewPr(102, "Beta review"),
+        ]);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+    const rowAlpha = (await screen.findByText("Alpha review")).closest(
+      "[role='row']",
+    ) as HTMLElement;
+    fireEvent.click(rowAlpha);
+    const grid = screen.getByRole("grid", { name: "My review pull requests" });
+
+    // E marks the selected row done; it leaves the inbox.
+    fireEvent.keyDown(grid, { key: "e" });
+    await waitFor(() => {
+      expect(screen.queryByText("Alpha review")).toBeNull();
+    });
+    expect(screen.getByText("Beta review")).toBeTruthy();
+
+    // The done view lists it; E restores it back to the inbox.
+    fireEvent.click(screen.getByRole("button", { name: "Done (1)" }));
+    expect(await screen.findByText("Alpha review")).toBeTruthy();
+    expect(screen.queryByText("Beta review")).toBeNull();
+    fireEvent.keyDown(grid, { key: "e" });
+    await waitFor(() => {
+      expect(screen.queryByText("Alpha review")).toBeNull();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Back to inbox" }));
+    expect(await screen.findByText("Alpha review")).toBeTruthy();
+    expect(screen.getByText("Beta review")).toBeTruthy();
+  });
+
   it("searches across entities from the command palette and opens a work item in app", async () => {
     invokeMock.mockImplementation((command: string) => {
       if (command === "list_organizations") {
