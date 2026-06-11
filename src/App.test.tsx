@@ -872,6 +872,36 @@ describe("App", () => {
           createdDate: "2026-05-24T00:00:00Z",
         });
       }
+      if (command === "list_work_item_type_states") {
+        return Promise.resolve(["Active", "Resolved", "Closed"]);
+      }
+      if (command === "set_work_item_state") {
+        return Promise.resolve({
+          organizationId: "contoso",
+          projectId: "project-1",
+          projectName: "Platform",
+          id: 123,
+          title: "Fix save workflow",
+          workItemType: "Bug",
+          state: "Resolved",
+          assignedTo: "Creator",
+          createdBy: "Creator",
+          createdDate: "2026-05-23T00:00:00Z",
+          changedDate: "2026-05-24T02:00:00Z",
+          areaPath: "Platform\\Product",
+          iterationPath: "Platform\\Sprint 24",
+          reason: "Fixed",
+          tags: "save; bug",
+          priority: "1",
+          severity: "2 - High",
+          storyPoints: null,
+          remainingWork: null,
+          descriptionHtml: "<p>Fix the save flow.</p>",
+          acceptanceCriteriaHtml: "<ul><li>Save succeeds</li></ul>",
+          webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/123",
+          comments: [],
+        });
+      }
       if (command === "record_mention_interaction") {
         return Promise.resolve(null);
       }
@@ -1050,6 +1080,35 @@ describe("App", () => {
     });
     await waitFor(() => {
       expect(screen.queryByText("Applied 1 change")).toBeNull();
+    });
+
+    // Ctrl+Enter in the comment box posts the comment and applies staged
+    // property changes in one step.
+    fireEvent.keyDown(workItemsGrid, { key: "s" });
+    fireEvent.click(await screen.findByRole("button", { name: "Resolved" }));
+    expect(await screen.findByText("1 pending change")).toBeTruthy();
+    fireEvent.keyDown(workItemsGrid, { key: "m" });
+    const comboCommentBox = screen.getByLabelText("Comment");
+    fireEvent.change(comboCommentBox, { target: { value: "Closing this" } });
+    fireEvent.keyDown(comboCommentBox, { key: "Enter", ctrlKey: true });
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("set_work_item_state", {
+        input: {
+          organizationId: "contoso",
+          projectId: "project-1",
+          workItemId: 123,
+          state: "Resolved",
+        },
+      });
+      expect(invokeMock).toHaveBeenCalledWith(
+        "add_work_item_comment",
+        expect.objectContaining({
+          input: expect.objectContaining({ workItemId: 123 }),
+        }),
+      );
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("1 pending change")).toBeNull();
     });
 
     fireEvent.keyDown(workItemsGrid, { key: "m" });

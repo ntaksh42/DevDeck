@@ -1079,6 +1079,9 @@ export function WorkItemPreviewPanel({
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
       event.preventDefault();
       postComment();
+      // One keystroke finishes the "comment + property change" flow, like
+      // Azure DevOps' save-with-comment.
+      if (stagedEntries.length > 0) void applyStaged();
       return;
     }
 
