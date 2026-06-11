@@ -1070,7 +1070,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
       >
         {/* Grid */}
         <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-white">
-          <div ref={gridScrollRef} className="min-h-0 flex-1 overflow-auto">
+          <div ref={gridScrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
             <div className="min-w-[720px]">
               {/* Column headers */}
               <div

@@ -788,7 +788,7 @@ function CommitResults({
           className="flex min-h-0 flex-1 flex-col outline-none"
           onKeyDown={handleKeyDown}
         >
-          <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-auto">
+          <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
           <div className="min-w-[680px]">
             <div
               role="row"
