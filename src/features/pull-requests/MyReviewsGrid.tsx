@@ -39,7 +39,8 @@ import { LoadingState, ErrorState, PreviewEmptyState } from '@/components/StateD
 
 const DEFAULT_REVIEW_PREVIEW_WIDTH = 420;
 const MIN_REVIEW_PREVIEW_WIDTH = 280;
-const MAX_REVIEW_PREVIEW_WIDTH = 1280;
+// Effectively unbounded: the pane is still capped by the window width.
+const MAX_REVIEW_PREVIEW_WIDTH = 8192;
 const REVIEW_PREVIEW_WIDTH_STORAGE_KEY = 'azdodeck:layout:reviewPreviewWidth';
 const DEFAULT_PR_GRID_COLUMN_WIDTHS = [52, 110, 180, 82, 56, 76, 68, 78];
 const PR_GRID_COLUMN_MIN_WIDTHS = [48, 96, 150, 72, 50, 68, 62, 70];

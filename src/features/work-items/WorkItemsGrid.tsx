@@ -50,7 +50,9 @@ const WI_VISIBLE_COLUMNS_STORAGE_KEY = "azdodeck:layout:wiSearchGridVisibleColum
 const WI_SORT_STORAGE_KEY = "azdodeck:view:wiSearchGridSort:v1";
 const WI_COLUMN_FILTERS_STORAGE_KEY = "azdodeck:view:wiSearchGridColumnFilters:v1";
 const DEFAULT_WORK_ITEM_PREVIEW_WIDTH = 440;
-const MAX_WORK_ITEM_PREVIEW_WIDTH = 1280;
+// Effectively unbounded: the pane is still capped by the window because the
+// preview grid column is minmax(300px, var(--work-item-preview-width)).
+const MAX_WORK_ITEM_PREVIEW_WIDTH = 8192;
 const WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY = "azdodeck:layout:workItemPreviewWidth";
 const WI_GRID_ROW_HEIGHT = 29;
 const WI_GRID_OVERSCAN = 8;
