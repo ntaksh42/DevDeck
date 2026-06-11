@@ -1013,12 +1013,12 @@ describe("App", () => {
       "update_work_item_fields",
       expect.anything(),
     );
-    expect(await screen.findByText("1 pending change")).toBeTruthy();
-    expect(screen.getByText(/Assignee:/)).toBeTruthy();
+    const pendingChip = await screen.findByText("1 pending");
+    expect(pendingChip.parentElement?.getAttribute("title")).toContain("Assignee:");
 
     // Esc discards staged changes without writing.
-    fireEvent.keyDown(screen.getByText("1 pending change"), { key: "Escape" });
-    expect(screen.queryByText("1 pending change")).toBeNull();
+    fireEvent.keyDown(screen.getByText("1 pending"), { key: "Escape" });
+    expect(screen.queryByText("1 pending")).toBeNull();
     expect(invokeMock).not.toHaveBeenCalledWith(
       "update_work_item_fields",
       expect.anything(),
@@ -1027,7 +1027,7 @@ describe("App", () => {
     // Stage again and apply.
     fireEvent.keyDown(workItemsGrid, { key: "a" });
     fireEvent.click(await screen.findByRole("button", { name: /creator@example.com/ }));
-    expect(await screen.findByText("1 pending change")).toBeTruthy();
+    expect(await screen.findByText("1 pending")).toBeTruthy();
 
     // Ctrl+S applies the staged change.
     fireEvent.keyDown(window, { key: "s", ctrlKey: true });
@@ -1047,14 +1047,14 @@ describe("App", () => {
       });
     });
     await waitFor(() => {
-      expect(screen.queryByText("1 pending change")).toBeNull();
+      expect(screen.queryByText("1 pending")).toBeNull();
     });
     await waitFor(() => {
       expect(within(workItemsGrid).getAllByText("Creator").length).toBeGreaterThan(0);
     });
 
     // Undo restores the pre-apply assignee.
-    expect(screen.getByText("Applied 1 change")).toBeTruthy();
+    expect(screen.getByText("Applied 1")).toBeTruthy();
     fireEvent.keyDown(workItemsGrid, { key: "u" });
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("update_work_item_fields", {
@@ -1067,14 +1067,14 @@ describe("App", () => {
       });
     });
     await waitFor(() => {
-      expect(screen.queryByText("Applied 1 change")).toBeNull();
+      expect(screen.queryByText("Applied 1")).toBeNull();
     });
 
     // Ctrl+Enter in the comment box posts the comment and applies staged
     // property changes in one step.
     fireEvent.keyDown(workItemsGrid, { key: "s" });
     fireEvent.click(await screen.findByRole("button", { name: "Resolved" }));
-    expect(await screen.findByText("1 pending change")).toBeTruthy();
+    expect(await screen.findByText("1 pending")).toBeTruthy();
     fireEvent.keyDown(workItemsGrid, { key: "m" });
     const comboCommentBox = screen.getByLabelText("Comment");
     fireEvent.change(comboCommentBox, { target: { value: "Closing this" } });
@@ -1096,7 +1096,7 @@ describe("App", () => {
       );
     });
     await waitFor(() => {
-      expect(screen.queryByText("1 pending change")).toBeNull();
+      expect(screen.queryByText("1 pending")).toBeNull();
     });
 
     fireEvent.keyDown(workItemsGrid, { key: "m" });

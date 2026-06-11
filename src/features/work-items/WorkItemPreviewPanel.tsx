@@ -993,7 +993,7 @@ export function WorkItemPreviewPanel({
 
   return (
     <aside
-      className="flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-white shadow-sm transition-[border-color,box-shadow] focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/25"
+      className="relative flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-white shadow-sm transition-[border-color,box-shadow] focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/25"
       onKeyDown={handlePreviewPanelKeyDown}
     >
       {!selectedItem ? (
@@ -1139,70 +1139,67 @@ export function WorkItemPreviewPanel({
                   />
                 }
               />
-              {undoState && stagedEntries.length === 0 ? (
-                <div className="flex shrink-0 items-center justify-between gap-2 border-t border-emerald-200 bg-emerald-50 px-2 py-1.5 text-xs">
-                  <span className="font-medium text-emerald-900">
-                    Applied {undoState.count} change{undoState.count === 1 ? "" : "s"}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => void undoLastApply()}
-                    disabled={applying}
-                    className="inline-flex items-center gap-1 rounded border border-border bg-white px-2 py-0.5 hover:bg-secondary disabled:opacity-50"
+              <div className="pointer-events-none absolute right-2 top-8 z-30 flex flex-col items-end gap-1">
+                {stagedEntries.length > 0 ? (
+                  <div
+                    className="pointer-events-auto flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50/95 py-0.5 pl-2 pr-0.5 text-[11px] shadow-sm"
+                    title={stagedEntries
+                      .map((entry) => `${entry.label}: ${entry.from} → ${entry.to}`)
+                      .join("\n")}
                   >
-                    {applying ? (
-                      <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-                    ) : null}
-                    Undo
-                    <kbd className="rounded bg-muted px-1 font-mono text-[10px]">U</kbd>
-                  </button>
-                </div>
-              ) : null}
-              {stagedEntries.length > 0 ? (
-                <div className="shrink-0 border-t border-amber-200 bg-amber-50 px-2 py-1.5 text-xs">
-                  <div className="flex items-center justify-between gap-2">
                     <span className="font-medium text-amber-900">
-                      {stagedEntries.length} pending change{stagedEntries.length === 1 ? "" : "s"}
+                      {stagedEntries.length} pending
                     </span>
-                    <span className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={discardStaged}
-                        disabled={applying}
-                        className="inline-flex items-center gap-1 rounded border border-border bg-white px-2 py-0.5 hover:bg-secondary disabled:opacity-50"
-                      >
-                        Discard
-                        <kbd className="rounded bg-muted px-1 font-mono text-[10px]">Esc</kbd>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void applyStaged()}
-                        disabled={applying}
-                        className="inline-flex items-center gap-1 rounded bg-primary px-2 py-0.5 font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
-                      >
-                        {applying ? (
-                          <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-                        ) : null}
-                        Apply
-                        <kbd className="rounded bg-primary-foreground/20 px-1 font-mono text-[10px]">
-                          Ctrl+S
-                        </kbd>
-                      </button>
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void applyStaged()}
+                      disabled={applying}
+                      title="Apply (Ctrl+S)"
+                      className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+                    >
+                      {applying ? (
+                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                      ) : null}
+                      Apply
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Discard pending changes"
+                      title="Discard (Esc)"
+                      onClick={discardStaged}
+                      disabled={applying}
+                      className="rounded-full p-0.5 text-amber-900/70 hover:bg-amber-100 hover:text-amber-900 disabled:opacity-50"
+                    >
+                      <X className="h-3.5 w-3.5" aria-hidden="true" />
+                    </button>
                   </div>
-                  <ul className="mt-1 space-y-0.5 text-amber-900/90">
-                    {stagedEntries.map((entry) => (
-                      <li key={entry.key} className="truncate">
-                        <span className="font-medium">{entry.label}:</span> {entry.from} →{" "}
-                        {entry.to}
-                      </li>
-                    ))}
-                  </ul>
-                  {applyError ? (
-                    <p className="mt-1 text-destructive">{applyError}</p>
-                  ) : null}
-                </div>
-              ) : null}
+                ) : null}
+                {undoState && stagedEntries.length === 0 ? (
+                  <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50/95 py-0.5 pl-2 pr-0.5 text-[11px] shadow-sm">
+                    <span className="text-emerald-900">Applied {undoState.count}</span>
+                    <button
+                      type="button"
+                      onClick={() => void undoLastApply()}
+                      disabled={applying}
+                      title="Undo (U)"
+                      className="inline-flex items-center gap-1 rounded-full border border-border bg-white px-2 py-0.5 hover:bg-secondary disabled:opacity-50"
+                    >
+                      {applying ? (
+                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                      ) : null}
+                      Undo
+                    </button>
+                  </div>
+                ) : null}
+                {applyError ? (
+                  <div
+                    className="pointer-events-auto max-w-[280px] truncate rounded border border-destructive/30 bg-red-50 px-2 py-0.5 text-[11px] text-destructive shadow-sm"
+                    title={applyError}
+                  >
+                    {applyError}
+                  </div>
+                ) : null}
+              </div>
               <div className="bg-slate-50/70 p-2">
                 <form className="space-y-1" onSubmit={submitComment}>
                   <div ref={mentionPickerRef} className="relative">
