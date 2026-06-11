@@ -180,10 +180,12 @@ async fn list_my_review_pull_requests(
 #[tauri::command]
 #[tracing::instrument(skip(state))]
 async fn search_all(input: SearchAllInput, state: State<'_, AppState>) -> Result<SearchAllResult> {
+    let db = state.db.clone();
     let work_items = state.work_items.clone();
     let pull_requests = state.pull_requests.clone();
     let commits = state.commits.clone();
-    run_blocking(move || search::search_all(&work_items, &pull_requests, &commits, input)).await
+    run_blocking(move || search::search_all(&db, &work_items, &pull_requests, &commits, input))
+        .await
 }
 
 #[tauri::command]

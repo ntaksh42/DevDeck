@@ -116,7 +116,7 @@ function invalidationScopesForSyncScope(scope: SyncScope = "all"): SyncScope[] {
 
 type PaletteSearchKind = "workItems" | "pullRequests" | "commits";
 
-type ExternalSearchRequest = { query: string; requestId: number };
+type ExternalSearchRequest = { query: string; requestId: number; organizationId?: string };
 
 function parsePaletteSearch(text: string): { kind: PaletteSearchKind | null; query: string } {
   const match = /^(wi|pr|c):\s*(.*)$/i.exec(text.trim());
@@ -140,6 +140,7 @@ type RecentPaletteItem = {
   label: string;
   detail?: string;
   query: string;
+  organizationId?: string;
   webUrl?: string | null;
 };
 
@@ -249,17 +250,16 @@ function AppShell() {
   }, [paletteSearchText]);
 
   const paletteSearch = parsePaletteSearch(debouncedPaletteSearchText);
-  const paletteOrganizationId = organizations[0]?.id ?? "";
   const paletteSearchEnabled =
     commandPaletteOpen &&
-    !!paletteOrganizationId &&
+    organizations.length > 0 &&
     (/^\d+$/.test(paletteSearch.query)
       ? paletteSearch.query.length >= 1
       : paletteSearch.query.length >= 2);
   const searchAllQuery = useQuery({
-    queryKey: ["searchAll", paletteOrganizationId, paletteSearch.query],
-    queryFn: () =>
-      searchAll({ organizationId: paletteOrganizationId, query: paletteSearch.query }),
+    // No organizationId: the palette searches every configured organization.
+    queryKey: ["searchAll", paletteSearch.query],
+    queryFn: () => searchAll({ query: paletteSearch.query }),
     enabled: paletteSearchEnabled,
     staleTime: 30_000,
     // Keep showing the previous results while the next keystroke's search
@@ -267,15 +267,19 @@ function AppShell() {
     placeholderData: keepPreviousData,
   });
 
-  function openSearchTarget(kind: PaletteSearchKind, query: string): void {
+  function openSearchTarget(
+    kind: PaletteSearchKind,
+    query: string,
+    organizationId?: string,
+  ): void {
     if (kind === "workItems") {
-      setWorkItemSearchRequest({ query, requestId: Date.now() });
+      setWorkItemSearchRequest({ query, requestId: Date.now(), organizationId });
       setView("workItems");
     } else if (kind === "pullRequests") {
-      setPullRequestSearchRequest({ query, requestId: Date.now() });
+      setPullRequestSearchRequest({ query, requestId: Date.now(), organizationId });
       setView("pullRequestSearch");
     } else {
-      setCommitSearchRequest({ query, requestId: Date.now() });
+      setCommitSearchRequest({ query, requestId: Date.now(), organizationId });
       setView("commits");
     }
   }
@@ -286,6 +290,7 @@ function AppShell() {
     const items: CommandPaletteSearchItem[] = [];
     const kind = paletteSearch.kind;
     const rawQuery = paletteSearch.query;
+    const showOrg = organizations.length > 1;
 
     if (!kind || kind === "workItems") {
       for (const item of data.workItems) {
@@ -293,8 +298,16 @@ function AppShell() {
           kind: "workItems",
           key: `wi:${item.organizationId}:${item.id}`,
           label: `#${item.id} ${item.title}`,
-          detail: [item.workItemType, item.state, item.assignedTo].filter(Boolean).join(" · "),
+          detail: [
+            showOrg ? item.organizationId : null,
+            item.workItemType,
+            item.state,
+            item.assignedTo,
+          ]
+            .filter(Boolean)
+            .join(" · "),
           query: String(item.id),
+          organizationId: item.organizationId,
           webUrl: item.webUrl,
         };
         items.push({
@@ -304,7 +317,7 @@ function AppShell() {
           detail: recent.detail,
           run: () => {
             recordRecentPaletteItem(recent);
-            openSearchTarget("workItems", recent.query);
+            openSearchTarget("workItems", recent.query, recent.organizationId);
           },
           runAlt: item.webUrl
             ? () => {
@@ -331,8 +344,11 @@ function AppShell() {
           kind: "pullRequests",
           key: `pr:${pr.organizationId}:${pr.repositoryId}:${pr.pullRequestId}`,
           label: `PR ${pr.pullRequestId} ${pr.title}`,
-          detail: [pr.repositoryName, pr.createdBy].filter(Boolean).join(" · "),
+          detail: [showOrg ? pr.organizationId : null, pr.repositoryName, pr.createdBy]
+            .filter(Boolean)
+            .join(" · "),
           query: String(pr.pullRequestId),
+          organizationId: pr.organizationId,
           webUrl: pr.webUrl,
         };
         items.push({
@@ -342,7 +358,7 @@ function AppShell() {
           detail: recent.detail,
           run: () => {
             recordRecentPaletteItem(recent);
-            openSearchTarget("pullRequests", recent.query);
+            openSearchTarget("pullRequests", recent.query, recent.organizationId);
           },
           runAlt: pr.webUrl
             ? () => {
@@ -369,8 +385,15 @@ function AppShell() {
           kind: "commits",
           key: `c:${commit.organizationId}:${commit.repositoryId}:${commit.commitId}`,
           label: `${commit.shortCommitId} ${commitFirstLine(commit.comment)}`,
-          detail: [commit.repositoryName, commit.authorName].filter(Boolean).join(" · "),
+          detail: [
+            showOrg ? commit.organizationId : null,
+            commit.repositoryName,
+            commit.authorName,
+          ]
+            .filter(Boolean)
+            .join(" · "),
           query: rawQuery,
+          organizationId: commit.organizationId,
           webUrl: commit.webUrl,
         };
         items.push({
@@ -380,7 +403,7 @@ function AppShell() {
           detail: recent.detail,
           run: () => {
             recordRecentPaletteItem(recent);
-            openSearchTarget("commits", recent.query);
+            openSearchTarget("commits", recent.query, recent.organizationId);
           },
           runAlt: commit.webUrl
             ? () => {
@@ -415,7 +438,7 @@ function AppShell() {
       detail: item.detail,
       run: () => {
         recordRecentPaletteItem(item);
-        openSearchTarget(item.kind, item.query);
+        openSearchTarget(item.kind, item.query, item.organizationId);
       },
       runAlt: item.webUrl
         ? () => {

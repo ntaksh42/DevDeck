@@ -17,7 +17,7 @@ export function WorkItemSearch({
   onExternalSearchHandled,
 }: {
   organizations: Organization[];
-  externalSearch?: { query: string; requestId: number } | null;
+  externalSearch?: { query: string; requestId: number; organizationId?: string } | null;
   onExternalSearchHandled?: () => void;
 }) {
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
@@ -39,12 +39,14 @@ export function WorkItemSearch({
 
   useEffect(() => {
     if (!externalSearch) return;
+    const targetOrganizationId = externalSearch.organizationId ?? organizationId;
+    setOrganizationId(targetOrganizationId);
     setQuery(externalSearch.query);
     setState("all");
     setWorkItemType("");
     setProjectId("");
     mutation.mutate({
-      organizationId,
+      organizationId: targetOrganizationId,
       query: externalSearch.query,
       state: "all",
       workItemType: "",

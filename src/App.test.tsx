@@ -2085,7 +2085,7 @@ describe("App", () => {
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("search_all", {
-        input: { organizationId: "contoso", query: "123" },
+        input: { query: "123" },
       });
     });
     expect(await screen.findByText("#123 Fix save workflow")).toBeTruthy();

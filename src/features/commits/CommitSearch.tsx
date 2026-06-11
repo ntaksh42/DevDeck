@@ -90,7 +90,7 @@ export function CommitSearch({
   onExternalSearchHandled,
 }: {
   organizations: Organization[];
-  externalSearch?: { query: string; requestId: number } | null;
+  externalSearch?: { query: string; requestId: number; organizationId?: string } | null;
   onExternalSearchHandled?: () => void;
 }) {
   const initialViewState = useMemo(() => loadCommitSearchViewState(), []);
@@ -168,7 +168,9 @@ export function CommitSearch({
 
   useEffect(() => {
     if (!externalSearch) return;
+    const targetOrganizationId = externalSearch.organizationId ?? selectedOrganizationId;
     mutation.reset();
+    setOrganizationId(targetOrganizationId);
     setQuery(externalSearch.query);
     setAuthor("");
     setBranch("");
@@ -178,7 +180,7 @@ export function CommitSearch({
     setRepositoryId("");
     setValidationError(null);
     mutation.mutate({
-      organizationId: selectedOrganizationId,
+      organizationId: targetOrganizationId,
       query: externalSearch.query,
       author: "",
       branch: "",

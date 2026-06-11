@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::commits::{CommitService, CommitSummary, SearchCommitsInput};
+use crate::db::AppDatabase;
 use crate::error::Result;
 use crate::prs::{PullRequestService, PullRequestSummary, SearchPullRequestsInput};
 use crate::work_items::{SearchWorkItemsInput, WorkItemService, WorkItemSummary};
@@ -34,6 +35,7 @@ pub struct SearchAllResult {
 }
 
 pub fn search_all(
+    db: &AppDatabase,
     work_items: &WorkItemService,
     pull_requests: &PullRequestService,
     commits: &CommitService,
@@ -58,30 +60,51 @@ pub fn search_all(
         });
     }
 
-    let mut work_item_results = work_items.search(SearchWorkItemsInput {
-        organization_id: input.organization_id.clone(),
-        query: Some(query.clone()),
-        state: None,
-        work_item_type: None,
-        project_id: None,
-    })?;
-    let mut pull_request_results = pull_requests.search(SearchPullRequestsInput {
-        organization_id: input.organization_id.clone(),
-        query: Some(query.clone()),
-        status: None,
-        project_id: None,
-        repository_id: None,
-    })?;
-    let mut commit_results = commits.search(SearchCommitsInput {
-        organization_id: input.organization_id,
-        query: Some(query),
-        author: None,
-        branch: None,
-        from_date: None,
-        to_date: None,
-        project_id: None,
-        repository_id: None,
-    })?;
+    // Without an explicit organization the palette searches every configured
+    // organization and merges the results.
+    let org_ids: Vec<String> = match input.organization_id {
+        Some(id) => vec![id],
+        None => db
+            .list_organizations()?
+            .into_iter()
+            .map(|organization| organization.id)
+            .collect(),
+    };
+
+    let mut work_item_results = Vec::new();
+    let mut pull_request_results = Vec::new();
+    let mut commit_results = Vec::new();
+    for org_id in &org_ids {
+        work_item_results.extend(work_items.search(SearchWorkItemsInput {
+            organization_id: Some(org_id.clone()),
+            query: Some(query.clone()),
+            state: None,
+            work_item_type: None,
+            project_id: None,
+        })?);
+        pull_request_results.extend(pull_requests.search(SearchPullRequestsInput {
+            organization_id: Some(org_id.clone()),
+            query: Some(query.clone()),
+            status: None,
+            project_id: None,
+            repository_id: None,
+        })?);
+        commit_results.extend(commits.search(SearchCommitsInput {
+            organization_id: Some(org_id.clone()),
+            query: Some(query.clone()),
+            author: None,
+            branch: None,
+            from_date: None,
+            to_date: None,
+            project_id: None,
+            repository_id: None,
+        })?);
+    }
+    if org_ids.len() > 1 {
+        work_item_results.sort_by(|a, b| b.changed_date.cmp(&a.changed_date));
+        pull_request_results.sort_by(|a, b| b.creation_date.cmp(&a.creation_date));
+        commit_results.sort_by(|a, b| b.author_date.cmp(&a.author_date));
+    }
 
     // Totals are bounded by each underlying search's own cap, not exact counts.
     let totals = SearchAllTotals {
@@ -209,9 +232,10 @@ mod tests {
 
     #[test]
     fn search_all_groups_results_by_kind() {
-        let (_db_file, _db, work_items, pull_requests, commits) = make_services();
+        let (_db_file, db, work_items, pull_requests, commits) = make_services();
 
         let result = search_all(
+            &db,
             &work_items,
             &pull_requests,
             &commits,
@@ -241,9 +265,10 @@ mod tests {
 
     #[test]
     fn search_all_numeric_query_matches_work_item_and_pr_ids() {
-        let (_db_file, _db, work_items, pull_requests, commits) = make_services();
+        let (_db_file, db, work_items, pull_requests, commits) = make_services();
 
         let result = search_all(
+            &db,
             &work_items,
             &pull_requests,
             &commits,
@@ -264,9 +289,10 @@ mod tests {
 
     #[test]
     fn search_all_empty_query_returns_nothing() {
-        let (_db_file, _db, work_items, pull_requests, commits) = make_services();
+        let (_db_file, db, work_items, pull_requests, commits) = make_services();
 
         let result = search_all(
+            &db,
             &work_items,
             &pull_requests,
             &commits,
@@ -281,6 +307,60 @@ mod tests {
         assert!(result.work_items.is_empty());
         assert!(result.pull_requests.is_empty());
         assert!(result.commits.is_empty());
+    }
+
+    #[test]
+    fn search_all_without_organization_searches_every_org() {
+        let (_db_file, db, work_items, pull_requests, commits) = make_services();
+        db.upsert_organization(OrganizationDraft {
+            id: "fabrikam".to_string(),
+            name: "fabrikam".to_string(),
+            display_name: None,
+            base_url: "https://dev.azure.com/fabrikam".to_string(),
+            auth_provider: "pat".to_string(),
+            credential_key: "azdodeck:org:fabrikam:pat".to_string(),
+            authenticated_user_id: None,
+            authenticated_user_display_name: None,
+            authenticated_user_unique_name: None,
+        })
+        .unwrap();
+        db.upsert_work_items(&[CachedWorkItem {
+            org_id: "fabrikam".to_string(),
+            project_id: "p9".to_string(),
+            project_name: "Fabrikam".to_string(),
+            id: 900,
+            title: "retry tuning in fabrikam".to_string(),
+            work_item_type: Some("Task".to_string()),
+            state: Some("New".to_string()),
+            assigned_to: None,
+            assigned_to_unique_name: None,
+            changed_date: Some("2026-06-06T00:00:00Z".to_string()),
+            web_url: None,
+        }])
+        .unwrap();
+
+        let result = search_all(
+            &db,
+            &work_items,
+            &pull_requests,
+            &commits,
+            SearchAllInput {
+                organization_id: None,
+                query: "retry".to_string(),
+                limit_per_kind: None,
+            },
+        )
+        .unwrap();
+
+        let orgs: Vec<&str> = result
+            .work_items
+            .iter()
+            .map(|item| item.organization_id.as_str())
+            .collect();
+        assert!(orgs.contains(&"contoso"));
+        assert!(orgs.contains(&"fabrikam"));
+        // Most recently changed first when merging organizations.
+        assert_eq!(result.work_items[0].id, 900);
     }
 
     #[test]
@@ -305,6 +385,7 @@ mod tests {
         db.upsert_work_items(&extra).unwrap();
 
         let result = search_all(
+            &db,
             &work_items,
             &pull_requests,
             &commits,
