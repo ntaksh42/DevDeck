@@ -9,7 +9,7 @@ import {
   useState,
 } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Plus, Send, SlidersHorizontal, Trash2, X } from 'lucide-react';
+import { ChevronRight, Loader2, Plus, Send, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import {
   addWorkItemComment,
   assignWorkItem,
@@ -36,7 +36,7 @@ import {
   type WorkItemPreview,
   type WorkItemSummary,
 } from '@/lib/azdoCommands';
-import { formatRelativeDate, isEditableTarget } from '@/lib/utils';
+import { focusPrimaryGrid, formatRelativeDate, isEditableTarget } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
 import { PreviewEmptyState } from '@/components/StateDisplay';
 import { ShortcutHint } from '@/components/ShortcutHint';
@@ -51,6 +51,15 @@ import {
   type PreviewFieldKey,
 } from './previewFieldsStorage';
 const SAVED_REPLIES_STORAGE_KEY = "azdodeck:workItems:savedReplies";
+
+type StagedChanges = {
+  state?: string;
+  assignee?: { assignValue: string; displayName: string };
+  priority?: number;
+  reason?: string;
+  tags?: string[];
+  fields?: Record<string, { label: string; value: string }>;
+};
 
 type PreviewFieldDefinition = {
   editable?: "state" | "assignee" | "priority" | "reason";
@@ -504,6 +513,110 @@ export function WorkItemPreviewPanel({
     },
   });
 
+  // Property edits are staged locally and written to Azure DevOps only on an
+  // explicit apply (Ctrl+S); Esc discards.
+  const [staged, setStaged] = useState<StagedChanges>({});
+  const [applying, setApplying] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
+
+  const stagedEntries = useMemo(() => {
+    const entries: { key: string; label: string; from: string; to: string }[] = [];
+    if (!preview) return entries;
+    if (staged.state !== undefined) {
+      entries.push({ key: "state", label: "State", from: preview.state ?? "—", to: staged.state });
+    }
+    if (staged.assignee) {
+      entries.push({
+        key: "assignee",
+        label: "Assignee",
+        from: preview.assignedTo ?? "Unassigned",
+        to: staged.assignee.displayName,
+      });
+    }
+    if (staged.priority !== undefined) {
+      entries.push({
+        key: "priority",
+        label: "Priority",
+        from: preview.priority ?? "—",
+        to: String(staged.priority),
+      });
+    }
+    if (staged.reason !== undefined) {
+      entries.push({ key: "reason", label: "Reason", from: preview.reason ?? "—", to: staged.reason });
+    }
+    if (staged.tags) {
+      entries.push({
+        key: "tags",
+        label: "Tags",
+        from: preview.tags?.trim() ? preview.tags : "—",
+        to: staged.tags.join("; ") || "—",
+      });
+    }
+    for (const [referenceName, field] of Object.entries(staged.fields ?? {})) {
+      entries.push({
+        key: `field:${referenceName}`,
+        label: field.label,
+        from: customPreviewFieldValue(preview, referenceName) ?? "—",
+        to: field.value,
+      });
+    }
+    return entries;
+  }, [preview, staged]);
+
+  function discardStaged() {
+    setStaged({});
+    setApplyError(null);
+  }
+
+  async function applyStaged() {
+    if (!selectedItem || applying || stagedEntries.length === 0) return;
+    const base = {
+      organizationId: selectedItem.organizationId,
+      projectId: selectedItem.projectId,
+      workItemId: selectedItem.id,
+    };
+    setApplying(true);
+    setApplyError(null);
+    try {
+      if (staged.assignee) {
+        await assignMutation.mutateAsync({ ...base, assignedTo: staged.assignee.assignValue });
+        setStaged((current) => ({ ...current, assignee: undefined }));
+      }
+      if (staged.priority !== undefined) {
+        await priorityMutation.mutateAsync({ ...base, priority: staged.priority });
+        setStaged((current) => ({ ...current, priority: undefined }));
+      }
+      if (staged.tags) {
+        await tagsMutation.mutateAsync({ ...base, tags: staged.tags });
+        setStaged((current) => ({ ...current, tags: undefined }));
+      }
+      for (const [referenceName, field] of Object.entries(staged.fields ?? {})) {
+        await customFieldMutation.mutateAsync({
+          ...base,
+          fieldReferenceName: referenceName,
+          value: field.value,
+        });
+        setStaged((current) => {
+          const fields = { ...current.fields };
+          delete fields[referenceName];
+          return { ...current, fields: Object.keys(fields).length > 0 ? fields : undefined };
+        });
+      }
+      if (staged.state !== undefined) {
+        await stateMutation.mutateAsync({ ...base, state: staged.state });
+        setStaged((current) => ({ ...current, state: undefined }));
+      }
+      if (staged.reason !== undefined) {
+        await reasonMutation.mutateAsync({ ...base, reason: staged.reason });
+        setStaged((current) => ({ ...current, reason: undefined }));
+      }
+    } catch (error) {
+      setApplyError(commandErrorMessage(error));
+    } finally {
+      setApplying(false);
+    }
+  }
+
   useEffect(() => {
     setAssigneeOpen(false);
     setAssigneeQuery("");
@@ -522,6 +635,8 @@ export function WorkItemPreviewPanel({
     setMentionQuery("");
     setMentionStart(null);
     setActiveMentionIndex(0);
+    setStaged({});
+    setApplyError(null);
   }, [selectedItem?.id]);
 
   useEffect(() => {
@@ -655,22 +770,69 @@ export function WorkItemPreviewPanel({
 
   function assignTo(candidate: WorkItemAssigneeCandidate) {
     if (!selectedItem) return;
-    assignMutation.mutate({
-      organizationId: selectedItem.organizationId,
-      projectId: selectedItem.projectId,
-      workItemId: selectedItem.id,
-      assignedTo: candidate.assignValue,
-    });
+    setStaged((current) => ({
+      ...current,
+      assignee:
+        candidate.displayName === preview?.assignedTo
+          ? undefined
+          : { assignValue: candidate.assignValue, displayName: candidate.displayName },
+    }));
+    setAssigneeOpen(false);
+    setAssigneeQuery("");
   }
 
   function setPriority(priority: number) {
     if (!selectedItem) return;
-    priorityMutation.mutate({
-      organizationId: selectedItem.organizationId,
-      projectId: selectedItem.projectId,
-      workItemId: selectedItem.id,
-      priority,
+    setStaged((current) => ({
+      ...current,
+      priority: String(priority) === preview?.priority ? undefined : priority,
+    }));
+    setPriorityPickerOpen(false);
+  }
+
+  function stageState(state: string) {
+    if (!selectedItem) return;
+    // Reason options belong to the current state, so a staged reason is
+    // dropped when the state itself changes.
+    setStaged((current) => ({
+      ...current,
+      state: state === preview?.state ? undefined : state,
+      reason: undefined,
+    }));
+    setStatePickerOpen(false);
+  }
+
+  function stageReason(reason: string) {
+    if (!selectedItem) return;
+    setStaged((current) => ({
+      ...current,
+      reason: reason === preview?.reason ? undefined : reason,
+    }));
+    setReasonEditorOpen(false);
+  }
+
+  function stageTags(tags: string[]) {
+    if (!selectedItem) return;
+    const normalized = tags.join("; ");
+    const currentTags = preview?.tags ?? "";
+    setStaged((current) => ({
+      ...current,
+      tags: normalized === currentTags ? undefined : tags,
+    }));
+  }
+
+  function stageCustomField(referenceName: string, label: string, value: string) {
+    if (!selectedItem) return;
+    setStaged((current) => {
+      const fields = { ...current.fields };
+      if (preview && (customPreviewFieldValue(preview, referenceName) ?? "") === value) {
+        delete fields[referenceName];
+      } else {
+        fields[referenceName] = { label, value };
+      }
+      return { ...current, fields: Object.keys(fields).length > 0 ? fields : undefined };
     });
+    setCustomFieldEditor(null);
   }
 
   useEffect(() => {
@@ -718,7 +880,33 @@ export function WorkItemPreviewPanel({
     };
   }, [commentMutation.isPending, commentText, selectedItem]);
 
+  const applyStagedRef = useRef<() => void>(() => {});
+  applyStagedRef.current = () => {
+    void applyStaged();
+  };
+
+  useEffect(() => {
+    function applyStagedFromCommand() {
+      applyStagedRef.current();
+    }
+    window.addEventListener("azdodeck:work-items:apply-staged", applyStagedFromCommand);
+    return () =>
+      window.removeEventListener("azdodeck:work-items:apply-staged", applyStagedFromCommand);
+  }, []);
+
   function handlePreviewPanelKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
+    if (
+      (event.ctrlKey || event.metaKey) &&
+      !event.altKey &&
+      !event.shiftKey &&
+      (event.key === "s" || event.key === "S")
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      void applyStaged();
+      return;
+    }
+
     if (
       isEditableTarget(event.target) ||
       event.altKey ||
@@ -726,6 +914,25 @@ export function WorkItemPreviewPanel({
       event.metaKey ||
       event.shiftKey
     ) {
+      return;
+    }
+
+    if (
+      event.key === "Escape" &&
+      !statePickerOpen &&
+      !assigneeOpen &&
+      !reasonEditorOpen &&
+      !priorityPickerOpen &&
+      !customFieldEditor
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (stagedEntries.length > 0) {
+        // First Esc discards pending changes, the next one leaves the panel.
+        discardStaged();
+      } else {
+        focusPrimaryGrid();
+      }
       return;
     }
 
@@ -826,17 +1033,10 @@ export function WorkItemPreviewPanel({
                 selectedFieldKeys={selectedPreviewFieldKeys}
                 onSelectedFieldKeysChange={setSelectedPreviewFieldKeys}
                 tagsPending={tagsMutation.isPending}
-                onTagsChange={(tags) =>
-                  tagsMutation.mutate({
-                    organizationId: preview.organizationId,
-                    projectId: preview.projectId,
-                    workItemId: preview.id,
-                    tags,
-                  })
-                }
+                onTagsChange={stageTags}
                 reasonControl={
                   <ReasonEditor
-                    current={preview.reason}
+                    current={staged.reason ?? preview.reason}
                     error={reasonMutation.isError ? commandErrorMessage(reasonMutation.error) : null}
                     onOpenChange={(open) => {
                       setReasonEditorOpen(open);
@@ -846,15 +1046,7 @@ export function WorkItemPreviewPanel({
                         setStatePickerOpen(false);
                       }
                     }}
-                    onSubmit={(reason) => {
-                      if (!selectedItem) return;
-                      reasonMutation.mutate({
-                        organizationId: selectedItem.organizationId,
-                        projectId: selectedItem.projectId,
-                        workItemId: selectedItem.id,
-                        reason,
-                      });
-                    }}
+                    onSubmit={stageReason}
                     open={reasonEditorOpen}
                     pending={reasonMutation.isPending}
                     shortcut="R"
@@ -862,7 +1054,9 @@ export function WorkItemPreviewPanel({
                 }
                 priorityControl={
                   <PriorityPicker
-                    current={preview.priority}
+                    current={
+                      staged.priority !== undefined ? String(staged.priority) : preview.priority
+                    }
                     error={priorityMutation.isError ? commandErrorMessage(priorityMutation.error) : null}
                     onOpenChange={(open) => {
                       setPriorityPickerOpen(open);
@@ -880,7 +1074,10 @@ export function WorkItemPreviewPanel({
                 renderCustomFieldControl={(field) => (
                   <CustomFieldPicker
                     label={field.label}
-                    current={customPreviewFieldValue(preview, field.referenceName)}
+                    current={
+                      staged.fields?.[field.referenceName]?.value ??
+                      customPreviewFieldValue(preview, field.referenceName)
+                    }
                     error={
                       customFieldEditor === field.referenceName &&
                       customFieldMutation.isError
@@ -892,16 +1089,9 @@ export function WorkItemPreviewPanel({
                       setCustomFieldEditor(open ? field.referenceName : null);
                       customFieldMutation.reset();
                     }}
-                    onSelect={(value) => {
-                      if (!selectedItem || customFieldMutation.isPending) return;
-                      customFieldMutation.mutate({
-                        organizationId: selectedItem.organizationId,
-                        projectId: selectedItem.projectId,
-                        workItemId: selectedItem.id,
-                        fieldReferenceName: field.referenceName,
-                        value,
-                      });
-                    }}
+                    onSelect={(value) =>
+                      stageCustomField(field.referenceName, field.label, value)
+                    }
                     open={customFieldEditor === field.referenceName}
                     options={
                       customFieldEditor === field.referenceName
@@ -917,7 +1107,7 @@ export function WorkItemPreviewPanel({
                 resolveImageSource={resolvePreviewImage}
                 stateControl={
                   <StatePicker
-                    current={preview.state}
+                    current={staged.state ?? preview.state}
                     error={stateMutation.isError ? commandErrorMessage(stateMutation.error) : null}
                     loading={statesQuery.isFetching}
                     onOpenChange={(open) => {
@@ -928,14 +1118,8 @@ export function WorkItemPreviewPanel({
                       }
                     }}
                     onSelect={(state) => {
-                      if (!selectedItem) return;
                       setPriorityPickerOpen(false);
-                      stateMutation.mutate({
-                        organizationId: selectedItem.organizationId,
-                        projectId: selectedItem.projectId,
-                        workItemId: selectedItem.id,
-                        state,
-                      });
+                      stageState(state);
                     }}
                     open={statePickerOpen}
                     options={statesQuery.data ?? []}
@@ -945,7 +1129,7 @@ export function WorkItemPreviewPanel({
                 }
                 assigneeControl={
                   <AssigneePicker
-                    current={preview.assignedTo}
+                    current={staged.assignee?.displayName ?? preview.assignedTo}
                     error={
                       assigneeQuery.trim()
                         ? assigneeOptionsQuery.isError
@@ -971,6 +1155,51 @@ export function WorkItemPreviewPanel({
                   />
                 }
               />
+              {stagedEntries.length > 0 ? (
+                <div className="shrink-0 border-t border-amber-200 bg-amber-50 px-2 py-1.5 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-amber-900">
+                      {stagedEntries.length} pending change{stagedEntries.length === 1 ? "" : "s"}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={discardStaged}
+                        disabled={applying}
+                        className="inline-flex items-center gap-1 rounded border border-border bg-white px-2 py-0.5 hover:bg-secondary disabled:opacity-50"
+                      >
+                        Discard
+                        <kbd className="rounded bg-muted px-1 font-mono text-[10px]">Esc</kbd>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void applyStaged()}
+                        disabled={applying}
+                        className="inline-flex items-center gap-1 rounded bg-primary px-2 py-0.5 font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+                      >
+                        {applying ? (
+                          <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                        ) : null}
+                        Apply
+                        <kbd className="rounded bg-primary-foreground/20 px-1 font-mono text-[10px]">
+                          Ctrl+S
+                        </kbd>
+                      </button>
+                    </span>
+                  </div>
+                  <ul className="mt-1 space-y-0.5 text-amber-900/90">
+                    {stagedEntries.map((entry) => (
+                      <li key={entry.key} className="truncate">
+                        <span className="font-medium">{entry.label}:</span> {entry.from} →{" "}
+                        {entry.to}
+                      </li>
+                    ))}
+                  </ul>
+                  {applyError ? (
+                    <p className="mt-1 text-destructive">{applyError}</p>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="bg-slate-50/70 p-2">
                 <form className="space-y-1" onSubmit={submitComment}>
                   <div ref={mentionPickerRef} className="relative">
@@ -1456,7 +1685,7 @@ function WorkItemPreviewDetails({
       {(descriptionHtml || acceptanceCriteriaHtml) && (
         <div className="mt-2 grid gap-2">
           {descriptionHtml ? (
-            <PreviewSection title="Description">
+            <PreviewSection collapseId="description" title="Description">
               <RichHtmlFrame
                 baseUrl={preview.webUrl}
                 html={descriptionHtml}
@@ -1467,7 +1696,7 @@ function WorkItemPreviewDetails({
             </PreviewSection>
           ) : null}
           {acceptanceCriteriaHtml ? (
-            <PreviewSection title="Acceptance Criteria">
+            <PreviewSection collapseId="acceptanceCriteria" title="Acceptance Criteria">
               <RichHtmlFrame
                 baseUrl={preview.webUrl}
                 html={acceptanceCriteriaHtml}
@@ -1481,7 +1710,7 @@ function WorkItemPreviewDetails({
       )}
 
       {preview.relations.length > 0 ? (
-        <PreviewSection className="mt-2" title={`Links (${preview.relations.length})`}>
+        <PreviewSection className="mt-2" collapseId="links" title={`Links (${preview.relations.length})`}>
           <div className="space-y-1">
             {preview.relations.map((relation) => (
               <button
@@ -1513,7 +1742,7 @@ function WorkItemPreviewDetails({
       ) : null}
 
       {preview.comments.length > 0 ? (
-        <PreviewSection className="mt-2" title={`Comments (${preview.comments.length})`}>
+        <PreviewSection className="mt-2" collapseId="comments" title={`Comments (${preview.comments.length})`}>
           {deleteCommentError ? (
             <p className="mb-1 text-[11px] leading-4 text-destructive">
               {deleteCommentError}
@@ -1869,23 +2098,83 @@ function PreviewField({
   );
 }
 
+const WI_PREVIEW_COLLAPSED_SECTIONS_STORAGE_KEY =
+  "azdodeck:view:wiPreviewCollapsedSections:v1";
+
+function loadCollapsedPreviewSections(): Set<string> {
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(WI_PREVIEW_COLLAPSED_SECTIONS_STORAGE_KEY) ?? "[]",
+    );
+    return new Set(
+      Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [],
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+function storeCollapsedPreviewSections(collapsed: Set<string>) {
+  window.localStorage.setItem(
+    WI_PREVIEW_COLLAPSED_SECTIONS_STORAGE_KEY,
+    JSON.stringify([...collapsed]),
+  );
+}
+
 function PreviewSection({
   children,
   className = "",
+  collapseId,
   title,
 }: {
   children: ReactNode;
   className?: string;
+  collapseId?: string;
   title: string;
 }) {
+  const [collapsed, setCollapsed] = useState(() =>
+    collapseId ? loadCollapsedPreviewSections().has(collapseId) : false,
+  );
+
+  function toggleCollapsed() {
+    if (!collapseId) return;
+    setCollapsed((current) => {
+      const next = !current;
+      const stored = loadCollapsedPreviewSections();
+      if (next) stored.add(collapseId);
+      else stored.delete(collapseId);
+      storeCollapsedPreviewSections(stored);
+      return next;
+    });
+  }
+
   return (
     <section className={`min-w-0 ${className}`}>
       <div className="sticky top-0 z-10 mb-1 border-t border-border bg-white/95 pb-0.5 pt-1 backdrop-blur-sm">
-        <h3 className="text-[11px] font-semibold leading-4 text-foreground/75">
-          {title}
-        </h3>
+        {collapseId ? (
+          <button
+            type="button"
+            aria-expanded={!collapsed}
+            onClick={toggleCollapsed}
+            className="flex w-full items-center gap-1 rounded text-left hover:bg-muted/60 focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            <ChevronRight
+              className={`h-3 w-3 shrink-0 text-muted-foreground transition-transform ${
+                collapsed ? "" : "rotate-90"
+              }`}
+              aria-hidden="true"
+            />
+            <h3 className="text-[11px] font-semibold leading-4 text-foreground/75">
+              {title}
+            </h3>
+          </button>
+        ) : (
+          <h3 className="text-[11px] font-semibold leading-4 text-foreground/75">
+            {title}
+          </h3>
+        )}
       </div>
-      {children}
+      {collapsed ? null : children}
     </section>
   );
 }

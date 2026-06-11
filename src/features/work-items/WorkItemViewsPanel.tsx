@@ -716,6 +716,9 @@ export function WorkItemViewsPanel({
 
   function handleViewListKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (isEditableTarget(event.target) || views.length === 0) return;
+    // Shift is part of the reorder chords below, but Ctrl/Meta/Alt chords
+    // belong to app-level shortcuts (Ctrl+K, Ctrl+R, …).
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
     const columnCount = viewCardColumnCount(event.currentTarget);
     if (event.shiftKey && (event.key === "ArrowLeft" || event.key === "ArrowUp")) {
       event.preventDefault();

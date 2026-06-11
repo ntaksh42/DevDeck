@@ -979,10 +979,45 @@ describe("App", () => {
       reviewerCommentSrcDocs.some((srcDoc) => srcDoc.includes("&lt;div&gt;")),
     ).toBe(false);
 
+    // Preview sections collapse and re-expand from the header toggle.
+    const commentsToggle = screen.getByRole("button", { name: "Comments (4)" });
+    expect(commentsToggle.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(commentsToggle);
+    expect(commentsToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(document.querySelectorAll('iframe[title^="Comment by "]')).toHaveLength(0);
+    fireEvent.click(commentsToggle);
+    expect(
+      document.querySelectorAll('iframe[title^="Comment by "]').length,
+    ).toBe(4);
+
     const workItemsGrid = screen.getByRole("grid", { name: "Work items" });
     fireEvent.keyDown(workItemsGrid, { key: "a" });
     expect(await screen.findByPlaceholderText("Search assignee...")).toBeTruthy();
     fireEvent.click(await screen.findByRole("button", { name: /creator@example.com/ }));
+
+    // Selection only stages the change; nothing is written yet.
+    expect(invokeMock).not.toHaveBeenCalledWith(
+      "assign_work_item",
+      expect.anything(),
+    );
+    expect(await screen.findByText("1 pending change")).toBeTruthy();
+    expect(screen.getByText(/Assignee:/)).toBeTruthy();
+
+    // Esc discards staged changes without writing.
+    fireEvent.keyDown(screen.getByText("1 pending change"), { key: "Escape" });
+    expect(screen.queryByText("1 pending change")).toBeNull();
+    expect(invokeMock).not.toHaveBeenCalledWith(
+      "assign_work_item",
+      expect.anything(),
+    );
+
+    // Stage again and apply.
+    fireEvent.keyDown(workItemsGrid, { key: "a" });
+    fireEvent.click(await screen.findByRole("button", { name: /creator@example.com/ }));
+    expect(await screen.findByText("1 pending change")).toBeTruthy();
+
+    // Ctrl+S applies the staged change.
+    fireEvent.keyDown(window, { key: "s", ctrlKey: true });
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("assign_work_item", {
         input: {
@@ -992,6 +1027,9 @@ describe("App", () => {
           assignedTo: "Creator <creator@example.com>",
         },
       });
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("1 pending change")).toBeNull();
     });
     await waitFor(() => {
       expect(within(workItemsGrid).getAllByText("Creator").length).toBeGreaterThan(0);
@@ -1011,6 +1049,18 @@ describe("App", () => {
     fireEvent.keyDown(document.activeElement ?? workItemsGrid, { key: "ArrowDown" });
     expect(document.activeElement).toBe(screen.getByLabelText("Work item preview"));
     expect(document.activeElement).not.toBe(commentBox);
+
+    // Esc returns focus from the preview to the grid.
+    fireEvent.keyDown(document.activeElement ?? workItemsGrid, { key: "Escape" });
+    expect(document.activeElement?.getAttribute("role")).toBe("row");
+
+    // Ctrl+K opens the palette even while the grid handles single-key moves.
+    fireEvent.keyDown(document.activeElement ?? workItemsGrid, { key: "k", ctrlKey: true });
+    const paletteInput = await screen.findByPlaceholderText("Type a command or search…");
+    fireEvent.keyDown(paletteInput, { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByPlaceholderText("Type a command or search…")).toBeNull();
+    });
     fireEvent.keyDown(window, { key: "g", altKey: true });
     expect(document.activeElement?.getAttribute("role")).toBe("row");
     fireEvent.keyDown(document.activeElement ?? workItemsGrid, { key: "ArrowUp" });
@@ -1676,6 +1726,72 @@ describe("App", () => {
     expect(invokeMock).not.toHaveBeenCalled();
     expect(openUrlMock).not.toHaveBeenCalled();
     windowOpenSpy.mockRestore();
+  });
+
+  it("restores review grid focus after a sync refresh removes the focused row", async () => {
+    const makeReviewPr = (pullRequestId: number, title: string) => ({
+      organizationId: "contoso",
+      projectId: "project-1",
+      projectName: "Platform",
+      repositoryId: "repo-1",
+      repositoryName: "azdo-dashboard",
+      pullRequestId,
+      title,
+      createdBy: "Alice",
+      creationDate: "2026-06-10T00:00:00Z",
+      targetRefName: "main",
+      webUrl: null,
+      myVote: 0,
+      myVoteLabel: "No Vote",
+      myIsRequired: true,
+      isDraft: false,
+    });
+    let alphaRemoved = false;
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve({ reviewResultFolderPath: null });
+      }
+      if (command === "get_review_result_preview") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_sync_states") {
+        return Promise.resolve([]);
+      }
+      if (command === "trigger_sync") {
+        return Promise.resolve(undefined);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve(
+          alphaRemoved
+            ? [makeReviewPr(102, "Beta review")]
+            : [makeReviewPr(101, "Alpha review"), makeReviewPr(102, "Beta review")],
+        );
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+    const rowAlpha = (await screen.findByText("Alpha review")).closest(
+      "[role='row']",
+    ) as HTMLElement;
+    fireEvent.click(rowAlpha);
+    rowAlpha.focus();
+    expect(document.activeElement).toBe(rowAlpha);
+
+    // Background sync finished: the focused PR is no longer assigned.
+    alphaRemoved = true;
+    tauriEventHandlers.get("sync:updated")?.({ payload: { scopes: ["myReviews"] } });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Alpha review")).toBeNull();
+    });
+    await waitFor(() => {
+      const rowBeta = screen.getByText("Beta review").closest("[role='row']");
+      expect(document.activeElement).toBe(rowBeta);
+    });
   });
 
   it("searches across entities from the command palette and opens a work item in app", async () => {

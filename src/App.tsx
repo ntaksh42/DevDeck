@@ -571,6 +571,18 @@ function AppShell() {
       shortcut: "Ctrl+Enter",
     },
     {
+      disabled:
+        activeView !== "myWorkItems" &&
+        activeView !== "workItems" &&
+        activeView !== "workItemViews",
+      group: "Work Items",
+      id: "wi.applyStaged",
+      keywords: ["save", "pending", "apply"],
+      label: "Apply pending work item changes",
+      run: () => dispatchWorkItemCommand("apply-staged"),
+      shortcut: "Ctrl+S",
+    },
+    {
       disabled: organizations.length === 0 || syncMutation.isPending,
       group: "General",
       id: "general.sync",
@@ -761,6 +773,24 @@ function AppShell() {
       ) {
         event.preventDefault();
         refreshCurrentView();
+        return;
+      }
+
+      if (
+        !event.defaultPrevented &&
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        !event.shiftKey &&
+        (event.key === "s" || event.key === "S")
+      ) {
+        if (
+          activeView === "myWorkItems" ||
+          activeView === "workItems" ||
+          activeView === "workItemViews"
+        ) {
+          event.preventDefault();
+          dispatchWorkItemCommand("apply-staged");
+        }
         return;
       }
 

@@ -430,6 +430,8 @@ function PullRequestResults({
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (isEditableTarget(e.target)) return;
+    // Single-letter shortcuts must not swallow app-level chords (Ctrl+K etc.).
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === "Escape" && openFilterCol) {
       e.preventDefault();
       setOpenFilterCol(null);

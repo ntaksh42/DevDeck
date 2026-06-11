@@ -454,6 +454,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
   const filterInputRef = useRef<HTMLInputElement | null>(null);
   const gridScrollRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const gridHadFocusRef = useRef(false);
   const [gridViewport, setGridViewport] = useState({ height: 0, scrollTop: 0 });
 
   useEffect(() => {
@@ -535,6 +536,11 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
       .map(({ pr }) => pr);
   }, [filtered, sort]);
 
+  const resultKeysSignature = useMemo(
+    () => sortedPrs.map((pr) => `${pr.organizationId}-${pr.pullRequestId}`).join("|"),
+    [sortedPrs],
+  );
+
   const visiblePrs = allPrs.filter((pr) => showDrafts || !pr.isDraft);
   const noVoteCount = visiblePrs.filter((pr) => pr.myVote === 0).length;
   const columnFilterCount = activeColumnFilterCount(columnFilters);
@@ -569,6 +575,16 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
   useEffect(() => {
     setSelectedIndex((index) => Math.min(index, Math.max(sortedPrs.length - 1, 0)));
   }, [sortedPrs.length]);
+
+  // A background sync can replace or remove the focused row's DOM node; once
+  // the grid had focus, restore it to the selected row after data changes so
+  // keyboard navigation keeps working.
+  useEffect(() => {
+    if (!gridHadFocusRef.current) return;
+    window.setTimeout(() => {
+      rowRefs.current[selectedIndex]?.focus();
+    }, 0);
+  }, [selectedIndex, resultKeysSignature]);
 
   useEffect(() => {
     const scroller = gridScrollRef.current;
@@ -707,6 +723,17 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
       return;
     }
 
+    // Single-letter shortcuts must not swallow app-level chords (Ctrl+K etc.).
+    // Ctrl+Enter (open in browser) stays grid-handled.
+    if (e.ctrlKey || e.metaKey || e.altKey) {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key === "Enter") {
+        e.preventDefault();
+        const pr = sortedPrs[selectedIndex];
+        if (pr?.webUrl) openExternalUrl(pr.webUrl);
+      }
+      return;
+    }
+
     if (e.key === "/") {
       e.preventDefault();
       filterInputRef.current?.focus();
@@ -791,12 +818,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
       moveSelection(selectedIndex - 10);
     } else if (e.key === "Enter") {
       e.preventDefault();
-      const pr = sortedPrs[selectedIndex];
-      if (e.ctrlKey) {
-        if (pr?.webUrl) openExternalUrl(pr.webUrl);
-      } else {
-        focusPrimaryPreview();
-      }
+      focusPrimaryPreview();
     }
   }
 
@@ -833,6 +855,21 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
       className="flex min-h-0 flex-1 flex-col gap-2 outline-none"
       tabIndex={-1}
       onKeyDown={handleKeyDown}
+      onFocusCapture={(event) => {
+        const target = event.target;
+        gridHadFocusRef.current =
+          target instanceof HTMLElement &&
+          Boolean(target.closest('[role="grid"], [role="row"]'));
+      }}
+      onBlurCapture={(event) => {
+        const nextTarget = event.relatedTarget;
+        if (
+          !(nextTarget instanceof HTMLElement) ||
+          !nextTarget.closest('[role="grid"], [role="row"]')
+        ) {
+          gridHadFocusRef.current = false;
+        }
+      }}
     >
       {copyToast && (
         <div

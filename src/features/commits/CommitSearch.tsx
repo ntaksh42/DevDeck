@@ -701,6 +701,8 @@ function CommitResults({
 
   function handleKeyDown(e: ReactKeyboardEvent) {
     if (isEditableTarget(e.target)) return;
+    // Single-letter shortcuts must not swallow app-level chords (Ctrl+K etc.).
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === "ArrowDown") { e.preventDefault(); moveSelection(1); }
     else if (e.key === "ArrowUp") { e.preventDefault(); moveSelection(-1); }
     else if (e.key === "Home") { e.preventDefault(); moveSelectionTo(0); }

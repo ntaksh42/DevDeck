@@ -1056,6 +1056,16 @@ export function WorkItemsGrid({
       setColumnMenuRect(null);
       return;
     }
+    // Single-letter shortcuts must not swallow app-level chords such as
+    // Ctrl+K (palette) or Ctrl+S (apply staged changes).
+    if (e.ctrlKey || e.metaKey || e.altKey) {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key === "Enter" && displayed.length > 0) {
+        e.preventDefault();
+        const item = displayed[selectedIndex];
+        if (item?.webUrl) openExternalUrl(item.webUrl);
+      }
+      return;
+    }
     if (displayed.length === 0) return;
     if (e.key === "ArrowDown" || e.key === "j" || e.key === "J") {
       e.preventDefault();
@@ -1077,12 +1087,7 @@ export function WorkItemsGrid({
       moveSelection(selectedIndex - 10);
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (e.ctrlKey) {
-        const item = displayed[selectedIndex];
-        if (item?.webUrl) openExternalUrl(item.webUrl);
-      } else {
-        focusPrimaryPreview();
-      }
+      focusPrimaryPreview();
     } else if (e.key === "o" || e.key === "O") {
       e.preventDefault();
       const item = displayed[selectedIndex];

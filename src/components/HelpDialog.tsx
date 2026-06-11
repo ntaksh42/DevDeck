@@ -69,9 +69,11 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Assign selected item</span><kbd className={kbd}>A</kbd></div>
           <div className={row}><span>Change state</span><kbd className={kbd}>S</kbd></div>
           <div className={row}><span>Change priority</span><kbd className={kbd}>P</kbd></div>
+          <div className={row}><span>Apply pending property changes</span><kbd className={kbd}>Ctrl+S</kbd></div>
+          <div className={row}><span>Discard pending property changes</span><kbd className={kbd}>Esc</kbd></div>
           <div className={row}><span>Focus comment</span><kbd className={kbd}>Alt+M / M</kbd></div>
           <div className={row}><span>Post comment</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
-          <div className={row}><span>Return to grid from input</span><kbd className={kbd}>Esc</kbd></div>
+          <div className={row}><span>Return to grid (from input / preview)</span><kbd className={kbd}>Esc</kbd></div>
 
           <p className={section}>Work Item Views</p>
           <div className={row}><span>Move view card</span><kbd className={kbd}>← → ↑ ↓</kbd></div>
