@@ -188,6 +188,14 @@ const ReviewPrRow = forwardRef<
         <span className="truncate font-medium text-foreground" title={pr.title}>
           {pr.title}
         </span>
+        {pr.mergeStatus === "conflicts" ? (
+          <span
+            className="inline-flex shrink-0 items-center rounded border border-red-200 bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-800"
+            title="This pull request has merge conflicts"
+          >
+            Conflicts
+          </span>
+        ) : null}
       </div>
 
       {/* Author */}

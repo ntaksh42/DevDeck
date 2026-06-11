@@ -78,6 +78,7 @@ const reviewPullRequestSummarySchema = z.object({
   myVoteLabel: z.string(),
   myIsRequired: z.boolean(),
   isDraft: z.boolean(),
+  mergeStatus: z.string().nullable().default(null),
 });
 
 const reviewPullRequestSummariesSchema = z.array(reviewPullRequestSummarySchema);

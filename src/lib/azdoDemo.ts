@@ -1179,6 +1179,7 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myVoteLabel: "No Vote",
       myIsRequired: true,
       isDraft: false,
+      mergeStatus: "conflicts",
     },
     {
       organizationId: "contoso",
@@ -1196,6 +1197,7 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myVoteLabel: "No Vote",
       myIsRequired: true,
       isDraft: false,
+      mergeStatus: null,
     },
     {
       organizationId: "contoso",
@@ -1213,6 +1215,7 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myVoteLabel: "Approved w/ Suggestions",
       myIsRequired: false,
       isDraft: false,
+      mergeStatus: null,
     },
     {
       organizationId: "contoso",
@@ -1230,6 +1233,7 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myVoteLabel: "No Vote",
       myIsRequired: false,
       isDraft: true,
+      mergeStatus: null,
     },
     {
       organizationId: "contoso",
@@ -1247,6 +1251,7 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myVoteLabel: "Rejected",
       myIsRequired: true,
       isDraft: false,
+      mergeStatus: null,
     },
     {
       organizationId: "contoso",
@@ -1264,6 +1269,7 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myVoteLabel: "Waiting for Author",
       myIsRequired: false,
       isDraft: false,
+      mergeStatus: null,
     },
     {
       organizationId: "contoso",
@@ -1281,6 +1287,7 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myVoteLabel: "Approved",
       myIsRequired: false,
       isDraft: false,
+      mergeStatus: null,
     },
   ]);
 }

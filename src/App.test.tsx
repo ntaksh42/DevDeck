@@ -1500,6 +1500,7 @@ describe("App", () => {
             myVoteLabel: "Waiting for Author",
             myIsRequired: false,
             isDraft: false,
+            mergeStatus: "conflicts",
           },
           {
             organizationId: "contoso",
@@ -1545,6 +1546,7 @@ describe("App", () => {
     expect(await main.findByText("Waiting on author")).toBeTruthy();
     expect(main.queryByText("Needs review")).toBeNull();
     expect(main.queryByText("Rejected legacy path")).toBeNull();
+    expect(main.getByText("Conflicts")).toBeTruthy();
     expect(await main.findByText("review-PR102.html")).toBeTruthy();
 
     fireEvent.keyDown(main.getByRole("grid", { name: "My review pull requests" }), {

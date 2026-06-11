@@ -34,6 +34,7 @@ pub struct ReviewPullRequestSummary {
     pub my_vote_label: String,
     pub my_is_required: bool,
     pub is_draft: bool,
+    pub merge_status: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -100,6 +101,7 @@ impl PullRequestService {
                 my_vote_label: pr.my_vote_label,
                 my_is_required: pr.my_is_required,
                 is_draft: pr.is_draft,
+                merge_status: pr.merge_status,
             })
             .collect();
         results.sort_by(|a, b| b.creation_date.cmp(&a.creation_date));
@@ -609,6 +611,7 @@ async fn fetch_review_prs_for_project(
             my_vote_label: vote_label(my_vote).to_string(),
             my_is_required,
             is_draft: pr.is_draft.unwrap_or(false),
+            merge_status: pr.merge_status.clone(),
         });
     }
     (project_name, Ok(cached_reviews))

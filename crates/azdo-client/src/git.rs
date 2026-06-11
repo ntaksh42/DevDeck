@@ -41,6 +41,7 @@ pub struct GitPullRequest {
     pub links: Option<PullRequestLinks>,
     pub reviewers: Option<Vec<IdentityRefWithVote>>,
     pub is_draft: Option<bool>,
+    pub merge_status: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

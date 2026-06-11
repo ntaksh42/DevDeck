@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, Result};
 
-const SCHEMA_VERSION: i64 = 8;
+const SCHEMA_VERSION: i64 = 9;
 
 /// Max rows kept in the my_work_items snapshot queries; sync notification
 /// diffing must know this cap to avoid treating re-entering rows as new.
@@ -105,6 +105,7 @@ pub struct CachedReviewPr {
     pub my_vote_label: String,
     pub my_is_required: bool,
     pub is_draft: bool,
+    pub merge_status: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -880,6 +881,36 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         }
         conn.execute_batch("PRAGMA user_version = 8;")?;
     }
+    if current < 9 {
+        // Minimal legacy databases may not have the table at all; create it in
+        // its current shape before adding the column.
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS review_pull_requests(
+                org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                project_id TEXT NOT NULL,
+                project_name TEXT NOT NULL,
+                repository_id TEXT NOT NULL,
+                repository_name TEXT NOT NULL,
+                pull_request_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                created_by TEXT,
+                creation_date TEXT NOT NULL,
+                target_ref_name TEXT NOT NULL,
+                web_url TEXT,
+                my_vote INTEGER NOT NULL DEFAULT 0,
+                my_vote_label TEXT NOT NULL DEFAULT '',
+                my_is_required INTEGER NOT NULL DEFAULT 0,
+                is_draft INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (org_id, repository_id, pull_request_id)
+            );
+            "#,
+        )?;
+        if !table_column_exists(conn, "review_pull_requests", "merge_status")? {
+            conn.execute_batch("ALTER TABLE review_pull_requests ADD COLUMN merge_status TEXT;")?;
+        }
+        conn.execute_batch("PRAGMA user_version = 9;")?;
+    }
     Ok(())
 }
 
@@ -1180,8 +1211,8 @@ fn upsert_review_pull_requests(conn: &Connection, prs: &[CachedReviewPr]) -> Res
         INSERT INTO review_pull_requests(
             org_id, project_id, project_name, repository_id, repository_name,
             pull_request_id, title, created_by, creation_date, target_ref_name,
-            web_url, my_vote, my_vote_label, my_is_required, is_draft
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+            web_url, my_vote, my_vote_label, my_is_required, is_draft, merge_status
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
         ON CONFLICT(org_id, repository_id, pull_request_id) DO UPDATE SET
             project_id = excluded.project_id,
             project_name = excluded.project_name,
@@ -1194,7 +1225,8 @@ fn upsert_review_pull_requests(conn: &Connection, prs: &[CachedReviewPr]) -> Res
             my_vote = excluded.my_vote,
             my_vote_label = excluded.my_vote_label,
             my_is_required = excluded.my_is_required,
-            is_draft = excluded.is_draft
+            is_draft = excluded.is_draft,
+            merge_status = excluded.merge_status
         "#,
     )?;
     for pr in prs {
@@ -1213,7 +1245,8 @@ fn upsert_review_pull_requests(conn: &Connection, prs: &[CachedReviewPr]) -> Res
             pr.my_vote,
             pr.my_vote_label,
             pr.my_is_required as i32,
-            pr.is_draft as i32
+            pr.is_draft as i32,
+            pr.merge_status
         ])?;
     }
     Ok(())
@@ -1224,7 +1257,7 @@ fn list_review_pull_requests(conn: &Connection, org_id: &str) -> Result<Vec<Cach
         r#"
         SELECT org_id, project_id, project_name, repository_id, repository_name,
                pull_request_id, title, created_by, creation_date, target_ref_name,
-               web_url, my_vote, my_vote_label, my_is_required, is_draft
+               web_url, my_vote, my_vote_label, my_is_required, is_draft, merge_status
         FROM review_pull_requests
         WHERE org_id = ?1
         ORDER BY creation_date DESC
@@ -1676,6 +1709,7 @@ fn map_cached_review_pr(row: &rusqlite::Row<'_>) -> rusqlite::Result<CachedRevie
         my_vote_label: row.get(12)?,
         my_is_required: row.get::<_, i32>(13)? != 0,
         is_draft: row.get::<_, i32>(14)? != 0,
+        merge_status: row.get(15)?,
     })
 }
 
