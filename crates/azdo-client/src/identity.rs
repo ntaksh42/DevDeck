@@ -74,7 +74,7 @@ pub struct IdentityPickerIdentity {
 struct IdentityPickerRequest<'a> {
     query: &'a str,
     identity_types: [&'static str; 1],
-    operation_scopes: [&'static str; 2],
+    operation_scopes: [&'static str; 1],
     options: IdentityPickerOptions,
     properties: [&'static str; 17],
 }
@@ -160,7 +160,9 @@ impl AdoClient {
                 &IdentityPickerRequest {
                     query: query.trim(),
                     identity_types: ["user"],
-                    operation_scopes: ["ims", "source"],
+                    // "ims" only: search identities already known to the
+                    // organization, not the whole backing directory (Entra ID).
+                    operation_scopes: ["ims"],
                     options: IdentityPickerOptions {
                         min_results: 5,
                         max_results,
@@ -443,7 +445,7 @@ mod tests {
             .and(body_json(serde_json::json!({
                 "query": "alice",
                 "identityTypes": ["user"],
-                "operationScopes": ["ims", "source"],
+                "operationScopes": ["ims"],
                 "options": {
                     "MinResults": 5,
                     "MaxResults": 40
