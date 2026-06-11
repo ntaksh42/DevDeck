@@ -71,6 +71,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Change priority</span><kbd className={kbd}>P</kbd></div>
           <div className={row}><span>Apply pending property changes</span><kbd className={kbd}>Ctrl+S</kbd></div>
           <div className={row}><span>Discard pending property changes</span><kbd className={kbd}>Esc</kbd></div>
+          <div className={row}><span>Undo last apply (10s window)</span><kbd className={kbd}>U</kbd></div>
           <div className={row}><span>Focus comment</span><kbd className={kbd}>Alt+M / M</kbd></div>
           <div className={row}><span>Post comment</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
           <div className={row}><span>Return to grid (from input / preview)</span><kbd className={kbd}>Esc</kbd></div>

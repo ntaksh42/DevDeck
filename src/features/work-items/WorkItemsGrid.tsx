@@ -1112,6 +1112,8 @@ export function WorkItemsGrid({
     } else if (e.key === "m" || e.key === "M") {
       e.preventDefault();
       setFocusCommentRequest((value) => value + 1);
+    } else if (e.key === "u" || e.key === "U") {
+      window.dispatchEvent(new CustomEvent("azdodeck:work-items:undo-apply"));
     } else if (e.key === "a" || e.key === "A") {
       e.preventDefault();
       if (checkedItems.length > 0) {

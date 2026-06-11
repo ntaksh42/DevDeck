@@ -61,6 +61,47 @@ type StagedChanges = {
   fields?: Record<string, { label: string; value: string }>;
 };
 
+const UNDO_WINDOW_MS = 10_000;
+
+// Builds the change set that restores the work item's pre-apply values.
+// Entries whose previous value cannot be restored (e.g. priority that was
+// never set) are skipped.
+function buildInverseChanges(preview: WorkItemPreview, staged: StagedChanges): StagedChanges {
+  const inverse: StagedChanges = {};
+  if (staged.state !== undefined && preview.state) {
+    inverse.state = preview.state;
+  }
+  if (staged.assignee) {
+    inverse.assignee = {
+      assignValue: preview.assignedTo ?? "",
+      displayName: preview.assignedTo ?? "Unassigned",
+    };
+  }
+  if (staged.priority !== undefined && preview.priority) {
+    const previous = Number.parseInt(preview.priority, 10);
+    if (Number.isFinite(previous)) inverse.priority = previous;
+  }
+  if (staged.reason !== undefined && preview.reason) {
+    inverse.reason = preview.reason;
+  }
+  if (staged.tags) {
+    inverse.tags = (preview.tags ?? "")
+      .split(";")
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+  }
+  for (const referenceName of Object.keys(staged.fields ?? {})) {
+    inverse.fields = {
+      ...inverse.fields,
+      [referenceName]: {
+        label: staged.fields![referenceName].label,
+        value: customPreviewFieldValue(preview, referenceName) ?? "",
+      },
+    };
+  }
+  return inverse;
+}
+
 type PreviewFieldDefinition = {
   editable?: "state" | "assignee" | "priority" | "reason";
   key: PreviewFieldKey;
@@ -518,6 +559,12 @@ export function WorkItemPreviewPanel({
   const [staged, setStaged] = useState<StagedChanges>({});
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [undoState, setUndoState] = useState<{
+    changes: StagedChanges;
+    workItemId: number;
+    count: number;
+  } | null>(null);
+  const undoTimerRef = useRef<number | null>(null);
 
   const stagedEntries = useMemo(() => {
     const entries: { key: string; label: string; from: string; to: string }[] = [];
@@ -568,48 +615,89 @@ export function WorkItemPreviewPanel({
     setApplyError(null);
   }
 
-  async function applyStaged() {
-    if (!selectedItem || applying || stagedEntries.length === 0) return;
+  async function applyChangeSet(changes: StagedChanges, onApplied?: (key: string) => void) {
+    if (!selectedItem) return;
     const base = {
       organizationId: selectedItem.organizationId,
       projectId: selectedItem.projectId,
       workItemId: selectedItem.id,
     };
+    if (changes.assignee) {
+      await assignMutation.mutateAsync({ ...base, assignedTo: changes.assignee.assignValue });
+      onApplied?.("assignee");
+    }
+    if (changes.priority !== undefined) {
+      await priorityMutation.mutateAsync({ ...base, priority: changes.priority });
+      onApplied?.("priority");
+    }
+    if (changes.tags) {
+      await tagsMutation.mutateAsync({ ...base, tags: changes.tags });
+      onApplied?.("tags");
+    }
+    for (const [referenceName, field] of Object.entries(changes.fields ?? {})) {
+      await customFieldMutation.mutateAsync({
+        ...base,
+        fieldReferenceName: referenceName,
+        value: field.value,
+      });
+      onApplied?.(`field:${referenceName}`);
+    }
+    if (changes.state !== undefined) {
+      await stateMutation.mutateAsync({ ...base, state: changes.state });
+      onApplied?.("state");
+    }
+    if (changes.reason !== undefined) {
+      await reasonMutation.mutateAsync({ ...base, reason: changes.reason });
+      onApplied?.("reason");
+    }
+  }
+
+  function clearStagedKey(key: string) {
+    setStaged((current) => {
+      if (key.startsWith("field:")) {
+        const referenceName = key.slice("field:".length);
+        const fields = { ...current.fields };
+        delete fields[referenceName];
+        return { ...current, fields: Object.keys(fields).length > 0 ? fields : undefined };
+      }
+      return { ...current, [key]: undefined };
+    });
+  }
+
+  async function applyStaged() {
+    if (!selectedItem || applying || stagedEntries.length === 0) return;
+    const inverse = preview ? buildInverseChanges(preview, staged) : {};
+    const appliedCount = stagedEntries.length;
+    const workItemId = selectedItem.id;
     setApplying(true);
     setApplyError(null);
     try {
-      if (staged.assignee) {
-        await assignMutation.mutateAsync({ ...base, assignedTo: staged.assignee.assignValue });
-        setStaged((current) => ({ ...current, assignee: undefined }));
-      }
-      if (staged.priority !== undefined) {
-        await priorityMutation.mutateAsync({ ...base, priority: staged.priority });
-        setStaged((current) => ({ ...current, priority: undefined }));
-      }
-      if (staged.tags) {
-        await tagsMutation.mutateAsync({ ...base, tags: staged.tags });
-        setStaged((current) => ({ ...current, tags: undefined }));
-      }
-      for (const [referenceName, field] of Object.entries(staged.fields ?? {})) {
-        await customFieldMutation.mutateAsync({
-          ...base,
-          fieldReferenceName: referenceName,
-          value: field.value,
-        });
-        setStaged((current) => {
-          const fields = { ...current.fields };
-          delete fields[referenceName];
-          return { ...current, fields: Object.keys(fields).length > 0 ? fields : undefined };
-        });
-      }
-      if (staged.state !== undefined) {
-        await stateMutation.mutateAsync({ ...base, state: staged.state });
-        setStaged((current) => ({ ...current, state: undefined }));
-      }
-      if (staged.reason !== undefined) {
-        await reasonMutation.mutateAsync({ ...base, reason: staged.reason });
-        setStaged((current) => ({ ...current, reason: undefined }));
-      }
+      await applyChangeSet(staged, clearStagedKey);
+      setUndoState({ changes: inverse, workItemId, count: appliedCount });
+      if (undoTimerRef.current !== null) window.clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = window.setTimeout(() => {
+        setUndoState(null);
+        undoTimerRef.current = null;
+      }, UNDO_WINDOW_MS);
+    } catch (error) {
+      setApplyError(commandErrorMessage(error));
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  async function undoLastApply() {
+    const undo = undoState;
+    if (!undo || !selectedItem || applying || selectedItem.id !== undo.workItemId) return;
+    if (undoTimerRef.current !== null) {
+      window.clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = null;
+    }
+    setUndoState(null);
+    setApplying(true);
+    setApplyError(null);
+    try {
+      await applyChangeSet(undo.changes);
     } catch (error) {
       setApplyError(commandErrorMessage(error));
     } finally {
@@ -637,6 +725,11 @@ export function WorkItemPreviewPanel({
     setActiveMentionIndex(0);
     setStaged({});
     setApplyError(null);
+    setUndoState(null);
+    if (undoTimerRef.current !== null) {
+      window.clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = null;
+    }
   }, [selectedItem?.id]);
 
   useEffect(() => {
@@ -884,14 +977,24 @@ export function WorkItemPreviewPanel({
   applyStagedRef.current = () => {
     void applyStaged();
   };
+  const undoApplyRef = useRef<() => void>(() => {});
+  undoApplyRef.current = () => {
+    void undoLastApply();
+  };
 
   useEffect(() => {
     function applyStagedFromCommand() {
       applyStagedRef.current();
     }
+    function undoApplyFromCommand() {
+      undoApplyRef.current();
+    }
     window.addEventListener("azdodeck:work-items:apply-staged", applyStagedFromCommand);
-    return () =>
+    window.addEventListener("azdodeck:work-items:undo-apply", undoApplyFromCommand);
+    return () => {
       window.removeEventListener("azdodeck:work-items:apply-staged", applyStagedFromCommand);
+      window.removeEventListener("azdodeck:work-items:undo-apply", undoApplyFromCommand);
+    };
   }, []);
 
   function handlePreviewPanelKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
@@ -964,6 +1067,11 @@ export function WorkItemPreviewPanel({
     } else if (event.key === "m" || event.key === "M") {
       event.preventDefault();
       textareaRef.current?.focus();
+    } else if (event.key === "u" || event.key === "U") {
+      if (undoState) {
+        event.preventDefault();
+        void undoLastApply();
+      }
     }
   }
 
@@ -1155,6 +1263,25 @@ export function WorkItemPreviewPanel({
                   />
                 }
               />
+              {undoState && stagedEntries.length === 0 ? (
+                <div className="flex shrink-0 items-center justify-between gap-2 border-t border-emerald-200 bg-emerald-50 px-2 py-1.5 text-xs">
+                  <span className="font-medium text-emerald-900">
+                    Applied {undoState.count} change{undoState.count === 1 ? "" : "s"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void undoLastApply()}
+                    disabled={applying}
+                    className="inline-flex items-center gap-1 rounded border border-border bg-white px-2 py-0.5 hover:bg-secondary disabled:opacity-50"
+                  >
+                    {applying ? (
+                      <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                    ) : null}
+                    Undo
+                    <kbd className="rounded bg-muted px-1 font-mono text-[10px]">U</kbd>
+                  </button>
+                </div>
+              ) : null}
               {stagedEntries.length > 0 ? (
                 <div className="shrink-0 border-t border-amber-200 bg-amber-50 px-2 py-1.5 text-xs">
                   <div className="flex items-center justify-between gap-2">

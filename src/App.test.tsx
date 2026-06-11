@@ -1035,6 +1035,23 @@ describe("App", () => {
       expect(within(workItemsGrid).getAllByText("Creator").length).toBeGreaterThan(0);
     });
 
+    // Undo restores the pre-apply assignee.
+    expect(screen.getByText("Applied 1 change")).toBeTruthy();
+    fireEvent.keyDown(workItemsGrid, { key: "u" });
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("assign_work_item", {
+        input: {
+          organizationId: "contoso",
+          projectId: "project-1",
+          workItemId: 123,
+          assignedTo: "Test User",
+        },
+      });
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("Applied 1 change")).toBeNull();
+    });
+
     fireEvent.keyDown(workItemsGrid, { key: "m" });
     let commentBox = screen.getByLabelText("Comment");
     expect(document.activeElement).toBe(commentBox);
