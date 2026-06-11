@@ -51,6 +51,38 @@ const PR_GRID_ROW_HEIGHT = 29;
 const PR_GRID_OVERSCAN = 8;
 type VoteValue = -10 | -5 | 0 | 5 | 10 | number;
 
+// Graphite-style inbox sections: rows group by what the reviewer has to do
+// next, then sort by the user's column sort within each section.
+type ReviewSection = "needsReview" | "waitingAuthor" | "approved" | "rejected" | "draft";
+
+const REVIEW_SECTION_ORDER: ReviewSection[] = [
+  "needsReview",
+  "waitingAuthor",
+  "approved",
+  "rejected",
+  "draft",
+];
+
+const REVIEW_SECTION_LABELS: Record<ReviewSection, string> = {
+  needsReview: "Needs your review",
+  waitingAuthor: "Waiting for author",
+  approved: "Approved by you",
+  rejected: "Rejected by you",
+  draft: "Drafts",
+};
+
+function reviewSectionOf(pr: ReviewPullRequestSummary): ReviewSection {
+  if (pr.isDraft) return "draft";
+  if (pr.myVote === 10 || pr.myVote === 5) return "approved";
+  if (pr.myVote === -5) return "waitingAuthor";
+  if (pr.myVote === -10) return "rejected";
+  return "needsReview";
+}
+
+type ReviewRow =
+  | { kind: "header"; key: ReviewSection; label: string; count: number }
+  | { kind: "pr"; pr: ReviewPullRequestSummary; prIndex: number };
+
 function VoteBadge({ vote, label }: { vote: VoteValue; label: string }) {
   const colors: Record<number, string> = {
     10: "bg-green-100 text-green-800 border-green-200",
@@ -530,12 +562,38 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     return filtered
       .map((pr, index) => ({ pr, index }))
       .sort((a, b) => {
+        const sectionDelta =
+          REVIEW_SECTION_ORDER.indexOf(reviewSectionOf(a.pr)) -
+          REVIEW_SECTION_ORDER.indexOf(reviewSectionOf(b.pr));
+        if (sectionDelta !== 0) return sectionDelta;
         const result = compareReviewPrs(a.pr, b.pr, sort.key);
         const directed = sort.direction === "asc" ? result : -result;
         return directed || a.index - b.index;
       })
       .map(({ pr }) => pr);
   }, [filtered, sort]);
+
+  // Flattened row model with section headers, used by the virtualizer.
+  const { reviewRows, prFlatIndexes } = useMemo(() => {
+    const rows: ReviewRow[] = [];
+    const flatIndexes: number[] = [];
+    let currentSection: ReviewSection | null = null;
+    sortedPrs.forEach((pr, prIndex) => {
+      const section = reviewSectionOf(pr);
+      if (section !== currentSection) {
+        currentSection = section;
+        rows.push({
+          kind: "header",
+          key: section,
+          label: REVIEW_SECTION_LABELS[section],
+          count: sortedPrs.filter((candidate) => reviewSectionOf(candidate) === section).length,
+        });
+      }
+      flatIndexes[prIndex] = rows.length;
+      rows.push({ kind: "pr", pr, prIndex });
+    });
+    return { reviewRows: rows, prFlatIndexes: flatIndexes };
+  }, [sortedPrs]);
 
   const resultKeysSignature = useMemo(
     () => sortedPrs.map((pr) => `${pr.organizationId}-${pr.pullRequestId}`).join("|"),
@@ -624,7 +682,8 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     setSelectedIndex(next);
     const scroller = gridScrollRef.current;
     if (scroller) {
-      const rowTop = next * PR_GRID_ROW_HEIGHT;
+      const flatIndex = prFlatIndexes[next] ?? next;
+      const rowTop = flatIndex * PR_GRID_ROW_HEIGHT;
       const rowBottom = rowTop + PR_GRID_ROW_HEIGHT;
       if (rowTop < scroller.scrollTop) {
         scroller.scrollTop = rowTop;
@@ -842,13 +901,13 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     Math.max(gridViewport.height, PR_GRID_ROW_HEIGHT) / PR_GRID_ROW_HEIGHT,
   );
   const lastVirtualRow = Math.min(
-    sortedPrs.length,
+    reviewRows.length,
     firstVirtualRow + visibleRowCount + PR_GRID_OVERSCAN * 2,
   );
-  const virtualRows = sortedPrs.slice(firstVirtualRow, lastVirtualRow);
+  const virtualRows = reviewRows.slice(firstVirtualRow, lastVirtualRow);
   const virtualTopPadding = firstVirtualRow * PR_GRID_ROW_HEIGHT;
   const virtualBottomPadding =
-    Math.max(0, sortedPrs.length - lastVirtualRow) * PR_GRID_ROW_HEIGHT;
+    Math.max(0, reviewRows.length - lastVirtualRow) * PR_GRID_ROW_HEIGHT;
 
   return (
     <div
@@ -1035,16 +1094,27 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
                   {virtualTopPadding > 0 ? (
                     <div style={{ height: virtualTopPadding }} />
                   ) : null}
-                  {virtualRows.map((pr, offset) => {
-                    const i = firstVirtualRow + offset;
+                  {virtualRows.map((row) => {
+                    if (row.kind === "header") {
+                      return (
+                        <div
+                          key={`header:${row.key}`}
+                          role="presentation"
+                          className="flex h-[29px] items-center gap-1.5 border-b border-border bg-muted/60 px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+                        >
+                          {row.label}
+                          <span className="font-normal normal-case">({row.count})</span>
+                        </div>
+                      );
+                    }
                     return (
                       <ReviewPrRow
-                        key={`${pr.organizationId}-${pr.pullRequestId}`}
-                        ref={(el) => { rowRefs.current[i] = el; }}
+                        key={`${row.pr.organizationId}-${row.pr.pullRequestId}`}
+                        ref={(el) => { rowRefs.current[row.prIndex] = el; }}
                         columnTemplate={COLS}
-                        pr={pr}
-                        selected={i === selectedIndex}
-                        onSelect={() => setSelectedIndex(i)}
+                        pr={row.pr}
+                        selected={row.prIndex === selectedIndex}
+                        onSelect={() => setSelectedIndex(row.prIndex)}
                       />
                     );
                   })}

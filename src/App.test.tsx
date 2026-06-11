@@ -1542,6 +1542,14 @@ describe("App", () => {
     expect(await main.findByText("Needs review")).toBeTruthy();
     expect(main.queryByRole("tab", { name: "Rejected" })).toBeNull();
 
+    // Rows group into reviewer-action sections (visible on the All tab).
+    fireEvent.keyDown(main.getByRole("grid", { name: "My review pull requests" }), {
+      key: "4",
+    });
+    expect(await main.findByText("Waiting for author")).toBeTruthy();
+    expect(main.getByText("Needs your review")).toBeTruthy();
+    expect(main.getByText("Rejected by you")).toBeTruthy();
+
     fireEvent.keyDown(main.getByRole("grid", { name: "My review pull requests" }), {
       key: "2",
     });
