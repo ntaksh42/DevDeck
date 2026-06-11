@@ -991,9 +991,68 @@ export function WorkItemPreviewPanel({
     postComment();
   }
 
+  // Rendered inline in the preview header row, so it never overlaps content.
+  const stagedStatusChip = (
+    <>
+      {stagedEntries.length > 0 ? (
+        <span
+          className="flex shrink-0 items-center gap-1 rounded-full border border-amber-300 bg-amber-50 py-0.5 pl-2 pr-0.5 text-[11px]"
+          title={stagedEntries
+            .map((entry) => `${entry.label}: ${entry.from} → ${entry.to}`)
+            .join("\n")}
+        >
+          <span className="font-medium text-amber-900">{stagedEntries.length} pending</span>
+          <button
+            type="button"
+            onClick={() => void applyStaged()}
+            disabled={applying}
+            title="Apply (Ctrl+S)"
+            className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+          >
+            {applying ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : null}
+            Apply
+          </button>
+          <button
+            type="button"
+            aria-label="Discard pending changes"
+            title="Discard (Esc)"
+            onClick={discardStaged}
+            disabled={applying}
+            className="rounded-full p-0.5 text-amber-900/70 hover:bg-amber-100 hover:text-amber-900 disabled:opacity-50"
+          >
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </span>
+      ) : null}
+      {undoState && stagedEntries.length === 0 ? (
+        <span className="flex shrink-0 items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 py-0.5 pl-2 pr-0.5 text-[11px]">
+          <span className="text-emerald-900">Applied {undoState.count}</span>
+          <button
+            type="button"
+            onClick={() => void undoLastApply()}
+            disabled={applying}
+            title="Undo (U)"
+            className="inline-flex items-center gap-1 rounded-full border border-border bg-white px-2 py-0.5 hover:bg-secondary disabled:opacity-50"
+          >
+            {applying ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : null}
+            Undo
+          </button>
+        </span>
+      ) : null}
+      {applyError ? (
+        <span
+          className="max-w-[220px] shrink-0 truncate rounded border border-destructive/30 bg-red-50 px-2 py-0.5 text-[11px] text-destructive"
+          title={applyError}
+        >
+          {applyError}
+        </span>
+      ) : null}
+    </>
+  );
+
   return (
     <aside
-      className="relative flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-white shadow-sm transition-[border-color,box-shadow] focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/25"
+      className="flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-white shadow-sm transition-[border-color,box-shadow] focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/25"
       onKeyDown={handlePreviewPanelKeyDown}
     >
       {!selectedItem ? (
@@ -1008,6 +1067,7 @@ export function WorkItemPreviewPanel({
             <>
               <WorkItemPreviewDetails
                 customPreviewFields={customPreviewFields}
+                statusChip={stagedStatusChip}
                 deleteCommentError={
                   deleteCommentMutation.isError
                     ? commandErrorMessage(deleteCommentMutation.error)
@@ -1139,67 +1199,6 @@ export function WorkItemPreviewPanel({
                   />
                 }
               />
-              <div className="pointer-events-none absolute right-2 top-8 z-30 flex flex-col items-end gap-1">
-                {stagedEntries.length > 0 ? (
-                  <div
-                    className="pointer-events-auto flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50/95 py-0.5 pl-2 pr-0.5 text-[11px] shadow-sm"
-                    title={stagedEntries
-                      .map((entry) => `${entry.label}: ${entry.from} → ${entry.to}`)
-                      .join("\n")}
-                  >
-                    <span className="font-medium text-amber-900">
-                      {stagedEntries.length} pending
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => void applyStaged()}
-                      disabled={applying}
-                      title="Apply (Ctrl+S)"
-                      className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
-                    >
-                      {applying ? (
-                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-                      ) : null}
-                      Apply
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Discard pending changes"
-                      title="Discard (Esc)"
-                      onClick={discardStaged}
-                      disabled={applying}
-                      className="rounded-full p-0.5 text-amber-900/70 hover:bg-amber-100 hover:text-amber-900 disabled:opacity-50"
-                    >
-                      <X className="h-3.5 w-3.5" aria-hidden="true" />
-                    </button>
-                  </div>
-                ) : null}
-                {undoState && stagedEntries.length === 0 ? (
-                  <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50/95 py-0.5 pl-2 pr-0.5 text-[11px] shadow-sm">
-                    <span className="text-emerald-900">Applied {undoState.count}</span>
-                    <button
-                      type="button"
-                      onClick={() => void undoLastApply()}
-                      disabled={applying}
-                      title="Undo (U)"
-                      className="inline-flex items-center gap-1 rounded-full border border-border bg-white px-2 py-0.5 hover:bg-secondary disabled:opacity-50"
-                    >
-                      {applying ? (
-                        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-                      ) : null}
-                      Undo
-                    </button>
-                  </div>
-                ) : null}
-                {applyError ? (
-                  <div
-                    className="pointer-events-auto max-w-[280px] truncate rounded border border-destructive/30 bg-red-50 px-2 py-0.5 text-[11px] text-destructive shadow-sm"
-                    title={applyError}
-                  >
-                    {applyError}
-                  </div>
-                ) : null}
-              </div>
               <div className="bg-slate-50/70 p-2">
                 <form className="space-y-1" onSubmit={submitComment}>
                   <div ref={mentionPickerRef} className="relative">
@@ -1346,6 +1345,7 @@ function WorkItemPreviewDetails({
   resolveImageSource,
   selectedFieldKeys,
   stateControl,
+  statusChip,
   tagsPending,
   onTagsChange,
 }: {
@@ -1365,6 +1365,7 @@ function WorkItemPreviewDetails({
   resolveImageSource: (url: string) => Promise<string | null>;
   selectedFieldKeys: PreviewFieldKey[];
   stateControl: ReactNode;
+  statusChip?: ReactNode;
   tagsPending: boolean;
   onTagsChange: (tags: string[]) => void;
 }) {
@@ -1474,6 +1475,7 @@ function WorkItemPreviewDetails({
                 updated {formatRelativeDate(preview.changedDate)}
               </span>
             ) : null}
+            {statusChip}
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <div ref={fieldMenuRef} className="relative">
