@@ -215,6 +215,22 @@ pub struct SetWorkItemFieldInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct UpdateWorkItemFieldsInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_id: i64,
+    pub fields: Vec<WorkItemFieldValueInput>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemFieldValueInput {
+    pub reference_name: String,
+    pub value: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListWorkItemFieldAllowedValuesInput {
     pub organization_id: Option<String>,
     pub project_id: String,
@@ -1134,6 +1150,69 @@ impl WorkItemService {
         }
         if let Err(e) = self.db.update_my_work_item_if_present(&cached) {
             tracing::warn!(error = %e, "failed to update my_work_items cache after set_tags");
+        }
+        let comments = client
+            .list_work_item_comments(
+                &project.id,
+                input.work_item_id,
+                WORK_ITEM_PREVIEW_COMMENT_LIMIT,
+            )
+            .await
+            .unwrap_or_default();
+
+        Ok(summarize_work_item_preview(
+            &organization,
+            &project.id,
+            &project.name,
+            work_item,
+            comments,
+        ))
+    }
+
+    // Applies all staged property changes in one JSON Patch request so state
+    // transition rules evaluate the full change set atomically.
+    pub async fn update_fields(&self, input: UpdateWorkItemFieldsInput) -> Result<WorkItemPreview> {
+        if input.fields.is_empty() {
+            return Err(AppError::InvalidInput(
+                "at least one field is required".to_string(),
+            ));
+        }
+        let mut fields: Vec<(String, Value)> = Vec::with_capacity(input.fields.len());
+        for field in &input.fields {
+            let reference_name = validate_update_field_reference_name(&field.reference_name)?;
+            let value = if reference_name.eq_ignore_ascii_case("Microsoft.VSTS.Common.Priority") {
+                field
+                    .value
+                    .trim()
+                    .parse::<i64>()
+                    .map(Value::from)
+                    .unwrap_or_else(|_| Value::from(field.value.clone()))
+            } else {
+                Value::from(field.value.clone())
+            };
+            fields.push((reference_name.to_string(), value));
+        }
+
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = client
+            .list_projects()
+            .await?
+            .into_iter()
+            .find(|p| p.id == input.project_id)
+            .ok_or_else(|| {
+                AppError::InvalidInput(format!("project not found: {}", input.project_id))
+            })?;
+
+        let work_item = client
+            .update_work_item_fields(&project.id, input.work_item_id, &fields)
+            .await?;
+        let cached = work_item_to_cached(&organization, &project.id, &project.name, &work_item);
+        if let Err(e) = self.db.upsert_work_items(std::slice::from_ref(&cached)) {
+            tracing::warn!(error = %e, "failed to update work item cache after update_fields");
+        }
+        if let Err(e) = self.db.update_my_work_item_if_present(&cached) {
+            tracing::warn!(error = %e, "failed to update my_work_items cache after update_fields");
         }
         let comments = client
             .list_work_item_comments(
@@ -2144,6 +2223,26 @@ fn custom_work_item_fields(work_item: &WorkItem) -> Vec<WorkItemCustomField> {
 
 /// Generic field updates are restricted to non-System fields; System.* edits
 /// go through the dedicated state/assignee/reason commands.
+// The combined update accepts the System fields the staging UI edits plus
+// anything `validate_editable_field_reference_name` allows for custom fields.
+fn validate_update_field_reference_name(value: &str) -> Result<&str> {
+    const ALLOWED_SYSTEM_FIELDS: &[&str] = &[
+        "System.State",
+        "System.Reason",
+        "System.AssignedTo",
+        "System.Tags",
+    ];
+    let field = value.trim();
+    if let Some(allowed) = ALLOWED_SYSTEM_FIELDS
+        .iter()
+        .copied()
+        .find(|allowed| allowed.eq_ignore_ascii_case(field))
+    {
+        return Ok(allowed);
+    }
+    validate_editable_field_reference_name(field)
+}
+
 fn validate_editable_field_reference_name(value: &str) -> Result<&str> {
     let field = value.trim();
     if !is_valid_field_reference_name(field) {

@@ -28,6 +28,7 @@ import type {
   SearchWorkItemsInput,
   SetWorkItemFieldInput,
   SetWorkItemTagsInput,
+  UpdateWorkItemFieldsInput,
   ListWorkItemFieldAllowedValuesInput,
   SetWorkItemReasonInput,
   SetWorkItemPriorityInput,
@@ -107,6 +108,7 @@ const writeCommands = new Set([
   "set_work_item_priority",
   "set_work_item_field",
   "set_work_item_tags",
+  "update_work_item_fields",
   "set_work_items_state",
   "assign_work_items",
   "set_work_items_priority",
@@ -301,6 +303,10 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     case "set_work_item_tags": {
       const input = (args as { input?: SetWorkItemTagsInput } | undefined)?.input;
       return demoSetWorkItemTags(input);
+    }
+    case "update_work_item_fields": {
+      const input = (args as { input?: UpdateWorkItemFieldsInput } | undefined)?.input;
+      return demoUpdateWorkItemFields(input);
     }
     case "list_work_item_updates":
       return demoWorkItemUpdates();
@@ -904,6 +910,30 @@ function demoSetWorkItemState(input?: SetWorkItemStateInput): WorkItemPreview {
   );
   if (!input?.state?.trim()) return preview;
   return { ...preview, state: input.state.trim(), changedDate: new Date().toISOString() };
+}
+
+function demoUpdateWorkItemFields(input?: UpdateWorkItemFieldsInput): WorkItemPreview {
+  let preview = demoWorkItemPreview(
+    input
+      ? { organizationId: input.organizationId, projectId: input.projectId, workItemId: input.workItemId }
+      : undefined,
+  );
+  for (const field of input?.fields ?? []) {
+    const referenceName = field.referenceName.trim();
+    const value = field.value.trim();
+    if (referenceName === "System.State" && value) preview = { ...preview, state: value };
+    else if (referenceName === "System.Reason" && value) preview = { ...preview, reason: value };
+    else if (referenceName === "System.AssignedTo") preview = { ...preview, assignedTo: value || null };
+    else if (referenceName === "System.Tags") preview = { ...preview, tags: value || null };
+    else if (referenceName === "Microsoft.VSTS.Common.Priority" && value) preview = { ...preview, priority: value };
+    else if (referenceName) {
+      const others = preview.customFields.filter(
+        (existing) => existing.referenceName.toLowerCase() !== referenceName.toLowerCase(),
+      );
+      preview = { ...preview, customFields: [...others, { referenceName, value }] };
+    }
+  }
+  return { ...preview, changedDate: new Date().toISOString() };
 }
 
 function demoSetWorkItemReason(input?: SetWorkItemReasonInput): WorkItemPreview {

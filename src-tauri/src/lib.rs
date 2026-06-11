@@ -44,9 +44,10 @@ use work_items::{
     RunWorkItemQueryInput, SavedQueryResult, SearchWorkItemAssigneesInput,
     SearchWorkItemMentionsInput, SearchWorkItemsInput, SetWorkItemFieldInput,
     SetWorkItemPriorityInput, SetWorkItemReasonInput, SetWorkItemStateInput, SetWorkItemTagsInput,
-    SetWorkItemsPriorityInput, SetWorkItemsStateInput, WorkItemAssigneeCandidate, WorkItemComment,
-    WorkItemFieldOption, WorkItemImage, WorkItemPreview, WorkItemProjectOption, WorkItemService,
-    WorkItemSummary, WorkItemUpdateSummary,
+    SetWorkItemsPriorityInput, SetWorkItemsStateInput, UpdateWorkItemFieldsInput,
+    WorkItemAssigneeCandidate, WorkItemComment, WorkItemFieldOption, WorkItemImage,
+    WorkItemPreview, WorkItemProjectOption, WorkItemService, WorkItemSummary,
+    WorkItemUpdateSummary,
 };
 
 #[derive(Clone)]
@@ -399,6 +400,16 @@ async fn set_work_item_field(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn update_work_item_fields(
+    input: UpdateWorkItemFieldsInput,
+    state: State<'_, AppState>,
+) -> Result<WorkItemPreview> {
+    ensure_write_enabled(&state)?;
+    state.work_items.update_fields(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn list_work_item_field_allowed_values(
     input: ListWorkItemFieldAllowedValuesInput,
     state: State<'_, AppState>,
@@ -571,6 +582,7 @@ pub fn run() {
             set_work_item_priority,
             set_work_item_tags,
             set_work_item_field,
+            update_work_item_fields,
             list_work_item_updates,
             list_work_item_field_allowed_values,
             list_work_item_type_states,

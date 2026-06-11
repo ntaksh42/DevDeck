@@ -422,6 +422,33 @@ impl AdoClient {
         .await
     }
 
+    /// Applies several field changes in a single JSON Patch request, so the
+    /// whole update succeeds or fails atomically (state transition rules see
+    /// all fields at once).
+    pub async fn update_work_item_fields(
+        &self,
+        project_id: &str,
+        work_item_id: i64,
+        fields: &[(String, serde_json::Value)],
+    ) -> Result<WorkItem> {
+        let path = format!("{project_id}/_apis/wit/workItems/{work_item_id}");
+        let operations: Vec<WorkItemPatchOperation> = fields
+            .iter()
+            .map(|(reference_name, value)| WorkItemPatchOperation {
+                op: "add",
+                path: format!("/fields/{reference_name}"),
+                value: value.clone(),
+            })
+            .collect();
+        self.patch_json(
+            &path,
+            &[("api-version", "7.1-preview")],
+            "application/json-patch+json",
+            &operations,
+        )
+        .await
+    }
+
     pub async fn update_work_item_field(
         &self,
         project_id: &str,
@@ -918,6 +945,55 @@ mod tests {
 
         assert_eq!(item.id, 10);
         assert_eq!(item.fields["System.State"].as_str(), Some("Active"));
+    }
+
+    #[tokio::test]
+    async fn update_work_item_fields_patches_all_fields_in_one_request() {
+        let server = MockServer::start().await;
+        Mock::given(method("PATCH"))
+            .and(path("/project-1/_apis/wit/workItems/10"))
+            .and(query_param("api-version", "7.1-preview"))
+            .and(body_json(serde_json::json!([
+                {
+                    "op": "add",
+                    "path": "/fields/System.State",
+                    "value": "Resolved"
+                },
+                {
+                    "op": "add",
+                    "path": "/fields/Microsoft.VSTS.Common.Priority",
+                    "value": 2
+                }
+            ])))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 10,
+                "fields": {
+                    "System.Title": "Fix bug",
+                    "System.State": "Resolved",
+                    "Microsoft.VSTS.Common.Priority": 2
+                }
+            })))
+            .mount(&server)
+            .await;
+
+        let item = test_client(&server)
+            .await
+            .update_work_item_fields(
+                "project-1",
+                10,
+                &[
+                    ("System.State".to_string(), serde_json::json!("Resolved")),
+                    (
+                        "Microsoft.VSTS.Common.Priority".to_string(),
+                        serde_json::json!(2),
+                    ),
+                ],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(item.id, 10);
+        assert_eq!(item.fields["System.State"].as_str(), Some("Resolved"));
     }
 
     #[tokio::test]

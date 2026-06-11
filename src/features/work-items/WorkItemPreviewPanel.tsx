@@ -12,27 +12,23 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, Loader2, Plus, Send, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import {
   addWorkItemComment,
-  assignWorkItem,
   deleteWorkItemComment,
   fetchWorkItemImage,
   listOrganizations,
   listWorkItemFields,
   listWorkItemUpdates,
-  setWorkItemState,
-  setWorkItemReason,
-  setWorkItemPriority,
-  setWorkItemTags,
   listWorkItemTypeStates,
   listWorkItemFieldAllowedValues,
-  setWorkItemField,
   searchWorkItemAssignees,
   searchWorkItemMentions,
   recordMentionInteraction,
+  updateWorkItemFields,
   commandErrorMessage,
   type MentionCandidate,
   type Organization,
   type WorkItemAssigneeCandidate,
   type WorkItemFieldOption,
+  type WorkItemFieldValueInput,
   type WorkItemPreview,
   type WorkItemSummary,
 } from '@/lib/azdoCommands';
@@ -440,85 +436,8 @@ export function WorkItemPreviewPanel({
     },
   });
 
-  const assignMutation = useMutation({
-    mutationFn: assignWorkItem,
-    onSuccess: (updatedPreview) => {
-      onPreviewUpdated?.(updatedPreview);
-      setAssigneeOpen(false);
-      setAssigneeQuery("");
-      queryClient.setQueryData(
-        workItemQueryKeys.preview(
-          updatedPreview.organizationId,
-          updatedPreview.projectId,
-          updatedPreview.id,
-        ),
-        updatedPreview,
-      );
-      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
-      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot() });
-      invalidateWorkItemQueryViews(queryClient);
-    },
-  });
-
-  const stateMutation = useMutation({
-    mutationFn: setWorkItemState,
-    onSuccess: (updatedPreview) => {
-      onPreviewUpdated?.(updatedPreview);
-      setStatePickerOpen(false);
-      queryClient.setQueryData(
-        workItemQueryKeys.preview(
-          updatedPreview.organizationId,
-          updatedPreview.projectId,
-          updatedPreview.id,
-        ),
-        updatedPreview,
-      );
-      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
-      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot() });
-      invalidateWorkItemQueryViews(queryClient);
-    },
-  });
-
-  const reasonMutation = useMutation({
-    mutationFn: setWorkItemReason,
-    onSuccess: (updatedPreview) => {
-      onPreviewUpdated?.(updatedPreview);
-      setReasonEditorOpen(false);
-      queryClient.setQueryData(
-        workItemQueryKeys.preview(
-          updatedPreview.organizationId,
-          updatedPreview.projectId,
-          updatedPreview.id,
-        ),
-        updatedPreview,
-      );
-      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
-      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot() });
-      invalidateWorkItemQueryViews(queryClient);
-    },
-  });
-
-  const customFieldMutation = useMutation({
-    mutationFn: setWorkItemField,
-    onSuccess: (updatedPreview) => {
-      onPreviewUpdated?.(updatedPreview);
-      setCustomFieldEditor(null);
-      queryClient.setQueryData(
-        workItemQueryKeys.preview(
-          updatedPreview.organizationId,
-          updatedPreview.projectId,
-          updatedPreview.id,
-        ),
-        updatedPreview,
-      );
-      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
-      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot() });
-      invalidateWorkItemQueryViews(queryClient);
-    },
-  });
-
-  const tagsMutation = useMutation({
-    mutationFn: setWorkItemTags,
+  const updateFieldsMutation = useMutation({
+    mutationFn: updateWorkItemFields,
     onSuccess: (updatedPreview) => {
       onPreviewUpdated?.(updatedPreview);
       queryClient.setQueryData(
@@ -534,26 +453,6 @@ export function WorkItemPreviewPanel({
       invalidateWorkItemQueryViews(queryClient);
     },
   });
-
-  const priorityMutation = useMutation({
-    mutationFn: setWorkItemPriority,
-    onSuccess: (updatedPreview) => {
-      onPreviewUpdated?.(updatedPreview);
-      setPriorityPickerOpen(false);
-      queryClient.setQueryData(
-        workItemQueryKeys.preview(
-          updatedPreview.organizationId,
-          updatedPreview.projectId,
-          updatedPreview.id,
-        ),
-        updatedPreview,
-      );
-      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
-      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot() });
-      invalidateWorkItemQueryViews(queryClient);
-    },
-  });
-
   // Property edits are staged locally and written to Azure DevOps only on an
   // explicit apply (Ctrl+S); Esc discards.
   const [staged, setStaged] = useState<StagedChanges>({});
@@ -615,52 +514,39 @@ export function WorkItemPreviewPanel({
     setApplyError(null);
   }
 
-  async function applyChangeSet(changes: StagedChanges, onApplied?: (key: string) => void) {
+  // All staged values go out as one JSON Patch, so the apply is atomic: state
+  // transition rules see the whole change set, and a failure leaves everything
+  // staged.
+  async function applyChangeSet(changes: StagedChanges) {
     if (!selectedItem) return;
-    const base = {
+    const fields: WorkItemFieldValueInput[] = [];
+    if (changes.assignee) {
+      fields.push({ referenceName: "System.AssignedTo", value: changes.assignee.assignValue });
+    }
+    if (changes.priority !== undefined) {
+      fields.push({
+        referenceName: "Microsoft.VSTS.Common.Priority",
+        value: String(changes.priority),
+      });
+    }
+    if (changes.tags) {
+      fields.push({ referenceName: "System.Tags", value: changes.tags.join("; ") });
+    }
+    for (const [referenceName, field] of Object.entries(changes.fields ?? {})) {
+      fields.push({ referenceName, value: field.value });
+    }
+    if (changes.state !== undefined) {
+      fields.push({ referenceName: "System.State", value: changes.state });
+    }
+    if (changes.reason !== undefined) {
+      fields.push({ referenceName: "System.Reason", value: changes.reason });
+    }
+    if (fields.length === 0) return;
+    await updateFieldsMutation.mutateAsync({
       organizationId: selectedItem.organizationId,
       projectId: selectedItem.projectId,
       workItemId: selectedItem.id,
-    };
-    if (changes.assignee) {
-      await assignMutation.mutateAsync({ ...base, assignedTo: changes.assignee.assignValue });
-      onApplied?.("assignee");
-    }
-    if (changes.priority !== undefined) {
-      await priorityMutation.mutateAsync({ ...base, priority: changes.priority });
-      onApplied?.("priority");
-    }
-    if (changes.tags) {
-      await tagsMutation.mutateAsync({ ...base, tags: changes.tags });
-      onApplied?.("tags");
-    }
-    for (const [referenceName, field] of Object.entries(changes.fields ?? {})) {
-      await customFieldMutation.mutateAsync({
-        ...base,
-        fieldReferenceName: referenceName,
-        value: field.value,
-      });
-      onApplied?.(`field:${referenceName}`);
-    }
-    if (changes.state !== undefined) {
-      await stateMutation.mutateAsync({ ...base, state: changes.state });
-      onApplied?.("state");
-    }
-    if (changes.reason !== undefined) {
-      await reasonMutation.mutateAsync({ ...base, reason: changes.reason });
-      onApplied?.("reason");
-    }
-  }
-
-  function clearStagedKey(key: string) {
-    setStaged((current) => {
-      if (key.startsWith("field:")) {
-        const referenceName = key.slice("field:".length);
-        const fields = { ...current.fields };
-        delete fields[referenceName];
-        return { ...current, fields: Object.keys(fields).length > 0 ? fields : undefined };
-      }
-      return { ...current, [key]: undefined };
+      fields,
     });
   }
 
@@ -672,7 +558,8 @@ export function WorkItemPreviewPanel({
     setApplying(true);
     setApplyError(null);
     try {
-      await applyChangeSet(staged, clearStagedKey);
+      await applyChangeSet(staged);
+      setStaged({});
       setUndoState({ changes: inverse, workItemId, count: appliedCount });
       if (undoTimerRef.current !== null) window.clearTimeout(undoTimerRef.current);
       undoTimerRef.current = window.setTimeout(() => {
@@ -712,12 +599,7 @@ export function WorkItemPreviewPanel({
     setReasonEditorOpen(false);
     setPriorityPickerOpen(false);
     setCustomFieldEditor(null);
-    stateMutation.reset();
-    reasonMutation.reset();
-    assignMutation.reset();
-    priorityMutation.reset();
-    customFieldMutation.reset();
-    tagsMutation.reset();
+    updateFieldsMutation.reset();
     setCommentText("");
     setSelectedMentions([]);
     setMentionQuery("");
@@ -1143,12 +1025,12 @@ export function WorkItemPreviewPanel({
                 preview={preview}
                 selectedFieldKeys={selectedPreviewFieldKeys}
                 onSelectedFieldKeysChange={setSelectedPreviewFieldKeys}
-                tagsPending={tagsMutation.isPending}
+                tagsPending={applying}
                 onTagsChange={stageTags}
                 reasonControl={
                   <ReasonEditor
                     current={staged.reason ?? preview.reason}
-                    error={reasonMutation.isError ? commandErrorMessage(reasonMutation.error) : null}
+                    error={null}
                     onOpenChange={(open) => {
                       setReasonEditorOpen(open);
                       if (open) {
@@ -1159,7 +1041,7 @@ export function WorkItemPreviewPanel({
                     }}
                     onSubmit={stageReason}
                     open={reasonEditorOpen}
-                    pending={reasonMutation.isPending}
+                    pending={applying}
                     shortcut="R"
                   />
                 }
@@ -1168,7 +1050,7 @@ export function WorkItemPreviewPanel({
                     current={
                       staged.priority !== undefined ? String(staged.priority) : preview.priority
                     }
-                    error={priorityMutation.isError ? commandErrorMessage(priorityMutation.error) : null}
+                    error={null}
                     onOpenChange={(open) => {
                       setPriorityPickerOpen(open);
                       if (open) {
@@ -1178,7 +1060,7 @@ export function WorkItemPreviewPanel({
                     }}
                     onSelect={setPriority}
                     open={priorityPickerOpen}
-                    pending={priorityMutation.isPending}
+                    pending={applying}
                     shortcut="P"
                   />
                 }
@@ -1189,16 +1071,10 @@ export function WorkItemPreviewPanel({
                       staged.fields?.[field.referenceName]?.value ??
                       customPreviewFieldValue(preview, field.referenceName)
                     }
-                    error={
-                      customFieldEditor === field.referenceName &&
-                      customFieldMutation.isError
-                        ? commandErrorMessage(customFieldMutation.error)
-                        : null
-                    }
+                    error={null}
                     loading={customFieldValuesQuery.isLoading}
                     onOpenChange={(open) => {
                       setCustomFieldEditor(open ? field.referenceName : null);
-                      customFieldMutation.reset();
                     }}
                     onSelect={(value) =>
                       stageCustomField(field.referenceName, field.label, value)
@@ -1209,17 +1085,14 @@ export function WorkItemPreviewPanel({
                         ? (customFieldValuesQuery.data ?? [])
                         : []
                     }
-                    pending={
-                      customFieldMutation.isPending &&
-                      customFieldEditor === field.referenceName
-                    }
+                    pending={applying && customFieldEditor === field.referenceName}
                   />
                 )}
                 resolveImageSource={resolvePreviewImage}
                 stateControl={
                   <StatePicker
                     current={staged.state ?? preview.state}
-                    error={stateMutation.isError ? commandErrorMessage(stateMutation.error) : null}
+                    error={null}
                     loading={statesQuery.isFetching}
                     onOpenChange={(open) => {
                       setStatePickerOpen(open);
@@ -1234,7 +1107,7 @@ export function WorkItemPreviewPanel({
                     }}
                     open={statePickerOpen}
                     options={statesQuery.data ?? []}
-                    pending={stateMutation.isPending}
+                    pending={applying}
                     shortcut="S"
                   />
                 }
@@ -1250,7 +1123,7 @@ export function WorkItemPreviewPanel({
                           ? commandErrorMessage(assigneeDefaultQuery.error)
                           : null
                     }
-                    mutationError={assignMutation.isError ? commandErrorMessage(assignMutation.error) : null}
+                    mutationError={null}
                     loading={assigneeDefaultQuery.isFetching || assigneeOptionsQuery.isFetching}
                     onOpenChange={(open) => {
                       setAssigneeOpen(open);
@@ -1260,7 +1133,7 @@ export function WorkItemPreviewPanel({
                     onSelect={assignTo}
                     open={assigneeOpen}
                     options={assigneeOptions}
-                    pending={assignMutation.isPending}
+                    pending={applying}
                     query={assigneeQuery}
                     shortcut="A"
                   />

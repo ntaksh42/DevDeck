@@ -404,6 +404,18 @@ export type SetWorkItemFieldInput = {
   value: string;
 };
 
+export type WorkItemFieldValueInput = {
+  referenceName: string;
+  value: string;
+};
+
+export type UpdateWorkItemFieldsInput = {
+  organizationId?: string;
+  projectId: string;
+  workItemId: number;
+  fields: WorkItemFieldValueInput[];
+};
+
 export type SetWorkItemTagsInput = {
   organizationId?: string;
   projectId: string;
@@ -720,6 +732,13 @@ export async function setWorkItemField(
   input: SetWorkItemFieldInput,
 ): Promise<WorkItemPreview> {
   const result = await invokeCommand("set_work_item_field", { input });
+  return workItemPreviewSchema.parse(result);
+}
+
+export async function updateWorkItemFields(
+  input: UpdateWorkItemFieldsInput,
+): Promise<WorkItemPreview> {
+  const result = await invokeCommand("update_work_item_fields", { input });
   return workItemPreviewSchema.parse(result);
 }
 

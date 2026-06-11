@@ -697,7 +697,7 @@ describe("App", () => {
   });
 
   it("searches work items and renders results", async () => {
-    invokeMock.mockImplementation((command: string) => {
+    invokeMock.mockImplementation((command: string, args?: unknown) => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
       }
@@ -825,7 +825,17 @@ describe("App", () => {
           },
         ]);
       }
-      if (command === "assign_work_item") {
+      if (command === "update_work_item_fields") {
+        const fields =
+          (
+            args as
+              | { input?: { fields?: { referenceName: string; value: string }[] } }
+              | undefined
+          )?.input?.fields ?? [];
+        const stateValue = fields.find((f) => f.referenceName === "System.State")?.value;
+        const assigneeValue = fields.find(
+          (f) => f.referenceName === "System.AssignedTo",
+        )?.value;
         return Promise.resolve({
           organizationId: "contoso",
           projectId: "project-1",
@@ -833,8 +843,8 @@ describe("App", () => {
           id: 123,
           title: "Fix save workflow",
           workItemType: "Bug",
-          state: "Active",
-          assignedTo: "Creator",
+          state: stateValue ?? "Active",
+          assignedTo: assigneeValue?.startsWith("Creator") ? "Creator" : "Test User",
           createdBy: "Creator",
           createdDate: "2026-05-23T00:00:00Z",
           changedDate: "2026-05-24T01:00:00Z",
@@ -874,33 +884,6 @@ describe("App", () => {
       }
       if (command === "list_work_item_type_states") {
         return Promise.resolve(["Active", "Resolved", "Closed"]);
-      }
-      if (command === "set_work_item_state") {
-        return Promise.resolve({
-          organizationId: "contoso",
-          projectId: "project-1",
-          projectName: "Platform",
-          id: 123,
-          title: "Fix save workflow",
-          workItemType: "Bug",
-          state: "Resolved",
-          assignedTo: "Creator",
-          createdBy: "Creator",
-          createdDate: "2026-05-23T00:00:00Z",
-          changedDate: "2026-05-24T02:00:00Z",
-          areaPath: "Platform\\Product",
-          iterationPath: "Platform\\Sprint 24",
-          reason: "Fixed",
-          tags: "save; bug",
-          priority: "1",
-          severity: "2 - High",
-          storyPoints: null,
-          remainingWork: null,
-          descriptionHtml: "<p>Fix the save flow.</p>",
-          acceptanceCriteriaHtml: "<ul><li>Save succeeds</li></ul>",
-          webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/123",
-          comments: [],
-        });
       }
       if (command === "record_mention_interaction") {
         return Promise.resolve(null);
@@ -1027,7 +1010,7 @@ describe("App", () => {
 
     // Selection only stages the change; nothing is written yet.
     expect(invokeMock).not.toHaveBeenCalledWith(
-      "assign_work_item",
+      "update_work_item_fields",
       expect.anything(),
     );
     expect(await screen.findByText("1 pending change")).toBeTruthy();
@@ -1037,7 +1020,7 @@ describe("App", () => {
     fireEvent.keyDown(screen.getByText("1 pending change"), { key: "Escape" });
     expect(screen.queryByText("1 pending change")).toBeNull();
     expect(invokeMock).not.toHaveBeenCalledWith(
-      "assign_work_item",
+      "update_work_item_fields",
       expect.anything(),
     );
 
@@ -1049,12 +1032,17 @@ describe("App", () => {
     // Ctrl+S applies the staged change.
     fireEvent.keyDown(window, { key: "s", ctrlKey: true });
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith("assign_work_item", {
+      expect(invokeMock).toHaveBeenCalledWith("update_work_item_fields", {
         input: {
           organizationId: "contoso",
           projectId: "project-1",
           workItemId: 123,
-          assignedTo: "Creator <creator@example.com>",
+          fields: [
+            {
+              referenceName: "System.AssignedTo",
+              value: "Creator <creator@example.com>",
+            },
+          ],
         },
       });
     });
@@ -1069,12 +1057,12 @@ describe("App", () => {
     expect(screen.getByText("Applied 1 change")).toBeTruthy();
     fireEvent.keyDown(workItemsGrid, { key: "u" });
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith("assign_work_item", {
+      expect(invokeMock).toHaveBeenCalledWith("update_work_item_fields", {
         input: {
           organizationId: "contoso",
           projectId: "project-1",
           workItemId: 123,
-          assignedTo: "Test User",
+          fields: [{ referenceName: "System.AssignedTo", value: "Test User" }],
         },
       });
     });
@@ -1092,12 +1080,12 @@ describe("App", () => {
     fireEvent.change(comboCommentBox, { target: { value: "Closing this" } });
     fireEvent.keyDown(comboCommentBox, { key: "Enter", ctrlKey: true });
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith("set_work_item_state", {
+      expect(invokeMock).toHaveBeenCalledWith("update_work_item_fields", {
         input: {
           organizationId: "contoso",
           projectId: "project-1",
           workItemId: 123,
-          state: "Resolved",
+          fields: [{ referenceName: "System.State", value: "Resolved" }],
         },
       });
       expect(invokeMock).toHaveBeenCalledWith(
