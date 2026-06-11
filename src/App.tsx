@@ -134,6 +134,18 @@ function commitFirstLine(text: string): string {
   return index === -1 ? text : text.slice(0, index);
 }
 
+// Linear-style two-key navigation: press G, then one of these.
+const GOTO_VIEW_KEYS: Record<string, View> = {
+  r: "myReviews",
+  p: "pullRequestSearch",
+  w: "myWorkItems",
+  i: "workItems",
+  v: "workItemViews",
+  c: "commits",
+  s: "settings",
+};
+const GOTO_CHAIN_TIMEOUT_MS = 1500;
+
 
 
 function AppShell() {
@@ -725,6 +737,50 @@ function AppShell() {
   useEffect(() => {
     window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(sidebarWidth)));
   }, [sidebarWidth]);
+
+  // The G chain runs in the capture phase so the second key wins over
+  // grid-level single-letter shortcuts (S, P, C, …).
+  useEffect(() => {
+    let armed = false;
+    let timer: number | null = null;
+
+    function disarm() {
+      armed = false;
+      if (timer !== null) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
+    }
+
+    function onKeyDownCapture(event: KeyboardEvent) {
+      if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+      if (isEditableTarget(event.target)) {
+        disarm();
+        return;
+      }
+      if (armed) {
+        const view = GOTO_VIEW_KEYS[event.key.toLowerCase()];
+        disarm();
+        if (view && (view === "settings" || organizations.length > 0)) {
+          event.preventDefault();
+          event.stopPropagation();
+          setView(view);
+          window.setTimeout(() => focusPrimaryGrid(), 0);
+        }
+        return;
+      }
+      if (event.key === "g" || event.key === "G") {
+        armed = true;
+        timer = window.setTimeout(disarm, GOTO_CHAIN_TIMEOUT_MS);
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDownCapture, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDownCapture, true);
+      disarm();
+    };
+  }, [organizations.length]);
 
   useEffect(() => {
     function onGlobalKeyDown(event: KeyboardEvent) {

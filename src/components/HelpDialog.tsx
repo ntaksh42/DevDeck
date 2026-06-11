@@ -83,6 +83,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Save (in dialog)</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
 
           <p className={section}>General</p>
+          <div className={row}><span>Go to view</span><kbd className={kbd}>G then R/P/W/I/V/C/S</kbd></div>
           <div className={row}><span>Show this help</span><kbd className={kbd}>F1 / ?</kbd></div>
           <div className={row}><span>Close dialog</span><kbd className={kbd}>Esc</kbd></div>
         </div>

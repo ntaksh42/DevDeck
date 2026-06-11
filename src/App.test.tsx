@@ -1870,6 +1870,55 @@ describe("App", () => {
     });
   });
 
+  it("navigates between views with the G key chain", async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve({ reviewResultFolderPath: null });
+      }
+      if (command === "get_review_result_preview") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_sync_states") {
+        return Promise.resolve([]);
+      }
+      if (command === "trigger_sync") {
+        return Promise.resolve(undefined);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_my_work_items") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_commit_repositories") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_work_item_projects") {
+        return Promise.resolve([]);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+    const main = within(await screen.findByRole("main"));
+    expect(await main.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: "g" });
+    fireEvent.keyDown(window, { key: "w" });
+    expect(await main.findByRole("heading", { name: "My Work Items" })).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: "g" });
+    fireEvent.keyDown(window, { key: "c" });
+    expect(await main.findByRole("heading", { name: "Commits" })).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: "g" });
+    fireEvent.keyDown(window, { key: "r" });
+    expect(await main.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
+  });
+
   it("searches across entities from the command palette and opens a work item in app", async () => {
     invokeMock.mockImplementation((command: string) => {
       if (command === "list_organizations") {
