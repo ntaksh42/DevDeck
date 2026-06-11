@@ -2041,5 +2041,16 @@ describe("App", () => {
     });
     const main = within(await screen.findByRole("main"));
     expect((await main.findAllByText("Fix save workflow")).length).toBeGreaterThan(0);
+
+    // Re-opening the palette with an empty query lists the item under Recent.
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    expect(await screen.findByText("Recent")).toBeTruthy();
+    fireEvent.click(screen.getByText("#123 Fix save workflow"));
+    await waitFor(() => {
+      const searchCalls = invokeMock.mock.calls.filter(
+        ([command]) => command === "search_work_items",
+      );
+      expect(searchCalls.length).toBeGreaterThanOrEqual(2);
+    });
   });
 });

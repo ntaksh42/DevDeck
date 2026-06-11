@@ -134,6 +134,46 @@ function commitFirstLine(text: string): string {
   return index === -1 ? text : text.slice(0, index);
 }
 
+type RecentPaletteItem = {
+  kind: PaletteSearchKind;
+  key: string;
+  label: string;
+  detail?: string;
+  query: string;
+  webUrl?: string | null;
+};
+
+const PALETTE_RECENT_ITEMS_STORAGE_KEY = "azdodeck:commandPalette:recentItems:v1";
+const PALETTE_RECENT_ITEMS_MAX = 15;
+
+function loadRecentPaletteItems(): RecentPaletteItem[] {
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(PALETTE_RECENT_ITEMS_STORAGE_KEY) ?? "[]",
+    );
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (item): item is RecentPaletteItem =>
+        !!item &&
+        typeof item === "object" &&
+        typeof item.key === "string" &&
+        typeof item.label === "string" &&
+        typeof item.query === "string" &&
+        (item.kind === "workItems" || item.kind === "pullRequests" || item.kind === "commits"),
+    );
+  } catch {
+    return [];
+  }
+}
+
+function recordRecentPaletteItem(item: RecentPaletteItem) {
+  const items = [item, ...loadRecentPaletteItems().filter((entry) => entry.key !== item.key)].slice(
+    0,
+    PALETTE_RECENT_ITEMS_MAX,
+  );
+  window.localStorage.setItem(PALETTE_RECENT_ITEMS_STORAGE_KEY, JSON.stringify(items));
+}
+
 // Linear-style two-key navigation: press G, then one of these.
 const GOTO_VIEW_KEYS: Record<string, View> = {
   r: "myReviews",
@@ -227,6 +267,19 @@ function AppShell() {
     placeholderData: keepPreviousData,
   });
 
+  function openSearchTarget(kind: PaletteSearchKind, query: string): void {
+    if (kind === "workItems") {
+      setWorkItemSearchRequest({ query, requestId: Date.now() });
+      setView("workItems");
+    } else if (kind === "pullRequests") {
+      setPullRequestSearchRequest({ query, requestId: Date.now() });
+      setView("pullRequestSearch");
+    } else {
+      setCommitSearchRequest({ query, requestId: Date.now() });
+      setView("commits");
+    }
+  }
+
   const paletteSearchItems = useMemo<CommandPaletteSearchItem[]>(() => {
     const data = paletteSearchEnabled ? searchAllQuery.data : undefined;
     if (!data) return [];
@@ -236,14 +289,22 @@ function AppShell() {
 
     if (!kind || kind === "workItems") {
       for (const item of data.workItems) {
-        items.push({
-          id: `wi:${item.organizationId}:${item.id}`,
-          group: "Work Items",
+        const recent: RecentPaletteItem = {
+          kind: "workItems",
+          key: `wi:${item.organizationId}:${item.id}`,
           label: `#${item.id} ${item.title}`,
           detail: [item.workItemType, item.state, item.assignedTo].filter(Boolean).join(" · "),
+          query: String(item.id),
+          webUrl: item.webUrl,
+        };
+        items.push({
+          id: recent.key,
+          group: "Work Items",
+          label: recent.label,
+          detail: recent.detail,
           run: () => {
-            setWorkItemSearchRequest({ query: String(item.id), requestId: Date.now() });
-            setView("workItems");
+            recordRecentPaletteItem(recent);
+            openSearchTarget("workItems", recent.query);
           },
           runAlt: item.webUrl
             ? () => {
@@ -266,17 +327,22 @@ function AppShell() {
     }
     if (!kind || kind === "pullRequests") {
       for (const pr of data.pullRequests) {
-        items.push({
-          id: `pr:${pr.organizationId}:${pr.repositoryId}:${pr.pullRequestId}`,
-          group: "Pull Requests (active)",
+        const recent: RecentPaletteItem = {
+          kind: "pullRequests",
+          key: `pr:${pr.organizationId}:${pr.repositoryId}:${pr.pullRequestId}`,
           label: `PR ${pr.pullRequestId} ${pr.title}`,
           detail: [pr.repositoryName, pr.createdBy].filter(Boolean).join(" · "),
+          query: String(pr.pullRequestId),
+          webUrl: pr.webUrl,
+        };
+        items.push({
+          id: recent.key,
+          group: "Pull Requests (active)",
+          label: recent.label,
+          detail: recent.detail,
           run: () => {
-            setPullRequestSearchRequest({
-              query: String(pr.pullRequestId),
-              requestId: Date.now(),
-            });
-            setView("pullRequestSearch");
+            recordRecentPaletteItem(recent);
+            openSearchTarget("pullRequests", recent.query);
           },
           runAlt: pr.webUrl
             ? () => {
@@ -299,14 +365,22 @@ function AppShell() {
     }
     if (!kind || kind === "commits") {
       for (const commit of data.commits) {
-        items.push({
-          id: `c:${commit.organizationId}:${commit.repositoryId}:${commit.commitId}`,
-          group: "Commits",
+        const recent: RecentPaletteItem = {
+          kind: "commits",
+          key: `c:${commit.organizationId}:${commit.repositoryId}:${commit.commitId}`,
           label: `${commit.shortCommitId} ${commitFirstLine(commit.comment)}`,
           detail: [commit.repositoryName, commit.authorName].filter(Boolean).join(" · "),
+          query: rawQuery,
+          webUrl: commit.webUrl,
+        };
+        items.push({
+          id: recent.key,
+          group: "Commits",
+          label: recent.label,
+          detail: recent.detail,
           run: () => {
-            setCommitSearchRequest({ query: rawQuery, requestId: Date.now() });
-            setView("commits");
+            recordRecentPaletteItem(recent);
+            openSearchTarget("commits", recent.query);
           },
           runAlt: commit.webUrl
             ? () => {
@@ -329,6 +403,28 @@ function AppShell() {
     }
     return items;
   }, [paletteSearch.kind, paletteSearch.query, paletteSearchEnabled, searchAllQuery.data]);
+
+  // With an empty query the palette surfaces recently opened items instead.
+  const paletteRecentItems = useMemo<CommandPaletteSearchItem[]>(() => {
+    if (!commandPaletteOpen || organizations.length === 0) return [];
+    if (debouncedPaletteSearchText.trim().length > 0) return [];
+    return loadRecentPaletteItems().map((item) => ({
+      id: `recent:${item.key}`,
+      group: "Recent",
+      label: item.label,
+      detail: item.detail,
+      run: () => {
+        recordRecentPaletteItem(item);
+        openSearchTarget(item.kind, item.query);
+      },
+      runAlt: item.webUrl
+        ? () => {
+            void openExternalUrl(item.webUrl as string);
+          }
+        : undefined,
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commandPaletteOpen, debouncedPaletteSearchText, organizations.length]);
 
   function closeCommandPalette(): void {
     setCommandPaletteOpen(false);
@@ -1173,7 +1269,7 @@ function AppShell() {
           search={
             organizations.length > 0
               ? {
-                  items: paletteSearchItems,
+                  items: [...paletteSearchItems, ...paletteRecentItems],
                   pending: paletteSearchEnabled && searchAllQuery.isFetching,
                   onQueryChange: setPaletteSearchText,
                 }
