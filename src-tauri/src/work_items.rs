@@ -118,6 +118,9 @@ pub struct RecordMentionInteractionInput {
     pub unique_name: String,
 }
 
+/// Same payload as a mention interaction; only the history table differs.
+pub type RecordAssigneeInteractionInput = RecordMentionInteractionInput;
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchWorkItemAssigneesInput {
@@ -729,6 +732,23 @@ impl WorkItemService {
         )
     }
 
+    pub fn record_assignee_interaction(&self, input: RecordAssigneeInteractionInput) -> Result<()> {
+        let unique_name = input.unique_name.trim();
+        let display_name = input.display_name.trim();
+        if unique_name.is_empty() || display_name.is_empty() {
+            return Ok(());
+        }
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let now = Utc::now().to_rfc3339();
+        self.db.record_assignee_interaction(
+            &organization.id,
+            unique_name,
+            display_name,
+            input.user_id.as_deref(),
+            &now,
+        )
+    }
+
     pub async fn search_mentions(
         &self,
         input: SearchWorkItemMentionsInput,
@@ -831,6 +851,17 @@ impl WorkItemService {
             }
             Err(error) => {
                 tracing::warn!(%error, "failed to load work item updates for assignee candidates");
+            }
+        }
+
+        match self.db.list_assignee_history(&organization.id, 20) {
+            Ok(entries) => {
+                for candidate in entries.into_iter().map(assignee_candidate_from_history) {
+                    push_unique_assignee_candidate(&mut candidates, candidate);
+                }
+            }
+            Err(error) => {
+                tracing::warn!(%error, "failed to load assignee history for assignee candidates");
             }
         }
 
@@ -1701,6 +1732,15 @@ fn mention_candidate_from_assignee(candidate: WorkItemAssigneeCandidate) -> Ment
         display_name: candidate.display_name,
         unique_name: candidate.unique_name,
     }
+}
+
+// Unlike mentions, assignment works with "Display <unique_name>" values, so
+// entries without a storage-key GUID are still usable.
+fn assignee_candidate_from_history(
+    entry: crate::db::MentionHistoryEntry,
+) -> WorkItemAssigneeCandidate {
+    let id = entry.user_id.unwrap_or_else(|| entry.unique_name.clone());
+    assignee_candidate_from_parts(id, entry.display_name, Some(entry.unique_name))
 }
 
 fn mention_candidate_from_history(
@@ -3038,6 +3078,30 @@ mod tests {
             user_id: None,
         };
         assert!(mention_candidate_from_history(missing_entry).is_none());
+    }
+
+    #[test]
+    fn assignee_candidate_from_history_works_without_guid_user_id() {
+        let entry = crate::db::MentionHistoryEntry {
+            unique_name: "alice@corp.com".to_string(),
+            display_name: "Alice".to_string(),
+            user_id: Some("d6245f20-2af8-44f4-9451-8107cb2767db".to_string()),
+        };
+        let candidate = assignee_candidate_from_history(entry);
+        assert_eq!(candidate.id, "d6245f20-2af8-44f4-9451-8107cb2767db");
+        assert_eq!(candidate.unique_name.as_deref(), Some("alice@corp.com"));
+        assert_eq!(candidate.assign_value, "Alice <alice@corp.com>");
+
+        // Assignment posts "Display <unique>" instead of @<id> tokens, so a
+        // history row without a GUID id is still usable.
+        let missing_entry = crate::db::MentionHistoryEntry {
+            unique_name: "carol@corp.com".to_string(),
+            display_name: "Carol".to_string(),
+            user_id: None,
+        };
+        let candidate = assignee_candidate_from_history(missing_entry);
+        assert_eq!(candidate.id, "carol@corp.com");
+        assert_eq!(candidate.assign_value, "Carol <carol@corp.com>");
     }
 
     #[test]

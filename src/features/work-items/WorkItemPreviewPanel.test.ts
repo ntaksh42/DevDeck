@@ -4,9 +4,11 @@ import {
   activeMentionAt,
   isSelfIdentity,
   markdownWithHardLineBreaks,
+  mentionTokenDeletionStart,
   rankMentionCandidates,
   renderAzureMentionMarkdown,
   sortSelfLast,
+  splitMatchSegments,
   splitWorkItemTags,
   workItemStateDotClass,
   workItemTypeColor,
@@ -311,5 +313,64 @@ describe("renderAzureMentionMarkdown", () => {
     expect(renderAzureMentionMarkdown("@Alice and @Bob hi", mentions)).toBe(
       "@Alice and @Bob hi",
     );
+  });
+});
+
+describe("mentionTokenDeletionStart", () => {
+  const names = ["Alice", "Tom Smith"];
+
+  it("matches a token directly before the cursor", () => {
+    const text = "cc @Alice";
+    expect(mentionTokenDeletionStart(text, text.length, names)).toBe(3);
+  });
+
+  it("includes the trailing space inserted after a mention", () => {
+    const text = "cc @Alice ";
+    expect(mentionTokenDeletionStart(text, text.length, names)).toBe(3);
+  });
+
+  it("handles multi-word display names", () => {
+    const text = "@Tom Smith ";
+    expect(mentionTokenDeletionStart(text, text.length, names)).toBe(0);
+  });
+
+  it("prefers the longest matching name", () => {
+    const text = "@Tom Smith";
+    expect(mentionTokenDeletionStart(text, text.length, ["Smith", "Tom Smith"])).toBe(0);
+  });
+
+  it("returns null when the cursor is inside the token", () => {
+    const text = "cc @Alice tail";
+    expect(mentionTokenDeletionStart(text, 7, names)).toBeNull();
+  });
+
+  it("returns null for plain text", () => {
+    const text = "no mentions here";
+    expect(mentionTokenDeletionStart(text, text.length, names)).toBeNull();
+    expect(mentionTokenDeletionStart(text, 0, names)).toBeNull();
+  });
+});
+
+describe("splitMatchSegments", () => {
+  it("marks the first case-insensitive match", () => {
+    expect(splitMatchSegments("Alice Johnson", "john")).toEqual([
+      { text: "Alice ", match: false },
+      { text: "John", match: true },
+      { text: "son", match: false },
+    ]);
+  });
+
+  it("returns a single segment when the query is empty or does not match", () => {
+    expect(splitMatchSegments("Alice", "")).toEqual([{ text: "Alice", match: false }]);
+    expect(splitMatchSegments("Alice", "  ")).toEqual([{ text: "Alice", match: false }]);
+    expect(splitMatchSegments("Alice", "bob")).toEqual([{ text: "Alice", match: false }]);
+  });
+
+  it("handles matches at the start and covering the whole text", () => {
+    expect(splitMatchSegments("alice@corp.com", "alice")).toEqual([
+      { text: "alice", match: true },
+      { text: "@corp.com", match: false },
+    ]);
+    expect(splitMatchSegments("Alice", "alice")).toEqual([{ text: "Alice", match: true }]);
   });
 });

@@ -390,6 +390,8 @@ export type RecordMentionInteractionInput = {
   uniqueName: string;
 };
 
+export type RecordAssigneeInteractionInput = RecordMentionInteractionInput;
+
 export type SearchWorkItemAssigneesInput = {
   organizationId?: string;
   projectId: string;
@@ -668,6 +670,12 @@ export async function recordMentionInteraction(
   input: RecordMentionInteractionInput,
 ): Promise<void> {
   await invokeCommand("record_mention_interaction", { input });
+}
+
+export async function recordAssigneeInteraction(
+  input: RecordAssigneeInteractionInput,
+): Promise<void> {
+  await invokeCommand("record_assignee_interaction", { input });
 }
 
 export async function searchWorkItemAssignees(

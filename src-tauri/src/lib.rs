@@ -40,13 +40,13 @@ use work_items::{
     DeleteWorkItemCommentInput, FetchWorkItemImageInput, GetSavedQueryInput,
     GetWorkItemPreviewInput, ListMyWorkItemsInput, ListWorkItemFieldAllowedValuesInput,
     ListWorkItemFieldsInput, ListWorkItemProjectsInput, ListWorkItemTypeStatesInput,
-    ListWorkItemUpdatesInput, MentionCandidate, RecordMentionInteractionInput,
-    RunWorkItemQueryInput, SavedQueryResult, SearchWorkItemAssigneesInput,
-    SearchWorkItemMentionsInput, SearchWorkItemsInput, SetWorkItemFieldInput,
-    SetWorkItemPriorityInput, SetWorkItemReasonInput, SetWorkItemStateInput, SetWorkItemTagsInput,
-    SetWorkItemsPriorityInput, SetWorkItemsStateInput, UpdateWorkItemFieldsInput,
-    WorkItemAssigneeCandidate, WorkItemComment, WorkItemFieldOption, WorkItemImage,
-    WorkItemPreview, WorkItemProjectOption, WorkItemService, WorkItemSummary,
+    ListWorkItemUpdatesInput, MentionCandidate, RecordAssigneeInteractionInput,
+    RecordMentionInteractionInput, RunWorkItemQueryInput, SavedQueryResult,
+    SearchWorkItemAssigneesInput, SearchWorkItemMentionsInput, SearchWorkItemsInput,
+    SetWorkItemFieldInput, SetWorkItemPriorityInput, SetWorkItemReasonInput, SetWorkItemStateInput,
+    SetWorkItemTagsInput, SetWorkItemsPriorityInput, SetWorkItemsStateInput,
+    UpdateWorkItemFieldsInput, WorkItemAssigneeCandidate, WorkItemComment, WorkItemFieldOption,
+    WorkItemImage, WorkItemPreview, WorkItemProjectOption, WorkItemService, WorkItemSummary,
     WorkItemUpdateSummary,
 };
 
@@ -261,6 +261,16 @@ async fn record_mention_interaction(
 ) -> Result<()> {
     let service = state.work_items.clone();
     run_blocking(move || service.record_mention_interaction(input)).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn record_assignee_interaction(
+    input: RecordAssigneeInteractionInput,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    let service = state.work_items.clone();
+    run_blocking(move || service.record_assignee_interaction(input)).await
 }
 
 #[tauri::command]
@@ -574,6 +584,7 @@ pub fn run() {
             get_work_item_preview,
             search_work_item_mentions,
             record_mention_interaction,
+            record_assignee_interaction,
             search_work_item_assignees,
             fetch_work_item_image,
             add_work_item_comment,

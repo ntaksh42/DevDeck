@@ -7,13 +7,14 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronUp, Filter, Loader2, X } from 'lucide-react';
 import {
   setWorkItemsState,
   assignWorkItems,
   setWorkItemsPriority,
   listWorkItemTypeStates,
+  recordAssigneeInteraction,
   searchWorkItemAssignees,
   getWorkItemPreview,
   commandErrorMessage,
@@ -31,6 +32,7 @@ import {
   formatRelativeDate,
   type SortDirection,
 } from '@/lib/utils';
+import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { openExternalUrl } from '@/lib/openExternal';
 import { ShortcutHint } from '@/components/ShortcutHint';
 import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
@@ -727,22 +729,25 @@ export function WorkItemsGrid({
   });
   const bulkStateOptions = bulkStateType && bulkStatesQuery.data ? bulkStatesQuery.data : COMMON_STATES;
 
+  const debouncedBulkAssignQuery = useDebouncedValue(bulkAssignQuery, 200);
   const bulkAssigneesQuery = useQuery({
     queryKey: workItemQueryKeys.assignees(
       firstCheckedItem?.organizationId,
       firstCheckedItem?.projectId,
       firstCheckedItem?.id,
-      bulkAssignQuery,
+      debouncedBulkAssignQuery,
     ),
     queryFn: () =>
       searchWorkItemAssignees({
         organizationId: firstCheckedItem!.organizationId,
         projectId: firstCheckedItem!.projectId,
         workItemId: firstCheckedItem!.id,
-        query: bulkAssignQuery,
+        query: debouncedBulkAssignQuery,
       }),
-    enabled: bulkAssignOpen && !!firstCheckedItem && bulkAssignQuery.trim().length > 0,
+    enabled:
+      bulkAssignOpen && !!firstCheckedItem && debouncedBulkAssignQuery.trim().length > 0,
     staleTime: 60_000,
+    placeholderData: keepPreviousData,
   });
   const bulkDefaultAssigneesQuery = useQuery({
     queryKey: workItemQueryKeys.assignees(
@@ -765,8 +770,8 @@ export function WorkItemsGrid({
     ? (bulkAssigneesQuery.data ?? [])
     : (bulkDefaultAssigneesQuery.data ?? []);
   const bulkAssignLoading = bulkAssignQuery.trim()
-    ? bulkAssigneesQuery.isFetching
-    : bulkDefaultAssigneesQuery.isFetching;
+    ? bulkAssigneesQuery.isLoading
+    : bulkDefaultAssigneesQuery.isLoading;
 
   function showBulkToast(results: BulkWorkItemResult[]) {
     const failed = results.filter((r) => r.error).length;
@@ -835,6 +840,23 @@ export function WorkItemsGrid({
     },
     onSuccess: (results, candidate) => {
       const succeededIds = new Set(results.filter((result) => !result.error).map((result) => result.id));
+      if (succeededIds.size > 0 && candidate.uniqueName) {
+        const organizationIds = new Set(
+          checkedItems
+            .filter((item) => succeededIds.has(item.id))
+            .map((item) => item.organizationId),
+        );
+        for (const organizationId of organizationIds) {
+          void recordAssigneeInteraction({
+            organizationId,
+            userId: candidate.id,
+            displayName: candidate.displayName,
+            uniqueName: candidate.uniqueName,
+          }).catch(() => {
+            // History is best-effort; the assignment itself already succeeded.
+          });
+        }
+      }
       if (succeededIds.size > 0) {
         setItemOverrides((current) => {
           const next = new Map(current);

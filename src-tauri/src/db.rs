@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, Result};
 
-const SCHEMA_VERSION: i64 = 9;
+const SCHEMA_VERSION: i64 = 10;
 
 /// Max rows kept in the my_work_items snapshot queries; sync notification
 /// diffing must know this cap to avoid treating re-entering rows as new.
@@ -583,6 +583,52 @@ impl AppDatabase {
         )?;
         Ok(())
     }
+
+    pub fn list_assignee_history(
+        &self,
+        org_id: &str,
+        limit: usize,
+    ) -> Result<Vec<MentionHistoryEntry>> {
+        let conn = self.open()?;
+        let mut stmt = conn.prepare(
+            "SELECT unique_name, display_name, user_id FROM assignee_history \
+             WHERE org_id = ?1 \
+             ORDER BY interaction_count DESC, last_used_at DESC \
+             LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(params![org_id, limit as i64], |row| {
+            Ok(MentionHistoryEntry {
+                unique_name: row.get(0)?,
+                display_name: row.get(1)?,
+                user_id: row.get(2)?,
+            })
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
+    pub fn record_assignee_interaction(
+        &self,
+        org_id: &str,
+        unique_name: &str,
+        display_name: &str,
+        user_id: Option<&str>,
+        now: &str,
+    ) -> Result<()> {
+        let unique_name_lower = unique_name.to_lowercase();
+        let conn = self.open()?;
+        conn.execute(
+            "INSERT INTO assignee_history(org_id, unique_name, display_name, user_id, interaction_count, last_used_at)
+             VALUES (?1, ?2, ?3, ?4, 1, ?5)
+             ON CONFLICT(org_id, unique_name) DO UPDATE SET
+                 display_name = excluded.display_name,
+                 user_id = COALESCE(excluded.user_id, user_id),
+                 interaction_count = interaction_count + 1,
+                 last_used_at = excluded.last_used_at",
+            params![org_id, unique_name_lower, display_name, user_id, now],
+        )?;
+        Ok(())
+    }
 }
 
 // ── Migration ─────────────────────────────────────────────────────────────────
@@ -910,6 +956,25 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             conn.execute_batch("ALTER TABLE review_pull_requests ADD COLUMN merge_status TEXT;")?;
         }
         conn.execute_batch("PRAGMA user_version = 9;")?;
+    }
+    if current < 10 {
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS assignee_history(
+                org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                unique_name TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                user_id TEXT,
+                interaction_count INTEGER NOT NULL DEFAULT 1,
+                last_used_at TEXT NOT NULL,
+                PRIMARY KEY (org_id, unique_name)
+            );
+            CREATE INDEX IF NOT EXISTS idx_assignee_history_rank
+                ON assignee_history(org_id, interaction_count DESC, last_used_at DESC);
+
+            PRAGMA user_version = 10;
+            "#,
+        )?;
     }
     Ok(())
 }
@@ -2363,6 +2428,43 @@ mod tests {
         assert_eq!(entries[0].display_name, "Bob");
         assert_eq!(entries[0].user_id.as_deref(), Some("bob-id"));
         assert_eq!(entries[1].unique_name, "alice@corp.com");
+    }
+
+    #[test]
+    fn list_assignee_history_ranks_by_interaction_count() {
+        let tf = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        db.record_assignee_interaction(
+            "org1",
+            "alice@corp.com",
+            "Alice",
+            None,
+            "2026-06-01T00:00:00Z",
+        )
+        .unwrap();
+        db.record_assignee_interaction(
+            "org1",
+            "bob@corp.com",
+            "Bob",
+            Some("bob-id"),
+            "2026-06-02T00:00:00Z",
+        )
+        .unwrap();
+        db.record_assignee_interaction("org1", "bob@corp.com", "Bob", None, "2026-06-03T00:00:00Z")
+            .unwrap();
+
+        let entries = db.list_assignee_history("org1", 10).unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].unique_name, "bob@corp.com");
+        assert_eq!(entries[0].display_name, "Bob");
+        assert_eq!(entries[0].user_id.as_deref(), Some("bob-id"));
+        assert_eq!(entries[1].unique_name, "alice@corp.com");
+
+        // Assignee history must stay separate from mention history.
+        assert!(db.list_mention_history("org1", 10).unwrap().is_empty());
     }
 
     #[test]

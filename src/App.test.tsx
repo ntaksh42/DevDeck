@@ -888,6 +888,9 @@ describe("App", () => {
       if (command === "record_mention_interaction") {
         return Promise.resolve(null);
       }
+      if (command === "record_assignee_interaction") {
+        return Promise.resolve(null);
+      }
       return Promise.reject(new Error(`Unhandled command: ${command}`));
     });
 
@@ -1051,6 +1054,18 @@ describe("App", () => {
     });
     await waitFor(() => {
       expect(within(workItemsGrid).getAllByText("Creator").length).toBeGreaterThan(0);
+    });
+
+    // A successful assignment is learned into the local assignee history.
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("record_assignee_interaction", {
+        input: {
+          organizationId: "contoso",
+          userId: "9ce68702-0694-6ef4-b9fa-0f3143502233",
+          displayName: "Creator",
+          uniqueName: "creator@example.com",
+        },
+      });
     });
 
     // Undo restores the pre-apply assignee.

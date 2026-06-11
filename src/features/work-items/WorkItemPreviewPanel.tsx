@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, Loader2, Plus, Send, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import {
   addWorkItemComment,
@@ -21,6 +21,7 @@ import {
   listWorkItemFieldAllowedValues,
   searchWorkItemAssignees,
   searchWorkItemMentions,
+  recordAssigneeInteraction,
   recordMentionInteraction,
   updateWorkItemFields,
   commandErrorMessage,
@@ -33,6 +34,7 @@ import {
   type WorkItemSummary,
 } from '@/lib/azdoCommands';
 import { focusPrimaryGrid, formatRelativeDate, isEditableTarget } from '@/lib/utils';
+import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { openExternalUrl } from '@/lib/openExternal';
 import { PreviewEmptyState } from '@/components/StateDisplay';
 import { ShortcutHint } from '@/components/ShortcutHint';
@@ -50,7 +52,9 @@ const SAVED_REPLIES_STORAGE_KEY = "azdodeck:workItems:savedReplies";
 
 type StagedChanges = {
   state?: string;
-  assignee?: { assignValue: string; displayName: string };
+  // id/uniqueName are carried along so a successful apply can be recorded in
+  // the local assignee history; the undo direction omits them.
+  assignee?: { assignValue: string; displayName: string; id?: string; uniqueName?: string | null };
   priority?: number;
   reason?: string;
   tags?: string[];
@@ -193,6 +197,7 @@ export function WorkItemPreviewPanel({
   const [mentionStart, setMentionStart] = useState<number | null>(null);
   const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
   const queryClient = useQueryClient();
   const [assigneeOpen, setAssigneeOpen] = useState(false);
   const [assigneeQuery, setAssigneeQuery] = useState("");
@@ -271,22 +276,26 @@ export function WorkItemPreviewPanel({
     [preview],
   );
 
+  // Debounced so each keystroke does not fire a backend identity search;
+  // keepPreviousData keeps the list visible while the next search runs.
+  const debouncedMentionQuery = useDebouncedValue(mentionQuery, 200);
   const mentionOptionsQuery = useQuery({
     queryKey: workItemQueryKeys.mentions(
       selectedItem?.organizationId,
       selectedItem?.projectId,
       selectedItem?.id,
-      mentionQuery,
+      debouncedMentionQuery,
     ),
     queryFn: () =>
       searchWorkItemMentions({
         organizationId: selectedItem!.organizationId,
         projectId: selectedItem!.projectId,
         workItemId: selectedItem!.id,
-        query: mentionQuery,
+        query: debouncedMentionQuery,
       }),
     enabled: !!selectedItem && mentionStart !== null,
     staleTime: 60_000,
+    placeholderData: keepPreviousData,
   });
   const mentionOptions = useMemo(
     () =>
@@ -343,22 +352,24 @@ export function WorkItemPreviewPanel({
     staleTime: 60_000,
   });
   // Run typed search only when there is input; the default query covers the empty state.
+  const debouncedAssigneeQuery = useDebouncedValue(assigneeQuery, 200);
   const assigneeOptionsQuery = useQuery({
     queryKey: workItemQueryKeys.assignees(
       selectedItem?.organizationId,
       selectedItem?.projectId,
       selectedItem?.id,
-      assigneeQuery,
+      debouncedAssigneeQuery,
     ),
     queryFn: () =>
       searchWorkItemAssignees({
         organizationId: selectedItem!.organizationId,
         projectId: selectedItem!.projectId,
         workItemId: selectedItem!.id,
-        query: assigneeQuery,
+        query: debouncedAssigneeQuery,
       }),
-    enabled: !!selectedItem && assigneeOpen && assigneeQuery.trim().length > 0,
+    enabled: !!selectedItem && assigneeOpen && debouncedAssigneeQuery.trim().length > 0,
     staleTime: 60_000,
+    placeholderData: keepPreviousData,
   });
   const assigneeOptions = useMemo(
     () =>
@@ -550,8 +561,25 @@ export function WorkItemPreviewPanel({
     });
   }
 
+  // Applying disables the focused picker trigger (and unmounts the chip button
+  // that was clicked), so keyboard focus silently falls to <body>. Restore it
+  // after the post-apply rerender has re-enabled the controls.
+  function restorePanelFocus(previousFocus: Element | null) {
+    window.setTimeout(() => {
+      const panel = panelRef.current;
+      const active = document.activeElement;
+      if (!panel || (active && active !== document.body)) return;
+      if (previousFocus instanceof HTMLElement && panel.contains(previousFocus)) {
+        previousFocus.focus();
+      } else {
+        panel.querySelector<HTMLElement>("[data-primary-preview='true']")?.focus();
+      }
+    }, 0);
+  }
+
   async function applyStaged() {
     if (!selectedItem || applying || stagedEntries.length === 0) return;
+    const previousFocus = document.activeElement;
     const inverse = preview ? buildInverseChanges(preview, staged) : {};
     const appliedCount = stagedEntries.length;
     const workItemId = selectedItem.id;
@@ -559,6 +587,16 @@ export function WorkItemPreviewPanel({
     setApplyError(null);
     try {
       await applyChangeSet(staged);
+      if (staged.assignee?.uniqueName) {
+        void recordAssigneeInteraction({
+          organizationId: selectedItem.organizationId,
+          userId: staged.assignee.id,
+          displayName: staged.assignee.displayName,
+          uniqueName: staged.assignee.uniqueName,
+        }).catch(() => {
+          // History is best-effort; the assignment itself already succeeded.
+        });
+      }
       setStaged({});
       setUndoState({ changes: inverse, workItemId, count: appliedCount });
       if (undoTimerRef.current !== null) window.clearTimeout(undoTimerRef.current);
@@ -570,12 +608,14 @@ export function WorkItemPreviewPanel({
       setApplyError(commandErrorMessage(error));
     } finally {
       setApplying(false);
+      restorePanelFocus(previousFocus);
     }
   }
 
   async function undoLastApply() {
     const undo = undoState;
     if (!undo || !selectedItem || applying || selectedItem.id !== undo.workItemId) return;
+    const previousFocus = document.activeElement;
     if (undoTimerRef.current !== null) {
       window.clearTimeout(undoTimerRef.current);
       undoTimerRef.current = null;
@@ -589,6 +629,7 @@ export function WorkItemPreviewPanel({
       setApplyError(commandErrorMessage(error));
     } finally {
       setApplying(false);
+      restorePanelFocus(previousFocus);
     }
   }
 
@@ -750,7 +791,12 @@ export function WorkItemPreviewPanel({
       assignee:
         candidate.displayName === preview?.assignedTo
           ? undefined
-          : { assignValue: candidate.assignValue, displayName: candidate.displayName },
+          : {
+              assignValue: candidate.assignValue,
+              displayName: candidate.displayName,
+              id: candidate.id,
+              uniqueName: candidate.uniqueName,
+            },
     }));
     setAssigneeOpen(false);
     setAssigneeQuery("");
@@ -967,6 +1013,42 @@ export function WorkItemPreviewPanel({
       return;
     }
 
+    if (event.key === "Escape") {
+      event.preventDefault();
+      if (mentionStart !== null) {
+        setMentionQuery("");
+        setMentionStart(null);
+      } else {
+        // Second Esc backs out of the comment editor so the panel's
+        // single-key shortcuts (s/a/p/r, Esc) work again.
+        panelRef.current
+          ?.querySelector<HTMLElement>("[data-primary-preview='true']")
+          ?.focus();
+      }
+      return;
+    }
+
+    if (
+      event.key === "Backspace" &&
+      event.currentTarget.selectionStart === event.currentTarget.selectionEnd
+    ) {
+      const textarea = event.currentTarget;
+      const cursor = textarea.selectionStart;
+      const start = mentionTokenDeletionStart(
+        commentText,
+        cursor,
+        selectedMentions.map((mention) => mention.displayName),
+      );
+      if (start !== null) {
+        event.preventDefault();
+        const next = commentText.slice(0, start) + commentText.slice(cursor);
+        setCommentText(next);
+        updateMentionState(next, start);
+        window.setTimeout(() => textarea.setSelectionRange(start, start), 0);
+        return;
+      }
+    }
+
     if (!showMentionOptions) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -979,10 +1061,6 @@ export function WorkItemPreviewPanel({
     } else if (event.key === "Enter" || event.key === "Tab") {
       event.preventDefault();
       applyMention(mentionOptions[activeMentionIndex] ?? mentionOptions[0]);
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      setMentionQuery("");
-      setMentionStart(null);
     }
   }
 
@@ -1052,6 +1130,7 @@ export function WorkItemPreviewPanel({
 
   return (
     <aside
+      ref={panelRef}
       className="flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-white shadow-sm transition-[border-color,box-shadow] focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/25"
       onKeyDown={handlePreviewPanelKeyDown}
     >
@@ -1184,7 +1263,7 @@ export function WorkItemPreviewPanel({
                           : null
                     }
                     mutationError={null}
-                    loading={assigneeDefaultQuery.isFetching || assigneeOptionsQuery.isFetching}
+                    loading={assigneeDefaultQuery.isLoading || assigneeOptionsQuery.isLoading}
                     onOpenChange={(open) => {
                       setAssigneeOpen(open);
                       if (open) setPriorityPickerOpen(false);
@@ -1239,18 +1318,27 @@ export function WorkItemPreviewPanel({
                             }
                             onMouseDown={(event) => event.preventDefault()}
                             onClick={() => applyMention(candidate)}
-                            className={`flex w-full min-w-0 flex-col px-3 py-2 text-left text-sm ${
+                            className={`flex w-full min-w-0 items-center gap-2 px-3 py-1.5 text-left text-sm ${
                               index === activeMentionIndex ? "bg-secondary" : "hover:bg-muted"
                             }`}
                           >
-                            <span className="truncate font-medium">
-                              {candidate.displayName}
-                            </span>
-                            {candidate.uniqueName ? (
-                              <span className="truncate text-xs text-muted-foreground">
-                                {candidate.uniqueName}
+                            <CandidateAvatar displayName={candidate.displayName} />
+                            <span className="flex min-w-0 flex-col">
+                              <span className="truncate font-medium">
+                                <HighlightedText
+                                  text={candidate.displayName}
+                                  query={mentionQuery}
+                                />
                               </span>
-                            ) : null}
+                              {candidate.uniqueName ? (
+                                <span className="truncate text-xs text-muted-foreground">
+                                  <HighlightedText
+                                    text={candidate.uniqueName}
+                                    query={mentionQuery}
+                                  />
+                                </span>
+                              ) : null}
+                            </span>
                           </button>
                         ))}
                       </div>
@@ -3243,14 +3331,19 @@ function AssigneePicker({
                       else inputRef.current?.focus();
                     }
                   }}
-                  className="flex w-full min-w-0 flex-col rounded px-2 py-1 text-left text-xs hover:bg-secondary"
+                  className="flex w-full min-w-0 items-center gap-2 rounded px-2 py-1 text-left text-xs hover:bg-secondary"
                 >
-                  <span className="truncate font-medium">{candidate.displayName}</span>
-                  {candidate.uniqueName ? (
-                    <span className="truncate text-[11px] text-muted-foreground">
-                      {candidate.uniqueName}
+                  <CandidateAvatar displayName={candidate.displayName} />
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate font-medium">
+                      <HighlightedText text={candidate.displayName} query={query} />
                     </span>
-                  ) : null}
+                    {candidate.uniqueName ? (
+                      <span className="truncate text-[11px] text-muted-foreground">
+                        <HighlightedText text={candidate.uniqueName} query={query} />
+                      </span>
+                    ) : null}
+                  </span>
                 </button>
               ))
             ) : (
@@ -3262,6 +3355,64 @@ function AssigneePicker({
         </div>
       ) : null}
     </div>
+  );
+}
+
+// Marks the first case-insensitive occurrence of `query` in `text` so the
+// candidate lists can show why an entry matched.
+export function splitMatchSegments(
+  text: string,
+  query: string,
+): { text: string; match: boolean }[] {
+  const trimmed = query.trim();
+  if (!trimmed) return [{ text, match: false }];
+  const index = text.toLowerCase().indexOf(trimmed.toLowerCase());
+  if (index < 0) return [{ text, match: false }];
+  const segments: { text: string; match: boolean }[] = [];
+  if (index > 0) segments.push({ text: text.slice(0, index), match: false });
+  segments.push({ text: text.slice(index, index + trimmed.length), match: true });
+  if (index + trimmed.length < text.length) {
+    segments.push({ text: text.slice(index + trimmed.length), match: false });
+  }
+  return segments;
+}
+
+function HighlightedText({ text, query }: { text: string; query: string }) {
+  return (
+    <>
+      {splitMatchSegments(text, query).map((segment, index) =>
+        segment.match ? (
+          <b key={index} className="font-bold">
+            {segment.text}
+          </b>
+        ) : (
+          <Fragment key={index}>{segment.text}</Fragment>
+        ),
+      )}
+    </>
+  );
+}
+
+const CANDIDATE_AVATAR_CLASSES = [
+  "bg-sky-100 text-sky-700",
+  "bg-emerald-100 text-emerald-700",
+  "bg-amber-100 text-amber-700",
+  "bg-violet-100 text-violet-700",
+  "bg-rose-100 text-rose-700",
+  "bg-teal-100 text-teal-700",
+];
+
+function CandidateAvatar({ displayName }: { displayName: string }) {
+  let hash = 0;
+  for (const char of displayName) hash = (hash * 31 + (char.codePointAt(0) ?? 0)) >>> 0;
+  const colorClass = CANDIDATE_AVATAR_CLASSES[hash % CANDIDATE_AVATAR_CLASSES.length];
+  return (
+    <span
+      aria-hidden="true"
+      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold ${colorClass}`}
+    >
+      {commentAuthorInitials(displayName)}
+    </span>
   );
 }
 
@@ -3563,6 +3714,31 @@ export function activeMentionAt(
     start: beforeCursor.length - (match[2].length + 1),
     query: match[2],
   };
+}
+
+// If the text directly before `cursor` is an inserted mention token
+// ("@Display Name" with an optional trailing space), returns the index of its
+// "@" so Backspace can remove the whole token instead of breaking the display
+// name one character at a time. The longest matching name wins.
+export function mentionTokenDeletionStart(
+  text: string,
+  cursor: number,
+  displayNames: readonly string[],
+): number | null {
+  if (cursor <= 0) return null;
+  const before = text.slice(0, cursor);
+  let start: number | null = null;
+  for (const displayName of displayNames) {
+    const name = displayName.trim();
+    if (!name) continue;
+    for (const token of [`@${name} `, `@${name}`]) {
+      if (before.endsWith(token)) {
+        const tokenStart = cursor - token.length;
+        if (start === null || tokenStart < start) start = tokenStart;
+      }
+    }
+  }
+  return start;
 }
 
 function addSelectedMention(
