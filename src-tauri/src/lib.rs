@@ -37,15 +37,13 @@ use tauri::{AppHandle, Manager, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tokio::sync::{mpsc, oneshot};
 use work_items::{
-    AddWorkItemCommentInput, AssignWorkItemInput, AssignWorkItemsInput, BulkWorkItemResult,
-    DeleteWorkItemCommentInput, FetchWorkItemImageInput, GetSavedQueryInput,
-    GetWorkItemPreviewInput, ListMyWorkItemsInput, ListWorkItemFieldAllowedValuesInput,
-    ListWorkItemFieldsInput, ListWorkItemProjectsInput, ListWorkItemTypeStatesInput,
-    ListWorkItemUpdatesInput, MentionCandidate, RecordAssigneeInteractionInput,
-    RecordMentionInteractionInput, RunWorkItemQueryInput, SavedQueryResult,
-    SearchWorkItemAssigneesInput, SearchWorkItemMentionsInput, SearchWorkItemsInput,
-    SetWorkItemFieldInput, SetWorkItemPriorityInput, SetWorkItemReasonInput, SetWorkItemStateInput,
-    SetWorkItemTagsInput, SetWorkItemsPriorityInput, SetWorkItemsStateInput,
+    AddWorkItemCommentInput, AssignWorkItemsInput, BulkWorkItemResult, DeleteWorkItemCommentInput,
+    FetchWorkItemImageInput, GetSavedQueryInput, GetWorkItemPreviewInput, ListMyWorkItemsInput,
+    ListWorkItemFieldAllowedValuesInput, ListWorkItemFieldsInput, ListWorkItemProjectsInput,
+    ListWorkItemTypeStatesInput, ListWorkItemUpdatesInput, MentionCandidate,
+    RecordAssigneeInteractionInput, RecordMentionInteractionInput, RunWorkItemQueryInput,
+    SavedQueryResult, SearchWorkItemAssigneesInput, SearchWorkItemMentionsInput,
+    SearchWorkItemsInput, SetWorkItemsPriorityInput, SetWorkItemsStateInput,
     UpdateWorkItemFieldsInput, WorkItemAssigneeCandidate, WorkItemComment, WorkItemFieldOption,
     WorkItemImage, WorkItemPreview, WorkItemProjectOption, WorkItemService, WorkItemSummary,
     WorkItemUpdateSummary,
@@ -314,61 +312,11 @@ async fn delete_work_item_comment(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
-async fn assign_work_item(
-    input: AssignWorkItemInput,
-    state: State<'_, AppState>,
-) -> Result<WorkItemPreview> {
-    ensure_write_enabled(&state)?;
-    state.work_items.assign(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn set_work_item_state(
-    input: SetWorkItemStateInput,
-    state: State<'_, AppState>,
-) -> Result<WorkItemPreview> {
-    ensure_write_enabled(&state)?;
-    state.work_items.set_state(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn set_work_item_reason(
-    input: SetWorkItemReasonInput,
-    state: State<'_, AppState>,
-) -> Result<WorkItemPreview> {
-    ensure_write_enabled(&state)?;
-    state.work_items.set_reason(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn set_work_item_priority(
-    input: SetWorkItemPriorityInput,
-    state: State<'_, AppState>,
-) -> Result<WorkItemPreview> {
-    ensure_write_enabled(&state)?;
-    state.work_items.set_priority(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
 async fn list_work_item_updates(
     input: ListWorkItemUpdatesInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkItemUpdateSummary>> {
     state.work_items.list_updates(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn set_work_item_tags(
-    input: SetWorkItemTagsInput,
-    state: State<'_, AppState>,
-) -> Result<WorkItemPreview> {
-    ensure_write_enabled(&state)?;
-    state.work_items.set_tags(input).await
 }
 
 #[tauri::command]
@@ -399,16 +347,6 @@ async fn set_work_items_priority(
 ) -> Result<Vec<BulkWorkItemResult>> {
     ensure_write_enabled(&state)?;
     state.work_items.set_items_priority(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn set_work_item_field(
-    input: SetWorkItemFieldInput,
-    state: State<'_, AppState>,
-) -> Result<WorkItemPreview> {
-    ensure_write_enabled(&state)?;
-    state.work_items.set_field(input).await
 }
 
 #[tauri::command]
@@ -590,12 +528,6 @@ pub fn run() {
             fetch_work_item_image,
             add_work_item_comment,
             delete_work_item_comment,
-            assign_work_item,
-            set_work_item_state,
-            set_work_item_reason,
-            set_work_item_priority,
-            set_work_item_tags,
-            set_work_item_field,
             update_work_item_fields,
             list_work_item_updates,
             list_work_item_field_allowed_values,

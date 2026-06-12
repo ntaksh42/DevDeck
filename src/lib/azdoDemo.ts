@@ -3,7 +3,6 @@ import type {
   AddPatOrganizationInput,
   AddWorkItemCommentInput,
   AppSettings,
-  AssignWorkItemInput,
   AssignWorkItemsInput,
   CommitRepositoryOption,
   CommitSummary,
@@ -26,16 +25,11 @@ import type {
   SearchPullRequestsInput,
   SearchWorkItemMentionsInput,
   SearchWorkItemsInput,
-  SetWorkItemFieldInput,
-  SetWorkItemTagsInput,
   UpdateWorkItemFieldsInput,
   ListWorkItemFieldAllowedValuesInput,
-  SetWorkItemReasonInput,
-  SetWorkItemPriorityInput,
   SetWorkItemsPriorityInput,
   SetWorkItemsStateInput,
   SyncState,
-  SetWorkItemStateInput,
   UpdateAppSettingsInput,
   WorkItemComment,
   WorkItemAssigneeCandidate,
@@ -102,12 +96,6 @@ let demoSyncStates: SyncState[] = [
 const writeCommands = new Set([
   "add_work_item_comment",
   "delete_work_item_comment",
-  "assign_work_item",
-  "set_work_item_state",
-  "set_work_item_reason",
-  "set_work_item_priority",
-  "set_work_item_field",
-  "set_work_item_tags",
   "update_work_item_fields",
   "set_work_items_state",
   "assign_work_items",
@@ -275,34 +263,6 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         ?.input;
       if (input) deletedDemoWorkItemComments.add(input.commentId);
       return null;
-    }
-    case "assign_work_item": {
-      const input = (args as { input?: AssignWorkItemInput } | undefined)
-        ?.input;
-      return demoAssignWorkItem(input);
-    }
-    case "set_work_item_state": {
-      const input = (args as { input?: SetWorkItemStateInput } | undefined)
-        ?.input;
-      return demoSetWorkItemState(input);
-    }
-    case "set_work_item_reason": {
-      const input = (args as { input?: SetWorkItemReasonInput } | undefined)
-        ?.input;
-      return demoSetWorkItemReason(input);
-    }
-    case "set_work_item_priority": {
-      const input = (args as { input?: SetWorkItemPriorityInput } | undefined)
-        ?.input;
-      return demoSetWorkItemPriority(input);
-    }
-    case "set_work_item_field": {
-      const input = (args as { input?: SetWorkItemFieldInput } | undefined)?.input;
-      return demoSetWorkItemField(input);
-    }
-    case "set_work_item_tags": {
-      const input = (args as { input?: SetWorkItemTagsInput } | undefined)?.input;
-      return demoSetWorkItemTags(input);
     }
     case "update_work_item_fields": {
       const input = (args as { input?: UpdateWorkItemFieldsInput } | undefined)?.input;
@@ -877,42 +837,6 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
   });
 }
 
-function demoAssignWorkItem(input?: AssignWorkItemInput): WorkItemPreview {
-  const preview = demoWorkItemPreview(
-    input
-      ? {
-          organizationId: input.organizationId,
-          projectId: input.projectId,
-          workItemId: input.workItemId,
-        }
-      : undefined,
-  );
-  const assignee = input?.assignedTo?.trim();
-  if (!assignee) return preview;
-  const person = demoMentionPeople.find(
-    (candidate) =>
-      candidate.uniqueName?.toLowerCase() === assignee.toLowerCase() ||
-      candidate.displayName.toLowerCase() === assignee.toLowerCase() ||
-      `${candidate.displayName} <${candidate.uniqueName}>`.toLowerCase() ===
-        assignee.toLowerCase(),
-  );
-  return {
-    ...preview,
-    assignedTo: person?.displayName ?? assignee,
-    changedDate: new Date().toISOString(),
-  };
-}
-
-function demoSetWorkItemState(input?: SetWorkItemStateInput): WorkItemPreview {
-  const preview = demoWorkItemPreview(
-    input
-      ? { organizationId: input.organizationId, projectId: input.projectId, workItemId: input.workItemId }
-      : undefined,
-  );
-  if (!input?.state?.trim()) return preview;
-  return { ...preview, state: input.state.trim(), changedDate: new Date().toISOString() };
-}
-
 function demoUpdateWorkItemFields(input?: UpdateWorkItemFieldsInput): WorkItemPreview {
   let preview = demoWorkItemPreview(
     input
@@ -935,40 +859,6 @@ function demoUpdateWorkItemFields(input?: UpdateWorkItemFieldsInput): WorkItemPr
     }
   }
   return { ...preview, changedDate: new Date().toISOString() };
-}
-
-function demoSetWorkItemReason(input?: SetWorkItemReasonInput): WorkItemPreview {
-  const preview = demoWorkItemPreview(
-    input
-      ? { organizationId: input.organizationId, projectId: input.projectId, workItemId: input.workItemId }
-      : undefined,
-  );
-  if (!input?.reason?.trim()) return preview;
-  return { ...preview, reason: input.reason.trim(), changedDate: new Date().toISOString() };
-}
-
-function demoSetWorkItemField(input?: SetWorkItemFieldInput): WorkItemPreview {
-  const preview = demoWorkItemPreview(
-    input
-      ? {
-          organizationId: input.organizationId,
-          projectId: input.projectId,
-          workItemId: input.workItemId,
-          customFields: [input.fieldReferenceName],
-        }
-      : undefined,
-  );
-  const referenceName = input?.fieldReferenceName?.trim();
-  const value = input?.value?.trim();
-  if (!referenceName || !value) return preview;
-  const others = preview.customFields.filter(
-    (field) => field.referenceName.toLowerCase() !== referenceName.toLowerCase(),
-  );
-  return {
-    ...preview,
-    changedDate: new Date().toISOString(),
-    customFields: [...others, { referenceName, value }],
-  };
 }
 
 function demoListWorkItemFieldAllowedValues(
@@ -1020,42 +910,6 @@ function demoWorkItemUpdates(): WorkItemUpdateSummary[] {
       ],
     },
   ];
-}
-
-function demoSetWorkItemTags(input?: SetWorkItemTagsInput): WorkItemPreview {
-  const preview = demoWorkItemPreview(
-    input
-      ? {
-          organizationId: input.organizationId,
-          projectId: input.projectId,
-          workItemId: input.workItemId,
-        }
-      : undefined,
-  );
-  if (!input) return preview;
-  return {
-    ...preview,
-    changedDate: new Date().toISOString(),
-    tags: input.tags.map((tag) => tag.trim()).filter(Boolean).join("; ") || null,
-  };
-}
-
-function demoSetWorkItemPriority(input?: SetWorkItemPriorityInput): WorkItemPreview {
-  const preview = demoWorkItemPreview(
-    input
-      ? {
-          organizationId: input.organizationId,
-          projectId: input.projectId,
-          workItemId: input.workItemId,
-        }
-      : undefined,
-  );
-  if (!input?.priority) return preview;
-  return {
-    ...preview,
-    changedDate: new Date().toISOString(),
-    priority: String(input.priority),
-  };
 }
 
 const DEMO_STATES_BY_TYPE: Record<string, string[]> = {

@@ -148,10 +148,10 @@ caches the bearer token in memory for five minutes.
 
 ## Frontend Conventions
 
-The UI uses React, TanStack Query, Tailwind, and shadcn/ui components under
-`src/components/ui/`. Prefer the existing feature structure under `src/features`
-for new work. Keep command calls behind `src/lib/azdoCommands.ts`; components
-should not call Tauri IPC directly.
+The UI uses React, TanStack Query, Tailwind, and hand-rolled shared components
+under `src/components/`. Prefer the existing feature structure under
+`src/features` for new work. Keep command calls behind `src/lib/azdoCommands.ts`;
+components should not call Tauri IPC directly.
 
 Server state should go through TanStack Query. When a backend mutation changes
 data already shown on screen, update or invalidate the relevant query keys
@@ -164,8 +164,8 @@ filters, and comment editors.
 
 Prefer dense, work-focused screens. Avoid large unused panels and decorative
 spacing in operational views; use available height for grids, previews,
-comments, and relevant metadata. Long lists should be virtualized with
-`@tanstack/react-virtual` or an existing local pattern instead of rendering all
+comments, and relevant metadata. Long lists should be virtualized with the
+existing local windowing pattern used by the grids instead of rendering all
 rows.
 
 When rendering Azure DevOps rich text, sanitize and normalize the HTML before

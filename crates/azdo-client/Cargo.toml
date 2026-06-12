@@ -20,4 +20,3 @@ base64 = "0.22"
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }
 wiremock = "0.6"
-pretty_assertions = "1"

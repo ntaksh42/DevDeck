@@ -6,7 +6,7 @@ import {
 import { GripVertical } from "lucide-react";
 import { clamp } from "@/lib/utils";
 
-export function beginHorizontalResize(
+function beginHorizontalResize(
   event: ReactPointerEvent,
   options: {
     value: number;

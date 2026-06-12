@@ -24,7 +24,6 @@ import {
   RefreshCw,
   Settings,
 } from "lucide-react";
-import { Route, Routes } from "react-router-dom";
 import {
   commandErrorMessage,
   getAppSettings,
@@ -49,7 +48,6 @@ import { ResizeHandle } from "@/components/ResizeHandle";
 import { LoadingState, ErrorState } from "@/components/StateDisplay";
 import { NavButton, NavSection, NavSubItem } from "@/components/Nav";
 import { HelpDialog } from "@/components/HelpDialog";
-import { UserGuideDialog } from "@/components/UserGuideDialog";
 import {
   CommandPalette,
   type CommandPaletteAction,
@@ -221,7 +219,6 @@ function AppShell() {
   const [view, setView] = useState<View>("myReviews");
   const [helpOpen, setHelpOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [userGuideOpen, setUserGuideOpen] = useState(false);
   const [navExpanded, setNavExpanded] = useState<Record<NavSectionId, boolean>>({
     pullRequests: true,
     workItems: true,
@@ -474,7 +471,6 @@ function AppShell() {
           }
         : undefined,
     }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [commandPaletteOpen, debouncedPaletteSearchText, organizations.length]);
 
   function closeCommandPalette(): void {
@@ -716,6 +712,18 @@ function AppShell() {
       label: "Change selected work item priority",
       run: () => dispatchWorkItemCommand("open-priority"),
       shortcut: "P",
+    },
+    {
+      disabled:
+        activeView !== "myWorkItems" &&
+        activeView !== "workItems" &&
+        activeView !== "workItemViews",
+      group: "Work Items",
+      id: "wi.customField",
+      keywords: ["custom", "field", "edit"],
+      label: "Change selected work item custom field",
+      run: () => dispatchWorkItemCommand("open-field"),
+      shortcut: "F",
     },
     {
       disabled:
@@ -1018,7 +1026,6 @@ function AppShell() {
         }
         setHelpOpen(false);
         closeCommandPalette();
-        setUserGuideOpen(false);
         return;
       }
 
@@ -1251,14 +1258,14 @@ function AppShell() {
                 disabled={syncMutation.isPending}
                 onClick={() => syncMutation.mutate({ scope: "all" })}
                 aria-keyshortcuts="Alt+S"
-                className="flex items-center gap-1.5 rounded-md border border-border bg-white px-3 py-1 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+                aria-label="Sync now"
+                className="flex items-center rounded-md border border-border bg-white p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
                 title="Sync now"
               >
                 <RefreshCw
                   className={`h-4 w-4 ${syncMutation.isPending ? "animate-spin" : ""}`}
                   aria-hidden="true"
                 />
-                Sync
               </button>
             </div>
           )}
@@ -1330,18 +1337,13 @@ function AppShell() {
           }
         />
       )}
-      {userGuideOpen && <UserGuideDialog onClose={() => setUserGuideOpen(false)} />}
     </div>
   );
 }
 
 
 function App() {
-  return (
-    <Routes>
-      <Route path="/" element={<AppShell />} />
-    </Routes>
-  );
+  return <AppShell />;
 }
 
 export default App;

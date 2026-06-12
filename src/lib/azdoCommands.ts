@@ -155,8 +155,6 @@ const workItemRelationSchema = z.object({
   webUrl: z.string().nullable(),
 });
 
-export type WorkItemRelation = z.infer<typeof workItemRelationSchema>;
-
 const workItemPreviewSchema = z.object({
   organizationId: z.string(),
   projectId: z.string(),
@@ -298,8 +296,6 @@ export const syncUpdatedEventSchema = z.object({
   scopes: z.array(syncScopeSchema),
 });
 
-export type SyncUpdatedEvent = z.infer<typeof syncUpdatedEventSchema>;
-
 export type AddPatOrganizationInput = {
   organization: string;
   pat: string;
@@ -399,14 +395,6 @@ export type SearchWorkItemAssigneesInput = {
   query: string;
 };
 
-export type SetWorkItemFieldInput = {
-  organizationId?: string;
-  projectId: string;
-  workItemId: number;
-  fieldReferenceName: string;
-  value: string;
-};
-
 export type WorkItemFieldValueInput = {
   referenceName: string;
   value: string;
@@ -417,13 +405,6 @@ export type UpdateWorkItemFieldsInput = {
   projectId: string;
   workItemId: number;
   fields: WorkItemFieldValueInput[];
-};
-
-export type SetWorkItemTagsInput = {
-  organizationId?: string;
-  projectId: string;
-  workItemId: number;
-  tags: string[];
 };
 
 export type ListWorkItemUpdatesInput = {
@@ -456,34 +437,6 @@ export type DeleteWorkItemCommentInput = {
   projectId: string;
   workItemId: number;
   commentId: number;
-};
-
-export type AssignWorkItemInput = {
-  organizationId?: string;
-  projectId: string;
-  workItemId: number;
-  assignedTo: string;
-};
-
-export type SetWorkItemStateInput = {
-  organizationId?: string;
-  projectId: string;
-  workItemId: number;
-  state: string;
-};
-
-export type SetWorkItemReasonInput = {
-  organizationId?: string;
-  projectId: string;
-  workItemId: number;
-  reason: string;
-};
-
-export type SetWorkItemPriorityInput = {
-  organizationId?: string;
-  projectId: string;
-  workItemId: number;
-  priority: number;
 };
 
 export type ListWorkItemTypeStatesInput = {
@@ -709,52 +662,10 @@ export async function deleteWorkItemComment(
   await invokeCommand("delete_work_item_comment", { input });
 }
 
-export async function assignWorkItem(
-  input: AssignWorkItemInput,
-): Promise<WorkItemPreview> {
-  const result = await invokeCommand("assign_work_item", { input });
-  return workItemPreviewSchema.parse(result);
-}
-
-export async function setWorkItemState(
-  input: SetWorkItemStateInput,
-): Promise<WorkItemPreview> {
-  const result = await invokeCommand("set_work_item_state", { input });
-  return workItemPreviewSchema.parse(result);
-}
-
-export async function setWorkItemReason(
-  input: SetWorkItemReasonInput,
-): Promise<WorkItemPreview> {
-  const result = await invokeCommand("set_work_item_reason", { input });
-  return workItemPreviewSchema.parse(result);
-}
-
-export async function setWorkItemPriority(
-  input: SetWorkItemPriorityInput,
-): Promise<WorkItemPreview> {
-  const result = await invokeCommand("set_work_item_priority", { input });
-  return workItemPreviewSchema.parse(result);
-}
-
-export async function setWorkItemField(
-  input: SetWorkItemFieldInput,
-): Promise<WorkItemPreview> {
-  const result = await invokeCommand("set_work_item_field", { input });
-  return workItemPreviewSchema.parse(result);
-}
-
 export async function updateWorkItemFields(
   input: UpdateWorkItemFieldsInput,
 ): Promise<WorkItemPreview> {
   const result = await invokeCommand("update_work_item_fields", { input });
-  return workItemPreviewSchema.parse(result);
-}
-
-export async function setWorkItemTags(
-  input: SetWorkItemTagsInput,
-): Promise<WorkItemPreview> {
-  const result = await invokeCommand("set_work_item_tags", { input });
   return workItemPreviewSchema.parse(result);
 }
 

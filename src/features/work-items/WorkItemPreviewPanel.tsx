@@ -61,7 +61,6 @@ import {
   type WorkItemFieldPreset,
   type WorkItemFieldPresetField,
 } from './fieldPresetsStorage';
-const SAVED_REPLIES_STORAGE_KEY = "azdodeck:workItems:savedReplies";
 
 type StagedChanges = {
   state?: string;
@@ -215,19 +214,6 @@ const PREVIEW_FIELD_DEFINITIONS: PreviewFieldDefinition[] = [
   { key: "changedDate", label: "Changed" },
 ];
 
-function loadSavedReplies(): string[] {
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(SAVED_REPLIES_STORAGE_KEY) ?? "[]");
-    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-function storeSavedReplies(replies: string[]) {
-  window.localStorage.setItem(SAVED_REPLIES_STORAGE_KEY, JSON.stringify(replies.slice(0, 20)));
-}
-
 function stopPreviewNavigationKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
   if (
     event.key === 'ArrowDown' ||
@@ -248,6 +234,7 @@ export function WorkItemPreviewPanel({
   customPreviewFields,
   focusCommentRequest,
   openAssigneeRequest,
+  openFieldRequest,
   openPriorityRequest,
   openStateRequest,
   onCustomPreviewFieldsChange,
@@ -260,6 +247,7 @@ export function WorkItemPreviewPanel({
   customPreviewFields: CustomPreviewField[];
   focusCommentRequest?: number;
   openAssigneeRequest?: number;
+  openFieldRequest?: number;
   openPriorityRequest?: number;
   openStateRequest?: number;
   onCustomPreviewFieldsChange: (fields: CustomPreviewField[]) => void;
@@ -284,6 +272,7 @@ export function WorkItemPreviewPanel({
   const [priorityPickerOpen, setPriorityPickerOpen] = useState(false);
   const [customFieldEditor, setCustomFieldEditor] = useState<string | null>(null);
   const handledOpenAssigneeRequest = useRef(0);
+  const handledOpenFieldRequest = useRef(0);
   const handledOpenPriorityRequest = useRef(0);
   const handledOpenStateRequest = useRef(0);
 
@@ -822,6 +811,31 @@ export function WorkItemPreviewPanel({
     setCustomFieldEditor(null);
   }
 
+  // F opens the first custom field's picker; pressing F again moves to the
+  // next one, wrapping, so every custom field stays reachable from the keyboard.
+  function openNextCustomField() {
+    if (!selectedItem || customPreviewFields.length === 0) return;
+    const currentIndex = customPreviewFields.findIndex(
+      (field) => field.referenceName === customFieldEditor,
+    );
+    const next = customPreviewFields[(currentIndex + 1) % customPreviewFields.length];
+    setAssigneeOpen(false);
+    setStatePickerOpen(false);
+    setReasonEditorOpen(false);
+    setPriorityPickerOpen(false);
+    setCustomFieldEditor(next.referenceName);
+  }
+  const openNextCustomFieldRef = useRef<() => void>(() => {});
+  openNextCustomFieldRef.current = openNextCustomField;
+
+  useEffect(() => {
+    if (!openFieldRequest || handledOpenFieldRequest.current === openFieldRequest) {
+      return;
+    }
+    handledOpenFieldRequest.current = openFieldRequest;
+    openNextCustomFieldRef.current();
+  }, [openFieldRequest]);
+
   useEffect(() => {
     function openState() {
       if (!selectedItem) return;
@@ -845,13 +859,18 @@ export function WorkItemPreviewPanel({
       setReasonEditorOpen(false);
       setStatePickerOpen(false);
     }
+    function openField() {
+      openNextCustomFieldRef.current();
+    }
     window.addEventListener("azdodeck:work-items:open-state", openState);
     window.addEventListener("azdodeck:work-items:open-assignee", openAssignee);
     window.addEventListener("azdodeck:work-items:open-priority", openPriority);
+    window.addEventListener("azdodeck:work-items:open-field", openField);
     return () => {
       window.removeEventListener("azdodeck:work-items:open-state", openState);
       window.removeEventListener("azdodeck:work-items:open-assignee", openAssignee);
       window.removeEventListener("azdodeck:work-items:open-priority", openPriority);
+      window.removeEventListener("azdodeck:work-items:open-field", openField);
     };
   }, [selectedItem]);
 
@@ -946,6 +965,9 @@ export function WorkItemPreviewPanel({
       setAssigneeOpen(false);
       setStatePickerOpen(false);
       setPriorityPickerOpen(false);
+    } else if (event.key === "f" || event.key === "F") {
+      event.preventDefault();
+      openNextCustomField();
     } else if (event.key === "m" || event.key === "M") {
       event.preventDefault();
       focusWorkItemCommentInput();
@@ -1110,6 +1132,7 @@ export function WorkItemPreviewPanel({
                 renderCustomFieldControl={(field) => (
                   <CustomFieldPicker
                     label={field.label}
+                    shortcut="F"
                     current={
                       staged.fields?.[field.referenceName]?.value ??
                       customPreviewFieldValue(preview, field.referenceName)
@@ -1232,7 +1255,6 @@ function CommentComposer({
 }) {
   const queryClient = useQueryClient();
   const [commentText, setCommentText] = useState("");
-  const [savedReplies, setSavedReplies] = useState<string[]>(() => loadSavedReplies());
   const [selectedMentions, setSelectedMentions] = useState<SelectedMention[]>([]);
   const mentionsToRecordRef = useRef<
     Array<{ id: string; displayName: string; uniqueName: string; organizationId: string }>
@@ -1404,14 +1426,6 @@ function CommentComposer({
     });
   }
 
-  function saveCurrentReply() {
-    const reply = commentText.trim();
-    if (!reply) return;
-    const next = [reply, ...savedReplies.filter((value) => value !== reply)].slice(0, 20);
-    setSavedReplies(next);
-    storeSavedReplies(next);
-  }
-
   function handleCommentKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
       event.preventDefault();
@@ -1543,54 +1557,23 @@ function CommentComposer({
             {commandErrorMessage(commentMutation.error)}
           </p>
         ) : null}
-        <div className="flex flex-wrap items-center justify-between gap-1.5">
-          <div className="flex items-center gap-1">
-            {savedReplies.length > 0 ? (
-              <select
-                aria-label="Saved replies"
-                value=""
-                onChange={(event) => {
-                  if (!event.target.value) return;
-                  setCommentText(event.target.value);
-                  event.target.value = "";
-                }}
-                className="h-6 rounded border border-input bg-white px-1 text-xs"
-              >
-                <option value="">Saved replies</option>
-                {savedReplies.map((reply, index) => (
-                  <option key={`${index}:${reply}`} value={reply}>
-                    {reply.slice(0, 60)}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            <button
-              type="button"
-              disabled={!commentText.trim()}
-              onClick={saveCurrentReply}
-              className="h-6 rounded border border-border bg-white px-2 text-xs hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Save reply
-            </button>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {commentMutation.isSuccess ? (
-              <span className="text-xs text-muted-foreground">Comment posted</span>
-            ) : null}
-            <button
-              type="submit"
-              aria-label="Post comment"
-              disabled={!commentText.trim() || commentMutation.isPending}
-              className="inline-flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {commentMutation.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-              ) : (
-                <Send className="h-3.5 w-3.5" aria-hidden="true" />
-              )}
-              Post
-            </button>
-          </div>
+        <div className="flex items-center justify-end gap-1.5">
+          {commentMutation.isSuccess ? (
+            <span className="text-xs text-muted-foreground">Comment posted</span>
+          ) : null}
+          <button
+            type="submit"
+            aria-label="Post comment"
+            title="Post comment (Ctrl+Enter)"
+            disabled={!commentText.trim() || commentMutation.isPending}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {commentMutation.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <Send className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+          </button>
         </div>
       </form>
     </div>
@@ -3175,6 +3158,7 @@ function CustomFieldPicker({
   open,
   options,
   pending,
+  shortcut,
 }: {
   current: string | null;
   error?: string | null;
@@ -3185,6 +3169,7 @@ function CustomFieldPicker({
   open: boolean;
   options: string[];
   pending: boolean;
+  shortcut?: string;
 }) {
   const pickerRef = useCloseOnOutsidePointer<HTMLDivElement>(open, () =>
     onOpenChange(false),
@@ -3209,6 +3194,7 @@ function CustomFieldPicker({
           ref={triggerRef}
           type="button"
           aria-label={`Change ${label}`}
+          aria-keyshortcuts={shortcut}
           disabled={pending}
           onClick={() => onOpenChange(!open)}
           className="max-w-full truncate rounded px-1 text-left text-[12px] font-semibold leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
@@ -4125,7 +4111,7 @@ function addSelectedMention(
 const MENTION_RESOLVABLE_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export function isMentionResolvableId(id: string): boolean {
+function isMentionResolvableId(id: string): boolean {
   return MENTION_RESOLVABLE_ID_PATTERN.test(id);
 }
 

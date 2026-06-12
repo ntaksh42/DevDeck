@@ -4,6 +4,39 @@ All notable changes to AzDoDeck are documented here.
 
 ## [Unreleased]
 
+### Added
+- Custom fields shown in the work item preview can now be edited from the keyboard: `F` opens the first custom field's value picker and pressing it again moves to the next one. Also available as "Change selected work item custom field" in the command palette.
+- Field presets: save pending work item changes under a name and re-stage them later with the digit shortcuts shown in the preview panel.
+
+### Changed
+- **Startup and rendering performance.** Views other than the default My Reviews grid are code-split and lazy-loaded; the comment composer no longer re-renders with the preview panel; only the newest work item comments mount by default; neighbor preview prefetch waits until the selection settles; and the post-apply preview is served straight from the mutation response instead of a refetch.
+- **Less backend traffic.** Active pull requests sync per project instead of per repository, the organization project directory is cached with a short TTL, work item attachment images are cached in the frontend, and mention/assignee candidates derived from work item updates are cached.
+
+### Fixed
+- The keyboard shortcut help now lists the actual My Reviews vote filter tabs (No Vote / Waiting Author / Approved / All).
+
+### Changed
+- Decluttered chrome: the header Sync button and the comment Post button are icon-only (hover for the tooltip), and the inline `F1` / `Alt+,` / `Alt+G` / `Alt+P` shortcut chips are gone — `?` still opens the full shortcut reference.
+
+### Removed
+- Saved replies for work item comments (the "Save reply" button and the saved-replies dropdown).
+- The unreachable embedded HTML user guide dialog (the sidebar Help button has opened the keyboard shortcut reference for a while) and the unused per-field work item update commands that were superseded by the single JSON Patch apply in 0.1.15.
+
+## [0.1.15] — 2026-06-12
+
+### Added
+- **Staged work item editing.** Property changes (state, assignee, priority, custom fields) are staged locally and applied together with `Ctrl+S` as a single JSON Patch request, so transition rules see the whole change set at once. `Ctrl+Enter` posts a comment and applies pending changes in one step, and an apply can be undone for 10 seconds with `U`.
+- Linear-style `G` key chains for view navigation (`G` then `R/P/W/I/V/C/S`).
+- Local done/archive triage (`E`) for My Reviews and My Work Items rows.
+- Command palette search covers every configured organization, and an empty query lists recently opened items.
+- My Reviews rows are grouped into reviewer-action sections and show merge-conflict badges.
+
+### Changed
+- The pending/applied banners became a compact chip inline in the preview header row.
+- Preview panes can be resized without the previous practical width cap.
+- Mention and assignee candidate search is scoped to the organization, with usability improvements for both pickers.
+- Horizontal grid scrollbars are hidden.
+
 ## [0.1.14] — 2026-06-11
 
 ### Added
@@ -106,16 +139,12 @@ All notable changes to AzDoDeck are documented here.
 ### Added
 - GitHub Release workflow publishes Windows x64 NSIS and MSI installers.
 - Demo harness scenarios for rich text, large data, empty data, slow network, and API errors.
-
-### Changed
-- Work Item preview and PR list rendering hardened for large datasets and Azure DevOps rich text.
-- Windows installer WebView2 bootstrapper handling is explicit in Tauri configuration and documentation.
-
-### Added
 - Help menu with embedded HTML user guide (sidebar button)
 - Work Item preview panel shows posted comments
 
 ### Changed
+- Work Item preview and PR list rendering hardened for large datasets and Azure DevOps rich text.
+- Windows installer WebView2 bootstrapper handling is explicit in Tauri configuration and documentation.
 - Compact Work Item filter bar with denser grid columns
 - Work Item preview panel collapsed to single compact header: badges and title shown immediately on row selection; iframe drops duplicate h1, tighter CSS spacing, comment count in section heading
 

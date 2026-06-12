@@ -34,7 +34,6 @@ import {
 } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
 import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
-import { ShortcutHint } from '@/components/ShortcutHint';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { LoadingState, ErrorState, PreviewEmptyState } from '@/components/StateDisplay';
 
@@ -1203,7 +1202,6 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
                   </button>
                 </>
               ) : null}
-              <ShortcutHint>Alt+G</ShortcutHint>
             </span>
           </div>
         </div>
@@ -1373,9 +1371,7 @@ function ReviewResultPreviewPanel({
         </div>
         {previewLoading ? (
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
-        ) : (
-          <ShortcutHint>Alt+P</ShortcutHint>
-        )}
+        ) : null}
       </div>
 
       {settingsLoading ? (
