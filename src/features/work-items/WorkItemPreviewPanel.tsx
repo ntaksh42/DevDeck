@@ -594,7 +594,7 @@ export function WorkItemPreviewPanel({
   }
 
   function savePresetFromStaged(name: string) {
-    const fields = presetFieldsFromStaged(staged);
+    const fields = presetFieldsFromStaged(stagedRef.current);
     if (fields.length === 0) return;
     const preset: WorkItemFieldPreset = {
       id: `preset-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,

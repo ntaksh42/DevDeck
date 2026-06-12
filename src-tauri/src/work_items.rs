@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use azdo_client::{
     AdoClient, AdoError, Identity, IdentityPickerIdentity, WorkItem,
@@ -9,6 +11,7 @@ use base64::Engine;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tokio::sync::Mutex;
 
 use crate::auth::client_for_organization;
 use crate::commits::encode_path_segment;
@@ -414,7 +417,7 @@ pub struct MentionCandidate {
     pub unique_name: Option<String>,
 }
 
-#[derive(Debug, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkItemAssigneeCandidate {
     pub id: String,
@@ -435,11 +438,21 @@ pub struct WorkItemComment {
     pub created_date: Option<String>,
 }
 
+const UPDATE_CANDIDATES_TTL: Duration = Duration::from_secs(60);
+const UPDATE_CANDIDATES_CACHE_CAP: usize = 200;
+
+// People recently involved in a work item, derived from its update history.
+// Mention and assignee search both need them for every (debounced) keystroke,
+// while the underlying updates change rarely — cache them briefly per item.
+type UpdateCandidatesCache =
+    Arc<Mutex<HashMap<(String, String, i64), (Instant, Vec<WorkItemAssigneeCandidate>)>>>;
+
 #[derive(Debug, Clone)]
 pub struct WorkItemService {
     db: AppDatabase,
     secrets: SecretStore,
     projects: ProjectDirectory,
+    update_candidates: UpdateCandidatesCache,
 }
 
 impl WorkItemService {
@@ -448,7 +461,33 @@ impl WorkItemService {
             db,
             secrets,
             projects: ProjectDirectory::new(),
+            update_candidates: UpdateCandidatesCache::default(),
         }
+    }
+
+    async fn update_candidates(
+        &self,
+        client: &AdoClient,
+        org_id: &str,
+        project_id: &str,
+        work_item_id: i64,
+    ) -> Result<Vec<WorkItemAssigneeCandidate>> {
+        let key = (org_id.to_string(), project_id.to_string(), work_item_id);
+        let mut cache = self.update_candidates.lock().await;
+        if let Some((fetched_at, candidates)) = cache.get(&key) {
+            if fetched_at.elapsed() < UPDATE_CANDIDATES_TTL {
+                return Ok(candidates.clone());
+            }
+        }
+        let updates = client
+            .list_work_item_updates(project_id, work_item_id, 50)
+            .await?;
+        let candidates = assignee_candidates_from_updates(updates);
+        if cache.len() >= UPDATE_CANDIDATES_CACHE_CAP {
+            cache.clear();
+        }
+        cache.insert(key, (Instant::now(), candidates.clone()));
+        Ok(candidates)
     }
 
     pub fn search(&self, input: SearchWorkItemsInput) -> Result<Vec<WorkItemSummary>> {
@@ -757,12 +796,17 @@ impl WorkItemService {
         let client = client_for_organization(&organization, &self.secrets)?;
         let mut candidates = Vec::new();
 
-        match client
-            .list_work_item_updates(&input.project_id, input.work_item_id, 50)
+        match self
+            .update_candidates(
+                &client,
+                &organization.id,
+                &input.project_id,
+                input.work_item_id,
+            )
             .await
         {
-            Ok(updates) => {
-                for candidate in assignee_candidates_from_updates(updates)
+            Ok(update_candidates) => {
+                for candidate in update_candidates
                     .into_iter()
                     .map(mention_candidate_from_assignee)
                 {
@@ -839,12 +883,17 @@ impl WorkItemService {
         let client = client_for_organization(&organization, &self.secrets)?;
         let mut candidates = Vec::new();
 
-        match client
-            .list_work_item_updates(&input.project_id, input.work_item_id, 50)
+        match self
+            .update_candidates(
+                &client,
+                &organization.id,
+                &input.project_id,
+                input.work_item_id,
+            )
             .await
         {
-            Ok(updates) => {
-                for candidate in assignee_candidates_from_updates(updates) {
+            Ok(update_candidates) => {
+                for candidate in update_candidates {
                     push_unique_assignee_candidate(&mut candidates, candidate);
                 }
             }
@@ -2798,6 +2847,47 @@ mod tests {
         AdoClient::new("contoso", Arc::new(PatProvider::new("test-pat")))
             .unwrap()
             .with_base_url(base_url)
+    }
+
+    #[tokio::test]
+    async fn update_candidates_are_cached_per_work_item() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/p1/_apis/wit/workItems/42/updates"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "count": 1,
+                "value": [{
+                    "revisedBy": {
+                        "id": "alice-id",
+                        "displayName": "Alice",
+                        "uniqueName": "alice@corp.com"
+                    },
+                    "fields": {}
+                }]
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let db_file = tempfile::NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(db_file.path().to_path_buf());
+        db.initialize().unwrap();
+        let service = WorkItemService::new(db, SecretStore);
+        let client = test_client(&server).await;
+
+        let first = service
+            .update_candidates(&client, "contoso", "p1", 42)
+            .await
+            .unwrap();
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].display_name, "Alice");
+
+        // Second lookup within the TTL is served from cache (expect(1) above).
+        let second = service
+            .update_candidates(&client, "contoso", "p1", 42)
+            .await
+            .unwrap();
+        assert_eq!(first, second);
     }
 
     fn make_org_draft() -> OrganizationDraft {
