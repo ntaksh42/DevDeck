@@ -127,6 +127,28 @@ impl AdoClient {
         Ok(response.value)
     }
 
+    /// Lists pull requests across every repository of a project in one call.
+    pub async fn list_project_pull_requests(
+        &self,
+        project_id: &str,
+        status: PullRequestStatus,
+        top: u32,
+    ) -> Result<Vec<GitPullRequest>> {
+        let path = format!("{project_id}/_apis/git/pullrequests");
+        let top_str = top.to_string();
+        let response: ListResponse<GitPullRequest> = self
+            .get_json(
+                &path,
+                &[
+                    ("api-version", "7.1-preview"),
+                    ("searchCriteria.status", status.as_query_value()),
+                    ("$top", &top_str),
+                ],
+            )
+            .await?;
+        Ok(response.value)
+    }
+
     pub async fn list_pull_requests_by_reviewer(
         &self,
         project_id: &str,
@@ -298,6 +320,58 @@ mod tests {
             prs[0].links.as_ref().unwrap().web.as_ref().unwrap().href,
             "https://dev.azure.com/testorg/project/_git/repo/pullrequest/42"
         );
+    }
+
+    #[tokio::test]
+    async fn list_project_pull_requests_spans_repositories() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/git/pullrequests"))
+            .and(query_param("api-version", "7.1-preview"))
+            .and(query_param("searchCriteria.status", "active"))
+            .and(query_param("$top", "500"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 2,
+                "value": [
+                    {
+                        "pullRequestId": 42,
+                        "title": "Add dashboard",
+                        "status": "active",
+                        "creationDate": "2026-05-24T00:00:00Z",
+                        "repository": {
+                            "id": "repo-1",
+                            "name": "dashboard",
+                            "project": { "id": "project-1", "name": "Platform" }
+                        },
+                        "sourceRefName": "refs/heads/feature/dashboard",
+                        "targetRefName": "refs/heads/main"
+                    },
+                    {
+                        "pullRequestId": 43,
+                        "title": "Fix tooling",
+                        "status": "active",
+                        "creationDate": "2026-05-25T00:00:00Z",
+                        "repository": {
+                            "id": "repo-2",
+                            "name": "tools",
+                            "project": { "id": "project-1", "name": "Platform" }
+                        },
+                        "sourceRefName": "refs/heads/fix/tooling",
+                        "targetRefName": "refs/heads/main"
+                    }
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let prs = test_client(&server)
+            .await
+            .list_project_pull_requests("project-1", PullRequestStatus::Active, 500)
+            .await
+            .unwrap();
+        assert_eq!(prs.len(), 2);
+        assert_eq!(prs[0].repository.as_ref().unwrap().id, "repo-1");
+        assert_eq!(prs[1].repository.as_ref().unwrap().id, "repo-2");
     }
 
     #[tokio::test]

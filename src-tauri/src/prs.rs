@@ -1,4 +1,4 @@
-use azdo_client::{AdoClient, AdoError, GitRepository, PullRequestStatus, TeamProject};
+use azdo_client::{AdoClient, AdoError, PullRequestStatus, TeamProject};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinSet;
@@ -9,6 +9,8 @@ use crate::error::{AppError, Result};
 use crate::secrets::SecretStore;
 
 const PR_SYNC_CONCURRENCY: usize = 4;
+// Active PRs across one project; well above what a project realistically has.
+const PROJECT_PR_SYNC_TOP: u32 = 500;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -220,8 +222,8 @@ struct SyncPrsResult {
     warning: Option<String>,
 }
 
-struct PrRepoFetch {
-    repository_id: String,
+struct PrProjectFetch {
+    project_id: String,
     label: String,
     result: Result<Vec<CachedPr>>,
 }
@@ -271,27 +273,27 @@ async fn do_sync_prs(
 ) -> Result<SyncPrsResult> {
     let projects = client.list_projects().await?;
     let mut cached_prs: Vec<CachedPr> = Vec::new();
-    let mut synced_repo_ids: Vec<String> = Vec::new();
+    let mut synced_project_ids: Vec<String> = Vec::new();
     let mut skipped: Vec<String> = Vec::new();
     let mut last_skip_error: Option<AppError> = None;
     let mut pr_tasks = JoinSet::new();
 
-    let collect = |fetch: PrRepoFetch,
+    let collect = |fetch: PrProjectFetch,
                    cached_prs: &mut Vec<CachedPr>,
-                   synced_repo_ids: &mut Vec<String>,
+                   synced_project_ids: &mut Vec<String>,
                    skipped: &mut Vec<String>,
                    last_skip_error: &mut Option<AppError>| {
         match fetch.result {
             Ok(prs) => {
-                synced_repo_ids.push(fetch.repository_id);
+                synced_project_ids.push(fetch.project_id);
                 cached_prs.extend(prs);
             }
             Err(e) => {
                 tracing::warn!(
                     org = %org.name,
-                    repository = %fetch.label,
+                    project = %fetch.label,
                     error = %e,
-                    "PR sync failed for repository, preserving cached data"
+                    "PR sync failed for project, preserving cached data"
                 );
                 skipped.push(fetch.label);
                 *last_skip_error = Some(e);
@@ -300,54 +302,28 @@ async fn do_sync_prs(
     };
 
     for project in &projects {
-        let repos = match client.list_repositories(&project.id).await {
-            Ok(repos) => repos,
-            Err(e) if is_ado_not_found(&e) => {
-                tracing::warn!(
-                    org = %org.name,
-                    project = %project.name,
-                    error = %e,
-                    "repository list returned 404, skipping project"
-                );
-                continue;
-            }
-            Err(e) => {
-                tracing::warn!(
-                    org = %org.name,
-                    project = %project.name,
-                    error = %e,
-                    "failed to list repositories, skipping project and preserving cached data"
-                );
-                skipped.push(project.name.clone());
-                last_skip_error = Some(e.into());
-                continue;
-            }
-        };
-        for repo in repos {
-            while pr_tasks.len() >= PR_SYNC_CONCURRENCY {
-                let fetch = join_pr_task(&mut pr_tasks).await?;
-                collect(
-                    fetch,
-                    &mut cached_prs,
-                    &mut synced_repo_ids,
-                    &mut skipped,
-                    &mut last_skip_error,
-                );
-            }
-            pr_tasks.spawn(fetch_active_prs_for_repo(
-                client.clone(),
-                org.clone(),
-                project.clone(),
-                repo,
-            ));
+        while pr_tasks.len() >= PR_SYNC_CONCURRENCY {
+            let fetch = join_pr_task(&mut pr_tasks).await?;
+            collect(
+                fetch,
+                &mut cached_prs,
+                &mut synced_project_ids,
+                &mut skipped,
+                &mut last_skip_error,
+            );
         }
+        pr_tasks.spawn(fetch_active_prs_for_project(
+            client.clone(),
+            org.clone(),
+            project.clone(),
+        ));
     }
     while !pr_tasks.is_empty() {
         let fetch = join_pr_task(&mut pr_tasks).await?;
         collect(
             fetch,
             &mut cached_prs,
-            &mut synced_repo_ids,
+            &mut synced_project_ids,
             &mut skipped,
             &mut last_skip_error,
         );
@@ -355,19 +331,19 @@ async fn do_sync_prs(
 
     // If nothing synced and we have a real error, surface it instead of
     // recording a spurious success.
-    if synced_repo_ids.is_empty() {
+    if synced_project_ids.is_empty() {
         if let Some(e) = last_skip_error {
             return Err(e);
         }
     }
 
-    let synced_ids: Vec<&str> = synced_repo_ids.iter().map(String::as_str).collect();
-    db.replace_pull_requests(&org.id, &synced_ids, &cached_prs)?;
+    let synced_ids: Vec<&str> = synced_project_ids.iter().map(String::as_str).collect();
+    db.replace_pull_requests_for_projects(&org.id, &synced_ids, &cached_prs)?;
 
     let mut warning_parts: Vec<String> = Vec::new();
     if !skipped.is_empty() {
         warning_parts.push(format!(
-            "{} repository/project(s) skipped due to PR sync errors: {}.",
+            "{} project(s) skipped due to PR sync errors: {}.",
             skipped.len(),
             skipped.join(", ")
         ));
@@ -448,7 +424,7 @@ fn collect_review_fetch(
     }
 }
 
-async fn join_pr_task(tasks: &mut JoinSet<PrRepoFetch>) -> Result<PrRepoFetch> {
+async fn join_pr_task(tasks: &mut JoinSet<PrProjectFetch>) -> Result<PrProjectFetch> {
     tasks
         .join_next()
         .await
@@ -466,16 +442,17 @@ async fn join_review_task(
         .map_err(|e| AppError::AzureDevOps(format!("review PR sync task failed: {e}")))
 }
 
-async fn fetch_active_prs_for_repo(
+// One project-level query replaces a request per repository; repositories
+// with zero active PRs simply contribute nothing.
+async fn fetch_active_prs_for_project(
     client: AdoClient,
     org: Organization,
     project: TeamProject,
-    repo: GitRepository,
-) -> PrRepoFetch {
-    let repository_id = repo.id.clone();
-    let label = format!("{}/{}", project.name, repo.name);
+) -> PrProjectFetch {
+    let project_id = project.id.clone();
+    let label = project.name.clone();
     let prs = match client
-        .list_pull_requests(&project.id, &repo.id, PullRequestStatus::Active)
+        .list_project_pull_requests(&project.id, PullRequestStatus::Active, PROJECT_PR_SYNC_TOP)
         .await
     {
         Ok(prs) => prs,
@@ -483,21 +460,20 @@ async fn fetch_active_prs_for_repo(
             tracing::warn!(
                 org = %org.name,
                 project = %project.name,
-                repository = %repo.name,
                 error = %e,
-                "pull request list returned 404, skipping repository"
+                "pull request list returned 404, skipping project"
             );
-            // 404 means the repository is gone; treat as synced-empty so its
+            // 404 means the project is gone; treat as synced-empty so its
             // stale cached rows are cleaned up.
-            return PrRepoFetch {
-                repository_id,
+            return PrProjectFetch {
+                project_id,
                 label,
                 result: Ok(Vec::new()),
             };
         }
         Err(e) => {
-            return PrRepoFetch {
-                repository_id,
+            return PrProjectFetch {
+                project_id,
                 label,
                 result: Err(e.into()),
             }
@@ -506,20 +482,34 @@ async fn fetch_active_prs_for_repo(
 
     let cached = prs
         .into_iter()
-        .map(|pr| {
+        .filter_map(|pr| {
+            let Some(repo) = pr.repository else {
+                tracing::warn!(
+                    org = %org.name,
+                    project = %project.name,
+                    pull_request_id = pr.pull_request_id,
+                    "pull request response carried no repository; skipping"
+                );
+                return None;
+            };
+            let project_name = repo
+                .project
+                .as_ref()
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| project.name.clone());
             let web_url = format!(
                 "{}/{}/_git/{}/pullrequest/{}",
                 org.base_url,
-                encode_path_segment(&project.name),
+                encode_path_segment(&project_name),
                 encode_path_segment(&repo.name),
                 pr.pull_request_id
             );
-            CachedPr {
+            Some(CachedPr {
                 org_id: org.id.clone(),
                 project_id: project.id.clone(),
-                project_name: project.name.clone(),
-                repository_id: repo.id.clone(),
-                repository_name: repo.name.clone(),
+                project_name,
+                repository_id: repo.id,
+                repository_name: repo.name,
                 pull_request_id: pr.pull_request_id,
                 title: pr.title,
                 status: pr.status,
@@ -528,11 +518,11 @@ async fn fetch_active_prs_for_repo(
                 source_ref_name: short_ref(&pr.source_ref_name),
                 target_ref_name: short_ref(&pr.target_ref_name),
                 web_url: Some(web_url),
-            }
+            })
         })
         .collect();
-    PrRepoFetch {
-        repository_id,
+    PrProjectFetch {
+        project_id,
         label,
         result: Ok(cached),
     }
@@ -631,31 +621,21 @@ mod tests {
     use crate::db::OrganizationDraft;
 
     #[tokio::test]
-    async fn pr_sync_skips_failing_repo_and_preserves_its_cache() {
+    async fn pr_sync_skips_failing_project_and_preserves_its_cache() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/_apis/projects"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-                "count": 1,
-                "value": [{ "id": "project-1", "name": "Platform" }]
-            })))
-            .mount(&server)
-            .await;
-        Mock::given(method("GET"))
-            .and(path("/project-1/_apis/git/repositories"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
                 "count": 2,
                 "value": [
-                    { "id": "repo-ok", "name": "Good Repo" },
-                    { "id": "repo-bad", "name": "Bad Repo" }
+                    { "id": "project-ok", "name": "Platform" },
+                    { "id": "project-bad", "name": "Broken" }
                 ]
             })))
             .mount(&server)
             .await;
         Mock::given(method("GET"))
-            .and(path(
-                "/project-1/_apis/git/repositories/repo-ok/pullrequests",
-            ))
+            .and(path("/project-ok/_apis/git/pullrequests"))
             .and(query_param("searchCriteria.status", "active"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
                 "count": 1,
@@ -664,6 +644,11 @@ mod tests {
                     "title": "Fresh PR",
                     "status": "active",
                     "creationDate": "2026-06-09T00:00:00Z",
+                    "repository": {
+                        "id": "repo-ok",
+                        "name": "Good Repo",
+                        "project": { "id": "project-ok", "name": "Platform" }
+                    },
                     "sourceRefName": "refs/heads/feature",
                     "targetRefName": "refs/heads/main"
                 }]
@@ -671,9 +656,7 @@ mod tests {
             .mount(&server)
             .await;
         Mock::given(method("GET"))
-            .and(path(
-                "/project-1/_apis/git/repositories/repo-bad/pullrequests",
-            ))
+            .and(path("/project-bad/_apis/git/pullrequests"))
             .respond_with(ResponseTemplate::new(403))
             .mount(&server)
             .await;
@@ -694,25 +677,43 @@ mod tests {
                 authenticated_user_unique_name: None,
             })
             .unwrap();
-        // Pre-existing cached PR in the repo that is about to fail.
-        db.replace_pull_requests(
+        // Pre-existing cached PRs: one in the project that is about to fail
+        // (must survive) and one in the healthy project (must be replaced).
+        db.replace_pull_requests_for_projects(
             &org.id,
-            &["repo-bad"],
-            &[CachedPr {
-                org_id: org.id.clone(),
-                project_id: "project-1".to_string(),
-                project_name: "Platform".to_string(),
-                repository_id: "repo-bad".to_string(),
-                repository_name: "Bad Repo".to_string(),
-                pull_request_id: 99,
-                title: "Stale but preserved".to_string(),
-                status: "active".to_string(),
-                created_by: None,
-                creation_date: "2026-06-01T00:00:00Z".to_string(),
-                source_ref_name: "feature".to_string(),
-                target_ref_name: "main".to_string(),
-                web_url: None,
-            }],
+            &["project-bad", "project-ok"],
+            &[
+                CachedPr {
+                    org_id: org.id.clone(),
+                    project_id: "project-bad".to_string(),
+                    project_name: "Broken".to_string(),
+                    repository_id: "repo-bad".to_string(),
+                    repository_name: "Bad Repo".to_string(),
+                    pull_request_id: 99,
+                    title: "Stale but preserved".to_string(),
+                    status: "active".to_string(),
+                    created_by: None,
+                    creation_date: "2026-06-01T00:00:00Z".to_string(),
+                    source_ref_name: "feature".to_string(),
+                    target_ref_name: "main".to_string(),
+                    web_url: None,
+                },
+                CachedPr {
+                    org_id: org.id.clone(),
+                    project_id: "project-ok".to_string(),
+                    project_name: "Platform".to_string(),
+                    repository_id: "repo-ok".to_string(),
+                    repository_name: "Good Repo".to_string(),
+                    pull_request_id: 98,
+                    title: "Closed since last sync".to_string(),
+                    status: "active".to_string(),
+                    created_by: None,
+                    creation_date: "2026-06-01T00:00:00Z".to_string(),
+                    source_ref_name: "feature".to_string(),
+                    target_ref_name: "main".to_string(),
+                    web_url: None,
+                },
+            ],
         )
         .unwrap();
 
@@ -727,10 +728,12 @@ mod tests {
         let titles: Vec<&str> = cached.iter().map(|pr| pr.title.as_str()).collect();
         assert!(titles.contains(&"Fresh PR"));
         assert!(titles.contains(&"Stale but preserved"));
+        // The healthy project was fully replaced, so its stale row is gone.
+        assert!(!titles.contains(&"Closed since last sync"));
         assert!(result
             .warning
             .as_deref()
-            .is_some_and(|warning| warning.contains("Platform/Bad Repo")));
+            .is_some_and(|warning| warning.contains("Broken")));
     }
 
     #[test]
