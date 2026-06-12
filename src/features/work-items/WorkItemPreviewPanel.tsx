@@ -530,6 +530,11 @@ export function WorkItemPreviewPanel({
     },
   });
 
+  // Must match how the grids build their preview query key.
+  const customFieldsSignature = useMemo(
+    () => customPreviewFields.map((field) => field.referenceName).join("|"),
+    [customPreviewFields],
+  );
   const updateFieldsMutation = useMutation({
     mutationFn: updateWorkItemFields,
     onSuccess: (updatedPreview) => {
@@ -539,10 +544,21 @@ export function WorkItemPreviewPanel({
           updatedPreview.organizationId,
           updatedPreview.projectId,
           updatedPreview.id,
+          customFieldsSignature,
         ),
-        updatedPreview,
+        // The mutation response carries no relations; keep the cached ones
+        // instead of blanking the Related section until the next refetch.
+        (current: WorkItemPreview | undefined) =>
+          current
+            ? { ...updatedPreview, relations: current.relations }
+            : updatedPreview,
       );
-      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
+      // The response above is already the fresh preview; mark the other
+      // cached previews stale without refetching the one just written.
+      void queryClient.invalidateQueries({
+        queryKey: workItemQueryKeys.previewRoot(),
+        refetchType: "none",
+      });
       void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot() });
       invalidateWorkItemQueryViews(queryClient);
     },
