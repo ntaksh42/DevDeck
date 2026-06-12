@@ -72,6 +72,7 @@ type StagedChanges = {
 type StagedEntry = { key: string; label: string; from: string; to: string };
 
 const UNDO_WINDOW_MS = 10_000;
+const VISIBLE_COMMENT_LIMIT = 20;
 
 // Builds the change set that restores the work item's pre-apply values.
 // Entries whose previous value cannot be restored (e.g. priority that was
@@ -1570,6 +1571,16 @@ function WorkItemPreviewDetails({
   onTagsChange: (tags: string[]) => void;
 }) {
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  // Comments arrive newest first; only the recent ones mount their iframe by
+  // default because each comment is a full sandboxed document.
+  const [showAllComments, setShowAllComments] = useState(false);
+  useEffect(() => {
+    setShowAllComments(false);
+  }, [preview.id]);
+  const visibleComments = showAllComments
+    ? preview.comments
+    : preview.comments.slice(0, VISIBLE_COMMENT_LIMIT);
+  const hiddenCommentCount = preview.comments.length - visibleComments.length;
   const [fieldMenuOpen, setFieldMenuOpen] = useState(false);
   const [customFieldLabel, setCustomFieldLabel] = useState("");
   const [customFieldReferenceName, setCustomFieldReferenceName] = useState("");
@@ -1952,7 +1963,7 @@ function WorkItemPreviewDetails({
             </p>
           ) : null}
           <div className="space-y-1">
-            {preview.comments.map((comment) => {
+            {visibleComments.map((comment) => {
               const deleting = deletingCommentId === comment.id;
               return (
                 <CollapsibleComment
@@ -1974,6 +1985,15 @@ function WorkItemPreviewDetails({
                 />
               );
             })}
+            {hiddenCommentCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => setShowAllComments(true)}
+                className="w-full rounded border border-dashed border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+              >
+                Show {hiddenCommentCount} older comment{hiddenCommentCount === 1 ? "" : "s"}
+              </button>
+            ) : null}
           </div>
         </PreviewSection>
       ) : null}
