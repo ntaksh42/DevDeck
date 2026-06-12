@@ -1,6 +1,8 @@
 import {
   CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
+  lazy,
+  Suspense,
   useEffect,
   useMemo,
   useRef,
@@ -53,18 +55,44 @@ import {
   type CommandPaletteAction,
   type CommandPaletteSearchItem,
 } from "@/components/CommandPalette";
-import { CommitSearch } from "@/features/commits/CommitSearch";
-import { WorkItemSearch } from '@/features/work-items/WorkItemSearch';
-import { WorkItemViewsPanel } from '@/features/work-items/WorkItemViewsPanel';
 import {
   loadWorkItemQueryViews,
   type WorkItemQueryView,
 } from '@/features/work-items/workItemViewsStorage';
-import { MyWorkItemsPanel } from '@/features/work-items/MyWorkItemsPanel';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from '@/features/work-items/queryKeys';
-import { OrganizationSettings, SetupPanel } from '@/features/settings/OrganizationSettings';
 import { MyReviewsGrid } from '@/features/pull-requests/MyReviewsGrid';
-import { PullRequestSearch } from '@/features/pull-requests/PullRequestSearch';
+
+// Only the default view (My Reviews) loads eagerly; the other views are
+// code-split so app startup does not pay for panels that may never open.
+const CommitSearch = lazy(() =>
+  import("@/features/commits/CommitSearch").then((m) => ({ default: m.CommitSearch })),
+);
+const WorkItemSearch = lazy(() =>
+  import("@/features/work-items/WorkItemSearch").then((m) => ({ default: m.WorkItemSearch })),
+);
+const WorkItemViewsPanel = lazy(() =>
+  import("@/features/work-items/WorkItemViewsPanel").then((m) => ({
+    default: m.WorkItemViewsPanel,
+  })),
+);
+const MyWorkItemsPanel = lazy(() =>
+  import("@/features/work-items/MyWorkItemsPanel").then((m) => ({
+    default: m.MyWorkItemsPanel,
+  })),
+);
+const OrganizationSettings = lazy(() =>
+  import("@/features/settings/OrganizationSettings").then((m) => ({
+    default: m.OrganizationSettings,
+  })),
+);
+const SetupPanel = lazy(() =>
+  import("@/features/settings/OrganizationSettings").then((m) => ({ default: m.SetupPanel })),
+);
+const PullRequestSearch = lazy(() =>
+  import("@/features/pull-requests/PullRequestSearch").then((m) => ({
+    default: m.PullRequestSearch,
+  })),
+);
 import {
   showWorkItemNotificationEvent,
   type WorkItemNotificationEvent,
@@ -1243,6 +1271,7 @@ function AppShell() {
               : "overflow-hidden"
           }`}
         >
+          <Suspense fallback={<LoadingState />}>
           {organizationsQuery.isLoading ? (
             <LoadingState />
           ) : organizationsQuery.isError ? (
@@ -1282,6 +1311,7 @@ function AppShell() {
           ) : (
             <OrganizationSettings organizations={organizations} />
           )}
+          </Suspense>
         </section>
       </main>
       {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
