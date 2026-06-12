@@ -14,7 +14,6 @@ import { ChevronRight, Loader2, Plus, Send, SlidersHorizontal, Trash2, X, Zap } 
 import {
   addWorkItemComment,
   deleteWorkItemComment,
-  fetchWorkItemImage,
   listOrganizations,
   listWorkItemFields,
   listWorkItemUpdates,
@@ -36,6 +35,7 @@ import {
 } from '@/lib/azdoCommands';
 import { focusPrimaryGrid, formatRelativeDate, isEditableTarget } from '@/lib/utils';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
+import { fetchWorkItemImageCached } from '@/lib/workItemImageCache';
 import { openExternalUrl } from '@/lib/openExternal';
 import { PreviewEmptyState } from '@/components/StateDisplay';
 import { ShortcutHint } from '@/components/ShortcutHint';
@@ -477,7 +477,7 @@ export function WorkItemPreviewPanel({
   const resolvePreviewImage = useMemo(
     () => async (url: string) => {
       if (!selectedItem) return null;
-      return fetchWorkItemImage({
+      return fetchWorkItemImageCached({
         organizationId: selectedItem.organizationId,
         url,
       });
