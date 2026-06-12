@@ -1164,6 +1164,33 @@ describe("App", () => {
       });
     });
 
+    // Field presets: save the pending change under a name, discard, then
+    // re-stage it with the digit shortcut.
+    fireEvent.keyDown(workItemsGrid, { key: "s" });
+    fireEvent.click(await screen.findByRole("button", { name: "Closed" }));
+    expect(await screen.findByText("1 pending")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Field presets" }));
+    fireEvent.change(screen.getByLabelText("New preset name"), {
+      target: { value: "Close it" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(screen.getByRole("button", { name: /^1\s?Close it$/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Discard pending changes" }));
+    expect(screen.queryByText("1 pending")).toBeNull();
+
+    fireEvent.keyDown(screen.getByLabelText("Work item preview"), { key: "1" });
+    const presetChip = await screen.findByText("1 pending");
+    expect(presetChip.parentElement?.getAttribute("title")).toContain("State");
+    expect(invokeMock).not.toHaveBeenCalledWith(
+      "update_work_item_fields",
+      expect.objectContaining({
+        input: expect.objectContaining({
+          fields: [{ referenceName: "System.State", value: "Closed" }],
+        }),
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Discard pending changes" }));
+
     // Verify switching work items clears the unsent comment draft.
     const draftBox = screen.getByLabelText("Comment") as HTMLTextAreaElement;
     fireEvent.change(draftBox, { target: { value: "unsent draft" } });

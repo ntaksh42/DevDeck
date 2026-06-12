@@ -3,13 +3,14 @@ import {
   Fragment,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
+  type SetStateAction,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, Loader2, Plus, Send, SlidersHorizontal, Trash2, X } from 'lucide-react';
+import { ChevronRight, Loader2, Plus, Send, SlidersHorizontal, Trash2, X, Zap } from 'lucide-react';
 import {
   addWorkItemComment,
   deleteWorkItemComment,
@@ -48,6 +49,13 @@ import {
   type CustomPreviewField,
   type PreviewFieldKey,
 } from './previewFieldsStorage';
+import {
+  loadFieldPresets,
+  storeFieldPresets,
+  MAX_FIELD_PRESETS,
+  type WorkItemFieldPreset,
+  type WorkItemFieldPresetField,
+} from './fieldPresetsStorage';
 const SAVED_REPLIES_STORAGE_KEY = "azdodeck:workItems:savedReplies";
 
 type StagedChanges = {
@@ -60,6 +68,8 @@ type StagedChanges = {
   tags?: string[];
   fields?: Record<string, { label: string; value: string }>;
 };
+
+type StagedEntry = { key: string; label: string; from: string; to: string };
 
 const UNDO_WINDOW_MS = 10_000;
 
@@ -100,6 +110,78 @@ function buildInverseChanges(preview: WorkItemPreview, staged: StagedChanges): S
     };
   }
   return inverse;
+}
+
+// Serializes pending changes into the flat field list stored in a preset.
+// State precedes Reason to mirror applyChangeSet's patch order.
+export function presetFieldsFromStaged(staged: StagedChanges): WorkItemFieldPresetField[] {
+  const fields: WorkItemFieldPresetField[] = [];
+  if (staged.assignee) {
+    fields.push({
+      referenceName: "System.AssignedTo",
+      label: "Assignee",
+      value: staged.assignee.assignValue,
+    });
+  }
+  if (staged.priority !== undefined) {
+    fields.push({
+      referenceName: "Microsoft.VSTS.Common.Priority",
+      label: "Priority",
+      value: String(staged.priority),
+    });
+  }
+  if (staged.tags) {
+    fields.push({ referenceName: "System.Tags", label: "Tags", value: staged.tags.join("; ") });
+  }
+  for (const [referenceName, field] of Object.entries(staged.fields ?? {})) {
+    fields.push({ referenceName, label: field.label, value: field.value });
+  }
+  if (staged.state !== undefined) {
+    fields.push({ referenceName: "System.State", label: "State", value: staged.state });
+  }
+  if (staged.reason !== undefined) {
+    fields.push({ referenceName: "System.Reason", label: "Reason", value: staged.reason });
+  }
+  return fields;
+}
+
+// Maps a preset's fields back onto staged-change slots. Fields that already
+// match the work item's current value are skipped so applying a preset twice
+// (or to an already-resolved item) stages nothing redundant.
+export function stagedChangesFromPresetFields(
+  fields: readonly WorkItemFieldPresetField[],
+  preview: WorkItemPreview | null,
+): StagedChanges {
+  const staged: StagedChanges = {};
+  for (const field of fields) {
+    const referenceName = field.referenceName.toLowerCase();
+    if (referenceName === "system.state") {
+      if (field.value !== preview?.state) staged.state = field.value;
+    } else if (referenceName === "system.reason") {
+      if (field.value !== preview?.reason) staged.reason = field.value;
+    } else if (referenceName === "system.assignedto") {
+      if (field.value !== preview?.assignedTo) {
+        staged.assignee = { assignValue: field.value, displayName: field.value };
+      }
+    } else if (referenceName === "microsoft.vsts.common.priority") {
+      const priority = Number.parseInt(field.value, 10);
+      if (Number.isFinite(priority) && String(priority) !== preview?.priority) {
+        staged.priority = priority;
+      }
+    } else if (referenceName === "system.tags") {
+      const tags = splitWorkItemTags(field.value);
+      if (tags.join("; ") !== (preview?.tags ?? "")) staged.tags = tags;
+    } else if (
+      !preview ||
+      (customPreviewFieldValue(preview, field.referenceName) ?? "") !== field.value
+    ) {
+      staged.fields = {
+        ...staged.fields,
+        [field.referenceName]: { label: field.label, value: field.value },
+      };
+    }
+  }
+  return staged;
 }
 
 type PreviewFieldDefinition = {
@@ -467,6 +549,7 @@ export function WorkItemPreviewPanel({
   // Property edits are staged locally and written to Azure DevOps only on an
   // explicit apply (Ctrl+S); Esc discards.
   const [staged, setStaged] = useState<StagedChanges>({});
+  const [presets, setPresets] = useState<WorkItemFieldPreset[]>(() => loadFieldPresets());
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [undoState, setUndoState] = useState<{
@@ -475,54 +558,62 @@ export function WorkItemPreviewPanel({
     count: number;
   } | null>(null);
   const undoTimerRef = useRef<number | null>(null);
+  const stagedRef = useRef<StagedChanges>(staged);
+  const previewRef = useRef<WorkItemPreview | null>(preview ?? null);
+  stagedRef.current = staged;
+  previewRef.current = preview ?? null;
 
-  const stagedEntries = useMemo(() => {
-    const entries: { key: string; label: string; from: string; to: string }[] = [];
-    if (!preview) return entries;
-    if (staged.state !== undefined) {
-      entries.push({ key: "state", label: "State", from: preview.state ?? "—", to: staged.state });
-    }
-    if (staged.assignee) {
-      entries.push({
-        key: "assignee",
-        label: "Assignee",
-        from: preview.assignedTo ?? "Unassigned",
-        to: staged.assignee.displayName,
-      });
-    }
-    if (staged.priority !== undefined) {
-      entries.push({
-        key: "priority",
-        label: "Priority",
-        from: preview.priority ?? "—",
-        to: String(staged.priority),
-      });
-    }
-    if (staged.reason !== undefined) {
-      entries.push({ key: "reason", label: "Reason", from: preview.reason ?? "—", to: staged.reason });
-    }
-    if (staged.tags) {
-      entries.push({
-        key: "tags",
-        label: "Tags",
-        from: preview.tags?.trim() ? preview.tags : "—",
-        to: staged.tags.join("; ") || "—",
-      });
-    }
-    for (const [referenceName, field] of Object.entries(staged.fields ?? {})) {
-      entries.push({
-        key: `field:${referenceName}`,
-        label: field.label,
-        from: customPreviewFieldValue(preview, referenceName) ?? "—",
-        to: field.value,
-      });
-    }
-    return entries;
-  }, [preview, staged]);
+  function setStagedChanges(action: SetStateAction<StagedChanges>) {
+    setStaged((current) => {
+      const next = typeof action === "function" ? action(current) : action;
+      stagedRef.current = next;
+      return next;
+    });
+  }
+
+  const stagedEntries = useMemo(() => stagedEntriesForPreview(preview, staged), [preview, staged]);
 
   function discardStaged() {
-    setStaged({});
+    setStagedChanges({});
     setApplyError(null);
+  }
+
+  // Stages a preset's field changes; the user still reviews and applies them
+  // with Ctrl+S like any other pending change.
+  function applyPreset(preset: WorkItemFieldPreset) {
+    if (!selectedItem) return;
+    const changes = stagedChangesFromPresetFields(preset.fields, preview);
+    setStagedChanges((current) => ({
+      ...current,
+      ...changes,
+      fields:
+        changes.fields || current.fields
+          ? { ...current.fields, ...changes.fields }
+          : undefined,
+    }));
+  }
+
+  function savePresetFromStaged(name: string) {
+    const fields = presetFieldsFromStaged(staged);
+    if (fields.length === 0) return;
+    const preset: WorkItemFieldPreset = {
+      id: `preset-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      name,
+      fields,
+    };
+    setPresets((current) => {
+      const next = [...current, preset].slice(0, MAX_FIELD_PRESETS);
+      storeFieldPresets(next);
+      return next;
+    });
+  }
+
+  function deletePreset(id: string) {
+    setPresets((current) => {
+      const next = current.filter((preset) => preset.id !== id);
+      storeFieldPresets(next);
+      return next;
+    });
   }
 
   // All staged values go out as one JSON Patch, so the apply is atomic: state
@@ -578,26 +669,29 @@ export function WorkItemPreviewPanel({
   }
 
   async function applyStaged() {
-    if (!selectedItem || applying || stagedEntries.length === 0) return;
+    const currentStaged = stagedRef.current;
+    const currentPreview = previewRef.current;
+    const currentStagedEntries = stagedEntriesForPreview(currentPreview, currentStaged);
+    if (!selectedItem || applying || currentStagedEntries.length === 0) return;
     const previousFocus = document.activeElement;
-    const inverse = preview ? buildInverseChanges(preview, staged) : {};
-    const appliedCount = stagedEntries.length;
+    const inverse = currentPreview ? buildInverseChanges(currentPreview, currentStaged) : {};
+    const appliedCount = currentStagedEntries.length;
     const workItemId = selectedItem.id;
     setApplying(true);
     setApplyError(null);
     try {
-      await applyChangeSet(staged);
-      if (staged.assignee?.uniqueName) {
+      await applyChangeSet(currentStaged);
+      if (currentStaged.assignee?.uniqueName) {
         void recordAssigneeInteraction({
           organizationId: selectedItem.organizationId,
-          userId: staged.assignee.id,
-          displayName: staged.assignee.displayName,
-          uniqueName: staged.assignee.uniqueName,
+          userId: currentStaged.assignee.id,
+          displayName: currentStaged.assignee.displayName,
+          uniqueName: currentStaged.assignee.uniqueName,
         }).catch(() => {
           // History is best-effort; the assignment itself already succeeded.
         });
       }
-      setStaged({});
+      setStagedChanges({});
       setUndoState({ changes: inverse, workItemId, count: appliedCount });
       if (undoTimerRef.current !== null) window.clearTimeout(undoTimerRef.current);
       undoTimerRef.current = window.setTimeout(() => {
@@ -646,7 +740,7 @@ export function WorkItemPreviewPanel({
     setMentionQuery("");
     setMentionStart(null);
     setActiveMentionIndex(0);
-    setStaged({});
+    setStagedChanges({});
     setApplyError(null);
     setUndoState(null);
     if (undoTimerRef.current !== null) {
@@ -786,7 +880,7 @@ export function WorkItemPreviewPanel({
 
   function assignTo(candidate: WorkItemAssigneeCandidate) {
     if (!selectedItem) return;
-    setStaged((current) => ({
+    setStagedChanges((current) => ({
       ...current,
       assignee:
         candidate.displayName === preview?.assignedTo
@@ -804,7 +898,7 @@ export function WorkItemPreviewPanel({
 
   function setPriority(priority: number) {
     if (!selectedItem) return;
-    setStaged((current) => ({
+    setStagedChanges((current) => ({
       ...current,
       priority: String(priority) === preview?.priority ? undefined : priority,
     }));
@@ -815,7 +909,7 @@ export function WorkItemPreviewPanel({
     if (!selectedItem) return;
     // Reason options belong to the current state, so a staged reason is
     // dropped when the state itself changes.
-    setStaged((current) => ({
+    setStagedChanges((current) => ({
       ...current,
       state: state === preview?.state ? undefined : state,
       reason: undefined,
@@ -825,7 +919,7 @@ export function WorkItemPreviewPanel({
 
   function stageReason(reason: string) {
     if (!selectedItem) return;
-    setStaged((current) => ({
+    setStagedChanges((current) => ({
       ...current,
       reason: reason === preview?.reason ? undefined : reason,
     }));
@@ -836,7 +930,7 @@ export function WorkItemPreviewPanel({
     if (!selectedItem) return;
     const normalized = tags.join("; ");
     const currentTags = preview?.tags ?? "";
-    setStaged((current) => ({
+    setStagedChanges((current) => ({
       ...current,
       tags: normalized === currentTags ? undefined : tags,
     }));
@@ -844,7 +938,7 @@ export function WorkItemPreviewPanel({
 
   function stageCustomField(referenceName: string, label: string, value: string) {
     if (!selectedItem) return;
-    setStaged((current) => {
+    setStagedChanges((current) => {
       const fields = { ...current.fields };
       if (preview && (customPreviewFieldValue(preview, referenceName) ?? "") === value) {
         delete fields[referenceName];
@@ -1000,6 +1094,12 @@ export function WorkItemPreviewPanel({
         event.preventDefault();
         void undoLastApply();
       }
+    } else if (event.key >= "1" && event.key <= "9") {
+      const preset = presets[Number(event.key) - 1];
+      if (preset) {
+        event.preventDefault();
+        applyPreset(preset);
+      }
     }
   }
 
@@ -1147,6 +1247,16 @@ export function WorkItemPreviewPanel({
               <WorkItemPreviewDetails
                 customPreviewFields={customPreviewFields}
                 statusChip={stagedStatusChip}
+                presetsControl={
+                  <PresetMenu
+                    canSave={stagedEntries.length > 0}
+                    onApply={applyPreset}
+                    onDelete={deletePreset}
+                    onSave={savePresetFromStaged}
+                    presets={presets}
+                    stagedCount={stagedEntries.length}
+                  />
+                }
                 deleteCommentError={
                   deleteCommentMutation.isError
                     ? commandErrorMessage(deleteCommentMutation.error)
@@ -1429,6 +1539,7 @@ function WorkItemPreviewDetails({
   onSelectedFieldKeysChange,
   priorityControl,
   reasonControl,
+  presetsControl,
   renderCustomFieldControl,
   resolveImageSource,
   selectedFieldKeys,
@@ -1447,6 +1558,7 @@ function WorkItemPreviewDetails({
   onCustomPreviewFieldsChange: (fields: CustomPreviewField[]) => void;
   onDeleteComment: (commentId: number) => void;
   onSelectedFieldKeysChange: (keys: PreviewFieldKey[]) => void;
+  presetsControl?: ReactNode;
   priorityControl: ReactNode;
   reasonControl: ReactNode;
   renderCustomFieldControl: (field: CustomPreviewField) => ReactNode;
@@ -1566,6 +1678,7 @@ function WorkItemPreviewDetails({
             {statusChip}
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            {presetsControl}
             <div ref={fieldMenuRef} className="relative">
               <button
                 type="button"
@@ -2114,6 +2227,53 @@ function customPreviewFieldValue(preview: WorkItemPreview, referenceName: string
       (field) => field.referenceName.toLowerCase() === referenceName.toLowerCase(),
     )?.value ?? null
   );
+}
+
+function stagedEntriesForPreview(
+  preview: WorkItemPreview | null | undefined,
+  staged: StagedChanges,
+): StagedEntry[] {
+  const entries: StagedEntry[] = [];
+  if (!preview) return entries;
+  if (staged.state !== undefined) {
+    entries.push({ key: "state", label: "State", from: preview.state ?? "—", to: staged.state });
+  }
+  if (staged.assignee) {
+    entries.push({
+      key: "assignee",
+      label: "Assignee",
+      from: preview.assignedTo ?? "Unassigned",
+      to: staged.assignee.displayName,
+    });
+  }
+  if (staged.priority !== undefined) {
+    entries.push({
+      key: "priority",
+      label: "Priority",
+      from: preview.priority ?? "—",
+      to: String(staged.priority),
+    });
+  }
+  if (staged.reason !== undefined) {
+    entries.push({ key: "reason", label: "Reason", from: preview.reason ?? "—", to: staged.reason });
+  }
+  if (staged.tags) {
+    entries.push({
+      key: "tags",
+      label: "Tags",
+      from: preview.tags?.trim() ? preview.tags : "—",
+      to: staged.tags.join("; ") || "—",
+    });
+  }
+  for (const [referenceName, field] of Object.entries(staged.fields ?? {})) {
+    entries.push({
+      key: `field:${referenceName}`,
+      label: field.label,
+      from: customPreviewFieldValue(preview, referenceName) ?? "—",
+      to: field.value,
+    });
+  }
+  return entries;
 }
 
 function filterCustomFieldOptions(
@@ -3413,6 +3573,121 @@ function CandidateAvatar({ displayName }: { displayName: string }) {
     >
       {commentAuthorInitials(displayName)}
     </span>
+  );
+}
+
+// Named bundles of field changes ("Resolve as Won't Fix", ...). Applying one
+// stages its changes; saving captures the current pending changes.
+function PresetMenu({
+  canSave,
+  onApply,
+  onDelete,
+  onSave,
+  presets,
+  stagedCount,
+}: {
+  canSave: boolean;
+  onApply: (preset: WorkItemFieldPreset) => void;
+  onDelete: (id: string) => void;
+  onSave: (name: string) => void;
+  presets: WorkItemFieldPreset[];
+  stagedCount: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const menuRef = useCloseOnOutsidePointer<HTMLDivElement>(open, () => setOpen(false));
+
+  return (
+    <div ref={menuRef} className="relative">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-label="Field presets"
+        title="Field presets — press 1-9 to apply"
+        onClick={() => setOpen((current) => !current)}
+        className="inline-flex h-5 w-5 items-center justify-center rounded border border-border bg-white text-muted-foreground hover:bg-secondary hover:text-foreground"
+      >
+        <Zap className="h-3 w-3" aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className="absolute right-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-white p-1 shadow-lg">
+          <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+            Field presets
+          </div>
+          {presets.length > 0 ? (
+            presets.map((preset, index) => (
+              <div
+                key={preset.id}
+                className="group flex items-center gap-1 rounded hover:bg-muted"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    onApply(preset);
+                    setOpen(false);
+                  }}
+                  title={preset.fields
+                    .map((field) => `${field.label}: ${field.value}`)
+                    .join("\n")}
+                  className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1 text-left text-xs"
+                >
+                  <ShortcutHint>{index + 1}</ShortcutHint>
+                  <span className="truncate">{preset.name}</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Delete preset ${preset.name}`}
+                  onClick={() => onDelete(preset.id)}
+                  className="mr-1 rounded p-0.5 text-muted-foreground opacity-0 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                >
+                  <Trash2 className="h-3 w-3" aria-hidden="true" />
+                </button>
+              </div>
+            ))
+          ) : (
+            <p className="px-2 py-1 text-[11px] text-muted-foreground">No presets yet.</p>
+          )}
+          <div className="mt-1 border-t border-border px-2 py-1.5">
+            {canSave ? (
+              <form
+                className="flex items-center gap-1"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const trimmed = name.trim();
+                  if (!trimmed) return;
+                  onSave(trimmed);
+                  setName("");
+                }}
+              >
+                <input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder={`Save ${stagedCount} pending as…`}
+                  aria-label="New preset name"
+                  className="h-6 min-w-0 flex-1 rounded border border-input bg-white px-1.5 text-xs outline-none focus:border-primary"
+                />
+                <button
+                  type="submit"
+                  disabled={!name.trim() || presets.length >= MAX_FIELD_PRESETS}
+                  className="h-6 rounded border border-border bg-white px-2 text-xs hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Save
+                </button>
+              </form>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">
+                Stage changes (state, reason, …), then save them here as a preset.
+              </p>
+            )}
+            {presets.length >= MAX_FIELD_PRESETS ? (
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                Up to {MAX_FIELD_PRESETS} presets.
+              </p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
