@@ -689,25 +689,31 @@ export function WorkItemsGrid({
   }, [selectedItem]);
 
   useEffect(() => {
-    for (const item of [displayed[selectedIndex - 1], displayed[selectedIndex + 1]]) {
-      if (!item) continue;
-      void queryClient.prefetchQuery({
-        queryKey: workItemQueryKeys.preview(
-          item.organizationId,
-          item.projectId,
-          item.id,
-          customPreviewFieldSignature,
-        ),
-        queryFn: () =>
-          getWorkItemPreview({
-            organizationId: item.organizationId,
-            projectId: item.projectId,
-            workItemId: item.id,
-            customFields: customPreviewFieldRefs,
-          }),
-        staleTime: 30_000,
-      });
-    }
+    // Wait for the selection to settle: a preview fetch is several REST calls,
+    // and holding an arrow key would otherwise fire a burst of them for rows
+    // the user only scrolled past.
+    const timer = window.setTimeout(() => {
+      for (const item of [displayed[selectedIndex - 1], displayed[selectedIndex + 1]]) {
+        if (!item) continue;
+        void queryClient.prefetchQuery({
+          queryKey: workItemQueryKeys.preview(
+            item.organizationId,
+            item.projectId,
+            item.id,
+            customPreviewFieldSignature,
+          ),
+          queryFn: () =>
+            getWorkItemPreview({
+              organizationId: item.organizationId,
+              projectId: item.projectId,
+              workItemId: item.id,
+              customFields: customPreviewFieldRefs,
+            }),
+          staleTime: 30_000,
+        });
+      }
+    }, 300);
+    return () => window.clearTimeout(timer);
   }, [customPreviewFieldRefs, customPreviewFieldSignature, displayed, queryClient, selectedIndex]);
 
   const COMMON_STATES = ["New", "Active", "Resolved", "Closed", "To Do", "Doing", "Done"];
