@@ -7,6 +7,7 @@ mod commits;
 mod db;
 mod error;
 mod orgs;
+mod projects;
 mod prs;
 mod search;
 mod secrets;

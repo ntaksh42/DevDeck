@@ -14,6 +14,7 @@ use crate::auth::client_for_organization;
 use crate::commits::encode_path_segment;
 use crate::db::{AppDatabase, CachedWorkItem, Organization};
 use crate::error::{AppError, Result};
+use crate::projects::ProjectDirectory;
 use crate::secrets::SecretStore;
 
 const WORK_ITEM_FIELDS: &[&str] = &[
@@ -438,11 +439,16 @@ pub struct WorkItemComment {
 pub struct WorkItemService {
     db: AppDatabase,
     secrets: SecretStore,
+    projects: ProjectDirectory,
 }
 
 impl WorkItemService {
     pub fn new(db: AppDatabase, secrets: SecretStore) -> Self {
-        Self { db, secrets }
+        Self {
+            db,
+            secrets,
+            projects: ProjectDirectory::new(),
+        }
     }
 
     pub fn search(&self, input: SearchWorkItemsInput) -> Result<Vec<WorkItemSummary>> {
@@ -489,8 +495,9 @@ impl WorkItemService {
     ) -> Result<Vec<WorkItemProjectOption>> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let mut projects = client
-            .list_projects()
+        let mut projects = self
+            .projects
+            .list(&client, &organization.id)
             .await?
             .into_iter()
             .map(|project| WorkItemProjectOption {
@@ -507,14 +514,10 @@ impl WorkItemService {
 
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let project = client
-            .list_projects()
-            .await?
-            .into_iter()
-            .find(|project| project.id == input.project_id)
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("project not found: {}", input.project_id))
-            })?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
 
         let limit = work_item_query_limit(input.limit);
         let (ids, depths) = if is_link_wiql(wiql) {
@@ -593,14 +596,10 @@ impl WorkItemService {
     pub async fn preview(&self, input: GetWorkItemPreviewInput) -> Result<WorkItemPreview> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let project = client
-            .list_projects()
-            .await?
-            .into_iter()
-            .find(|project| project.id == input.project_id)
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("project not found: {}", input.project_id))
-            })?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
         let fields = preview_fields(input.custom_fields.as_deref())
             .iter()
             .map(ToString::to_string)
@@ -970,14 +969,10 @@ impl WorkItemService {
 
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let project = client
-            .list_projects()
-            .await?
-            .into_iter()
-            .find(|project| project.id == input.project_id)
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("project not found: {}", input.project_id))
-            })?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
 
         let work_item = client
             .update_work_item_assigned_to(&project.id, input.work_item_id, assigned_to)
@@ -1015,14 +1010,10 @@ impl WorkItemService {
 
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let project = client
-            .list_projects()
-            .await?
-            .into_iter()
-            .find(|p| p.id == input.project_id)
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("project not found: {}", input.project_id))
-            })?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
 
         let work_item = client
             .update_work_item_state(&project.id, input.work_item_id, &state)
@@ -1060,14 +1051,10 @@ impl WorkItemService {
 
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let project = client
-            .list_projects()
-            .await?
-            .into_iter()
-            .find(|p| p.id == input.project_id)
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("project not found: {}", input.project_id))
-            })?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
 
         let work_item = client
             .update_work_item_reason(&project.id, input.work_item_id, &reason)
@@ -1106,14 +1093,10 @@ impl WorkItemService {
 
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let project = client
-            .list_projects()
-            .await?
-            .into_iter()
-            .find(|p| p.id == input.project_id)
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("project not found: {}", input.project_id))
-            })?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
 
         let work_item = client
             .update_work_item_priority(&project.id, input.work_item_id, input.priority)
@@ -1163,14 +1146,10 @@ impl WorkItemService {
 
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let project = client
-            .list_projects()
-            .await?
-            .into_iter()
-            .find(|p| p.id == input.project_id)
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("project not found: {}", input.project_id))
-            })?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
 
         let work_item = client
             .update_work_item_field(&project.id, input.work_item_id, "System.Tags", &joined)
@@ -1226,14 +1205,10 @@ impl WorkItemService {
 
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let project = client
-            .list_projects()
-            .await?
-            .into_iter()
-            .find(|p| p.id == input.project_id)
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("project not found: {}", input.project_id))
-            })?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
 
         let work_item = client
             .update_work_item_fields(&project.id, input.work_item_id, &fields)
@@ -1272,14 +1247,10 @@ impl WorkItemService {
 
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let project = client
-            .list_projects()
-            .await?
-            .into_iter()
-            .find(|p| p.id == input.project_id)
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("project not found: {}", input.project_id))
-            })?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
 
         let work_item = client
             .update_work_item_field(&project.id, input.work_item_id, field, value)
@@ -1378,14 +1349,10 @@ impl WorkItemService {
         }
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let project = client
-            .list_projects()
-            .await?
-            .into_iter()
-            .find(|p| p.id == input.project_id)
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("project not found: {}", input.project_id))
-            })?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
 
         let mut results = Vec::new();
         for id in input.work_item_ids {
@@ -1423,14 +1390,10 @@ impl WorkItemService {
         }
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let project = client
-            .list_projects()
-            .await?
-            .into_iter()
-            .find(|p| p.id == input.project_id)
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("project not found: {}", input.project_id))
-            })?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
 
         let mut results = Vec::new();
         for id in input.work_item_ids {
@@ -1472,14 +1435,10 @@ impl WorkItemService {
         }
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let project = client
-            .list_projects()
-            .await?
-            .into_iter()
-            .find(|p| p.id == input.project_id)
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("project not found: {}", input.project_id))
-            })?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
 
         let mut results = Vec::new();
         for id in input.work_item_ids {
