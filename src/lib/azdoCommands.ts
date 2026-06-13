@@ -362,6 +362,45 @@ const commitRepositoryOptionsSchema = z.array(commitRepositoryOptionSchema);
 
 export type CommitRepositoryOption = z.infer<typeof commitRepositoryOptionSchema>;
 
+const commitChangedFileSchema = z.object({
+  path: z.string(),
+  changeType: z.string(),
+  originalPath: z.string().nullable(),
+});
+const commitChangeSetSchema = z.object({
+  commitId: z.string(),
+  parentCommitId: z.string().nullable(),
+  files: z.array(commitChangedFileSchema),
+});
+export type CommitChangedFile = z.infer<typeof commitChangedFileSchema>;
+export type CommitChangeSet = z.infer<typeof commitChangeSetSchema>;
+// A commit's per-file diff has the same shape as a PR file diff.
+export type CommitFileDiff = z.infer<typeof prFileDiffSchema>;
+
+export async function getCommitChanges(input: {
+  organizationId?: string;
+  projectId: string;
+  repositoryId: string;
+  commitId: string;
+}): Promise<CommitChangeSet> {
+  const result = await invokeCommand("get_commit_changes", { input });
+  return commitChangeSetSchema.parse(result);
+}
+
+export async function getCommitFileDiff(input: {
+  organizationId?: string;
+  projectId: string;
+  repositoryId: string;
+  filePath: string;
+  originalPath?: string | null;
+  changeType: string;
+  commitId: string;
+  parentCommitId?: string | null;
+}): Promise<CommitFileDiff> {
+  const result = await invokeCommand("get_commit_file_diff", { input });
+  return prFileDiffSchema.parse(result);
+}
+
 const syncScopeSchema = z.enum(["all", "hot", "myReviews", "myWorkItems", "commits"]);
 
 export type SyncScope = z.infer<typeof syncScopeSchema>;

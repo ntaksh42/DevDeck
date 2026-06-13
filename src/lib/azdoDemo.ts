@@ -789,6 +789,27 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     }
     case "list_commit_repositories":
       return demoCommitRepositories();
+    case "get_commit_changes": {
+      const input = (args as { input?: { commitId?: string } } | undefined)?.input;
+      return {
+        commitId: input?.commitId ?? "demosha",
+        parentCommitId: "demoparent",
+        files: [
+          { path: "/src/app.ts", changeType: "edit", originalPath: null },
+          { path: "/README.md", changeType: "add", originalPath: null },
+        ],
+      };
+    }
+    case "get_commit_file_diff": {
+      const input = (args as { input?: { filePath?: string } } | undefined)?.input;
+      return {
+        filePath: input?.filePath ?? "/src/app.ts",
+        baseContent: "const x = 1;\nconst y = 2;\n",
+        targetContent: "const x = 1;\nconst y = 3;\nconst z = 4;\n",
+        baseUnavailableReason: null,
+        targetUnavailableReason: null,
+      };
+    }
     case "list_pipeline_projects":
       return demoPipelineProjects();
     case "list_pipeline_definitions":
