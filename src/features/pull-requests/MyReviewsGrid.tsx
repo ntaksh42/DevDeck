@@ -8,11 +8,13 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, ChevronUp, Filter, Search, X } from 'lucide-react';
 import {
   listMyReviewPullRequests,
   commandErrorMessage,
+  prLocator,
+  submitPullRequestVote,
   type Organization,
   type ReviewPullRequestSummary,
 } from '@/lib/azdoCommands';
@@ -518,6 +520,14 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     staleTime: 5 * 60_000,
   });
 
+  const queryClient = useQueryClient();
+  const voteMutation = useMutation({
+    mutationFn: submitPullRequestVote,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["myReviews"] });
+    },
+  });
+
   const [textFilter, setTextFilter] = useState(initialViewState.textFilter);
   const [collapsedSections, setCollapsedSections] = useState<Set<ReviewSection>>(
     initialViewState.collapsedSections,
@@ -806,6 +816,21 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     });
   }
 
+  // Quick-vote the selected PR straight from the grid, without opening the panel.
+  function voteSelected(vote: -10 | -5 | 0 | 5 | 10, label: string) {
+    const pr = sortedPrs[selectedIndex];
+    if (!pr || voteMutation.isPending) return;
+    voteMutation.mutate(
+      { ...prLocator(pr), vote },
+      {
+        onSuccess: () => {
+          setCopyToast(`Voted: ${label}`);
+          setTimeout(() => setCopyToast(null), 1500);
+        },
+      },
+    );
+  }
+
   function openFilter(col: FilterableColumn, anchorEl: HTMLButtonElement) {
     setFilterAnchorRect(anchorEl.getBoundingClientRect());
     setOpenFilterCol(col);
@@ -931,6 +956,31 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
           () => { setCopyToast("Copy failed"); setTimeout(() => setCopyToast(null), 1500); },
         );
       }
+      return;
+    }
+    if (e.key === "a" || e.key === "A") {
+      e.preventDefault();
+      voteSelected(10, "Approve");
+      return;
+    }
+    if (e.key === "s" || e.key === "S") {
+      e.preventDefault();
+      voteSelected(5, "Suggestions");
+      return;
+    }
+    if (e.key === "w" || e.key === "W") {
+      e.preventDefault();
+      voteSelected(-5, "Wait");
+      return;
+    }
+    if (e.key === "x" || e.key === "X") {
+      e.preventDefault();
+      voteSelected(-10, "Reject");
+      return;
+    }
+    if (e.key === "0") {
+      e.preventDefault();
+      voteSelected(0, "No vote");
       return;
     }
     if (e.key === "Escape") {
