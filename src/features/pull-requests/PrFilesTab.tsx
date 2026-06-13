@@ -421,138 +421,149 @@ export function PrFilesTab({
     );
   }
 
+  const selectedViewed = selectedFile
+    ? viewedKeys.has(fileViewedKey(selectedFile.path))
+    : false;
+
   return (
     <div
-      className="flex min-h-0 flex-1 flex-col outline-none"
+      className="flex min-h-0 flex-1 outline-none"
       data-primary-preview="true"
       tabIndex={-1}
       onKeyDown={handleFilesKeyDown}
     >
-      {/* File list header with review progress */}
-      <div className="flex shrink-0 items-center justify-between border-b border-border bg-gray-50 px-2 py-1 text-[11px] text-muted-foreground">
-        <span>
-          {files.length} file{files.length === 1 ? "" : "s"} ·{" "}
-          <span className={viewedCount === files.length ? "font-medium text-green-700" : ""}>
-            {viewedCount}/{files.length} viewed
+      {/* Left: file list (GitHub-style file sidebar) */}
+      <div className="flex w-2/5 min-w-[150px] max-w-[340px] shrink-0 flex-col border-r border-border">
+        <div className="flex shrink-0 items-center justify-between border-b border-border bg-gray-50 px-2 py-1 text-[11px] text-muted-foreground">
+          <span>
+            {files.length} file{files.length === 1 ? "" : "s"} ·{" "}
+            <span className={viewedCount === files.length ? "font-medium text-green-700" : ""}>
+              {viewedCount}/{files.length} viewed
+            </span>
           </span>
-        </span>
-        <span className="text-muted-foreground/70">j/k files · n/p comments</span>
+          <span className="text-muted-foreground/70" title="j/k move files · n/p jump comments">
+            j/k · n/p
+          </span>
+        </div>
+        <div ref={fileListRef} className="min-h-0 flex-1 overflow-y-auto">
+          {files.map((file) => {
+            const badge = changeTypeBadge(file.changeType);
+            const threadCount = activeThreadCounts.get(pathKey(file.path)) ?? 0;
+            const selected = file.path === selectedPath;
+            const viewed = viewedKeys.has(fileViewedKey(file.path));
+            return (
+              <div
+                key={file.path}
+                role="button"
+                tabIndex={-1}
+                onClick={() => setSelectedPath(file.path)}
+                className={`flex w-full cursor-pointer items-center gap-1.5 px-2 py-1 text-left text-xs ${
+                  selected ? "bg-secondary" : "hover:bg-muted/50"
+                } ${viewed ? "opacity-55" : ""}`}
+                title={file.path}
+              >
+                <span
+                  className={`inline-flex w-4 shrink-0 items-center justify-center rounded border text-[10px] font-semibold ${badge.cls}`}
+                  aria-label={file.changeType}
+                >
+                  {badge.label}
+                </span>
+                {/* dir=rtl keeps the filename visible when truncating; the LRM
+                    mark stops the leading slash from jumping to the end. */}
+                <span
+                  className={`min-w-0 flex-1 truncate font-mono ${viewed ? "line-through" : ""}`}
+                  dir="rtl"
+                >
+                  {`‎${file.path}`}
+                </span>
+                {threadCount > 0 ? (
+                  <span className="inline-flex shrink-0 items-center rounded-full border border-blue-200 bg-blue-50 px-1.5 text-[10px] font-medium text-blue-700">
+                    {threadCount}
+                  </span>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      {/* File list */}
-      <div ref={fileListRef} className="max-h-[40%] shrink-0 overflow-y-auto border-b border-border">
-        {files.map((file) => {
-          const badge = changeTypeBadge(file.changeType);
-          const threadCount = activeThreadCounts.get(pathKey(file.path)) ?? 0;
-          const selected = file.path === selectedPath;
-          const viewed = viewedKeys.has(fileViewedKey(file.path));
-          return (
-            <div
-              key={file.path}
-              role="button"
-              tabIndex={-1}
-              onClick={() => setSelectedPath(file.path)}
-              className={`flex w-full cursor-pointer items-center gap-1.5 px-2 py-1 text-left text-xs ${
-                selected ? "bg-secondary" : "hover:bg-muted/50"
-              } ${viewed ? "opacity-55" : ""}`}
-              title={file.path}
+      {/* Right: selected file diff */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {selectedFile ? (
+          <div className="flex shrink-0 items-center gap-2 border-b border-border bg-gray-50 px-2 py-1">
+            <span
+              className="min-w-0 flex-1 truncate font-mono text-[11px]"
+              dir="rtl"
+              title={selectedFile.path}
             >
+              {`‎${selectedFile.path}`}
+            </span>
+            <label className="flex shrink-0 cursor-pointer items-center gap-1 text-[11px] text-muted-foreground">
               <input
                 type="checkbox"
-                checked={viewed}
-                onClick={(event) => event.stopPropagation()}
-                onChange={() => toggleViewed(file.path)}
-                aria-label={`Mark ${file.path} as viewed`}
-                title="Mark viewed"
-                className="h-3 w-3 shrink-0"
+                checked={selectedViewed}
+                onChange={() => toggleViewed(selectedFile.path)}
+                className="h-3 w-3"
               />
-              <span
-                className={`inline-flex w-4 shrink-0 items-center justify-center rounded border text-[10px] font-semibold ${badge.cls}`}
-                aria-label={file.changeType}
-              >
-                {badge.label}
-              </span>
-              {/* dir=rtl keeps the filename visible when truncating; the LRM
-                  mark stops the leading slash from jumping to the end. */}
-              <span
-                className={`min-w-0 flex-1 truncate font-mono ${viewed ? "line-through" : ""}`}
-                dir="rtl"
-              >
-                {`‎${file.path}`}
-              </span>
-              {threadCount > 0 ? (
-                <span className="inline-flex shrink-0 items-center rounded-full border border-blue-200 bg-blue-50 px-1.5 text-[10px] font-medium text-blue-700">
-                  {threadCount}
-                </span>
-              ) : null}
+              Viewed
+            </label>
+            <div
+              className="flex shrink-0 items-center gap-0.5 rounded border border-border bg-white p-0.5"
+              role="tablist"
+              aria-label="Diff view mode"
+            >
+              {(["unified", "split"] as ViewMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  role="tab"
+                  aria-selected={viewMode === mode}
+                  onClick={() => {
+                    setViewMode(mode);
+                    window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
+                  }}
+                  className={`rounded px-2 py-px text-[11px] font-medium ${
+                    viewMode === mode
+                      ? "bg-secondary text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {mode === "unified" ? "Unified" : "Split"}
+                </button>
+              ))}
             </div>
-          );
-        })}
-      </div>
-
-      {/* Diff toolbar */}
-      {selectedFile ? (
-        <div className="flex shrink-0 items-center justify-between border-b border-border px-2 py-1">
-          <span className="text-[11px] text-muted-foreground">
-            Click a line number's + to comment
-          </span>
-          <div
-            className="flex items-center gap-0.5 rounded border border-border bg-gray-50 p-0.5"
-            role="tablist"
-            aria-label="Diff view mode"
-          >
-            {(["unified", "split"] as ViewMode[]).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                role="tab"
-                aria-selected={viewMode === mode}
-                onClick={() => {
-                  setViewMode(mode);
-                  window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
-                }}
-                className={`rounded px-2 py-px text-[11px] font-medium ${
-                  viewMode === mode
-                    ? "bg-white text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {mode === "unified" ? "Unified" : "Split"}
-              </button>
-            ))}
           </div>
-        </div>
-      ) : null}
-
-      {actionError ? (
-        <div className="m-2 shrink-0 rounded-md border border-destructive/30 bg-red-50 px-2 py-1 text-xs text-destructive">
-          {actionError}
-        </div>
-      ) : null}
-
-      {/* Diff */}
-      <div ref={diffScrollRef} className="min-h-0 flex-1 overflow-auto">
-        {!selectedFile ? (
-          <PreviewEmptyState message="Select a file to view its diff." />
-        ) : diffQuery.isLoading ? (
-          <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            Loading diff
-          </div>
-        ) : diffQuery.isError ? (
-          <ErrorState message={commandErrorMessage(diffQuery.error)} />
-        ) : diffQuery.data ? (
-          <DiffContent
-            baseContent={diffQuery.data.baseContent}
-            targetContent={diffQuery.data.targetContent}
-            baseUnavailableReason={diffQuery.data.baseUnavailableReason}
-            targetUnavailableReason={diffQuery.data.targetUnavailableReason}
-            webUrl={pr.webUrl}
-            viewMode={viewMode}
-            lineAttachments={lineAttachments}
-            onStartComment={onStartComment}
-          />
         ) : null}
+
+        {actionError ? (
+          <div className="m-2 shrink-0 rounded-md border border-destructive/30 bg-red-50 px-2 py-1 text-xs text-destructive">
+            {actionError}
+          </div>
+        ) : null}
+
+        <div ref={diffScrollRef} className="min-h-0 flex-1 overflow-auto">
+          {!selectedFile ? (
+            <PreviewEmptyState message="Select a file to view its diff." />
+          ) : diffQuery.isLoading ? (
+            <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              Loading diff
+            </div>
+          ) : diffQuery.isError ? (
+            <ErrorState message={commandErrorMessage(diffQuery.error)} />
+          ) : diffQuery.data ? (
+            <DiffContent
+              baseContent={diffQuery.data.baseContent}
+              targetContent={diffQuery.data.targetContent}
+              baseUnavailableReason={diffQuery.data.baseUnavailableReason}
+              targetUnavailableReason={diffQuery.data.targetUnavailableReason}
+              webUrl={pr.webUrl}
+              viewMode={viewMode}
+              lineAttachments={lineAttachments}
+              onStartComment={onStartComment}
+            />
+          ) : null}
+        </div>
       </div>
     </div>
   );
