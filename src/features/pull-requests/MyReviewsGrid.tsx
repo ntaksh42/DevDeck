@@ -1,6 +1,7 @@
 import {
   type CSSProperties,
   type ReactNode,
+  Fragment,
   forwardRef,
   useEffect,
   useMemo,
@@ -31,6 +32,7 @@ import {
 import { openExternalUrl } from '@/lib/openExternal';
 import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
+import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { LoadingState, ErrorState } from '@/components/StateDisplay';
 import { PrReviewPanel } from './PrReviewPanel';
 import { VOTE_BADGE_CLASSES, voteTone } from './voteVisual';
@@ -113,15 +115,89 @@ function RequiredBadge({ required }: { required: boolean }) {
   );
 }
 
+// Renders a single grid cell for the given column key. Cells stay direct grid
+// items (wrapped only in a keyed Fragment) so the column template lines up.
+function renderPrCell(key: SortKey, pr: ReviewPullRequestSummary, isStale: boolean): ReactNode {
+  switch (key) {
+    case "pullRequestId":
+      return (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (pr.webUrl) openExternalUrl(pr.webUrl);
+          }}
+          className="truncate text-left font-mono text-xs text-primary hover:underline"
+          title={`PR #${pr.pullRequestId}`}
+        >
+          #{pr.pullRequestId}
+        </button>
+      );
+    case "repositoryName":
+      return (
+        <span className="truncate text-sm text-foreground" title={pr.repositoryName}>
+          {pr.repositoryName}
+        </span>
+      );
+    case "title":
+      return (
+        <div className="flex min-w-0 items-center gap-1.5">
+          {pr.isDraft && (
+            <span className="inline-flex shrink-0 items-center rounded border border-gray-300 bg-gray-50 px-1.5 py-0.5 text-xs text-gray-500">
+              Draft
+            </span>
+          )}
+          <span className="truncate font-medium text-foreground" title={pr.title}>
+            {pr.title}
+          </span>
+          {pr.mergeStatus === "conflicts" ? (
+            <span
+              className="inline-flex shrink-0 items-center rounded border border-red-200 bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-800"
+              title="This pull request has merge conflicts"
+            >
+              Conflicts
+            </span>
+          ) : null}
+        </div>
+      );
+    case "createdBy":
+      return (
+        <span className="truncate text-sm text-muted-foreground" title={pr.createdBy ?? "Unknown"}>
+          {pr.createdBy ?? "Unknown"}
+        </span>
+      );
+    case "creationDate":
+      return (
+        <span
+          className={`text-xs ${isStale ? "font-medium text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`}
+          title={formatDate(pr.creationDate)}
+        >
+          {formatRelativeDate(pr.creationDate)}
+        </span>
+      );
+    case "targetRefName":
+      return (
+        <span className="truncate text-xs text-muted-foreground" title={pr.targetRefName}>
+          {pr.targetRefName}
+        </span>
+      );
+    case "myIsRequired":
+      return <RequiredBadge required={pr.myIsRequired} />;
+    case "myVote":
+      return <VoteBadge vote={pr.myVote} label={pr.myVoteLabel} />;
+  }
+}
+
 const ReviewPrRow = forwardRef<
   HTMLDivElement,
   {
     pr: ReviewPullRequestSummary;
     selected: boolean;
     columnTemplate: string;
+    visibleColumns: SortKey[];
     onSelect: () => void;
   }
->(({ pr, selected, columnTemplate, onSelect }, ref) => {
+>(({ pr, selected, columnTemplate, visibleColumns, onSelect }, ref) => {
   const createdTime = new Date(pr.creationDate).getTime();
   const isStale = Number.isFinite(createdTime)
     ? Math.floor((Date.now() - createdTime) / 86_400_000) >= 3
@@ -151,67 +227,9 @@ const ReviewPrRow = forwardRef<
           : "hover:bg-muted/50"}`}
       style={{ gridTemplateColumns: columnTemplate }}
     >
-      {/* PR# */}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          if (pr.webUrl) openExternalUrl(pr.webUrl);
-        }}
-        className="truncate text-left font-mono text-xs text-primary hover:underline"
-        title={`PR #${pr.pullRequestId}`}
-      >
-        #{pr.pullRequestId}
-      </button>
-
-      {/* Repository */}
-      <span className="truncate text-sm text-foreground" title={pr.repositoryName}>
-        {pr.repositoryName}
-      </span>
-
-      {/* Title + Draft badge */}
-      <div className="flex min-w-0 items-center gap-1.5">
-        {pr.isDraft && (
-          <span className="inline-flex shrink-0 items-center rounded border border-gray-300 bg-gray-50 px-1.5 py-0.5 text-xs text-gray-500">
-            Draft
-          </span>
-        )}
-        <span className="truncate font-medium text-foreground" title={pr.title}>
-          {pr.title}
-        </span>
-        {pr.mergeStatus === "conflicts" ? (
-          <span
-            className="inline-flex shrink-0 items-center rounded border border-red-200 bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-800"
-            title="This pull request has merge conflicts"
-          >
-            Conflicts
-          </span>
-        ) : null}
-      </div>
-
-      {/* Author */}
-      <span className="truncate text-sm text-muted-foreground" title={pr.createdBy ?? "Unknown"}>
-        {pr.createdBy ?? "Unknown"}
-      </span>
-
-      {/* Created */}
-      <span
-        className={`text-xs ${isStale ? "font-medium text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`}
-        title={formatDate(pr.creationDate)}
-      >
-        {formatRelativeDate(pr.creationDate)}
-      </span>
-
-      {/* Target branch */}
-      <span className="truncate text-xs text-muted-foreground" title={pr.targetRefName}>
-        {pr.targetRefName}
-      </span>
-
-      {/* Required / Optional */}
-      <RequiredBadge required={pr.myIsRequired} />
-
-      {/* Vote */}
-      <VoteBadge vote={pr.myVote} label={pr.myVoteLabel} />
+      {visibleColumns.map((key) => (
+        <Fragment key={key}>{renderPrCell(key, pr, isStale)}</Fragment>
+      ))}
     </div>
   );
 });
@@ -241,6 +259,27 @@ const sortLabels: Record<SortKey, string> = {
   myIsRequired: "Role",
   myVote: "My Vote",
 };
+
+// Column order matches the width arrays; PR# and Title can never be hidden.
+const PR_GRID_KEYS: SortKey[] = [
+  "pullRequestId",
+  "repositoryName",
+  "title",
+  "createdBy",
+  "creationDate",
+  "targetRefName",
+  "myIsRequired",
+  "myVote",
+];
+const PR_GRID_REQUIRED_COLUMNS: SortKey[] = ["pullRequestId", "title"];
+
+function loadVisibleColumns(value: unknown): SortKey[] {
+  if (!Array.isArray(value)) return [...PR_GRID_KEYS];
+  const set = new Set(value.filter((v): v is SortKey => PR_GRID_KEYS.includes(v as SortKey)));
+  for (const required of PR_GRID_REQUIRED_COLUMNS) set.add(required);
+  const ordered = PR_GRID_KEYS.filter((key) => set.has(key));
+  return ordered.length > 0 ? ordered : [...PR_GRID_KEYS];
+}
 
 function defaultSortDirection(key: SortKey): SortDirection {
   return key === "creationDate" ? "desc" : "asc";
@@ -372,6 +411,7 @@ type MyReviewsGridViewState = {
   showDrafts: boolean;
   sort: SortState;
   textFilter: string;
+  visibleColumns: SortKey[];
 };
 
 // Everything except the actionable "Needs your review" section starts folded,
@@ -391,6 +431,7 @@ function defaultMyReviewsGridViewState(): MyReviewsGridViewState {
     showDrafts: false,
     sort: { key: "creationDate", direction: "desc" },
     textFilter: "",
+    visibleColumns: [...PR_GRID_KEYS],
   };
 }
 
@@ -431,6 +472,7 @@ function loadMyReviewsGridViewState(): MyReviewsGridViewState {
       showDrafts: typeof parsed.showDrafts === "boolean" ? parsed.showDrafts : fallback.showDrafts,
       sort,
       textFilter: typeof parsed.textFilter === "string" ? parsed.textFilter : fallback.textFilter,
+      visibleColumns: loadVisibleColumns(parsed.visibleColumns),
     };
   } catch {
     return fallback;
@@ -488,6 +530,10 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
   );
   const [openFilterCol, setOpenFilterCol] = useState<FilterableColumn | null>(null);
   const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
+  const [visibleColumns, setVisibleColumns] = useState<SortKey[]>(
+    initialViewState.visibleColumns,
+  );
+  const [columnMenuRect, setColumnMenuRect] = useState<DOMRect | null>(null);
   const [columnWidths, setColumnWidths] = useState(() =>
     storedNumbers(
       PR_GRID_COLUMN_WIDTHS_STORAGE_KEY,
@@ -531,8 +577,9 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
       showDrafts,
       sort,
       textFilter,
+      visibleColumns,
     });
-  }, [collapsedSections, columnFilters, organizationId, showDrafts, sort, textFilter]);
+  }, [collapsedSections, columnFilters, organizationId, showDrafts, sort, textFilter, visibleColumns]);
 
   const allPrs = query.data ?? [];
 
@@ -932,7 +979,24 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     setSelectedIndex(0);
   }
 
-  const COLS = gridColumnTemplate(columnWidths, 2);
+  function toggleColumnVisibility(column: SortKey) {
+    if (PR_GRID_REQUIRED_COLUMNS.includes(column)) return;
+    setVisibleColumns((current) =>
+      current.includes(column)
+        ? current.filter((value) => value !== column)
+        : PR_GRID_KEYS.filter((value) => value === column || current.includes(value)),
+    );
+  }
+
+  function resetColumnVisibility() {
+    setVisibleColumns([...PR_GRID_KEYS]);
+  }
+
+  const visibleColumnWidths = visibleColumns.map(
+    (column) => columnWidths[PR_GRID_KEYS.indexOf(column)],
+  );
+  const titleFlexIndex = Math.max(0, visibleColumns.indexOf("title"));
+  const COLS = gridColumnTemplate(visibleColumnWidths, titleFlexIndex);
   const firstVirtualRow = Math.max(
     0,
     Math.floor(gridViewport.scrollTop / PR_GRID_ROW_HEIGHT) - PR_GRID_OVERSCAN,
@@ -1058,32 +1122,31 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
                 className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                 style={{ gridTemplateColumns: COLS }}
               >
-                {(["pullRequestId", "repositoryName", "title", "createdBy", "creationDate", "targetRefName", "myIsRequired"] as SortKey[]).map((col, i) => (
-                  <SortHeaderButton
-                    key={col}
-                    column={col}
-                    sort={sort}
-                    onSort={applySort}
-                    filterActive={isFilterableColumn(col) && !!columnFilters[col]?.size}
-                    onFilterOpen={isFilterableColumn(col) ? (el) => openFilter(col, el) : undefined}
-                    resizeHandle={
-                      <ColumnResizeHandle
-                        columnIndex={i}
-                        widths={columnWidths}
-                        setWidths={setColumnWidths}
-                        min={PR_GRID_COLUMN_MIN_WIDTHS[i]}
-                        max={PR_GRID_COLUMN_MAX_WIDTHS[i]}
-                      />
-                    }
-                  />
-                ))}
-                <SortHeaderButton
-                  column="myVote"
-                  sort={sort}
-                  onSort={applySort}
-                  filterActive={!!columnFilters.myVote?.size}
-                  onFilterOpen={(el) => openFilter("myVote", el)}
-                />
+                {visibleColumns.map((col, i) => {
+                  const fullIndex = PR_GRID_KEYS.indexOf(col);
+                  const isLast = i === visibleColumns.length - 1;
+                  return (
+                    <SortHeaderButton
+                      key={col}
+                      column={col}
+                      sort={sort}
+                      onSort={applySort}
+                      filterActive={isFilterableColumn(col) && !!columnFilters[col]?.size}
+                      onFilterOpen={isFilterableColumn(col) ? (el) => openFilter(col, el) : undefined}
+                      resizeHandle={
+                        isLast ? undefined : (
+                          <ColumnResizeHandle
+                            columnIndex={fullIndex}
+                            widths={columnWidths}
+                            setWidths={setColumnWidths}
+                            min={PR_GRID_COLUMN_MIN_WIDTHS[fullIndex]}
+                            max={PR_GRID_COLUMN_MAX_WIDTHS[fullIndex]}
+                          />
+                        )
+                      }
+                    />
+                  );
+                })}
               </div>
 
               {query.isLoading ? (
@@ -1143,6 +1206,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
                         columnTemplate={COLS}
                         pr={row.pr}
                         selected={row.prIndex === selectedIndex}
+                        visibleColumns={visibleColumns}
                         onSelect={() => setSelectedIndex(row.prIndex)}
                       />
                     );
@@ -1191,6 +1255,13 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
                   </button>
                 </>
               ) : null}
+              <button
+                type="button"
+                onClick={(event) => setColumnMenuRect(event.currentTarget.getBoundingClientRect())}
+                className="rounded border border-border bg-white px-2 py-0.5 text-xs hover:bg-secondary"
+              >
+                Columns
+              </button>
             </span>
           </div>
         </div>
@@ -1223,6 +1294,17 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
             setOpenFilterCol(null);
             setFilterAnchorRect(null);
           }}
+        />
+      ) : null}
+      {columnMenuRect ? (
+        <ColumnVisibilityMenu
+          anchorRect={columnMenuRect}
+          columns={PR_GRID_KEYS.map((key) => ({ key, label: sortLabels[key] }))}
+          visibleColumns={visibleColumns}
+          requiredColumns={PR_GRID_REQUIRED_COLUMNS}
+          onToggle={toggleColumnVisibility}
+          onReset={resetColumnVisibility}
+          onClose={() => setColumnMenuRect(null)}
         />
       ) : null}
     </div>
