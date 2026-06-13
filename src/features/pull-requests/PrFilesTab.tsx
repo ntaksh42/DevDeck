@@ -26,6 +26,14 @@ const MAX_RENDERED_DIFF_LINES = 2000;
 
 type ViewMode = "unified" | "split";
 
+const VIEW_MODE_STORAGE_KEY = "azdodeck:view:prDiffViewMode";
+
+function loadViewMode(): ViewMode {
+  return window.localStorage.getItem(VIEW_MODE_STORAGE_KEY) === "unified"
+    ? "unified"
+    : "split";
+}
+
 type ChangeBadge = { label: string; cls: string };
 
 const ADD_BADGE: ChangeBadge = { label: "A", cls: "border-green-200 bg-green-100 text-green-800" };
@@ -66,7 +74,7 @@ export function PrFilesTab({
 }) {
   const queryClient = useQueryClient();
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>("unified");
+  const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode);
   // Target-side line number where a new inline comment is being drafted.
   const [commentLine, setCommentLine] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -294,7 +302,10 @@ export function PrFilesTab({
                 type="button"
                 role="tab"
                 aria-selected={viewMode === mode}
-                onClick={() => setViewMode(mode)}
+                onClick={() => {
+                  setViewMode(mode);
+                  window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
+                }}
                 className={`rounded px-2 py-px text-[11px] font-medium ${
                   viewMode === mode
                     ? "bg-white text-foreground shadow-sm"

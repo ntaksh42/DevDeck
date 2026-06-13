@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Loader2, Maximize2, Minimize2 } from "lucide-react";
 import {
   commandErrorMessage,
   getAppSettings,
@@ -40,7 +40,15 @@ const VOTE_OPTIONS: { vote: -10 | -5 | 0 | 5 | 10; label: string }[] = [
   { vote: 0, label: "Reset" },
 ];
 
-export function PrReviewPanel({ selectedPr }: { selectedPr: ReviewPullRequestSummary | null }) {
+export function PrReviewPanel({
+  selectedPr,
+  maximized = false,
+  onToggleMaximize,
+}: {
+  selectedPr: ReviewPullRequestSummary | null;
+  maximized?: boolean;
+  onToggleMaximize?: () => void;
+}) {
   const [tab, setTab] = useState<PanelTab>("review");
 
   const reviewQuery = useQuery({
@@ -56,7 +64,7 @@ export function PrReviewPanel({ selectedPr }: { selectedPr: ReviewPullRequestSum
   });
 
   return (
-    <aside className="flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-white focus-within:ring-2 focus-within:ring-ring">
+    <aside className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-white focus-within:ring-2 focus-within:ring-ring">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-2 py-1.5">
         <div className="flex items-center gap-0.5 rounded-md border border-border bg-gray-50 p-0.5" role="tablist" aria-label="PR review tabs">
           {PANEL_TABS.map((option) => (
@@ -85,6 +93,22 @@ export function PrReviewPanel({ selectedPr }: { selectedPr: ReviewPullRequestSum
           ) : (
             <ShortcutHint>Alt+P</ShortcutHint>
           )}
+          {onToggleMaximize ? (
+            <button
+              type="button"
+              onClick={onToggleMaximize}
+              aria-label={maximized ? "Restore split view" : "Maximize review panel"}
+              aria-pressed={maximized}
+              title={`${maximized ? "Restore split view" : "Maximize review panel"} (F)`}
+              className="rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              {maximized ? (
+                <Minimize2 className="h-3.5 w-3.5" aria-hidden="true" />
+              ) : (
+                <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+            </button>
+          ) : null}
         </div>
       </div>
 

@@ -494,6 +494,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     ),
   );
   const [copyToast, setCopyToast] = useState<string | null>(null);
+  const [maximized, setMaximized] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const filterInputRef = useRef<HTMLInputElement | null>(null);
   const gridScrollRef = useRef<HTMLDivElement | null>(null);
@@ -838,6 +839,11 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
       setSelectedIndex(0);
       return;
     }
+    if (e.key === "f" || e.key === "F") {
+      e.preventDefault();
+      setMaximized((value) => !value);
+      return;
+    }
     if (e.key === "e" || e.key === "E") {
       e.preventDefault();
       const pr = sortedPrs[selectedIndex];
@@ -1045,11 +1051,19 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
       </div>
 
       <div
-        className="grid min-h-0 flex-1 items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_8px_minmax(280px,var(--review-preview-width))]"
+        className={
+          maximized
+            ? "flex min-h-0 flex-1"
+            : "grid min-h-0 flex-1 items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_8px_minmax(280px,var(--review-preview-width))]"
+        }
         style={{ "--review-preview-width": `${previewWidth}px` } as CSSProperties}
       >
         {/* Grid */}
-        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-white">
+        <div
+          className={`flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-white ${
+            maximized ? "hidden" : ""
+          }`}
+        >
           <div ref={gridScrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
             <div className="min-w-[720px]">
               {/* Column headers */}
@@ -1190,7 +1204,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
 
         <ResizeHandle
           ariaLabel="Resize review preview"
-          className="hidden xl:flex"
+          className={maximized ? "hidden" : "hidden xl:flex"}
           direction={-1}
           max={MAX_REVIEW_PREVIEW_WIDTH}
           min={MIN_REVIEW_PREVIEW_WIDTH}
@@ -1199,7 +1213,11 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
           value={previewWidth}
         />
 
-        <PrReviewPanel selectedPr={selectedPr} />
+        <PrReviewPanel
+          selectedPr={selectedPr}
+          maximized={maximized}
+          onToggleMaximize={() => setMaximized((value) => !value)}
+        />
       </div>
       {openFilterCol && filterAnchorRect ? (
         <ColumnFilterDropdown
