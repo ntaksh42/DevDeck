@@ -18,6 +18,8 @@ import {
 import {
   BookOpen,
   Building2,
+  Code,
+  GitBranch,
   GitCommitHorizontal,
   GitPullRequest,
   ListChecks,
@@ -66,6 +68,12 @@ import { MyReviewsGrid } from '@/features/pull-requests/MyReviewsGrid';
 const CommitSearch = lazy(() =>
   import("@/features/commits/CommitSearch").then((m) => ({ default: m.CommitSearch })),
 );
+const PipelinesView = lazy(() =>
+  import("@/features/pipelines/PipelinesView").then((m) => ({ default: m.PipelinesView })),
+);
+const CodeSearchView = lazy(() =>
+  import("@/features/code/CodeSearchView").then((m) => ({ default: m.CodeSearchView })),
+);
 const WorkItemSearch = lazy(() =>
   import("@/features/work-items/WorkItemSearch").then((m) => ({ default: m.WorkItemSearch })),
 );
@@ -104,6 +112,8 @@ type View =
   | "myWorkItems"
   | "workItemViews"
   | "commits"
+  | "pipelines"
+  | "codeSearch"
   | "settings";
 
 type NavSectionId = "pullRequests" | "workItems";
@@ -210,6 +220,8 @@ const GOTO_VIEW_KEYS: Record<string, View> = {
   i: "workItems",
   v: "workItemViews",
   c: "commits",
+  b: "pipelines",
+  d: "codeSearch",
   s: "settings",
 };
 const GOTO_CHAIN_TIMEOUT_MS = 1500;
@@ -560,6 +572,11 @@ function AppShell() {
   }
 
   function refreshCurrentView(): void {
+    if (activeView === "pipelines") {
+      // Pipelines are fetched live, not via background sync.
+      void queryClient.invalidateQueries({ queryKey: ["pipelineRuns"] });
+      return;
+    }
     if (organizations.length > 0 && !syncMutation.isPending) {
       syncMutation.mutate({ scope: currentViewSyncScope() });
     }
@@ -623,6 +640,22 @@ function AppShell() {
       keywords: ["commit", "search"],
       label: "Go to Commits",
       run: () => setView("commits"),
+    },
+    {
+      disabled: organizations.length === 0,
+      group: "Navigation",
+      id: "nav.pipelines",
+      keywords: ["build", "ci", "pipeline"],
+      label: "Go to Pipelines",
+      run: () => setView("pipelines"),
+    },
+    {
+      disabled: organizations.length === 0,
+      group: "Navigation",
+      id: "nav.codeSearch",
+      keywords: ["code", "search", "grep", "files"],
+      label: "Go to Code Search",
+      run: () => setView("codeSearch"),
     },
     {
       group: "Navigation",
@@ -1162,6 +1195,20 @@ function AppShell() {
               label="Commits"
               onClick={() => setView("commits")}
             />
+            <NavButton
+              active={activeView === "pipelines"}
+              disabled={organizations.length === 0}
+              icon={<GitBranch className="h-4 w-4" aria-hidden="true" />}
+              label="Pipelines"
+              onClick={() => setView("pipelines")}
+            />
+            <NavButton
+              active={activeView === "codeSearch"}
+              disabled={organizations.length === 0}
+              icon={<Code className="h-4 w-4" aria-hidden="true" />}
+              label="Code"
+              onClick={() => setView("codeSearch")}
+            />
           </div>
           <div className="mt-auto space-y-1 border-t border-border pt-2">
             <NavButton
@@ -1211,7 +1258,11 @@ function AppShell() {
                         ? "Work Item Views"
                         : activeView === "commits"
                           ? "Commits"
-                          : "Settings"}
+                          : activeView === "pipelines"
+                            ? "Pipelines"
+                            : activeView === "codeSearch"
+                              ? "Code Search"
+                              : "Settings"}
             </h1>
             <p className="text-sm text-muted-foreground">
               {activeView === "pullRequestSearch"
@@ -1226,7 +1277,11 @@ function AppShell() {
                         ? "Saved WIQL views with counts, grid results, and preview"
                         : activeView === "commits"
                           ? "Search Azure DevOps commits across repositories"
-                          : "Local Azure DevOps organization setup"}
+                          : activeView === "pipelines"
+                            ? "Azure DevOps build runs by project"
+                            : activeView === "codeSearch"
+                              ? "Search code across Azure DevOps repositories"
+                              : "Local Azure DevOps organization setup"}
             </p>
           </div>
           {organizations.length > 0 && (
@@ -1291,6 +1346,10 @@ function AppShell() {
               externalSearch={commitSearchRequest}
               onExternalSearchHandled={() => setCommitSearchRequest(null)}
             />
+          ) : activeView === "pipelines" ? (
+            <PipelinesView organizations={organizations} />
+          ) : activeView === "codeSearch" ? (
+            <CodeSearchView organizations={organizations} />
           ) : organizations.length === 0 ? (
             <SetupPanel />
           ) : (

@@ -1,13 +1,17 @@
-use azdo_client::{AdoClient, CommitSearchCriteria, GitCommitRef, GitRepository, TeamProject};
+use azdo_client::{
+    AdoClient, AdoError, CommitSearchCriteria, GitCommitRef, GitRepository, TeamProject,
+};
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinSet;
 
+use crate::auth::client_for_organization;
 use crate::db::{AppDatabase, CachedCommit, Organization};
 use crate::error::{AppError, Result};
 use crate::secrets::SecretStore;
 
 const COMMIT_SYNC_CONCURRENCY: usize = 4;
+const MAX_DIFF_CONTENT_BYTES: usize = 256 * 1024;
 type CommitSyncTaskResult = Result<Option<(String, Vec<CachedCommit>)>>;
 
 #[derive(Debug, Deserialize)]
@@ -55,10 +59,57 @@ pub struct CommitSummary {
     pub web_url: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetCommitChangesInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub repository_id: String,
+    pub commit_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetCommitFileDiffInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub repository_id: String,
+    pub file_path: String,
+    pub original_path: Option<String>,
+    pub change_type: String,
+    pub commit_id: String,
+    pub parent_commit_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitChangedFile {
+    pub path: String,
+    pub change_type: String,
+    pub original_path: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitChangeSet {
+    pub commit_id: String,
+    pub parent_commit_id: Option<String>,
+    pub files: Vec<CommitChangedFile>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitFileDiff {
+    pub file_path: String,
+    pub base_content: Option<String>,
+    pub target_content: Option<String>,
+    pub base_unavailable_reason: Option<String>,
+    pub target_unavailable_reason: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct CommitService {
     db: AppDatabase,
-    #[allow(dead_code)]
     secrets: SecretStore,
 }
 
@@ -171,8 +222,146 @@ impl CommitService {
         Ok(results)
     }
 
+    pub async fn get_commit_changes(
+        &self,
+        input: GetCommitChangesInput,
+    ) -> Result<CommitChangeSet> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let commit = client
+            .get_commit(&input.project_id, &input.repository_id, &input.commit_id)
+            .await?;
+        let parent_commit_id = commit
+            .parents
+            .and_then(|parents| parents.into_iter().next());
+        let entries = client
+            .get_commit_changes(&input.project_id, &input.repository_id, &input.commit_id)
+            .await?;
+        let files = entries
+            .into_iter()
+            .filter_map(|entry| {
+                let item = entry.item?;
+                if item.is_folder.unwrap_or(false) {
+                    return None;
+                }
+                Some(CommitChangedFile {
+                    path: item.path?,
+                    change_type: entry.change_type.unwrap_or_else(|| "edit".to_string()),
+                    original_path: entry.source_server_item,
+                })
+            })
+            .collect();
+        Ok(CommitChangeSet {
+            commit_id: input.commit_id,
+            parent_commit_id,
+            files,
+        })
+    }
+
+    pub async fn get_commit_file_diff(
+        &self,
+        input: GetCommitFileDiffInput,
+    ) -> Result<CommitFileDiff> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let flags = ChangeFlags::parse(&input.change_type);
+        let base_path = input
+            .original_path
+            .clone()
+            .unwrap_or_else(|| input.file_path.clone());
+
+        let base_future = async {
+            if flags.is_add {
+                Ok((None, None))
+            } else if let Some(parent) = input.parent_commit_id.as_deref() {
+                fetch_commit_side(
+                    &client,
+                    &input.project_id,
+                    &input.repository_id,
+                    &base_path,
+                    parent,
+                )
+                .await
+            } else {
+                Ok((None, Some("missing".to_string())))
+            }
+        };
+        let target_future = async {
+            if flags.is_delete {
+                Ok((None, None))
+            } else {
+                fetch_commit_side(
+                    &client,
+                    &input.project_id,
+                    &input.repository_id,
+                    &input.file_path,
+                    &input.commit_id,
+                )
+                .await
+            }
+        };
+        let ((base_content, base_unavailable_reason), (target_content, target_unavailable_reason)) =
+            tokio::try_join!(base_future, target_future)?;
+
+        Ok(CommitFileDiff {
+            file_path: input.file_path,
+            base_content,
+            target_content,
+            base_unavailable_reason,
+            target_unavailable_reason,
+        })
+    }
+
     fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {
         self.db.resolve_organization(id)
+    }
+}
+
+struct ChangeFlags {
+    is_add: bool,
+    is_delete: bool,
+}
+
+impl ChangeFlags {
+    fn parse(change_type: &str) -> Self {
+        let tokens: Vec<&str> = change_type.split(',').map(|token| token.trim()).collect();
+        Self {
+            is_add: tokens.contains(&"add") || tokens.contains(&"undelete"),
+            is_delete: tokens.contains(&"delete"),
+        }
+    }
+}
+
+async fn fetch_commit_side(
+    client: &AdoClient,
+    project_id: &str,
+    repository_id: &str,
+    path: &str,
+    commit_id: &str,
+) -> Result<(Option<String>, Option<String>)> {
+    match client
+        .get_item_content(project_id, repository_id, path, commit_id)
+        .await
+    {
+        Ok(item) => {
+            if item
+                .content_metadata
+                .as_ref()
+                .and_then(|metadata| metadata.is_binary)
+                .unwrap_or(false)
+            {
+                return Ok((None, Some("binary".to_string())));
+            }
+            match item.content {
+                Some(content) if content.len() > MAX_DIFF_CONTENT_BYTES => {
+                    Ok((None, Some("tooLarge".to_string())))
+                }
+                Some(content) => Ok((Some(content), None)),
+                None => Ok((None, Some("binary".to_string()))),
+            }
+        }
+        Err(AdoError::Api { status: 404, .. }) => Ok((None, Some("missing".to_string()))),
+        Err(error) => Err(error.into()),
     }
 }
 
@@ -422,6 +611,18 @@ async fn fetch_commits_for_repo(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn change_flags_parse_detects_add_and_delete() {
+        let add = ChangeFlags::parse("add");
+        assert!(add.is_add && !add.is_delete);
+        let delete = ChangeFlags::parse("delete");
+        assert!(delete.is_delete && !delete.is_add);
+        let edit = ChangeFlags::parse("edit");
+        assert!(!edit.is_add && !edit.is_delete);
+        let rename_edit = ChangeFlags::parse("edit, rename");
+        assert!(!rename_edit.is_add && !rename_edit.is_delete);
+    }
 
     #[test]
     fn normalize_optional_trims_empty_values() {

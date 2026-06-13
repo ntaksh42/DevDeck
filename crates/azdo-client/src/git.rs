@@ -3,6 +3,14 @@ use serde::Deserialize;
 
 use crate::client::AdoClient;
 use crate::error::Result;
+use crate::pr_review::GitChangeEntry;
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CommitChangesResponse {
+    #[serde(default)]
+    changes: Vec<GitChangeEntry>,
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -53,6 +61,10 @@ pub struct GitCommitRef {
     pub committer: Option<GitUserDate>,
     pub remote_url: Option<String>,
     pub url: Option<String>,
+    /// Parent commit ids; present on the single-commit endpoint, absent on the
+    /// commit list endpoint.
+    #[serde(default)]
+    pub parents: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -210,6 +222,33 @@ impl AdoClient {
             .collect();
         let response: ListResponse<GitCommitRef> = self.get_json(&path, &query_refs).await?;
         Ok(response.value)
+    }
+
+    pub async fn get_commit(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        commit_id: &str,
+    ) -> Result<GitCommitRef> {
+        let path =
+            format!("{project_id}/_apis/git/repositories/{repository_id}/commits/{commit_id}");
+        self.get_json(&path, &[("api-version", "7.1-preview")])
+            .await
+    }
+
+    pub async fn get_commit_changes(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        commit_id: &str,
+    ) -> Result<Vec<GitChangeEntry>> {
+        let path = format!(
+            "{project_id}/_apis/git/repositories/{repository_id}/commits/{commit_id}/changes"
+        );
+        let response: CommitChangesResponse = self
+            .get_json(&path, &[("api-version", "7.1-preview")])
+            .await?;
+        Ok(response.changes)
     }
 }
 
@@ -417,6 +456,68 @@ mod tests {
         let reviewers = prs[0].reviewers.as_ref().unwrap();
         assert_eq!(reviewers[0].vote, 0);
         assert!(reviewers[0].is_required);
+    }
+
+    #[tokio::test]
+    async fn get_commit_parses_parents() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/project-1/_apis/git/repositories/repo-1/commits/abc123",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "commitId": "abc123",
+                "comment": "Fix bug",
+                "parents": ["parent1", "parent0"]
+            })))
+            .mount(&server)
+            .await;
+
+        let commit = test_client(&server)
+            .await
+            .get_commit("project-1", "repo-1", "abc123")
+            .await
+            .unwrap();
+        assert_eq!(commit.commit_id, "abc123");
+        assert_eq!(
+            commit.parents.as_deref(),
+            Some(["parent1".to_string(), "parent0".to_string()].as_slice())
+        );
+    }
+
+    #[tokio::test]
+    async fn get_commit_changes_maps_entries() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/project-1/_apis/git/repositories/repo-1/commits/abc123/changes",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "changeCounts": { "Edit": 1 },
+                "changes": [
+                    {
+                        "item": { "path": "/src/main.rs", "isFolder": false },
+                        "changeType": "edit"
+                    },
+                    {
+                        "item": { "path": "/src", "isFolder": true },
+                        "changeType": "edit"
+                    }
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let changes = test_client(&server)
+            .await
+            .get_commit_changes("project-1", "repo-1", "abc123")
+            .await
+            .unwrap();
+        assert_eq!(changes.len(), 2);
+        assert_eq!(
+            changes[0].item.as_ref().unwrap().path.as_deref(),
+            Some("/src/main.rs")
+        );
     }
 
     #[tokio::test]

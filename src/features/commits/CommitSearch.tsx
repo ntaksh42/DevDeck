@@ -34,6 +34,7 @@ import {
 import { openExternalUrl } from "@/lib/openExternal";
 import { ColumnResizeHandle, ResizeHandle } from "@/components/ResizeHandle";
 import { ErrorState, LoadingState } from "@/components/StateDisplay";
+import { CommitFilesPanel } from "./CommitFilesPanel";
 
 const DEFAULT_COMMIT_PREVIEW_WIDTH = 460;
 const MIN_COMMIT_PREVIEW_WIDTH = 320;
@@ -668,28 +669,37 @@ function CommitPreviewPanel({
         tabIndex={-1}
       >
         {commit ? (
-          <div className="px-3 py-2">
-            <p className="whitespace-pre-wrap break-words text-sm text-foreground">
-              {commit.comment || "(no comment)"}
-            </p>
-            <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs text-muted-foreground">
-              <dt>Author</dt>
-              <dd className="text-foreground">
-                {commit.authorName ?? "—"}
-                {commit.authorEmail ? ` <${commit.authorEmail}>` : ""}
-              </dd>
-              <dt>Date</dt>
-              <dd className="text-foreground">
-                {commit.authorDate ? formatDate(commit.authorDate) : "—"}
-              </dd>
-              <dt>Repository</dt>
-              <dd className="text-foreground">
-                {commit.projectName} / {commit.repositoryName}
-              </dd>
-              <dt>Commit</dt>
-              <dd className="break-all font-mono text-foreground">{commit.commitId}</dd>
-            </dl>
-          </div>
+          <>
+            <div className="px-3 py-2">
+              <p className="whitespace-pre-wrap break-words text-sm text-foreground">
+                {commit.comment || "(no comment)"}
+              </p>
+              <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <dt>Author</dt>
+                <dd className="text-foreground">
+                  {commit.authorName ?? "—"}
+                  {commit.authorEmail ? ` <${commit.authorEmail}>` : ""}
+                </dd>
+                <dt>Date</dt>
+                <dd className="text-foreground">
+                  {commit.authorDate ? formatDate(commit.authorDate) : "—"}
+                </dd>
+                <dt>Repository</dt>
+                <dd className="text-foreground">
+                  {commit.projectName} / {commit.repositoryName}
+                </dd>
+                <dt>Commit</dt>
+                <dd className="break-all font-mono text-foreground">{commit.commitId}</dd>
+              </dl>
+            </div>
+            <CommitFilesPanel
+              key={`${commit.organizationId}:${commit.repositoryId}:${commit.commitId}`}
+              organizationId={commit.organizationId}
+              projectId={commit.projectId}
+              repositoryId={commit.repositoryId}
+              commitId={commit.commitId}
+            />
+          </>
         ) : (
           <div className="flex h-full items-center justify-center px-3 text-sm text-muted-foreground">
             Select a commit.

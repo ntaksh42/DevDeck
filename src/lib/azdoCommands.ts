@@ -362,6 +362,69 @@ const commitRepositoryOptionsSchema = z.array(commitRepositoryOptionSchema);
 
 export type CommitRepositoryOption = z.infer<typeof commitRepositoryOptionSchema>;
 
+const commitChangedFileSchema = z.object({
+  path: z.string(),
+  changeType: z.string(),
+  originalPath: z.string().nullable(),
+});
+const commitChangeSetSchema = z.object({
+  commitId: z.string(),
+  parentCommitId: z.string().nullable(),
+  files: z.array(commitChangedFileSchema),
+});
+export type CommitChangedFile = z.infer<typeof commitChangedFileSchema>;
+export type CommitChangeSet = z.infer<typeof commitChangeSetSchema>;
+// A commit's per-file diff has the same shape as a PR file diff.
+export type CommitFileDiff = z.infer<typeof prFileDiffSchema>;
+
+export async function getCommitChanges(input: {
+  organizationId?: string;
+  projectId: string;
+  repositoryId: string;
+  commitId: string;
+}): Promise<CommitChangeSet> {
+  const result = await invokeCommand("get_commit_changes", { input });
+  return commitChangeSetSchema.parse(result);
+}
+
+export async function getCommitFileDiff(input: {
+  organizationId?: string;
+  projectId: string;
+  repositoryId: string;
+  filePath: string;
+  originalPath?: string | null;
+  changeType: string;
+  commitId: string;
+  parentCommitId?: string | null;
+}): Promise<CommitFileDiff> {
+  const result = await invokeCommand("get_commit_file_diff", { input });
+  return prFileDiffSchema.parse(result);
+}
+
+const codeSearchHitSchema = z.object({
+  fileName: z.string(),
+  path: z.string(),
+  projectName: z.string(),
+  repositoryName: z.string(),
+  branch: z.string().nullable(),
+  webUrl: z.string(),
+});
+const codeSearchResultsSchema = z.object({
+  count: z.number(),
+  results: z.array(codeSearchHitSchema),
+});
+export type CodeSearchHit = z.infer<typeof codeSearchHitSchema>;
+export type CodeSearchResults = z.infer<typeof codeSearchResultsSchema>;
+
+export async function searchCode(input: {
+  organizationId?: string;
+  query: string;
+  project?: string;
+}): Promise<CodeSearchResults> {
+  const result = await invokeCommand("search_code", { input });
+  return codeSearchResultsSchema.parse(result);
+}
+
 const syncScopeSchema = z.enum(["all", "hot", "myReviews", "myWorkItems", "commits"]);
 
 export type SyncScope = z.infer<typeof syncScopeSchema>;
@@ -769,6 +832,27 @@ export async function submitPullRequestVote(
   return prReviewerSchema.parse(result);
 }
 
+const prStatusResultSchema = z.object({
+  status: z.string().nullable(),
+  isDraft: z.boolean(),
+});
+export type PrStatusResult = z.infer<typeof prStatusResultSchema>;
+
+export type PullRequestAction = "abandon" | "reactivate" | "publish" | "complete";
+
+export async function updatePullRequest(input: {
+  organizationId?: string;
+  projectId: string;
+  repositoryId: string;
+  pullRequestId: number;
+  action: PullRequestAction;
+  mergeStrategy?: string;
+  deleteSourceBranch?: boolean;
+}): Promise<PrStatusResult> {
+  const result = await invokeCommand("update_pull_request", { input });
+  return prStatusResultSchema.parse(result);
+}
+
 export async function searchPullRequestMentions(
   input: SearchPullRequestMentionsInput,
 ): Promise<MentionCandidate[]> {
@@ -949,6 +1033,141 @@ export async function getSavedQuery(
 ): Promise<SavedQueryResult> {
   const result = await invokeCommand("get_saved_query", { input });
   return savedQueryResultSchema.parse(result);
+}
+
+const pipelineProjectOptionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+const pipelineProjectOptionsSchema = z.array(pipelineProjectOptionSchema);
+export type PipelineProjectOption = z.infer<typeof pipelineProjectOptionSchema>;
+
+const pipelineDefinitionOptionSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+});
+const pipelineDefinitionOptionsSchema = z.array(pipelineDefinitionOptionSchema);
+export type PipelineDefinitionOption = z.infer<typeof pipelineDefinitionOptionSchema>;
+
+const pipelineRunSummarySchema = z.object({
+  organizationId: z.string(),
+  projectId: z.string(),
+  projectName: z.string(),
+  buildId: z.number(),
+  buildNumber: z.string().nullable(),
+  definitionId: z.number().nullable(),
+  definitionName: z.string().nullable(),
+  status: z.string().nullable(),
+  result: z.string().nullable(),
+  sourceBranch: z.string().nullable(),
+  reason: z.string().nullable(),
+  requestedFor: z.string().nullable(),
+  queueTime: z.string().nullable(),
+  startTime: z.string().nullable(),
+  finishTime: z.string().nullable(),
+  webUrl: z.string(),
+});
+const pipelineRunSummariesSchema = z.array(pipelineRunSummarySchema);
+export type PipelineRunSummary = z.infer<typeof pipelineRunSummarySchema>;
+
+const timelineNodeSchema = z.object({
+  id: z.string(),
+  parentId: z.string().nullable(),
+  nodeType: z.string().nullable(),
+  name: z.string().nullable(),
+  state: z.string().nullable(),
+  result: z.string().nullable(),
+  startTime: z.string().nullable(),
+  finishTime: z.string().nullable(),
+  logId: z.number().nullable(),
+  errorCount: z.number(),
+  warningCount: z.number(),
+  order: z.number().nullable(),
+});
+export type TimelineNode = z.infer<typeof timelineNodeSchema>;
+
+const pipelineRunDetailSchema = z.object({
+  run: pipelineRunSummarySchema,
+  timeline: z.array(timelineNodeSchema),
+});
+export type PipelineRunDetail = z.infer<typeof pipelineRunDetailSchema>;
+
+const pipelineLogTailSchema = z.object({
+  lines: z.array(z.string()),
+  truncated: z.boolean(),
+});
+export type PipelineLogTail = z.infer<typeof pipelineLogTailSchema>;
+
+export type ListPipelineRunsInput = {
+  organizationId?: string;
+  projectId: string;
+  definitionId?: number;
+  branch?: string;
+  result?: string;
+  status?: string;
+  requestedForMe?: boolean;
+};
+
+export async function listPipelineProjects(input: {
+  organizationId?: string;
+}): Promise<PipelineProjectOption[]> {
+  const result = await invokeCommand("list_pipeline_projects", { input });
+  return pipelineProjectOptionsSchema.parse(result);
+}
+
+export async function listPipelineRuns(
+  input: ListPipelineRunsInput,
+): Promise<PipelineRunSummary[]> {
+  const result = await invokeCommand("list_pipeline_runs", { input });
+  return pipelineRunSummariesSchema.parse(result);
+}
+
+export async function listPipelineDefinitions(input: {
+  organizationId?: string;
+  projectId: string;
+  nameFilter?: string;
+}): Promise<PipelineDefinitionOption[]> {
+  const result = await invokeCommand("list_pipeline_definitions", { input });
+  return pipelineDefinitionOptionsSchema.parse(result);
+}
+
+export async function getPipelineRun(input: {
+  organizationId?: string;
+  projectId: string;
+  buildId: number;
+}): Promise<PipelineRunDetail> {
+  const result = await invokeCommand("get_pipeline_run", { input });
+  return pipelineRunDetailSchema.parse(result);
+}
+
+export async function getPipelineRunLogTail(input: {
+  organizationId?: string;
+  projectId: string;
+  buildId: number;
+  logId: number;
+  maxLines?: number;
+}): Promise<PipelineLogTail> {
+  const result = await invokeCommand("get_pipeline_run_log_tail", { input });
+  return pipelineLogTailSchema.parse(result);
+}
+
+export async function rerunPipelineRun(input: {
+  organizationId?: string;
+  projectId: string;
+  definitionId: number;
+  sourceBranch: string;
+}): Promise<PipelineRunSummary> {
+  const result = await invokeCommand("rerun_pipeline_run", { input });
+  return pipelineRunSummarySchema.parse(result);
+}
+
+export async function cancelPipelineRun(input: {
+  organizationId?: string;
+  projectId: string;
+  buildId: number;
+}): Promise<PipelineRunSummary> {
+  const result = await invokeCommand("cancel_pipeline_run", { input });
+  return pipelineRunSummarySchema.parse(result);
 }
 
 export async function searchCommits(

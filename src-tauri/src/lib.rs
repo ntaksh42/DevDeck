@@ -3,10 +3,12 @@ use std::str::FromStr;
 use serde::Deserialize;
 
 mod auth;
+mod code_search;
 mod commits;
 mod db;
 mod error;
 mod orgs;
+mod pipelines;
 mod pr_review;
 mod projects;
 mod prs;
@@ -16,18 +18,26 @@ mod settings;
 mod sync;
 mod work_items;
 
+use code_search::{CodeSearchResults, CodeSearchService, SearchCodeInput};
 use commits::{
-    CommitRepositoryOption, CommitService, CommitSummary, ListCommitRepositoriesInput,
-    SearchCommitsInput,
+    CommitChangeSet, CommitFileDiff, CommitRepositoryOption, CommitService, CommitSummary,
+    GetCommitChangesInput, GetCommitFileDiffInput, ListCommitRepositoriesInput, SearchCommitsInput,
 };
 use db::{AppDatabase, AppSettings, Organization, SyncState};
 use error::{AppError, Result};
 use orgs::{AddAzureCliOrganizationInput, AddPatOrganizationInput, OrganizationService};
+use pipelines::{
+    CancelPipelineRunInput, GetPipelineRunInput, GetPipelineRunLogTailInput,
+    ListPipelineDefinitionsInput, ListPipelineProjectsInput, ListPipelineRunsInput,
+    PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption, PipelineRunDetail,
+    PipelineRunSummary, PipelineService, RerunPipelineRunInput,
+};
 use pr_review::{
     DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
     PostPullRequestCommentInput, PrCommit, PrFileDiff, PrLocator, PrReviewService, PrReviewer,
-    PrThread, PullRequestChanges, PullRequestReview, SearchPullRequestMentionsInput,
-    SetPullRequestThreadStatusInput, SubmitPullRequestVoteInput,
+    PrStatusResult, PrThread, PullRequestChanges, PullRequestReview,
+    SearchPullRequestMentionsInput, SetPullRequestThreadStatusInput, SubmitPullRequestVoteInput,
+    UpdatePullRequestInput,
 };
 use prs::{
     ListMyReviewPullRequestsInput, PullRequestService, PullRequestSummary,
@@ -64,6 +74,8 @@ struct AppState {
     pr_review: PrReviewService,
     work_items: WorkItemService,
     commits: CommitService,
+    pipelines: PipelineService,
+    code_search: CodeSearchService,
     settings: SettingsService,
     sync_trigger: mpsc::Sender<SyncTrigger>,
 }
@@ -248,6 +260,16 @@ async fn submit_pull_request_vote(
 ) -> Result<PrReviewer> {
     ensure_write_enabled(&state)?;
     state.pr_review.submit_vote(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn update_pull_request(
+    input: UpdatePullRequestInput,
+    state: State<'_, AppState>,
+) -> Result<PrStatusResult> {
+    ensure_write_enabled(&state)?;
+    state.pr_review.update_pull_request(input).await
 }
 
 #[tauri::command]
@@ -520,6 +542,98 @@ async fn list_commit_repositories(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn search_code(
+    input: SearchCodeInput,
+    state: State<'_, AppState>,
+) -> Result<CodeSearchResults> {
+    state.code_search.search(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn get_commit_changes(
+    input: GetCommitChangesInput,
+    state: State<'_, AppState>,
+) -> Result<CommitChangeSet> {
+    state.commits.get_commit_changes(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn get_commit_file_diff(
+    input: GetCommitFileDiffInput,
+    state: State<'_, AppState>,
+) -> Result<CommitFileDiff> {
+    state.commits.get_commit_file_diff(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn list_pipeline_projects(
+    input: ListPipelineProjectsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<PipelineProjectOption>> {
+    state.pipelines.list_projects(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn list_pipeline_runs(
+    input: ListPipelineRunsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<PipelineRunSummary>> {
+    state.pipelines.list_runs(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn list_pipeline_definitions(
+    input: ListPipelineDefinitionsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<PipelineDefinitionOption>> {
+    state.pipelines.list_definitions(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn get_pipeline_run(
+    input: GetPipelineRunInput,
+    state: State<'_, AppState>,
+) -> Result<PipelineRunDetail> {
+    state.pipelines.get_run(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn get_pipeline_run_log_tail(
+    input: GetPipelineRunLogTailInput,
+    state: State<'_, AppState>,
+) -> Result<PipelineLogTail> {
+    state.pipelines.get_run_log_tail(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn rerun_pipeline_run(
+    input: RerunPipelineRunInput,
+    state: State<'_, AppState>,
+) -> Result<PipelineRunSummary> {
+    ensure_write_enabled(&state)?;
+    state.pipelines.rerun_run(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn cancel_pipeline_run(
+    input: CancelPipelineRunInput,
+    state: State<'_, AppState>,
+) -> Result<PipelineRunSummary> {
+    ensure_write_enabled(&state)?;
+    state.pipelines.cancel_run(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn trigger_sync(input: Option<TriggerSyncInput>, state: State<'_, AppState>) -> Result<()> {
     let (tx, rx) = oneshot::channel();
     state
@@ -599,6 +713,8 @@ pub fn run() {
                 pr_review: PrReviewService::new(db.clone(), SecretStore),
                 work_items: WorkItemService::new(db.clone(), SecretStore),
                 commits: CommitService::new(db.clone(), SecretStore),
+                pipelines: PipelineService::new(db.clone(), SecretStore),
+                code_search: CodeSearchService::new(db.clone(), SecretStore),
                 settings: SettingsService::new(db.clone()),
                 sync_trigger: sync_tx,
             });
@@ -625,6 +741,7 @@ pub fn run() {
             post_pull_request_comment,
             set_pull_request_thread_status,
             submit_pull_request_vote,
+            update_pull_request,
             search_pull_request_mentions,
             edit_pull_request_comment,
             delete_pull_request_comment,
@@ -653,6 +770,16 @@ pub fn run() {
             set_work_items_priority,
             search_commits,
             list_commit_repositories,
+            search_code,
+            get_commit_changes,
+            get_commit_file_diff,
+            list_pipeline_projects,
+            list_pipeline_runs,
+            list_pipeline_definitions,
+            get_pipeline_run,
+            get_pipeline_run_log_tail,
+            rerun_pipeline_run,
+            cancel_pipeline_run,
             trigger_sync
         ])
         .run(tauri::generate_context!())

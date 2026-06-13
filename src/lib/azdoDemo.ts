@@ -117,8 +117,11 @@ const writeCommands = new Set([
   "post_pull_request_comment",
   "set_pull_request_thread_status",
   "submit_pull_request_vote",
+  "update_pull_request",
   "edit_pull_request_comment",
   "delete_pull_request_comment",
+  "rerun_pipeline_run",
+  "cancel_pipeline_run",
 ]);
 
 let demoPrThreadSeq = 100;
@@ -308,6 +311,117 @@ export function summarize(widgetId: string) {
   return widget ? \`\${widget.label} — a deliberately long, unchanged-but-reflowed descriptive suffix that shows how split view now wraps very long lines instead of clipping them\` : "unknown";
 }
 `;
+
+function demoPipelineProjects() {
+  return [
+    { id: "demo-project", name: "Demo Project" },
+    { id: "demo-tools", name: "Tooling" },
+  ];
+}
+
+function demoPipelineDefinitions() {
+  return [
+    { id: 1, name: "CI" },
+    { id: 2, name: "Nightly" },
+  ];
+}
+
+function demoPipelineRuns() {
+  return [
+    {
+      organizationId: "demo-org",
+      projectId: "demo-project",
+      projectName: "Demo Project",
+      buildId: 1001,
+      buildNumber: "20260613.3",
+      definitionId: 1,
+      definitionName: "CI",
+      status: "completed",
+      result: "succeeded",
+      sourceBranch: "refs/heads/main",
+      reason: "individualCI",
+      requestedFor: "Demo User",
+      queueTime: "2026-06-13T09:00:00Z",
+      startTime: "2026-06-13T09:00:05Z",
+      finishTime: "2026-06-13T09:04:00Z",
+      webUrl: "https://dev.azure.com/demo/demo/_build/results?buildId=1001",
+    },
+    {
+      organizationId: "demo-org",
+      projectId: "demo-project",
+      projectName: "Demo Project",
+      buildId: 1002,
+      buildNumber: "20260613.4",
+      definitionId: 1,
+      definitionName: "CI",
+      status: "completed",
+      result: "failed",
+      sourceBranch: "refs/heads/feature/login",
+      reason: "pullRequest",
+      requestedFor: "Demo User",
+      queueTime: "2026-06-13T10:00:00Z",
+      startTime: "2026-06-13T10:00:05Z",
+      finishTime: "2026-06-13T10:02:30Z",
+      webUrl: "https://dev.azure.com/demo/demo/_build/results?buildId=1002",
+    },
+    {
+      organizationId: "demo-org",
+      projectId: "demo-project",
+      projectName: "Demo Project",
+      buildId: 1003,
+      buildNumber: "20260613.5",
+      definitionId: 2,
+      definitionName: "Nightly",
+      status: "inProgress",
+      result: null,
+      sourceBranch: "refs/heads/main",
+      reason: "schedule",
+      requestedFor: "Scheduler",
+      queueTime: "2026-06-13T11:00:00Z",
+      startTime: "2026-06-13T11:00:05Z",
+      finishTime: null,
+      webUrl: "https://dev.azure.com/demo/demo/_build/results?buildId=1003",
+    },
+  ];
+}
+
+function demoPipelineRunDetail(buildId: number) {
+  const runs = demoPipelineRuns();
+  const run = runs.find((r) => r.buildId === buildId) ?? runs[0];
+  return {
+    run,
+    timeline: [
+      {
+        id: "stage-1",
+        parentId: null,
+        nodeType: "Stage",
+        name: "Build",
+        state: "completed",
+        result: run.result ?? "succeeded",
+        startTime: run.startTime,
+        finishTime: run.finishTime,
+        logId: null,
+        errorCount: run.result === "failed" ? 1 : 0,
+        warningCount: 0,
+        order: 1,
+      },
+      {
+        id: "job-1",
+        parentId: "stage-1",
+        nodeType: "Job",
+        name: "Compile",
+        state: "completed",
+        result: run.result ?? "succeeded",
+        startTime: run.startTime,
+        finishTime: run.finishTime,
+        logId: 7,
+        errorCount: run.result === "failed" ? 1 : 0,
+        warningCount: 0,
+        order: 1,
+      },
+    ],
+  };
+}
 
 export async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
   await new Promise((resolve) => window.setTimeout(resolve, demoResponseDelayMs()));
@@ -555,6 +669,14 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         isMe: true,
       };
     }
+    case "update_pull_request": {
+      const input = (args as { input?: { action?: string } } | undefined)?.input;
+      const action = input?.action;
+      return {
+        status: action === "abandon" ? "abandoned" : action === "complete" ? "completed" : "active",
+        isDraft: action === "publish" ? false : true,
+      };
+    }
     case "search_work_items": {
       const input = (args as { input?: SearchWorkItemsInput } | undefined)?.input;
       return demoWorkItems(input);
@@ -676,6 +798,86 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     }
     case "list_commit_repositories":
       return demoCommitRepositories();
+    case "get_commit_changes": {
+      const input = (args as { input?: { commitId?: string } } | undefined)?.input;
+      return {
+        commitId: input?.commitId ?? "demosha",
+        parentCommitId: "demoparent",
+        files: [
+          { path: "/src/app.ts", changeType: "edit", originalPath: null },
+          { path: "/README.md", changeType: "add", originalPath: null },
+        ],
+      };
+    }
+    case "get_commit_file_diff": {
+      const input = (args as { input?: { filePath?: string } } | undefined)?.input;
+      return {
+        filePath: input?.filePath ?? "/src/app.ts",
+        baseContent: "const x = 1;\nconst y = 2;\n",
+        targetContent: "const x = 1;\nconst y = 3;\nconst z = 4;\n",
+        baseUnavailableReason: null,
+        targetUnavailableReason: null,
+      };
+    }
+    case "search_code": {
+      const input = (args as { input?: { query?: string } } | undefined)?.input;
+      const query = input?.query?.trim() ?? "";
+      if (!query) return { count: 0, results: [] };
+      return {
+        count: 2,
+        results: [
+          {
+            fileName: "azdoCommands.ts",
+            path: "/src/lib/azdoCommands.ts",
+            projectName: "Demo Project",
+            repositoryName: "azdo-dashboard",
+            branch: "main",
+            webUrl:
+              "https://dev.azure.com/demo/Demo%20Project/_git/azdo-dashboard?path=/src/lib/azdoCommands.ts&_a=contents&version=GBmain",
+          },
+          {
+            fileName: "App.tsx",
+            path: "/src/App.tsx",
+            projectName: "Demo Project",
+            repositoryName: "azdo-dashboard",
+            branch: "main",
+            webUrl:
+              "https://dev.azure.com/demo/Demo%20Project/_git/azdo-dashboard?path=/src/App.tsx&_a=contents&version=GBmain",
+          },
+        ],
+      };
+    }
+    case "list_pipeline_projects":
+      return demoPipelineProjects();
+    case "list_pipeline_definitions":
+      return demoPipelineDefinitions();
+    case "list_pipeline_runs":
+      return demoPipelineRuns();
+    case "get_pipeline_run": {
+      const input = (args as { input?: { buildId?: number } } | undefined)?.input;
+      return demoPipelineRunDetail(input?.buildId ?? 1001);
+    }
+    case "get_pipeline_run_log_tail":
+      return {
+        lines: ["[command] npm run build", "ERROR: build failed (exit 1)"],
+        truncated: false,
+      };
+    case "rerun_pipeline_run": {
+      const input = (args as { input?: { buildId?: number } } | undefined)?.input;
+      return {
+        ...demoPipelineRuns()[0],
+        buildId: input?.buildId ?? 1004,
+        status: "notStarted",
+        result: null,
+      };
+    }
+    case "cancel_pipeline_run": {
+      const input = (args as { input?: { buildId?: number } } | undefined)?.input;
+      const run =
+        demoPipelineRuns().find((r) => r.buildId === input?.buildId) ??
+        demoPipelineRuns()[2];
+      return { ...run, status: "cancelling" };
+    }
     case "list_sync_states":
       return demoSyncStates;
     case "get_saved_query": {

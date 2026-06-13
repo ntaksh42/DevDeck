@@ -14,7 +14,9 @@ import {
   searchPullRequestMentions,
   setPullRequestThreadStatus,
   submitPullRequestVote,
+  updatePullRequest,
   type MentionCandidate,
+  type PullRequestAction,
   type PullRequestReview,
   type ReviewPullRequestSummary,
 } from "@/lib/azdoCommands";
@@ -274,6 +276,33 @@ function ReviewTab({
     onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
   });
 
+  const settingsQuery = useQuery({
+    queryKey: ["appSettings"],
+    queryFn: getAppSettings,
+    staleTime: 5 * 60_000,
+  });
+  const readOnly = settingsQuery.data?.readOnlyValidationModeEnabled ?? false;
+  const [mergeStrategy, setMergeStrategy] = useState("squash");
+  const [deleteSourceBranch, setDeleteSourceBranch] = useState(false);
+
+  const updateMutation = useMutation({
+    mutationFn: updatePullRequest,
+    onSuccess: () => {
+      setActionError(null);
+      invalidateReview();
+    },
+    onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
+  });
+
+  function runPrAction(action: PullRequestAction, confirmMessage: string) {
+    if (!window.confirm(confirmMessage)) return;
+    updateMutation.mutate({
+      ...prLocator(pr),
+      action,
+      ...(action === "complete" ? { mergeStrategy, deleteSourceBranch } : {}),
+    });
+  }
+
   // Keep a focus target (Alt+P) present even on loading/error states.
   if (loading) {
     return (
@@ -332,6 +361,70 @@ function ReviewTab({
           ))}
         </select>
         {voteMutation.isPending ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden="true" />
+        ) : null}
+      </div>
+
+      {/* PR status actions. My Reviews syncs active PRs only, so the visible PR
+          is active; reactivate is reachable through the backend but not here. */}
+      <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-border px-2 py-1.5 text-xs">
+        <span className="font-medium text-muted-foreground">PR</span>
+        {review.isDraft ? (
+          <button
+            type="button"
+            disabled={readOnly || updateMutation.isPending}
+            title={readOnly ? "Read-only validation mode is enabled" : undefined}
+            onClick={() => runPrAction("publish", "Publish this draft pull request?")}
+            className="rounded border border-border bg-white px-2 py-0.5 font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Publish
+          </button>
+        ) : null}
+        <select
+          aria-label="Merge strategy"
+          value={mergeStrategy}
+          disabled={readOnly || updateMutation.isPending}
+          onChange={(event) => setMergeStrategy(event.target.value)}
+          className="h-6 rounded border border-input bg-background px-1 outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+        >
+          <option value="squash">Squash</option>
+          <option value="noFastForward">Merge</option>
+          <option value="rebase">Rebase</option>
+          <option value="rebaseMerge">Rebase + merge</option>
+        </select>
+        <label className="flex items-center gap-1 text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={deleteSourceBranch}
+            disabled={readOnly || updateMutation.isPending}
+            onChange={(event) => setDeleteSourceBranch(event.target.checked)}
+          />
+          Delete branch
+        </label>
+        <button
+          type="button"
+          disabled={readOnly || updateMutation.isPending}
+          title={readOnly ? "Read-only validation mode is enabled" : undefined}
+          onClick={() =>
+            runPrAction(
+              "complete",
+              `Complete (merge) this pull request using ${mergeStrategy}?`,
+            )
+          }
+          className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 font-medium text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Complete
+        </button>
+        <button
+          type="button"
+          disabled={readOnly || updateMutation.isPending}
+          title={readOnly ? "Read-only validation mode is enabled" : undefined}
+          onClick={() => runPrAction("abandon", "Abandon this pull request?")}
+          className="rounded border border-border bg-white px-2 py-0.5 font-medium text-muted-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Abandon
+        </button>
+        {updateMutation.isPending ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden="true" />
         ) : null}
       </div>

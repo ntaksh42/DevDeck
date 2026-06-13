@@ -270,6 +270,58 @@ impl AdoClient {
         unreachable!("retry policy always has at least one attempt")
     }
 
+    pub(crate) async fn get_text(&self, path: &str, query: &[(&str, &str)]) -> Result<String> {
+        let url = self
+            .base_url
+            .join(path)
+            .map_err(|e| AdoError::Auth(e.to_string()))?;
+
+        for attempt in 1..=self.retry_policy.attempts() {
+            let auth = self.auth.auth_header_value().await?;
+            let response = self
+                .http
+                .get(url.clone())
+                .query(query)
+                .header("Authorization", &auth)
+                .send()
+                .await;
+
+            match response {
+                Ok(resp) => {
+                    let status = resp.status();
+                    if status.is_success() {
+                        return Ok(resp.text().await?);
+                    }
+                    if status == StatusCode::UNAUTHORIZED {
+                        return Err(AdoError::Unauthorized);
+                    }
+                    let retry_after = parse_retry_after(resp.headers());
+                    if self.should_retry_status(status, attempt) {
+                        let delay = self.retry_delay(attempt, retry_after);
+                        sleep(delay).await;
+                        continue;
+                    }
+                    if status == StatusCode::TOO_MANY_REQUESTS {
+                        return Err(AdoError::RateLimited(
+                            retry_after.unwrap_or(Duration::from_secs(60)),
+                        ));
+                    }
+                    let body = resp.text().await.unwrap_or_default();
+                    return Err(AdoError::Api {
+                        status: status.as_u16(),
+                        body,
+                    });
+                }
+                Err(error) if self.should_retry_error(&error, attempt) => {
+                    sleep(self.retry_policy.backoff_delay(attempt)).await;
+                }
+                Err(error) => return Err(AdoError::Network(error)),
+            }
+        }
+
+        unreachable!("retry policy always has at least one attempt")
+    }
+
     pub(crate) async fn post_json<B: Serialize + ?Sized, T: DeserializeOwned>(
         &self,
         path: &str,
@@ -280,7 +332,29 @@ impl AdoClient {
             .base_url
             .join(path)
             .map_err(|e| AdoError::Auth(e.to_string()))?;
+        self.post_json_to_url(url, query, body).await
+    }
 
+    /// POSTs to the Almsearch service host (Code/Work Item Search), which lives
+    /// on a different subdomain than the core REST API.
+    pub(crate) async fn post_json_almsearch<B: Serialize + ?Sized, T: DeserializeOwned>(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        body: &B,
+    ) -> Result<T> {
+        let url = almsearch_base_url(&self.base_url)?
+            .join(path)
+            .map_err(|e| AdoError::Auth(e.to_string()))?;
+        self.post_json_to_url(url, query, body).await
+    }
+
+    async fn post_json_to_url<B: Serialize + ?Sized, T: DeserializeOwned>(
+        &self,
+        url: Url,
+        query: &[(&str, &str)],
+        body: &B,
+    ) -> Result<T> {
         for attempt in 1..=self.retry_policy.attempts() {
             let auth = self.auth.auth_header_value().await?;
             let response = self
@@ -307,7 +381,7 @@ impl AdoClient {
                         let delay = self.retry_delay(attempt, retry_after);
                         tracing::warn!(
                             method = "POST",
-                            path,
+                            url = %url,
                             attempt,
                             status = status.as_u16(),
                             delay_ms = delay.as_millis(),
@@ -333,7 +407,7 @@ impl AdoClient {
                     let delay = self.retry_policy.backoff_delay(attempt);
                     tracing::warn!(
                         method = "POST",
-                        path,
+                        url = %url,
                         attempt,
                         delay_ms = delay.as_millis(),
                         error = %error,
@@ -677,6 +751,20 @@ fn vssps_base_url(base_url: &Url) -> Result<Url> {
         .map_err(|e| AdoError::Auth(e.to_string()))
 }
 
+fn almsearch_base_url(base_url: &Url) -> Result<Url> {
+    if base_url.host_str() != Some("dev.azure.com") {
+        return Ok(base_url.clone());
+    }
+
+    let organization = base_url
+        .path_segments()
+        .and_then(|mut segments| segments.next())
+        .filter(|segment| !segment.is_empty())
+        .ok_or_else(|| AdoError::Auth("missing organization in base URL".to_string()))?;
+    Url::parse(&format!("https://almsearch.dev.azure.com/{organization}/"))
+        .map_err(|e| AdoError::Auth(e.to_string()))
+}
+
 fn parse_retry_after(headers: &HeaderMap) -> Option<Duration> {
     headers
         .get("Retry-After")
@@ -740,6 +828,23 @@ mod tests {
             data.authenticated_user.provider_display_name.as_deref(),
             Some("Test User")
         );
+    }
+
+    #[tokio::test]
+    async fn get_text_returns_plain_body() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/build/builds/9/logs/3"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("line1\nline2\nline3"))
+            .mount(&server)
+            .await;
+
+        let client = test_client(&server).await;
+        let body = client
+            .get_text("project-1/_apis/build/builds/9/logs/3", &[])
+            .await
+            .unwrap();
+        assert_eq!(body, "line1\nline2\nline3");
     }
 
     #[tokio::test]
