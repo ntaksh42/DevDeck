@@ -401,6 +401,30 @@ export async function getCommitFileDiff(input: {
   return prFileDiffSchema.parse(result);
 }
 
+const codeSearchHitSchema = z.object({
+  fileName: z.string(),
+  path: z.string(),
+  projectName: z.string(),
+  repositoryName: z.string(),
+  branch: z.string().nullable(),
+  webUrl: z.string(),
+});
+const codeSearchResultsSchema = z.object({
+  count: z.number(),
+  results: z.array(codeSearchHitSchema),
+});
+export type CodeSearchHit = z.infer<typeof codeSearchHitSchema>;
+export type CodeSearchResults = z.infer<typeof codeSearchResultsSchema>;
+
+export async function searchCode(input: {
+  organizationId?: string;
+  query: string;
+  project?: string;
+}): Promise<CodeSearchResults> {
+  const result = await invokeCommand("search_code", { input });
+  return codeSearchResultsSchema.parse(result);
+}
+
 const syncScopeSchema = z.enum(["all", "hot", "myReviews", "myWorkItems", "commits"]);
 
 export type SyncScope = z.infer<typeof syncScopeSchema>;

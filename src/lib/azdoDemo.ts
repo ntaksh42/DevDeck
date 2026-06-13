@@ -819,6 +819,34 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         targetUnavailableReason: null,
       };
     }
+    case "search_code": {
+      const input = (args as { input?: { query?: string } } | undefined)?.input;
+      const query = input?.query?.trim() ?? "";
+      if (!query) return { count: 0, results: [] };
+      return {
+        count: 2,
+        results: [
+          {
+            fileName: "azdoCommands.ts",
+            path: "/src/lib/azdoCommands.ts",
+            projectName: "Demo Project",
+            repositoryName: "azdo-dashboard",
+            branch: "main",
+            webUrl:
+              "https://dev.azure.com/demo/Demo%20Project/_git/azdo-dashboard?path=/src/lib/azdoCommands.ts&_a=contents&version=GBmain",
+          },
+          {
+            fileName: "App.tsx",
+            path: "/src/App.tsx",
+            projectName: "Demo Project",
+            repositoryName: "azdo-dashboard",
+            branch: "main",
+            webUrl:
+              "https://dev.azure.com/demo/Demo%20Project/_git/azdo-dashboard?path=/src/App.tsx&_a=contents&version=GBmain",
+          },
+        ],
+      };
+    }
     case "list_pipeline_projects":
       return demoPipelineProjects();
     case "list_pipeline_definitions":
