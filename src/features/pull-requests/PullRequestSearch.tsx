@@ -1,4 +1,5 @@
 import {
+  type CSSProperties,
   type FormEvent,
   forwardRef,
   useEffect,
@@ -15,11 +16,41 @@ import {
   type Organization,
   type SearchPullRequestsInput,
   type PullRequestSummary,
+  type ReviewPullRequestSummary,
 } from '@/lib/azdoCommands';
-import { clamp, storedNumbers, gridColumnTemplate, isEditableTarget, formatDate, formatRelativeDate } from '@/lib/utils';
+import {
+  clamp,
+  storedNumbers,
+  storedNumber,
+  gridColumnTemplate,
+  isEditableTarget,
+  focusFilterInput,
+  focusPrimaryPreview,
+  formatDate,
+  formatRelativeDate,
+} from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
-import { ColumnResizeHandle } from '@/components/ResizeHandle';
+import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { ErrorState } from '@/components/StateDisplay';
+import { PrReviewPanel } from './PrReviewPanel';
+
+const DEFAULT_PR_SEARCH_PREVIEW_WIDTH = 460;
+const MIN_PR_SEARCH_PREVIEW_WIDTH = 320;
+const MAX_PR_SEARCH_PREVIEW_WIDTH = 8192;
+const PR_SEARCH_PREVIEW_WIDTH_STORAGE_KEY = 'azdodeck:layout:prSearchPreviewWidth';
+
+// Adapts a search result to the shape PrReviewPanel needs; the panel refetches
+// the real review (vote/reviewers/threads) by locator, so these are defaults.
+function toReviewSummary(pr: PullRequestSummary): ReviewPullRequestSummary {
+  return {
+    ...pr,
+    myVote: 0,
+    myVoteLabel: "No Vote",
+    myIsRequired: false,
+    isDraft: false,
+    mergeStatus: null,
+  };
+}
 
 const DEFAULT_PR_SEARCH_COLUMN_WIDTHS = [56, 70, 220, 130, 104, 64, 120];
 const PR_SEARCH_COLUMN_MIN_WIDTHS = [52, 64, 160, 104, 86, 58, 100];
@@ -273,6 +304,15 @@ function PullRequestResults({
   const [openFilterCol, setOpenFilterCol] = useState<PrSearchFilterableColumn | null>(null);
   const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
   const [copyToast, setCopyToast] = useState<string | null>(null);
+  const [maximized, setMaximized] = useState(false);
+  const [previewWidth, setPreviewWidth] = useState(() =>
+    storedNumber(
+      PR_SEARCH_PREVIEW_WIDTH_STORAGE_KEY,
+      DEFAULT_PR_SEARCH_PREVIEW_WIDTH,
+      MIN_PR_SEARCH_PREVIEW_WIDTH,
+      MAX_PR_SEARCH_PREVIEW_WIDTH,
+    ),
+  );
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
   const restoreFocusRef = useRef(false);
   const [scrollerEl, setScrollerEl] = useState<HTMLDivElement | null>(null);
@@ -281,6 +321,10 @@ function PullRequestResults({
   useEffect(() => {
     localStorage.setItem(PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
   }, [columnWidths]);
+
+  useEffect(() => {
+    localStorage.setItem(PR_SEARCH_PREVIEW_WIDTH_STORAGE_KEY, String(Math.round(previewWidth)));
+  }, [previewWidth]);
 
   useEffect(() => {
     if (!scrollerEl) return;
@@ -431,22 +475,41 @@ function PullRequestResults({
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (isEditableTarget(e.target)) return;
-    // Single-letter shortcuts must not swallow app-level chords (Ctrl+K etc.).
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    // Single-letter shortcuts must not swallow app-level chords (Ctrl+K etc.);
+    // Ctrl+Enter stays grid-handled to open in Azure DevOps.
+    if (e.ctrlKey || e.metaKey || e.altKey) {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key === "Enter") {
+        e.preventDefault();
+        const pr = filteredResults[selectedIndex];
+        if (pr?.webUrl) openExternalUrl(pr.webUrl);
+      }
+      return;
+    }
     if (e.key === "Escape" && openFilterCol) {
       e.preventDefault();
       setOpenFilterCol(null);
       setFilterAnchorRect(null);
       return;
     }
+    if (e.key === "/") {
+      e.preventDefault();
+      focusFilterInput();
+      return;
+    }
+    if (e.key === "\\") {
+      e.preventDefault();
+      setMaximized((value) => !value);
+      return;
+    }
     if (filteredResults.length === 0) return;
-    if (e.key === "ArrowDown") { e.preventDefault(); moveSelection(1); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); moveSelection(-1); }
+    if (e.key === "ArrowDown" || e.key === "j" || e.key === "J") { e.preventDefault(); moveSelection(1); }
+    else if (e.key === "ArrowUp" || e.key === "k" || e.key === "K") { e.preventDefault(); moveSelection(-1); }
     else if (e.key === "Home") { e.preventDefault(); moveSelectionTo(0); }
     else if (e.key === "End") { e.preventDefault(); moveSelectionTo(filteredResults.length - 1); }
     else if (e.key === "PageDown") { e.preventDefault(); moveSelection(10); }
     else if (e.key === "PageUp") { e.preventDefault(); moveSelection(-10); }
-    else if (e.key === "Enter") {
+    else if (e.key === "Enter" || e.key === "ArrowRight") { e.preventDefault(); focusPrimaryPreview(); }
+    else if (e.key === "o" || e.key === "O") {
       e.preventDefault();
       const pr = filteredResults[selectedIndex];
       if (pr?.webUrl) openExternalUrl(pr.webUrl);
@@ -479,8 +542,24 @@ function PullRequestResults({
   const virtualBottomPadding =
     Math.max(0, filteredResults.length - lastVirtualRow) * PR_SEARCH_ROW_HEIGHT;
 
+  const selectedPr = filteredResults[selectedIndex]
+    ? toReviewSummary(filteredResults[selectedIndex])
+    : null;
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-white">
+    <div
+      className={
+        maximized
+          ? "flex min-h-0 flex-1"
+          : "grid min-h-0 flex-1 items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_8px_minmax(320px,var(--pr-preview-width))]"
+      }
+      style={{ "--pr-preview-width": `${previewWidth}px` } as CSSProperties}
+    >
+      <div
+        className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-white ${
+          maximized ? "hidden" : ""
+        }`}
+      >
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <h2 className="text-base font-semibold">Results</h2>
         <span className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -592,6 +671,25 @@ function PullRequestResults({
           </div>
         </div>
       )}
+      </div>
+
+      <ResizeHandle
+        ariaLabel="Resize pull request preview"
+        className={maximized ? "hidden" : "hidden xl:flex"}
+        direction={-1}
+        max={MAX_PR_SEARCH_PREVIEW_WIDTH}
+        min={MIN_PR_SEARCH_PREVIEW_WIDTH}
+        onChange={setPreviewWidth}
+        onReset={() => setPreviewWidth(DEFAULT_PR_SEARCH_PREVIEW_WIDTH)}
+        value={previewWidth}
+      />
+
+      <PrReviewPanel
+        selectedPr={selectedPr}
+        maximized={maximized}
+        onToggleMaximize={() => setMaximized((value) => !value)}
+      />
+
       {copyToast && (
         <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1 text-xs text-background shadow-lg">
           {copyToast}
@@ -736,9 +834,10 @@ const PrSearchRow = forwardRef<
       onClick={onSelect}
       onKeyDown={(e) => {
         if ((e.target as HTMLElement).closest("button")) return;
-        if (e.key === "Enter" && pr.webUrl) {
+        if (e.key === "Enter") {
           e.stopPropagation();
-          openExternalUrl(pr.webUrl);
+          if (e.ctrlKey && pr.webUrl) openExternalUrl(pr.webUrl);
+          else focusPrimaryPreview();
         }
       }}
       className={`grid h-[29px] cursor-pointer select-none items-center gap-2 border-b border-border px-2 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
