@@ -15,7 +15,7 @@ export type WorkItemNotificationEvent = {
   items: WorkItemNotificationItem[];
 };
 
-export type WorkItemNotificationItem = {
+type WorkItemNotificationItem = {
   kind: "assigned" | "stateChanged";
   id: number;
   title: string;

@@ -27,7 +27,6 @@ import {
   formatRelativeDate,
 } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
-import { ShortcutHint } from "@/components/ShortcutHint";
 import { ColumnResizeHandle } from "@/components/ResizeHandle";
 import { ErrorState } from "@/components/StateDisplay";
 
@@ -768,7 +767,6 @@ function CommitResults({
               </button>
             </>
           ) : null}
-          <ShortcutHint>Alt+G</ShortcutHint>
         </span>
       </div>
       {!searched && !loading ? (

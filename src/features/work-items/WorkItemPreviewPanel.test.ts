@@ -1,15 +1,17 @@
 import { describe, expect, it } from "vitest";
-import type { MentionCandidate, Organization } from "@/lib/azdoCommands";
+import type { MentionCandidate, Organization, WorkItemPreview } from "@/lib/azdoCommands";
 import {
   activeMentionAt,
   isSelfIdentity,
   markdownWithHardLineBreaks,
   mentionTokenDeletionStart,
+  presetFieldsFromStaged,
   rankMentionCandidates,
   renderAzureMentionMarkdown,
   sortSelfLast,
   splitMatchSegments,
   splitWorkItemTags,
+  stagedChangesFromPresetFields,
   workItemStateDotClass,
   workItemTypeColor,
 } from "./WorkItemPreviewPanel";
@@ -348,6 +350,132 @@ describe("mentionTokenDeletionStart", () => {
     const text = "no mentions here";
     expect(mentionTokenDeletionStart(text, text.length, names)).toBeNull();
     expect(mentionTokenDeletionStart(text, 0, names)).toBeNull();
+  });
+});
+
+function makePreview(overrides: Partial<WorkItemPreview> = {}): WorkItemPreview {
+  return {
+    organizationId: "contoso",
+    projectId: "project-1",
+    projectName: "Platform",
+    id: 123,
+    title: "Fix bug",
+    workItemType: "Bug",
+    state: "Active",
+    assignedTo: null,
+    createdBy: null,
+    createdDate: null,
+    changedDate: null,
+    areaPath: null,
+    iterationPath: null,
+    reason: "Approved",
+    tags: null,
+    priority: "2",
+    severity: null,
+    storyPoints: null,
+    remainingWork: null,
+    descriptionHtml: null,
+    acceptanceCriteriaHtml: null,
+    customFields: [],
+    webUrl: null,
+    comments: [],
+    relations: [],
+    ...overrides,
+  };
+}
+
+describe("presetFieldsFromStaged", () => {
+  it("serializes staged changes with state before reason", () => {
+    expect(
+      presetFieldsFromStaged({
+        state: "Resolved",
+        reason: "Won't Fix",
+        priority: 3,
+        tags: ["triage", "backlog"],
+        fields: { "Custom.Team": { label: "Team", value: "Core" } },
+      }),
+    ).toEqual([
+      { referenceName: "Microsoft.VSTS.Common.Priority", label: "Priority", value: "3" },
+      { referenceName: "System.Tags", label: "Tags", value: "triage; backlog" },
+      { referenceName: "Custom.Team", label: "Team", value: "Core" },
+      { referenceName: "System.State", label: "State", value: "Resolved" },
+      { referenceName: "System.Reason", label: "Reason", value: "Won't Fix" },
+    ]);
+  });
+
+  it("serializes a staged assignee as System.AssignedTo", () => {
+    expect(
+      presetFieldsFromStaged({
+        assignee: { assignValue: "Alice <alice@corp.com>", displayName: "Alice" },
+      }),
+    ).toEqual([
+      {
+        referenceName: "System.AssignedTo",
+        label: "Assignee",
+        value: "Alice <alice@corp.com>",
+      },
+    ]);
+  });
+
+  it("returns an empty list when nothing is staged", () => {
+    expect(presetFieldsFromStaged({})).toEqual([]);
+  });
+});
+
+describe("stagedChangesFromPresetFields", () => {
+  const resolveAsWontFix = [
+    { referenceName: "System.State", label: "State", value: "Resolved" },
+    { referenceName: "System.Reason", label: "Reason", value: "Won't Fix" },
+  ];
+
+  it("stages state and reason onto their dedicated slots", () => {
+    expect(stagedChangesFromPresetFields(resolveAsWontFix, makePreview())).toEqual({
+      state: "Resolved",
+      reason: "Won't Fix",
+    });
+  });
+
+  it("skips fields that already match the work item", () => {
+    const preview = makePreview({ state: "Resolved", reason: "Won't Fix" });
+    expect(stagedChangesFromPresetFields(resolveAsWontFix, preview)).toEqual({});
+  });
+
+  it("round-trips through presetFieldsFromStaged", () => {
+    const staged = {
+      state: "Resolved",
+      reason: "Won't Fix",
+      priority: 3,
+      tags: ["triage"],
+      fields: { "Custom.Team": { label: "Team", value: "Core" } },
+    };
+    expect(
+      stagedChangesFromPresetFields(presetFieldsFromStaged(staged), makePreview()),
+    ).toEqual(staged);
+  });
+
+  it("maps assignee, priority, tags, and custom fields", () => {
+    const fields = [
+      { referenceName: "System.AssignedTo", label: "Assignee", value: "Alice <alice@corp.com>" },
+      { referenceName: "Microsoft.VSTS.Common.Priority", label: "Priority", value: "1" },
+      { referenceName: "System.Tags", label: "Tags", value: "a; b" },
+      { referenceName: "Custom.Team", label: "Team", value: "Core" },
+    ];
+    expect(stagedChangesFromPresetFields(fields, makePreview())).toEqual({
+      assignee: {
+        assignValue: "Alice <alice@corp.com>",
+        displayName: "Alice <alice@corp.com>",
+      },
+      priority: 1,
+      tags: ["a", "b"],
+      fields: { "Custom.Team": { label: "Team", value: "Core" } },
+    });
+  });
+
+  it("ignores an unparsable priority value", () => {
+    const fields = [
+      { referenceName: "Microsoft.VSTS.Common.Priority", label: "Priority", value: "high" },
+    ];
+    expect(stagedChangesFromPresetFields(fields, makePreview())).toEqual({});
   });
 });
 

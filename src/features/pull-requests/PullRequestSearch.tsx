@@ -19,7 +19,6 @@ import {
 import { clamp, storedNumbers, gridColumnTemplate, isEditableTarget, formatDate, formatRelativeDate } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
 import { ColumnResizeHandle } from '@/components/ResizeHandle';
-import { ShortcutHint } from '@/components/ShortcutHint';
 import { ErrorState } from '@/components/StateDisplay';
 
 const DEFAULT_PR_SEARCH_COLUMN_WIDTHS = [56, 70, 220, 130, 104, 64, 120];
@@ -498,7 +497,6 @@ function PullRequestResults({
               </button>
             </>
           ) : null}
-          <ShortcutHint>Alt+G</ShortcutHint>
         </span>
       </div>
       {!searched && !loading ? (

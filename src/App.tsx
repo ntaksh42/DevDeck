@@ -1,6 +1,8 @@
 import {
   CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
+  lazy,
+  Suspense,
   useEffect,
   useMemo,
   useRef,
@@ -22,7 +24,6 @@ import {
   RefreshCw,
   Settings,
 } from "lucide-react";
-import { Route, Routes } from "react-router-dom";
 import {
   commandErrorMessage,
   getAppSettings,
@@ -47,24 +48,49 @@ import { ResizeHandle } from "@/components/ResizeHandle";
 import { LoadingState, ErrorState } from "@/components/StateDisplay";
 import { NavButton, NavSection, NavSubItem } from "@/components/Nav";
 import { HelpDialog } from "@/components/HelpDialog";
-import { UserGuideDialog } from "@/components/UserGuideDialog";
 import {
   CommandPalette,
   type CommandPaletteAction,
   type CommandPaletteSearchItem,
 } from "@/components/CommandPalette";
-import { CommitSearch } from "@/features/commits/CommitSearch";
-import { WorkItemSearch } from '@/features/work-items/WorkItemSearch';
-import { WorkItemViewsPanel } from '@/features/work-items/WorkItemViewsPanel';
 import {
   loadWorkItemQueryViews,
   type WorkItemQueryView,
 } from '@/features/work-items/workItemViewsStorage';
-import { MyWorkItemsPanel } from '@/features/work-items/MyWorkItemsPanel';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from '@/features/work-items/queryKeys';
-import { OrganizationSettings, SetupPanel } from '@/features/settings/OrganizationSettings';
 import { MyReviewsGrid } from '@/features/pull-requests/MyReviewsGrid';
-import { PullRequestSearch } from '@/features/pull-requests/PullRequestSearch';
+
+// Only the default view (My Reviews) loads eagerly; the other views are
+// code-split so app startup does not pay for panels that may never open.
+const CommitSearch = lazy(() =>
+  import("@/features/commits/CommitSearch").then((m) => ({ default: m.CommitSearch })),
+);
+const WorkItemSearch = lazy(() =>
+  import("@/features/work-items/WorkItemSearch").then((m) => ({ default: m.WorkItemSearch })),
+);
+const WorkItemViewsPanel = lazy(() =>
+  import("@/features/work-items/WorkItemViewsPanel").then((m) => ({
+    default: m.WorkItemViewsPanel,
+  })),
+);
+const MyWorkItemsPanel = lazy(() =>
+  import("@/features/work-items/MyWorkItemsPanel").then((m) => ({
+    default: m.MyWorkItemsPanel,
+  })),
+);
+const OrganizationSettings = lazy(() =>
+  import("@/features/settings/OrganizationSettings").then((m) => ({
+    default: m.OrganizationSettings,
+  })),
+);
+const SetupPanel = lazy(() =>
+  import("@/features/settings/OrganizationSettings").then((m) => ({ default: m.SetupPanel })),
+);
+const PullRequestSearch = lazy(() =>
+  import("@/features/pull-requests/PullRequestSearch").then((m) => ({
+    default: m.PullRequestSearch,
+  })),
+);
 import {
   showWorkItemNotificationEvent,
   type WorkItemNotificationEvent,
@@ -193,7 +219,6 @@ function AppShell() {
   const [view, setView] = useState<View>("myReviews");
   const [helpOpen, setHelpOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [userGuideOpen, setUserGuideOpen] = useState(false);
   const [navExpanded, setNavExpanded] = useState<Record<NavSectionId, boolean>>({
     pullRequests: true,
     workItems: true,
@@ -446,7 +471,6 @@ function AppShell() {
           }
         : undefined,
     }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [commandPaletteOpen, debouncedPaletteSearchText, organizations.length]);
 
   function closeCommandPalette(): void {
@@ -688,6 +712,18 @@ function AppShell() {
       label: "Change selected work item priority",
       run: () => dispatchWorkItemCommand("open-priority"),
       shortcut: "P",
+    },
+    {
+      disabled:
+        activeView !== "myWorkItems" &&
+        activeView !== "workItems" &&
+        activeView !== "workItemViews",
+      group: "Work Items",
+      id: "wi.customField",
+      keywords: ["custom", "field", "edit"],
+      label: "Change selected work item custom field",
+      run: () => dispatchWorkItemCommand("open-field"),
+      shortcut: "F",
     },
     {
       disabled:
@@ -990,7 +1026,6 @@ function AppShell() {
         }
         setHelpOpen(false);
         closeCommandPalette();
-        setUserGuideOpen(false);
         return;
       }
 
@@ -1223,14 +1258,14 @@ function AppShell() {
                 disabled={syncMutation.isPending}
                 onClick={() => syncMutation.mutate({ scope: "all" })}
                 aria-keyshortcuts="Alt+S"
-                className="flex items-center gap-1.5 rounded-md border border-border bg-white px-3 py-1 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+                aria-label="Sync now"
+                className="flex items-center rounded-md border border-border bg-white p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
                 title="Sync now"
               >
                 <RefreshCw
                   className={`h-4 w-4 ${syncMutation.isPending ? "animate-spin" : ""}`}
                   aria-hidden="true"
                 />
-                Sync
               </button>
             </div>
           )}
@@ -1243,6 +1278,7 @@ function AppShell() {
               : "overflow-hidden"
           }`}
         >
+          <Suspense fallback={<LoadingState />}>
           {organizationsQuery.isLoading ? (
             <LoadingState />
           ) : organizationsQuery.isError ? (
@@ -1282,6 +1318,7 @@ function AppShell() {
           ) : (
             <OrganizationSettings organizations={organizations} />
           )}
+          </Suspense>
         </section>
       </main>
       {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
@@ -1300,18 +1337,13 @@ function AppShell() {
           }
         />
       )}
-      {userGuideOpen && <UserGuideDialog onClose={() => setUserGuideOpen(false)} />}
     </div>
   );
 }
 
 
 function App() {
-  return (
-    <Routes>
-      <Route path="/" element={<AppShell />} />
-    </Routes>
-  );
+  return <AppShell />;
 }
 
 export default App;

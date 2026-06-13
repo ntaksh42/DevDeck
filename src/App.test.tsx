@@ -7,7 +7,6 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 
@@ -60,9 +59,7 @@ function renderApp() {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
-        <App />
-      </MemoryRouter>
+      <App />
     </QueryClientProvider>,
   );
 }
@@ -182,7 +179,7 @@ describe("App", () => {
       ([command]) => command === "list_my_review_pull_requests",
     ).length;
 
-    fireEvent.click(screen.getByRole("button", { name: "Sync" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sync now" }));
 
     await waitFor(() => {
       const reviewCallsAfterSync = invokeMock.mock.calls.filter(
@@ -1164,6 +1161,33 @@ describe("App", () => {
       });
     });
 
+    // Field presets: save the pending change under a name, discard, then
+    // re-stage it with the digit shortcut.
+    fireEvent.keyDown(workItemsGrid, { key: "s" });
+    fireEvent.click(await screen.findByRole("button", { name: "Closed" }));
+    expect(await screen.findByText("1 pending")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Field presets" }));
+    fireEvent.change(screen.getByLabelText("New preset name"), {
+      target: { value: "Close it" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(screen.getByRole("button", { name: /^1\s?Close it$/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Discard pending changes" }));
+    expect(screen.queryByText("1 pending")).toBeNull();
+
+    fireEvent.keyDown(screen.getByLabelText("Work item preview"), { key: "1" });
+    const presetChip = await screen.findByText("1 pending");
+    expect(presetChip.parentElement?.getAttribute("title")).toContain("State");
+    expect(invokeMock).not.toHaveBeenCalledWith(
+      "update_work_item_fields",
+      expect.objectContaining({
+        input: expect.objectContaining({
+          fields: [{ referenceName: "System.State", value: "Closed" }],
+        }),
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Discard pending changes" }));
+
     // Verify switching work items clears the unsent comment draft.
     const draftBox = screen.getByLabelText("Comment") as HTMLTextAreaElement;
     fireEvent.change(draftBox, { target: { value: "unsent draft" } });
@@ -1181,6 +1205,151 @@ describe("App", () => {
       expect(openUrlMock).toHaveBeenCalledWith(
         "https://dev.azure.com/contoso/project/_workitems/edit/123",
       );
+    });
+  });
+
+  it("edits custom preview fields from the keyboard with F", async () => {
+    window.localStorage.setItem(
+      "azdodeck:workItems:previewCustomFields",
+      JSON.stringify([
+        { referenceName: "Custom.ReleaseTrain", label: "Release Train" },
+        { referenceName: "Custom.CustomerImpact", label: "Customer Impact" },
+      ]),
+    );
+    const makePreview = (releaseTrain: string) => ({
+      organizationId: "contoso",
+      projectId: "project-1",
+      projectName: "Platform",
+      id: 123,
+      title: "Fix save workflow",
+      workItemType: "Bug",
+      state: "Active",
+      assignedTo: "Test User",
+      createdBy: "Creator",
+      createdDate: "2026-05-23T00:00:00Z",
+      changedDate: "2026-05-24T00:00:00Z",
+      areaPath: "Platform\\Product",
+      iterationPath: "Platform\\Sprint 24",
+      reason: "Work started",
+      tags: null,
+      priority: "1",
+      severity: null,
+      storyPoints: null,
+      remainingWork: null,
+      descriptionHtml: "<p>Fix the save flow.</p>",
+      acceptanceCriteriaHtml: null,
+      webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/123",
+      customFields: [
+        { referenceName: "Custom.ReleaseTrain", value: releaseTrain },
+        { referenceName: "Custom.CustomerImpact", value: "Low" },
+      ],
+      comments: [],
+    });
+    invokeMock.mockImplementation((command: string, args?: unknown) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve({ reviewResultFolderPath: null });
+      }
+      if (command === "get_review_result_preview") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_sync_states") {
+        return Promise.resolve([]);
+      }
+      if (command === "trigger_sync") {
+        return Promise.resolve(undefined);
+      }
+      if (command === "list_work_item_projects") {
+        return Promise.resolve([{ projectId: "project-1", projectName: "Platform" }]);
+      }
+      if (command === "search_work_items") {
+        return Promise.resolve([
+          {
+            organizationId: "contoso",
+            projectId: "project-1",
+            projectName: "Platform",
+            id: 123,
+            title: "Fix save workflow",
+            workItemType: "Bug",
+            state: "Active",
+            assignedTo: "Test User",
+            changedDate: "2026-05-24T00:00:00Z",
+            webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/123",
+          },
+        ]);
+      }
+      if (command === "get_work_item_preview") {
+        return Promise.resolve(makePreview("Tokyo"));
+      }
+      if (command === "list_work_item_field_allowed_values") {
+        const referenceName = (
+          args as { input?: { fieldReferenceName?: string } } | undefined
+        )?.input?.fieldReferenceName;
+        return Promise.resolve(
+          referenceName === "Custom.ReleaseTrain" ? ["Tokyo", "Osaka"] : ["Low", "High"],
+        );
+      }
+      if (command === "update_work_item_fields") {
+        return Promise.resolve(makePreview("Osaka"));
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+    const main = within(await screen.findByRole("main"));
+
+    await screen.findByText("No pull requests assigned to you.");
+    fireEvent.click(
+      within(screen.getByRole("navigation", { name: "Primary navigation" })).getAllByRole(
+        "button",
+        { name: "Search" },
+      )[1],
+    );
+    fireEvent.change(await main.findByPlaceholderText("Search work items…"), {
+      target: { value: "save" },
+    });
+    fireEvent.click(main.getByRole("button", { name: "Search" }));
+    await screen.findByLabelText("Comment");
+
+    const workItemsGrid = screen.getByRole("grid", { name: "Work items" });
+
+    // F opens the first custom field's picker.
+    fireEvent.keyDown(workItemsGrid, { key: "f" });
+    expect(await screen.findByLabelText("Custom value for Release Train")).toBeTruthy();
+
+    // Pressing F again cycles to the next custom field.
+    fireEvent.keyDown(workItemsGrid, { key: "f" });
+    expect(await screen.findByLabelText("Custom value for Customer Impact")).toBeTruthy();
+    expect(screen.queryByLabelText("Custom value for Release Train")).toBeNull();
+
+    // Wrap around to the first field and stage a value; nothing is written yet.
+    fireEvent.keyDown(workItemsGrid, { key: "f" });
+    fireEvent.click(await screen.findByRole("button", { name: /Osaka/ }));
+    expect(await screen.findByText("1 pending")).toBeTruthy();
+    expect(invokeMock).not.toHaveBeenCalledWith(
+      "update_work_item_fields",
+      expect.anything(),
+    );
+
+    // Ctrl+S applies the staged custom field change.
+    fireEvent.keyDown(window, { key: "s", ctrlKey: true });
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("update_work_item_fields", {
+        input: {
+          organizationId: "contoso",
+          projectId: "project-1",
+          workItemId: 123,
+          fields: [{ referenceName: "Custom.ReleaseTrain", value: "Osaka" }],
+        },
+      });
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("1 pending")).toBeNull();
     });
   });
 

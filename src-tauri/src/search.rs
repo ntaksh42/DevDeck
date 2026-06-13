@@ -182,9 +182,9 @@ mod tests {
             },
         ])
         .unwrap();
-        db.replace_pull_requests(
+        db.replace_pull_requests_for_projects(
             "contoso",
-            &["repo1"],
+            &["p1"],
             &[CachedPr {
                 org_id: "contoso".to_string(),
                 project_id: "p1".to_string(),

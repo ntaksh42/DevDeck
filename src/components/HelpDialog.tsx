@@ -49,7 +49,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
 
           <p className={section}>My Reviews</p>
           <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>
-          <div className={row}><span>Filter: All / My / Approved / Rejected</span><kbd className={kbd}>1–4</kbd></div>
+          <div className={row}><span>Filter: No Vote / Waiting Author / Approved / All</span><kbd className={kbd}>1–4</kbd></div>
           <div className={row}><span>Focus preview</span><kbd className={kbd}>Enter</kbd></div>
           <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
           <div className={row}><span>Show drafts</span><kbd className={kbd}>D</kbd></div>
@@ -70,6 +70,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Assign selected item</span><kbd className={kbd}>A</kbd></div>
           <div className={row}><span>Change state</span><kbd className={kbd}>S</kbd></div>
           <div className={row}><span>Change priority</span><kbd className={kbd}>P</kbd></div>
+          <div className={row}><span>Edit custom field (press again for next)</span><kbd className={kbd}>F</kbd></div>
           <div className={row}><span>Apply pending property changes</span><kbd className={kbd}>Ctrl+S</kbd></div>
           <div className={row}><span>Discard pending property changes</span><kbd className={kbd}>Esc</kbd></div>
           <div className={row}><span>Undo last apply (10s window)</span><kbd className={kbd}>U</kbd></div>

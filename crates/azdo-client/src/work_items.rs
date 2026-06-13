@@ -382,26 +382,6 @@ impl AdoClient {
         .await
     }
 
-    pub async fn update_work_item_reason(
-        &self,
-        project_id: &str,
-        work_item_id: i64,
-        reason: &str,
-    ) -> Result<WorkItem> {
-        let path = format!("{project_id}/_apis/wit/workItems/{work_item_id}");
-        self.patch_json(
-            &path,
-            &[("api-version", "7.1-preview")],
-            "application/json-patch+json",
-            &[WorkItemPatchOperation {
-                op: "add",
-                path: "/fields/System.Reason".to_string(),
-                value: json!(reason),
-            }],
-        )
-        .await
-    }
-
     pub async fn update_work_item_priority(
         &self,
         project_id: &str,
@@ -445,27 +425,6 @@ impl AdoClient {
             &[("api-version", "7.1-preview")],
             "application/json-patch+json",
             &operations,
-        )
-        .await
-    }
-
-    pub async fn update_work_item_field(
-        &self,
-        project_id: &str,
-        work_item_id: i64,
-        field_reference_name: &str,
-        value: &str,
-    ) -> Result<WorkItem> {
-        let path = format!("{project_id}/_apis/wit/workItems/{work_item_id}");
-        self.patch_json(
-            &path,
-            &[("api-version", "7.1-preview")],
-            "application/json-patch+json",
-            &[WorkItemPatchOperation {
-                op: "add",
-                path: format!("/fields/{field_reference_name}"),
-                value: json!(value),
-            }],
         )
         .await
     }
@@ -997,39 +956,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn update_work_item_reason_patches_reason_field() {
-        let server = MockServer::start().await;
-        Mock::given(method("PATCH"))
-            .and(path("/project-1/_apis/wit/workItems/10"))
-            .and(query_param("api-version", "7.1-preview"))
-            .and(body_json(serde_json::json!([
-                {
-                    "op": "add",
-                    "path": "/fields/System.Reason",
-                    "value": "Work started"
-                }
-            ])))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "id": 10,
-                "fields": {
-                    "System.Title": "Fix bug",
-                    "System.Reason": "Work started"
-                }
-            })))
-            .mount(&server)
-            .await;
-
-        let item = test_client(&server)
-            .await
-            .update_work_item_reason("project-1", 10, "Work started")
-            .await
-            .unwrap();
-
-        assert_eq!(item.id, 10);
-        assert_eq!(item.fields["System.Reason"].as_str(), Some("Work started"));
-    }
-
-    #[tokio::test]
     async fn update_work_item_priority_patches_priority_field() {
         let server = MockServer::start().await;
         Mock::given(method("PATCH"))
@@ -1173,38 +1099,6 @@ mod tests {
     #[test]
     fn encode_path_segment_handles_special_characters() {
         assert_eq!(encode_path_segment("Bug & Feature"), "Bug%20%26%20Feature");
-    }
-
-    #[tokio::test]
-    async fn update_work_item_field_patches_custom_field() {
-        let server = MockServer::start().await;
-        Mock::given(method("PATCH"))
-            .and(path("/project-1/_apis/wit/workItems/10"))
-            .and(query_param("api-version", "7.1-preview"))
-            .and(body_json(serde_json::json!([
-                {
-                    "op": "add",
-                    "path": "/fields/Custom.ReleaseTrain",
-                    "value": "Wave 2"
-                }
-            ])))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "id": 10,
-                "fields": {
-                    "System.Title": "Fix bug",
-                    "Custom.ReleaseTrain": "Wave 2"
-                }
-            })))
-            .mount(&server)
-            .await;
-
-        let item = test_client(&server)
-            .await
-            .update_work_item_field("project-1", 10, "Custom.ReleaseTrain", "Wave 2")
-            .await
-            .unwrap();
-
-        assert_eq!(item.fields["Custom.ReleaseTrain"].as_str(), Some("Wave 2"));
     }
 
     #[tokio::test]

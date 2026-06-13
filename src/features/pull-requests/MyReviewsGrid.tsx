@@ -30,7 +30,6 @@ import {
 } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
 import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
-import { ShortcutHint } from '@/components/ShortcutHint';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { LoadingState, ErrorState } from '@/components/StateDisplay';
 import { PrReviewPanel } from './PrReviewPanel';
@@ -1197,7 +1196,6 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
                   </button>
                 </>
               ) : null}
-              <ShortcutHint>Alt+G</ShortcutHint>
             </span>
           </div>
         </div>

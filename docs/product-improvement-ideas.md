@@ -17,7 +17,6 @@ Trello, GitLab, and GitKraken.
 - Built-in Work Item Views for Assigned to me, Following, Mentioned, and My Activity.
 - `state:Doing assignee:me` style My Work Items filtering and filter helper chips.
 - Recent Work Item local tracking for selected/opened items.
-- Saved replies for Work Item comments.
 - Long comment folding with quick expand.
 - Image lightbox previews for rich Work Item description and comment images.
 - Clear image load failure state for Azure DevOps attachment auth/permission issues.
@@ -28,6 +27,12 @@ Trello, GitLab, and GitKraken.
 - Work Item Grid column visibility customization, saved per grid/view.
 - WIQL editor completions and lightweight validation.
 - Bulk Work Item state, assignee, and priority updates with failure details.
+- Staged Work Item edits applied as one JSON Patch request, with 10-second undo.
+- Field presets for re-staging common Work Item changes.
+- Local done/archive triage for My Reviews and My Work Items.
+- Reviewer-action sections and merge-conflict badges in My Reviews.
+- Command palette cross-entity search across organizations with recent items.
+- GitHub-style two-key navigation (`G` then a view key).
 
 ## Requires Azure DevOps API Expansion
 
@@ -58,7 +63,6 @@ data modeling, or event history support beyond the current command surface.
 
 ## Navigation And Keyboard
 
-- Add GitHub-style two-key navigation such as `g i` for Work Items and `g r` for reviews.
 - Show only context-relevant shortcuts in a compact status bar.
 - Teach shortcuts opportunistically after mouse actions.
 - Add back and forward history with `Alt+Left` and `Alt+Right`.

@@ -24,7 +24,7 @@ const DEMO_SCENARIOS = new Set<DemoScenario>([
   "slow-network",
 ]);
 
-export function currentDemoScenario(): DemoScenario {
+function currentDemoScenario(): DemoScenario {
   const value = readScenarioValue();
   return isDemoScenario(value) ? value : "default";
 }
@@ -40,7 +40,7 @@ export function shouldFailDemoCommand(command: string): boolean {
     "list_my_review_pull_requests",
     "search_work_items",
     "add_work_item_comment",
-    "assign_work_item",
+    "update_work_item_fields",
   ]).has(command);
 }
 

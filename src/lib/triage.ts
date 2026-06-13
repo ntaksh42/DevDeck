@@ -3,12 +3,12 @@
 // when the row changes upstream the entry no longer matches and the row
 // returns to the inbox automatically.
 
-export type TriageEntry = { snapshot: string; archivedAt: string };
-export type TriageStore = Record<string, TriageEntry>;
+type TriageEntry = { snapshot: string; archivedAt: string };
+type TriageStore = Record<string, TriageEntry>;
 
 const STORAGE_PREFIX = "azdodeck:triage:";
 
-export function loadTriageStore(scope: string): TriageStore {
+function loadTriageStore(scope: string): TriageStore {
   try {
     const parsed = JSON.parse(
       window.localStorage.getItem(`${STORAGE_PREFIX}${scope}`) ?? "{}",

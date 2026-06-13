@@ -1,5 +1,5 @@
-export const PREVIEW_FIELDS_STORAGE_KEY = "azdodeck:workItems:previewFields";
-export const PREVIEW_CUSTOM_FIELDS_STORAGE_KEY = "azdodeck:workItems:previewCustomFields";
+const PREVIEW_FIELDS_STORAGE_KEY = "azdodeck:workItems:previewFields";
+const PREVIEW_CUSTOM_FIELDS_STORAGE_KEY = "azdodeck:workItems:previewCustomFields";
 
 export type PreviewFieldKey =
   | "state"

@@ -3,17 +3,17 @@ import {
   Fragment,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
+  type SetStateAction,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, Loader2, Plus, Send, SlidersHorizontal, Trash2, X } from 'lucide-react';
+import { ChevronRight, Loader2, Plus, Send, SlidersHorizontal, Trash2, X, Zap } from 'lucide-react';
 import {
   addWorkItemComment,
   deleteWorkItemComment,
-  fetchWorkItemImage,
   listOrganizations,
   listWorkItemFields,
   listWorkItemUpdates,
@@ -33,8 +33,14 @@ import {
   type WorkItemPreview,
   type WorkItemSummary,
 } from '@/lib/azdoCommands';
-import { focusPrimaryGrid, formatRelativeDate, isEditableTarget } from '@/lib/utils';
+import {
+  focusPrimaryGrid,
+  focusWorkItemCommentInput,
+  formatRelativeDate,
+  isEditableTarget,
+} from '@/lib/utils';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
+import { fetchWorkItemImageCached } from '@/lib/workItemImageCache';
 import { openExternalUrl } from '@/lib/openExternal';
 import { PreviewEmptyState } from '@/components/StateDisplay';
 import { ShortcutHint } from '@/components/ShortcutHint';
@@ -48,7 +54,13 @@ import {
   type CustomPreviewField,
   type PreviewFieldKey,
 } from './previewFieldsStorage';
-const SAVED_REPLIES_STORAGE_KEY = "azdodeck:workItems:savedReplies";
+import {
+  loadFieldPresets,
+  storeFieldPresets,
+  MAX_FIELD_PRESETS,
+  type WorkItemFieldPreset,
+  type WorkItemFieldPresetField,
+} from './fieldPresetsStorage';
 
 type StagedChanges = {
   state?: string;
@@ -61,7 +73,10 @@ type StagedChanges = {
   fields?: Record<string, { label: string; value: string }>;
 };
 
+type StagedEntry = { key: string; label: string; from: string; to: string };
+
 const UNDO_WINDOW_MS = 10_000;
+const VISIBLE_COMMENT_LIMIT = 20;
 
 // Builds the change set that restores the work item's pre-apply values.
 // Entries whose previous value cannot be restored (e.g. priority that was
@@ -102,6 +117,78 @@ function buildInverseChanges(preview: WorkItemPreview, staged: StagedChanges): S
   return inverse;
 }
 
+// Serializes pending changes into the flat field list stored in a preset.
+// State precedes Reason to mirror applyChangeSet's patch order.
+export function presetFieldsFromStaged(staged: StagedChanges): WorkItemFieldPresetField[] {
+  const fields: WorkItemFieldPresetField[] = [];
+  if (staged.assignee) {
+    fields.push({
+      referenceName: "System.AssignedTo",
+      label: "Assignee",
+      value: staged.assignee.assignValue,
+    });
+  }
+  if (staged.priority !== undefined) {
+    fields.push({
+      referenceName: "Microsoft.VSTS.Common.Priority",
+      label: "Priority",
+      value: String(staged.priority),
+    });
+  }
+  if (staged.tags) {
+    fields.push({ referenceName: "System.Tags", label: "Tags", value: staged.tags.join("; ") });
+  }
+  for (const [referenceName, field] of Object.entries(staged.fields ?? {})) {
+    fields.push({ referenceName, label: field.label, value: field.value });
+  }
+  if (staged.state !== undefined) {
+    fields.push({ referenceName: "System.State", label: "State", value: staged.state });
+  }
+  if (staged.reason !== undefined) {
+    fields.push({ referenceName: "System.Reason", label: "Reason", value: staged.reason });
+  }
+  return fields;
+}
+
+// Maps a preset's fields back onto staged-change slots. Fields that already
+// match the work item's current value are skipped so applying a preset twice
+// (or to an already-resolved item) stages nothing redundant.
+export function stagedChangesFromPresetFields(
+  fields: readonly WorkItemFieldPresetField[],
+  preview: WorkItemPreview | null,
+): StagedChanges {
+  const staged: StagedChanges = {};
+  for (const field of fields) {
+    const referenceName = field.referenceName.toLowerCase();
+    if (referenceName === "system.state") {
+      if (field.value !== preview?.state) staged.state = field.value;
+    } else if (referenceName === "system.reason") {
+      if (field.value !== preview?.reason) staged.reason = field.value;
+    } else if (referenceName === "system.assignedto") {
+      if (field.value !== preview?.assignedTo) {
+        staged.assignee = { assignValue: field.value, displayName: field.value };
+      }
+    } else if (referenceName === "microsoft.vsts.common.priority") {
+      const priority = Number.parseInt(field.value, 10);
+      if (Number.isFinite(priority) && String(priority) !== preview?.priority) {
+        staged.priority = priority;
+      }
+    } else if (referenceName === "system.tags") {
+      const tags = splitWorkItemTags(field.value);
+      if (tags.join("; ") !== (preview?.tags ?? "")) staged.tags = tags;
+    } else if (
+      !preview ||
+      (customPreviewFieldValue(preview, field.referenceName) ?? "") !== field.value
+    ) {
+      staged.fields = {
+        ...staged.fields,
+        [field.referenceName]: { label: field.label, value: field.value },
+      };
+    }
+  }
+  return staged;
+}
+
 type PreviewFieldDefinition = {
   editable?: "state" | "assignee" | "priority" | "reason";
   key: PreviewFieldKey;
@@ -127,19 +214,6 @@ const PREVIEW_FIELD_DEFINITIONS: PreviewFieldDefinition[] = [
   { key: "changedDate", label: "Changed" },
 ];
 
-function loadSavedReplies(): string[] {
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(SAVED_REPLIES_STORAGE_KEY) ?? "[]");
-    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-function storeSavedReplies(replies: string[]) {
-  window.localStorage.setItem(SAVED_REPLIES_STORAGE_KEY, JSON.stringify(replies.slice(0, 20)));
-}
-
 function stopPreviewNavigationKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
   if (
     event.key === 'ArrowDown' ||
@@ -160,6 +234,7 @@ export function WorkItemPreviewPanel({
   customPreviewFields,
   focusCommentRequest,
   openAssigneeRequest,
+  openFieldRequest,
   openPriorityRequest,
   openStateRequest,
   onCustomPreviewFieldsChange,
@@ -172,6 +247,7 @@ export function WorkItemPreviewPanel({
   customPreviewFields: CustomPreviewField[];
   focusCommentRequest?: number;
   openAssigneeRequest?: number;
+  openFieldRequest?: number;
   openPriorityRequest?: number;
   openStateRequest?: number;
   onCustomPreviewFieldsChange: (fields: CustomPreviewField[]) => void;
@@ -181,22 +257,12 @@ export function WorkItemPreviewPanel({
   selectedItem: WorkItemSummary | null;
   onPreviewUpdated?: (preview: WorkItemPreview) => void;
 }) {
-  const [commentText, setCommentText] = useState("");
-  const [savedReplies, setSavedReplies] = useState<string[]>(() => loadSavedReplies());
   const [selectedPreviewFieldKeys, setSelectedPreviewFieldKeys] = useState<PreviewFieldKey[]>(
     () => loadPreviewFieldKeys(),
   );
-  const [selectedMentions, setSelectedMentions] = useState<SelectedMention[]>([]);
-  const mentionsToRecordRef = useRef<
-    Array<{ id: string; displayName: string; uniqueName: string; organizationId: string }>
-  >([]);
   const [mentionDisplayNamesById, setMentionDisplayNamesById] = useState<
     Record<string, string>
   >({});
-  const [mentionQuery, setMentionQuery] = useState("");
-  const [mentionStart, setMentionStart] = useState<number | null>(null);
-  const [activeMentionIndex, setActiveMentionIndex] = useState(0);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const queryClient = useQueryClient();
   const [assigneeOpen, setAssigneeOpen] = useState(false);
@@ -205,8 +271,8 @@ export function WorkItemPreviewPanel({
   const [reasonEditorOpen, setReasonEditorOpen] = useState(false);
   const [priorityPickerOpen, setPriorityPickerOpen] = useState(false);
   const [customFieldEditor, setCustomFieldEditor] = useState<string | null>(null);
-  const handledFocusCommentRequest = useRef(0);
   const handledOpenAssigneeRequest = useRef(0);
+  const handledOpenFieldRequest = useRef(0);
   const handledOpenPriorityRequest = useRef(0);
   const handledOpenStateRequest = useRef(0);
 
@@ -276,59 +342,6 @@ export function WorkItemPreviewPanel({
     [preview],
   );
 
-  // Debounced so each keystroke does not fire a backend identity search;
-  // keepPreviousData keeps the list visible while the next search runs.
-  const debouncedMentionQuery = useDebouncedValue(mentionQuery, 200);
-  const mentionOptionsQuery = useQuery({
-    queryKey: workItemQueryKeys.mentions(
-      selectedItem?.organizationId,
-      selectedItem?.projectId,
-      selectedItem?.id,
-      debouncedMentionQuery,
-    ),
-    queryFn: () =>
-      searchWorkItemMentions({
-        organizationId: selectedItem!.organizationId,
-        projectId: selectedItem!.projectId,
-        workItemId: selectedItem!.id,
-        query: debouncedMentionQuery,
-      }),
-    enabled: !!selectedItem && mentionStart !== null,
-    staleTime: 60_000,
-    placeholderData: keepPreviousData,
-  });
-  const mentionOptions = useMemo(
-    () =>
-      // Self stays in the list but last: removing it entirely leaves the
-      // picker empty in single-member organizations.
-      sortSelfLast(
-        rankMentionCandidates({
-          recent: recentMentionOptions,
-          remote: mentionOptionsQuery.data ?? [],
-          query: mentionQuery,
-          priorityNames: mentionPriorityNames,
-        }),
-        selfOrg,
-      ),
-    [
-      mentionOptionsQuery.data,
-      mentionPriorityNames,
-      mentionQuery,
-      recentMentionOptions,
-      selfOrg,
-    ],
-  );
-  const showMentionOptions = mentionStart !== null && mentionOptions.length > 0;
-  const showMentionError =
-    mentionStart !== null && mentionOptionsQuery.isError && mentionOptions.length === 0;
-  const mentionPickerRef = useCloseOnOutsidePointer<HTMLDivElement>(
-    showMentionOptions,
-    () => {
-      setMentionStart(null);
-      setMentionQuery("");
-    },
-  );
-
   useEffect(() => {
     storePreviewFieldKeys(selectedPreviewFieldKeys);
   }, [selectedPreviewFieldKeys]);
@@ -395,34 +408,13 @@ export function WorkItemPreviewPanel({
   const resolvePreviewImage = useMemo(
     () => async (url: string) => {
       if (!selectedItem) return null;
-      return fetchWorkItemImage({
+      return fetchWorkItemImageCached({
         organizationId: selectedItem.organizationId,
         url,
       });
     },
     [selectedItem],
   );
-
-  const commentMutation = useMutation({
-    mutationFn: addWorkItemComment,
-    onSuccess: () => {
-      for (const mention of mentionsToRecordRef.current) {
-        void recordMentionInteraction({
-          organizationId: mention.organizationId,
-          userId: mention.id,
-          displayName: mention.displayName,
-          uniqueName: mention.uniqueName,
-        });
-      }
-      mentionsToRecordRef.current = [];
-      setCommentText("");
-      setSelectedMentions([]);
-      setMentionQuery("");
-      setMentionStart(null);
-      setActiveMentionIndex(0);
-      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
-    },
-  });
 
   const deleteCommentMutation = useMutation({
     mutationFn: deleteWorkItemComment,
@@ -447,6 +439,11 @@ export function WorkItemPreviewPanel({
     },
   });
 
+  // Must match how the grids build their preview query key.
+  const customFieldsSignature = useMemo(
+    () => customPreviewFields.map((field) => field.referenceName).join("|"),
+    [customPreviewFields],
+  );
   const updateFieldsMutation = useMutation({
     mutationFn: updateWorkItemFields,
     onSuccess: (updatedPreview) => {
@@ -456,10 +453,21 @@ export function WorkItemPreviewPanel({
           updatedPreview.organizationId,
           updatedPreview.projectId,
           updatedPreview.id,
+          customFieldsSignature,
         ),
-        updatedPreview,
+        // The mutation response carries no relations; keep the cached ones
+        // instead of blanking the Related section until the next refetch.
+        (current: WorkItemPreview | undefined) =>
+          current
+            ? { ...updatedPreview, relations: current.relations }
+            : updatedPreview,
       );
-      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
+      // The response above is already the fresh preview; mark the other
+      // cached previews stale without refetching the one just written.
+      void queryClient.invalidateQueries({
+        queryKey: workItemQueryKeys.previewRoot(),
+        refetchType: "none",
+      });
       void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot() });
       invalidateWorkItemQueryViews(queryClient);
     },
@@ -467,6 +475,7 @@ export function WorkItemPreviewPanel({
   // Property edits are staged locally and written to Azure DevOps only on an
   // explicit apply (Ctrl+S); Esc discards.
   const [staged, setStaged] = useState<StagedChanges>({});
+  const [presets, setPresets] = useState<WorkItemFieldPreset[]>(() => loadFieldPresets());
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [undoState, setUndoState] = useState<{
@@ -475,54 +484,62 @@ export function WorkItemPreviewPanel({
     count: number;
   } | null>(null);
   const undoTimerRef = useRef<number | null>(null);
+  const stagedRef = useRef<StagedChanges>(staged);
+  const previewRef = useRef<WorkItemPreview | null>(preview ?? null);
+  stagedRef.current = staged;
+  previewRef.current = preview ?? null;
 
-  const stagedEntries = useMemo(() => {
-    const entries: { key: string; label: string; from: string; to: string }[] = [];
-    if (!preview) return entries;
-    if (staged.state !== undefined) {
-      entries.push({ key: "state", label: "State", from: preview.state ?? "—", to: staged.state });
-    }
-    if (staged.assignee) {
-      entries.push({
-        key: "assignee",
-        label: "Assignee",
-        from: preview.assignedTo ?? "Unassigned",
-        to: staged.assignee.displayName,
-      });
-    }
-    if (staged.priority !== undefined) {
-      entries.push({
-        key: "priority",
-        label: "Priority",
-        from: preview.priority ?? "—",
-        to: String(staged.priority),
-      });
-    }
-    if (staged.reason !== undefined) {
-      entries.push({ key: "reason", label: "Reason", from: preview.reason ?? "—", to: staged.reason });
-    }
-    if (staged.tags) {
-      entries.push({
-        key: "tags",
-        label: "Tags",
-        from: preview.tags?.trim() ? preview.tags : "—",
-        to: staged.tags.join("; ") || "—",
-      });
-    }
-    for (const [referenceName, field] of Object.entries(staged.fields ?? {})) {
-      entries.push({
-        key: `field:${referenceName}`,
-        label: field.label,
-        from: customPreviewFieldValue(preview, referenceName) ?? "—",
-        to: field.value,
-      });
-    }
-    return entries;
-  }, [preview, staged]);
+  function setStagedChanges(action: SetStateAction<StagedChanges>) {
+    setStaged((current) => {
+      const next = typeof action === "function" ? action(current) : action;
+      stagedRef.current = next;
+      return next;
+    });
+  }
+
+  const stagedEntries = useMemo(() => stagedEntriesForPreview(preview, staged), [preview, staged]);
 
   function discardStaged() {
-    setStaged({});
+    setStagedChanges({});
     setApplyError(null);
+  }
+
+  // Stages a preset's field changes; the user still reviews and applies them
+  // with Ctrl+S like any other pending change.
+  function applyPreset(preset: WorkItemFieldPreset) {
+    if (!selectedItem) return;
+    const changes = stagedChangesFromPresetFields(preset.fields, preview);
+    setStagedChanges((current) => ({
+      ...current,
+      ...changes,
+      fields:
+        changes.fields || current.fields
+          ? { ...current.fields, ...changes.fields }
+          : undefined,
+    }));
+  }
+
+  function savePresetFromStaged(name: string) {
+    const fields = presetFieldsFromStaged(stagedRef.current);
+    if (fields.length === 0) return;
+    const preset: WorkItemFieldPreset = {
+      id: `preset-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      name,
+      fields,
+    };
+    setPresets((current) => {
+      const next = [...current, preset].slice(0, MAX_FIELD_PRESETS);
+      storeFieldPresets(next);
+      return next;
+    });
+  }
+
+  function deletePreset(id: string) {
+    setPresets((current) => {
+      const next = current.filter((preset) => preset.id !== id);
+      storeFieldPresets(next);
+      return next;
+    });
   }
 
   // All staged values go out as one JSON Patch, so the apply is atomic: state
@@ -578,26 +595,29 @@ export function WorkItemPreviewPanel({
   }
 
   async function applyStaged() {
-    if (!selectedItem || applying || stagedEntries.length === 0) return;
+    const currentStaged = stagedRef.current;
+    const currentPreview = previewRef.current;
+    const currentStagedEntries = stagedEntriesForPreview(currentPreview, currentStaged);
+    if (!selectedItem || applying || currentStagedEntries.length === 0) return;
     const previousFocus = document.activeElement;
-    const inverse = preview ? buildInverseChanges(preview, staged) : {};
-    const appliedCount = stagedEntries.length;
+    const inverse = currentPreview ? buildInverseChanges(currentPreview, currentStaged) : {};
+    const appliedCount = currentStagedEntries.length;
     const workItemId = selectedItem.id;
     setApplying(true);
     setApplyError(null);
     try {
-      await applyChangeSet(staged);
-      if (staged.assignee?.uniqueName) {
+      await applyChangeSet(currentStaged);
+      if (currentStaged.assignee?.uniqueName) {
         void recordAssigneeInteraction({
           organizationId: selectedItem.organizationId,
-          userId: staged.assignee.id,
-          displayName: staged.assignee.displayName,
-          uniqueName: staged.assignee.uniqueName,
+          userId: currentStaged.assignee.id,
+          displayName: currentStaged.assignee.displayName,
+          uniqueName: currentStaged.assignee.uniqueName,
         }).catch(() => {
           // History is best-effort; the assignment itself already succeeded.
         });
       }
-      setStaged({});
+      setStagedChanges({});
       setUndoState({ changes: inverse, workItemId, count: appliedCount });
       if (undoTimerRef.current !== null) window.clearTimeout(undoTimerRef.current);
       undoTimerRef.current = window.setTimeout(() => {
@@ -641,12 +661,7 @@ export function WorkItemPreviewPanel({
     setPriorityPickerOpen(false);
     setCustomFieldEditor(null);
     updateFieldsMutation.reset();
-    setCommentText("");
-    setSelectedMentions([]);
-    setMentionQuery("");
-    setMentionStart(null);
-    setActiveMentionIndex(0);
-    setStaged({});
+    setStagedChanges({});
     setApplyError(null);
     setUndoState(null);
     if (undoTimerRef.current !== null) {
@@ -654,18 +669,6 @@ export function WorkItemPreviewPanel({
       undoTimerRef.current = null;
     }
   }, [selectedItem?.id]);
-
-  useEffect(() => {
-    if (
-      !focusCommentRequest ||
-      handledFocusCommentRequest.current === focusCommentRequest
-    ) {
-      return;
-    }
-    handledFocusCommentRequest.current = focusCommentRequest;
-    if (!selectedItem) return;
-    textareaRef.current?.focus();
-  }, [focusCommentRequest, selectedItem]);
 
   useEffect(() => {
     if (
@@ -713,65 +716,17 @@ export function WorkItemPreviewPanel({
     setStatePickerOpen(false);
   }, [openPriorityRequest, selectedItem]);
 
-  function updateMentionState(text: string, cursor: number) {
-    const mention = activeMentionAt(text, cursor);
-    setMentionStart(mention?.start ?? null);
-    setMentionQuery(mention?.query ?? "");
-    setActiveMentionIndex(0);
-  }
-
-  function applyMention(candidate: MentionCandidate) {
-    const textarea = textareaRef.current;
-    const cursor = textarea?.selectionStart ?? commentText.length;
-    const start = mentionStart ?? cursor;
-    const replacement = `@${candidate.displayName} `;
-    const next = `${commentText.slice(0, start)}${replacement}${commentText.slice(cursor)}`;
-    const nextCursor = start + replacement.length;
-    setCommentText(next);
-    setSelectedMentions((current) => addSelectedMention(current, candidate));
+  function handleMentionApplied(candidate: MentionCandidate) {
     setMentionDisplayNamesById((current) => ({
       ...current,
       [candidate.id]: candidate.displayName,
     }));
-    setMentionQuery("");
-    setMentionStart(null);
-    window.setTimeout(() => {
-      textarea?.focus();
-      textarea?.setSelectionRange(nextCursor, nextCursor);
-    }, 0);
   }
 
-  function postComment() {
-    if (!selectedItem || !commentText.trim() || commentMutation.isPending) return;
-    mentionsToRecordRef.current = selectedMentions
-      .filter(
-        (m) =>
-          m.uniqueName &&
-          isMentionResolvableId(m.id) &&
-          mentionTokenPattern(m.displayName).test(commentText),
-      )
-      .map((m) => ({
-        id: m.id,
-        displayName: m.displayName,
-        uniqueName: m.uniqueName!,
-        organizationId: selectedItem.organizationId,
-      }));
-    commentMutation.mutate({
-      organizationId: selectedItem.organizationId,
-      projectId: selectedItem.projectId,
-      workItemId: selectedItem.id,
-      markdown: markdownWithHardLineBreaks(
-        renderAzureMentionMarkdown(commentText, selectedMentions),
-      ),
-    });
-  }
-
-  function saveCurrentReply() {
-    const reply = commentText.trim();
-    if (!reply) return;
-    const next = [reply, ...savedReplies.filter((value) => value !== reply)].slice(0, 20);
-    setSavedReplies(next);
-    storeSavedReplies(next);
+  function focusPanelBody() {
+    panelRef.current
+      ?.querySelector<HTMLElement>("[data-primary-preview='true']")
+      ?.focus();
   }
 
   function deleteComment(commentId: number) {
@@ -786,7 +741,7 @@ export function WorkItemPreviewPanel({
 
   function assignTo(candidate: WorkItemAssigneeCandidate) {
     if (!selectedItem) return;
-    setStaged((current) => ({
+    setStagedChanges((current) => ({
       ...current,
       assignee:
         candidate.displayName === preview?.assignedTo
@@ -804,7 +759,7 @@ export function WorkItemPreviewPanel({
 
   function setPriority(priority: number) {
     if (!selectedItem) return;
-    setStaged((current) => ({
+    setStagedChanges((current) => ({
       ...current,
       priority: String(priority) === preview?.priority ? undefined : priority,
     }));
@@ -815,7 +770,7 @@ export function WorkItemPreviewPanel({
     if (!selectedItem) return;
     // Reason options belong to the current state, so a staged reason is
     // dropped when the state itself changes.
-    setStaged((current) => ({
+    setStagedChanges((current) => ({
       ...current,
       state: state === preview?.state ? undefined : state,
       reason: undefined,
@@ -825,7 +780,7 @@ export function WorkItemPreviewPanel({
 
   function stageReason(reason: string) {
     if (!selectedItem) return;
-    setStaged((current) => ({
+    setStagedChanges((current) => ({
       ...current,
       reason: reason === preview?.reason ? undefined : reason,
     }));
@@ -836,7 +791,7 @@ export function WorkItemPreviewPanel({
     if (!selectedItem) return;
     const normalized = tags.join("; ");
     const currentTags = preview?.tags ?? "";
-    setStaged((current) => ({
+    setStagedChanges((current) => ({
       ...current,
       tags: normalized === currentTags ? undefined : tags,
     }));
@@ -844,7 +799,7 @@ export function WorkItemPreviewPanel({
 
   function stageCustomField(referenceName: string, label: string, value: string) {
     if (!selectedItem) return;
-    setStaged((current) => {
+    setStagedChanges((current) => {
       const fields = { ...current.fields };
       if (preview && (customPreviewFieldValue(preview, referenceName) ?? "") === value) {
         delete fields[referenceName];
@@ -855,6 +810,31 @@ export function WorkItemPreviewPanel({
     });
     setCustomFieldEditor(null);
   }
+
+  // F opens the first custom field's picker; pressing F again moves to the
+  // next one, wrapping, so every custom field stays reachable from the keyboard.
+  function openNextCustomField() {
+    if (!selectedItem || customPreviewFields.length === 0) return;
+    const currentIndex = customPreviewFields.findIndex(
+      (field) => field.referenceName === customFieldEditor,
+    );
+    const next = customPreviewFields[(currentIndex + 1) % customPreviewFields.length];
+    setAssigneeOpen(false);
+    setStatePickerOpen(false);
+    setReasonEditorOpen(false);
+    setPriorityPickerOpen(false);
+    setCustomFieldEditor(next.referenceName);
+  }
+  const openNextCustomFieldRef = useRef<() => void>(() => {});
+  openNextCustomFieldRef.current = openNextCustomField;
+
+  useEffect(() => {
+    if (!openFieldRequest || handledOpenFieldRequest.current === openFieldRequest) {
+      return;
+    }
+    handledOpenFieldRequest.current = openFieldRequest;
+    openNextCustomFieldRef.current();
+  }, [openFieldRequest]);
 
   useEffect(() => {
     function openState() {
@@ -879,27 +859,20 @@ export function WorkItemPreviewPanel({
       setReasonEditorOpen(false);
       setStatePickerOpen(false);
     }
-    function focusComment() {
-      if (!selectedItem) return;
-      textareaRef.current?.focus();
+    function openField() {
+      openNextCustomFieldRef.current();
     }
-    function submitCurrentComment() {
-      postComment();
-    }
-
     window.addEventListener("azdodeck:work-items:open-state", openState);
     window.addEventListener("azdodeck:work-items:open-assignee", openAssignee);
     window.addEventListener("azdodeck:work-items:open-priority", openPriority);
-    window.addEventListener("azdodeck:work-items:focus-comment", focusComment);
-    window.addEventListener("azdodeck:work-items:post-comment", submitCurrentComment);
+    window.addEventListener("azdodeck:work-items:open-field", openField);
     return () => {
       window.removeEventListener("azdodeck:work-items:open-state", openState);
       window.removeEventListener("azdodeck:work-items:open-assignee", openAssignee);
       window.removeEventListener("azdodeck:work-items:open-priority", openPriority);
-      window.removeEventListener("azdodeck:work-items:focus-comment", focusComment);
-      window.removeEventListener("azdodeck:work-items:post-comment", submitCurrentComment);
+      window.removeEventListener("azdodeck:work-items:open-field", openField);
     };
-  }, [commentMutation.isPending, commentText, selectedItem]);
+  }, [selectedItem]);
 
   const applyStagedRef = useRef<() => void>(() => {});
   applyStagedRef.current = () => {
@@ -992,81 +965,24 @@ export function WorkItemPreviewPanel({
       setAssigneeOpen(false);
       setStatePickerOpen(false);
       setPriorityPickerOpen(false);
+    } else if (event.key === "f" || event.key === "F") {
+      event.preventDefault();
+      openNextCustomField();
     } else if (event.key === "m" || event.key === "M") {
       event.preventDefault();
-      textareaRef.current?.focus();
+      focusWorkItemCommentInput();
     } else if (event.key === "u" || event.key === "U") {
       if (undoState) {
         event.preventDefault();
         void undoLastApply();
       }
-    }
-  }
-
-  function handleCommentKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
-    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-      event.preventDefault();
-      postComment();
-      // One keystroke finishes the "comment + property change" flow, like
-      // Azure DevOps' save-with-comment.
-      if (stagedEntries.length > 0) void applyStaged();
-      return;
-    }
-
-    if (event.key === "Escape") {
-      event.preventDefault();
-      if (mentionStart !== null) {
-        setMentionQuery("");
-        setMentionStart(null);
-      } else {
-        // Second Esc backs out of the comment editor so the panel's
-        // single-key shortcuts (s/a/p/r, Esc) work again.
-        panelRef.current
-          ?.querySelector<HTMLElement>("[data-primary-preview='true']")
-          ?.focus();
-      }
-      return;
-    }
-
-    if (
-      event.key === "Backspace" &&
-      event.currentTarget.selectionStart === event.currentTarget.selectionEnd
-    ) {
-      const textarea = event.currentTarget;
-      const cursor = textarea.selectionStart;
-      const start = mentionTokenDeletionStart(
-        commentText,
-        cursor,
-        selectedMentions.map((mention) => mention.displayName),
-      );
-      if (start !== null) {
+    } else if (event.key >= "1" && event.key <= "9") {
+      const preset = presets[Number(event.key) - 1];
+      if (preset) {
         event.preventDefault();
-        const next = commentText.slice(0, start) + commentText.slice(cursor);
-        setCommentText(next);
-        updateMentionState(next, start);
-        window.setTimeout(() => textarea.setSelectionRange(start, start), 0);
-        return;
+        applyPreset(preset);
       }
     }
-
-    if (!showMentionOptions) return;
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setActiveMentionIndex((index) => (index + 1) % mentionOptions.length);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setActiveMentionIndex(
-        (index) => (index - 1 + mentionOptions.length) % mentionOptions.length,
-      );
-    } else if (event.key === "Enter" || event.key === "Tab") {
-      event.preventDefault();
-      applyMention(mentionOptions[activeMentionIndex] ?? mentionOptions[0]);
-    }
-  }
-
-  function submitComment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    postComment();
   }
 
   // Rendered inline in the preview header row, so it never overlaps content.
@@ -1147,6 +1063,16 @@ export function WorkItemPreviewPanel({
               <WorkItemPreviewDetails
                 customPreviewFields={customPreviewFields}
                 statusChip={stagedStatusChip}
+                presetsControl={
+                  <PresetMenu
+                    canSave={stagedEntries.length > 0}
+                    onApply={applyPreset}
+                    onDelete={deletePreset}
+                    onSave={savePresetFromStaged}
+                    presets={presets}
+                    stagedCount={stagedEntries.length}
+                  />
+                }
                 deleteCommentError={
                   deleteCommentMutation.isError
                     ? commandErrorMessage(deleteCommentMutation.error)
@@ -1206,6 +1132,7 @@ export function WorkItemPreviewPanel({
                 renderCustomFieldControl={(field) => (
                   <CustomFieldPicker
                     label={field.label}
+                    shortcut="F"
                     current={
                       staged.fields?.[field.referenceName]?.value ??
                       customPreviewFieldValue(preview, field.referenceName)
@@ -1278,132 +1205,19 @@ export function WorkItemPreviewPanel({
                   />
                 }
               />
-              <div className="bg-slate-50/70 p-2">
-                <form className="space-y-1" onSubmit={submitComment}>
-                  <div ref={mentionPickerRef} className="relative">
-                    <textarea
-                      ref={textareaRef}
-                      data-work-item-comment-input="true"
-                      value={commentText}
-                      onChange={(event) => {
-                        setCommentText(event.target.value);
-                        updateMentionState(
-                          event.target.value,
-                          event.target.selectionStart,
-                        );
-                      }}
-                      onClick={(event) => {
-                        updateMentionState(
-                          event.currentTarget.value,
-                          event.currentTarget.selectionStart,
-                        );
-                      }}
-                      onKeyDown={handleCommentKeyDown}
-                      aria-label="Comment"
-                      aria-keyshortcuts="M Alt+M Control+Enter Meta+Enter"
-                      placeholder="Add a comment..."
-                      rows={2}
-                      className="min-h-[36px] w-full resize-none rounded-md border border-input bg-white px-2 py-1.5 text-sm outline-none transition-[border-color,box-shadow,min-height] focus:min-h-[64px] focus:border-primary focus:ring-4 focus:ring-primary/20"
-                    />
-                    {showMentionOptions ? (
-                      <div className="absolute bottom-full left-0 z-20 mb-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-white py-1 shadow-lg">
-                        {mentionOptions.map((candidate, index) => (
-                          <button
-                            key={candidate.id}
-                            type="button"
-                            ref={
-                              index === activeMentionIndex
-                                ? scrollMentionOptionIntoView
-                                : undefined
-                            }
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => applyMention(candidate)}
-                            className={`flex w-full min-w-0 items-center gap-2 px-3 py-1.5 text-left text-sm ${
-                              index === activeMentionIndex ? "bg-secondary" : "hover:bg-muted"
-                            }`}
-                          >
-                            <CandidateAvatar displayName={candidate.displayName} />
-                            <span className="flex min-w-0 flex-col">
-                              <span className="truncate font-medium">
-                                <HighlightedText
-                                  text={candidate.displayName}
-                                  query={mentionQuery}
-                                />
-                              </span>
-                              {candidate.uniqueName ? (
-                                <span className="truncate text-xs text-muted-foreground">
-                                  <HighlightedText
-                                    text={candidate.uniqueName}
-                                    query={mentionQuery}
-                                  />
-                                </span>
-                              ) : null}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : showMentionError ? (
-                      <div className="absolute bottom-full left-0 z-20 mb-1 w-full rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-[11px] text-destructive shadow-lg">
-                        Search failed: {commandErrorMessage(mentionOptionsQuery.error)}
-                      </div>
-                    ) : null}
-                  </div>
-                  {commentMutation.isError ? (
-                    <p className="text-xs text-destructive">
-                      {commandErrorMessage(commentMutation.error)}
-                    </p>
-                  ) : null}
-                  <div className="flex flex-wrap items-center justify-between gap-1.5">
-                    <div className="flex items-center gap-1">
-                      {savedReplies.length > 0 ? (
-                        <select
-                          aria-label="Saved replies"
-                          value=""
-                          onChange={(event) => {
-                            if (!event.target.value) return;
-                            setCommentText(event.target.value);
-                            event.target.value = "";
-                          }}
-                          className="h-6 rounded border border-input bg-white px-1 text-xs"
-                        >
-                          <option value="">Saved replies</option>
-                          {savedReplies.map((reply, index) => (
-                            <option key={`${index}:${reply}`} value={reply}>
-                              {reply.slice(0, 60)}
-                            </option>
-                          ))}
-                        </select>
-                      ) : null}
-                      <button
-                        type="button"
-                        disabled={!commentText.trim()}
-                        onClick={saveCurrentReply}
-                        className="h-6 rounded border border-border bg-white px-2 text-xs hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        Save reply
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      {commentMutation.isSuccess ? (
-                        <span className="text-xs text-muted-foreground">Comment posted</span>
-                      ) : null}
-                      <button
-                        type="submit"
-                        aria-label="Post comment"
-                        disabled={!commentText.trim() || commentMutation.isPending}
-                        className="inline-flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {commentMutation.isPending ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                        ) : (
-                          <Send className="h-3.5 w-3.5" aria-hidden="true" />
-                        )}
-                        Post
-                      </button>
-                    </div>
-                  </div>
-                </form>
-              </div>
+              <CommentComposer
+                focusCommentRequest={focusCommentRequest}
+                hasStagedChanges={stagedEntries.length > 0}
+                mentionPriorityNames={mentionPriorityNames}
+                onApplyStaged={() => {
+                  void applyStaged();
+                }}
+                onEscapeToPanel={focusPanelBody}
+                onMentionApplied={handleMentionApplied}
+                recentMentionOptions={recentMentionOptions}
+                selectedItem={selectedItem}
+                selfOrg={selfOrg}
+              />
             </>
           ) : previewLoading ? (
             <PreviewEmptyState message={`Loading work item #${selectedItem.id}.`} />
@@ -1413,6 +1227,356 @@ export function WorkItemPreviewPanel({
         </>
       )}
     </aside>
+  );
+}
+
+// Owns the comment draft and the mention picker so typing re-renders only
+// this subtree, not the whole preview panel with its comment iframes.
+function CommentComposer({
+  focusCommentRequest,
+  hasStagedChanges,
+  mentionPriorityNames,
+  onApplyStaged,
+  onEscapeToPanel,
+  onMentionApplied,
+  recentMentionOptions,
+  selectedItem,
+  selfOrg,
+}: {
+  focusCommentRequest?: number;
+  hasStagedChanges: boolean;
+  mentionPriorityNames: string[];
+  onApplyStaged: () => void;
+  onEscapeToPanel: () => void;
+  onMentionApplied: (candidate: MentionCandidate) => void;
+  recentMentionOptions: MentionCandidate[];
+  selectedItem: WorkItemSummary | null;
+  selfOrg: Organization | undefined;
+}) {
+  const queryClient = useQueryClient();
+  const [commentText, setCommentText] = useState("");
+  const [selectedMentions, setSelectedMentions] = useState<SelectedMention[]>([]);
+  const mentionsToRecordRef = useRef<
+    Array<{ id: string; displayName: string; uniqueName: string; organizationId: string }>
+  >([]);
+  const [mentionQuery, setMentionQuery] = useState("");
+  const [mentionStart, setMentionStart] = useState<number | null>(null);
+  const [activeMentionIndex, setActiveMentionIndex] = useState(0);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const handledFocusCommentRequest = useRef(0);
+
+  // Debounced so each keystroke does not fire a backend identity search;
+  // keepPreviousData keeps the list visible while the next search runs.
+  const debouncedMentionQuery = useDebouncedValue(mentionQuery, 200);
+  const mentionOptionsQuery = useQuery({
+    queryKey: workItemQueryKeys.mentions(
+      selectedItem?.organizationId,
+      selectedItem?.projectId,
+      selectedItem?.id,
+      debouncedMentionQuery,
+    ),
+    queryFn: () =>
+      searchWorkItemMentions({
+        organizationId: selectedItem!.organizationId,
+        projectId: selectedItem!.projectId,
+        workItemId: selectedItem!.id,
+        query: debouncedMentionQuery,
+      }),
+    enabled: !!selectedItem && mentionStart !== null,
+    staleTime: 60_000,
+    placeholderData: keepPreviousData,
+  });
+  const mentionOptions = useMemo(
+    () =>
+      // Self stays in the list but last: removing it entirely leaves the
+      // picker empty in single-member organizations.
+      sortSelfLast(
+        rankMentionCandidates({
+          recent: recentMentionOptions,
+          remote: mentionOptionsQuery.data ?? [],
+          query: mentionQuery,
+          priorityNames: mentionPriorityNames,
+        }),
+        selfOrg,
+      ),
+    [
+      mentionOptionsQuery.data,
+      mentionPriorityNames,
+      mentionQuery,
+      recentMentionOptions,
+      selfOrg,
+    ],
+  );
+  const showMentionOptions = mentionStart !== null && mentionOptions.length > 0;
+  const showMentionError =
+    mentionStart !== null && mentionOptionsQuery.isError && mentionOptions.length === 0;
+  const mentionPickerRef = useCloseOnOutsidePointer<HTMLDivElement>(
+    showMentionOptions,
+    () => {
+      setMentionStart(null);
+      setMentionQuery("");
+    },
+  );
+
+  const commentMutation = useMutation({
+    mutationFn: addWorkItemComment,
+    onSuccess: () => {
+      for (const mention of mentionsToRecordRef.current) {
+        void recordMentionInteraction({
+          organizationId: mention.organizationId,
+          userId: mention.id,
+          displayName: mention.displayName,
+          uniqueName: mention.uniqueName,
+        });
+      }
+      mentionsToRecordRef.current = [];
+      setCommentText("");
+      setSelectedMentions([]);
+      setMentionQuery("");
+      setMentionStart(null);
+      setActiveMentionIndex(0);
+      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
+    },
+  });
+
+  // Switching work items clears the unsent draft.
+  useEffect(() => {
+    setCommentText("");
+    setSelectedMentions([]);
+    setMentionQuery("");
+    setMentionStart(null);
+    setActiveMentionIndex(0);
+  }, [selectedItem?.id]);
+
+  useEffect(() => {
+    if (
+      !focusCommentRequest ||
+      handledFocusCommentRequest.current === focusCommentRequest
+    ) {
+      return;
+    }
+    handledFocusCommentRequest.current = focusCommentRequest;
+    if (!selectedItem) return;
+    textareaRef.current?.focus();
+  }, [focusCommentRequest, selectedItem]);
+
+  useEffect(() => {
+    function focusComment() {
+      if (!selectedItem) return;
+      textareaRef.current?.focus();
+    }
+    function submitCurrentComment() {
+      postComment();
+    }
+    window.addEventListener("azdodeck:work-items:focus-comment", focusComment);
+    window.addEventListener("azdodeck:work-items:post-comment", submitCurrentComment);
+    return () => {
+      window.removeEventListener("azdodeck:work-items:focus-comment", focusComment);
+      window.removeEventListener("azdodeck:work-items:post-comment", submitCurrentComment);
+    };
+  });
+
+  function updateMentionState(text: string, cursor: number) {
+    const mention = activeMentionAt(text, cursor);
+    setMentionStart(mention?.start ?? null);
+    setMentionQuery(mention?.query ?? "");
+    setActiveMentionIndex(0);
+  }
+
+  function applyMention(candidate: MentionCandidate) {
+    const textarea = textareaRef.current;
+    const cursor = textarea?.selectionStart ?? commentText.length;
+    const start = mentionStart ?? cursor;
+    const replacement = `@${candidate.displayName} `;
+    const next = `${commentText.slice(0, start)}${replacement}${commentText.slice(cursor)}`;
+    const nextCursor = start + replacement.length;
+    setCommentText(next);
+    setSelectedMentions((current) => addSelectedMention(current, candidate));
+    onMentionApplied(candidate);
+    setMentionQuery("");
+    setMentionStart(null);
+    window.setTimeout(() => {
+      textarea?.focus();
+      textarea?.setSelectionRange(nextCursor, nextCursor);
+    }, 0);
+  }
+
+  function postComment() {
+    if (!selectedItem || !commentText.trim() || commentMutation.isPending) return;
+    mentionsToRecordRef.current = selectedMentions
+      .filter(
+        (m) =>
+          m.uniqueName &&
+          isMentionResolvableId(m.id) &&
+          mentionTokenPattern(m.displayName).test(commentText),
+      )
+      .map((m) => ({
+        id: m.id,
+        displayName: m.displayName,
+        uniqueName: m.uniqueName!,
+        organizationId: selectedItem.organizationId,
+      }));
+    commentMutation.mutate({
+      organizationId: selectedItem.organizationId,
+      projectId: selectedItem.projectId,
+      workItemId: selectedItem.id,
+      markdown: markdownWithHardLineBreaks(
+        renderAzureMentionMarkdown(commentText, selectedMentions),
+      ),
+    });
+  }
+
+  function handleCommentKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      postComment();
+      // One keystroke finishes the "comment + property change" flow, like
+      // Azure DevOps' save-with-comment.
+      if (hasStagedChanges) onApplyStaged();
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      if (mentionStart !== null) {
+        setMentionQuery("");
+        setMentionStart(null);
+      } else {
+        // Second Esc backs out of the comment editor so the panel's
+        // single-key shortcuts (s/a/p/r, Esc) work again.
+        onEscapeToPanel();
+      }
+      return;
+    }
+
+    if (
+      event.key === "Backspace" &&
+      event.currentTarget.selectionStart === event.currentTarget.selectionEnd
+    ) {
+      const textarea = event.currentTarget;
+      const cursor = textarea.selectionStart;
+      const start = mentionTokenDeletionStart(
+        commentText,
+        cursor,
+        selectedMentions.map((mention) => mention.displayName),
+      );
+      if (start !== null) {
+        event.preventDefault();
+        const next = commentText.slice(0, start) + commentText.slice(cursor);
+        setCommentText(next);
+        updateMentionState(next, start);
+        window.setTimeout(() => textarea.setSelectionRange(start, start), 0);
+        return;
+      }
+    }
+
+    if (!showMentionOptions) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveMentionIndex((index) => (index + 1) % mentionOptions.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveMentionIndex(
+        (index) => (index - 1 + mentionOptions.length) % mentionOptions.length,
+      );
+    } else if (event.key === "Enter" || event.key === "Tab") {
+      event.preventDefault();
+      applyMention(mentionOptions[activeMentionIndex] ?? mentionOptions[0]);
+    }
+  }
+
+  function submitComment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    postComment();
+  }
+
+  return (
+    <div className="bg-slate-50/70 p-2">
+      <form className="space-y-1" onSubmit={submitComment}>
+        <div ref={mentionPickerRef} className="relative">
+          <textarea
+            ref={textareaRef}
+            data-work-item-comment-input="true"
+            value={commentText}
+            onChange={(event) => {
+              setCommentText(event.target.value);
+              updateMentionState(event.target.value, event.target.selectionStart);
+            }}
+            onClick={(event) => {
+              updateMentionState(
+                event.currentTarget.value,
+                event.currentTarget.selectionStart,
+              );
+            }}
+            onKeyDown={handleCommentKeyDown}
+            aria-label="Comment"
+            aria-keyshortcuts="M Alt+M Control+Enter Meta+Enter"
+            placeholder="Add a comment..."
+            rows={2}
+            className="min-h-[36px] w-full resize-none rounded-md border border-input bg-white px-2 py-1.5 text-sm outline-none transition-[border-color,box-shadow,min-height] focus:min-h-[64px] focus:border-primary focus:ring-4 focus:ring-primary/20"
+          />
+          {showMentionOptions ? (
+            <div className="absolute bottom-full left-0 z-20 mb-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-white py-1 shadow-lg">
+              {mentionOptions.map((candidate, index) => (
+                <button
+                  key={candidate.id}
+                  type="button"
+                  ref={
+                    index === activeMentionIndex
+                      ? scrollMentionOptionIntoView
+                      : undefined
+                  }
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => applyMention(candidate)}
+                  className={`flex w-full min-w-0 items-center gap-2 px-3 py-1.5 text-left text-sm ${
+                    index === activeMentionIndex ? "bg-secondary" : "hover:bg-muted"
+                  }`}
+                >
+                  <CandidateAvatar displayName={candidate.displayName} />
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate font-medium">
+                      <HighlightedText text={candidate.displayName} query={mentionQuery} />
+                    </span>
+                    {candidate.uniqueName ? (
+                      <span className="truncate text-xs text-muted-foreground">
+                        <HighlightedText text={candidate.uniqueName} query={mentionQuery} />
+                      </span>
+                    ) : null}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : showMentionError ? (
+            <div className="absolute bottom-full left-0 z-20 mb-1 w-full rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1 text-[11px] text-destructive shadow-lg">
+              Search failed: {commandErrorMessage(mentionOptionsQuery.error)}
+            </div>
+          ) : null}
+        </div>
+        {commentMutation.isError ? (
+          <p className="text-xs text-destructive">
+            {commandErrorMessage(commentMutation.error)}
+          </p>
+        ) : null}
+        <div className="flex items-center justify-end gap-1.5">
+          {commentMutation.isSuccess ? (
+            <span className="text-xs text-muted-foreground">Comment posted</span>
+          ) : null}
+          <button
+            type="submit"
+            aria-label="Post comment"
+            title="Post comment (Ctrl+Enter)"
+            disabled={!commentText.trim() || commentMutation.isPending}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {commentMutation.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <Send className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
 
@@ -1429,6 +1593,7 @@ function WorkItemPreviewDetails({
   onSelectedFieldKeysChange,
   priorityControl,
   reasonControl,
+  presetsControl,
   renderCustomFieldControl,
   resolveImageSource,
   selectedFieldKeys,
@@ -1447,6 +1612,7 @@ function WorkItemPreviewDetails({
   onCustomPreviewFieldsChange: (fields: CustomPreviewField[]) => void;
   onDeleteComment: (commentId: number) => void;
   onSelectedFieldKeysChange: (keys: PreviewFieldKey[]) => void;
+  presetsControl?: ReactNode;
   priorityControl: ReactNode;
   reasonControl: ReactNode;
   renderCustomFieldControl: (field: CustomPreviewField) => ReactNode;
@@ -1458,6 +1624,16 @@ function WorkItemPreviewDetails({
   onTagsChange: (tags: string[]) => void;
 }) {
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  // Comments arrive newest first; only the recent ones mount their iframe by
+  // default because each comment is a full sandboxed document.
+  const [showAllComments, setShowAllComments] = useState(false);
+  useEffect(() => {
+    setShowAllComments(false);
+  }, [preview.id]);
+  const visibleComments = showAllComments
+    ? preview.comments
+    : preview.comments.slice(0, VISIBLE_COMMENT_LIMIT);
+  const hiddenCommentCount = preview.comments.length - visibleComments.length;
   const [fieldMenuOpen, setFieldMenuOpen] = useState(false);
   const [customFieldLabel, setCustomFieldLabel] = useState("");
   const [customFieldReferenceName, setCustomFieldReferenceName] = useState("");
@@ -1566,6 +1742,7 @@ function WorkItemPreviewDetails({
             {statusChip}
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            {presetsControl}
             <div ref={fieldMenuRef} className="relative">
               <button
                 type="button"
@@ -1839,7 +2016,7 @@ function WorkItemPreviewDetails({
             </p>
           ) : null}
           <div className="space-y-1">
-            {preview.comments.map((comment) => {
+            {visibleComments.map((comment) => {
               const deleting = deletingCommentId === comment.id;
               return (
                 <CollapsibleComment
@@ -1861,6 +2038,15 @@ function WorkItemPreviewDetails({
                 />
               );
             })}
+            {hiddenCommentCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => setShowAllComments(true)}
+                className="w-full rounded border border-dashed border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+              >
+                Show {hiddenCommentCount} older comment{hiddenCommentCount === 1 ? "" : "s"}
+              </button>
+            ) : null}
           </div>
         </PreviewSection>
       ) : null}
@@ -2114,6 +2300,53 @@ function customPreviewFieldValue(preview: WorkItemPreview, referenceName: string
       (field) => field.referenceName.toLowerCase() === referenceName.toLowerCase(),
     )?.value ?? null
   );
+}
+
+function stagedEntriesForPreview(
+  preview: WorkItemPreview | null | undefined,
+  staged: StagedChanges,
+): StagedEntry[] {
+  const entries: StagedEntry[] = [];
+  if (!preview) return entries;
+  if (staged.state !== undefined) {
+    entries.push({ key: "state", label: "State", from: preview.state ?? "—", to: staged.state });
+  }
+  if (staged.assignee) {
+    entries.push({
+      key: "assignee",
+      label: "Assignee",
+      from: preview.assignedTo ?? "Unassigned",
+      to: staged.assignee.displayName,
+    });
+  }
+  if (staged.priority !== undefined) {
+    entries.push({
+      key: "priority",
+      label: "Priority",
+      from: preview.priority ?? "—",
+      to: String(staged.priority),
+    });
+  }
+  if (staged.reason !== undefined) {
+    entries.push({ key: "reason", label: "Reason", from: preview.reason ?? "—", to: staged.reason });
+  }
+  if (staged.tags) {
+    entries.push({
+      key: "tags",
+      label: "Tags",
+      from: preview.tags?.trim() ? preview.tags : "—",
+      to: staged.tags.join("; ") || "—",
+    });
+  }
+  for (const [referenceName, field] of Object.entries(staged.fields ?? {})) {
+    entries.push({
+      key: `field:${referenceName}`,
+      label: field.label,
+      from: customPreviewFieldValue(preview, referenceName) ?? "—",
+      to: field.value,
+    });
+  }
+  return entries;
 }
 
 function filterCustomFieldOptions(
@@ -2925,6 +3158,7 @@ function CustomFieldPicker({
   open,
   options,
   pending,
+  shortcut,
 }: {
   current: string | null;
   error?: string | null;
@@ -2935,6 +3169,7 @@ function CustomFieldPicker({
   open: boolean;
   options: string[];
   pending: boolean;
+  shortcut?: string;
 }) {
   const pickerRef = useCloseOnOutsidePointer<HTMLDivElement>(open, () =>
     onOpenChange(false),
@@ -2959,6 +3194,7 @@ function CustomFieldPicker({
           ref={triggerRef}
           type="button"
           aria-label={`Change ${label}`}
+          aria-keyshortcuts={shortcut}
           disabled={pending}
           onClick={() => onOpenChange(!open)}
           className="max-w-full truncate rounded px-1 text-left text-[12px] font-semibold leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
@@ -3416,6 +3652,121 @@ function CandidateAvatar({ displayName }: { displayName: string }) {
   );
 }
 
+// Named bundles of field changes ("Resolve as Won't Fix", ...). Applying one
+// stages its changes; saving captures the current pending changes.
+function PresetMenu({
+  canSave,
+  onApply,
+  onDelete,
+  onSave,
+  presets,
+  stagedCount,
+}: {
+  canSave: boolean;
+  onApply: (preset: WorkItemFieldPreset) => void;
+  onDelete: (id: string) => void;
+  onSave: (name: string) => void;
+  presets: WorkItemFieldPreset[];
+  stagedCount: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const menuRef = useCloseOnOutsidePointer<HTMLDivElement>(open, () => setOpen(false));
+
+  return (
+    <div ref={menuRef} className="relative">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-label="Field presets"
+        title="Field presets — press 1-9 to apply"
+        onClick={() => setOpen((current) => !current)}
+        className="inline-flex h-5 w-5 items-center justify-center rounded border border-border bg-white text-muted-foreground hover:bg-secondary hover:text-foreground"
+      >
+        <Zap className="h-3 w-3" aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className="absolute right-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-white p-1 shadow-lg">
+          <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground">
+            Field presets
+          </div>
+          {presets.length > 0 ? (
+            presets.map((preset, index) => (
+              <div
+                key={preset.id}
+                className="group flex items-center gap-1 rounded hover:bg-muted"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    onApply(preset);
+                    setOpen(false);
+                  }}
+                  title={preset.fields
+                    .map((field) => `${field.label}: ${field.value}`)
+                    .join("\n")}
+                  className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1 text-left text-xs"
+                >
+                  <ShortcutHint>{index + 1}</ShortcutHint>
+                  <span className="truncate">{preset.name}</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Delete preset ${preset.name}`}
+                  onClick={() => onDelete(preset.id)}
+                  className="mr-1 rounded p-0.5 text-muted-foreground opacity-0 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                >
+                  <Trash2 className="h-3 w-3" aria-hidden="true" />
+                </button>
+              </div>
+            ))
+          ) : (
+            <p className="px-2 py-1 text-[11px] text-muted-foreground">No presets yet.</p>
+          )}
+          <div className="mt-1 border-t border-border px-2 py-1.5">
+            {canSave ? (
+              <form
+                className="flex items-center gap-1"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const trimmed = name.trim();
+                  if (!trimmed) return;
+                  onSave(trimmed);
+                  setName("");
+                }}
+              >
+                <input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder={`Save ${stagedCount} pending as…`}
+                  aria-label="New preset name"
+                  className="h-6 min-w-0 flex-1 rounded border border-input bg-white px-1.5 text-xs outline-none focus:border-primary"
+                />
+                <button
+                  type="submit"
+                  disabled={!name.trim() || presets.length >= MAX_FIELD_PRESETS}
+                  className="h-6 rounded border border-border bg-white px-2 text-xs hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Save
+                </button>
+              </form>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">
+                Stage changes (state, reason, …), then save them here as a preset.
+              </p>
+            )}
+            {presets.length >= MAX_FIELD_PRESETS ? (
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                Up to {MAX_FIELD_PRESETS} presets.
+              </p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function recentWorkItemMentionCandidates(
   preview: WorkItemPreview | null,
 ): MentionCandidate[] {
@@ -3760,7 +4111,7 @@ function addSelectedMention(
 const MENTION_RESOLVABLE_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export function isMentionResolvableId(id: string): boolean {
+function isMentionResolvableId(id: string): boolean {
   return MENTION_RESOLVABLE_ID_PATTERN.test(id);
 }
 

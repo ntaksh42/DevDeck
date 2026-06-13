@@ -34,7 +34,6 @@ import {
 } from '@/lib/utils';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { openExternalUrl } from '@/lib/openExternal';
-import { ShortcutHint } from '@/components/ShortcutHint';
 import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { LoadingState } from '@/components/StateDisplay';
@@ -328,7 +327,7 @@ function extraFieldValue(item: WorkItemSummary, referenceName: string): string |
   );
 }
 
-export function extraColumnLabel(referenceName: string): string {
+function extraColumnLabel(referenceName: string): string {
   return referenceName.split(".").pop() || referenceName;
 }
 
@@ -522,6 +521,7 @@ export function WorkItemsGrid({
   const [openAssigneeRequest, setOpenAssigneeRequest] = useState(0);
   const [openStateRequest, setOpenStateRequest] = useState(0);
   const [openPriorityRequest, setOpenPriorityRequest] = useState(0);
+  const [openFieldRequest, setOpenFieldRequest] = useState(0);
   const [itemOverrides, setItemOverrides] = useState<Map<string, Partial<WorkItemSummary>>>(new Map());
   const [customPreviewFields, setCustomPreviewFields] = useState<CustomPreviewField[]>(
     () => loadCustomPreviewFields(),
@@ -689,25 +689,31 @@ export function WorkItemsGrid({
   }, [selectedItem]);
 
   useEffect(() => {
-    for (const item of [displayed[selectedIndex - 1], displayed[selectedIndex + 1]]) {
-      if (!item) continue;
-      void queryClient.prefetchQuery({
-        queryKey: workItemQueryKeys.preview(
-          item.organizationId,
-          item.projectId,
-          item.id,
-          customPreviewFieldSignature,
-        ),
-        queryFn: () =>
-          getWorkItemPreview({
-            organizationId: item.organizationId,
-            projectId: item.projectId,
-            workItemId: item.id,
-            customFields: customPreviewFieldRefs,
-          }),
-        staleTime: 30_000,
-      });
-    }
+    // Wait for the selection to settle: a preview fetch is several REST calls,
+    // and holding an arrow key would otherwise fire a burst of them for rows
+    // the user only scrolled past.
+    const timer = window.setTimeout(() => {
+      for (const item of [displayed[selectedIndex - 1], displayed[selectedIndex + 1]]) {
+        if (!item) continue;
+        void queryClient.prefetchQuery({
+          queryKey: workItemQueryKeys.preview(
+            item.organizationId,
+            item.projectId,
+            item.id,
+            customPreviewFieldSignature,
+          ),
+          queryFn: () =>
+            getWorkItemPreview({
+              organizationId: item.organizationId,
+              projectId: item.projectId,
+              workItemId: item.id,
+              customFields: customPreviewFieldRefs,
+            }),
+          staleTime: 30_000,
+        });
+      }
+    }, 300);
+    return () => window.clearTimeout(timer);
   }, [customPreviewFieldRefs, customPreviewFieldSignature, displayed, queryClient, selectedIndex]);
 
   const COMMON_STATES = ["New", "Active", "Resolved", "Closed", "To Do", "Doing", "Done"];
@@ -1200,6 +1206,9 @@ export function WorkItemsGrid({
       } else {
         setOpenPriorityRequest((value) => value + 1);
       }
+    } else if (e.key === "f" || e.key === "F") {
+      e.preventDefault();
+      setOpenFieldRequest((value) => value + 1);
     }
   }
 
@@ -1501,7 +1510,6 @@ export function WorkItemsGrid({
               >
                 Columns
               </button>
-              <ShortcutHint>Alt+G</ShortcutHint>
             </span>
           </div>
         </div>
@@ -1527,6 +1535,7 @@ export function WorkItemsGrid({
                 setCustomPreviewFields(fields);
               }}
               openAssigneeRequest={openAssigneeRequest}
+              openFieldRequest={openFieldRequest}
               openPriorityRequest={openPriorityRequest}
               openStateRequest={openStateRequest}
               preview={previewQuery.data ?? null}

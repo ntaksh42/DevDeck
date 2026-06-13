@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use azdo_client::{
     AdoClient, AdoError, Identity, IdentityPickerIdentity, WorkItem,
@@ -9,11 +11,13 @@ use base64::Engine;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tokio::sync::Mutex;
 
 use crate::auth::client_for_organization;
 use crate::commits::encode_path_segment;
 use crate::db::{AppDatabase, CachedWorkItem, Organization};
 use crate::error::{AppError, Result};
+use crate::projects::ProjectDirectory;
 use crate::secrets::SecretStore;
 
 const WORK_ITEM_FIELDS: &[&str] = &[
@@ -159,61 +163,6 @@ pub struct DeleteWorkItemCommentInput {
     pub project_id: String,
     pub work_item_id: i64,
     pub comment_id: i64,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AssignWorkItemInput {
-    pub organization_id: Option<String>,
-    pub project_id: String,
-    pub work_item_id: i64,
-    pub assigned_to: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SetWorkItemStateInput {
-    pub organization_id: Option<String>,
-    pub project_id: String,
-    pub work_item_id: i64,
-    pub state: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SetWorkItemReasonInput {
-    pub organization_id: Option<String>,
-    pub project_id: String,
-    pub work_item_id: i64,
-    pub reason: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SetWorkItemPriorityInput {
-    pub organization_id: Option<String>,
-    pub project_id: String,
-    pub work_item_id: i64,
-    pub priority: i64,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SetWorkItemTagsInput {
-    pub organization_id: Option<String>,
-    pub project_id: String,
-    pub work_item_id: i64,
-    pub tags: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SetWorkItemFieldInput {
-    pub organization_id: Option<String>,
-    pub project_id: String,
-    pub work_item_id: i64,
-    pub field_reference_name: String,
-    pub value: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -413,7 +362,7 @@ pub struct MentionCandidate {
     pub unique_name: Option<String>,
 }
 
-#[derive(Debug, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkItemAssigneeCandidate {
     pub id: String,
@@ -434,15 +383,56 @@ pub struct WorkItemComment {
     pub created_date: Option<String>,
 }
 
+const UPDATE_CANDIDATES_TTL: Duration = Duration::from_secs(60);
+const UPDATE_CANDIDATES_CACHE_CAP: usize = 200;
+
+// People recently involved in a work item, derived from its update history.
+// Mention and assignee search both need them for every (debounced) keystroke,
+// while the underlying updates change rarely — cache them briefly per item.
+type UpdateCandidatesCache =
+    Arc<Mutex<HashMap<(String, String, i64), (Instant, Vec<WorkItemAssigneeCandidate>)>>>;
+
 #[derive(Debug, Clone)]
 pub struct WorkItemService {
     db: AppDatabase,
     secrets: SecretStore,
+    projects: ProjectDirectory,
+    update_candidates: UpdateCandidatesCache,
 }
 
 impl WorkItemService {
     pub fn new(db: AppDatabase, secrets: SecretStore) -> Self {
-        Self { db, secrets }
+        Self {
+            db,
+            secrets,
+            projects: ProjectDirectory::new(),
+            update_candidates: UpdateCandidatesCache::default(),
+        }
+    }
+
+    async fn update_candidates(
+        &self,
+        client: &AdoClient,
+        org_id: &str,
+        project_id: &str,
+        work_item_id: i64,
+    ) -> Result<Vec<WorkItemAssigneeCandidate>> {
+        let key = (org_id.to_string(), project_id.to_string(), work_item_id);
+        let mut cache = self.update_candidates.lock().await;
+        if let Some((fetched_at, candidates)) = cache.get(&key) {
+            if fetched_at.elapsed() < UPDATE_CANDIDATES_TTL {
+                return Ok(candidates.clone());
+            }
+        }
+        let updates = client
+            .list_work_item_updates(project_id, work_item_id, 50)
+            .await?;
+        let candidates = assignee_candidates_from_updates(updates);
+        if cache.len() >= UPDATE_CANDIDATES_CACHE_CAP {
+            cache.clear();
+        }
+        cache.insert(key, (Instant::now(), candidates.clone()));
+        Ok(candidates)
     }
 
     pub fn search(&self, input: SearchWorkItemsInput) -> Result<Vec<WorkItemSummary>> {
@@ -489,8 +479,9 @@ impl WorkItemService {
     ) -> Result<Vec<WorkItemProjectOption>> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let mut projects = client
-            .list_projects()
+        let mut projects = self
+            .projects
+            .list(&client, &organization.id)
             .await?
             .into_iter()
             .map(|project| WorkItemProjectOption {
@@ -507,14 +498,10 @@ impl WorkItemService {
 
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let project = client
-            .list_projects()
-            .await?
-            .into_iter()
-            .find(|project| project.id == input.project_id)
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("project not found: {}", input.project_id))
-            })?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
 
         let limit = work_item_query_limit(input.limit);
         let (ids, depths) = if is_link_wiql(wiql) {
@@ -593,14 +580,10 @@ impl WorkItemService {
     pub async fn preview(&self, input: GetWorkItemPreviewInput) -> Result<WorkItemPreview> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let project = client
-            .list_projects()
-            .await?
-            .into_iter()
-            .find(|project| project.id == input.project_id)
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("project not found: {}", input.project_id))
-            })?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
         let fields = preview_fields(input.custom_fields.as_deref())
             .iter()
             .map(ToString::to_string)
@@ -758,12 +741,17 @@ impl WorkItemService {
         let client = client_for_organization(&organization, &self.secrets)?;
         let mut candidates = Vec::new();
 
-        match client
-            .list_work_item_updates(&input.project_id, input.work_item_id, 50)
+        match self
+            .update_candidates(
+                &client,
+                &organization.id,
+                &input.project_id,
+                input.work_item_id,
+            )
             .await
         {
-            Ok(updates) => {
-                for candidate in assignee_candidates_from_updates(updates)
+            Ok(update_candidates) => {
+                for candidate in update_candidates
                     .into_iter()
                     .map(mention_candidate_from_assignee)
                 {
@@ -840,12 +828,17 @@ impl WorkItemService {
         let client = client_for_organization(&organization, &self.secrets)?;
         let mut candidates = Vec::new();
 
-        match client
-            .list_work_item_updates(&input.project_id, input.work_item_id, 50)
+        match self
+            .update_candidates(
+                &client,
+                &organization.id,
+                &input.project_id,
+                input.work_item_id,
+            )
             .await
         {
-            Ok(updates) => {
-                for candidate in assignee_candidates_from_updates(updates) {
+            Ok(update_candidates) => {
+                for candidate in update_candidates {
                     push_unique_assignee_candidate(&mut candidates, candidate);
                 }
             }
@@ -962,244 +955,6 @@ impl WorkItemService {
         Ok(())
     }
 
-    pub async fn assign(&self, input: AssignWorkItemInput) -> Result<WorkItemPreview> {
-        let assigned_to = input.assigned_to.trim();
-        if assigned_to.is_empty() {
-            return Err(AppError::InvalidInput("assignee is required".to_string()));
-        }
-
-        let organization = self.resolve_organization(input.organization_id.as_deref())?;
-        let client = client_for_organization(&organization, &self.secrets)?;
-        let project = client
-            .list_projects()
-            .await?
-            .into_iter()
-            .find(|project| project.id == input.project_id)
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("project not found: {}", input.project_id))
-            })?;
-
-        let work_item = client
-            .update_work_item_assigned_to(&project.id, input.work_item_id, assigned_to)
-            .await?;
-        let cached = work_item_to_cached(&organization, &project.id, &project.name, &work_item);
-        if let Err(e) = self.db.upsert_work_items(std::slice::from_ref(&cached)) {
-            tracing::warn!(error = %e, "failed to update work item cache after assign");
-        }
-        if let Err(e) = self.db.update_my_work_item_if_present(&cached) {
-            tracing::warn!(error = %e, "failed to update my_work_items cache after assign");
-        }
-        let comments = client
-            .list_work_item_comments(
-                &project.id,
-                input.work_item_id,
-                WORK_ITEM_PREVIEW_COMMENT_LIMIT,
-            )
-            .await
-            .unwrap_or_default();
-
-        Ok(summarize_work_item_preview(
-            &organization,
-            &project.id,
-            &project.name,
-            work_item,
-            comments,
-        ))
-    }
-
-    pub async fn set_state(&self, input: SetWorkItemStateInput) -> Result<WorkItemPreview> {
-        let state = input.state.trim().to_string();
-        if state.is_empty() {
-            return Err(AppError::InvalidInput("state is required".to_string()));
-        }
-
-        let organization = self.resolve_organization(input.organization_id.as_deref())?;
-        let client = client_for_organization(&organization, &self.secrets)?;
-        let project = client
-            .list_projects()
-            .await?
-            .into_iter()
-            .find(|p| p.id == input.project_id)
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("project not found: {}", input.project_id))
-            })?;
-
-        let work_item = client
-            .update_work_item_state(&project.id, input.work_item_id, &state)
-            .await?;
-        let cached = work_item_to_cached(&organization, &project.id, &project.name, &work_item);
-        if let Err(e) = self.db.upsert_work_items(std::slice::from_ref(&cached)) {
-            tracing::warn!(error = %e, "failed to update work item cache after set_state");
-        }
-        if let Err(e) = self.db.update_my_work_item_if_present(&cached) {
-            tracing::warn!(error = %e, "failed to update my_work_items cache after set_state");
-        }
-        let comments = client
-            .list_work_item_comments(
-                &project.id,
-                input.work_item_id,
-                WORK_ITEM_PREVIEW_COMMENT_LIMIT,
-            )
-            .await
-            .unwrap_or_default();
-
-        Ok(summarize_work_item_preview(
-            &organization,
-            &project.id,
-            &project.name,
-            work_item,
-            comments,
-        ))
-    }
-
-    pub async fn set_reason(&self, input: SetWorkItemReasonInput) -> Result<WorkItemPreview> {
-        let reason = input.reason.trim().to_string();
-        if reason.is_empty() {
-            return Err(AppError::InvalidInput("reason is required".to_string()));
-        }
-
-        let organization = self.resolve_organization(input.organization_id.as_deref())?;
-        let client = client_for_organization(&organization, &self.secrets)?;
-        let project = client
-            .list_projects()
-            .await?
-            .into_iter()
-            .find(|p| p.id == input.project_id)
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("project not found: {}", input.project_id))
-            })?;
-
-        let work_item = client
-            .update_work_item_reason(&project.id, input.work_item_id, &reason)
-            .await?;
-        let cached = work_item_to_cached(&organization, &project.id, &project.name, &work_item);
-        if let Err(e) = self.db.upsert_work_items(std::slice::from_ref(&cached)) {
-            tracing::warn!(error = %e, "failed to update work item cache after set_reason");
-        }
-        if let Err(e) = self.db.update_my_work_item_if_present(&cached) {
-            tracing::warn!(error = %e, "failed to update my_work_items cache after set_reason");
-        }
-        let comments = client
-            .list_work_item_comments(
-                &project.id,
-                input.work_item_id,
-                WORK_ITEM_PREVIEW_COMMENT_LIMIT,
-            )
-            .await
-            .unwrap_or_default();
-
-        Ok(summarize_work_item_preview(
-            &organization,
-            &project.id,
-            &project.name,
-            work_item,
-            comments,
-        ))
-    }
-
-    pub async fn set_priority(&self, input: SetWorkItemPriorityInput) -> Result<WorkItemPreview> {
-        if input.priority <= 0 {
-            return Err(AppError::InvalidInput(
-                "priority must be positive".to_string(),
-            ));
-        }
-
-        let organization = self.resolve_organization(input.organization_id.as_deref())?;
-        let client = client_for_organization(&organization, &self.secrets)?;
-        let project = client
-            .list_projects()
-            .await?
-            .into_iter()
-            .find(|p| p.id == input.project_id)
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("project not found: {}", input.project_id))
-            })?;
-
-        let work_item = client
-            .update_work_item_priority(&project.id, input.work_item_id, input.priority)
-            .await?;
-        let cached = work_item_to_cached(&organization, &project.id, &project.name, &work_item);
-        if let Err(e) = self.db.upsert_work_items(std::slice::from_ref(&cached)) {
-            tracing::warn!(error = %e, "failed to update work item cache after set_priority");
-        }
-        if let Err(e) = self.db.update_my_work_item_if_present(&cached) {
-            tracing::warn!(error = %e, "failed to update my_work_items cache after set_priority");
-        }
-        let comments = client
-            .list_work_item_comments(
-                &project.id,
-                input.work_item_id,
-                WORK_ITEM_PREVIEW_COMMENT_LIMIT,
-            )
-            .await
-            .unwrap_or_default();
-
-        Ok(summarize_work_item_preview(
-            &organization,
-            &project.id,
-            &project.name,
-            work_item,
-            comments,
-        ))
-    }
-
-    pub async fn set_tags(&self, input: SetWorkItemTagsInput) -> Result<WorkItemPreview> {
-        let mut tags: Vec<String> = Vec::new();
-        for tag in &input.tags {
-            let tag = tag.trim();
-            if tag.is_empty() || tag.contains(';') {
-                continue;
-            }
-            if tags
-                .iter()
-                .any(|existing| existing.eq_ignore_ascii_case(tag))
-            {
-                continue;
-            }
-            tags.push(tag.to_string());
-        }
-        // An empty list clears all tags.
-        let joined = tags.join("; ");
-
-        let organization = self.resolve_organization(input.organization_id.as_deref())?;
-        let client = client_for_organization(&organization, &self.secrets)?;
-        let project = client
-            .list_projects()
-            .await?
-            .into_iter()
-            .find(|p| p.id == input.project_id)
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("project not found: {}", input.project_id))
-            })?;
-
-        let work_item = client
-            .update_work_item_field(&project.id, input.work_item_id, "System.Tags", &joined)
-            .await?;
-        let cached = work_item_to_cached(&organization, &project.id, &project.name, &work_item);
-        if let Err(e) = self.db.upsert_work_items(std::slice::from_ref(&cached)) {
-            tracing::warn!(error = %e, "failed to update work item cache after set_tags");
-        }
-        if let Err(e) = self.db.update_my_work_item_if_present(&cached) {
-            tracing::warn!(error = %e, "failed to update my_work_items cache after set_tags");
-        }
-        let comments = client
-            .list_work_item_comments(
-                &project.id,
-                input.work_item_id,
-                WORK_ITEM_PREVIEW_COMMENT_LIMIT,
-            )
-            .await
-            .unwrap_or_default();
-
-        Ok(summarize_work_item_preview(
-            &organization,
-            &project.id,
-            &project.name,
-            work_item,
-            comments,
-        ))
-    }
-
     // Applies all staged property changes in one JSON Patch request so state
     // transition rules evaluate the full change set atomically.
     pub async fn update_fields(&self, input: UpdateWorkItemFieldsInput) -> Result<WorkItemPreview> {
@@ -1226,14 +981,10 @@ impl WorkItemService {
 
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let project = client
-            .list_projects()
-            .await?
-            .into_iter()
-            .find(|p| p.id == input.project_id)
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("project not found: {}", input.project_id))
-            })?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
 
         let work_item = client
             .update_work_item_fields(&project.id, input.work_item_id, &fields)
@@ -1244,52 +995,6 @@ impl WorkItemService {
         }
         if let Err(e) = self.db.update_my_work_item_if_present(&cached) {
             tracing::warn!(error = %e, "failed to update my_work_items cache after update_fields");
-        }
-        let comments = client
-            .list_work_item_comments(
-                &project.id,
-                input.work_item_id,
-                WORK_ITEM_PREVIEW_COMMENT_LIMIT,
-            )
-            .await
-            .unwrap_or_default();
-
-        Ok(summarize_work_item_preview(
-            &organization,
-            &project.id,
-            &project.name,
-            work_item,
-            comments,
-        ))
-    }
-
-    pub async fn set_field(&self, input: SetWorkItemFieldInput) -> Result<WorkItemPreview> {
-        let field = validate_editable_field_reference_name(&input.field_reference_name)?;
-        let value = input.value.trim();
-        if value.is_empty() {
-            return Err(AppError::InvalidInput("value is required".to_string()));
-        }
-
-        let organization = self.resolve_organization(input.organization_id.as_deref())?;
-        let client = client_for_organization(&organization, &self.secrets)?;
-        let project = client
-            .list_projects()
-            .await?
-            .into_iter()
-            .find(|p| p.id == input.project_id)
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("project not found: {}", input.project_id))
-            })?;
-
-        let work_item = client
-            .update_work_item_field(&project.id, input.work_item_id, field, value)
-            .await?;
-        let cached = work_item_to_cached(&organization, &project.id, &project.name, &work_item);
-        if let Err(e) = self.db.upsert_work_items(std::slice::from_ref(&cached)) {
-            tracing::warn!(error = %e, "failed to update work item cache after set_field");
-        }
-        if let Err(e) = self.db.update_my_work_item_if_present(&cached) {
-            tracing::warn!(error = %e, "failed to update my_work_items cache after set_field");
         }
         let comments = client
             .list_work_item_comments(
@@ -1378,14 +1083,10 @@ impl WorkItemService {
         }
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let project = client
-            .list_projects()
-            .await?
-            .into_iter()
-            .find(|p| p.id == input.project_id)
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("project not found: {}", input.project_id))
-            })?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
 
         let mut results = Vec::new();
         for id in input.work_item_ids {
@@ -1423,14 +1124,10 @@ impl WorkItemService {
         }
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let project = client
-            .list_projects()
-            .await?
-            .into_iter()
-            .find(|p| p.id == input.project_id)
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("project not found: {}", input.project_id))
-            })?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
 
         let mut results = Vec::new();
         for id in input.work_item_ids {
@@ -1472,14 +1169,10 @@ impl WorkItemService {
         }
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let project = client
-            .list_projects()
-            .await?
-            .into_iter()
-            .find(|p| p.id == input.project_id)
-            .ok_or_else(|| {
-                AppError::InvalidInput(format!("project not found: {}", input.project_id))
-            })?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
 
         let mut results = Vec::new();
         for id in input.work_item_ids {
@@ -2828,6 +2521,47 @@ mod tests {
         AdoClient::new("contoso", Arc::new(PatProvider::new("test-pat")))
             .unwrap()
             .with_base_url(base_url)
+    }
+
+    #[tokio::test]
+    async fn update_candidates_are_cached_per_work_item() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/p1/_apis/wit/workItems/42/updates"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "count": 1,
+                "value": [{
+                    "revisedBy": {
+                        "id": "alice-id",
+                        "displayName": "Alice",
+                        "uniqueName": "alice@corp.com"
+                    },
+                    "fields": {}
+                }]
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let db_file = tempfile::NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(db_file.path().to_path_buf());
+        db.initialize().unwrap();
+        let service = WorkItemService::new(db, SecretStore);
+        let client = test_client(&server).await;
+
+        let first = service
+            .update_candidates(&client, "contoso", "p1", 42)
+            .await
+            .unwrap();
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].display_name, "Alice");
+
+        // Second lookup within the TTL is served from cache (expect(1) above).
+        let second = service
+            .update_candidates(&client, "contoso", "p1", 42)
+            .await
+            .unwrap();
+        assert_eq!(first, second);
     }
 
     fn make_org_draft() -> OrganizationDraft {

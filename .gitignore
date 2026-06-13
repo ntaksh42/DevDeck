@@ -29,8 +29,10 @@ test-results/
 *.sln
 *.sw?
 
-# Local tooling and artifacts
-scripts/
+# Local tooling and artifacts (release.ps1 is tracked: package.json and the
+# README reference it as the release flow)
+scripts/*
+!scripts/release.ps1
 .claude/
 entity_id
 local_id

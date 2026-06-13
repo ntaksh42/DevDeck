@@ -1,15 +1,6 @@
 import { type ReactNode } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
-function ShortcutChip({ shortcut }: { shortcut?: string }) {
-  if (!shortcut) return null;
-  return (
-    <kbd className="ml-auto shrink-0 rounded border border-border bg-background px-1 font-mono text-[10px] font-medium leading-4 text-muted-foreground opacity-60 group-hover:opacity-100 group-focus-visible:opacity-100">
-      {shortcut}
-    </kbd>
-  );
-}
-
 export function NavButton({
   active,
   disabled = false,
@@ -41,7 +32,6 @@ export function NavButton({
     >
       <span className="shrink-0">{icon}</span>
       <span className="min-w-0 truncate">{label}</span>
-      <ShortcutChip shortcut={shortcut} />
     </button>
   );
 }
@@ -95,13 +85,11 @@ export function NavSubItem({
   active,
   disabled = false,
   label,
-  shortcut,
   onClick,
 }: {
   active: boolean;
   disabled?: boolean;
   label: string;
-  shortcut?: string;
   onClick: () => void;
 }) {
   return (
@@ -110,7 +98,6 @@ export function NavSubItem({
       disabled={disabled}
       onClick={onClick}
       aria-label={label}
-      aria-keyshortcuts={shortcut}
       data-nav-item="true"
       data-nav-active={active ? "true" : undefined}
       data-nav-label={label}
@@ -119,7 +106,6 @@ export function NavSubItem({
       } disabled:cursor-not-allowed disabled:opacity-50`}
     >
       <span className="min-w-0 truncate">{label}</span>
-      <ShortcutChip shortcut={shortcut} />
     </button>
   );
 }
