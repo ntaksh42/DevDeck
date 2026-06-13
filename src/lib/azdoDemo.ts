@@ -8,6 +8,8 @@ import type {
   CommitRepositoryOption,
   CommitSummary,
   DeleteWorkItemCommentInput,
+  GetPullRequestFileDiffInput,
+  GetPullRequestReviewInput,
   GetReviewResultPreviewInput,
   GetSavedQueryInput,
   GetWorkItemPreviewInput,
@@ -15,9 +17,17 @@ import type {
   ListWorkItemFieldsInput,
   MentionCandidate,
   Organization,
+  PostPullRequestCommentInput,
+  PrChangedFile,
+  PrFileDiff,
+  PrThread,
+  PullRequestChanges,
+  PullRequestReview,
   PullRequestSummary,
   ReviewPullRequestSummary,
   ReviewResultPreview,
+  SetPullRequestThreadStatusInput,
+  SubmitPullRequestVoteInput,
   RunWorkItemQueryInput,
   SearchAllInput,
   SearchAllResult,
@@ -112,7 +122,112 @@ const writeCommands = new Set([
   "set_work_items_state",
   "assign_work_items",
   "set_work_items_priority",
+  "post_pull_request_comment",
+  "set_pull_request_thread_status",
+  "submit_pull_request_vote",
 ]);
+
+let demoPrThreadSeq = 100;
+const demoPrVotes = new Map<number, number>();
+const demoPrThreads = new Map<number, PrThread[]>();
+
+function demoVoteLabel(vote: number): string {
+  switch (vote) {
+    case 10:
+      return "Approved";
+    case 5:
+      return "Approved w/ Suggestions";
+    case -5:
+      return "Waiting for Author";
+    case -10:
+      return "Rejected";
+    default:
+      return "No Vote";
+  }
+}
+
+function demoThreadsFor(pullRequestId: number): PrThread[] {
+  const existing = demoPrThreads.get(pullRequestId);
+  if (existing) return existing;
+  const threads: PrThread[] = [
+    {
+      id: 1,
+      status: "active",
+      filePath: null,
+      rightLine: null,
+      comments: [
+        {
+          id: 1,
+          parentCommentId: 0,
+          content: "Could you add a test for the empty case?",
+          author: "Riley Reviewer",
+          publishedDate: "2026-05-22T09:00:00Z",
+          isSystem: false,
+        },
+      ],
+    },
+    {
+      id: 2,
+      status: "closed",
+      filePath: "/src/app/dashboard.ts",
+      rightLine: 2,
+      comments: [
+        {
+          id: 1,
+          parentCommentId: 0,
+          content: "This constant should be configurable.",
+          author: "Riley Reviewer",
+          publishedDate: "2026-05-21T15:00:00Z",
+          isSystem: false,
+        },
+        {
+          id: 2,
+          parentCommentId: 1,
+          content: "Fixed in the latest iteration.",
+          author: "Demo User",
+          publishedDate: "2026-05-22T10:00:00Z",
+          isSystem: false,
+        },
+      ],
+    },
+    {
+      id: 3,
+      status: null,
+      filePath: null,
+      rightLine: null,
+      comments: [
+        {
+          id: 1,
+          parentCommentId: 0,
+          content: "Riley Reviewer voted 10",
+          author: "Riley Reviewer",
+          publishedDate: "2026-05-20T12:00:00Z",
+          isSystem: true,
+        },
+      ],
+    },
+  ];
+  demoPrThreads.set(pullRequestId, threads);
+  return threads;
+}
+
+const demoPrFiles: PrChangedFile[] = [
+  { path: "/src/app/dashboard.ts", changeType: "edit", originalPath: null },
+  { path: "/src/app/useDashboardData.ts", changeType: "add", originalPath: null },
+  { path: "/docs/assets/screenshot.png", changeType: "add", originalPath: null },
+  { path: "/src/app/legacyDashboard.ts", changeType: "delete", originalPath: null },
+];
+
+const DEMO_DIFF_BASE = `export function loadDashboard() {
+  const refreshIntervalMs = 30000;
+  return fetchData(refreshIntervalMs);
+}
+`;
+const DEMO_DIFF_TARGET = `export function loadDashboard(options: DashboardOptions) {
+  const refreshIntervalMs = options.refreshIntervalMs ?? 30000;
+  return fetchData(refreshIntervalMs);
+}
+`;
 
 export async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
   await new Promise((resolve) => window.setTimeout(resolve, demoResponseDelayMs()));
@@ -201,6 +316,130 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     }
     case "list_my_review_pull_requests":
       return demoReviewPullRequests();
+    case "get_pull_request_review": {
+      const input = (args as { input?: GetPullRequestReviewInput } | undefined)?.input;
+      const prId = input?.pullRequestId ?? 0;
+      const summary = demoReviewPullRequests().find((pr) => pr.pullRequestId === prId);
+      const myVote = demoPrVotes.get(prId) ?? summary?.myVote ?? 0;
+      const review: PullRequestReview = {
+        pullRequestId: prId,
+        title: summary?.title ?? `Demo pull request #${prId}`,
+        description:
+          "## Summary\nImproves the dashboard loading flow.\n\n- configurable refresh interval\n- removes the legacy loader",
+        sourceRefName: "refs/heads/feature/dashboard-loading",
+        targetRefName: `refs/heads/${summary?.targetRefName ?? "main"}`,
+        createdBy: summary?.createdBy ?? "Avery Author",
+        creationDate: summary?.creationDate ?? "2026-05-20T08:00:00Z",
+        isDraft: summary?.isDraft ?? false,
+        reviewers: [
+          {
+            displayName: "Demo User",
+            vote: myVote,
+            voteLabel: demoVoteLabel(myVote),
+            isRequired: summary?.myIsRequired ?? true,
+            isMe: true,
+          },
+          {
+            displayName: "Riley Reviewer",
+            vote: 10,
+            voteLabel: "Approved",
+            isRequired: false,
+            isMe: false,
+          },
+        ],
+        threads: demoThreadsFor(prId),
+      };
+      return review;
+    }
+    case "list_pull_request_changes": {
+      const changes: PullRequestChanges = {
+        baseCommitId: "demo-base",
+        targetCommitId: "demo-target",
+        files: demoPrFiles,
+      };
+      return changes;
+    }
+    case "get_pull_request_file_diff": {
+      const input = (args as { input?: GetPullRequestFileDiffInput } | undefined)?.input;
+      const filePath = input?.filePath ?? "";
+      if (filePath.endsWith(".png")) {
+        const diff: PrFileDiff = {
+          filePath,
+          baseContent: null,
+          targetContent: null,
+          baseUnavailableReason: null,
+          targetUnavailableReason: "binary",
+        };
+        return diff;
+      }
+      const changeType = input?.changeType ?? "edit";
+      const diff: PrFileDiff = {
+        filePath,
+        baseContent: changeType.includes("add") ? null : DEMO_DIFF_BASE,
+        targetContent: changeType.includes("delete") ? null : DEMO_DIFF_TARGET,
+        baseUnavailableReason: null,
+        targetUnavailableReason: null,
+      };
+      return diff;
+    }
+    case "post_pull_request_comment": {
+      const input = (args as { input?: PostPullRequestCommentInput } | undefined)?.input;
+      if (!input) throw new Error("missing input");
+      const threads = demoThreadsFor(input.pullRequestId);
+      if (input.threadId != null) {
+        const thread = threads.find((candidate) => candidate.id === input.threadId);
+        if (!thread) throw new Error(`thread not found: ${input.threadId}`);
+        thread.comments.push({
+          id: thread.comments.length + 1,
+          parentCommentId: input.parentCommentId ?? 1,
+          content: input.content,
+          author: "Demo User",
+          publishedDate: new Date().toISOString(),
+          isSystem: false,
+        });
+        return thread;
+      }
+      const thread: PrThread = {
+        id: ++demoPrThreadSeq,
+        status: "active",
+        filePath: input.filePath ?? null,
+        rightLine: input.rightLine ?? null,
+        comments: [
+          {
+            id: 1,
+            parentCommentId: 0,
+            content: input.content,
+            author: "Demo User",
+            publishedDate: new Date().toISOString(),
+            isSystem: false,
+          },
+        ],
+      };
+      threads.unshift(thread);
+      return thread;
+    }
+    case "set_pull_request_thread_status": {
+      const input = (args as { input?: SetPullRequestThreadStatusInput } | undefined)?.input;
+      if (!input) throw new Error("missing input");
+      const thread = demoThreadsFor(input.pullRequestId).find(
+        (candidate) => candidate.id === input.threadId,
+      );
+      if (!thread) throw new Error(`thread not found: ${input.threadId}`);
+      thread.status = input.status;
+      return thread;
+    }
+    case "submit_pull_request_vote": {
+      const input = (args as { input?: SubmitPullRequestVoteInput } | undefined)?.input;
+      if (!input) throw new Error("missing input");
+      demoPrVotes.set(input.pullRequestId, input.vote);
+      return {
+        displayName: "Demo User",
+        vote: input.vote,
+        voteLabel: demoVoteLabel(input.vote),
+        isRequired: true,
+        isMe: true,
+      };
+    }
     case "search_work_items": {
       const input = (args as { input?: SearchWorkItemsInput } | undefined)?.input;
       return demoWorkItems(input);
@@ -1163,7 +1402,7 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
   const hr = 3_600_000;
   const day = 86_400_000;
 
-  return applyReviewPullRequestScenario([
+  return withDemoVotes(applyReviewPullRequestScenario([
     {
       organizationId: "contoso",
       projectId: "platform",
@@ -1290,7 +1529,17 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       isDraft: false,
       mergeStatus: null,
     },
-  ]);
+  ]));
+}
+
+// Reflects votes cast through submit_pull_request_vote in the demo session.
+function withDemoVotes(prs: ReviewPullRequestSummary[]): ReviewPullRequestSummary[] {
+  if (demoPrVotes.size === 0) return prs;
+  return prs.map((pr) => {
+    const vote = demoPrVotes.get(pr.pullRequestId);
+    if (vote == null) return pr;
+    return { ...pr, myVote: vote, myVoteLabel: demoVoteLabel(vote) };
+  });
 }
 
 function demoCommitRepositories(): CommitRepositoryOption[] {
