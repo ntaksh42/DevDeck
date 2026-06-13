@@ -85,6 +85,78 @@ const reviewPullRequestSummariesSchema = z.array(reviewPullRequestSummarySchema)
 
 export type ReviewPullRequestSummary = z.infer<typeof reviewPullRequestSummarySchema>;
 
+const prReviewerSchema = z.object({
+  displayName: z.string(),
+  vote: z.number(),
+  voteLabel: z.string(),
+  isRequired: z.boolean(),
+  isMe: z.boolean(),
+});
+
+export type PrReviewer = z.infer<typeof prReviewerSchema>;
+
+const prCommentSchema = z.object({
+  id: z.number(),
+  parentCommentId: z.number().nullable(),
+  content: z.string().nullable(),
+  author: z.string().nullable(),
+  publishedDate: z.string().nullable(),
+  isSystem: z.boolean(),
+});
+
+export type PrComment = z.infer<typeof prCommentSchema>;
+
+const prThreadSchema = z.object({
+  id: z.number(),
+  status: z.string().nullable(),
+  filePath: z.string().nullable(),
+  rightLine: z.number().nullable(),
+  comments: z.array(prCommentSchema),
+});
+
+export type PrThread = z.infer<typeof prThreadSchema>;
+
+const pullRequestReviewSchema = z.object({
+  pullRequestId: z.number(),
+  title: z.string(),
+  description: z.string().nullable(),
+  sourceRefName: z.string(),
+  targetRefName: z.string(),
+  createdBy: z.string().nullable(),
+  creationDate: z.string().nullable(),
+  isDraft: z.boolean(),
+  reviewers: z.array(prReviewerSchema),
+  threads: z.array(prThreadSchema),
+});
+
+export type PullRequestReview = z.infer<typeof pullRequestReviewSchema>;
+
+const prChangedFileSchema = z.object({
+  path: z.string(),
+  changeType: z.string(),
+  originalPath: z.string().nullable(),
+});
+
+export type PrChangedFile = z.infer<typeof prChangedFileSchema>;
+
+const pullRequestChangesSchema = z.object({
+  baseCommitId: z.string().nullable(),
+  targetCommitId: z.string().nullable(),
+  files: z.array(prChangedFileSchema),
+});
+
+export type PullRequestChanges = z.infer<typeof pullRequestChangesSchema>;
+
+const prFileDiffSchema = z.object({
+  filePath: z.string(),
+  baseContent: z.string().nullable(),
+  targetContent: z.string().nullable(),
+  baseUnavailableReason: z.string().nullable(),
+  targetUnavailableReason: z.string().nullable(),
+});
+
+export type PrFileDiff = z.infer<typeof prFileDiffSchema>;
+
 const workItemSummaryExtraFieldSchema = z.object({
   referenceName: z.string(),
   value: z.string().nullable(),
@@ -337,6 +409,41 @@ export type SearchPullRequestsInput = {
 
 export type ListMyReviewPullRequestsInput = {
   organizationId?: string;
+};
+
+export type PrLocatorInput = {
+  organizationId?: string;
+  projectId: string;
+  repositoryId: string;
+  pullRequestId: number;
+};
+
+export type GetPullRequestReviewInput = PrLocatorInput;
+export type ListPullRequestChangesInput = PrLocatorInput;
+
+export type GetPullRequestFileDiffInput = PrLocatorInput & {
+  filePath: string;
+  originalPath?: string | null;
+  changeType: string;
+  baseCommitId?: string | null;
+  targetCommitId?: string | null;
+};
+
+export type PostPullRequestCommentInput = PrLocatorInput & {
+  threadId?: number;
+  parentCommentId?: number;
+  content: string;
+  filePath?: string;
+  rightLine?: number;
+};
+
+export type SetPullRequestThreadStatusInput = PrLocatorInput & {
+  threadId: number;
+  status: "active" | "closed";
+};
+
+export type SubmitPullRequestVoteInput = PrLocatorInput & {
+  vote: -10 | -5 | 0 | 5 | 10;
 };
 
 export type SearchAllInput = {
@@ -610,6 +717,48 @@ export async function listMyReviewPullRequests(
 ): Promise<ReviewPullRequestSummary[]> {
   const result = await invokeCommand("list_my_review_pull_requests", { input });
   return reviewPullRequestSummariesSchema.parse(result);
+}
+
+export async function getPullRequestReview(
+  input: GetPullRequestReviewInput,
+): Promise<PullRequestReview> {
+  const result = await invokeCommand("get_pull_request_review", { input });
+  return pullRequestReviewSchema.parse(result);
+}
+
+export async function listPullRequestChanges(
+  input: ListPullRequestChangesInput,
+): Promise<PullRequestChanges> {
+  const result = await invokeCommand("list_pull_request_changes", { input });
+  return pullRequestChangesSchema.parse(result);
+}
+
+export async function getPullRequestFileDiff(
+  input: GetPullRequestFileDiffInput,
+): Promise<PrFileDiff> {
+  const result = await invokeCommand("get_pull_request_file_diff", { input });
+  return prFileDiffSchema.parse(result);
+}
+
+export async function postPullRequestComment(
+  input: PostPullRequestCommentInput,
+): Promise<PrThread> {
+  const result = await invokeCommand("post_pull_request_comment", { input });
+  return prThreadSchema.parse(result);
+}
+
+export async function setPullRequestThreadStatus(
+  input: SetPullRequestThreadStatusInput,
+): Promise<PrThread> {
+  const result = await invokeCommand("set_pull_request_thread_status", { input });
+  return prThreadSchema.parse(result);
+}
+
+export async function submitPullRequestVote(
+  input: SubmitPullRequestVoteInput,
+): Promise<PrReviewer> {
+  const result = await invokeCommand("submit_pull_request_vote", { input });
+  return prReviewerSchema.parse(result);
 }
 
 export async function searchAll(input: SearchAllInput): Promise<SearchAllResult> {
