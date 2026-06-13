@@ -7,6 +7,7 @@ mod commits;
 mod db;
 mod error;
 mod orgs;
+mod pr_review;
 mod prs;
 mod search;
 mod secrets;
@@ -21,6 +22,12 @@ use commits::{
 use db::{AppDatabase, AppSettings, Organization, SyncState};
 use error::{AppError, Result};
 use orgs::{AddAzureCliOrganizationInput, AddPatOrganizationInput, OrganizationService};
+use pr_review::{
+    GetPullRequestFileDiffInput, GetPullRequestReviewInput, ListPullRequestChangesInput,
+    PostPullRequestCommentInput, PrFileDiff, PrReviewService, PrReviewer, PrThread,
+    PullRequestChanges, PullRequestReview, SetPullRequestThreadStatusInput,
+    SubmitPullRequestVoteInput,
+};
 use prs::{
     ListMyReviewPullRequestsInput, PullRequestService, PullRequestSummary,
     ReviewPullRequestSummary, SearchPullRequestsInput,
@@ -55,6 +62,7 @@ struct AppState {
     db: AppDatabase,
     organizations: OrganizationService,
     pull_requests: PullRequestService,
+    pr_review: PrReviewService,
     work_items: WorkItemService,
     commits: CommitService,
     settings: SettingsService,
@@ -175,6 +183,63 @@ async fn list_my_review_pull_requests(
 ) -> Result<Vec<ReviewPullRequestSummary>> {
     let service = state.pull_requests.clone();
     run_blocking(move || service.list_my_reviews(input)).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn get_pull_request_review(
+    input: GetPullRequestReviewInput,
+    state: State<'_, AppState>,
+) -> Result<PullRequestReview> {
+    state.pr_review.get_review(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn list_pull_request_changes(
+    input: ListPullRequestChangesInput,
+    state: State<'_, AppState>,
+) -> Result<PullRequestChanges> {
+    state.pr_review.list_changes(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn get_pull_request_file_diff(
+    input: GetPullRequestFileDiffInput,
+    state: State<'_, AppState>,
+) -> Result<PrFileDiff> {
+    state.pr_review.get_file_diff(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn post_pull_request_comment(
+    input: PostPullRequestCommentInput,
+    state: State<'_, AppState>,
+) -> Result<PrThread> {
+    ensure_write_enabled(&state)?;
+    state.pr_review.post_comment(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn set_pull_request_thread_status(
+    input: SetPullRequestThreadStatusInput,
+    state: State<'_, AppState>,
+) -> Result<PrThread> {
+    ensure_write_enabled(&state)?;
+    state.pr_review.set_thread_status(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn submit_pull_request_vote(
+    input: SubmitPullRequestVoteInput,
+    state: State<'_, AppState>,
+) -> Result<PrReviewer> {
+    ensure_write_enabled(&state)?;
+    state.pr_review.submit_vote(input).await
 }
 
 #[tauri::command]
@@ -554,6 +619,7 @@ pub fn run() {
                 db: db.clone(),
                 organizations: OrganizationService::new(db.clone(), SecretStore),
                 pull_requests: PullRequestService::new(db.clone(), SecretStore),
+                pr_review: PrReviewService::new(db.clone(), SecretStore),
                 work_items: WorkItemService::new(db.clone(), SecretStore),
                 commits: CommitService::new(db.clone(), SecretStore),
                 settings: SettingsService::new(db.clone()),
@@ -575,6 +641,12 @@ pub fn run() {
             add_azure_cli_organization,
             search_pull_requests,
             list_my_review_pull_requests,
+            get_pull_request_review,
+            list_pull_request_changes,
+            get_pull_request_file_diff,
+            post_pull_request_comment,
+            set_pull_request_thread_status,
+            submit_pull_request_vote,
             search_all,
             search_work_items,
             list_my_work_items,

@@ -169,7 +169,7 @@ fn short_ref(value: &str) -> String {
         .to_string()
 }
 
-fn vote_label(vote: i32) -> &'static str {
+pub(crate) fn vote_label(vote: i32) -> &'static str {
     match vote {
         10 => "Approved",
         5 => "Approved w/ Suggestions",
