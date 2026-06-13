@@ -1,0 +1,81 @@
+<mxfile host="app.diagrams.net" type="device">
+  <diagram name="data-flow" id="azdodeck-data-flow">
+    <mxGraphModel dx="1100" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="データフロー：PR検索を例にした処理の道のり（デスクトップモード）" style="text;html=1;align=left;verticalAlign=middle;fontSize=16;fontStyle=1;fontColor=#111827;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="640" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s1" value="&#9312; 画面で操作&lt;br&gt;例: PR検索の [検索] ボタン&lt;br&gt;src/features/.../PullRequestSearch.tsx" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#3b82f6;fontColor=#1e3a8a;" vertex="1" parent="1">
+          <mxGeometry x="340" y="70" width="360" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s2" value="&#9313; フロント境界を呼ぶ&lt;br&gt;azdoCommands.searchPullRequests(条件)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#3b82f6;fontColor=#1e3a8a;" vertex="1" parent="1">
+          <mxGeometry x="340" y="170" width="360" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s3" value="&#9314; 実行環境を判定&lt;br&gt;isTauriRuntime() ? invoke() : demoInvoke()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#a855f7;fontColor=#581c87;" vertex="1" parent="1">
+          <mxGeometry x="340" y="260" width="360" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s4" value="&#9315; Tauri IPC で Rust へ&lt;br&gt;invoke(&quot;search_pull_requests&quot;, 条件)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#a855f7;fontColor=#581c87;" vertex="1" parent="1">
+          <mxGeometry x="340" y="350" width="360" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s5" value="&#9316; コマンド受け口&lt;br&gt;lib.rs: #[tauri::command] search_pull_requests" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#22c55e;fontColor=#14532d;" vertex="1" parent="1">
+          <mxGeometry x="340" y="440" width="360" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s6" value="&#9317; ドメインサービス&lt;br&gt;PullRequestService.search()&lt;br&gt;まず SQLite キャッシュ、必要なら AdoClient" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#22c55e;fontColor=#14532d;" vertex="1" parent="1">
+          <mxGeometry x="340" y="530" width="360" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="s7" value="&#9318; REST 通信&lt;br&gt;AdoClient → Azure DevOps REST 7.1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#ef4444;fontColor=#7f1d1d;" vertex="1" parent="1">
+          <mxGeometry x="340" y="640" width="360" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="db" value="SQLite&lt;br&gt;キャッシュ" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=12;fillColor=#fef9c3;strokeColor=#eab308;fontColor=#713f12;" vertex="1" parent="1">
+          <mxGeometry x="760" y="525" width="150" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;" edge="1" parent="1" source="s1" target="s2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;" edge="1" parent="1" source="s2" target="s3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;" edge="1" parent="1" source="s3" target="s4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;" edge="1" parent="1" source="s4" target="s5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;" edge="1" parent="1" source="s5" target="s6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f6" value="新規取得が必要なとき" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;" edge="1" parent="1" source="s6" target="s7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f7" value="参照 / 保存" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=classic;endArrow=classic;fontColor=#713f12;" edge="1" parent="1" source="s6" target="db">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ret" value="結果は Zod で検証され、&lt;br&gt;TanStack Query が画面の表を更新" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;dashed=1;strokeColor=#2563eb;fontColor=#1e3a8a;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="s7" target="s1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="260" y="670" />
+              <mxPoint x="260" y="105" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="legend" value="青=フロント / 紫=実行モード・IPC / 緑=Rustバックエンド / 赤=外部 / 黄=保存 / 青破線=結果が画面へ戻る道" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#374151;" vertex="1" parent="1">
+          <mxGeometry x="40" y="740" width="860" height="20" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

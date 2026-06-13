@@ -1,0 +1,86 @@
+<mxfile host="app.diagrams.net" type="device">
+  <diagram name="architecture" id="azdodeck-architecture">
+    <mxGraphModel dx="1100" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="950" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="AzDoDeck 全体アーキテクチャ" style="text;html=1;align=left;verticalAlign=middle;fontSize=18;fontStyle=1;fontColor=#111827;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="400" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ui" value="&#9312; 画面 (UI)&lt;br&gt;React + TypeScript&lt;br&gt;src/features, src/components" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#3b82f6;fontColor=#1e3a8a;" vertex="1" parent="1">
+          <mxGeometry x="300" y="70" width="300" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="bridge" value="&#9313; フロント境界&lt;br&gt;src/lib/azdoCommands.ts&lt;br&gt;(Zodで結果を検証 / 実行環境を判定)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#3b82f6;fontColor=#1e3a8a;" vertex="1" parent="1">
+          <mxGeometry x="300" y="180" width="300" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="demo" value="ブラウザ (pnpm dev)&lt;br&gt;demoInvoke()&lt;br&gt;偽のデモデータ" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#a855f7;fontColor=#581c87;" vertex="1" parent="1">
+          <mxGeometry x="120" y="320" width="210" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="invoke" value="デスクトップ&lt;br&gt;Tauri invoke() = IPC" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#a855f7;fontColor=#581c87;" vertex="1" parent="1">
+          <mxGeometry x="370" y="320" width="240" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="cmd" value="&#9314; Tauri コマンド層&lt;br&gt;src-tauri/src/lib.rs&lt;br&gt;#[tauri::command]" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#22c55e;fontColor=#14532d;" vertex="1" parent="1">
+          <mxGeometry x="340" y="430" width="300" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="svc" value="&#9314; ドメインサービス (Rust)&lt;br&gt;prs / work_items / commits / search&lt;br&gt;orgs / projects / settings / pr_review / sync" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#22c55e;fontColor=#14532d;" vertex="1" parent="1">
+          <mxGeometry x="340" y="540" width="300" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="client" value="&#9315; azdo-client クレート&lt;br&gt;AdoClient: get_json / post_json&lt;br&gt;(リトライ・401/429/5xx 処理)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#22c55e;fontColor=#14532d;" vertex="1" parent="1">
+          <mxGeometry x="340" y="680" width="300" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="rest" value="Azure DevOps REST API 7.1&lt;br&gt;(クラウド上の外部サービス)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#ef4444;fontColor=#7f1d1d;" vertex="1" parent="1">
+          <mxGeometry x="340" y="800" width="300" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="sqlite" value="SQLite キャッシュ&lt;br&gt;azdodeck.sqlite3&lt;br&gt;(rusqlite / スキーマ v10)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=14;fillColor=#fef9c3;strokeColor=#eab308;fontColor=#713f12;" vertex="1" parent="1">
+          <mxGeometry x="700" y="545" width="240" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="keyring" value="Windows 資格情報マネージャ&lt;br&gt;(keyring)&lt;br&gt;PAT・トークン" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=14;fillColor=#fee2e2;strokeColor=#ef4444;fontColor=#7f1d1d;" vertex="1" parent="1">
+          <mxGeometry x="700" y="685" width="240" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;" edge="1" parent="1" source="ui" target="bridge">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="ブラウザ時" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;fontColor=#581c87;" edge="1" parent="1" source="bridge" target="demo">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="デスクトップ時" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;fontColor=#581c87;" edge="1" parent="1" source="bridge" target="invoke">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;" edge="1" parent="1" source="invoke" target="cmd">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;" edge="1" parent="1" source="cmd" target="svc">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;" edge="1" parent="1" source="svc" target="client">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" value="HTTPS" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;" edge="1" parent="1" source="client" target="rest">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" value="読み書き" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=classic;endArrow=classic;fontColor=#713f12;" edge="1" parent="1" source="svc" target="sqlite">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" value="トークン取得" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;fontColor=#7f1d1d;" edge="1" parent="1" source="svc" target="keyring">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend" value="凡例:  青=フロント / 緑=Rustバックエンド / 赤=外部・秘密 / 黄=保存 / 紫=実行モード分岐" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#374151;" vertex="1" parent="1">
+          <mxGeometry x="40" y="890" width="760" height="20" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
