@@ -57,6 +57,12 @@ function loadViewMode(): ViewMode {
     : "split";
 }
 
+const WHOLE_FILE_STORAGE_KEY = "azdodeck:view:prDiffWholeFile";
+
+function loadWholeFile(): boolean {
+  return window.localStorage.getItem(WHOLE_FILE_STORAGE_KEY) === "true";
+}
+
 function viewedStorageKey(pr: ReviewPullRequestSummary): string {
   return `azdodeck:prViewed:${pr.organizationId}:${pr.repositoryId}:${pr.pullRequestId}`;
 }
@@ -114,6 +120,7 @@ export function PrFilesTab({
   const queryClient = useQueryClient();
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode);
+  const [showWholeFile, setShowWholeFile] = useState<boolean>(loadWholeFile);
   // Side + line number where a new inline comment is being drafted. "right"
   // anchors to the target (new) file, "left" to the base (old) file.
   const [commentDraft, setCommentDraft] = useState<DiffCommentDraft | null>(null);
@@ -544,6 +551,25 @@ export function PrFilesTab({
               />
               Viewed
             </label>
+            <button
+              type="button"
+              aria-pressed={showWholeFile}
+              onClick={() => {
+                setShowWholeFile((value) => {
+                  const next = !value;
+                  window.localStorage.setItem(WHOLE_FILE_STORAGE_KEY, String(next));
+                  return next;
+                });
+              }}
+              title="Show the whole file instead of only the changed regions"
+              className={`shrink-0 rounded border px-2 py-px text-[11px] font-medium ${
+                showWholeFile
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border bg-white text-muted-foreground hover:bg-secondary"
+              }`}
+            >
+              Whole file
+            </button>
             <div
               className="flex shrink-0 items-center gap-0.5 rounded border border-border bg-white p-0.5"
               role="tablist"
@@ -598,6 +624,7 @@ export function PrFilesTab({
               targetUnavailableReason={diffQuery.data.targetUnavailableReason}
               webUrl={pr.webUrl}
               viewMode={viewMode}
+              wholeFile={showWholeFile}
               lineAttachments={lineAttachments}
               lineHasContent={lineHasContent}
               onStartComment={onStartComment}
@@ -616,6 +643,7 @@ function DiffContent({
   targetUnavailableReason,
   webUrl,
   viewMode,
+  wholeFile,
   lineAttachments,
   lineHasContent,
   onStartComment,
@@ -626,6 +654,7 @@ function DiffContent({
   targetUnavailableReason: string | null;
   webUrl: string | null;
   viewMode: ViewMode;
+  wholeFile: boolean;
   lineAttachments: (side: CommentSide, line: number | null) => ReactNode;
   lineHasContent: (side: CommentSide, line: number | null) => boolean;
   onStartComment: (side: CommentSide, line: number) => void;
@@ -660,30 +689,35 @@ function DiffContent({
   );
 
   // Fold unchanged runs, but never a line that carries a comment or open draft.
+  // "Whole file" disables folding so every line of the file stays visible.
   const collapsedUnified = useMemo(
     () =>
       collapseDiff(
         unified,
-        (line) =>
-          line.kind === "context" &&
-          !lineHasContent("right", line.targetLine) &&
-          !lineHasContent("left", line.baseLine),
+        wholeFile
+          ? () => false
+          : (line) =>
+              line.kind === "context" &&
+              !lineHasContent("right", line.targetLine) &&
+              !lineHasContent("left", line.baseLine),
         DIFF_CONTEXT_LINES,
       ),
-    [unified, lineHasContent],
+    [unified, lineHasContent, wholeFile],
   );
   const collapsedSplit = useMemo(
     () =>
       collapseDiff(
         split,
-        (row) =>
-          row.left?.kind === "context" &&
-          row.right?.kind === "context" &&
-          !lineHasContent("left", row.left.line) &&
-          !lineHasContent("right", row.right.line),
+        wholeFile
+          ? () => false
+          : (row) =>
+              row.left?.kind === "context" &&
+              row.right?.kind === "context" &&
+              !lineHasContent("left", row.left.line) &&
+              !lineHasContent("right", row.right.line),
         DIFF_CONTEXT_LINES,
       ),
-    [split, lineHasContent],
+    [split, lineHasContent, wholeFile],
   );
 
   if (fatalReason) {
