@@ -23,8 +23,7 @@ use db::{AppDatabase, AppSettings, Organization, SyncState};
 use error::{AppError, Result};
 use orgs::{AddAzureCliOrganizationInput, AddPatOrganizationInput, OrganizationService};
 use pr_review::{
-    GetPullRequestFileDiffInput, GetPullRequestReviewInput, ListPullRequestChangesInput,
-    ListPullRequestCommitsInput, PostPullRequestCommentInput, PrCommit, PrFileDiff,
+    GetPullRequestFileDiffInput, PostPullRequestCommentInput, PrCommit, PrFileDiff, PrLocator,
     PrReviewService, PrReviewer, PrThread, PullRequestChanges, PullRequestReview,
     SetPullRequestThreadStatusInput, SubmitPullRequestVoteInput,
 };
@@ -188,7 +187,7 @@ async fn list_my_review_pull_requests(
 #[tauri::command]
 #[tracing::instrument(skip(state))]
 async fn get_pull_request_review(
-    input: GetPullRequestReviewInput,
+    input: PrLocator,
     state: State<'_, AppState>,
 ) -> Result<PullRequestReview> {
     state.pr_review.get_review(input).await
@@ -197,7 +196,7 @@ async fn get_pull_request_review(
 #[tauri::command]
 #[tracing::instrument(skip(state))]
 async fn list_pull_request_changes(
-    input: ListPullRequestChangesInput,
+    input: PrLocator,
     state: State<'_, AppState>,
 ) -> Result<PullRequestChanges> {
     state.pr_review.list_changes(input).await
@@ -215,7 +214,7 @@ async fn get_pull_request_file_diff(
 #[tauri::command]
 #[tracing::instrument(skip(state))]
 async fn list_pull_request_commits(
-    input: ListPullRequestCommitsInput,
+    input: PrLocator,
     state: State<'_, AppState>,
 ) -> Result<Vec<PrCommit>> {
     state.pr_review.list_commits(input).await

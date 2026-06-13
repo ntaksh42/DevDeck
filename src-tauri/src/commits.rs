@@ -172,18 +172,7 @@ impl CommitService {
     }
 
     fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {
-        if let Some(id) = id {
-            return self
-                .db
-                .get_organization(id)?
-                .ok_or_else(|| AppError::InvalidInput(format!("organization not found: {id}")));
-        }
-
-        self.db
-            .list_organizations()?
-            .into_iter()
-            .next()
-            .ok_or_else(|| AppError::InvalidInput("no organization is configured".to_string()))
+        self.db.resolve_organization(id)
     }
 }
 

@@ -2,9 +2,10 @@ use azdo_client::{AdoError, GitThread, NewThreadContext};
 use serde::{Deserialize, Serialize};
 
 use crate::auth::client_for_organization;
-use crate::db::{AppDatabase, Organization};
+use crate::commits::encode_path_segment;
+use crate::db::AppDatabase;
 use crate::error::{AppError, Result};
-use crate::prs::vote_label;
+use crate::prs::{short_ref, vote_label};
 use crate::secrets::SecretStore;
 
 const MAX_DIFF_CONTENT_BYTES: usize = 256 * 1024;
@@ -16,20 +17,6 @@ pub struct PrLocator {
     pub project_id: String,
     pub repository_id: String,
     pub pull_request_id: i64,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GetPullRequestReviewInput {
-    #[serde(flatten)]
-    pub pr: PrLocator,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ListPullRequestChangesInput {
-    #[serde(flatten)]
-    pub pr: PrLocator,
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,8 +38,6 @@ pub struct PostPullRequestCommentInput {
     pub pr: PrLocator,
     /// None creates a new thread; Some replies to an existing thread.
     pub thread_id: Option<i64>,
-    /// Parent comment id for replies (usually the thread's first comment id).
-    pub parent_comment_id: Option<i64>,
     pub content: String,
     /// Line anchor for new threads (future inline-comment support).
     pub file_path: Option<String>,
@@ -77,13 +62,6 @@ pub struct SubmitPullRequestVoteInput {
     pub vote: i32,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ListPullRequestCommitsInput {
-    #[serde(flatten)]
-    pub pr: PrLocator,
-}
-
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PrCommit {
@@ -92,6 +70,7 @@ pub struct PrCommit {
     pub comment: String,
     pub author_name: Option<String>,
     pub author_date: Option<String>,
+    pub web_url: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -124,6 +103,7 @@ pub struct PrReviewer {
 pub struct PrThread {
     pub id: i64,
     pub status: Option<String>,
+    pub is_resolved: bool,
     pub file_path: Option<String>,
     pub right_line: Option<i64>,
     pub comments: Vec<PrComment>,
@@ -177,34 +157,15 @@ impl PrReviewService {
         Self { db, secrets }
     }
 
-    fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {
-        if let Some(id) = id {
-            return self
-                .db
-                .get_organization(id)?
-                .ok_or_else(|| AppError::InvalidInput(format!("organization not found: {id}")));
-        }
-        self.db
-            .list_organizations()?
-            .into_iter()
-            .next()
-            .ok_or_else(|| AppError::InvalidInput("no organization is configured".to_string()))
-    }
-
-    pub async fn get_review(&self, input: GetPullRequestReviewInput) -> Result<PullRequestReview> {
-        let organization = self.resolve_organization(input.pr.organization_id.as_deref())?;
+    pub async fn get_review(&self, pr: PrLocator) -> Result<PullRequestReview> {
+        let organization = self
+            .db
+            .resolve_organization(pr.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
         let (detail, threads) = tokio::try_join!(
-            client.get_pull_request_detail(
-                &input.pr.project_id,
-                &input.pr.repository_id,
-                input.pr.pull_request_id,
-            ),
-            client.list_pull_request_threads(
-                &input.pr.project_id,
-                &input.pr.repository_id,
-                input.pr.pull_request_id,
-            ),
+            client.get_pull_request_detail(&pr.project_id, &pr.repository_id, pr.pull_request_id,),
+            client
+                .list_pull_request_threads(&pr.project_id, &pr.repository_id, pr.pull_request_id,),
         )?;
 
         let me = organization.authenticated_user_id.as_deref();
@@ -212,8 +173,8 @@ impl PrReviewService {
             pull_request_id: detail.pull_request_id,
             title: detail.title,
             description: detail.description,
-            source_ref_name: detail.source_ref_name,
-            target_ref_name: detail.target_ref_name,
+            source_ref_name: short_ref(&detail.source_ref_name),
+            target_ref_name: short_ref(&detail.target_ref_name),
             created_by: detail.created_by.and_then(|id| id.display_name),
             creation_date: detail.creation_date.map(|date| date.to_rfc3339()),
             is_draft: detail.is_draft.unwrap_or(false),
@@ -233,18 +194,13 @@ impl PrReviewService {
         })
     }
 
-    pub async fn list_changes(
-        &self,
-        input: ListPullRequestChangesInput,
-    ) -> Result<PullRequestChanges> {
-        let organization = self.resolve_organization(input.pr.organization_id.as_deref())?;
+    pub async fn list_changes(&self, pr: PrLocator) -> Result<PullRequestChanges> {
+        let organization = self
+            .db
+            .resolve_organization(pr.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
         let iterations = client
-            .list_pull_request_iterations(
-                &input.pr.project_id,
-                &input.pr.repository_id,
-                input.pr.pull_request_id,
-            )
+            .list_pull_request_iterations(&pr.project_id, &pr.repository_id, pr.pull_request_id)
             .await?;
         let Some(latest) = iterations.into_iter().max_by_key(|iteration| iteration.id) else {
             return Ok(PullRequestChanges {
@@ -255,9 +211,9 @@ impl PrReviewService {
         };
         let entries = client
             .get_pull_request_iteration_changes(
-                &input.pr.project_id,
-                &input.pr.repository_id,
-                input.pr.pull_request_id,
+                &pr.project_id,
+                &pr.repository_id,
+                pr.pull_request_id,
                 latest.id,
             )
             .await?;
@@ -283,29 +239,38 @@ impl PrReviewService {
     }
 
     pub async fn get_file_diff(&self, input: GetPullRequestFileDiffInput) -> Result<PrFileDiff> {
-        let organization = self.resolve_organization(input.pr.organization_id.as_deref())?;
+        let organization = self
+            .db
+            .resolve_organization(input.pr.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let change_type = input.change_type.to_ascii_lowercase();
+        let flags = ChangeFlags::parse(&input.change_type);
 
         let base_path = input
             .original_path
             .clone()
             .unwrap_or_else(|| input.file_path.clone());
-        let (base_content, base_unavailable_reason) = if change_type.contains("add") {
-            (None, None)
-        } else if let Some(commit) = input.base_commit_id.as_deref() {
-            fetch_side(&client, &input.pr, &base_path, commit).await?
-        } else {
-            (None, Some("missing".to_string()))
-        };
 
-        let (target_content, target_unavailable_reason) = if change_type.contains("delete") {
-            (None, None)
-        } else if let Some(commit) = input.target_commit_id.as_deref() {
-            fetch_side(&client, &input.pr, &input.file_path, commit).await?
-        } else {
-            (None, Some("missing".to_string()))
+        // The two sides are independent; fetch them concurrently.
+        let base_future = async {
+            if flags.is_add {
+                Ok((None, None))
+            } else if let Some(commit) = input.base_commit_id.as_deref() {
+                fetch_side(&client, &input.pr, &base_path, commit).await
+            } else {
+                Ok((None, Some("missing".to_string())))
+            }
         };
+        let target_future = async {
+            if flags.is_delete {
+                Ok((None, None))
+            } else if let Some(commit) = input.target_commit_id.as_deref() {
+                fetch_side(&client, &input.pr, &input.file_path, commit).await
+            } else {
+                Ok((None, Some("missing".to_string())))
+            }
+        };
+        let ((base_content, base_unavailable_reason), (target_content, target_unavailable_reason)) =
+            tokio::try_join!(base_future, target_future)?;
 
         Ok(PrFileDiff {
             file_path: input.file_path,
@@ -321,31 +286,42 @@ impl PrReviewService {
         if content.is_empty() {
             return Err(AppError::InvalidInput("comment is empty".to_string()));
         }
-        let organization = self.resolve_organization(input.pr.organization_id.as_deref())?;
+        let organization = self
+            .db
+            .resolve_organization(input.pr.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
 
         let thread = if let Some(thread_id) = input.thread_id {
+            // Fetch just this thread to find its root comment (the reply parent)
+            // instead of trusting a client-supplied id; the same single-thread
+            // call doubles as the up-to-date response after posting.
+            let existing = client
+                .get_pull_request_thread(
+                    &input.pr.project_id,
+                    &input.pr.repository_id,
+                    input.pr.pull_request_id,
+                    thread_id,
+                )
+                .await?;
+            let parent_comment_id = root_comment_id(&existing);
             client
                 .add_pull_request_comment(
                     &input.pr.project_id,
                     &input.pr.repository_id,
                     input.pr.pull_request_id,
                     thread_id,
-                    input.parent_comment_id.unwrap_or(1),
+                    parent_comment_id,
                     content,
                 )
                 .await?;
-            // Re-fetch the thread so the response includes every comment.
             client
-                .list_pull_request_threads(
+                .get_pull_request_thread(
                     &input.pr.project_id,
                     &input.pr.repository_id,
                     input.pr.pull_request_id,
+                    thread_id,
                 )
                 .await?
-                .into_iter()
-                .find(|thread| thread.id == thread_id)
-                .ok_or_else(|| AppError::InvalidInput(format!("thread not found: {thread_id}")))?
         } else {
             let context = match (&input.file_path, input.right_line) {
                 (Some(file_path), Some(line)) => Some(NewThreadContext {
@@ -374,7 +350,9 @@ impl PrReviewService {
         input: SetPullRequestThreadStatusInput,
     ) -> Result<PrThread> {
         validate_thread_status(&input.status)?;
-        let organization = self.resolve_organization(input.pr.organization_id.as_deref())?;
+        let organization = self
+            .db
+            .resolve_organization(input.pr.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
         let thread = client
             .update_pull_request_thread_status(
@@ -390,16 +368,20 @@ impl PrReviewService {
         })
     }
 
-    pub async fn list_commits(&self, input: ListPullRequestCommitsInput) -> Result<Vec<PrCommit>> {
-        let organization = self.resolve_organization(input.pr.organization_id.as_deref())?;
+    pub async fn list_commits(&self, pr: PrLocator) -> Result<Vec<PrCommit>> {
+        let organization = self
+            .db
+            .resolve_organization(pr.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
         let commits = client
-            .list_pull_request_commits(
-                &input.pr.project_id,
-                &input.pr.repository_id,
-                input.pr.pull_request_id,
-            )
+            .list_pull_request_commits(&pr.project_id, &pr.repository_id, pr.pull_request_id)
             .await?;
+        // Azure DevOps resolves the repository GUID in the `_git/{repo}` path,
+        // so the commit web URL is built from trusted fields without an extra
+        // round-trip (matching the URL guidance in AGENTS.md).
+        let base_url = organization.base_url.trim_end_matches('/');
+        let repo_segment = encode_path_segment(&pr.repository_id);
+        let project_segment = encode_path_segment(&pr.project_id);
         Ok(commits
             .into_iter()
             .map(|commit| {
@@ -410,6 +392,10 @@ impl PrReviewService {
                     .next()
                     .unwrap_or_default()
                     .to_string();
+                let web_url = Some(format!(
+                    "{base_url}/{project_segment}/_git/{repo_segment}/commit/{}",
+                    commit.commit_id
+                ));
                 PrCommit {
                     short_commit_id: commit.commit_id.chars().take(8).collect(),
                     commit_id: commit.commit_id,
@@ -423,6 +409,7 @@ impl PrReviewService {
                         .as_ref()
                         .and_then(|author| author.date)
                         .map(|date| date.to_rfc3339()),
+                    web_url,
                 }
             })
             .collect())
@@ -430,7 +417,9 @@ impl PrReviewService {
 
     pub async fn submit_vote(&self, input: SubmitPullRequestVoteInput) -> Result<PrReviewer> {
         validate_vote(input.vote)?;
-        let organization = self.resolve_organization(input.pr.organization_id.as_deref())?;
+        let organization = self
+            .db
+            .resolve_organization(input.pr.organization_id.as_deref())?;
         let reviewer_id = organization.authenticated_user_id.clone().ok_or_else(|| {
             AppError::InvalidInput(
                 "organization has no authenticated user id; re-add the organization".to_string(),
@@ -446,14 +435,77 @@ impl PrReviewService {
                 input.vote,
             )
             .await?;
+        // Keep the cached review row in sync so the grid's vote column updates
+        // immediately instead of waiting for the next background sync.
+        let label = vote_label(reviewer.vote).to_string();
+        if let Err(error) = self.db.update_review_pr_vote(
+            &organization.id,
+            &input.pr.repository_id,
+            input.pr.pull_request_id,
+            reviewer.vote,
+            &label,
+        ) {
+            tracing::warn!(error = %error, "failed to update cached review vote");
+        }
         Ok(PrReviewer {
             is_me: true,
             display_name: reviewer.display_name.unwrap_or_default(),
             vote: reviewer.vote,
-            vote_label: vote_label(reviewer.vote).to_string(),
+            vote_label: label,
             is_required: reviewer.is_required,
         })
     }
+}
+
+/// Azure DevOps serializes `VersionControlChangeType` as comma-joined tokens
+/// (e.g. "edit, rename", "undelete"). Substring matching misreads "undelete" as
+/// a delete, so the tokens are parsed explicitly.
+struct ChangeFlags {
+    is_add: bool,
+    is_delete: bool,
+}
+
+impl ChangeFlags {
+    fn parse(change_type: &str) -> Self {
+        let mut is_add = false;
+        let mut is_delete = false;
+        for token in change_type.split(',') {
+            match token.trim().to_ascii_lowercase().as_str() {
+                // A restored file ("undelete") exists on the target side and is
+                // absent at the base, so it behaves like an add for diffing.
+                "add" | "undelete" => is_add = true,
+                "delete" => is_delete = true,
+                _ => {}
+            }
+        }
+        ChangeFlags { is_add, is_delete }
+    }
+}
+
+/// The reply parent is the thread's root comment (parentCommentId == 0), not
+/// the first visible one — deleted roots must not reparent replies.
+fn root_comment_id(thread: &GitThread) -> i64 {
+    thread
+        .comments
+        .as_ref()
+        .and_then(|comments| {
+            comments
+                .iter()
+                .find(|comment| comment.parent_comment_id.unwrap_or(0) == 0)
+                .or_else(|| comments.first())
+        })
+        .map(|comment| comment.id)
+        .unwrap_or(1)
+}
+
+/// Maps an Azure DevOps thread status to a resolved/unresolved boolean. Only the
+/// explicit closed-like statuses count as resolved; "active", "pending",
+/// "unknown", and absent status are treated as open.
+fn thread_resolved(status: Option<&str>) -> bool {
+    matches!(
+        status,
+        Some("closed") | Some("fixed") | Some("wontFix") | Some("byDesign")
+    )
 }
 
 fn validate_vote(vote: i32) -> Result<()> {
@@ -516,6 +568,7 @@ fn map_threads(threads: Vec<GitThread>) -> Vec<PrThread> {
             let context = thread.thread_context;
             PrThread {
                 id: thread.id,
+                is_resolved: thread_resolved(thread.status.as_deref()),
                 status: thread.status,
                 file_path: context.as_ref().and_then(|ctx| ctx.file_path.clone()),
                 right_line: context
@@ -591,5 +644,43 @@ mod tests {
         assert!(validate_thread_status("active").is_ok());
         assert!(validate_thread_status("closed").is_ok());
         assert!(validate_thread_status("fixed").is_err());
+    }
+
+    #[test]
+    fn change_flags_parse_handles_undelete_and_combined_tokens() {
+        let undelete = ChangeFlags::parse("undelete");
+        assert!(undelete.is_add);
+        assert!(!undelete.is_delete);
+
+        let edit_rename = ChangeFlags::parse("edit, rename");
+        assert!(!edit_rename.is_add);
+        assert!(!edit_rename.is_delete);
+
+        let delete = ChangeFlags::parse("delete");
+        assert!(delete.is_delete);
+        assert!(!delete.is_add);
+    }
+
+    #[test]
+    fn thread_resolved_treats_unknown_as_open() {
+        assert!(thread_resolved(Some("closed")));
+        assert!(thread_resolved(Some("fixed")));
+        assert!(!thread_resolved(Some("active")));
+        assert!(!thread_resolved(Some("pending")));
+        assert!(!thread_resolved(Some("unknown")));
+        assert!(!thread_resolved(None));
+    }
+
+    #[test]
+    fn root_comment_id_picks_the_thread_root_not_first_visible() {
+        let thread: GitThread = serde_json::from_value(serde_json::json!({
+            "id": 5,
+            "comments": [
+                { "id": 10, "parentCommentId": 0, "content": "root" },
+                { "id": 11, "parentCommentId": 10, "content": "reply" }
+            ]
+        }))
+        .unwrap();
+        assert_eq!(root_comment_id(&thread), 10);
     }
 }

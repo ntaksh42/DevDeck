@@ -208,6 +208,20 @@ impl AppDatabase {
         get_organization(&conn, id)
     }
 
+    /// Resolves an organization by id, or falls back to the first configured
+    /// organization when no id is given.
+    pub fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {
+        if let Some(id) = id {
+            return self
+                .get_organization(id)?
+                .ok_or_else(|| AppError::InvalidInput(format!("organization not found: {id}")));
+        }
+        self.list_organizations()?
+            .into_iter()
+            .next()
+            .ok_or_else(|| AppError::InvalidInput("no organization is configured".to_string()))
+    }
+
     pub fn upsert_organization(&self, draft: OrganizationDraft) -> Result<Organization> {
         let conn = self.open()?;
         upsert_organization(&conn, draft)
@@ -280,6 +294,25 @@ impl AppDatabase {
         )?;
         upsert_review_pull_requests(&tx, prs)?;
         tx.commit()?;
+        Ok(())
+    }
+
+    /// Reflects a freshly cast vote in the cached review row so the grid does
+    /// not show a stale vote until the next background sync.
+    pub fn update_review_pr_vote(
+        &self,
+        org_id: &str,
+        repository_id: &str,
+        pull_request_id: i64,
+        vote: i32,
+        vote_label: &str,
+    ) -> Result<()> {
+        let conn = self.open()?;
+        conn.execute(
+            "UPDATE review_pull_requests SET my_vote = ?4, my_vote_label = ?5 \
+             WHERE org_id = ?1 AND repository_id = ?2 AND pull_request_id = ?3",
+            params![org_id, repository_id, pull_request_id, vote, vote_label],
+        )?;
         Ok(())
     }
 

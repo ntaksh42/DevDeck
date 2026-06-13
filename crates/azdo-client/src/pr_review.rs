@@ -82,6 +82,8 @@ pub struct GitCommitRefId {
 #[serde(rename_all = "camelCase")]
 pub struct GitIterationChanges {
     pub change_entries: Vec<GitChangeEntry>,
+    /// Continuation cursor when the change set spans multiple pages.
+    pub next_skip: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -140,6 +142,20 @@ impl AdoClient {
             .get_json(&path, &[("api-version", "7.1-preview")])
             .await?;
         Ok(response.value)
+    }
+
+    pub async fn get_pull_request_thread(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        pull_request_id: i64,
+        thread_id: i64,
+    ) -> Result<GitThread> {
+        let path = format!(
+            "{project_id}/_apis/git/repositories/{repository_id}/pullRequests/{pull_request_id}/threads/{thread_id}"
+        );
+        self.get_json(&path, &[("api-version", "7.1-preview")])
+            .await
     }
 
     pub async fn create_pull_request_thread(
@@ -242,6 +258,8 @@ impl AdoClient {
     }
 
     /// `$compareTo=0` returns the cumulative changes against the PR base.
+    /// Follows `nextSkip` so PRs with more changed files than one page fit are
+    /// returned in full.
     pub async fn get_pull_request_iteration_changes(
         &self,
         project_id: &str,
@@ -252,13 +270,26 @@ impl AdoClient {
         let path = format!(
             "{project_id}/_apis/git/repositories/{repository_id}/pullRequests/{pull_request_id}/iterations/{iteration_id}/changes"
         );
-        let response: GitIterationChanges = self
-            .get_json(
-                &path,
-                &[("api-version", "7.1-preview"), ("$compareTo", "0")],
-            )
-            .await?;
-        Ok(response.change_entries)
+        let mut all = Vec::new();
+        let mut skip: Option<i64> = None;
+        loop {
+            let skip_value = skip.map(|value| value.to_string());
+            let mut query = vec![
+                ("api-version", "7.1-preview"),
+                ("$compareTo", "0"),
+                ("$top", "1000"),
+            ];
+            if let Some(skip_value) = skip_value.as_deref() {
+                query.push(("$skip", skip_value));
+            }
+            let response: GitIterationChanges = self.get_json(&path, &query).await?;
+            all.extend(response.change_entries);
+            match response.next_skip {
+                Some(next) if next > 0 && next != skip.unwrap_or(0) => skip = Some(next),
+                _ => break,
+            }
+        }
+        Ok(all)
     }
 
     pub async fn list_pull_request_commits(
