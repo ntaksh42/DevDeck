@@ -4,7 +4,7 @@ use serde_json::json;
 
 use crate::client::AdoClient;
 use crate::error::Result;
-use crate::git::{IdentityRef, IdentityRefWithVote, ListResponse};
+use crate::git::{GitCommitRef, IdentityRef, IdentityRefWithVote, ListResponse};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -259,6 +259,21 @@ impl AdoClient {
             )
             .await?;
         Ok(response.change_entries)
+    }
+
+    pub async fn list_pull_request_commits(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        pull_request_id: i64,
+    ) -> Result<Vec<GitCommitRef>> {
+        let path = format!(
+            "{project_id}/_apis/git/repositories/{repository_id}/pullRequests/{pull_request_id}/commits"
+        );
+        let response: ListResponse<GitCommitRef> = self
+            .get_json(&path, &[("api-version", "7.1-preview")])
+            .await?;
+        Ok(response.value)
     }
 
     /// Fetches the (text) content of a file at a specific commit.
@@ -572,6 +587,42 @@ mod tests {
         assert_eq!(
             changes[0].item.as_ref().unwrap().path.as_deref(),
             Some("/src/app.ts")
+        );
+    }
+
+    #[tokio::test]
+    async fn list_pull_request_commits_maps_commit_fields() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/project-1/_apis/git/repositories/repo-1/pullRequests/42/commits",
+            ))
+            .and(query_param("api-version", "7.1-preview"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 1,
+                "value": [{
+                    "commitId": "abc1234567890",
+                    "comment": "Add rate limiting\n\nDetails here.",
+                    "author": {
+                        "name": "Alice",
+                        "email": "alice@example.com",
+                        "date": "2026-06-01T00:00:00Z"
+                    }
+                }]
+            })))
+            .mount(&server)
+            .await;
+
+        let commits = test_client(&server)
+            .await
+            .list_pull_request_commits("project-1", "repo-1", 42)
+            .await
+            .unwrap();
+        assert_eq!(commits.len(), 1);
+        assert_eq!(commits[0].commit_id, "abc1234567890");
+        assert_eq!(
+            commits[0].author.as_ref().unwrap().name.as_deref(),
+            Some("Alice")
         );
     }
 
