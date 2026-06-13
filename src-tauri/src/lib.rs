@@ -23,9 +23,10 @@ use db::{AppDatabase, AppSettings, Organization, SyncState};
 use error::{AppError, Result};
 use orgs::{AddAzureCliOrganizationInput, AddPatOrganizationInput, OrganizationService};
 use pr_review::{
-    GetPullRequestFileDiffInput, PostPullRequestCommentInput, PrCommit, PrFileDiff, PrLocator,
-    PrReviewService, PrReviewer, PrThread, PullRequestChanges, PullRequestReview,
-    SearchPullRequestMentionsInput, SetPullRequestThreadStatusInput, SubmitPullRequestVoteInput,
+    DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
+    PostPullRequestCommentInput, PrCommit, PrFileDiff, PrLocator, PrReviewService, PrReviewer,
+    PrThread, PullRequestChanges, PullRequestReview, SearchPullRequestMentionsInput,
+    SetPullRequestThreadStatusInput, SubmitPullRequestVoteInput,
 };
 use prs::{
     ListMyReviewPullRequestsInput, PullRequestService, PullRequestSummary,
@@ -257,6 +258,26 @@ async fn search_pull_request_mentions(
     state: State<'_, AppState>,
 ) -> Result<Vec<MentionCandidate>> {
     state.pr_review.search_mentions(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn edit_pull_request_comment(
+    input: EditPullRequestCommentInput,
+    state: State<'_, AppState>,
+) -> Result<PrThread> {
+    ensure_write_enabled(&state)?;
+    state.pr_review.edit_comment(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn delete_pull_request_comment(
+    input: DeletePullRequestCommentInput,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    ensure_write_enabled(&state)?;
+    state.pr_review.delete_comment(input).await
 }
 
 #[tauri::command]
@@ -666,6 +687,8 @@ pub fn run() {
             set_pull_request_thread_status,
             submit_pull_request_vote,
             search_pull_request_mentions,
+            edit_pull_request_comment,
+            delete_pull_request_comment,
             search_all,
             search_work_items,
             list_my_work_items,

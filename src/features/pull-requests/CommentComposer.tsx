@@ -13,6 +13,7 @@ type Mode = "edit" | "preview";
 export function CommentComposer({
   placeholder,
   submitLabel = "Comment",
+  initialValue = "",
   autoFocus = false,
   busy = false,
   onSubmit,
@@ -22,6 +23,7 @@ export function CommentComposer({
 }: {
   placeholder: string;
   submitLabel?: string;
+  initialValue?: string;
   autoFocus?: boolean;
   busy?: boolean;
   onSubmit: (content: string) => Promise<void>;
@@ -29,7 +31,7 @@ export function CommentComposer({
   onSubmitted?: () => void;
   mentionSearch?: (query: string) => Promise<MentionCandidate[]>;
 }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialValue);
   const [mode, setMode] = useState<Mode>("edit");
   const [submitting, setSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);

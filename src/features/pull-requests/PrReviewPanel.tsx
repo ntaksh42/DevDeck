@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Maximize2, Minimize2 } from "lucide-react";
 import {
   commandErrorMessage,
+  deletePullRequestComment,
+  editPullRequestComment,
   getAppSettings,
   getPullRequestReview,
   getReviewResultPreview,
@@ -200,6 +202,24 @@ function ReviewTab({
     onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
   });
 
+  const editMutation = useMutation({
+    mutationFn: editPullRequestComment,
+    onSuccess: () => {
+      setActionError(null);
+      invalidateReview();
+    },
+    onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deletePullRequestComment,
+    onSuccess: () => {
+      setActionError(null);
+      invalidateReview();
+    },
+    onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
+  });
+
   // Keep a focus target (Alt+P) present even on loading/error states.
   if (loading) {
     return (
@@ -328,6 +348,21 @@ function ReviewTab({
                     status: thread.isResolved ? "active" : "closed",
                   });
                 }}
+                onEditComment={(commentId, content) =>
+                  editMutation.mutateAsync({
+                    ...prLocator(pr),
+                    threadId: thread.id,
+                    commentId,
+                    content,
+                  }).then(() => undefined)
+                }
+                onDeleteComment={(commentId) =>
+                  deleteMutation.mutateAsync({
+                    ...prLocator(pr),
+                    threadId: thread.id,
+                    commentId,
+                  })
+                }
               />
             ))
           )}

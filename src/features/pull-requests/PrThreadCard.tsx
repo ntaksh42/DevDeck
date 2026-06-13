@@ -15,6 +15,8 @@ export function PrThreadCard({
   showFilePath = true,
   onReply,
   onToggleStatus,
+  onEditComment,
+  onDeleteComment,
   mentionSearch,
 }: {
   thread: PrThread;
@@ -22,9 +24,12 @@ export function PrThreadCard({
   showFilePath?: boolean;
   onReply: (content: string) => Promise<void>;
   onToggleStatus: () => void;
+  onEditComment?: (commentId: number, content: string) => Promise<void>;
+  onDeleteComment?: (commentId: number) => Promise<void>;
   mentionSearch?: (query: string) => Promise<MentionCandidate[]>;
 }) {
   const [replying, setReplying] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const resolved = thread.isResolved;
 
   return (
@@ -71,17 +76,62 @@ export function PrThreadCard({
         {thread.comments
           .filter((comment) => !comment.isSystem)
           .map((comment) => (
-            <div key={comment.id} className="text-xs">
-              <span className="font-medium text-foreground">{comment.author ?? "Unknown"}</span>
-              {comment.publishedDate ? (
-                <span
-                  className="ml-1 text-[10px] text-muted-foreground"
-                  title={formatDate(comment.publishedDate)}
-                >
-                  {formatRelativeDate(comment.publishedDate)}
-                </span>
-              ) : null}
-              <MarkdownView text={comment.content ?? ""} className="text-foreground" />
+            <div key={comment.id} className="group/comment text-xs">
+              <div className="flex items-center gap-1">
+                <span className="font-medium text-foreground">{comment.author ?? "Unknown"}</span>
+                {comment.publishedDate ? (
+                  <span
+                    className="text-[10px] text-muted-foreground"
+                    title={formatDate(comment.publishedDate)}
+                  >
+                    {formatRelativeDate(comment.publishedDate)}
+                  </span>
+                ) : null}
+                {comment.isMine && editingId !== comment.id && (onEditComment || onDeleteComment) ? (
+                  <span className="ml-auto flex items-center gap-1 opacity-0 transition-opacity group-hover/comment:opacity-100">
+                    {onEditComment ? (
+                      <button
+                        type="button"
+                        onClick={() => setEditingId(comment.id)}
+                        className="rounded px-1 py-px text-[10px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+                      >
+                        Edit
+                      </button>
+                    ) : null}
+                    {onDeleteComment ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          if (window.confirm("Delete this comment?")) {
+                            void onDeleteComment(comment.id);
+                          }
+                        }}
+                        className="rounded px-1 py-px text-[10px] text-muted-foreground hover:bg-secondary hover:text-destructive disabled:opacity-50"
+                      >
+                        Delete
+                      </button>
+                    ) : null}
+                  </span>
+                ) : null}
+              </div>
+              {editingId === comment.id && onEditComment ? (
+                <div className="mt-1">
+                  <CommentComposer
+                    placeholder="Edit comment… (Ctrl+Enter to save)"
+                    submitLabel="Save"
+                    initialValue={comment.content ?? ""}
+                    autoFocus
+                    busy={busy}
+                    mentionSearch={mentionSearch}
+                    onSubmit={(content) => onEditComment(comment.id, content)}
+                    onCancel={() => setEditingId(null)}
+                    onSubmitted={() => setEditingId(null)}
+                  />
+                </div>
+              ) : (
+                <MarkdownView text={comment.content ?? ""} className="text-foreground" />
+              )}
             </div>
           ))}
       </div>

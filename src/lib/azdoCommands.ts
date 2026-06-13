@@ -102,6 +102,7 @@ const prCommentSchema = z.object({
   author: z.string().nullable(),
   publishedDate: z.string().nullable(),
   isSystem: z.boolean(),
+  isMine: z.boolean(),
 });
 
 export type PrComment = z.infer<typeof prCommentSchema>;
@@ -480,6 +481,17 @@ export type SearchPullRequestMentionsInput = {
   query: string;
 };
 
+export type EditPullRequestCommentInput = PrLocatorInput & {
+  threadId: number;
+  commentId: number;
+  content: string;
+};
+
+export type DeletePullRequestCommentInput = PrLocatorInput & {
+  threadId: number;
+  commentId: number;
+};
+
 export type SearchAllInput = {
   organizationId?: string;
   query: string;
@@ -807,6 +819,19 @@ export async function searchPullRequestMentions(
 ): Promise<MentionCandidate[]> {
   const result = await invokeCommand("search_pull_request_mentions", { input });
   return mentionCandidatesSchema.parse(result);
+}
+
+export async function editPullRequestComment(
+  input: EditPullRequestCommentInput,
+): Promise<PrThread> {
+  const result = await invokeCommand("edit_pull_request_comment", { input });
+  return prThreadSchema.parse(result);
+}
+
+export async function deletePullRequestComment(
+  input: DeletePullRequestCommentInput,
+): Promise<void> {
+  await invokeCommand("delete_pull_request_comment", { input });
 }
 
 export async function searchAll(input: SearchAllInput): Promise<SearchAllResult> {

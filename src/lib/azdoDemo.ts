@@ -8,6 +8,8 @@ import type {
   CommitRepositoryOption,
   CommitSummary,
   DeleteWorkItemCommentInput,
+  DeletePullRequestCommentInput,
+  EditPullRequestCommentInput,
   GetPullRequestFileDiffInput,
   GetPullRequestReviewInput,
   GetReviewResultPreviewInput,
@@ -127,6 +129,8 @@ const writeCommands = new Set([
   "post_pull_request_comment",
   "set_pull_request_thread_status",
   "submit_pull_request_vote",
+  "edit_pull_request_comment",
+  "delete_pull_request_comment",
 ]);
 
 let demoPrThreadSeq = 100;
@@ -166,6 +170,7 @@ function demoThreadsFor(pullRequestId: number): PrThread[] {
           author: "Riley Reviewer",
           publishedDate: "2026-05-22T09:00:00Z",
           isSystem: false,
+          isMine: false,
         },
       ],
     },
@@ -183,6 +188,7 @@ function demoThreadsFor(pullRequestId: number): PrThread[] {
           author: "Riley Reviewer",
           publishedDate: "2026-05-21T15:00:00Z",
           isSystem: false,
+          isMine: false,
         },
         {
           id: 2,
@@ -191,6 +197,7 @@ function demoThreadsFor(pullRequestId: number): PrThread[] {
           author: "Demo User",
           publishedDate: "2026-05-22T10:00:00Z",
           isSystem: false,
+          isMine: true,
         },
       ],
     },
@@ -208,6 +215,7 @@ function demoThreadsFor(pullRequestId: number): PrThread[] {
           author: "Riley Reviewer",
           publishedDate: "2026-05-20T12:00:00Z",
           isSystem: true,
+          isMine: false,
         },
       ],
     },
@@ -439,6 +447,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
           author: "Demo User",
           publishedDate: new Date().toISOString(),
           isSystem: false,
+          isMine: true,
         });
         return thread;
       }
@@ -456,11 +465,34 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
             author: "Demo User",
             publishedDate: new Date().toISOString(),
             isSystem: false,
+            isMine: true,
           },
         ],
       };
       threads.unshift(thread);
       return thread;
+    }
+    case "edit_pull_request_comment": {
+      const input = (args as { input?: EditPullRequestCommentInput } | undefined)?.input;
+      if (!input) throw new Error("missing input");
+      const thread = demoThreadsFor(input.pullRequestId).find(
+        (candidate) => candidate.id === input.threadId,
+      );
+      if (!thread) throw new Error(`thread not found: ${input.threadId}`);
+      const comment = thread.comments.find((candidate) => candidate.id === input.commentId);
+      if (comment) comment.content = input.content;
+      return thread;
+    }
+    case "delete_pull_request_comment": {
+      const input = (args as { input?: DeletePullRequestCommentInput } | undefined)?.input;
+      if (!input) throw new Error("missing input");
+      const thread = demoThreadsFor(input.pullRequestId).find(
+        (candidate) => candidate.id === input.threadId,
+      );
+      if (thread) {
+        thread.comments = thread.comments.filter((candidate) => candidate.id !== input.commentId);
+      }
+      return null;
     }
     case "set_pull_request_thread_status": {
       const input = (args as { input?: SetPullRequestThreadStatusInput } | undefined)?.input;

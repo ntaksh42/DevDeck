@@ -205,6 +205,42 @@ impl AdoClient {
             .await
     }
 
+    pub async fn update_pull_request_comment(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        pull_request_id: i64,
+        thread_id: i64,
+        comment_id: i64,
+        content: &str,
+    ) -> Result<GitThreadComment> {
+        let path = format!(
+            "{project_id}/_apis/git/repositories/{repository_id}/pullRequests/{pull_request_id}/threads/{thread_id}/comments/{comment_id}"
+        );
+        let body = json!({ "content": content });
+        self.patch_json(
+            &path,
+            &[("api-version", "7.1-preview")],
+            "application/json",
+            &body,
+        )
+        .await
+    }
+
+    pub async fn delete_pull_request_comment(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        pull_request_id: i64,
+        thread_id: i64,
+        comment_id: i64,
+    ) -> Result<()> {
+        let path = format!(
+            "{project_id}/_apis/git/repositories/{repository_id}/pullRequests/{pull_request_id}/threads/{thread_id}/comments/{comment_id}"
+        );
+        self.delete(&path, &[("api-version", "7.1-preview")]).await
+    }
+
     pub async fn update_pull_request_thread_status(
         &self,
         project_id: &str,
@@ -512,6 +548,50 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(comment.id, 2);
+    }
+
+    #[tokio::test]
+    async fn update_pull_request_comment_patches_content() {
+        let server = MockServer::start().await;
+        Mock::given(method("PATCH"))
+            .and(path(
+                "/project-1/_apis/git/repositories/repo-1/pullRequests/42/threads/7/comments/2",
+            ))
+            .and(body_partial_json(
+                serde_json::json!({ "content": "Edited." }),
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 2,
+                "parentCommentId": 1,
+                "content": "Edited."
+            })))
+            .mount(&server)
+            .await;
+
+        let comment = test_client(&server)
+            .await
+            .update_pull_request_comment("project-1", "repo-1", 42, 7, 2, "Edited.")
+            .await
+            .unwrap();
+        assert_eq!(comment.content.as_deref(), Some("Edited."));
+    }
+
+    #[tokio::test]
+    async fn delete_pull_request_comment_issues_delete() {
+        let server = MockServer::start().await;
+        Mock::given(method("DELETE"))
+            .and(path(
+                "/project-1/_apis/git/repositories/repo-1/pullRequests/42/threads/7/comments/2",
+            ))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&server)
+            .await;
+
+        test_client(&server)
+            .await
+            .delete_pull_request_comment("project-1", "repo-1", 42, 7, 2)
+            .await
+            .unwrap();
     }
 
     #[tokio::test]

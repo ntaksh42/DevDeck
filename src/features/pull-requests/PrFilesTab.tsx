@@ -11,6 +11,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus } from "lucide-react";
 import {
   commandErrorMessage,
+  deletePullRequestComment,
+  editPullRequestComment,
   getPullRequestFileDiff,
   listPullRequestChanges,
   postPullRequestComment,
@@ -163,7 +165,29 @@ export function PrFilesTab({
     onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
   });
 
-  const mutationsBusy = commentMutation.isPending || statusMutation.isPending;
+  const editMutation = useMutation({
+    mutationFn: editPullRequestComment,
+    onSuccess: () => {
+      setActionError(null);
+      invalidateReview();
+    },
+    onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deletePullRequestComment,
+    onSuccess: () => {
+      setActionError(null);
+      invalidateReview();
+    },
+    onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
+  });
+
+  const mutationsBusy =
+    commentMutation.isPending ||
+    statusMutation.isPending ||
+    editMutation.isPending ||
+    deleteMutation.isPending;
 
   // Path matching is normalized: the threads and changes APIs can disagree on
   // leading slash and casing.
@@ -348,6 +372,16 @@ export function PrFilesTab({
     });
   }
 
+  function editComment(thread: PrThread, commentId: number, content: string): Promise<void> {
+    return editMutation
+      .mutateAsync({ ...prLocator(pr), threadId: thread.id, commentId, content })
+      .then(() => undefined);
+  }
+
+  function deleteComment(thread: PrThread, commentId: number): Promise<void> {
+    return deleteMutation.mutateAsync({ ...prLocator(pr), threadId: thread.id, commentId });
+  }
+
   // Inline block rendered under a right-side line: existing threads + comment box.
   function lineAttachments(rightLine: number | null) {
     if (rightLine == null) return null;
@@ -368,6 +402,8 @@ export function PrFilesTab({
             mentionSearch={mentionSearch}
             onReply={(content) => replyToThread(thread, content)}
             onToggleStatus={() => toggleThreadStatus(thread)}
+            onEditComment={(commentId, content) => editComment(thread, commentId, content)}
+            onDeleteComment={(commentId) => deleteComment(thread, commentId)}
           />
         ))}
         {drafting ? (

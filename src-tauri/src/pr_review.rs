@@ -70,6 +70,25 @@ pub struct SearchPullRequestMentionsInput {
     pub query: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EditPullRequestCommentInput {
+    #[serde(flatten)]
+    pub pr: PrLocator,
+    pub thread_id: i64,
+    pub comment_id: i64,
+    pub content: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeletePullRequestCommentInput {
+    #[serde(flatten)]
+    pub pr: PrLocator,
+    pub thread_id: i64,
+    pub comment_id: i64,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PrCommit {
@@ -126,6 +145,7 @@ pub struct PrComment {
     pub author: Option<String>,
     pub published_date: Option<String>,
     pub is_system: bool,
+    pub is_mine: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -198,7 +218,7 @@ impl PrReviewService {
                     is_required: reviewer.is_required,
                 })
                 .collect(),
-            threads: map_threads(threads),
+            threads: map_threads(threads, me),
         })
     }
 
@@ -348,9 +368,12 @@ impl PrReviewService {
                 )
                 .await?
         };
-        map_threads(vec![thread]).into_iter().next().ok_or_else(|| {
-            AppError::InvalidInput("posted thread has no visible comments".to_string())
-        })
+        map_threads(vec![thread], organization.authenticated_user_id.as_deref())
+            .into_iter()
+            .next()
+            .ok_or_else(|| {
+                AppError::InvalidInput("posted thread has no visible comments".to_string())
+            })
     }
 
     pub async fn set_thread_status(
@@ -371,9 +394,64 @@ impl PrReviewService {
                 &input.status,
             )
             .await?;
-        map_threads(vec![thread]).into_iter().next().ok_or_else(|| {
-            AppError::InvalidInput("updated thread has no visible comments".to_string())
-        })
+        map_threads(vec![thread], organization.authenticated_user_id.as_deref())
+            .into_iter()
+            .next()
+            .ok_or_else(|| {
+                AppError::InvalidInput("updated thread has no visible comments".to_string())
+            })
+    }
+
+    pub async fn edit_comment(&self, input: EditPullRequestCommentInput) -> Result<PrThread> {
+        let content = input.content.trim();
+        if content.is_empty() {
+            return Err(AppError::InvalidInput("comment is empty".to_string()));
+        }
+        let organization = self
+            .db
+            .resolve_organization(input.pr.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        client
+            .update_pull_request_comment(
+                &input.pr.project_id,
+                &input.pr.repository_id,
+                input.pr.pull_request_id,
+                input.thread_id,
+                input.comment_id,
+                content,
+            )
+            .await?;
+        let thread = client
+            .get_pull_request_thread(
+                &input.pr.project_id,
+                &input.pr.repository_id,
+                input.pr.pull_request_id,
+                input.thread_id,
+            )
+            .await?;
+        map_threads(vec![thread], organization.authenticated_user_id.as_deref())
+            .into_iter()
+            .next()
+            .ok_or_else(|| {
+                AppError::InvalidInput("edited thread has no visible comments".to_string())
+            })
+    }
+
+    pub async fn delete_comment(&self, input: DeletePullRequestCommentInput) -> Result<()> {
+        let organization = self
+            .db
+            .resolve_organization(input.pr.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        client
+            .delete_pull_request_comment(
+                &input.pr.project_id,
+                &input.pr.repository_id,
+                input.pr.pull_request_id,
+                input.thread_id,
+                input.comment_id,
+            )
+            .await?;
+        Ok(())
     }
 
     pub async fn list_commits(&self, pr: PrLocator) -> Result<Vec<PrCommit>> {
@@ -587,7 +665,7 @@ async fn fetch_side(
     }
 }
 
-fn map_threads(threads: Vec<GitThread>) -> Vec<PrThread> {
+fn map_threads(threads: Vec<GitThread>, me: Option<&str>) -> Vec<PrThread> {
     threads
         .into_iter()
         .filter(|thread| !thread.is_deleted)
@@ -607,13 +685,19 @@ fn map_threads(threads: Vec<GitThread>) -> Vec<PrThread> {
                     .unwrap_or_default()
                     .into_iter()
                     .filter(|comment| !comment.is_deleted)
-                    .map(|comment| PrComment {
-                        id: comment.id,
-                        parent_comment_id: comment.parent_comment_id,
-                        content: comment.content,
-                        author: comment.author.and_then(|author| author.display_name),
-                        published_date: comment.published_date.map(|date| date.to_rfc3339()),
-                        is_system: comment.comment_type.as_deref() == Some("system"),
+                    .map(|comment| {
+                        let author = comment.author;
+                        let is_mine =
+                            me.is_some() && author.as_ref().and_then(|a| a.id.as_deref()) == me;
+                        PrComment {
+                            id: comment.id,
+                            parent_comment_id: comment.parent_comment_id,
+                            content: comment.content,
+                            author: author.and_then(|author| author.display_name),
+                            published_date: comment.published_date.map(|date| date.to_rfc3339()),
+                            is_system: comment.comment_type.as_deref() == Some("system"),
+                            is_mine,
+                        }
                     })
                     .collect(),
             }
@@ -639,7 +723,7 @@ mod tests {
                     "rightFileStart": { "line": 12, "offset": 1 }
                 },
                 "comments": [
-                    { "id": 1, "content": "real", "commentType": "text" },
+                    { "id": 1, "content": "real", "commentType": "text", "author": { "id": "me-1" } },
                     { "id": 2, "content": "voted", "commentType": "system" },
                     { "id": 3, "content": "deleted", "commentType": "text", "isDeleted": true }
                 ]
@@ -647,12 +731,13 @@ mod tests {
         ]))
         .unwrap();
 
-        let mapped = map_threads(threads);
+        let mapped = map_threads(threads, Some("me-1"));
         assert_eq!(mapped.len(), 1);
         assert_eq!(mapped[0].file_path.as_deref(), Some("/src/app.ts"));
         assert_eq!(mapped[0].right_line, Some(12));
         assert_eq!(mapped[0].comments.len(), 2);
         assert!(!mapped[0].comments[0].is_system);
+        assert!(mapped[0].comments[0].is_mine);
         assert!(mapped[0].comments[1].is_system);
     }
 
