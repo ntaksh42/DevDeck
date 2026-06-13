@@ -26,7 +26,7 @@ import { LoadingState, ErrorState, PreviewEmptyState } from "@/components/StateD
 import { CommentComposer } from "./CommentComposer";
 import { PrFilesTab } from "./PrFilesTab";
 import { PrThreadCard } from "./PrThreadCard";
-import { VOTE_BUTTON_ACTIVE_CLASSES, VOTE_DOT_CLASSES, voteTone } from "./voteVisual";
+import { VOTE_BADGE_CLASSES, VOTE_DOT_CLASSES, voteTone } from "./voteVisual";
 
 function usePrMentionSearch(organizationId: string) {
   return useCallback(
@@ -46,12 +46,14 @@ const PANEL_TABS: { key: PanelTab; label: string }[] = [
   { key: "result", label: "Result" },
 ];
 
-const VOTE_OPTIONS: { vote: -10 | -5 | 0 | 5 | 10; label: string }[] = [
+type VoteValue = -10 | -5 | 0 | 5 | 10;
+
+const VOTE_OPTIONS: { vote: VoteValue; label: string }[] = [
   { vote: 10, label: "Approve" },
   { vote: 5, label: "Suggestions" },
   { vote: -5, label: "Wait" },
   { vote: -10, label: "Reject" },
-  { vote: 0, label: "Reset" },
+  { vote: 0, label: "No vote" },
 ];
 
 export function PrReviewPanel({
@@ -279,27 +281,30 @@ function ReviewTab({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Vote buttons */}
-      <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-2 py-1.5">
-        {VOTE_OPTIONS.map((option) => {
-          const active = myVote === option.vote && option.vote !== 0;
-          return (
-            <button
-              key={option.vote}
-              type="button"
-              disabled={voteMutation.isPending}
-              onClick={() => voteMutation.mutate({ ...prLocator(pr), vote: option.vote })}
-              className={`rounded border px-2 py-0.5 text-xs font-medium disabled:opacity-50 ${
-                active
-                  ? VOTE_BUTTON_ACTIVE_CLASSES[voteTone(option.vote)]
-                  : "border-border bg-white text-muted-foreground hover:bg-secondary"
-              }`}
-              title={`Vote: ${option.label}`}
-            >
+      {/* Vote control: a single dropdown that shows and sets the current vote. */}
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-2 py-1.5">
+        <label htmlFor="pr-vote-select" className="text-xs font-medium text-muted-foreground">
+          Your vote
+        </label>
+        <select
+          id="pr-vote-select"
+          value={myVote}
+          disabled={voteMutation.isPending}
+          onChange={(event) =>
+            voteMutation.mutate({
+              ...prLocator(pr),
+              vote: Number(event.target.value) as VoteValue,
+            })
+          }
+          aria-label="Your vote"
+          className={`h-7 rounded-md border px-2 text-xs font-medium outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 ${VOTE_BADGE_CLASSES[voteTone(myVote)]}`}
+        >
+          {VOTE_OPTIONS.map((option) => (
+            <option key={option.vote} value={option.vote}>
               {option.label}
-            </button>
-          );
-        })}
+            </option>
+          ))}
+        </select>
         {voteMutation.isPending ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden="true" />
         ) : null}
