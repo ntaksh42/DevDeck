@@ -26,6 +26,23 @@ type WorkItemNotificationItem = {
   webUrl: string | null;
 };
 
+export type PullRequestNotificationEvent = {
+  organizationId: string;
+  organizationName: string;
+  items: PullRequestNotificationItem[];
+};
+
+type PullRequestNotificationItem = {
+  kind: "reviewRequested" | "voteReset" | "commentReply";
+  pullRequestId: number;
+  title: string;
+  repositoryName: string;
+  projectName: string;
+  webUrl: string | null;
+  commentAuthor: string | null;
+  snippet: string | null;
+};
+
 export async function sendTestDesktopNotification(): Promise<DesktopNotificationResult> {
   return sendDesktopNotification("AzDoDeck notifications", {
     body: "Desktop notifications are ready.",
@@ -59,6 +76,43 @@ export async function showWorkItemNotificationEvent(
       body: contentPreviewEnabled
         ? workItemNotificationBody(event.organizationName, item)
         : "Open AzDoDeck to review this work item update.",
+      onClick: item.webUrl
+        ? () => {
+            void openExternalUrl(item.webUrl!);
+          }
+        : undefined,
+    });
+  }
+  return result;
+}
+
+export async function showPullRequestNotificationEvent(
+  event: PullRequestNotificationEvent,
+  settings: AppSettings,
+): Promise<DesktopNotificationResult> {
+  if (!settings.desktopNotificationsEnabled || event.items.length === 0) {
+    return "skipped";
+  }
+
+  const contentPreviewEnabled = settings.notificationContentPreviewEnabled;
+  const items = event.items.slice(0, 20);
+  if (items.length > 3) {
+    return sendDesktopNotification(`${items.length} pull request updates`, {
+      body: contentPreviewEnabled
+        ? `${event.organizationName}: ${items
+            .slice(0, 3)
+            .map((item) => `!${item.pullRequestId} ${item.title}`)
+            .join(", ")}`
+        : "Open AzDoDeck to review the latest pull request updates.",
+    });
+  }
+
+  let result: DesktopNotificationResult = "denied";
+  for (const item of items) {
+    result = await sendDesktopNotification(pullRequestNotificationTitle(item), {
+      body: contentPreviewEnabled
+        ? pullRequestNotificationBody(event.organizationName, item)
+        : "Open AzDoDeck to review this pull request update.",
       onClick: item.webUrl
         ? () => {
             void openExternalUrl(item.webUrl!);
@@ -143,6 +197,30 @@ function workItemNotificationBody(
     return `${title}\n${from} -> ${to} / ${organizationName}`;
   }
   return `${title}\n${item.projectName} / ${organizationName}`;
+}
+
+function pullRequestNotificationTitle(item: PullRequestNotificationItem): string {
+  switch (item.kind) {
+    case "reviewRequested":
+      return `Review requested: !${item.pullRequestId}`;
+    case "voteReset":
+      return `Vote reset: !${item.pullRequestId}`;
+    case "commentReply":
+      return `New reply: !${item.pullRequestId}`;
+  }
+}
+
+function pullRequestNotificationBody(
+  organizationName: string,
+  item: PullRequestNotificationItem,
+): string {
+  const title = truncate(item.title, 90);
+  if (item.kind === "commentReply") {
+    const who = item.commentAuthor ?? "Someone";
+    const snippet = item.snippet ? `\n${truncate(item.snippet, 90)}` : "";
+    return `${who} on "${title}"${snippet}\n${item.repositoryName} / ${organizationName}`;
+  }
+  return `${title}\n${item.repositoryName} / ${organizationName}`;
 }
 
 function truncate(value: string, maxLength: number): string {

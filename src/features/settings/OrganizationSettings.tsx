@@ -354,6 +354,9 @@ function settingsInput(
       settings?.notificationContentPreviewEnabled ?? true,
     notifyWorkItemAssignments: settings?.notifyWorkItemAssignments ?? true,
     notifyWorkItemStateChanges: settings?.notifyWorkItemStateChanges ?? true,
+    notifyPrReviewRequests: settings?.notifyPrReviewRequests ?? true,
+    notifyPrVoteResets: settings?.notifyPrVoteResets ?? true,
+    notifyPrCommentReplies: settings?.notifyPrCommentReplies ?? true,
     ...input,
   };
 }
@@ -460,6 +463,9 @@ function DesktopNotificationSettings() {
   const [contentPreviewEnabled, setContentPreviewEnabled] = useState(true);
   const [assignmentsEnabled, setAssignmentsEnabled] = useState(true);
   const [stateChangesEnabled, setStateChangesEnabled] = useState(true);
+  const [prReviewRequests, setPrReviewRequests] = useState(true);
+  const [prVoteResets, setPrVoteResets] = useState(true);
+  const [prCommentReplies, setPrCommentReplies] = useState(true);
   const [testResult, setTestResult] = useState<string | null>(null);
 
   useEffect(() => {
@@ -468,6 +474,9 @@ function DesktopNotificationSettings() {
     setContentPreviewEnabled(settings?.notificationContentPreviewEnabled ?? true);
     setAssignmentsEnabled(settings?.notifyWorkItemAssignments ?? true);
     setStateChangesEnabled(settings?.notifyWorkItemStateChanges ?? true);
+    setPrReviewRequests(settings?.notifyPrReviewRequests ?? true);
+    setPrVoteResets(settings?.notifyPrVoteResets ?? true);
+    setPrCommentReplies(settings?.notifyPrCommentReplies ?? true);
   }, [settingsQuery.data]);
 
   const mutation = useMutation({
@@ -486,6 +495,9 @@ function DesktopNotificationSettings() {
         notificationContentPreviewEnabled: contentPreviewEnabled,
         notifyWorkItemAssignments: assignmentsEnabled,
         notifyWorkItemStateChanges: stateChangesEnabled,
+        notifyPrReviewRequests: prReviewRequests,
+        notifyPrVoteResets: prVoteResets,
+        notifyPrCommentReplies: prCommentReplies,
       }),
     );
   }
@@ -512,7 +524,8 @@ function DesktopNotificationSettings() {
           <div>
             <h2 className="text-base font-semibold">Desktop notifications</h2>
             <p className="text-sm text-muted-foreground">
-              Notify when assigned work items or states change after sync.
+              Notify after sync about work item changes and pull request review
+              requests, vote resets, and replies.
             </p>
           </div>
         </div>
@@ -556,6 +569,38 @@ function DesktopNotificationSettings() {
             />
             Show title in notification
           </label>
+        </div>
+        <div className="border-t border-border pt-3">
+          <p className="mb-2 text-sm font-medium">Pull requests</p>
+          <div className="grid gap-2 md:grid-cols-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={prReviewRequests}
+                onChange={(event) => setPrReviewRequests(event.target.checked)}
+                className="h-4 w-4 rounded border-input"
+              />
+              New review requests
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={prVoteResets}
+                onChange={(event) => setPrVoteResets(event.target.checked)}
+                className="h-4 w-4 rounded border-input"
+              />
+              Vote resets
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={prCommentReplies}
+                onChange={(event) => setPrCommentReplies(event.target.checked)}
+                className="h-4 w-4 rounded border-input"
+              />
+              Comment replies &amp; mentions
+            </label>
+          </div>
         </div>
 
         {settingsQuery.isError ? (
