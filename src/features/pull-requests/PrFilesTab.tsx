@@ -1,4 +1,12 @@
-import { type ReactNode, memo, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus } from "lucide-react";
 import {
@@ -19,6 +27,7 @@ import {
   type SideBySideCell,
 } from "@/lib/diffView";
 import { openExternalUrl } from "@/lib/openExternal";
+import { isEditableTarget } from "@/lib/utils";
 import { LoadingState, ErrorState, PreviewEmptyState } from "@/components/StateDisplay";
 import { PrThreadCard } from "./PrThreadCard";
 
@@ -32,6 +41,22 @@ function loadViewMode(): ViewMode {
   return window.localStorage.getItem(VIEW_MODE_STORAGE_KEY) === "unified"
     ? "unified"
     : "split";
+}
+
+function viewedStorageKey(pr: ReviewPullRequestSummary): string {
+  return `azdodeck:prViewed:${pr.organizationId}:${pr.repositoryId}:${pr.pullRequestId}`;
+}
+
+function loadViewedKeys(key: string): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(key);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return new Set(
+      Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [],
+    );
+  } catch {
+    return new Set();
+  }
 }
 
 type ChangeBadge = { label: string; cls: string };
@@ -78,6 +103,13 @@ export function PrFilesTab({
   // Target-side line number where a new inline comment is being drafted.
   const [commentLine, setCommentLine] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [viewedKeys, setViewedKeys] = useState<Set<string>>(() =>
+    loadViewedKeys(viewedStorageKey(pr)),
+  );
+  // Thread the n/p shortcuts last jumped to (for ordering).
+  const [focusedThreadId, setFocusedThreadId] = useState<number | null>(null);
+  const fileListRef = useRef<HTMLDivElement | null>(null);
+  const diffScrollRef = useRef<HTMLDivElement | null>(null);
 
   const changesQuery = useQuery({
     queryKey: ["prChanges", pr.organizationId, pr.repositoryId, pr.pullRequestId],
@@ -94,7 +126,9 @@ export function PrFilesTab({
     setSelectedPath(null);
     setCommentLine(null);
     setActionError(null);
-  }, [pr.pullRequestId, pr.repositoryId]);
+    setFocusedThreadId(null);
+    setViewedKeys(loadViewedKeys(viewedStorageKey(pr)));
+  }, [pr]);
 
   useEffect(() => {
     setCommentLine(null);
@@ -155,6 +189,39 @@ export function PrFilesTab({
     return map;
   }, [threads, selectedFile]);
 
+  // Viewed state is keyed by file path + target commit, so a new iteration
+  // re-surfaces files for review (GitHub resets "viewed" when content changes).
+  const targetCommit = changes?.targetCommitId ?? "";
+  const fileViewedKey = useCallback(
+    (path: string) => `${pathKey(path)}@${targetCommit}`,
+    [targetCommit],
+  );
+  const viewedCount = files.reduce(
+    (count, file) => count + (viewedKeys.has(fileViewedKey(file.path)) ? 1 : 0),
+    0,
+  );
+
+  // Unresolved file-anchored threads in file/line order, for n/p navigation.
+  const orderedUnresolvedThreads = useMemo(() => {
+    const result: { threadId: number; filePath: string; rightLine: number }[] = [];
+    for (const file of files) {
+      const key = pathKey(file.path);
+      const fileThreads = (threads ?? [])
+        .filter(
+          (thread) =>
+            thread.filePath &&
+            thread.rightLine != null &&
+            !thread.isResolved &&
+            pathKey(thread.filePath) === key,
+        )
+        .sort((a, b) => (a.rightLine ?? 0) - (b.rightLine ?? 0));
+      for (const thread of fileThreads) {
+        result.push({ threadId: thread.id, filePath: file.path, rightLine: thread.rightLine as number });
+      }
+    }
+    return result;
+  }, [files, threads]);
+
   const diffQuery = useQuery({
     // Commit ids are part of the key so a new iteration does not serve a stale
     // cached diff.
@@ -184,6 +251,63 @@ export function PrFilesTab({
     setActionError(null);
     setCommentLine(line);
   }, []);
+
+  // Scroll the n/p-focused thread into view once its file's diff is rendered.
+  useEffect(() => {
+    if (focusedThreadId == null) return;
+    const entry = orderedUnresolvedThreads.find((thread) => thread.threadId === focusedThreadId);
+    if (!entry || entry.filePath !== selectedPath) return;
+    const target = diffScrollRef.current?.querySelector(
+      `[data-comment-line="${entry.rightLine}"]`,
+    );
+    target?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [focusedThreadId, selectedPath, orderedUnresolvedThreads, diffQuery.data]);
+
+  function toggleViewed(path: string) {
+    setViewedKeys((prev) => {
+      const next = new Set(prev);
+      const key = fileViewedKey(path);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      window.localStorage.setItem(viewedStorageKey(pr), JSON.stringify([...next]));
+      return next;
+    });
+  }
+
+  function handleFilesKeyDown(event: React.KeyboardEvent) {
+    if (isEditableTarget(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.key === "j" || event.key === "k") {
+      if (files.length === 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const index = files.findIndex((file) => file.path === selectedPath);
+      const delta = event.key === "j" ? 1 : -1;
+      const nextIndex =
+        index < 0
+          ? event.key === "j"
+            ? 0
+            : files.length - 1
+          : Math.max(0, Math.min(files.length - 1, index + delta));
+      setSelectedPath(files[nextIndex].path);
+      return;
+    }
+    if (event.key === "n" || event.key === "p") {
+      if (orderedUnresolvedThreads.length === 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const current = orderedUnresolvedThreads.findIndex((t) => t.threadId === focusedThreadId);
+      const delta = event.key === "n" ? 1 : -1;
+      const nextIndex =
+        current < 0
+          ? event.key === "n"
+            ? 0
+            : orderedUnresolvedThreads.length - 1
+          : (current + delta + orderedUnresolvedThreads.length) % orderedUnresolvedThreads.length;
+      const entry = orderedUnresolvedThreads[nextIndex];
+      setSelectedPath(entry.filePath);
+      setFocusedThreadId(entry.threadId);
+    }
+  }
 
   if (changesQuery.isLoading) return <LoadingState />;
   if (changesQuery.isError) return <ErrorState message={commandErrorMessage(changesQuery.error)} />;
@@ -220,7 +344,10 @@ export function PrFilesTab({
     const drafting = commentLine === rightLine;
     if (lineThreads.length === 0 && !drafting) return null;
     return (
-      <div className="space-y-1 border-y border-border bg-muted/30 px-2 py-1.5 font-sans whitespace-normal">
+      <div
+        data-comment-line={rightLine}
+        className="space-y-1 border-y border-border bg-muted/30 px-2 py-1.5 font-sans whitespace-normal"
+      >
         {lineThreads.map((thread) => (
           <PrThreadCard
             key={thread.id}
@@ -247,23 +374,46 @@ export function PrFilesTab({
       className="flex min-h-0 flex-1 flex-col outline-none"
       data-primary-preview="true"
       tabIndex={-1}
+      onKeyDown={handleFilesKeyDown}
     >
+      {/* File list header with review progress */}
+      <div className="flex shrink-0 items-center justify-between border-b border-border bg-gray-50 px-2 py-1 text-[11px] text-muted-foreground">
+        <span>
+          {files.length} file{files.length === 1 ? "" : "s"} ·{" "}
+          <span className={viewedCount === files.length ? "font-medium text-green-700" : ""}>
+            {viewedCount}/{files.length} viewed
+          </span>
+        </span>
+        <span className="text-muted-foreground/70">j/k files · n/p comments</span>
+      </div>
+
       {/* File list */}
-      <div className="max-h-[40%] shrink-0 overflow-y-auto border-b border-border">
+      <div ref={fileListRef} className="max-h-[40%] shrink-0 overflow-y-auto border-b border-border">
         {files.map((file) => {
           const badge = changeTypeBadge(file.changeType);
           const threadCount = activeThreadCounts.get(pathKey(file.path)) ?? 0;
           const selected = file.path === selectedPath;
+          const viewed = viewedKeys.has(fileViewedKey(file.path));
           return (
-            <button
+            <div
               key={file.path}
-              type="button"
+              role="button"
+              tabIndex={-1}
               onClick={() => setSelectedPath(file.path)}
-              className={`flex w-full items-center gap-1.5 px-2 py-1 text-left text-xs ${
+              className={`flex w-full cursor-pointer items-center gap-1.5 px-2 py-1 text-left text-xs ${
                 selected ? "bg-secondary" : "hover:bg-muted/50"
-              }`}
+              } ${viewed ? "opacity-55" : ""}`}
               title={file.path}
             >
+              <input
+                type="checkbox"
+                checked={viewed}
+                onClick={(event) => event.stopPropagation()}
+                onChange={() => toggleViewed(file.path)}
+                aria-label={`Mark ${file.path} as viewed`}
+                title="Mark viewed"
+                className="h-3 w-3 shrink-0"
+              />
               <span
                 className={`inline-flex w-4 shrink-0 items-center justify-center rounded border text-[10px] font-semibold ${badge.cls}`}
                 aria-label={file.changeType}
@@ -272,7 +422,10 @@ export function PrFilesTab({
               </span>
               {/* dir=rtl keeps the filename visible when truncating; the LRM
                   mark stops the leading slash from jumping to the end. */}
-              <span className="min-w-0 flex-1 truncate font-mono" dir="rtl">
+              <span
+                className={`min-w-0 flex-1 truncate font-mono ${viewed ? "line-through" : ""}`}
+                dir="rtl"
+              >
                 {`‎${file.path}`}
               </span>
               {threadCount > 0 ? (
@@ -280,7 +433,7 @@ export function PrFilesTab({
                   {threadCount}
                 </span>
               ) : null}
-            </button>
+            </div>
           );
         })}
       </div>
@@ -326,7 +479,7 @@ export function PrFilesTab({
       ) : null}
 
       {/* Diff */}
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div ref={diffScrollRef} className="min-h-0 flex-1 overflow-auto">
         {!selectedFile ? (
           <PreviewEmptyState message="Select a file to view its diff." />
         ) : diffQuery.isLoading ? (
