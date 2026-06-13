@@ -1,6 +1,8 @@
 import {
   type CSSProperties,
   type FormEvent,
+  type ReactNode,
+  Fragment,
   forwardRef,
   useEffect,
   useRef,
@@ -31,6 +33,7 @@ import {
 } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
+import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { ErrorState } from '@/components/StateDisplay';
 import { PrReviewPanel } from './PrReviewPanel';
 
@@ -268,15 +271,112 @@ function activeColumnFilterCount(
   ).length;
 }
 
-const PR_SEARCH_COLUMNS: { label: string; filterKey?: PrSearchFilterableColumn }[] = [
-  { label: "PR#" },
-  { label: "Status", filterKey: "status" },
-  { label: "Title" },
-  { label: "Repository", filterKey: "repository" },
-  { label: "Author", filterKey: "createdBy" },
-  { label: "Date" },
-  { label: "Branch", filterKey: "branch" },
+type PrSearchColumnKey =
+  | "pullRequestId"
+  | "status"
+  | "title"
+  | "repository"
+  | "author"
+  | "date"
+  | "branch";
+const PR_SEARCH_KEYS: PrSearchColumnKey[] = [
+  "pullRequestId",
+  "status",
+  "title",
+  "repository",
+  "author",
+  "date",
+  "branch",
 ];
+const PR_SEARCH_COLUMN_LABELS: Record<PrSearchColumnKey, string> = {
+  pullRequestId: "PR#",
+  status: "Status",
+  title: "Title",
+  repository: "Repository",
+  author: "Author",
+  date: "Date",
+  branch: "Branch",
+};
+const PR_SEARCH_REQUIRED_COLUMNS: PrSearchColumnKey[] = ["pullRequestId", "title"];
+const PR_SEARCH_COLUMN_FILTER_KEY: Partial<Record<PrSearchColumnKey, PrSearchFilterableColumn>> = {
+  status: "status",
+  repository: "repository",
+  author: "createdBy",
+  branch: "branch",
+};
+const PR_SEARCH_VISIBLE_COLUMNS_STORAGE_KEY = "azdodeck:layout:prSearchVisibleColumns:v1";
+
+function loadPrSearchVisibleColumns(): PrSearchColumnKey[] {
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(PR_SEARCH_VISIBLE_COLUMNS_STORAGE_KEY) ?? "null",
+    );
+    if (!Array.isArray(parsed)) return [...PR_SEARCH_KEYS];
+    const set = new Set(
+      parsed.filter((v): v is PrSearchColumnKey => PR_SEARCH_KEYS.includes(v as PrSearchColumnKey)),
+    );
+    for (const required of PR_SEARCH_REQUIRED_COLUMNS) set.add(required);
+    const ordered = PR_SEARCH_KEYS.filter((key) => set.has(key));
+    return ordered.length > 0 ? ordered : [...PR_SEARCH_KEYS];
+  } catch {
+    return [...PR_SEARCH_KEYS];
+  }
+}
+
+// Cells stay direct grid items (keyed Fragment) so the column template lines up.
+function renderPrSearchCell(key: PrSearchColumnKey, pr: PullRequestSummary): ReactNode {
+  switch (key) {
+    case "pullRequestId":
+      return (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); if (pr.webUrl) openExternalUrl(pr.webUrl); }}
+          className="truncate text-left font-mono text-xs text-primary hover:underline"
+          title={`PR #${pr.pullRequestId}`}
+        >
+          #{pr.pullRequestId}
+        </button>
+      );
+    case "status": {
+      const statusColor = PR_STATUS_COLORS[pr.status] ?? "bg-secondary text-foreground border-border";
+      return (
+        <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-medium capitalize ${statusColor}`}>
+          {pr.status}
+        </span>
+      );
+    }
+    case "title":
+      return (
+        <span className="truncate font-medium text-foreground" title={pr.title}>
+          {pr.title}
+        </span>
+      );
+    case "repository":
+      return (
+        <span className="truncate text-xs text-muted-foreground" title={`${pr.projectName} / ${pr.repositoryName}`}>
+          {pr.projectName} / {pr.repositoryName}
+        </span>
+      );
+    case "author":
+      return (
+        <span className="truncate text-sm text-muted-foreground" title={pr.createdBy ?? "Unknown"}>
+          {pr.createdBy ?? "Unknown"}
+        </span>
+      );
+    case "date":
+      return (
+        <span className="text-xs text-muted-foreground" title={formatDate(pr.creationDate)}>
+          {formatRelativeDate(pr.creationDate)}
+        </span>
+      );
+    case "branch":
+      return (
+        <span className="truncate text-xs text-muted-foreground" title={`${pr.sourceRefName} → ${pr.targetRefName}`}>
+          {pr.sourceRefName} → {pr.targetRefName}
+        </span>
+      );
+  }
+}
 
 function PullRequestResults({
   activeExternalFilterCount = 0,
@@ -303,6 +403,10 @@ function PullRequestResults({
   const [columnFilters, setColumnFilters] = useState<Partial<Record<PrSearchFilterableColumn, Set<string>>>>({});
   const [openFilterCol, setOpenFilterCol] = useState<PrSearchFilterableColumn | null>(null);
   const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
+  const [visibleColumns, setVisibleColumns] = useState<PrSearchColumnKey[]>(
+    loadPrSearchVisibleColumns,
+  );
+  const [columnMenuRect, setColumnMenuRect] = useState<DOMRect | null>(null);
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const [maximized, setMaximized] = useState(false);
   const [previewWidth, setPreviewWidth] = useState(() =>
@@ -327,6 +431,10 @@ function PullRequestResults({
   }, [previewWidth]);
 
   useEffect(() => {
+    localStorage.setItem(PR_SEARCH_VISIBLE_COLUMNS_STORAGE_KEY, JSON.stringify(visibleColumns));
+  }, [visibleColumns]);
+
+  useEffect(() => {
     if (!scrollerEl) return;
 
     function updateViewport() {
@@ -347,7 +455,24 @@ function PullRequestResults({
     };
   }, [scrollerEl]);
 
-  const columnTemplate = gridColumnTemplate(columnWidths, 2);
+  function toggleColumnVisibility(column: PrSearchColumnKey) {
+    if (PR_SEARCH_REQUIRED_COLUMNS.includes(column)) return;
+    setVisibleColumns((current) =>
+      current.includes(column)
+        ? current.filter((value) => value !== column)
+        : PR_SEARCH_KEYS.filter((value) => value === column || current.includes(value)),
+    );
+  }
+
+  function resetColumnVisibility() {
+    setVisibleColumns([...PR_SEARCH_KEYS]);
+  }
+
+  const visibleColumnWidths = visibleColumns.map(
+    (column) => columnWidths[PR_SEARCH_KEYS.indexOf(column)],
+  );
+  const titleFlexIndex = Math.max(0, visibleColumns.indexOf("title"));
+  const columnTemplate = gridColumnTemplate(visibleColumnWidths, titleFlexIndex);
 
   const columnUniqueValues = useMemo(() => {
     const map = {} as Record<PrSearchFilterableColumn, string[]>;
@@ -576,6 +701,13 @@ function PullRequestResults({
               </button>
             </>
           ) : null}
+          <button
+            type="button"
+            onClick={(event) => setColumnMenuRect(event.currentTarget.getBoundingClientRect())}
+            className="rounded border border-border bg-white px-2 py-0.5 text-xs hover:bg-secondary"
+          >
+            Columns
+          </button>
         </span>
       </div>
       {!searched && !loading ? (
@@ -602,36 +734,41 @@ function PullRequestResults({
             className="grid border-b border-border bg-muted/40 px-2 py-1 text-xs font-medium text-muted-foreground"
             style={{ gridTemplateColumns: columnTemplate }}
           >
-            {PR_SEARCH_COLUMNS.map((column, i) => (
-              <div key={column.label} role="columnheader" className="relative min-w-0 px-1">
-                <div className="flex min-w-0 items-center">
-                  <span className="truncate">{column.label}</span>
-                  {column.filterKey ? (
-                    <button
-                      type="button"
-                      aria-label={`Filter by ${column.label}`}
-                      onClick={(event) => openFilter(column.filterKey!, event.currentTarget)}
-                      className={`ml-1 shrink-0 rounded p-0.5 focus:outline-none focus:ring-1 focus:ring-ring ${
-                        columnFilters[column.filterKey]?.size
-                          ? "text-primary"
-                          : "text-muted-foreground/40 hover:text-muted-foreground"
-                      }`}
-                    >
-                      <Filter className="h-3 w-3" aria-hidden="true" />
-                    </button>
-                  ) : null}
+            {visibleColumns.map((key, i) => {
+              const fullIndex = PR_SEARCH_KEYS.indexOf(key);
+              const filterKey = PR_SEARCH_COLUMN_FILTER_KEY[key];
+              const isLast = i === visibleColumns.length - 1;
+              return (
+                <div key={key} role="columnheader" className="relative min-w-0 px-1">
+                  <div className="flex min-w-0 items-center">
+                    <span className="truncate">{PR_SEARCH_COLUMN_LABELS[key]}</span>
+                    {filterKey ? (
+                      <button
+                        type="button"
+                        aria-label={`Filter by ${PR_SEARCH_COLUMN_LABELS[key]}`}
+                        onClick={(event) => openFilter(filterKey, event.currentTarget)}
+                        className={`ml-1 shrink-0 rounded p-0.5 focus:outline-none focus:ring-1 focus:ring-ring ${
+                          columnFilters[filterKey]?.size
+                            ? "text-primary"
+                            : "text-muted-foreground/40 hover:text-muted-foreground"
+                        }`}
+                      >
+                        <Filter className="h-3 w-3" aria-hidden="true" />
+                      </button>
+                    ) : null}
+                  </div>
+                  {isLast ? null : (
+                    <ColumnResizeHandle
+                      columnIndex={fullIndex}
+                      widths={columnWidths}
+                      setWidths={setColumnWidths}
+                      min={PR_SEARCH_COLUMN_MIN_WIDTHS[fullIndex]}
+                      max={PR_SEARCH_COLUMN_MAX_WIDTHS[fullIndex]}
+                    />
+                  )}
                 </div>
-                {i < PR_SEARCH_COLUMNS.length - 1 && (
-                  <ColumnResizeHandle
-                    columnIndex={i}
-                    widths={columnWidths}
-                    setWidths={setColumnWidths}
-                    min={PR_SEARCH_COLUMN_MIN_WIDTHS[i]}
-                    max={PR_SEARCH_COLUMN_MAX_WIDTHS[i]}
-                  />
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
           {loading ? (
             <div className="flex min-h-32 items-center justify-center">
@@ -660,6 +797,7 @@ function PullRequestResults({
                     pr={pr}
                     selected={index === selectedIndex}
                     columnTemplate={columnTemplate}
+                    visibleColumns={visibleColumns}
                     onSelect={() => setSelectedIndex(index)}
                   />
                 );
@@ -706,6 +844,17 @@ function PullRequestResults({
             setOpenFilterCol(null);
             setFilterAnchorRect(null);
           }}
+        />
+      ) : null}
+      {columnMenuRect ? (
+        <ColumnVisibilityMenu
+          anchorRect={columnMenuRect}
+          columns={PR_SEARCH_KEYS.map((key) => ({ key, label: PR_SEARCH_COLUMN_LABELS[key] }))}
+          visibleColumns={visibleColumns}
+          requiredColumns={PR_SEARCH_REQUIRED_COLUMNS}
+          onToggle={toggleColumnVisibility}
+          onReset={resetColumnVisibility}
+          onClose={() => setColumnMenuRect(null)}
         />
       ) : null}
     </div>
@@ -821,10 +970,10 @@ const PrSearchRow = forwardRef<
     pr: PullRequestSummary;
     selected: boolean;
     columnTemplate: string;
+    visibleColumns: PrSearchColumnKey[];
     onSelect: () => void;
   }
->(({ pr, selected, columnTemplate, onSelect }, ref) => {
-  const statusColor = PR_STATUS_COLORS[pr.status] ?? "bg-secondary text-foreground border-border";
+>(({ pr, selected, columnTemplate, visibleColumns, onSelect }, ref) => {
   return (
     <div
       ref={ref}
@@ -845,32 +994,9 @@ const PrSearchRow = forwardRef<
       }`}
       style={{ gridTemplateColumns: columnTemplate }}
     >
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); if (pr.webUrl) openExternalUrl(pr.webUrl); }}
-        className="truncate text-left font-mono text-xs text-primary hover:underline"
-        title={`PR #${pr.pullRequestId}`}
-      >
-        #{pr.pullRequestId}
-      </button>
-      <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-medium capitalize ${statusColor}`}>
-        {pr.status}
-      </span>
-      <span className="truncate font-medium text-foreground" title={pr.title}>
-        {pr.title}
-      </span>
-      <span className="truncate text-xs text-muted-foreground" title={`${pr.projectName} / ${pr.repositoryName}`}>
-        {pr.projectName} / {pr.repositoryName}
-      </span>
-      <span className="truncate text-sm text-muted-foreground" title={pr.createdBy ?? "Unknown"}>
-        {pr.createdBy ?? "Unknown"}
-      </span>
-      <span className="text-xs text-muted-foreground" title={formatDate(pr.creationDate)}>
-        {formatRelativeDate(pr.creationDate)}
-      </span>
-      <span className="truncate text-xs text-muted-foreground" title={`${pr.sourceRefName} → ${pr.targetRefName}`}>
-        {pr.sourceRefName} → {pr.targetRefName}
-      </span>
+      {visibleColumns.map((key) => (
+        <Fragment key={key}>{renderPrSearchCell(key, pr)}</Fragment>
+      ))}
     </div>
   );
 });
