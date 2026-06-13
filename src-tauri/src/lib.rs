@@ -18,8 +18,8 @@ mod sync;
 mod work_items;
 
 use commits::{
-    CommitRepositoryOption, CommitService, CommitSummary, ListCommitRepositoriesInput,
-    SearchCommitsInput,
+    CommitChangeSet, CommitFileDiff, CommitRepositoryOption, CommitService, CommitSummary,
+    GetCommitChangesInput, GetCommitFileDiffInput, ListCommitRepositoriesInput, SearchCommitsInput,
 };
 use db::{AppDatabase, AppSettings, Organization, SyncState};
 use error::{AppError, Result};
@@ -528,6 +528,24 @@ async fn list_commit_repositories(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn get_commit_changes(
+    input: GetCommitChangesInput,
+    state: State<'_, AppState>,
+) -> Result<CommitChangeSet> {
+    state.commits.get_commit_changes(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn get_commit_file_diff(
+    input: GetCommitFileDiffInput,
+    state: State<'_, AppState>,
+) -> Result<CommitFileDiff> {
+    state.commits.get_commit_file_diff(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn list_pipeline_projects(
     input: ListPipelineProjectsInput,
     state: State<'_, AppState>,
@@ -727,6 +745,8 @@ pub fn run() {
             set_work_items_priority,
             search_commits,
             list_commit_repositories,
+            get_commit_changes,
+            get_commit_file_diff,
             list_pipeline_projects,
             list_pipeline_runs,
             list_pipeline_definitions,
