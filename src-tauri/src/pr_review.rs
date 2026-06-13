@@ -77,6 +77,23 @@ pub struct SubmitPullRequestVoteInput {
     pub vote: i32,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListPullRequestCommitsInput {
+    #[serde(flatten)]
+    pub pr: PrLocator,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrCommit {
+    pub commit_id: String,
+    pub short_commit_id: String,
+    pub comment: String,
+    pub author_name: Option<String>,
+    pub author_date: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PullRequestReview {
@@ -371,6 +388,44 @@ impl PrReviewService {
         map_threads(vec![thread]).into_iter().next().ok_or_else(|| {
             AppError::InvalidInput("updated thread has no visible comments".to_string())
         })
+    }
+
+    pub async fn list_commits(&self, input: ListPullRequestCommitsInput) -> Result<Vec<PrCommit>> {
+        let organization = self.resolve_organization(input.pr.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let commits = client
+            .list_pull_request_commits(
+                &input.pr.project_id,
+                &input.pr.repository_id,
+                input.pr.pull_request_id,
+            )
+            .await?;
+        Ok(commits
+            .into_iter()
+            .map(|commit| {
+                let comment = commit
+                    .comment
+                    .unwrap_or_default()
+                    .lines()
+                    .next()
+                    .unwrap_or_default()
+                    .to_string();
+                PrCommit {
+                    short_commit_id: commit.commit_id.chars().take(8).collect(),
+                    commit_id: commit.commit_id,
+                    comment,
+                    author_name: commit
+                        .author
+                        .as_ref()
+                        .and_then(|author| author.name.clone()),
+                    author_date: commit
+                        .author
+                        .as_ref()
+                        .and_then(|author| author.date)
+                        .map(|date| date.to_rfc3339()),
+                }
+            })
+            .collect())
     }
 
     pub async fn submit_vote(&self, input: SubmitPullRequestVoteInput) -> Result<PrReviewer> {

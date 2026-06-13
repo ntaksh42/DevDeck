@@ -24,9 +24,9 @@ use error::{AppError, Result};
 use orgs::{AddAzureCliOrganizationInput, AddPatOrganizationInput, OrganizationService};
 use pr_review::{
     GetPullRequestFileDiffInput, GetPullRequestReviewInput, ListPullRequestChangesInput,
-    PostPullRequestCommentInput, PrFileDiff, PrReviewService, PrReviewer, PrThread,
-    PullRequestChanges, PullRequestReview, SetPullRequestThreadStatusInput,
-    SubmitPullRequestVoteInput,
+    ListPullRequestCommitsInput, PostPullRequestCommentInput, PrCommit, PrFileDiff,
+    PrReviewService, PrReviewer, PrThread, PullRequestChanges, PullRequestReview,
+    SetPullRequestThreadStatusInput, SubmitPullRequestVoteInput,
 };
 use prs::{
     ListMyReviewPullRequestsInput, PullRequestService, PullRequestSummary,
@@ -210,6 +210,15 @@ async fn get_pull_request_file_diff(
     state: State<'_, AppState>,
 ) -> Result<PrFileDiff> {
     state.pr_review.get_file_diff(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn list_pull_request_commits(
+    input: ListPullRequestCommitsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<PrCommit>> {
+    state.pr_review.list_commits(input).await
 }
 
 #[tauri::command]
@@ -644,6 +653,7 @@ pub fn run() {
             get_pull_request_review,
             list_pull_request_changes,
             get_pull_request_file_diff,
+            list_pull_request_commits,
             post_pull_request_comment,
             set_pull_request_thread_status,
             submit_pull_request_vote,
