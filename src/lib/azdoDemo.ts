@@ -117,6 +117,7 @@ const writeCommands = new Set([
   "post_pull_request_comment",
   "set_pull_request_thread_status",
   "submit_pull_request_vote",
+  "update_pull_request",
   "edit_pull_request_comment",
   "delete_pull_request_comment",
   "rerun_pipeline_run",
@@ -666,6 +667,14 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         voteLabel: demoVoteLabel(input.vote),
         isRequired: true,
         isMe: true,
+      };
+    }
+    case "update_pull_request": {
+      const input = (args as { input?: { action?: string } } | undefined)?.input;
+      const action = input?.action;
+      return {
+        status: action === "abandon" ? "abandoned" : action === "complete" ? "completed" : "active",
+        isDraft: action === "publish" ? false : true,
       };
     }
     case "search_work_items": {

@@ -808,6 +808,27 @@ export async function submitPullRequestVote(
   return prReviewerSchema.parse(result);
 }
 
+const prStatusResultSchema = z.object({
+  status: z.string().nullable(),
+  isDraft: z.boolean(),
+});
+export type PrStatusResult = z.infer<typeof prStatusResultSchema>;
+
+export type PullRequestAction = "abandon" | "reactivate" | "publish" | "complete";
+
+export async function updatePullRequest(input: {
+  organizationId?: string;
+  projectId: string;
+  repositoryId: string;
+  pullRequestId: number;
+  action: PullRequestAction;
+  mergeStrategy?: string;
+  deleteSourceBranch?: boolean;
+}): Promise<PrStatusResult> {
+  const result = await invokeCommand("update_pull_request", { input });
+  return prStatusResultSchema.parse(result);
+}
+
 export async function searchPullRequestMentions(
   input: SearchPullRequestMentionsInput,
 ): Promise<MentionCandidate[]> {
