@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, Result};
 
-const SCHEMA_VERSION: i64 = 10;
+const SCHEMA_VERSION: i64 = 11;
 
 /// Max rows kept in the my_work_items snapshot queries; sync notification
 /// diffing must know this cap to avoid treating re-entering rows as new.
@@ -41,6 +41,9 @@ pub struct AppSettings {
     pub notification_content_preview_enabled: bool,
     pub notify_work_item_assignments: bool,
     pub notify_work_item_state_changes: bool,
+    pub notify_pr_review_requests: bool,
+    pub notify_pr_vote_resets: bool,
+    pub notify_pr_comment_replies: bool,
 }
 
 impl Default for AppSettings {
@@ -53,6 +56,9 @@ impl Default for AppSettings {
             notification_content_preview_enabled: true,
             notify_work_item_assignments: true,
             notify_work_item_state_changes: true,
+            notify_pr_review_requests: true,
+            notify_pr_vote_resets: true,
+            notify_pr_comment_replies: true,
         }
     }
 }
@@ -242,6 +248,27 @@ impl AppDatabase {
     pub fn update_app_settings(&self, settings: AppSettings) -> Result<AppSettings> {
         let conn = self.open()?;
         update_app_settings(&conn, settings)
+    }
+
+    pub fn get_pr_comment_seen(
+        &self,
+        org_id: &str,
+        repository_id: &str,
+        pull_request_id: i64,
+    ) -> Result<Option<i64>> {
+        let conn = self.open()?;
+        get_pr_comment_seen(&conn, org_id, repository_id, pull_request_id)
+    }
+
+    pub fn set_pr_comment_seen(
+        &self,
+        org_id: &str,
+        repository_id: &str,
+        pull_request_id: i64,
+        last_seen_comment_id: i64,
+    ) -> Result<()> {
+        let conn = self.open()?;
+        set_pr_comment_seen(&conn, org_id, repository_id, pull_request_id, last_seen_comment_id)
     }
 
     // ── Pull requests cache ───────────────────────────────────────────────────
@@ -1009,6 +1036,22 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             "#,
         )?;
     }
+    if current < 11 {
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS pr_comment_seen(
+                organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                repository_id TEXT NOT NULL,
+                pull_request_id INTEGER NOT NULL,
+                last_seen_comment_id INTEGER NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (organization_id, repository_id, pull_request_id)
+            );
+
+            PRAGMA user_version = 11;
+            "#,
+        )?;
+    }
     Ok(())
 }
 
@@ -1140,6 +1183,9 @@ fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
             "notify_work_item_state_changes",
             true,
         )?,
+        notify_pr_review_requests: get_bool_setting(conn, "notify_pr_review_requests", true)?,
+        notify_pr_vote_resets: get_bool_setting(conn, "notify_pr_vote_resets", true)?,
+        notify_pr_comment_replies: get_bool_setting(conn, "notify_pr_comment_replies", true)?,
     })
 }
 
@@ -1179,6 +1225,17 @@ fn update_app_settings(conn: &Connection, settings: AppSettings) -> Result<AppSe
         "notify_work_item_state_changes",
         settings.notify_work_item_state_changes,
     )?;
+    set_bool_setting(
+        conn,
+        "notify_pr_review_requests",
+        settings.notify_pr_review_requests,
+    )?;
+    set_bool_setting(conn, "notify_pr_vote_resets", settings.notify_pr_vote_resets)?;
+    set_bool_setting(
+        conn,
+        "notify_pr_comment_replies",
+        settings.notify_pr_comment_replies,
+    )?;
     get_app_settings(conn)
 }
 
@@ -1207,6 +1264,47 @@ fn set_setting(conn: &Connection, key: &str, value: Option<&str>) -> Result<()> 
             conn.execute("DELETE FROM app_settings WHERE key = ?1", [key])?;
         }
     }
+    Ok(())
+}
+
+fn get_pr_comment_seen(
+    conn: &Connection,
+    org_id: &str,
+    repository_id: &str,
+    pull_request_id: i64,
+) -> Result<Option<i64>> {
+    Ok(conn
+        .query_row(
+            "SELECT last_seen_comment_id FROM pr_comment_seen \
+             WHERE organization_id = ?1 AND repository_id = ?2 AND pull_request_id = ?3",
+            params![org_id, repository_id, pull_request_id],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
+fn set_pr_comment_seen(
+    conn: &Connection,
+    org_id: &str,
+    repository_id: &str,
+    pull_request_id: i64,
+    last_seen_comment_id: i64,
+) -> Result<()> {
+    conn.execute(
+        r#"
+        INSERT INTO pr_comment_seen(organization_id, repository_id, pull_request_id, last_seen_comment_id, updated_at)
+        VALUES (?1, ?2, ?3, ?4, ?5)
+        ON CONFLICT(organization_id, repository_id, pull_request_id)
+        DO UPDATE SET last_seen_comment_id = excluded.last_seen_comment_id, updated_at = excluded.updated_at
+        "#,
+        params![
+            org_id,
+            repository_id,
+            pull_request_id,
+            last_seen_comment_id,
+            Utc::now().to_rfc3339()
+        ],
+    )?;
     Ok(())
 }
 
@@ -1908,6 +2006,24 @@ mod tests {
     }
 
     #[test]
+    fn pr_comment_seen_roundtrips() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        upsert_organization(&conn, make_org_draft("org")).unwrap();
+        assert_eq!(get_pr_comment_seen(&conn, "org", "repo", 42).unwrap(), None);
+        set_pr_comment_seen(&conn, "org", "repo", 42, 100).unwrap();
+        assert_eq!(
+            get_pr_comment_seen(&conn, "org", "repo", 42).unwrap(),
+            Some(100)
+        );
+        set_pr_comment_seen(&conn, "org", "repo", 42, 150).unwrap();
+        assert_eq!(
+            get_pr_comment_seen(&conn, "org", "repo", 42).unwrap(),
+            Some(150)
+        );
+    }
+
+    #[test]
     fn migrate_v1_db_upgrades_to_latest() {
         let conn = Connection::open_in_memory().unwrap();
         conn.pragma_update(None, "foreign_keys", "ON").unwrap();
@@ -2043,6 +2159,9 @@ mod tests {
                 notification_content_preview_enabled: false,
                 notify_work_item_assignments: true,
                 notify_work_item_state_changes: false,
+                notify_pr_review_requests: false,
+                notify_pr_vote_resets: true,
+                notify_pr_comment_replies: false,
             },
         )
         .unwrap();
@@ -2056,6 +2175,9 @@ mod tests {
         assert!(!saved.notification_content_preview_enabled);
         assert!(saved.notify_work_item_assignments);
         assert!(!saved.notify_work_item_state_changes);
+        assert!(!saved.notify_pr_review_requests);
+        assert!(saved.notify_pr_vote_resets);
+        assert!(!saved.notify_pr_comment_replies);
 
         let cleared = update_app_settings(
             &conn,

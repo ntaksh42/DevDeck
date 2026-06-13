@@ -8,7 +8,7 @@ use tokio::time::{interval_at, Instant, MissedTickBehavior};
 
 use crate::auth::client_for_organization;
 use crate::commits::sync_commits_for_org;
-use crate::db::{AppDatabase, AppSettings, CachedWorkItem, MY_WORK_ITEMS_LIMIT};
+use crate::db::{AppDatabase, AppSettings, CachedReviewPr, CachedWorkItem, MY_WORK_ITEMS_LIMIT};
 use crate::prs::sync_prs_for_org;
 use crate::secrets::SecretStore;
 use crate::work_items::sync_work_items_for_org;
@@ -68,6 +68,79 @@ enum WorkItemNotificationKind {
     StateChanged,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PullRequestNotificationEvent {
+    pub organization_id: String,
+    pub organization_name: String,
+    pub items: Vec<PrNotificationItem>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PrNotificationItem {
+    pub kind: PrNotificationKind,
+    pub pull_request_id: i64,
+    pub title: String,
+    pub repository_name: String,
+    pub project_name: String,
+    pub web_url: Option<String>,
+    pub comment_author: Option<String>,
+    pub snippet: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum PrNotificationKind {
+    ReviewRequested,
+    VoteReset,
+    CommentReply,
+}
+
+fn pr_review_item(pr: &CachedReviewPr, kind: PrNotificationKind) -> PrNotificationItem {
+    PrNotificationItem {
+        kind,
+        pull_request_id: pr.pull_request_id,
+        title: pr.title.clone(),
+        repository_name: pr.repository_name.clone(),
+        project_name: pr.project_name.clone(),
+        web_url: pr.web_url.clone(),
+        comment_author: None,
+        snippet: None,
+    }
+}
+
+/// Diffs the review-PR cache snapshots taken before and after a sync to find new
+/// review requests (a PR newly present) and vote resets (a reviewer's vote moving
+/// from non-zero back to zero). Comment replies are handled separately because
+/// they require fetching threads. On the very first snapshot (`previous` empty)
+/// review requests are suppressed to avoid backfilling every existing PR.
+pub fn pr_review_notification_items(
+    previous: &[CachedReviewPr],
+    current: &[CachedReviewPr],
+    settings: &AppSettings,
+) -> Vec<PrNotificationItem> {
+    let prev_by_id: HashMap<i64, &CachedReviewPr> =
+        previous.iter().map(|pr| (pr.pull_request_id, pr)).collect();
+    let first_snapshot = previous.is_empty();
+    let mut items = Vec::new();
+    for pr in current {
+        match prev_by_id.get(&pr.pull_request_id) {
+            None => {
+                if settings.notify_pr_review_requests && !first_snapshot {
+                    items.push(pr_review_item(pr, PrNotificationKind::ReviewRequested));
+                }
+            }
+            Some(prev) => {
+                if settings.notify_pr_vote_resets && prev.my_vote != 0 && pr.my_vote == 0 {
+                    items.push(pr_review_item(pr, PrNotificationKind::VoteReset));
+                }
+            }
+        }
+    }
+    items
+}
+
 impl SyncRunner {
     pub fn new(db: AppDatabase, secrets: SecretStore) -> Self {
         Self { db, secrets }
@@ -122,6 +195,10 @@ impl SyncRunner {
         };
         let should_collect_work_item_notifications = settings.desktop_notifications_enabled
             && (settings.notify_work_item_assignments || settings.notify_work_item_state_changes);
+        let should_collect_pr_notifications = settings.desktop_notifications_enabled
+            && (settings.notify_pr_review_requests
+                || settings.notify_pr_vote_resets
+                || settings.notify_pr_comment_replies);
 
         let orgs = match self.db.list_organizations() {
             Ok(orgs) => orgs,
@@ -142,10 +219,42 @@ impl SyncRunner {
                 scope,
                 SyncScope::All | SyncScope::Hot | SyncScope::MyReviews
             ) {
+                let previous_reviews = if should_collect_pr_notifications {
+                    self.db.list_review_pull_requests(&org.id).unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
                 if let Err(e) = sync_prs_for_org(&self.db, &client, &org).await {
                     tracing::error!(org = %org.name, error = ?e, "sync: PR sync failed");
                 } else {
                     emit_sync_updated(handle, &org.id, vec![SyncScope::MyReviews]);
+                    if should_collect_pr_notifications {
+                        let current_reviews =
+                            self.db.list_review_pull_requests(&org.id).unwrap_or_default();
+                        let mut items = pr_review_notification_items(
+                            &previous_reviews,
+                            &current_reviews,
+                            &settings,
+                        );
+                        if settings.notify_pr_comment_replies {
+                            items.extend(
+                                crate::prs::collect_pr_comment_notifications(
+                                    &self.db, &client, &org,
+                                )
+                                .await,
+                            );
+                        }
+                        if !items.is_empty() {
+                            let event = PullRequestNotificationEvent {
+                                organization_id: org.id.clone(),
+                                organization_name: org.name.clone(),
+                                items,
+                            };
+                            if let Err(e) = handle.emit("notifications:pull-requests", event) {
+                                tracing::warn!(org = %org.name, error = ?e, "sync: failed to emit PR notification event");
+                            }
+                        }
+                    }
                 }
             }
             let previous_my_work_items = if should_collect_work_item_notifications {
@@ -325,6 +434,65 @@ mod tests {
         let current = vec![work_item(1, "New item", Some("To Do"))];
 
         assert!(work_item_notification_items(&[], &current, &settings).is_empty());
+    }
+
+    fn review_pr(pr_id: i64, my_vote: i32) -> CachedReviewPr {
+        CachedReviewPr {
+            org_id: "o".into(),
+            project_id: "p".into(),
+            project_name: "Proj".into(),
+            repository_id: "r".into(),
+            repository_name: "Repo".into(),
+            pull_request_id: pr_id,
+            title: format!("PR {pr_id}"),
+            created_by: None,
+            creation_date: "2026-06-01T00:00:00Z".into(),
+            target_ref_name: "main".into(),
+            web_url: Some("https://x/pr".into()),
+            my_vote,
+            my_vote_label: String::new(),
+            my_is_required: true,
+            is_draft: false,
+            merge_status: None,
+        }
+    }
+
+    fn pr_settings(review: bool, reset: bool) -> AppSettings {
+        AppSettings {
+            desktop_notifications_enabled: true,
+            notify_pr_review_requests: review,
+            notify_pr_vote_resets: reset,
+            ..AppSettings::default()
+        }
+    }
+
+    #[test]
+    fn pr_review_items_flags_new_review_and_vote_reset() {
+        let prev = vec![review_pr(1, 10), review_pr(2, 0)];
+        let curr = vec![review_pr(1, 0), review_pr(2, 0), review_pr(3, 0)];
+        let items = pr_review_notification_items(&prev, &curr, &pr_settings(true, true));
+        assert!(items
+            .iter()
+            .any(|i| i.pull_request_id == 1 && i.kind == PrNotificationKind::VoteReset));
+        assert!(items
+            .iter()
+            .any(|i| i.pull_request_id == 3 && i.kind == PrNotificationKind::ReviewRequested));
+        assert_eq!(items.len(), 2);
+    }
+
+    #[test]
+    fn pr_review_items_suppressed_on_first_snapshot() {
+        let curr = vec![review_pr(1, 0), review_pr(2, 0)];
+        let items = pr_review_notification_items(&[], &curr, &pr_settings(true, true));
+        assert!(items.is_empty());
+    }
+
+    #[test]
+    fn pr_review_items_respect_toggles() {
+        let prev = vec![review_pr(1, 10)];
+        let curr = vec![review_pr(1, 0), review_pr(2, 0)];
+        let items = pr_review_notification_items(&prev, &curr, &pr_settings(false, false));
+        assert!(items.is_empty());
     }
 
     #[test]

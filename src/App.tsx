@@ -94,7 +94,9 @@ const PullRequestSearch = lazy(() =>
 );
 import {
   showWorkItemNotificationEvent,
+  showPullRequestNotificationEvent,
   type WorkItemNotificationEvent,
+  type PullRequestNotificationEvent,
 } from "@/lib/desktopNotifications";
 
 type View =
@@ -877,6 +879,26 @@ function AppShell() {
         cleanup = unlisten;
       })
       .catch((e) => console.error("notifications:work-items listen failed", e));
+    return () => cleanup?.();
+  }, []);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let cleanup: (() => void) | undefined;
+    listen<PullRequestNotificationEvent>(
+      "notifications:pull-requests",
+      (event) => {
+        const settings = appSettingsRef.current;
+        if (!settings) return;
+        void showPullRequestNotificationEvent(event.payload, settings);
+      },
+    )
+      .then((unlisten) => {
+        cleanup = unlisten;
+      })
+      .catch((e) =>
+        console.error("notifications:pull-requests listen failed", e),
+      );
     return () => cleanup?.();
   }, []);
 
