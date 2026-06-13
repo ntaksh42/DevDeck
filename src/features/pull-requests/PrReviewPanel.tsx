@@ -78,6 +78,22 @@ export function PrReviewPanel({
     staleTime: 60_000,
   });
 
+  const settingsQuery = useQuery({
+    queryKey: ["appSettings"],
+    queryFn: getAppSettings,
+    staleTime: 5 * 60_000,
+  });
+  // The Result tab only surfaces a local HTML folder, so hide it until one is
+  // configured instead of showing an empty "not configured" tab.
+  const hasReviewResultFolder = !!settingsQuery.data?.reviewResultFolderPath;
+  const tabs = hasReviewResultFolder
+    ? PANEL_TABS
+    : PANEL_TABS.filter((option) => option.key !== "result");
+
+  useEffect(() => {
+    if (!hasReviewResultFolder && tab === "result") setTab("review");
+  }, [hasReviewResultFolder, tab]);
+
   // Esc / ← step back to the grid from anywhere in the preview that is not a
   // text field (composer Esc is handled locally and stops propagation first).
   function handlePreviewKeyDown(event: React.KeyboardEvent) {
@@ -139,7 +155,7 @@ export function PrReviewPanel({
 
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-2 py-1.5">
         <div className="flex items-center gap-0.5 rounded-md border border-border bg-gray-50 p-0.5" role="tablist" aria-label="PR review tabs">
-          {PANEL_TABS.map((option) => (
+          {tabs.map((option) => (
             <button
               key={option.key}
               type="button"
