@@ -3,6 +3,7 @@ pub mod client;
 pub mod error;
 pub mod git;
 pub mod identity;
+pub mod pipelines;
 pub mod pr_review;
 pub mod work_items;
 
@@ -14,6 +15,10 @@ pub use git::{
     IdentityRefWithVote, PullRequestStatus, TeamProject,
 };
 pub use identity::{AuthenticatedUser, ConnectionData, Identity, IdentityPickerIdentity};
+pub use pipelines::{
+    Build, BuildDefinitionRef, BuildIdentityRef, BuildListCriteria, BuildLogTail, Timeline,
+    TimelineLogRef, TimelineRecord,
+};
 pub use pr_review::{
     GitChangeEntry, GitChangeItem, GitCommitRefId, GitContentMetadata, GitFilePosition,
     GitItemContent, GitIteration, GitPullRequestDetail, GitThread, GitThreadComment,

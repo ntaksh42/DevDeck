@@ -270,6 +270,58 @@ impl AdoClient {
         unreachable!("retry policy always has at least one attempt")
     }
 
+    pub(crate) async fn get_text(&self, path: &str, query: &[(&str, &str)]) -> Result<String> {
+        let url = self
+            .base_url
+            .join(path)
+            .map_err(|e| AdoError::Auth(e.to_string()))?;
+
+        for attempt in 1..=self.retry_policy.attempts() {
+            let auth = self.auth.auth_header_value().await?;
+            let response = self
+                .http
+                .get(url.clone())
+                .query(query)
+                .header("Authorization", &auth)
+                .send()
+                .await;
+
+            match response {
+                Ok(resp) => {
+                    let status = resp.status();
+                    if status.is_success() {
+                        return Ok(resp.text().await?);
+                    }
+                    if status == StatusCode::UNAUTHORIZED {
+                        return Err(AdoError::Unauthorized);
+                    }
+                    let retry_after = parse_retry_after(resp.headers());
+                    if self.should_retry_status(status, attempt) {
+                        let delay = self.retry_delay(attempt, retry_after);
+                        sleep(delay).await;
+                        continue;
+                    }
+                    if status == StatusCode::TOO_MANY_REQUESTS {
+                        return Err(AdoError::RateLimited(
+                            retry_after.unwrap_or(Duration::from_secs(60)),
+                        ));
+                    }
+                    let body = resp.text().await.unwrap_or_default();
+                    return Err(AdoError::Api {
+                        status: status.as_u16(),
+                        body,
+                    });
+                }
+                Err(error) if self.should_retry_error(&error, attempt) => {
+                    sleep(self.retry_policy.backoff_delay(attempt)).await;
+                }
+                Err(error) => return Err(AdoError::Network(error)),
+            }
+        }
+
+        unreachable!("retry policy always has at least one attempt")
+    }
+
     pub(crate) async fn post_json<B: Serialize + ?Sized, T: DeserializeOwned>(
         &self,
         path: &str,
@@ -740,6 +792,23 @@ mod tests {
             data.authenticated_user.provider_display_name.as_deref(),
             Some("Test User")
         );
+    }
+
+    #[tokio::test]
+    async fn get_text_returns_plain_body() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/build/builds/9/logs/3"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("line1\nline2\nline3"))
+            .mount(&server)
+            .await;
+
+        let client = test_client(&server).await;
+        let body = client
+            .get_text("project-1/_apis/build/builds/9/logs/3", &[])
+            .await
+            .unwrap();
+        assert_eq!(body, "line1\nline2\nline3");
     }
 
     #[tokio::test]
