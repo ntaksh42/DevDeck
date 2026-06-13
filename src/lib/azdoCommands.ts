@@ -951,6 +951,141 @@ export async function getSavedQuery(
   return savedQueryResultSchema.parse(result);
 }
 
+const pipelineProjectOptionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+const pipelineProjectOptionsSchema = z.array(pipelineProjectOptionSchema);
+export type PipelineProjectOption = z.infer<typeof pipelineProjectOptionSchema>;
+
+const pipelineDefinitionOptionSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+});
+const pipelineDefinitionOptionsSchema = z.array(pipelineDefinitionOptionSchema);
+export type PipelineDefinitionOption = z.infer<typeof pipelineDefinitionOptionSchema>;
+
+const pipelineRunSummarySchema = z.object({
+  organizationId: z.string(),
+  projectId: z.string(),
+  projectName: z.string(),
+  buildId: z.number(),
+  buildNumber: z.string().nullable(),
+  definitionId: z.number().nullable(),
+  definitionName: z.string().nullable(),
+  status: z.string().nullable(),
+  result: z.string().nullable(),
+  sourceBranch: z.string().nullable(),
+  reason: z.string().nullable(),
+  requestedFor: z.string().nullable(),
+  queueTime: z.string().nullable(),
+  startTime: z.string().nullable(),
+  finishTime: z.string().nullable(),
+  webUrl: z.string(),
+});
+const pipelineRunSummariesSchema = z.array(pipelineRunSummarySchema);
+export type PipelineRunSummary = z.infer<typeof pipelineRunSummarySchema>;
+
+const timelineNodeSchema = z.object({
+  id: z.string(),
+  parentId: z.string().nullable(),
+  nodeType: z.string().nullable(),
+  name: z.string().nullable(),
+  state: z.string().nullable(),
+  result: z.string().nullable(),
+  startTime: z.string().nullable(),
+  finishTime: z.string().nullable(),
+  logId: z.number().nullable(),
+  errorCount: z.number(),
+  warningCount: z.number(),
+  order: z.number().nullable(),
+});
+export type TimelineNode = z.infer<typeof timelineNodeSchema>;
+
+const pipelineRunDetailSchema = z.object({
+  run: pipelineRunSummarySchema,
+  timeline: z.array(timelineNodeSchema),
+});
+export type PipelineRunDetail = z.infer<typeof pipelineRunDetailSchema>;
+
+const pipelineLogTailSchema = z.object({
+  lines: z.array(z.string()),
+  truncated: z.boolean(),
+});
+export type PipelineLogTail = z.infer<typeof pipelineLogTailSchema>;
+
+export type ListPipelineRunsInput = {
+  organizationId?: string;
+  projectId: string;
+  definitionId?: number;
+  branch?: string;
+  result?: string;
+  status?: string;
+  requestedForMe?: boolean;
+};
+
+export async function listPipelineProjects(input: {
+  organizationId?: string;
+}): Promise<PipelineProjectOption[]> {
+  const result = await invokeCommand("list_pipeline_projects", { input });
+  return pipelineProjectOptionsSchema.parse(result);
+}
+
+export async function listPipelineRuns(
+  input: ListPipelineRunsInput,
+): Promise<PipelineRunSummary[]> {
+  const result = await invokeCommand("list_pipeline_runs", { input });
+  return pipelineRunSummariesSchema.parse(result);
+}
+
+export async function listPipelineDefinitions(input: {
+  organizationId?: string;
+  projectId: string;
+  nameFilter?: string;
+}): Promise<PipelineDefinitionOption[]> {
+  const result = await invokeCommand("list_pipeline_definitions", { input });
+  return pipelineDefinitionOptionsSchema.parse(result);
+}
+
+export async function getPipelineRun(input: {
+  organizationId?: string;
+  projectId: string;
+  buildId: number;
+}): Promise<PipelineRunDetail> {
+  const result = await invokeCommand("get_pipeline_run", { input });
+  return pipelineRunDetailSchema.parse(result);
+}
+
+export async function getPipelineRunLogTail(input: {
+  organizationId?: string;
+  projectId: string;
+  buildId: number;
+  logId: number;
+  maxLines?: number;
+}): Promise<PipelineLogTail> {
+  const result = await invokeCommand("get_pipeline_run_log_tail", { input });
+  return pipelineLogTailSchema.parse(result);
+}
+
+export async function rerunPipelineRun(input: {
+  organizationId?: string;
+  projectId: string;
+  definitionId: number;
+  sourceBranch: string;
+}): Promise<PipelineRunSummary> {
+  const result = await invokeCommand("rerun_pipeline_run", { input });
+  return pipelineRunSummarySchema.parse(result);
+}
+
+export async function cancelPipelineRun(input: {
+  organizationId?: string;
+  projectId: string;
+  buildId: number;
+}): Promise<PipelineRunSummary> {
+  const result = await invokeCommand("cancel_pipeline_run", { input });
+  return pipelineRunSummarySchema.parse(result);
+}
+
 export async function searchCommits(
   input: SearchCommitsInput,
 ): Promise<CommitSummary[]> {
