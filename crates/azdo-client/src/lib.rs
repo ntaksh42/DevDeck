@@ -3,6 +3,7 @@ pub mod client;
 pub mod error;
 pub mod git;
 pub mod identity;
+pub mod pr_review;
 pub mod work_items;
 
 pub use auth::{AdoCredentialProvider, AzureCliProvider, PatProvider};
@@ -13,6 +14,9 @@ pub use git::{
     IdentityRefWithVote, PullRequestStatus, TeamProject,
 };
 pub use identity::{AuthenticatedUser, ConnectionData, Identity, IdentityPickerIdentity};
+pub use pr_review::{
+    GitFilePosition, GitPullRequestDetail, GitThread, GitThreadComment, GitThreadContext,
+};
 pub use work_items::{
     WorkItem, WorkItemComment, WorkItemFieldDefinition, WorkItemLink, WorkItemReference,
     WorkItemRelation, WorkItemUpdate,
