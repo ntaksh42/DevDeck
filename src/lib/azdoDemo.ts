@@ -360,8 +360,9 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         title: summary?.title ?? `Demo pull request #${prId}`,
         description:
           "## Summary\nImproves the dashboard loading flow.\n\n- configurable refresh interval\n- removes the legacy loader",
-        sourceRefName: "refs/heads/feature/dashboard-loading",
-        targetRefName: `refs/heads/${summary?.targetRefName ?? "main"}`,
+        // Backend strips refs/heads/ in get_review; mirror that here.
+        sourceRefName: "feature/dashboard-loading",
+        targetRefName: summary?.targetRefName ?? "main",
         createdBy: summary?.createdBy ?? "Avery Author",
         creationDate: summary?.creationDate ?? "2026-05-20T08:00:00Z",
         isDraft: summary?.isDraft ?? false,
