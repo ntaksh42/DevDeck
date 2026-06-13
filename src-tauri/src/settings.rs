@@ -16,6 +16,9 @@ pub struct UpdateAppSettingsInput {
     pub notification_content_preview_enabled: Option<bool>,
     pub notify_work_item_assignments: Option<bool>,
     pub notify_work_item_state_changes: Option<bool>,
+    pub notify_pr_review_requests: Option<bool>,
+    pub notify_pr_vote_resets: Option<bool>,
+    pub notify_pr_comment_replies: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,6 +66,9 @@ pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
             .unwrap_or(true),
         notify_work_item_assignments: input.notify_work_item_assignments.unwrap_or(true),
         notify_work_item_state_changes: input.notify_work_item_state_changes.unwrap_or(true),
+        notify_pr_review_requests: input.notify_pr_review_requests.unwrap_or(true),
+        notify_pr_vote_resets: input.notify_pr_vote_resets.unwrap_or(true),
+        notify_pr_comment_replies: input.notify_pr_comment_replies.unwrap_or(true),
     }
 }
 
