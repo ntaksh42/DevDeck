@@ -18,6 +18,10 @@ pub struct GitPullRequestDetail {
     pub creation_date: Option<DateTime<Utc>>,
     pub reviewers: Option<Vec<IdentityRefWithVote>>,
     pub is_draft: Option<bool>,
+    pub status: Option<String>,
+    /// Tip of the source branch; required when completing a PR to guard against
+    /// merging a stale revision.
+    pub last_merge_source_commit: Option<GitCommitRefId>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -266,6 +270,25 @@ impl AdoClient {
             &[("api-version", "7.1-preview")],
             "application/json",
             &body,
+        )
+        .await
+    }
+
+    pub async fn update_pull_request(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        pull_request_id: i64,
+        body: &serde_json::Value,
+    ) -> Result<GitPullRequestDetail> {
+        let path = format!(
+            "{project_id}/_apis/git/repositories/{repository_id}/pullrequests/{pull_request_id}"
+        );
+        self.patch_json(
+            &path,
+            &[("api-version", "7.1-preview")],
+            "application/json",
+            body,
         )
         .await
     }
@@ -664,6 +687,45 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(thread.status.as_deref(), Some("closed"));
+    }
+
+    #[tokio::test]
+    async fn update_pull_request_patches_completion() {
+        let server = MockServer::start().await;
+        Mock::given(method("PATCH"))
+            .and(path(
+                "/project-1/_apis/git/repositories/repo-1/pullrequests/42",
+            ))
+            .and(body_partial_json(
+                serde_json::json!({ "status": "completed" }),
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "pullRequestId": 42,
+                "title": "Add dashboard",
+                "sourceRefName": "refs/heads/feature",
+                "targetRefName": "refs/heads/main",
+                "status": "completed",
+                "isDraft": false
+            })))
+            .mount(&server)
+            .await;
+
+        let detail = test_client(&server)
+            .await
+            .update_pull_request(
+                "project-1",
+                "repo-1",
+                42,
+                &serde_json::json!({
+                    "status": "completed",
+                    "lastMergeSourceCommit": { "commitId": "abc" },
+                    "completionOptions": { "mergeStrategy": "squash" }
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(detail.status.as_deref(), Some("completed"));
+        assert_eq!(detail.is_draft, Some(false));
     }
 
     #[tokio::test]

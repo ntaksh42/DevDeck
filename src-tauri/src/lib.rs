@@ -33,8 +33,9 @@ use pipelines::{
 use pr_review::{
     DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
     PostPullRequestCommentInput, PrCommit, PrFileDiff, PrLocator, PrReviewService, PrReviewer,
-    PrThread, PullRequestChanges, PullRequestReview, SearchPullRequestMentionsInput,
-    SetPullRequestThreadStatusInput, SubmitPullRequestVoteInput,
+    PrStatusResult, PrThread, PullRequestChanges, PullRequestReview,
+    SearchPullRequestMentionsInput, SetPullRequestThreadStatusInput, SubmitPullRequestVoteInput,
+    UpdatePullRequestInput,
 };
 use prs::{
     ListMyReviewPullRequestsInput, PullRequestService, PullRequestSummary,
@@ -256,6 +257,16 @@ async fn submit_pull_request_vote(
 ) -> Result<PrReviewer> {
     ensure_write_enabled(&state)?;
     state.pr_review.submit_vote(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn update_pull_request(
+    input: UpdatePullRequestInput,
+    state: State<'_, AppState>,
+) -> Result<PrStatusResult> {
+    ensure_write_enabled(&state)?;
+    state.pr_review.update_pull_request(input).await
 }
 
 #[tauri::command]
@@ -717,6 +728,7 @@ pub fn run() {
             post_pull_request_comment,
             set_pull_request_thread_status,
             submit_pull_request_vote,
+            update_pull_request,
             search_pull_request_mentions,
             edit_pull_request_comment,
             delete_pull_request_comment,

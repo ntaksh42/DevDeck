@@ -67,6 +67,25 @@ pub struct SubmitPullRequestVoteInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct UpdatePullRequestInput {
+    #[serde(flatten)]
+    pub pr: PrLocator,
+    /// "abandon" | "reactivate" | "publish" | "complete"
+    pub action: String,
+    /// Required for "complete": noFastForward | squash | rebase | rebaseMerge
+    pub merge_strategy: Option<String>,
+    pub delete_source_branch: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrStatusResult {
+    pub status: Option<String>,
+    pub is_draft: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchPullRequestMentionsInput {
     pub organization_id: Option<String>,
     pub query: String,
@@ -408,6 +427,74 @@ impl PrReviewService {
             })
     }
 
+    pub async fn update_pull_request(
+        &self,
+        input: UpdatePullRequestInput,
+    ) -> Result<PrStatusResult> {
+        let organization = self
+            .db
+            .resolve_organization(input.pr.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let body = match input.action.as_str() {
+            "abandon" => serde_json::json!({ "status": "abandoned" }),
+            "reactivate" => serde_json::json!({ "status": "active" }),
+            "publish" => serde_json::json!({ "isDraft": false }),
+            "complete" => {
+                let merge_strategy = input
+                    .merge_strategy
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .ok_or_else(|| {
+                        AppError::InvalidInput(
+                            "merge strategy is required to complete a pull request".to_string(),
+                        )
+                    })?;
+                validate_merge_strategy(merge_strategy)?;
+                let detail = client
+                    .get_pull_request_detail(
+                        &input.pr.project_id,
+                        &input.pr.repository_id,
+                        input.pr.pull_request_id,
+                    )
+                    .await?;
+                let last_commit = detail
+                    .last_merge_source_commit
+                    .map(|c| c.commit_id)
+                    .ok_or_else(|| {
+                        AppError::InvalidInput(
+                            "pull request has no source commit to merge".to_string(),
+                        )
+                    })?;
+                serde_json::json!({
+                    "status": "completed",
+                    "lastMergeSourceCommit": { "commitId": last_commit },
+                    "completionOptions": {
+                        "mergeStrategy": merge_strategy,
+                        "deleteSourceBranch": input.delete_source_branch.unwrap_or(false),
+                    }
+                })
+            }
+            other => {
+                return Err(AppError::InvalidInput(format!(
+                    "unknown pull request action: {other}"
+                )))
+            }
+        };
+        let updated = client
+            .update_pull_request(
+                &input.pr.project_id,
+                &input.pr.repository_id,
+                input.pr.pull_request_id,
+                &body,
+            )
+            .await?;
+        Ok(PrStatusResult {
+            status: updated.status,
+            is_draft: updated.is_draft.unwrap_or(false),
+        })
+    }
+
     pub async fn edit_comment(&self, input: EditPullRequestCommentInput) -> Result<PrThread> {
         let content = input.content.trim();
         if content.is_empty() {
@@ -639,6 +726,19 @@ fn validate_thread_status(status: &str) -> Result<()> {
     }
 }
 
+fn validate_merge_strategy(strategy: &str) -> Result<()> {
+    if matches!(
+        strategy,
+        "noFastForward" | "squash" | "rebase" | "rebaseMerge"
+    ) {
+        Ok(())
+    } else {
+        Err(AppError::InvalidInput(format!(
+            "invalid merge strategy: {strategy}"
+        )))
+    }
+}
+
 async fn fetch_side(
     client: &azdo_client::AdoClient,
     pr: &PrLocator,
@@ -788,6 +888,15 @@ mod tests {
         assert!(validate_thread_status("active").is_ok());
         assert!(validate_thread_status("closed").is_ok());
         assert!(validate_thread_status("fixed").is_err());
+    }
+
+    #[test]
+    fn validate_merge_strategy_accepts_known_strategies() {
+        for strategy in ["noFastForward", "squash", "rebase", "rebaseMerge"] {
+            assert!(validate_merge_strategy(strategy).is_ok());
+        }
+        assert!(validate_merge_strategy("ff").is_err());
+        assert!(validate_merge_strategy("").is_err());
     }
 
     #[test]
