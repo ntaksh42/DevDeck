@@ -40,6 +40,7 @@ import {
   storedNumber,
   isEditableTarget,
   focusWorkItemCommentInput,
+  focusFilterInput,
   focusPrimaryGrid,
   focusPrimaryPreview,
   focusViewsPanel,
@@ -637,17 +638,7 @@ function AppShell() {
       keywords: ["search", "find"],
       label: "Focus filter",
       run: () => {
-        const filterInput = document.querySelector<HTMLInputElement>(
-          [
-            "[data-filter-input='true']",
-            "input[aria-label='Filter']",
-            "input[type='search']",
-            "input[placeholder*='Filter']",
-            "input[placeholder*='Search']",
-          ].join(","),
-        );
-        filterInput?.focus();
-        filterInput?.select();
+        focusFilterInput();
       },
       shortcut: "Ctrl+F",
     },
@@ -958,20 +949,7 @@ function AppShell() {
         !event.shiftKey &&
         (event.key === "f" || event.key === "F")
       ) {
-        const filterInput = document.querySelector<HTMLInputElement>(
-          [
-            "[data-filter-input='true']",
-            "input[aria-label='Filter']",
-            "input[type='search']",
-            "input[placeholder*='Filter']",
-            "input[placeholder*='Search']",
-          ].join(","),
-        );
-        if (filterInput && !filterInput.disabled && !filterInput.hidden) {
-          event.preventDefault();
-          filterInput.focus();
-          filterInput.select();
-        }
+        if (focusFilterInput()) event.preventDefault();
         return;
       }
 

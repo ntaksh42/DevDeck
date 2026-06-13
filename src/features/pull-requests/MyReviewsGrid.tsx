@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronDown, ChevronUp, Filter, Search, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronUp, Filter, Search, X } from 'lucide-react';
 import {
   listMyReviewPullRequests,
   commandErrorMessage,
@@ -217,7 +217,6 @@ const ReviewPrRow = forwardRef<
 });
 ReviewPrRow.displayName = "ReviewPrRow";
 
-type VoteFilter = "noVote" | "approved" | "waitingAuthor" | "all";
 type SortKey =
   | "pullRequestId"
   | "repositoryName"
@@ -367,22 +366,31 @@ function isFilterableColumn(column: SortKey): column is FilterableColumn {
 }
 
 type MyReviewsGridViewState = {
+  collapsedSections: Set<ReviewSection>;
   columnFilters: Partial<Record<FilterableColumn, Set<string>>>;
   organizationId: string;
   showDrafts: boolean;
   sort: SortState;
   textFilter: string;
-  voteFilter: VoteFilter;
 };
+
+// Everything except the actionable "Needs your review" section starts folded,
+// preserving the old "focus on what needs a vote" default without a filter.
+const DEFAULT_COLLAPSED_SECTIONS: ReviewSection[] = [
+  "waitingAuthor",
+  "approved",
+  "rejected",
+  "draft",
+];
 
 function defaultMyReviewsGridViewState(): MyReviewsGridViewState {
   return {
+    collapsedSections: new Set(DEFAULT_COLLAPSED_SECTIONS),
     columnFilters: {},
     organizationId: "",
     showDrafts: false,
     sort: { key: "creationDate", direction: "desc" },
     textFilter: "",
-    voteFilter: "noVote",
   };
 }
 
@@ -397,9 +405,14 @@ function loadMyReviewsGridViewState(): MyReviewsGridViewState {
       (parsed.sort.direction === "asc" || parsed.sort.direction === "desc")
         ? { key: parsed.sort.key as SortKey, direction: parsed.sort.direction as SortDirection }
         : fallback.sort;
-    const voteFilter = voteFilterOptions.some((option) => option.value === parsed.voteFilter)
-      ? (parsed.voteFilter as VoteFilter)
-      : fallback.voteFilter;
+    const collapsedSections = Array.isArray(parsed.collapsedSections)
+      ? new Set(
+          (parsed.collapsedSections as unknown[]).filter(
+            (value): value is ReviewSection =>
+              REVIEW_SECTION_ORDER.includes(value as ReviewSection),
+          ),
+        )
+      : fallback.collapsedSections;
     const columnFilters: Partial<Record<FilterableColumn, Set<string>>> = {};
     const parsedFilters = parsed.columnFilters;
     if (parsedFilters && typeof parsedFilters === "object" && !Array.isArray(parsedFilters)) {
@@ -412,12 +425,12 @@ function loadMyReviewsGridViewState(): MyReviewsGridViewState {
       }
     }
     return {
+      collapsedSections,
       columnFilters,
       organizationId: typeof parsed.organizationId === "string" ? parsed.organizationId : "",
       showDrafts: typeof parsed.showDrafts === "boolean" ? parsed.showDrafts : fallback.showDrafts,
       sort,
       textFilter: typeof parsed.textFilter === "string" ? parsed.textFilter : fallback.textFilter,
-      voteFilter,
     };
   } catch {
     return fallback;
@@ -432,7 +445,11 @@ function storeMyReviewsGridViewState(state: MyReviewsGridViewState) {
   }
   window.localStorage.setItem(
     PR_GRID_VIEW_STORAGE_KEY,
-    JSON.stringify({ ...state, columnFilters }),
+    JSON.stringify({
+      ...state,
+      columnFilters,
+      collapsedSections: [...state.collapsedSections],
+    }),
   );
 }
 
@@ -443,13 +460,6 @@ function activeColumnFilterCount(
     (values) => values && values.size > 0,
   ).length;
 }
-
-const voteFilterOptions: { value: VoteFilter; label: string }[] = [
-  { value: "noVote", label: "No Vote" },
-  { value: "waitingAuthor", label: "Waiting Author" },
-  { value: "approved", label: "Approved" },
-  { value: "all", label: "All" },
-];
 
 export function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
   const initialViewState = useMemo(() => loadMyReviewsGridViewState(), []);
@@ -467,7 +477,9 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
   });
 
   const [textFilter, setTextFilter] = useState(initialViewState.textFilter);
-  const [voteFilter, setVoteFilter] = useState<VoteFilter>(initialViewState.voteFilter);
+  const [collapsedSections, setCollapsedSections] = useState<Set<ReviewSection>>(
+    initialViewState.collapsedSections,
+  );
   const [showDrafts, setShowDrafts] = useState(initialViewState.showDrafts);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [sort, setSort] = useState<SortState>(initialViewState.sort);
@@ -513,14 +525,14 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
 
   useEffect(() => {
     storeMyReviewsGridViewState({
+      collapsedSections,
       columnFilters,
       organizationId,
       showDrafts,
       sort,
       textFilter,
-      voteFilter,
     });
-  }, [columnFilters, organizationId, showDrafts, sort, textFilter, voteFilter]);
+  }, [collapsedSections, columnFilters, organizationId, showDrafts, sort, textFilter]);
 
   const allPrs = query.data ?? [];
 
@@ -550,12 +562,9 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
         pr.myVoteLabel,
       ]))
         return false;
-      if (voteFilter === "noVote" && pr.myVote !== 0) return false;
-      if (voteFilter === "approved" && pr.myVote !== 10 && pr.myVote !== 5) return false;
-      if (voteFilter === "waitingAuthor" && pr.myVote !== -5) return false;
       return true;
     });
-  }, [allPrs, archivedKeys, showDone, textFilter, voteFilter, showDrafts]);
+  }, [allPrs, archivedKeys, showDone, textFilter, showDrafts]);
 
   const columnUniqueValues = useMemo(() => {
     const map = {} as Record<FilterableColumn, string[]>;
@@ -597,10 +606,16 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
       .map(({ pr }) => pr);
   }, [filtered, sort]);
 
-  // Flattened row model with section headers, used by the virtualizer.
+  // Flattened row model with section headers, used by the virtualizer. A
+  // collapsed section keeps its header (with the full count) but drops its rows.
   const { reviewRows, prFlatIndexes } = useMemo(() => {
     const rows: ReviewRow[] = [];
     const flatIndexes: number[] = [];
+    const sectionCounts = new Map<ReviewSection, number>();
+    for (const pr of sortedPrs) {
+      const section = reviewSectionOf(pr);
+      sectionCounts.set(section, (sectionCounts.get(section) ?? 0) + 1);
+    }
     let currentSection: ReviewSection | null = null;
     sortedPrs.forEach((pr, prIndex) => {
       const section = reviewSectionOf(pr);
@@ -610,14 +625,26 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
           kind: "header",
           key: section,
           label: REVIEW_SECTION_LABELS[section],
-          count: sortedPrs.filter((candidate) => reviewSectionOf(candidate) === section).length,
+          count: sectionCounts.get(section) ?? 0,
         });
       }
-      flatIndexes[prIndex] = rows.length;
-      rows.push({ kind: "pr", pr, prIndex });
+      if (!collapsedSections.has(section)) {
+        flatIndexes[prIndex] = rows.length;
+        rows.push({ kind: "pr", pr, prIndex });
+      }
     });
     return { reviewRows: rows, prFlatIndexes: flatIndexes };
-  }, [sortedPrs]);
+  }, [sortedPrs, collapsedSections]);
+
+  // Indexes into sortedPrs that are currently visible (in expanded sections),
+  // in display order — the basis for keyboard navigation and selection clamping.
+  const visibleSortedIndexes = useMemo(() => {
+    const result: number[] = [];
+    sortedPrs.forEach((pr, index) => {
+      if (!collapsedSections.has(reviewSectionOf(pr))) result.push(index);
+    });
+    return result;
+  }, [sortedPrs, collapsedSections]);
 
   const resultKeysSignature = useMemo(
     () => sortedPrs.map((pr) => `${pr.organizationId}-${pr.pullRequestId}`).join("|"),
@@ -627,8 +654,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
   const visiblePrs = allPrs.filter((pr) => showDrafts || !pr.isDraft);
   const noVoteCount = visiblePrs.filter((pr) => pr.myVote === 0).length;
   const columnFilterCount = activeColumnFilterCount(columnFilters);
-  const activeFilterCount =
-    (textFilter.trim() ? 1 : 0) + (voteFilter !== "all" ? 1 : 0) + columnFilterCount;
+  const activeFilterCount = (textFilter.trim() ? 1 : 0) + columnFilterCount;
   const isFiltered = activeFilterCount > 0;
   const selectedPr = sortedPrs[selectedIndex] ?? null;
 
@@ -643,9 +669,20 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     );
   }, [previewWidth]);
 
+  // Keep the selection on a visible row: when data shrinks or the selected
+  // row's section gets collapsed, snap to the nearest still-visible row.
   useEffect(() => {
-    setSelectedIndex((index) => Math.min(index, Math.max(sortedPrs.length - 1, 0)));
-  }, [sortedPrs.length]);
+    if (visibleSortedIndexes.length === 0) {
+      setSelectedIndex(0);
+      return;
+    }
+    if (!visibleSortedIndexes.includes(selectedIndex)) {
+      const next =
+        visibleSortedIndexes.find((index) => index >= selectedIndex) ??
+        visibleSortedIndexes[visibleSortedIndexes.length - 1];
+      setSelectedIndex(next);
+    }
+  }, [visibleSortedIndexes, selectedIndex]);
 
   // A background sync can replace or remove the focused row's DOM node; once
   // the grid had focus, restore it to the selected row after data changes so
@@ -680,36 +717,46 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     };
   }, []);
 
-  function applyVoteFilter(value: VoteFilter) {
-    setVoteFilter(value);
-    setSelectedIndex(0);
-  }
-
   function focusRow(index: number) {
     rowRefs.current[index]?.focus();
   }
 
-  function moveSelection(index: number) {
-    const next = Math.max(0, Math.min(index, sortedPrs.length - 1));
-    setSelectedIndex(next);
+  function scrollPrIntoView(prIndex: number) {
     const scroller = gridScrollRef.current;
-    if (scroller) {
-      const flatIndex = prFlatIndexes[next] ?? next;
-      const rowTop = flatIndex * PR_GRID_ROW_HEIGHT;
-      const rowBottom = rowTop + PR_GRID_ROW_HEIGHT;
-      if (rowTop < scroller.scrollTop) {
-        scroller.scrollTop = rowTop;
-      } else if (rowBottom > scroller.scrollTop + scroller.clientHeight) {
-        scroller.scrollTop = rowBottom - scroller.clientHeight;
-      }
+    if (!scroller) return;
+    const flatIndex = prFlatIndexes[prIndex];
+    if (flatIndex == null) return;
+    const rowTop = flatIndex * PR_GRID_ROW_HEIGHT;
+    const rowBottom = rowTop + PR_GRID_ROW_HEIGHT;
+    if (rowTop < scroller.scrollTop) {
+      scroller.scrollTop = rowTop;
+    } else if (rowBottom > scroller.scrollTop + scroller.clientHeight) {
+      scroller.scrollTop = rowBottom - scroller.clientHeight;
     }
-    window.setTimeout(() => focusRow(next), 0);
   }
 
-  function moveVoteFilter(delta: number) {
-    const currentIndex = voteFilterOptions.findIndex((option) => option.value === voteFilter);
-    const nextIndex = (currentIndex + delta + voteFilterOptions.length) % voteFilterOptions.length;
-    applyVoteFilter(voteFilterOptions[nextIndex].value);
+  // Select the visible row at the given position within visibleSortedIndexes.
+  function selectVisiblePosition(position: number) {
+    if (visibleSortedIndexes.length === 0) return;
+    const clamped = Math.max(0, Math.min(position, visibleSortedIndexes.length - 1));
+    const prIndex = visibleSortedIndexes[clamped];
+    setSelectedIndex(prIndex);
+    scrollPrIntoView(prIndex);
+    window.setTimeout(() => focusRow(prIndex), 0);
+  }
+
+  function moveSelectionBy(delta: number) {
+    const position = visibleSortedIndexes.indexOf(selectedIndex);
+    selectVisiblePosition((position < 0 ? 0 : position) + delta);
+  }
+
+  function toggleSection(section: ReviewSection) {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(section)) next.delete(section);
+      else next.add(section);
+      return next;
+    });
   }
 
   function openFilter(col: FilterableColumn, anchorEl: HTMLButtonElement) {
@@ -756,7 +803,6 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
 
   function clearAllFilters() {
     setTextFilter("");
-    setVoteFilter("all");
     setColumnFilters({});
     setOpenFilterCol(null);
     setFilterAnchorRect(null);
@@ -774,23 +820,14 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
         setTextFilter("");
         setSelectedIndex(0);
         (e.target as HTMLElement).blur();
-      } else if (e.key === "ArrowDown" && filtered.length > 0) {
+      } else if (e.key === "ArrowDown" && visibleSortedIndexes.length > 0) {
         e.preventDefault();
-        moveSelection(selectedIndex);
+        const position = visibleSortedIndexes.indexOf(selectedIndex);
+        selectVisiblePosition(position < 0 ? 0 : position);
       }
       return;
     }
 
-    if (buttonTarget?.closest('[role="tablist"]') && e.key === "ArrowRight") {
-      e.preventDefault();
-      moveVoteFilter(1);
-      return;
-    }
-    if (buttonTarget?.closest('[role="tablist"]') && e.key === "ArrowLeft") {
-      e.preventDefault();
-      moveVoteFilter(-1);
-      return;
-    }
     if (buttonTarget && (e.key === "Enter" || e.key === " ")) {
       return;
     }
@@ -812,35 +849,21 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
       filterInputRef.current?.select();
       return;
     }
-    if (e.key === "1") {
-      e.preventDefault();
-      applyVoteFilter("noVote");
-      return;
-    }
-    if (e.key === "2") {
-      e.preventDefault();
-      applyVoteFilter("waitingAuthor");
-      return;
-    }
-    if (e.key === "3") {
-      e.preventDefault();
-      applyVoteFilter("approved");
-      return;
-    }
-    if (e.key === "4") {
-      e.preventDefault();
-      applyVoteFilter("all");
-      return;
-    }
     if (e.key === "d" || e.key === "D") {
       e.preventDefault();
       setShowDrafts((value) => !value);
       setSelectedIndex(0);
       return;
     }
-    if (e.key === "f" || e.key === "F") {
+    if (e.key === "\\") {
       e.preventDefault();
       setMaximized((value) => !value);
+      return;
+    }
+    if (e.key === "o" || e.key === "O") {
+      e.preventDefault();
+      const pr = sortedPrs[selectedIndex];
+      if (pr?.webUrl) openExternalUrl(pr.webUrl);
       return;
     }
     if (e.key === "e" || e.key === "E") {
@@ -873,36 +896,27 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
       clearAllFilters();
       return;
     }
-    if (e.key === "ArrowRight") {
+    if (visibleSortedIndexes.length === 0) return;
+    if (e.key === "ArrowDown" || e.key === "j" || e.key === "J") {
       e.preventDefault();
-      moveVoteFilter(1);
-      return;
-    }
-    if (e.key === "ArrowLeft") {
+      moveSelectionBy(1);
+    } else if (e.key === "ArrowUp" || e.key === "k" || e.key === "K") {
       e.preventDefault();
-      moveVoteFilter(-1);
-      return;
-    }
-    if (sortedPrs.length === 0) return;
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      moveSelection(selectedIndex + 1);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      moveSelection(selectedIndex - 1);
+      moveSelectionBy(-1);
     } else if (e.key === "Home") {
       e.preventDefault();
-      moveSelection(0);
+      selectVisiblePosition(0);
     } else if (e.key === "End") {
       e.preventDefault();
-      moveSelection(sortedPrs.length - 1);
+      selectVisiblePosition(visibleSortedIndexes.length - 1);
     } else if (e.key === "PageDown") {
       e.preventDefault();
-      moveSelection(selectedIndex + 10);
+      moveSelectionBy(10);
     } else if (e.key === "PageUp") {
       e.preventDefault();
-      moveSelection(selectedIndex - 10);
-    } else if (e.key === "Enter") {
+      moveSelectionBy(-10);
+    } else if (e.key === "Enter" || e.key === "ArrowRight") {
+      // Enter / → step into the preview; ← / Esc step back (handled there).
       e.preventDefault();
       focusPrimaryPreview();
     }
@@ -1006,33 +1020,6 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
           )}
         </div>
 
-        {/* Vote filter tabs */}
-        <div
-          className="flex items-center gap-0.5 rounded-md border border-border bg-gray-50 p-0.5"
-          role="tablist"
-          aria-label="Vote filter"
-        >
-          {voteFilterOptions.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => {
-                applyVoteFilter(opt.value);
-              }}
-              role="tab"
-              aria-selected={voteFilter === opt.value}
-              aria-pressed={voteFilter === opt.value}
-              className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
-                voteFilter === opt.value
-                  ? "bg-white text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-
         {/* Draft checkbox */}
         <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
           <input
@@ -1130,15 +1117,23 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
                   ) : null}
                   {virtualRows.map((row) => {
                     if (row.kind === "header") {
+                      const collapsed = collapsedSections.has(row.key);
                       return (
-                        <div
+                        <button
                           key={`header:${row.key}`}
-                          role="presentation"
-                          className="flex h-[29px] items-center gap-1.5 border-b border-border bg-muted/60 px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+                          type="button"
+                          onClick={() => toggleSection(row.key)}
+                          aria-expanded={!collapsed}
+                          className="flex h-[29px] w-full items-center gap-1 border-b border-border bg-muted/60 px-2 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground hover:bg-muted focus:outline-none focus:ring-1 focus:ring-inset focus:ring-ring"
                         >
+                          {collapsed ? (
+                            <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          ) : (
+                            <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          )}
                           {row.label}
                           <span className="font-normal normal-case">({row.count})</span>
-                        </div>
+                        </button>
                       );
                     }
                     return (

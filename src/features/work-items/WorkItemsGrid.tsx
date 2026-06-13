@@ -28,6 +28,7 @@ import {
   storedNumber,
   gridColumnTemplate,
   isEditableTarget,
+  focusFilterInput,
   focusPrimaryPreview,
   formatRelativeDate,
   type SortDirection,
@@ -1122,6 +1123,11 @@ export function WorkItemsGrid({
       }
       return;
     }
+    if (e.key === "/") {
+      e.preventDefault();
+      focusFilterInput();
+      return;
+    }
     if (displayed.length === 0) return;
     if (e.key === "ArrowDown" || e.key === "j" || e.key === "J") {
       e.preventDefault();
@@ -1141,7 +1147,7 @@ export function WorkItemsGrid({
     } else if (e.key === "PageUp") {
       e.preventDefault();
       moveSelection(selectedIndex - 10);
-    } else if (e.key === "Enter") {
+    } else if (e.key === "Enter" || e.key === "ArrowRight") {
       e.preventDefault();
       focusPrimaryPreview();
     } else if (e.key === "o" || e.key === "O") {

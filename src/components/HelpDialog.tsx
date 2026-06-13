@@ -45,25 +45,28 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Command palette</span><kbd className={kbd}>Ctrl+K</kbd></div>
           <div className={row}><span>Focus grid</span><kbd className={kbd}>Alt+G</kbd></div>
           <div className={row}><span>Focus preview</span><kbd className={kbd}>Alt+P</kbd></div>
+          <div className={row}><span>Grid → preview / back to grid</span><kbd className={kbd}>Enter / → · Esc / ←</kbd></div>
           <div className={row}><span>Focus views panel</span><kbd className={kbd}>Alt+V</kbd></div>
 
           <p className={section}>My Reviews</p>
           <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>
-          <div className={row}><span>Filter: No Vote / Waiting Author / Approved / All</span><kbd className={kbd}>1–4</kbd></div>
-          <div className={row}><span>Focus preview</span><kbd className={kbd}>Enter</kbd></div>
-          <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
+          <div className={row}><span>Open / focus preview</span><kbd className={kbd}>Enter / →</kbd></div>
+          <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>O / Ctrl+Enter</kbd></div>
+          <div className={row}><span>Collapse / expand section</span><kbd className={kbd}>click header</kbd></div>
+          <div className={row}><span>Maximize preview</span><kbd className={kbd}>\</kbd></div>
           <div className={row}><span>Show drafts</span><kbd className={kbd}>D</kbd></div>
           <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
-          <div className={row}><span>Move row</span><kbd className={kbd}>↑ ↓ PgUp PgDn Home End</kbd></div>
+          <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ PgUp PgDn Home End</kbd></div>
 
           <p className={section}>PR Search / WI Search / Commits</p>
           <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>Enter</kbd></div>
-          <div className={row}><span>Move row</span><kbd className={kbd}>↑ ↓ Home End</kbd></div>
+          <div className={row}><span>Move row</span><kbd className={kbd}>↑ ↓ PgUp PgDn Home End</kbd></div>
           <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
           <div className={row}><span>Mark done / restore (My Reviews, My Items)</span><kbd className={kbd}>E</kbd></div>
 
           <p className={section}>Work Items</p>
-          <div className={row}><span>Open detail preview</span><kbd className={kbd}>Enter</kbd></div>
+          <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>
+          <div className={row}><span>Open detail preview</span><kbd className={kbd}>Enter / →</kbd></div>
           <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>Ctrl+Enter / O</kbd></div>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ PgUp PgDn Home End</kbd></div>
           <div className={row}><span>Select row</span><kbd className={kbd}>Space</kbd></div>
@@ -76,7 +79,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Undo last apply (10s window)</span><kbd className={kbd}>U</kbd></div>
           <div className={row}><span>Focus comment</span><kbd className={kbd}>Alt+M / M</kbd></div>
           <div className={row}><span>Post comment (+ apply pending changes)</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
-          <div className={row}><span>Return to grid (from input / preview)</span><kbd className={kbd}>Esc</kbd></div>
+          <div className={row}><span>Return to grid (from input / preview)</span><kbd className={kbd}>Esc / ←</kbd></div>
 
           <p className={section}>Work Item Views</p>
           <div className={row}><span>Move view card</span><kbd className={kbd}>← → ↑ ↓</kbd></div>

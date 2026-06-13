@@ -1718,7 +1718,22 @@ function WorkItemPreviewDetails({
       aria-label="Work item preview"
       className="min-h-0 flex-1 overflow-auto bg-white px-2.5 pb-2 pt-1.5 text-xs outline-none focus:bg-primary/[0.02]"
       data-primary-preview="true"
-      onKeyDown={stopPreviewNavigationKeyDown}
+      onKeyDown={(event) => {
+        // ← steps back to the grid (mirrors the grid's → into the preview).
+        if (
+          event.key === "ArrowLeft" &&
+          !event.ctrlKey &&
+          !event.metaKey &&
+          !event.altKey &&
+          !isEditableTarget(event.target)
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+          focusPrimaryGrid();
+          return;
+        }
+        stopPreviewNavigationKeyDown(event);
+      }}
       tabIndex={-1}
     >
       <div className="border-b border-border pb-1.5">

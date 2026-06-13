@@ -76,6 +76,24 @@ export function focusPrimaryPreview(): boolean {
   return true;
 }
 
+// Focuses the active view's main filter/search input (shared by Ctrl+F and the
+// per-grid "/" shortcut so they target the same field everywhere).
+export function focusFilterInput(): boolean {
+  const input = document.querySelector<HTMLInputElement>(
+    [
+      "[data-filter-input='true']",
+      "input[aria-label='Filter']",
+      "input[type='search']",
+      "input[placeholder*='Filter']",
+      "input[placeholder*='Search']",
+    ].join(","),
+  );
+  if (!input || input.disabled || input.hidden) return false;
+  input.focus();
+  input.select();
+  return true;
+}
+
 export function focusViewsPanel(): boolean {
   const panel = document.querySelector<HTMLElement>("[data-views-panel='true']");
   if (!panel) return false;

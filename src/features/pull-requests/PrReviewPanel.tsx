@@ -18,7 +18,7 @@ import {
   type PullRequestReview,
   type ReviewPullRequestSummary,
 } from "@/lib/azdoCommands";
-import { formatDate, formatRelativeDate } from "@/lib/utils";
+import { focusPrimaryGrid, formatDate, formatRelativeDate, isEditableTarget } from "@/lib/utils";
 import { MarkdownView } from "@/lib/markdown";
 import { openExternalUrl } from "@/lib/openExternal";
 import { ShortcutHint } from "@/components/ShortcutHint";
@@ -79,8 +79,21 @@ export function PrReviewPanel({
     staleTime: 60_000,
   });
 
+  // Esc / ← step back to the grid from anywhere in the preview that is not a
+  // text field (composer Esc is handled locally and stops propagation first).
+  function handlePreviewKeyDown(event: React.KeyboardEvent) {
+    if (isEditableTarget(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.key === "Escape" || event.key === "ArrowLeft") {
+      event.preventDefault();
+      focusPrimaryGrid();
+    }
+  }
+
   return (
-    <aside className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-white focus-within:ring-2 focus-within:ring-ring">
+    <aside
+      onKeyDown={handlePreviewKeyDown}
+      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-white focus-within:ring-2 focus-within:ring-ring"
+    >
       {/* Persistent PR header (visible on every tab), GitHub-style. */}
       <div className="flex shrink-0 items-baseline gap-2 border-b border-border px-3 py-1.5">
         {selectedPr ? (
@@ -111,7 +124,7 @@ export function PrReviewPanel({
             onClick={onToggleMaximize}
             aria-label={maximized ? "Restore split view" : "Maximize review panel"}
             aria-pressed={maximized}
-            title={`${maximized ? "Restore split view" : "Maximize review panel"} (F)`}
+            title={`${maximized ? "Restore split view" : "Maximize review panel"} (\\)`}
             className={`shrink-0 rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${
               selectedPr ? "" : "ml-auto"
             }`}
