@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, ChevronsUpDown, Folder, Loader2, Plus } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp, ChevronsUpDown, Folder, Loader2, Plus } from "lucide-react";
 import {
   commandErrorMessage,
   deletePullRequestComment,
@@ -43,6 +43,10 @@ import { PrThreadCard } from "./PrThreadCard";
 const MAX_RENDERED_DIFF_LINES = 2000;
 // Lines of unchanged context kept around each change before folding the rest.
 const DIFF_CONTEXT_LINES = 3;
+// Lines revealed per click of a gap's up/down expander.
+const GAP_EXPAND_CHUNK = 20;
+
+type GapReveal = { top: number; bottom: number };
 
 type CommentSide = "left" | "right";
 type DiffCommentDraft = { side: CommentSide; line: number };
@@ -744,7 +748,7 @@ function DiffContent({
   onStartComment: (side: CommentSide, line: number) => void;
 }) {
   // Gaps the reader expanded, keyed by their first hidden line's numbers.
-  const [expandedGaps, setExpandedGaps] = useState<Set<string>>(() => new Set());
+  const [gapReveal, setGapReveal] = useState<Map<string, GapReveal>>(() => new Map());
 
   const baseBlocked = baseUnavailableReason != null;
   const targetBlocked = targetUnavailableReason != null;
@@ -821,10 +825,22 @@ function DiffContent({
     );
   }
 
-  function expandGap(key: string) {
-    setExpandedGaps((prev) => {
-      const next = new Set(prev);
-      next.add(key);
+  function revealGap(key: string, side: "top" | "bottom" | "all", total: number) {
+    setGapReveal((prev) => {
+      const next = new Map(prev);
+      const current = next.get(key) ?? { top: 0, bottom: 0 };
+      if (side === "all") {
+        next.set(key, { top: total, bottom: 0 });
+      } else {
+        const room = total - current.top - current.bottom;
+        const step = Math.min(GAP_EXPAND_CHUNK, room);
+        next.set(
+          key,
+          side === "top"
+            ? { ...current, top: current.top + step }
+            : { ...current, bottom: current.bottom + step },
+        );
+      }
       return next;
     });
   }
@@ -841,8 +857,8 @@ function DiffContent({
         {note}
         <CollapsedDiff
           items={collapsedSplit}
-          expandedGaps={expandedGaps}
-          onExpandGap={expandGap}
+          gapReveal={gapReveal}
+          onRevealGap={revealGap}
           gapKey={(row) => `${row.left?.line ?? ""}:${row.right?.line ?? ""}`}
           renderRow={(row, key) => (
             <div key={key}>
@@ -864,8 +880,8 @@ function DiffContent({
       {note}
       <CollapsedDiff
         items={collapsedUnified}
-        expandedGaps={expandedGaps}
-        onExpandGap={expandGap}
+        gapReveal={gapReveal}
+        onRevealGap={revealGap}
         gapKey={(line) => `${line.baseLine ?? ""}:${line.targetLine ?? ""}`}
         renderRow={(line, key) => {
           // Deleted lines anchor to the old (left) file; everything else to new.
@@ -890,14 +906,14 @@ function DiffContent({
  */
 function CollapsedDiff<T>({
   items,
-  expandedGaps,
-  onExpandGap,
+  gapReveal,
+  onRevealGap,
   gapKey,
   renderRow,
 }: {
   items: CollapsedItem<T>[];
-  expandedGaps: Set<string>;
-  onExpandGap: (key: string) => void;
+  gapReveal: Map<string, GapReveal>;
+  onRevealGap: (key: string, side: "top" | "bottom" | "all", total: number) => void;
   gapKey: (row: T) => string;
   renderRow: (row: T, key: string) => ReactNode;
 }) {
@@ -905,32 +921,43 @@ function CollapsedDiff<T>({
   let rendered = 0;
   let truncated = false;
 
+  function pushRows(rows: T[], from: number, to: number, prefix: string) {
+    for (let k = from; k < to; k++) {
+      if (rendered >= MAX_RENDERED_DIFF_LINES) {
+        truncated = true;
+        return;
+      }
+      out.push(renderRow(rows[k], `${prefix}${k}`));
+      rendered += 1;
+    }
+  }
+
   for (let i = 0; i < items.length && !truncated; i++) {
     const item = items[i];
     if (item.type === "row") {
-      if (rendered >= MAX_RENDERED_DIFF_LINES) {
-        truncated = true;
-        break;
-      }
-      out.push(renderRow(item.row, `r${i}`));
-      rendered += 1;
+      pushRows([item.row], 0, 1, `r${i}-`);
       continue;
     }
     const key = gapKey(item.rows[0]);
-    if (expandedGaps.has(key)) {
-      for (let k = 0; k < item.rows.length; k++) {
-        if (rendered >= MAX_RENDERED_DIFF_LINES) {
-          truncated = true;
-          break;
-        }
-        out.push(renderRow(item.rows[k], `g${i}-${k}`));
-        rendered += 1;
-      }
-    } else {
+    const total = item.rows.length;
+    const reveal = gapReveal.get(key) ?? { top: 0, bottom: 0 };
+    const middle = total - reveal.top - reveal.bottom;
+    // Rows already revealed from the top of the gap.
+    pushRows(item.rows, 0, reveal.top, `g${i}-`);
+    if (truncated) break;
+    if (middle > 0) {
       out.push(
-        <GapBar key={`gap${i}`} count={item.rows.length} onExpand={() => onExpandGap(key)} />,
+        <GapBar
+          key={`gap${i}`}
+          count={middle}
+          onExpandUp={() => onRevealGap(key, "top", total)}
+          onExpandDown={() => onRevealGap(key, "bottom", total)}
+          onExpandAll={() => onRevealGap(key, "all", total)}
+        />,
       );
     }
+    // Rows already revealed from the bottom of the gap.
+    pushRows(item.rows, total - reveal.bottom, total, `g${i}-`);
   }
 
   return (
@@ -941,16 +968,48 @@ function CollapsedDiff<T>({
   );
 }
 
-function GapBar({ count, onExpand }: { count: number; onExpand: () => void }) {
+function GapBar({
+  count,
+  onExpandUp,
+  onExpandDown,
+  onExpandAll,
+}: {
+  count: number;
+  onExpandUp: () => void;
+  onExpandDown: () => void;
+  onExpandAll: () => void;
+}) {
+  const cls =
+    "flex items-center justify-center hover:bg-muted/70 focus:outline-none focus:ring-1 focus:ring-inset focus:ring-ring";
   return (
-    <button
-      type="button"
-      onClick={onExpand}
-      className="flex w-full items-center justify-center gap-1 border-y border-border/60 bg-muted/40 py-0.5 text-[11px] text-muted-foreground hover:bg-muted/70 focus:outline-none focus:ring-1 focus:ring-inset focus:ring-ring"
-    >
-      <ChevronsUpDown className="h-3 w-3" aria-hidden="true" />
-      Expand {count} unchanged line{count === 1 ? "" : "s"}
-    </button>
+    <div className="flex w-full items-stretch border-y border-border/60 bg-muted/40 text-[11px] text-muted-foreground">
+      <button
+        type="button"
+        onClick={onExpandUp}
+        title={`Expand ${GAP_EXPAND_CHUNK} lines up`}
+        aria-label="Expand up"
+        className={`${cls} w-7`}
+      >
+        <ChevronUp className="h-3 w-3" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        onClick={onExpandAll}
+        className={`${cls} flex-1 gap-1 border-x border-border/60 py-0.5`}
+      >
+        <ChevronsUpDown className="h-3 w-3" aria-hidden="true" />
+        Expand {count} unchanged line{count === 1 ? "" : "s"}
+      </button>
+      <button
+        type="button"
+        onClick={onExpandDown}
+        title={`Expand ${GAP_EXPAND_CHUNK} lines down`}
+        aria-label="Expand down"
+        className={`${cls} w-7`}
+      >
+        <ChevronDown className="h-3 w-3" aria-hidden="true" />
+      </button>
+    </div>
   );
 }
 
