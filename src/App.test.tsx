@@ -1480,6 +1480,23 @@ describe("App", () => {
             : null,
         );
       }
+      if (command === "get_pull_request_review") {
+        const pullRequestId =
+          (args as { input?: { pullRequestId?: number } } | undefined)?.input
+            ?.pullRequestId ?? 0;
+        return Promise.resolve({
+          pullRequestId,
+          title: `PR ${pullRequestId}`,
+          description: null,
+          sourceRefName: "refs/heads/feature/x",
+          targetRefName: "refs/heads/main",
+          createdBy: "Alice",
+          creationDate: "2026-05-24T00:00:00Z",
+          isDraft: false,
+          reviewers: [],
+          threads: [],
+        });
+      }
       if (command === "list_my_review_pull_requests") {
         return Promise.resolve([
           {
@@ -1562,6 +1579,9 @@ describe("App", () => {
     expect(main.queryByText("Needs review")).toBeNull();
     expect(main.queryByText("Rejected legacy path")).toBeNull();
     expect(main.getByText("Conflicts")).toBeTruthy();
+
+    // The local review-result preview moved to the Result tab of the panel.
+    fireEvent.click(main.getByRole("tab", { name: "Result" }));
     expect(await main.findByText("review-PR102.html")).toBeTruthy();
 
     fireEvent.keyDown(main.getByRole("grid", { name: "My review pull requests" }), {

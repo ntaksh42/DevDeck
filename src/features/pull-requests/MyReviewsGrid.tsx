@@ -8,16 +8,12 @@ import {
   useState,
 } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronDown, ChevronUp, FileText, Filter, Loader2, Search, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Filter, Search, X } from 'lucide-react';
 import {
   listMyReviewPullRequests,
-  getReviewResultPreview,
-  getAppSettings,
   commandErrorMessage,
-  type AppSettings,
   type Organization,
   type ReviewPullRequestSummary,
-  type ReviewResultPreview,
 } from '@/lib/azdoCommands';
 import {
 
@@ -36,7 +32,8 @@ import { openExternalUrl } from '@/lib/openExternal';
 import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
 import { ShortcutHint } from '@/components/ShortcutHint';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
-import { LoadingState, ErrorState, PreviewEmptyState } from '@/components/StateDisplay';
+import { LoadingState, ErrorState } from '@/components/StateDisplay';
+import { PrReviewPanel } from './PrReviewPanel';
 
 const DEFAULT_REVIEW_PREVIEW_WIDTH = 420;
 const MIN_REVIEW_PREVIEW_WIDTH = 280;
@@ -640,18 +637,6 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
   const isFiltered = activeFilterCount > 0;
   const selectedPr = sortedPrs[selectedIndex] ?? null;
 
-  const settingsQuery = useQuery({
-    queryKey: ["appSettings"],
-    queryFn: getAppSettings,
-    staleTime: 5 * 60_000,
-  });
-
-  const previewQuery = useQuery({
-    queryKey: ["reviewResultPreview", selectedPr?.pullRequestId],
-    queryFn: () => getReviewResultPreview({ pullRequestId: selectedPr?.pullRequestId ?? 0 }),
-    enabled: !!selectedPr,
-  });
-
   useEffect(() => {
     containerRef.current?.focus();
   }, []);
@@ -1219,14 +1204,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
           value={previewWidth}
         />
 
-        <ReviewResultPreviewPanel
-          selectedPr={selectedPr}
-          settings={settingsQuery.data ?? null}
-          settingsLoading={settingsQuery.isLoading}
-          preview={previewQuery.data ?? null}
-          previewLoading={previewQuery.isFetching}
-          previewError={previewQuery.isError ? commandErrorMessage(previewQuery.error) : null}
-        />
+        <PrReviewPanel selectedPr={selectedPr} />
       </div>
       {openFilterCol && filterAnchorRect ? (
         <ColumnFilterDropdown
@@ -1342,77 +1320,3 @@ function ColumnFilterDropdown({
   );
 }
 
-function ReviewResultPreviewPanel({
-  selectedPr,
-  settings,
-  settingsLoading,
-  preview,
-  previewLoading,
-  previewError,
-}: {
-  selectedPr: ReviewPullRequestSummary | null;
-  settings: AppSettings | null;
-  settingsLoading: boolean;
-  preview: ReviewResultPreview | null;
-  previewLoading: boolean;
-  previewError: string | null;
-}) {
-  const hasFolder = !!settings?.reviewResultFolderPath;
-
-  return (
-    <aside className="flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-white focus-within:ring-2 focus-within:ring-ring">
-      <div className="flex items-center justify-between border-b border-border px-3 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold">Review Preview</h2>
-            <p className="truncate text-xs text-muted-foreground">
-              {selectedPr ? `PR${selectedPr.pullRequestId}` : "No PR selected"}
-            </p>
-          </div>
-        </div>
-        {previewLoading ? (
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
-        ) : (
-          <ShortcutHint>Alt+P</ShortcutHint>
-        )}
-      </div>
-
-      {settingsLoading ? (
-        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-          Loading
-        </div>
-      ) : !selectedPr ? (
-        <PreviewEmptyState message="Select a pull request." />
-      ) : !hasFolder ? (
-        <PreviewEmptyState message="Review result folder is not configured." />
-      ) : previewError ? (
-        <div className="m-3 rounded-md border border-destructive/30 bg-red-50 p-3 text-sm text-destructive">
-          {previewError}
-        </div>
-      ) : preview ? (
-        <>
-          <div className="border-b border-border px-3 py-2">
-            <p className="truncate text-xs font-medium" title={preview.fileName}>
-              {preview.fileName}
-            </p>
-            <p className="truncate text-xs text-muted-foreground" title={preview.filePath}>
-              {preview.filePath}
-            </p>
-          </div>
-          <iframe
-            title={`Review result preview for PR${preview.pullRequestId}`}
-            aria-keyshortcuts="Alt+P"
-            sandbox=""
-            srcDoc={preview.html}
-            className="min-h-0 flex-1 bg-white outline-none"
-            data-primary-preview="true"
-            tabIndex={-1}
-          />
-        </>
-      ) : (
-        <PreviewEmptyState message={`No HTML file matched PR${selectedPr.pullRequestId}.`} />
-      )}
-    </aside>
-  );
-}
