@@ -21,7 +21,6 @@ import {
 import { focusPrimaryGrid, formatDate, formatRelativeDate, isEditableTarget } from "@/lib/utils";
 import { MarkdownView } from "@/lib/markdown";
 import { openExternalUrl } from "@/lib/openExternal";
-import { ShortcutHint } from "@/components/ShortcutHint";
 import { LoadingState, ErrorState, PreviewEmptyState } from "@/components/StateDisplay";
 import { CommentComposer } from "./CommentComposer";
 import { PrFilesTab } from "./PrFilesTab";
@@ -160,9 +159,7 @@ export function PrReviewPanel({
         <div className="flex min-w-0 items-center gap-2">
           {reviewQuery.isFetching && tab !== "result" ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden="true" />
-          ) : (
-            <ShortcutHint>Alt+P</ShortcutHint>
-          )}
+          ) : null}
         </div>
       </div>
 
