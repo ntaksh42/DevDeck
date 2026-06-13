@@ -33,7 +33,7 @@ import {
 } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
 import { ColumnResizeHandle, ResizeHandle } from "@/components/ResizeHandle";
-import { ErrorState } from "@/components/StateDisplay";
+import { ErrorState, LoadingState } from "@/components/StateDisplay";
 
 const DEFAULT_COMMIT_PREVIEW_WIDTH = 460;
 const MIN_COMMIT_PREVIEW_WIDTH = 320;
@@ -964,9 +964,7 @@ function CommitResults({
               ))}
             </div>
             {loading ? (
-              <div className="flex min-h-32 items-center justify-center">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden="true" />
-              </div>
+              <LoadingState />
             ) : (
               <>
                 {virtualTopPadding > 0 ? <div style={{ height: virtualTopPadding }} /> : null}

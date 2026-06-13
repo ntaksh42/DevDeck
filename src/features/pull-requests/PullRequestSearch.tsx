@@ -34,7 +34,7 @@ import {
 import { openExternalUrl } from '@/lib/openExternal';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
-import { ErrorState } from '@/components/StateDisplay';
+import { ErrorState, LoadingState } from '@/components/StateDisplay';
 import { PrReviewPanel } from './PrReviewPanel';
 
 const DEFAULT_PR_SEARCH_PREVIEW_WIDTH = 460;
@@ -768,9 +768,7 @@ function PullRequestResults({
             })}
           </div>
           {loading ? (
-            <div className="flex min-h-32 items-center justify-center">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden="true" />
-            </div>
+            <LoadingState />
           ) : filteredResults.length === 0 ? (
             <div className="flex min-h-24 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
               <span>No results match the active filters.</span>
