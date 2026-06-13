@@ -132,8 +132,10 @@ export function PrFilesTab({
               >
                 {badge.label}
               </span>
+              {/* dir=rtl keeps the filename visible when truncating; the LRM
+                  mark stops the leading slash from jumping to the end. */}
               <span className="min-w-0 flex-1 truncate font-mono" dir="rtl">
-                {file.path}
+                {`‎${file.path}`}
               </span>
               {threadCount > 0 ? (
                 <span className="inline-flex shrink-0 items-center rounded-full border border-blue-200 bg-blue-50 px-1.5 text-[10px] font-medium text-blue-700">
