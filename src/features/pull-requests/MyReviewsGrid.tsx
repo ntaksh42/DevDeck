@@ -34,6 +34,7 @@ import { ShortcutHint } from '@/components/ShortcutHint';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { LoadingState, ErrorState } from '@/components/StateDisplay';
 import { PrReviewPanel } from './PrReviewPanel';
+import { VOTE_BADGE_CLASSES, voteTone } from './voteVisual';
 
 const DEFAULT_REVIEW_PREVIEW_WIDTH = 420;
 const MIN_REVIEW_PREVIEW_WIDTH = 280;
@@ -92,16 +93,10 @@ function reviewTriageSnapshot(pr: ReviewPullRequestSummary): string {
 }
 
 function VoteBadge({ vote, label }: { vote: VoteValue; label: string }) {
-  const colors: Record<number, string> = {
-    10: "bg-green-100 text-green-800 border-green-200",
-    5: "bg-teal-100 text-teal-800 border-teal-200",
-    0: "bg-gray-100 text-gray-600 border-gray-200",
-    [-5]: "bg-yellow-100 text-yellow-800 border-yellow-200",
-    [-10]: "bg-red-100 text-red-800 border-red-200",
-  };
-  const cls = colors[vote] ?? "bg-gray-100 text-gray-600 border-gray-200";
   return (
-    <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-medium ${cls}`}>
+    <span
+      className={`inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-medium ${VOTE_BADGE_CLASSES[voteTone(vote)]}`}
+    >
       {label}
     </span>
   );

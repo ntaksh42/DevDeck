@@ -3,13 +3,10 @@ import { type PrThread } from "@/lib/azdoCommands";
 import { formatDate, formatRelativeDate } from "@/lib/utils";
 import { MarkdownView } from "@/lib/markdown";
 
-export function isThreadResolved(thread: PrThread): boolean {
-  return thread.status != null && thread.status !== "active" && thread.status !== "pending";
-}
-
 /**
  * Shared thread card used by the Review tab and the inline diff view.
  * Owns its reply draft state; parents only handle the actual mutations.
+ * `onReply` is awaited so the draft survives a failed post.
  */
 export function PrThreadCard({
   thread,
@@ -21,18 +18,27 @@ export function PrThreadCard({
   thread: PrThread;
   busy: boolean;
   showFilePath?: boolean;
-  onReply: (content: string) => void;
+  onReply: (content: string) => Promise<void>;
   onToggleStatus: () => void;
 }) {
   const [replying, setReplying] = useState(false);
   const [replyText, setReplyText] = useState("");
-  const resolved = isThreadResolved(thread);
+  const [submitting, setSubmitting] = useState(false);
+  const resolved = thread.isResolved;
 
-  function submitReply() {
-    if (!replyText.trim()) return;
-    onReply(replyText);
-    setReplying(false);
-    setReplyText("");
+  async function submitReply() {
+    if (!replyText.trim() || submitting) return;
+    setSubmitting(true);
+    try {
+      await onReply(replyText);
+      // Only discard the draft once the post actually succeeded.
+      setReplying(false);
+      setReplyText("");
+    } catch {
+      // Keep the draft; the parent surfaces the error.
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -124,7 +130,7 @@ export function PrThreadCard({
             </button>
             <button
               type="button"
-              disabled={!replyText.trim() || busy}
+              disabled={!replyText.trim() || busy || submitting}
               onClick={submitReply}
               className="rounded border border-border bg-white px-1.5 py-px text-[10px] hover:bg-secondary disabled:opacity-50"
             >

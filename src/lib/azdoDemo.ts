@@ -154,6 +154,7 @@ function demoThreadsFor(pullRequestId: number): PrThread[] {
     {
       id: 1,
       status: "active",
+      isResolved: false,
       filePath: null,
       rightLine: null,
       comments: [
@@ -170,6 +171,7 @@ function demoThreadsFor(pullRequestId: number): PrThread[] {
     {
       id: 2,
       status: "closed",
+      isResolved: true,
       filePath: "/src/app/dashboard.ts",
       rightLine: 2,
       comments: [
@@ -194,6 +196,7 @@ function demoThreadsFor(pullRequestId: number): PrThread[] {
     {
       id: 3,
       status: null,
+      isResolved: false,
       filePath: null,
       rightLine: null,
       comments: [
@@ -231,6 +234,8 @@ const demoPrCommits: PrCommit[] = [
     comment: "Make the refresh interval configurable",
     authorName: "Avery Author",
     authorDate: "2026-05-22T10:00:00Z",
+    webUrl:
+      "https://dev.azure.com/contoso/platform/_git/api-gateway/commit/a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
   },
   {
     commitId: "b2c3d4e5f60718293a4b5c6d7e8f901234567890",
@@ -238,6 +243,8 @@ const demoPrCommits: PrCommit[] = [
     comment: "Extract useDashboardData hook",
     authorName: "Avery Author",
     authorDate: "2026-05-21T16:30:00Z",
+    webUrl:
+      "https://dev.azure.com/contoso/platform/_git/api-gateway/commit/b2c3d4e5f60718293a4b5c6d7e8f901234567890",
   },
   {
     commitId: "c3d4e5f60718293a4b5c6d7e8f90123456789012",
@@ -245,6 +252,8 @@ const demoPrCommits: PrCommit[] = [
     comment: "Remove the legacy dashboard loader",
     authorName: "Avery Author",
     authorDate: "2026-05-20T09:15:00Z",
+    webUrl:
+      "https://dev.azure.com/contoso/platform/_git/api-gateway/commit/c3d4e5f60718293a4b5c6d7e8f90123456789012",
   },
 ];
 
@@ -399,11 +408,16 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         };
         return diff;
       }
-      const changeType = input?.changeType ?? "edit";
+      const tokens = (input?.changeType ?? "edit")
+        .toLowerCase()
+        .split(",")
+        .map((token) => token.trim());
+      const isAdd = tokens.includes("add") || tokens.includes("undelete");
+      const isDelete = tokens.includes("delete");
       const diff: PrFileDiff = {
         filePath,
-        baseContent: changeType.includes("add") ? null : DEMO_DIFF_BASE,
-        targetContent: changeType.includes("delete") ? null : DEMO_DIFF_TARGET,
+        baseContent: isAdd ? null : DEMO_DIFF_BASE,
+        targetContent: isDelete ? null : DEMO_DIFF_TARGET,
         baseUnavailableReason: null,
         targetUnavailableReason: null,
       };
@@ -418,7 +432,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         if (!thread) throw new Error(`thread not found: ${input.threadId}`);
         thread.comments.push({
           id: thread.comments.length + 1,
-          parentCommentId: input.parentCommentId ?? 1,
+          parentCommentId: thread.comments[0]?.id ?? 0,
           content: input.content,
           author: "Demo User",
           publishedDate: new Date().toISOString(),
@@ -429,6 +443,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       const thread: PrThread = {
         id: ++demoPrThreadSeq,
         status: "active",
+        isResolved: false,
         filePath: input.filePath ?? null,
         rightLine: input.rightLine ?? null,
         comments: [
@@ -453,6 +468,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       );
       if (!thread) throw new Error(`thread not found: ${input.threadId}`);
       thread.status = input.status;
+      thread.isResolved = input.status === "closed";
       return thread;
     }
     case "submit_pull_request_vote": {

@@ -8,9 +8,9 @@ import {
   getReviewResultPreview,
   listPullRequestCommits,
   postPullRequestComment,
+  prLocator,
   setPullRequestThreadStatus,
   submitPullRequestVote,
-  type PrLocatorInput,
   type PullRequestReview,
   type ReviewPullRequestSummary,
 } from "@/lib/azdoCommands";
@@ -20,7 +20,8 @@ import { openExternalUrl } from "@/lib/openExternal";
 import { ShortcutHint } from "@/components/ShortcutHint";
 import { LoadingState, ErrorState, PreviewEmptyState } from "@/components/StateDisplay";
 import { PrFilesTab } from "./PrFilesTab";
-import { PrThreadCard, isThreadResolved } from "./PrThreadCard";
+import { PrThreadCard } from "./PrThreadCard";
+import { VOTE_BUTTON_ACTIVE_CLASSES, VOTE_DOT_CLASSES, voteTone } from "./voteVisual";
 
 type PanelTab = "review" | "files" | "commits" | "result";
 
@@ -31,22 +32,13 @@ const PANEL_TABS: { key: PanelTab; label: string }[] = [
   { key: "result", label: "Result" },
 ];
 
-const VOTE_OPTIONS: { vote: -10 | -5 | 0 | 5 | 10; label: string; activeCls: string }[] = [
-  { vote: 10, label: "Approve", activeCls: "border-green-400 bg-green-100 text-green-800" },
-  { vote: 5, label: "Suggestions", activeCls: "border-teal-400 bg-teal-100 text-teal-800" },
-  { vote: -5, label: "Wait", activeCls: "border-yellow-400 bg-yellow-100 text-yellow-800" },
-  { vote: -10, label: "Reject", activeCls: "border-red-400 bg-red-100 text-red-800" },
-  { vote: 0, label: "Reset", activeCls: "border-gray-400 bg-gray-100 text-gray-700" },
+const VOTE_OPTIONS: { vote: -10 | -5 | 0 | 5 | 10; label: string }[] = [
+  { vote: 10, label: "Approve" },
+  { vote: 5, label: "Suggestions" },
+  { vote: -5, label: "Wait" },
+  { vote: -10, label: "Reject" },
+  { vote: 0, label: "Reset" },
 ];
-
-function prLocator(pr: ReviewPullRequestSummary): PrLocatorInput {
-  return {
-    organizationId: pr.organizationId,
-    projectId: pr.projectId,
-    repositoryId: pr.repositoryId,
-    pullRequestId: pr.pullRequestId,
-  };
-}
 
 export function PrReviewPanel({ selectedPr }: { selectedPr: ReviewPullRequestSummary | null }) {
   const [tab, setTab] = useState<PanelTab>("review");
@@ -59,7 +51,7 @@ export function PrReviewPanel({ selectedPr }: { selectedPr: ReviewPullRequestSum
       selectedPr?.pullRequestId,
     ],
     queryFn: () => getPullRequestReview(prLocator(selectedPr as ReviewPullRequestSummary)),
-    enabled: !!selectedPr && tab !== "result",
+    enabled: !!selectedPr && (tab === "review" || tab === "files"),
     staleTime: 60_000,
   });
 
@@ -139,8 +131,11 @@ function ReviewTab({
     setActionError(null);
   }, [pr.pullRequestId, pr.repositoryId]);
 
+  // Scope invalidation to this PR so other PRs' cached reviews stay warm.
   function invalidateReview() {
-    void queryClient.invalidateQueries({ queryKey: ["prReview"] });
+    void queryClient.invalidateQueries({
+      queryKey: ["prReview", pr.organizationId, pr.repositoryId, pr.pullRequestId],
+    });
     void queryClient.invalidateQueries({ queryKey: ["myReviews"] });
   }
 
@@ -172,9 +167,28 @@ function ReviewTab({
     onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
   });
 
-  if (loading) return <LoadingState />;
-  if (error) return <ErrorState message={error} />;
-  if (!review) return <PreviewEmptyState message="No review data." />;
+  // Keep a focus target (Alt+P) present even on loading/error states.
+  if (loading) {
+    return (
+      <div data-primary-preview="true" tabIndex={-1} className="min-h-0 flex-1 outline-none">
+        <LoadingState />
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div data-primary-preview="true" tabIndex={-1} className="min-h-0 flex-1 outline-none">
+        <ErrorState message={error} />
+      </div>
+    );
+  }
+  if (!review) {
+    return (
+      <div data-primary-preview="true" tabIndex={-1} className="min-h-0 flex-1 outline-none">
+        <PreviewEmptyState message="No review data." />
+      </div>
+    );
+  }
 
   const myVote = review.reviewers.find((reviewer) => reviewer.isMe)?.vote ?? pr.myVote;
   const userThreads = review.threads.filter((thread) =>
@@ -197,7 +211,9 @@ function ReviewTab({
               disabled={voteMutation.isPending}
               onClick={() => voteMutation.mutate({ ...prLocator(pr), vote: option.vote })}
               className={`rounded border px-2 py-0.5 text-xs font-medium disabled:opacity-50 ${
-                active ? option.activeCls : "border-border bg-white text-muted-foreground hover:bg-secondary"
+                active
+                  ? VOTE_BUTTON_ACTIVE_CLASSES[voteTone(option.vote)]
+                  : "border-border bg-white text-muted-foreground hover:bg-secondary"
               }`}
               title={`Vote: ${option.label}`}
             >
@@ -219,6 +235,7 @@ function ReviewTab({
       <div
         className="min-h-0 flex-1 overflow-y-auto outline-none"
         data-primary-preview="true"
+        aria-keyshortcuts="Alt+P"
         tabIndex={-1}
       >
         {/* Meta + description */}
@@ -228,7 +245,7 @@ function ReviewTab({
             {review.createdBy ?? "Unknown"}
             {review.creationDate ? ` · ${formatRelativeDate(review.creationDate)}` : ""}
             {" · "}
-            {shortRef(review.sourceRefName)} → {shortRef(review.targetRefName)}
+            {review.sourceRefName} → {review.targetRefName}
           </p>
           <div className="mt-1.5 flex flex-wrap gap-1">
             {review.reviewers.map((reviewer) => (
@@ -263,19 +280,18 @@ function ReviewTab({
                 key={thread.id}
                 thread={thread}
                 busy={commentMutation.isPending || statusMutation.isPending}
-                onReply={(content) => {
-                  commentMutation.mutate({
+                onReply={(content) =>
+                  commentMutation.mutateAsync({
                     ...prLocator(pr),
                     threadId: thread.id,
-                    parentCommentId: thread.comments[0]?.id ?? 1,
                     content,
-                  });
-                }}
+                  }).then(() => undefined)
+                }
                 onToggleStatus={() => {
                   statusMutation.mutate({
                     ...prLocator(pr),
                     threadId: thread.id,
-                    status: isThreadResolved(thread) ? "active" : "closed",
+                    status: thread.isResolved ? "active" : "closed",
                   });
                 }}
               />
@@ -343,23 +359,16 @@ function ReviewTab({
   );
 }
 
-function shortRef(value: string): string {
-  return value.replace(/^refs\/heads\//, "");
-}
-
 function VoteDot({ vote }: { vote: number }) {
-  const cls =
-    vote >= 5 ? "bg-green-500" : vote === -5 ? "bg-yellow-500" : vote === -10 ? "bg-red-500" : "bg-gray-300";
-  return <span className={`inline-block h-1.5 w-1.5 rounded-full ${cls}`} aria-hidden="true" />;
+  return (
+    <span
+      className={`inline-block h-1.5 w-1.5 rounded-full ${VOTE_DOT_CLASSES[voteTone(vote)]}`}
+      aria-hidden="true"
+    />
+  );
 }
 
 // ── Commits tab ──────────────────────────────────────────────────────────────
-
-function commitWebUrl(prWebUrl: string | null, commitId: string): string | null {
-  if (!prWebUrl) return null;
-  if (!/\/pullrequest\/\d+$/.test(prWebUrl)) return null;
-  return prWebUrl.replace(/\/pullrequest\/\d+$/, `/commit/${commitId}`);
-}
 
 function CommitsTab({ pr }: { pr: ReviewPullRequestSummary }) {
   const commitsQuery = useQuery({
@@ -379,10 +388,11 @@ function CommitsTab({ pr }: { pr: ReviewPullRequestSummary }) {
     <div
       className="min-h-0 flex-1 overflow-y-auto outline-none"
       data-primary-preview="true"
+      aria-keyshortcuts="Alt+P"
       tabIndex={-1}
     >
       {commits.map((commit) => {
-        const webUrl = commitWebUrl(pr.webUrl, commit.commitId);
+        const webUrl = commit.webUrl;
         return (
           <div
             key={commit.commitId}

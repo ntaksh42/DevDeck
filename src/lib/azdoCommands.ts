@@ -109,6 +109,7 @@ export type PrComment = z.infer<typeof prCommentSchema>;
 const prThreadSchema = z.object({
   id: z.number(),
   status: z.string().nullable(),
+  isResolved: z.boolean(),
   filePath: z.string().nullable(),
   rightLine: z.number().nullable(),
   comments: z.array(prCommentSchema),
@@ -137,6 +138,7 @@ const prCommitSchema = z.object({
   comment: z.string(),
   authorName: z.string().nullable(),
   authorDate: z.string().nullable(),
+  webUrl: z.string().nullable(),
 });
 
 const prCommitsSchema = z.array(prCommitSchema);
@@ -430,6 +432,21 @@ export type PrLocatorInput = {
   pullRequestId: number;
 };
 
+/** Builds the PR locator shared by every PR review command. */
+export function prLocator(pr: {
+  organizationId: string;
+  projectId: string;
+  repositoryId: string;
+  pullRequestId: number;
+}): PrLocatorInput {
+  return {
+    organizationId: pr.organizationId,
+    projectId: pr.projectId,
+    repositoryId: pr.repositoryId,
+    pullRequestId: pr.pullRequestId,
+  };
+}
+
 export type GetPullRequestReviewInput = PrLocatorInput;
 export type ListPullRequestChangesInput = PrLocatorInput;
 export type ListPullRequestCommitsInput = PrLocatorInput;
@@ -444,7 +461,6 @@ export type GetPullRequestFileDiffInput = PrLocatorInput & {
 
 export type PostPullRequestCommentInput = PrLocatorInput & {
   threadId?: number;
-  parentCommentId?: number;
   content: string;
   filePath?: string;
   rightLine?: number;

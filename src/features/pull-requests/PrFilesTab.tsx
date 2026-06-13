@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus } from "lucide-react";
 import {
@@ -6,9 +6,9 @@ import {
   getPullRequestFileDiff,
   listPullRequestChanges,
   postPullRequestComment,
+  prLocator,
   setPullRequestThreadStatus,
   type PrChangedFile,
-  type PrLocatorInput,
   type PrThread,
   type ReviewPullRequestSummary,
 } from "@/lib/azdoCommands";
@@ -20,25 +20,29 @@ import {
 } from "@/lib/diffView";
 import { openExternalUrl } from "@/lib/openExternal";
 import { LoadingState, ErrorState, PreviewEmptyState } from "@/components/StateDisplay";
-import { PrThreadCard, isThreadResolved } from "./PrThreadCard";
+import { PrThreadCard } from "./PrThreadCard";
 
 const MAX_RENDERED_DIFF_LINES = 2000;
 
 type ViewMode = "unified" | "split";
 
-const CHANGE_TYPE_BADGES: { match: string; label: string; cls: string }[] = [
-  { match: "add", label: "A", cls: "border-green-200 bg-green-100 text-green-800" },
-  { match: "delete", label: "D", cls: "border-red-200 bg-red-100 text-red-800" },
-  { match: "rename", label: "R", cls: "border-purple-200 bg-purple-100 text-purple-800" },
-  { match: "edit", label: "M", cls: "border-blue-200 bg-blue-100 text-blue-800" },
-];
+type ChangeBadge = { label: string; cls: string };
 
-function changeTypeBadge(changeType: string) {
-  const normalized = changeType.toLowerCase();
-  return (
-    CHANGE_TYPE_BADGES.find((badge) => normalized.includes(badge.match)) ??
-    CHANGE_TYPE_BADGES[CHANGE_TYPE_BADGES.length - 1]
-  );
+const ADD_BADGE: ChangeBadge = { label: "A", cls: "border-green-200 bg-green-100 text-green-800" };
+const DELETE_BADGE: ChangeBadge = { label: "D", cls: "border-red-200 bg-red-100 text-red-800" };
+const RENAME_BADGE: ChangeBadge = {
+  label: "R",
+  cls: "border-purple-200 bg-purple-100 text-purple-800",
+};
+const EDIT_BADGE: ChangeBadge = { label: "M", cls: "border-blue-200 bg-blue-100 text-blue-800" };
+
+/** Token-aware badge: "undelete" is a restore, not a delete. */
+function changeTypeBadge(changeType: string): ChangeBadge {
+  const tokens = changeType.toLowerCase().split(",").map((token) => token.trim());
+  if (tokens.includes("rename")) return RENAME_BADGE;
+  if (tokens.includes("delete")) return DELETE_BADGE;
+  if (tokens.includes("add") || tokens.includes("undelete")) return ADD_BADGE;
+  return EDIT_BADGE;
 }
 
 const UNAVAILABLE_MESSAGES: Record<string, string> = {
@@ -47,13 +51,10 @@ const UNAVAILABLE_MESSAGES: Record<string, string> = {
   missing: "File content could not be loaded.",
 };
 
-function prLocator(pr: ReviewPullRequestSummary): PrLocatorInput {
-  return {
-    organizationId: pr.organizationId,
-    projectId: pr.projectId,
-    repositoryId: pr.repositoryId,
-    pullRequestId: pr.pullRequestId,
-  };
+/** Normalizes a server file path for matching across the threads and changes
+ * APIs, which can differ in leading slash and casing. */
+function pathKey(path: string): string {
+  return path.replace(/^\/+/, "").toLowerCase();
 }
 
 export function PrFilesTab({
@@ -91,8 +92,11 @@ export function PrFilesTab({
     setCommentLine(null);
   }, [selectedPath]);
 
+  // Scope invalidation to this PR so other PRs' cached reviews stay warm.
   function invalidateReview() {
-    void queryClient.invalidateQueries({ queryKey: ["prReview"] });
+    void queryClient.invalidateQueries({
+      queryKey: ["prReview", pr.organizationId, pr.repositoryId, pr.pullRequestId],
+    });
   }
 
   const commentMutation = useMutation({
@@ -116,12 +120,14 @@ export function PrFilesTab({
 
   const mutationsBusy = commentMutation.isPending || statusMutation.isPending;
 
+  // Path matching is normalized: the threads and changes APIs can disagree on
+  // leading slash and casing.
   const activeThreadCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const thread of threads ?? []) {
-      if (!thread.filePath) continue;
-      if (isThreadResolved(thread)) continue;
-      counts.set(thread.filePath, (counts.get(thread.filePath) ?? 0) + 1);
+      if (!thread.filePath || thread.isResolved) continue;
+      const key = pathKey(thread.filePath);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     return counts;
   }, [threads]);
@@ -130,8 +136,10 @@ export function PrFilesTab({
   const threadsByLine = useMemo(() => {
     const map = new Map<number, PrThread[]>();
     if (!selectedFile) return map;
+    const selectedKey = pathKey(selectedFile.path);
     for (const thread of threads ?? []) {
-      if (thread.filePath !== selectedFile.path || thread.rightLine == null) continue;
+      if (!thread.filePath || thread.rightLine == null) continue;
+      if (pathKey(thread.filePath) !== selectedKey) continue;
       const list = map.get(thread.rightLine) ?? [];
       list.push(thread);
       map.set(thread.rightLine, list);
@@ -140,12 +148,16 @@ export function PrFilesTab({
   }, [threads, selectedFile]);
 
   const diffQuery = useQuery({
+    // Commit ids are part of the key so a new iteration does not serve a stale
+    // cached diff.
     queryKey: [
       "prFileDiff",
       pr.organizationId,
       pr.repositoryId,
       pr.pullRequestId,
       selectedFile?.path,
+      changes?.baseCommitId,
+      changes?.targetCommitId,
     ],
     queryFn: () =>
       getPullRequestFileDiff({
@@ -159,6 +171,11 @@ export function PrFilesTab({
     enabled: !!selectedFile && !!changes,
     staleTime: 60_000,
   });
+
+  const onStartComment = useCallback((line: number) => {
+    setActionError(null);
+    setCommentLine(line);
+  }, []);
 
   if (changesQuery.isLoading) return <LoadingState />;
   if (changesQuery.isError) return <ErrorState message={commandErrorMessage(changesQuery.error)} />;
@@ -174,20 +191,17 @@ export function PrFilesTab({
     });
   }
 
-  function replyToThread(thread: PrThread, content: string) {
-    commentMutation.mutate({
-      ...prLocator(pr),
-      threadId: thread.id,
-      parentCommentId: thread.comments[0]?.id ?? 1,
-      content,
-    });
+  function replyToThread(thread: PrThread, content: string): Promise<void> {
+    return commentMutation
+      .mutateAsync({ ...prLocator(pr), threadId: thread.id, content })
+      .then(() => undefined);
   }
 
   function toggleThreadStatus(thread: PrThread) {
     statusMutation.mutate({
       ...prLocator(pr),
       threadId: thread.id,
-      status: isThreadResolved(thread) ? "active" : "closed",
+      status: thread.isResolved ? "active" : "closed",
     });
   }
 
@@ -230,7 +244,7 @@ export function PrFilesTab({
       <div className="max-h-[40%] shrink-0 overflow-y-auto border-b border-border">
         {files.map((file) => {
           const badge = changeTypeBadge(file.changeType);
-          const threadCount = activeThreadCounts.get(file.path) ?? 0;
+          const threadCount = activeThreadCounts.get(pathKey(file.path)) ?? 0;
           const selected = file.path === selectedPath;
           return (
             <button
@@ -315,16 +329,12 @@ export function PrFilesTab({
           <DiffContent
             baseContent={diffQuery.data.baseContent}
             targetContent={diffQuery.data.targetContent}
-            unavailableReason={
-              diffQuery.data.targetUnavailableReason ?? diffQuery.data.baseUnavailableReason
-            }
+            baseUnavailableReason={diffQuery.data.baseUnavailableReason}
+            targetUnavailableReason={diffQuery.data.targetUnavailableReason}
             webUrl={pr.webUrl}
             viewMode={viewMode}
             lineAttachments={lineAttachments}
-            onStartComment={(line) => {
-              setActionError(null);
-              setCommentLine(line);
-            }}
+            onStartComment={onStartComment}
           />
         ) : null}
       </div>
@@ -396,7 +406,8 @@ function InlineCommentBox({
 function DiffContent({
   baseContent,
   targetContent,
-  unavailableReason,
+  baseUnavailableReason,
+  targetUnavailableReason,
   webUrl,
   viewMode,
   lineAttachments,
@@ -404,31 +415,43 @@ function DiffContent({
 }: {
   baseContent: string | null;
   targetContent: string | null;
-  unavailableReason: string | null;
+  baseUnavailableReason: string | null;
+  targetUnavailableReason: string | null;
   webUrl: string | null;
   viewMode: ViewMode;
   lineAttachments: (rightLine: number | null) => ReactNode;
   onStartComment: (rightLine: number) => void;
 }) {
+  const baseBlocked = baseUnavailableReason != null;
+  const targetBlocked = targetUnavailableReason != null;
+  // Only give up when neither side can be shown. A single blocked side still
+  // renders (e.g. base too large → show the new file as additions).
+  const fatalReason =
+    baseBlocked && targetBlocked ? (targetUnavailableReason ?? baseUnavailableReason) : null;
+  // A blocked side is treated as empty so the available side still diffs.
+  const baseText = baseBlocked ? "" : baseContent ?? "";
+  const targetText = targetBlocked ? "" : targetContent ?? "";
+  const partialNote = fatalReason
+    ? null
+    : targetBlocked
+      ? `New version unavailable (${UNAVAILABLE_MESSAGES[targetUnavailableReason!] ?? targetUnavailableReason}); showing the previous version.`
+      : baseBlocked
+        ? `Previous version unavailable (${UNAVAILABLE_MESSAGES[baseUnavailableReason!] ?? baseUnavailableReason}); showing the new file.`
+        : null;
+
   const unified = useMemo(
-    () =>
-      unavailableReason || viewMode !== "unified"
-        ? []
-        : buildDiffLines(baseContent ?? "", targetContent ?? ""),
-    [baseContent, targetContent, unavailableReason, viewMode],
+    () => (fatalReason || viewMode !== "unified" ? [] : buildDiffLines(baseText, targetText)),
+    [baseText, targetText, fatalReason, viewMode],
   );
   const split = useMemo(
-    () =>
-      unavailableReason || viewMode !== "split"
-        ? []
-        : buildSideBySideRows(baseContent ?? "", targetContent ?? ""),
-    [baseContent, targetContent, unavailableReason, viewMode],
+    () => (fatalReason || viewMode !== "split" ? [] : buildSideBySideRows(baseText, targetText)),
+    [baseText, targetText, fatalReason, viewMode],
   );
 
-  if (unavailableReason) {
+  if (fatalReason) {
     return (
       <div className="flex flex-col items-center gap-2 py-6 text-xs text-muted-foreground">
-        <span>{UNAVAILABLE_MESSAGES[unavailableReason] ?? "Diff is not available."}</span>
+        <span>{UNAVAILABLE_MESSAGES[fatalReason] ?? "Diff is not available."}</span>
         {webUrl ? (
           <button
             type="button"
@@ -442,11 +465,18 @@ function DiffContent({
     );
   }
 
+  const note = partialNote ? (
+    <p className="border-b border-border bg-yellow-50 px-2 py-1 text-[11px] text-yellow-800">
+      {partialNote}
+    </p>
+  ) : null;
+
   if (viewMode === "split") {
     const truncated = split.length > MAX_RENDERED_DIFF_LINES;
     const rendered = truncated ? split.slice(0, MAX_RENDERED_DIFF_LINES) : split;
     return (
       <div className="font-mono text-[11px] leading-4">
+        {note}
         {rendered.map((row, index) => (
           <div key={index}>
             <div className="grid grid-cols-2">
@@ -465,6 +495,7 @@ function DiffContent({
   const rendered = truncated ? unified.slice(0, MAX_RENDERED_DIFF_LINES) : unified;
   return (
     <div className="font-mono text-[11px] leading-4">
+      {note}
       {rendered.map((line, index) => (
         <div key={index}>
           <DiffRow line={line} onStartComment={onStartComment} />
@@ -505,7 +536,8 @@ function CommentLineButton({ line, onStartComment }: { line: number; onStartComm
   );
 }
 
-function DiffRow({
+// Memoized so toolbar/comment-box state changes don't re-render every diff row.
+const DiffRow = memo(function DiffRow({
   line,
   onStartComment,
 }: {
@@ -530,9 +562,9 @@ function DiffRow({
       </span>
     </div>
   );
-}
+});
 
-function SplitCell({
+const SplitCell = memo(function SplitCell({
   cell,
   side,
   onStartComment,
@@ -558,4 +590,4 @@ function SplitCell({
       </span>
     </div>
   );
-}
+});
