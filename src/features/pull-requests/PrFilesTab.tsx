@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronsUpDown, Loader2, Plus } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronsUpDown, Folder, Loader2, Plus } from "lucide-react";
 import {
   commandErrorMessage,
   deletePullRequestComment,
@@ -110,6 +110,54 @@ function pathKey(path: string): string {
   return path.replace(/^\/+/, "").toLowerCase();
 }
 
+type FileTreeRow =
+  | { kind: "folder"; path: string; name: string; depth: number; collapsed: boolean }
+  | { kind: "file"; file: PrChangedFile; name: string; depth: number };
+
+type FileTreeNode = { folders: Map<string, FileTreeNode>; files: PrChangedFile[] };
+
+/** Groups changed files into a collapsible folder tree (GitHub-style). Returns
+ * the flattened render rows plus the files currently visible (under expanded
+ * folders), which drives j/k navigation. */
+function buildFileTreeRows(
+  files: PrChangedFile[],
+  collapsed: Set<string>,
+): { rows: FileTreeRow[]; visibleFiles: PrChangedFile[] } {
+  const root: FileTreeNode = { folders: new Map(), files: [] };
+  for (const file of files) {
+    const parts = file.path.replace(/^\/+/, "").split("/");
+    parts.pop(); // file name handled at render time
+    let node = root;
+    for (const part of parts) {
+      let child = node.folders.get(part);
+      if (!child) {
+        child = { folders: new Map(), files: [] };
+        node.folders.set(part, child);
+      }
+      node = child;
+    }
+    node.files.push(file);
+  }
+
+  const rows: FileTreeRow[] = [];
+  const visibleFiles: PrChangedFile[] = [];
+  const walk = (node: FileTreeNode, prefix: string, depth: number) => {
+    for (const name of [...node.folders.keys()].sort((a, b) => a.localeCompare(b))) {
+      const path = prefix ? `${prefix}/${name}` : name;
+      const isCollapsed = collapsed.has(path);
+      rows.push({ kind: "folder", path, name, depth, collapsed: isCollapsed });
+      if (!isCollapsed) walk(node.folders.get(name)!, path, depth + 1);
+    }
+    for (const file of [...node.files].sort((a, b) => a.path.localeCompare(b.path))) {
+      const name = file.path.replace(/^\/+/, "").split("/").pop() ?? file.path;
+      rows.push({ kind: "file", file, name, depth });
+      visibleFiles.push(file);
+    }
+  };
+  walk(root, "", 0);
+  return { rows, visibleFiles };
+}
+
 export function PrFilesTab({
   pr,
   threads,
@@ -130,6 +178,7 @@ export function PrFilesTab({
   );
   // Thread the n/p shortcuts last jumped to (for ordering).
   const [focusedThreadId, setFocusedThreadId] = useState<number | null>(null);
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(() => new Set());
   const fileListRef = useRef<HTMLDivElement | null>(null);
   const diffScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -143,12 +192,27 @@ export function PrFilesTab({
   const files = changes?.files ?? [];
   const selectedFile = files.find((file) => file.path === selectedPath) ?? null;
 
+  const { rows: fileTreeRows, visibleFiles } = useMemo(
+    () => buildFileTreeRows(files, collapsedFolders),
+    [files, collapsedFolders],
+  );
+
+  function toggleFolder(path: string) {
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }
+
   // Reset selection state when switching PRs.
   useEffect(() => {
     setSelectedPath(null);
     setCommentDraft(null);
     setActionError(null);
     setFocusedThreadId(null);
+    setCollapsedFolders(new Set());
     setViewedKeys(loadViewedKeys(viewedStorageKey(pr)));
   }, [pr]);
 
@@ -345,18 +409,18 @@ export function PrFilesTab({
   function handleFilesKeyDown(event: React.KeyboardEvent) {
     if (isEditableTarget(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.key === "j" || event.key === "k") {
-      if (files.length === 0) return;
+      if (visibleFiles.length === 0) return;
       event.preventDefault();
       event.stopPropagation();
-      const index = files.findIndex((file) => file.path === selectedPath);
+      const index = visibleFiles.findIndex((file) => file.path === selectedPath);
       const delta = event.key === "j" ? 1 : -1;
       const nextIndex =
         index < 0
           ? event.key === "j"
             ? 0
-            : files.length - 1
-          : Math.max(0, Math.min(files.length - 1, index + delta));
-      setSelectedPath(files[nextIndex].path);
+            : visibleFiles.length - 1
+          : Math.max(0, Math.min(visibleFiles.length - 1, index + delta));
+      setSelectedPath(visibleFiles[nextIndex].path);
       return;
     }
     if (event.key === "n" || event.key === "p") {
@@ -490,7 +554,29 @@ export function PrFilesTab({
           </span>
         </div>
         <div ref={fileListRef} className="min-h-0 flex-1 overflow-y-auto">
-          {files.map((file) => {
+          {fileTreeRows.map((row) => {
+            if (row.kind === "folder") {
+              return (
+                <button
+                  key={`folder:${row.path}`}
+                  type="button"
+                  onClick={() => toggleFolder(row.path)}
+                  aria-expanded={!row.collapsed}
+                  className="flex w-full items-center gap-1 py-1 pr-2 text-left text-xs text-muted-foreground hover:bg-muted/50"
+                  style={{ paddingLeft: 8 + row.depth * 12 }}
+                  title={row.path}
+                >
+                  {row.collapsed ? (
+                    <ChevronRight className="h-3 w-3 shrink-0" aria-hidden="true" />
+                  ) : (
+                    <ChevronDown className="h-3 w-3 shrink-0" aria-hidden="true" />
+                  )}
+                  <Folder className="h-3 w-3 shrink-0 text-muted-foreground/70" aria-hidden="true" />
+                  <span className="truncate font-mono">{row.name}</span>
+                </button>
+              );
+            }
+            const file = row.file;
             const badge = changeTypeBadge(file.changeType);
             const threadCount = activeThreadCounts.get(pathKey(file.path)) ?? 0;
             const selected = file.path === selectedPath;
@@ -501,9 +587,10 @@ export function PrFilesTab({
                 role="button"
                 tabIndex={-1}
                 onClick={() => setSelectedPath(file.path)}
-                className={`flex w-full cursor-pointer items-center gap-1.5 px-2 py-1 text-left text-xs ${
+                className={`flex w-full cursor-pointer items-center gap-1.5 py-1 pr-2 text-left text-xs ${
                   selected ? "bg-secondary" : "hover:bg-muted/50"
                 } ${viewed ? "opacity-55" : ""}`}
+                style={{ paddingLeft: 8 + row.depth * 12 + 4 }}
                 title={file.path}
               >
                 <span
@@ -512,13 +599,10 @@ export function PrFilesTab({
                 >
                   {badge.label}
                 </span>
-                {/* dir=rtl keeps the filename visible when truncating; the LRM
-                    mark stops the leading slash from jumping to the end. */}
                 <span
                   className={`min-w-0 flex-1 truncate font-mono ${viewed ? "line-through" : ""}`}
-                  dir="rtl"
                 >
-                  {`‎${file.path}`}
+                  {row.name}
                 </span>
                 {threadCount > 0 ? (
                   <span className="inline-flex shrink-0 items-center rounded-full border border-blue-200 bg-blue-50 px-1.5 text-[10px] font-medium text-blue-700">
