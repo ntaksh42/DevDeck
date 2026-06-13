@@ -109,3 +109,72 @@ export function NavSubItem({
     </button>
   );
 }
+
+// A sub-item that navigates on click and, when it has children, can expand or
+// collapse them via a separate chevron toggle. Clicking the label navigates;
+// clicking the chevron only toggles. Children render indented one level deeper.
+export function NavSubGroup({
+  id,
+  active,
+  disabled = false,
+  label,
+  expandable,
+  expanded,
+  onToggle,
+  onClick,
+  children,
+}: {
+  id: string;
+  active: boolean;
+  disabled?: boolean;
+  label: string;
+  expandable: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+  onClick: () => void;
+  children?: ReactNode;
+}) {
+  return (
+    <div>
+      <div className="flex items-center gap-0.5">
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={onClick}
+          aria-label={label}
+          data-nav-item="true"
+          data-nav-active={active ? "true" : undefined}
+          data-nav-label={label}
+          data-nav-subgroup={expandable ? "true" : undefined}
+          data-subgroup-id={id}
+          className={`group flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-sm outline-none focus:ring-2 focus:ring-ring ${
+            active ? "bg-secondary font-medium text-foreground" : "text-muted-foreground hover:bg-secondary"
+          } disabled:cursor-not-allowed disabled:opacity-50`}
+        >
+          <span className="min-w-0 truncate">{label}</span>
+        </button>
+        {expandable && (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={onToggle}
+            aria-label={`${expanded ? "Collapse" : "Expand"} ${label}`}
+            aria-expanded={expanded}
+            className="flex h-7 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-secondary focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {expanded ? (
+              <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+          </button>
+        )}
+      </div>
+      {expandable && expanded ? (
+        <div className="ml-2 space-y-0.5 border-l border-border pl-3">
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
+}

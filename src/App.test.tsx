@@ -1514,6 +1514,41 @@ describe("App", () => {
     expect(writeClipboardTextMock.mock.calls[0][0]).toContain("azdodeck.workItemViews");
   });
 
+  it("nests pinned work item views under Views and toggles their visibility", async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+    await screen.findByText("No pull requests assigned to you.");
+
+    const nav = within(
+      screen.getByRole("navigation", { name: "Primary navigation" }),
+    );
+
+    // Default pinned views render as children of "Views".
+    expect(nav.getByRole("button", { name: "Assigned to me" })).toBeTruthy();
+    expect(nav.getByRole("button", { name: "Following" })).toBeTruthy();
+
+    // Collapsing the "Views" group hides the pinned children.
+    fireEvent.click(nav.getByRole("button", { name: "Collapse Views" }));
+    expect(nav.queryByRole("button", { name: "Assigned to me" })).toBeNull();
+    expect(nav.queryByRole("button", { name: "Following" })).toBeNull();
+    // "Views" itself remains navigable.
+    expect(nav.getByRole("button", { name: "Views" })).toBeTruthy();
+
+    // Expanding restores them.
+    fireEvent.click(nav.getByRole("button", { name: "Expand Views" }));
+    expect(nav.getByRole("button", { name: "Assigned to me" })).toBeTruthy();
+    expect(nav.getByRole("button", { name: "Following" })).toBeTruthy();
+  });
+
   it("searches commits and renders results", async () => {
     invokeMock.mockImplementation((command: string) => {
       if (command === "list_organizations") {

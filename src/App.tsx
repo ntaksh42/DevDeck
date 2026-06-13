@@ -49,7 +49,7 @@ import {
 } from "@/lib/utils";
 import { ResizeHandle } from "@/components/ResizeHandle";
 import { LoadingState, ErrorState } from "@/components/StateDisplay";
-import { NavButton, NavSection, NavSubItem } from "@/components/Nav";
+import { NavButton, NavSection, NavSubGroup, NavSubItem } from "@/components/Nav";
 import { HelpDialog } from "@/components/HelpDialog";
 import {
   CommandPalette,
@@ -238,6 +238,7 @@ function AppShell() {
     pullRequests: true,
     workItems: true,
   });
+  const [pinnedViewsExpanded, setPinnedViewsExpanded] = useState(true);
   const [workItemNavViews, setWorkItemNavViews] = useState<WorkItemQueryView[]>(() =>
     loadWorkItemQueryViews(),
   );
@@ -848,6 +849,22 @@ function AppShell() {
       }
       return;
     }
+    if (event.key === "ArrowRight" && current.dataset.navSubgroup === "true") {
+      event.preventDefault();
+      if (!pinnedViewsExpanded) {
+        setPinnedViewsExpanded(true);
+      } else {
+        focusNavItem(current, 1);
+      }
+      return;
+    }
+    if (event.key === "ArrowLeft" && current.dataset.navSubgroup === "true") {
+      event.preventDefault();
+      if (pinnedViewsExpanded) {
+        setPinnedViewsExpanded(false);
+      }
+      return;
+    }
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       current.click();
@@ -1180,29 +1197,34 @@ function AppShell() {
                 label="My Items"
                 onClick={() => setView("myWorkItems")}
               />
-              <NavSubItem
+              <NavSubGroup
+                id="workItemViews"
                 active={activeView === "workItemViews" && !activePinnedWorkItemView}
                 disabled={organizations.length === 0}
                 label="Views"
+                expandable={pinnedWorkItemViews.length > 0}
+                expanded={pinnedViewsExpanded}
+                onToggle={() => setPinnedViewsExpanded((value) => !value)}
                 onClick={() => {
                   setActiveWorkItemViewId(null);
                   setSelectedWorkItemViewRequestId(null);
                   setView("workItemViews");
                 }}
-              />
-              {pinnedWorkItemViews.map((item) => (
-                <NavSubItem
-                  key={item.id}
-                  active={activeView === "workItemViews" && activeWorkItemViewId === item.id}
-                  disabled={organizations.length === 0}
-                  label={item.name}
-                  onClick={() => {
-                    setActiveWorkItemViewId(item.id);
-                    setSelectedWorkItemViewRequestId(item.id);
-                    setView("workItemViews");
-                  }}
-                />
-              ))}
+              >
+                {pinnedWorkItemViews.map((item) => (
+                  <NavSubItem
+                    key={item.id}
+                    active={activeView === "workItemViews" && activeWorkItemViewId === item.id}
+                    disabled={organizations.length === 0}
+                    label={item.name}
+                    onClick={() => {
+                      setActiveWorkItemViewId(item.id);
+                      setSelectedWorkItemViewRequestId(item.id);
+                      setView("workItemViews");
+                    }}
+                  />
+                ))}
+              </NavSubGroup>
               <NavSubItem
                 active={activeView === "workItems"}
                 disabled={organizations.length === 0}
