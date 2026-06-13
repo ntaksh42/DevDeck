@@ -348,6 +348,84 @@ impl AdoClient {
         unreachable!("retry policy always has at least one attempt")
     }
 
+    pub(crate) async fn put_json<B: Serialize + ?Sized, T: DeserializeOwned>(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        body: &B,
+    ) -> Result<T> {
+        let url = self
+            .base_url
+            .join(path)
+            .map_err(|e| AdoError::Auth(e.to_string()))?;
+
+        for attempt in 1..=self.retry_policy.attempts() {
+            let auth = self.auth.auth_header_value().await?;
+            let response = self
+                .http
+                .put(url.clone())
+                .query(query)
+                .header("Authorization", &auth)
+                .json(body)
+                .send()
+                .await;
+
+            match response {
+                Ok(resp) => {
+                    let status = resp.status();
+                    if status.is_success() {
+                        return Ok(resp.json().await?);
+                    }
+                    if status == StatusCode::UNAUTHORIZED {
+                        return Err(AdoError::Unauthorized);
+                    }
+
+                    let retry_after = parse_retry_after(resp.headers());
+                    if self.should_retry_status(status, attempt) {
+                        let delay = self.retry_delay(attempt, retry_after);
+                        tracing::warn!(
+                            method = "PUT",
+                            path,
+                            attempt,
+                            status = status.as_u16(),
+                            delay_ms = delay.as_millis(),
+                            "retrying Azure DevOps request after response"
+                        );
+                        sleep(delay).await;
+                        continue;
+                    }
+
+                    if status == StatusCode::TOO_MANY_REQUESTS {
+                        return Err(AdoError::RateLimited(
+                            retry_after.unwrap_or(Duration::from_secs(60)),
+                        ));
+                    }
+
+                    let body = resp.text().await.unwrap_or_default();
+                    return Err(AdoError::Api {
+                        status: status.as_u16(),
+                        body,
+                    });
+                }
+                Err(error) if self.should_retry_error(&error, attempt) => {
+                    let delay = self.retry_policy.backoff_delay(attempt);
+                    tracing::warn!(
+                        method = "PUT",
+                        path,
+                        attempt,
+                        delay_ms = delay.as_millis(),
+                        error = %error,
+                        "retrying Azure DevOps request after network error"
+                    );
+                    sleep(delay).await;
+                }
+                Err(error) => return Err(AdoError::Network(error)),
+            }
+        }
+
+        unreachable!("retry policy always has at least one attempt")
+    }
+
     pub(crate) async fn delete(&self, path: &str, query: &[(&str, &str)]) -> Result<()> {
         let url = self
             .base_url

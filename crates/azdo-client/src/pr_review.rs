@@ -160,6 +160,22 @@ impl AdoClient {
         )
         .await
     }
+
+    pub async fn submit_pull_request_vote(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        pull_request_id: i64,
+        reviewer_id: &str,
+        vote: i32,
+    ) -> Result<IdentityRefWithVote> {
+        let path = format!(
+            "{project_id}/_apis/git/repositories/{repository_id}/pullRequests/{pull_request_id}/reviewers/{reviewer_id}"
+        );
+        let body = json!({ "vote": vote, "id": reviewer_id });
+        self.put_json(&path, &[("api-version", "7.1-preview")], &body)
+            .await
+    }
 }
 
 #[cfg(test)]
@@ -367,5 +383,30 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(thread.status.as_deref(), Some("closed"));
+    }
+
+    #[tokio::test]
+    async fn submit_pull_request_vote_puts_vote_for_reviewer() {
+        let server = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path(
+                "/project-1/_apis/git/repositories/repo-1/pullRequests/42/reviewers/user-42",
+            ))
+            .and(body_partial_json(serde_json::json!({ "vote": 10 })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": "user-42",
+                "displayName": "Me",
+                "vote": 10,
+                "isRequired": true
+            })))
+            .mount(&server)
+            .await;
+
+        let reviewer = test_client(&server)
+            .await
+            .submit_pull_request_vote("project-1", "repo-1", 42, "user-42", 10)
+            .await
+            .unwrap();
+        assert_eq!(reviewer.vote, 10);
     }
 }
