@@ -35,6 +35,7 @@ import type {
   SearchCommitsInput,
   SearchWorkItemAssigneesInput,
   SearchPullRequestsInput,
+  SearchPullRequestMentionsInput,
   SearchWorkItemMentionsInput,
   SearchWorkItemsInput,
   SetWorkItemFieldInput,
@@ -536,6 +537,12 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     case "search_work_item_mentions": {
       const input = (
         args as { input?: SearchWorkItemMentionsInput } | undefined
+      )?.input;
+      return demoMentionCandidates(input?.query);
+    }
+    case "search_pull_request_mentions": {
+      const input = (
+        args as { input?: SearchPullRequestMentionsInput } | undefined
       )?.input;
       return demoMentionCandidates(input?.query);
     }

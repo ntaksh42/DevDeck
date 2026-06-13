@@ -15,7 +15,9 @@ import {
   listPullRequestChanges,
   postPullRequestComment,
   prLocator,
+  searchPullRequestMentions,
   setPullRequestThreadStatus,
+  type MentionCandidate,
   type PrChangedFile,
   type PrThread,
   type ReviewPullRequestSummary,
@@ -29,6 +31,7 @@ import {
 import { openExternalUrl } from "@/lib/openExternal";
 import { isEditableTarget } from "@/lib/utils";
 import { LoadingState, ErrorState, PreviewEmptyState } from "@/components/StateDisplay";
+import { CommentComposer } from "./CommentComposer";
 import { PrThreadCard } from "./PrThreadCard";
 
 const MAX_RENDERED_DIFF_LINES = 2000;
@@ -252,6 +255,12 @@ export function PrFilesTab({
     setCommentLine(line);
   }, []);
 
+  const mentionSearch = useCallback(
+    (query: string): Promise<MentionCandidate[]> =>
+      searchPullRequestMentions({ organizationId: pr.organizationId, query }),
+    [pr.organizationId],
+  );
+
   // Scroll the n/p-focused thread into view once its file's diff is rendered.
   useEffect(() => {
     if (focusedThreadId == null) return;
@@ -313,14 +322,16 @@ export function PrFilesTab({
   if (changesQuery.isError) return <ErrorState message={commandErrorMessage(changesQuery.error)} />;
   if (files.length === 0) return <PreviewEmptyState message="No changed files." />;
 
-  function postInlineComment(content: string) {
-    if (!selectedFile || commentLine == null) return;
-    commentMutation.mutate({
-      ...prLocator(pr),
-      content,
-      filePath: selectedFile.path,
-      rightLine: commentLine,
-    });
+  function postInlineComment(content: string): Promise<void> {
+    if (!selectedFile || commentLine == null) return Promise.resolve();
+    return commentMutation
+      .mutateAsync({
+        ...prLocator(pr),
+        content,
+        filePath: selectedFile.path,
+        rightLine: commentLine,
+      })
+      .then(() => undefined);
   }
 
   function replyToThread(thread: PrThread, content: string): Promise<void> {
@@ -354,15 +365,20 @@ export function PrFilesTab({
             thread={thread}
             busy={mutationsBusy}
             showFilePath={false}
+            mentionSearch={mentionSearch}
             onReply={(content) => replyToThread(thread, content)}
             onToggleStatus={() => toggleThreadStatus(thread)}
           />
         ))}
         {drafting ? (
-          <InlineCommentBox
+          <CommentComposer
+            placeholder="Comment on this line… (Ctrl+Enter to post)"
+            autoFocus
             busy={commentMutation.isPending}
+            mentionSearch={mentionSearch}
             onSubmit={postInlineComment}
             onCancel={() => setCommentLine(null)}
+            onSubmitted={() => setCommentLine(null)}
           />
         ) : null}
       </div>
@@ -501,67 +517,6 @@ export function PrFilesTab({
             onStartComment={onStartComment}
           />
         ) : null}
-      </div>
-    </div>
-  );
-}
-
-function InlineCommentBox({
-  busy,
-  onSubmit,
-  onCancel,
-}: {
-  busy: boolean;
-  onSubmit: (content: string) => void;
-  onCancel: () => void;
-}) {
-  const [text, setText] = useState("");
-
-  function submit() {
-    if (!text.trim()) return;
-    onSubmit(text);
-  }
-
-  return (
-    <div className="rounded-md border border-border bg-white px-2 py-1.5">
-      <textarea
-        autoFocus
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        onKeyDown={(event) => {
-          if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-            event.preventDefault();
-            submit();
-          }
-          if (event.key === "Escape") {
-            event.stopPropagation();
-            onCancel();
-          }
-        }}
-        rows={2}
-        placeholder="Comment on this line… (Ctrl+Enter to post)"
-        aria-label="New inline comment"
-        className="w-full resize-y rounded border border-input bg-background px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-ring"
-      />
-      <div className="mt-1 flex items-center justify-end gap-1">
-        {busy ? (
-          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" aria-hidden="true" />
-        ) : null}
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded border border-border bg-white px-1.5 py-px text-[10px] hover:bg-secondary"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          disabled={!text.trim() || busy}
-          onClick={submit}
-          className="rounded border border-border bg-white px-1.5 py-px text-[10px] hover:bg-secondary disabled:opacity-50"
-        >
-          Comment
-        </button>
       </div>
     </div>
   );

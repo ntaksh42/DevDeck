@@ -7,6 +7,7 @@ use crate::db::AppDatabase;
 use crate::error::{AppError, Result};
 use crate::prs::{short_ref, vote_label};
 use crate::secrets::SecretStore;
+use crate::work_items::{summarize_mention_candidate, MentionCandidate};
 
 const MAX_DIFF_CONTENT_BYTES: usize = 256 * 1024;
 
@@ -60,6 +61,13 @@ pub struct SubmitPullRequestVoteInput {
     #[serde(flatten)]
     pub pr: PrLocator,
     pub vote: i32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchPullRequestMentionsInput {
+    pub organization_id: Option<String>,
+    pub query: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -412,6 +420,25 @@ impl PrReviewService {
                     web_url,
                 }
             })
+            .collect())
+    }
+
+    pub async fn search_mentions(
+        &self,
+        input: SearchPullRequestMentionsInput,
+    ) -> Result<Vec<MentionCandidate>> {
+        let query = input.query.trim();
+        if query.is_empty() {
+            return Ok(Vec::new());
+        }
+        let organization = self
+            .db
+            .resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let identities = client.search_identities(query, 40).await?;
+        Ok(identities
+            .into_iter()
+            .filter_map(summarize_mention_candidate)
             .collect())
     }
 

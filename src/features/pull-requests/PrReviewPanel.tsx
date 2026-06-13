@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Maximize2, Minimize2 } from "lucide-react";
 import {
@@ -9,8 +9,10 @@ import {
   listPullRequestCommits,
   postPullRequestComment,
   prLocator,
+  searchPullRequestMentions,
   setPullRequestThreadStatus,
   submitPullRequestVote,
+  type MentionCandidate,
   type PullRequestReview,
   type ReviewPullRequestSummary,
 } from "@/lib/azdoCommands";
@@ -19,9 +21,18 @@ import { MarkdownView } from "@/lib/markdown";
 import { openExternalUrl } from "@/lib/openExternal";
 import { ShortcutHint } from "@/components/ShortcutHint";
 import { LoadingState, ErrorState, PreviewEmptyState } from "@/components/StateDisplay";
+import { CommentComposer } from "./CommentComposer";
 import { PrFilesTab } from "./PrFilesTab";
 import { PrThreadCard } from "./PrThreadCard";
 import { VOTE_BUTTON_ACTIVE_CLASSES, VOTE_DOT_CLASSES, voteTone } from "./voteVisual";
+
+function usePrMentionSearch(organizationId: string) {
+  return useCallback(
+    (query: string): Promise<MentionCandidate[]> =>
+      searchPullRequestMentions({ organizationId, query }),
+    [organizationId],
+  );
+}
 
 type PanelTab = "review" | "files" | "commits" | "result";
 
@@ -146,12 +157,11 @@ function ReviewTab({
   error: string | null;
 }) {
   const queryClient = useQueryClient();
-  const [newComment, setNewComment] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  const mentionSearch = usePrMentionSearch(pr.organizationId);
 
   // Reset draft state when another PR is selected.
   useEffect(() => {
-    setNewComment("");
     setActionError(null);
   }, [pr.pullRequestId, pr.repositoryId]);
 
@@ -174,9 +184,8 @@ function ReviewTab({
 
   const commentMutation = useMutation({
     mutationFn: postPullRequestComment,
-    onSuccess: (_thread, variables) => {
+    onSuccess: () => {
       setActionError(null);
-      if (variables.threadId == null) setNewComment("");
       invalidateReview();
     },
     onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
@@ -304,6 +313,7 @@ function ReviewTab({
                 key={thread.id}
                 thread={thread}
                 busy={commentMutation.isPending || statusMutation.isPending}
+                mentionSearch={mentionSearch}
                 onReply={(content) =>
                   commentMutation.mutateAsync({
                     ...prLocator(pr),
@@ -342,43 +352,16 @@ function ReviewTab({
       </div>
 
       {/* New comment */}
-      <form
-        className="shrink-0 border-t border-border p-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!newComment.trim()) return;
-          commentMutation.mutate({ ...prLocator(pr), content: newComment });
-        }}
-      >
-        <textarea
-          value={newComment}
-          onChange={(event) => setNewComment(event.target.value)}
-          onKeyDown={(event) => {
-            if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-              event.preventDefault();
-              if (newComment.trim()) {
-                commentMutation.mutate({ ...prLocator(pr), content: newComment });
-              }
-            }
-          }}
-          rows={2}
+      <div className="shrink-0 border-t border-border p-2">
+        <CommentComposer
           placeholder="Add a comment… (Ctrl+Enter to post)"
-          aria-label="New pull request comment"
-          className="w-full resize-y rounded border border-input bg-background px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-ring"
+          busy={commentMutation.isPending}
+          mentionSearch={mentionSearch}
+          onSubmit={(content) =>
+            commentMutation.mutateAsync({ ...prLocator(pr), content }).then(() => undefined)
+          }
         />
-        <div className="mt-1 flex items-center justify-end gap-2">
-          {commentMutation.isPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden="true" />
-          ) : null}
-          <button
-            type="submit"
-            disabled={!newComment.trim() || commentMutation.isPending}
-            className="rounded border border-border bg-white px-2 py-0.5 text-xs hover:bg-secondary disabled:opacity-50"
-          >
-            Comment
-          </button>
-        </div>
-      </form>
+      </div>
     </div>
   );
 }

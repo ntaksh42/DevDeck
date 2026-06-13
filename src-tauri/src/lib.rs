@@ -25,7 +25,7 @@ use orgs::{AddAzureCliOrganizationInput, AddPatOrganizationInput, OrganizationSe
 use pr_review::{
     GetPullRequestFileDiffInput, PostPullRequestCommentInput, PrCommit, PrFileDiff, PrLocator,
     PrReviewService, PrReviewer, PrThread, PullRequestChanges, PullRequestReview,
-    SetPullRequestThreadStatusInput, SubmitPullRequestVoteInput,
+    SearchPullRequestMentionsInput, SetPullRequestThreadStatusInput, SubmitPullRequestVoteInput,
 };
 use prs::{
     ListMyReviewPullRequestsInput, PullRequestService, PullRequestSummary,
@@ -248,6 +248,15 @@ async fn submit_pull_request_vote(
 ) -> Result<PrReviewer> {
     ensure_write_enabled(&state)?;
     state.pr_review.submit_vote(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn search_pull_request_mentions(
+    input: SearchPullRequestMentionsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<MentionCandidate>> {
+    state.pr_review.search_mentions(input).await
 }
 
 #[tauri::command]
@@ -656,6 +665,7 @@ pub fn run() {
             post_pull_request_comment,
             set_pull_request_thread_status,
             submit_pull_request_vote,
+            search_pull_request_mentions,
             search_all,
             search_work_items,
             list_my_work_items,

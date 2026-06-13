@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { type PrThread } from "@/lib/azdoCommands";
+import { type MentionCandidate, type PrThread } from "@/lib/azdoCommands";
 import { formatDate, formatRelativeDate } from "@/lib/utils";
 import { MarkdownView } from "@/lib/markdown";
+import { CommentComposer } from "./CommentComposer";
 
 /**
  * Shared thread card used by the Review tab and the inline diff view.
- * Owns its reply draft state; parents only handle the actual mutations.
- * `onReply` is awaited so the draft survives a failed post.
+ * Replies go through CommentComposer (Write/Preview + mentions), which keeps
+ * the draft when a post fails.
  */
 export function PrThreadCard({
   thread,
@@ -14,32 +15,17 @@ export function PrThreadCard({
   showFilePath = true,
   onReply,
   onToggleStatus,
+  mentionSearch,
 }: {
   thread: PrThread;
   busy: boolean;
   showFilePath?: boolean;
   onReply: (content: string) => Promise<void>;
   onToggleStatus: () => void;
+  mentionSearch?: (query: string) => Promise<MentionCandidate[]>;
 }) {
   const [replying, setReplying] = useState(false);
-  const [replyText, setReplyText] = useState("");
-  const [submitting, setSubmitting] = useState(false);
   const resolved = thread.isResolved;
-
-  async function submitReply() {
-    if (!replyText.trim() || submitting) return;
-    setSubmitting(true);
-    try {
-      await onReply(replyText);
-      // Only discard the draft once the post actually succeeded.
-      setReplying(false);
-      setReplyText("");
-    } catch {
-      // Keep the draft; the parent surfaces the error.
-    } finally {
-      setSubmitting(false);
-    }
-  }
 
   return (
     <div
@@ -101,42 +87,16 @@ export function PrThreadCard({
       </div>
       {replying ? (
         <div className="mt-1.5">
-          <textarea
-            autoFocus
-            value={replyText}
-            onChange={(event) => setReplyText(event.target.value)}
-            onKeyDown={(event) => {
-              if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-                event.preventDefault();
-                submitReply();
-              }
-              if (event.key === "Escape") {
-                event.stopPropagation();
-                setReplying(false);
-              }
-            }}
-            rows={2}
+          <CommentComposer
             placeholder="Reply… (Ctrl+Enter to post)"
-            aria-label="Reply to thread"
-            className="w-full resize-y rounded border border-input bg-background px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-ring"
+            submitLabel="Reply"
+            autoFocus
+            busy={busy}
+            mentionSearch={mentionSearch}
+            onSubmit={onReply}
+            onCancel={() => setReplying(false)}
+            onSubmitted={() => setReplying(false)}
           />
-          <div className="mt-1 flex justify-end gap-1">
-            <button
-              type="button"
-              onClick={() => setReplying(false)}
-              className="rounded border border-border bg-white px-1.5 py-px text-[10px] hover:bg-secondary"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={!replyText.trim() || busy || submitting}
-              onClick={submitReply}
-              className="rounded border border-border bg-white px-1.5 py-px text-[10px] hover:bg-secondary disabled:opacity-50"
-            >
-              Reply
-            </button>
-          </div>
         </div>
       ) : (
         <button

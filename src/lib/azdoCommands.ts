@@ -475,6 +475,11 @@ export type SubmitPullRequestVoteInput = PrLocatorInput & {
   vote: -10 | -5 | 0 | 5 | 10;
 };
 
+export type SearchPullRequestMentionsInput = {
+  organizationId?: string;
+  query: string;
+};
+
 export type SearchAllInput = {
   organizationId?: string;
   query: string;
@@ -795,6 +800,13 @@ export async function submitPullRequestVote(
 ): Promise<PrReviewer> {
   const result = await invokeCommand("submit_pull_request_vote", { input });
   return prReviewerSchema.parse(result);
+}
+
+export async function searchPullRequestMentions(
+  input: SearchPullRequestMentionsInput,
+): Promise<MentionCandidate[]> {
+  const result = await invokeCommand("search_pull_request_mentions", { input });
+  return mentionCandidatesSchema.parse(result);
 }
 
 export async function searchAll(input: SearchAllInput): Promise<SearchAllResult> {

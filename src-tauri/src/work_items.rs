@@ -1527,7 +1527,7 @@ impl WorkItemService {
     }
 }
 
-fn summarize_mention_candidate(identity: Identity) -> Option<MentionCandidate> {
+pub(crate) fn summarize_mention_candidate(identity: Identity) -> Option<MentionCandidate> {
     if !is_user_like_identity(&identity) {
         return None;
     }
