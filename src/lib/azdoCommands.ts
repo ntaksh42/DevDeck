@@ -415,6 +415,7 @@ const codeSearchHitSchema = z.object({
 const codeSearchResultsSchema = z.object({
   count: z.number(),
   results: z.array(codeSearchHitSchema),
+  notice: z.string().nullable(),
 });
 export type CodeSearchHit = z.infer<typeof codeSearchHitSchema>;
 export type CodeSearchResults = z.infer<typeof codeSearchResultsSchema>;
@@ -423,6 +424,9 @@ export async function searchCode(input: {
   organizationId?: string;
   query: string;
   project?: string;
+  repository?: string;
+  branch?: string;
+  path?: string;
 }): Promise<CodeSearchResults> {
   const result = await invokeCommand("search_code", { input });
   return codeSearchResultsSchema.parse(result);

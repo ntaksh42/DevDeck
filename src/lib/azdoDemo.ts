@@ -837,9 +837,10 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     case "search_code": {
       const input = (args as { input?: { query?: string } } | undefined)?.input;
       const query = input?.query?.trim() ?? "";
-      if (!query) return { count: 0, results: [] };
+      if (!query) return { count: 0, results: [], notice: null };
       return {
         count: 2,
+        notice: null,
         results: [
           {
             fileName: "azdoCommands.ts",

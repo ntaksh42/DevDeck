@@ -4,13 +4,16 @@ use serde_json::json;
 use crate::client::AdoClient;
 use crate::error::Result;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct CodeSearchRequest {
     pub search_text: String,
     pub top: u32,
     pub skip: u32,
-    /// Optional project name filter.
+    /// Optional filters by name. Branch is a short name (e.g. "main").
     pub project: Option<String>,
+    pub repository: Option<String>,
+    pub branch: Option<String>,
+    pub path: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -43,6 +46,9 @@ pub struct CodeSearchResponse {
     pub count: i64,
     #[serde(default)]
     pub results: Vec<CodeSearchResult>,
+    /// Non-zero when results are partial/unavailable (e.g. indexing in progress).
+    #[serde(default)]
+    pub info_code: Option<i64>,
 }
 
 impl AdoClient {
@@ -52,12 +58,23 @@ impl AdoClient {
             "$top": request.top,
             "$skip": request.skip,
         });
-        if let Some(project) = request.project.filter(|value| !value.trim().is_empty()) {
-            body["filters"] = json!({ "Project": [project] });
+        let mut filters = serde_json::Map::new();
+        for (key, value) in [
+            ("Project", request.project),
+            ("Repository", request.repository),
+            ("Branch", request.branch),
+            ("Path", request.path),
+        ] {
+            if let Some(value) = value.filter(|value| !value.trim().is_empty()) {
+                filters.insert(key.to_string(), json!([value]));
+            }
+        }
+        if !filters.is_empty() {
+            body["filters"] = serde_json::Value::Object(filters);
         }
         self.post_json_almsearch(
             "_apis/search/codesearchresults",
-            &[("api-version", "7.1-preview.1")],
+            &[("api-version", "7.1")],
             &body,
         )
         .await
@@ -69,7 +86,7 @@ mod tests {
     use std::sync::Arc;
 
     use url::Url;
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{body_partial_json, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
@@ -108,7 +125,7 @@ mod tests {
                 search_text: "AdoClient".to_string(),
                 top: 50,
                 skip: 0,
-                project: None,
+                ..Default::default()
             })
             .await
             .unwrap();
@@ -120,5 +137,43 @@ mod tests {
             response.results[0].versions[0].branch_name.as_deref(),
             Some("main")
         );
+    }
+
+    #[tokio::test]
+    async fn search_code_sends_filters_and_reads_info_code() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/_apis/search/codesearchresults"))
+            .and(body_partial_json(serde_json::json!({
+                "filters": {
+                    "Project": ["Platform"],
+                    "Repository": ["azdo-dashboard"],
+                    "Branch": ["main"]
+                }
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 0,
+                "results": [],
+                "infoCode": 1
+            })))
+            .mount(&server)
+            .await;
+
+        let response = test_client(&server)
+            .await
+            .search_code(CodeSearchRequest {
+                search_text: "AdoClient".to_string(),
+                top: 50,
+                skip: 0,
+                project: Some("Platform".to_string()),
+                repository: Some("azdo-dashboard".to_string()),
+                branch: Some("main".to_string()),
+                path: None,
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(response.count, 0);
+        assert_eq!(response.info_code, Some(1));
     }
 }

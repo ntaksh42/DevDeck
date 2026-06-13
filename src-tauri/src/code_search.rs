@@ -15,6 +15,9 @@ pub struct SearchCodeInput {
     pub organization_id: Option<String>,
     pub query: String,
     pub project: Option<String>,
+    pub repository: Option<String>,
+    pub branch: Option<String>,
+    pub path: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -33,6 +36,9 @@ pub struct CodeSearchHit {
 pub struct CodeSearchResults {
     pub count: i64,
     pub results: Vec<CodeSearchHit>,
+    /// Set when Azure DevOps could not return full results, e.g. the
+    /// organization is still being indexed after enabling Code Search.
+    pub notice: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -52,23 +58,23 @@ impl CodeSearchService {
             return Ok(CodeSearchResults {
                 count: 0,
                 results: vec![],
+                notice: None,
             });
         }
         let organization = self
             .db
             .resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let project = input
-            .project
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty());
 
         let response = client
             .search_code(CodeSearchRequest {
                 search_text: query.to_string(),
                 top: CODE_SEARCH_TOP,
                 skip: 0,
-                project,
+                project: normalize(input.project),
+                repository: normalize(input.repository),
+                branch: normalize(input.branch),
+                path: normalize(input.path),
             })
             .await
             .map_err(|error| match error {
@@ -111,7 +117,27 @@ impl CodeSearchService {
         Ok(CodeSearchResults {
             count: response.count,
             results,
+            notice: index_notice(response.info_code),
         })
+    }
+}
+
+fn normalize(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+/// Maps a non-zero Code Search `infoCode` to a user-facing notice. The common
+/// case right after enabling Code Search is that the org is still indexing.
+fn index_notice(info_code: Option<i64>) -> Option<String> {
+    match info_code {
+        None | Some(0) => None,
+        Some(_) => Some(
+            "Azure DevOps could not return full code results — your organization may still be \
+             indexing after enabling Code Search. Try again shortly."
+                .to_string(),
+        ),
     }
 }
 
@@ -175,5 +201,12 @@ mod tests {
             code_file_web_url(&org(), "Platform", "azdo dashboard", "/src/main.rs", Some("main")),
             "https://dev.azure.com/contoso/Platform/_git/azdo%20dashboard?path=/src/main.rs&_a=contents&version=GBmain"
         );
+    }
+
+    #[test]
+    fn index_notice_only_for_nonzero_info_code() {
+        assert!(index_notice(None).is_none());
+        assert!(index_notice(Some(0)).is_none());
+        assert!(index_notice(Some(1)).is_some());
     }
 }
