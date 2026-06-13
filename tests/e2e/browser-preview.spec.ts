@@ -18,14 +18,23 @@ test.describe("browser preview", () => {
     await page.getByRole("button", { name: "My Reviews" }).click();
     await expect(main.getByRole("heading", { name: "My Reviews" })).toBeVisible();
     await expect(main.getByRole("grid", { name: "My review pull requests" })).toBeVisible();
-    await expect(main.getByText("Add rate limiting middleware to all endpoints")).toBeVisible();
+    const reviewGrid = main.getByRole("grid", { name: "My review pull requests" });
+    await expect(
+      reviewGrid.getByText("Add rate limiting middleware to all endpoints"),
+    ).toBeVisible();
     await expect(main.getByText(/6 total,\s*2 not voted/)).toBeVisible();
     await expect(main.getByRole("tab", { name: "Rejected" })).toHaveCount(0);
+
+    // The PR review panel shows the selected PR with vote actions and comments.
+    await expect(main.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
+    await expect(main.getByText("Could you add a test for the empty case?")).toBeVisible();
+
+    // The local review-result preview lives on the Result tab.
+    await main.getByRole("tab", { name: "Result" }).click();
     await expect(main.getByText("review-PR101.html", { exact: true })).toBeVisible();
     await expect(page.getByRole("separator", { name: "Resize navigation" })).toBeVisible();
     await expect(main.getByRole("separator", { name: "Resize review preview" })).toBeVisible();
 
-    const reviewGrid = main.getByRole("grid", { name: "My review pull requests" });
     await main.getByRole("button", { name: "Sort by PR#" }).click();
     await expect(reviewGrid.getByRole("row").first()).toContainText("#98");
     await main.getByRole("button", { name: "Sort by PR#" }).click();
