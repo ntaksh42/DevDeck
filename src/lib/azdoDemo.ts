@@ -162,6 +162,7 @@ function demoThreadsFor(pullRequestId: number): PrThread[] {
       isResolved: false,
       filePath: null,
       rightLine: null,
+      leftLine: null,
       comments: [
         {
           id: 1,
@@ -180,6 +181,7 @@ function demoThreadsFor(pullRequestId: number): PrThread[] {
       isResolved: true,
       filePath: "/src/app/dashboard.ts",
       rightLine: 2,
+      leftLine: null,
       comments: [
         {
           id: 1,
@@ -207,6 +209,7 @@ function demoThreadsFor(pullRequestId: number): PrThread[] {
       isResolved: false,
       filePath: null,
       rightLine: null,
+      leftLine: null,
       comments: [
         {
           id: 1,
@@ -231,9 +234,32 @@ const demoPrFiles: PrChangedFile[] = [
   { path: "/src/app/legacyDashboard.ts", changeType: "delete", originalPath: null },
 ];
 
-const DEMO_DIFF_BASE = `export function loadDashboard() {
+const DEMO_DIFF_BASE = `import { fetchData } from "./api";
+import { Logger } from "./logger";
+
+const logger = new Logger("dashboard");
+
+export function loadDashboard() {
   const refreshIntervalMs = 30000;
+  logger.info("loading dashboard");
   return fetchData(refreshIntervalMs);
+}
+
+// The widgets below stay unchanged across iterations, so a reviewer can fold
+// this section away while focusing on the edited code above and below it.
+export const widgets = [
+  { id: "cpu", label: "CPU" },
+  { id: "memory", label: "Memory" },
+  { id: "disk", label: "Disk" },
+  { id: "network", label: "Network" },
+  { id: "errors", label: "Errors" },
+  { id: "latency", label: "Latency" },
+  { id: "throughput", label: "Throughput" },
+];
+
+export function summarize(widgetId: string) {
+  const widget = widgets.find((candidate) => candidate.id === widgetId);
+  return widget ? widget.label : "unknown";
 }
 `;
 const demoPrCommits: PrCommit[] = [
@@ -266,9 +292,32 @@ const demoPrCommits: PrCommit[] = [
   },
 ];
 
-const DEMO_DIFF_TARGET = `export function loadDashboard(options: DashboardOptions) {
+const DEMO_DIFF_TARGET = `import { fetchData } from "./api";
+import { Logger } from "./logger";
+
+const logger = new Logger("dashboard");
+
+export function loadDashboard(options: DashboardOptions) {
   const refreshIntervalMs = options.refreshIntervalMs ?? 30000;
+  logger.info("loading dashboard");
   return fetchData(refreshIntervalMs);
+}
+
+// The widgets below stay unchanged across iterations, so a reviewer can fold
+// this section away while focusing on the edited code above and below it.
+export const widgets = [
+  { id: "cpu", label: "CPU" },
+  { id: "memory", label: "Memory" },
+  { id: "disk", label: "Disk" },
+  { id: "network", label: "Network" },
+  { id: "errors", label: "Errors" },
+  { id: "latency", label: "Latency" },
+  { id: "throughput", label: "Throughput" },
+];
+
+export function summarize(widgetId: string) {
+  const widget = widgets.find((candidate) => candidate.id === widgetId);
+  return widget ? \`\${widget.label} — a deliberately long, unchanged-but-reflowed descriptive suffix that shows how split view now wraps very long lines instead of clipping them\` : "unknown";
 }
 `;
 
@@ -457,6 +506,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         isResolved: false,
         filePath: input.filePath ?? null,
         rightLine: input.rightLine ?? null,
+        leftLine: input.leftLine ?? null,
         comments: [
           {
             id: 1,

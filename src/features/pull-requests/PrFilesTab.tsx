@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus } from "lucide-react";
+import { ChevronsUpDown, Loader2, Plus } from "lucide-react";
 import {
   commandErrorMessage,
   deletePullRequestComment,
@@ -27,7 +27,11 @@ import {
 import {
   buildDiffLines,
   buildSideBySideRows,
+  collapseDiff,
+  type CollapsedItem,
   type DiffLine,
+  type DiffLineKind,
+  type InlineSegment,
   type SideBySideCell,
 } from "@/lib/diffView";
 import { openExternalUrl } from "@/lib/openExternal";
@@ -37,6 +41,11 @@ import { CommentComposer } from "./CommentComposer";
 import { PrThreadCard } from "./PrThreadCard";
 
 const MAX_RENDERED_DIFF_LINES = 2000;
+// Lines of unchanged context kept around each change before folding the rest.
+const DIFF_CONTEXT_LINES = 3;
+
+type CommentSide = "left" | "right";
+type DiffCommentDraft = { side: CommentSide; line: number };
 
 type ViewMode = "unified" | "split";
 
@@ -105,8 +114,9 @@ export function PrFilesTab({
   const queryClient = useQueryClient();
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode);
-  // Target-side line number where a new inline comment is being drafted.
-  const [commentLine, setCommentLine] = useState<number | null>(null);
+  // Side + line number where a new inline comment is being drafted. "right"
+  // anchors to the target (new) file, "left" to the base (old) file.
+  const [commentDraft, setCommentDraft] = useState<DiffCommentDraft | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [viewedKeys, setViewedKeys] = useState<Set<string>>(() =>
     loadViewedKeys(viewedStorageKey(pr)),
@@ -129,14 +139,14 @@ export function PrFilesTab({
   // Reset selection state when switching PRs.
   useEffect(() => {
     setSelectedPath(null);
-    setCommentLine(null);
+    setCommentDraft(null);
     setActionError(null);
     setFocusedThreadId(null);
     setViewedKeys(loadViewedKeys(viewedStorageKey(pr)));
   }, [pr]);
 
   useEffect(() => {
-    setCommentLine(null);
+    setCommentDraft(null);
   }, [selectedPath]);
 
   // Scope invalidation to this PR so other PRs' cached reviews stay warm.
@@ -150,7 +160,7 @@ export function PrFilesTab({
     mutationFn: postPullRequestComment,
     onSuccess: () => {
       setActionError(null);
-      setCommentLine(null);
+      setCommentDraft(null);
       invalidateReview();
     },
     onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
@@ -201,19 +211,26 @@ export function PrFilesTab({
     return counts;
   }, [threads]);
 
-  // Threads anchored to a right-side line of the selected file.
-  const threadsByLine = useMemo(() => {
-    const map = new Map<number, PrThread[]>();
-    if (!selectedFile) return map;
+  // Threads of the selected file, indexed by the side + line they anchor to.
+  // "right" is the target (new) file; "left" is the base (old) file.
+  const { threadsByRightLine, threadsByLeftLine } = useMemo(() => {
+    const right = new Map<number, PrThread[]>();
+    const left = new Map<number, PrThread[]>();
+    if (!selectedFile) return { threadsByRightLine: right, threadsByLeftLine: left };
     const selectedKey = pathKey(selectedFile.path);
     for (const thread of threads ?? []) {
-      if (!thread.filePath || thread.rightLine == null) continue;
-      if (pathKey(thread.filePath) !== selectedKey) continue;
-      const list = map.get(thread.rightLine) ?? [];
-      list.push(thread);
-      map.set(thread.rightLine, list);
+      if (!thread.filePath || pathKey(thread.filePath) !== selectedKey) continue;
+      if (thread.rightLine != null) {
+        const list = right.get(thread.rightLine) ?? [];
+        list.push(thread);
+        right.set(thread.rightLine, list);
+      } else if (thread.leftLine != null) {
+        const list = left.get(thread.leftLine) ?? [];
+        list.push(thread);
+        left.set(thread.leftLine, list);
+      }
     }
-    return map;
+    return { threadsByRightLine: right, threadsByLeftLine: left };
   }, [threads, selectedFile]);
 
   // Viewed state is keyed by file path + target commit, so a new iteration
@@ -274,10 +291,21 @@ export function PrFilesTab({
     staleTime: 60_000,
   });
 
-  const onStartComment = useCallback((line: number) => {
+  const onStartComment = useCallback((side: CommentSide, line: number) => {
     setActionError(null);
-    setCommentLine(line);
+    setCommentDraft({ side, line });
   }, []);
+
+  // A line carrying a comment thread or an open draft must never be folded away.
+  const lineHasContent = useCallback(
+    (side: CommentSide, line: number | null): boolean => {
+      if (line == null) return false;
+      const source = side === "right" ? threadsByRightLine : threadsByLeftLine;
+      if ((source.get(line)?.length ?? 0) > 0) return true;
+      return commentDraft?.side === side && commentDraft.line === line;
+    },
+    [threadsByRightLine, threadsByLeftLine, commentDraft],
+  );
 
   const mentionSearch = useCallback(
     (query: string): Promise<MentionCandidate[]> =>
@@ -347,13 +375,15 @@ export function PrFilesTab({
   if (files.length === 0) return <PreviewEmptyState message="No changed files." />;
 
   function postInlineComment(content: string): Promise<void> {
-    if (!selectedFile || commentLine == null) return Promise.resolve();
+    if (!selectedFile || !commentDraft) return Promise.resolve();
     return commentMutation
       .mutateAsync({
         ...prLocator(pr),
         content,
         filePath: selectedFile.path,
-        rightLine: commentLine,
+        ...(commentDraft.side === "left"
+          ? { leftLine: commentDraft.line }
+          : { rightLine: commentDraft.line }),
       })
       .then(() => undefined);
   }
@@ -382,15 +412,18 @@ export function PrFilesTab({
     return deleteMutation.mutateAsync({ ...prLocator(pr), threadId: thread.id, commentId });
   }
 
-  // Inline block rendered under a right-side line: existing threads + comment box.
-  function lineAttachments(rightLine: number | null) {
-    if (rightLine == null) return null;
-    const lineThreads = threadsByLine.get(rightLine) ?? [];
-    const drafting = commentLine === rightLine;
+  // Inline block rendered under a diff line: existing threads + comment box for
+  // the given side ("right" = target file, "left" = base file).
+  function lineAttachments(side: CommentSide, line: number | null) {
+    if (line == null) return null;
+    const source = side === "right" ? threadsByRightLine : threadsByLeftLine;
+    const lineThreads = source.get(line) ?? [];
+    const drafting = commentDraft?.side === side && commentDraft.line === line;
     if (lineThreads.length === 0 && !drafting) return null;
     return (
       <div
-        data-comment-line={rightLine}
+        // n/p navigation scrolls to right-side threads via this attribute.
+        data-comment-line={side === "right" ? line : undefined}
         className="space-y-1 border-y border-border bg-muted/30 px-2 py-1.5 font-sans whitespace-normal"
       >
         {lineThreads.map((thread) => (
@@ -408,13 +441,17 @@ export function PrFilesTab({
         ))}
         {drafting ? (
           <CommentComposer
-            placeholder="Comment on this line… (Ctrl+Enter to post)"
+            placeholder={
+              side === "left"
+                ? "Comment on the old line… (Ctrl+Enter to post)"
+                : "Comment on this line… (Ctrl+Enter to post)"
+            }
             autoFocus
             busy={commentMutation.isPending}
             mentionSearch={mentionSearch}
             onSubmit={postInlineComment}
-            onCancel={() => setCommentLine(null)}
-            onSubmitted={() => setCommentLine(null)}
+            onCancel={() => setCommentDraft(null)}
+            onSubmitted={() => setCommentDraft(null)}
           />
         ) : null}
       </div>
@@ -553,6 +590,8 @@ export function PrFilesTab({
             <ErrorState message={commandErrorMessage(diffQuery.error)} />
           ) : diffQuery.data ? (
             <DiffContent
+              // Remount per file/iteration so collapsed/expanded state resets.
+              key={`${selectedFile.path}@${changes?.targetCommitId ?? ""}`}
               baseContent={diffQuery.data.baseContent}
               targetContent={diffQuery.data.targetContent}
               baseUnavailableReason={diffQuery.data.baseUnavailableReason}
@@ -560,6 +599,7 @@ export function PrFilesTab({
               webUrl={pr.webUrl}
               viewMode={viewMode}
               lineAttachments={lineAttachments}
+              lineHasContent={lineHasContent}
               onStartComment={onStartComment}
             />
           ) : null}
@@ -577,6 +617,7 @@ function DiffContent({
   webUrl,
   viewMode,
   lineAttachments,
+  lineHasContent,
   onStartComment,
 }: {
   baseContent: string | null;
@@ -585,9 +626,13 @@ function DiffContent({
   targetUnavailableReason: string | null;
   webUrl: string | null;
   viewMode: ViewMode;
-  lineAttachments: (rightLine: number | null) => ReactNode;
-  onStartComment: (rightLine: number) => void;
+  lineAttachments: (side: CommentSide, line: number | null) => ReactNode;
+  lineHasContent: (side: CommentSide, line: number | null) => boolean;
+  onStartComment: (side: CommentSide, line: number) => void;
 }) {
+  // Gaps the reader expanded, keyed by their first hidden line's numbers.
+  const [expandedGaps, setExpandedGaps] = useState<Set<string>>(() => new Set());
+
   const baseBlocked = baseUnavailableReason != null;
   const targetBlocked = targetUnavailableReason != null;
   // Only give up when neither side can be shown. A single blocked side still
@@ -614,6 +659,33 @@ function DiffContent({
     [baseText, targetText, fatalReason, viewMode],
   );
 
+  // Fold unchanged runs, but never a line that carries a comment or open draft.
+  const collapsedUnified = useMemo(
+    () =>
+      collapseDiff(
+        unified,
+        (line) =>
+          line.kind === "context" &&
+          !lineHasContent("right", line.targetLine) &&
+          !lineHasContent("left", line.baseLine),
+        DIFF_CONTEXT_LINES,
+      ),
+    [unified, lineHasContent],
+  );
+  const collapsedSplit = useMemo(
+    () =>
+      collapseDiff(
+        split,
+        (row) =>
+          row.left?.kind === "context" &&
+          row.right?.kind === "context" &&
+          !lineHasContent("left", row.left.line) &&
+          !lineHasContent("right", row.right.line),
+        DIFF_CONTEXT_LINES,
+      ),
+    [split, lineHasContent],
+  );
+
   if (fatalReason) {
     return (
       <div className="flex flex-col items-center gap-2 py-6 text-xs text-muted-foreground">
@@ -631,6 +703,14 @@ function DiffContent({
     );
   }
 
+  function expandGap(key: string) {
+    setExpandedGaps((prev) => {
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+  }
+
   const note = partialNote ? (
     <p className="border-b border-border bg-yellow-50 px-2 py-1 text-[11px] text-yellow-800">
       {partialNote}
@@ -638,38 +718,121 @@ function DiffContent({
   ) : null;
 
   if (viewMode === "split") {
-    const truncated = split.length > MAX_RENDERED_DIFF_LINES;
-    const rendered = truncated ? split.slice(0, MAX_RENDERED_DIFF_LINES) : split;
     return (
       <div className="font-mono text-[11px] leading-4">
         {note}
-        {rendered.map((row, index) => (
-          <div key={index}>
-            <div className="grid grid-cols-2">
-              <SplitCell cell={row.left} side="left" onStartComment={onStartComment} />
-              <SplitCell cell={row.right} side="right" onStartComment={onStartComment} />
+        <CollapsedDiff
+          items={collapsedSplit}
+          expandedGaps={expandedGaps}
+          onExpandGap={expandGap}
+          gapKey={(row) => `${row.left?.line ?? ""}:${row.right?.line ?? ""}`}
+          renderRow={(row, key) => (
+            <div key={key}>
+              <div className="grid grid-cols-2">
+                <SplitCell cell={row.left} side="left" onStartComment={onStartComment} />
+                <SplitCell cell={row.right} side="right" onStartComment={onStartComment} />
+              </div>
+              {lineAttachments("left", row.left ? row.left.line : null)}
+              {lineAttachments("right", row.right ? row.right.line : null)}
             </div>
-            {lineAttachments(row.right?.line ?? null)}
-          </div>
-        ))}
-        {truncated ? <TruncationNote /> : null}
+          )}
+        />
       </div>
     );
   }
 
-  const truncated = unified.length > MAX_RENDERED_DIFF_LINES;
-  const rendered = truncated ? unified.slice(0, MAX_RENDERED_DIFF_LINES) : unified;
   return (
     <div className="font-mono text-[11px] leading-4">
       {note}
-      {rendered.map((line, index) => (
-        <div key={index}>
-          <DiffRow line={line} onStartComment={onStartComment} />
-          {lineAttachments(line.targetLine)}
-        </div>
-      ))}
-      {truncated ? <TruncationNote /> : null}
+      <CollapsedDiff
+        items={collapsedUnified}
+        expandedGaps={expandedGaps}
+        onExpandGap={expandGap}
+        gapKey={(line) => `${line.baseLine ?? ""}:${line.targetLine ?? ""}`}
+        renderRow={(line, key) => {
+          // Deleted lines anchor to the old (left) file; everything else to new.
+          const side: CommentSide = line.kind === "del" ? "left" : "right";
+          const anchorLine = line.kind === "del" ? line.baseLine : line.targetLine;
+          return (
+            <div key={key}>
+              <DiffRow line={line} onStartComment={onStartComment} />
+              {lineAttachments(side, anchorLine)}
+            </div>
+          );
+        }}
+      />
     </div>
+  );
+}
+
+/**
+ * Renders a collapsed diff: visible rows plus "expand" bars for folded gaps.
+ * The overall visible-row count is capped so a single huge change run cannot
+ * lock up rendering.
+ */
+function CollapsedDiff<T>({
+  items,
+  expandedGaps,
+  onExpandGap,
+  gapKey,
+  renderRow,
+}: {
+  items: CollapsedItem<T>[];
+  expandedGaps: Set<string>;
+  onExpandGap: (key: string) => void;
+  gapKey: (row: T) => string;
+  renderRow: (row: T, key: string) => ReactNode;
+}) {
+  const out: ReactNode[] = [];
+  let rendered = 0;
+  let truncated = false;
+
+  for (let i = 0; i < items.length && !truncated; i++) {
+    const item = items[i];
+    if (item.type === "row") {
+      if (rendered >= MAX_RENDERED_DIFF_LINES) {
+        truncated = true;
+        break;
+      }
+      out.push(renderRow(item.row, `r${i}`));
+      rendered += 1;
+      continue;
+    }
+    const key = gapKey(item.rows[0]);
+    if (expandedGaps.has(key)) {
+      for (let k = 0; k < item.rows.length; k++) {
+        if (rendered >= MAX_RENDERED_DIFF_LINES) {
+          truncated = true;
+          break;
+        }
+        out.push(renderRow(item.rows[k], `g${i}-${k}`));
+        rendered += 1;
+      }
+    } else {
+      out.push(
+        <GapBar key={`gap${i}`} count={item.rows.length} onExpand={() => onExpandGap(key)} />,
+      );
+    }
+  }
+
+  return (
+    <>
+      {out}
+      {truncated ? <TruncationNote /> : null}
+    </>
+  );
+}
+
+function GapBar({ count, onExpand }: { count: number; onExpand: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onExpand}
+      className="flex w-full items-center justify-center gap-1 border-y border-border/60 bg-muted/40 py-0.5 text-[11px] text-muted-foreground hover:bg-muted/70 focus:outline-none focus:ring-1 focus:ring-inset focus:ring-ring"
+    >
+      <ChevronsUpDown className="h-3 w-3" aria-hidden="true" />
+      Expand {count} unchanged line{count === 1 ? "" : "s"}
+    </button>
   );
 }
 
@@ -689,12 +852,47 @@ function rowBackground(kind: SideBySideCell["kind"] | DiffLine["kind"]): string 
       : "";
 }
 
-function CommentLineButton({ line, onStartComment }: { line: number; onStartComment: (line: number) => void }) {
+/** Renders line text, highlighting the changed words of a partial edit. */
+function LineText({
+  segments,
+  text,
+  kind,
+}: {
+  segments?: InlineSegment[];
+  text: string;
+  kind: DiffLineKind;
+}) {
+  if (!segments) return <>{text}</>;
+  const highlight = kind === "add" ? "rounded-sm bg-green-200/80" : "rounded-sm bg-red-200/80";
+  return (
+    <>
+      {segments.map((segment, index) =>
+        segment.highlight ? (
+          <span key={index} className={highlight}>
+            {segment.text}
+          </span>
+        ) : (
+          <span key={index}>{segment.text}</span>
+        ),
+      )}
+    </>
+  );
+}
+
+function CommentLineButton({
+  side,
+  line,
+  onStartComment,
+}: {
+  side: CommentSide;
+  line: number;
+  onStartComment: (side: CommentSide, line: number) => void;
+}) {
   return (
     <button
       type="button"
-      aria-label={`Comment on line ${line}`}
-      onClick={() => onStartComment(line)}
+      aria-label={`Comment on ${side === "left" ? "old " : ""}line ${line}`}
+      onClick={() => onStartComment(side, line)}
       className="invisible absolute inset-y-0 left-0 flex w-4 items-center justify-center rounded-sm bg-primary text-primary-foreground group-hover:visible"
     >
       <Plus className="h-3 w-3" aria-hidden="true" />
@@ -708,23 +906,26 @@ const DiffRow = memo(function DiffRow({
   onStartComment,
 }: {
   line: DiffLine;
-  onStartComment: (rightLine: number) => void;
+  onStartComment: (side: CommentSide, line: number) => void;
 }) {
   const marker = line.kind === "add" ? "+" : line.kind === "del" ? "-" : " ";
   return (
     <div className={`group grid grid-cols-[3rem_3rem_1fr] ${rowBackground(line.kind)}`}>
       <span className="relative select-none border-r border-border/60 pr-1 text-right text-muted-foreground/70">
-        {line.targetLine != null ? (
-          <CommentLineButton line={line.targetLine} onStartComment={onStartComment} />
+        {line.kind === "del" && line.baseLine != null ? (
+          <CommentLineButton side="left" line={line.baseLine} onStartComment={onStartComment} />
         ) : null}
         {line.baseLine ?? ""}
       </span>
-      <span className="select-none border-r border-border/60 pr-1 text-right text-muted-foreground/70">
+      <span className="relative select-none border-r border-border/60 pr-1 text-right text-muted-foreground/70">
+        {line.kind !== "del" && line.targetLine != null ? (
+          <CommentLineButton side="right" line={line.targetLine} onStartComment={onStartComment} />
+        ) : null}
         {line.targetLine ?? ""}
       </span>
       <span className="whitespace-pre pl-1">
         {marker}
-        {line.text}
+        <LineText segments={line.segments} text={line.text} kind={line.kind} />
       </span>
     </div>
   );
@@ -736,8 +937,8 @@ const SplitCell = memo(function SplitCell({
   onStartComment,
 }: {
   cell: SideBySideCell | null;
-  side: "left" | "right";
-  onStartComment: (rightLine: number) => void;
+  side: CommentSide;
+  onStartComment: (side: CommentSide, line: number) => void;
 }) {
   if (!cell) {
     return <div className="border-r border-border/60 bg-muted/20" aria-hidden="true" />;
@@ -745,14 +946,12 @@ const SplitCell = memo(function SplitCell({
   return (
     <div className={`group grid min-w-0 grid-cols-[3rem_1fr] border-r border-border/60 ${rowBackground(cell.kind)}`}>
       <span className="relative select-none border-r border-border/60 pr-1 text-right text-muted-foreground/70">
-        {side === "right" ? (
-          <CommentLineButton line={cell.line} onStartComment={onStartComment} />
-        ) : null}
+        <CommentLineButton side={side} line={cell.line} onStartComment={onStartComment} />
         {cell.line}
       </span>
-      {/* Long lines are clipped in split view; switch to unified to scroll. */}
-      <span className="overflow-hidden whitespace-pre pl-1" title={cell.text}>
-        {cell.text}
+      {/* Wrap long lines so split view no longer needs a switch to unified. */}
+      <span className="whitespace-pre-wrap break-all pl-1">
+        <LineText segments={cell.segments} text={cell.text} kind={cell.kind} />
       </span>
     </div>
   );

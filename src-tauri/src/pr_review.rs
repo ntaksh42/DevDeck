@@ -40,9 +40,11 @@ pub struct PostPullRequestCommentInput {
     /// None creates a new thread; Some replies to an existing thread.
     pub thread_id: Option<i64>,
     pub content: String,
-    /// Line anchor for new threads (future inline-comment support).
+    /// File + line anchor for a new inline thread. `right_line` targets the new
+    /// side of the diff, `left_line` the old side; at most one is set.
     pub file_path: Option<String>,
     pub right_line: Option<i64>,
+    pub left_line: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -133,6 +135,7 @@ pub struct PrThread {
     pub is_resolved: bool,
     pub file_path: Option<String>,
     pub right_line: Option<i64>,
+    pub left_line: Option<i64>,
     pub comments: Vec<PrComment>,
 }
 
@@ -351,11 +354,14 @@ impl PrReviewService {
                 )
                 .await?
         } else {
-            let context = match (&input.file_path, input.right_line) {
-                (Some(file_path), Some(line)) => Some(NewThreadContext {
-                    file_path: file_path.clone(),
-                    right_line: line,
-                }),
+            let context = match &input.file_path {
+                Some(file_path) if input.right_line.is_some() || input.left_line.is_some() => {
+                    Some(NewThreadContext {
+                        file_path: file_path.clone(),
+                        right_line: input.right_line,
+                        left_line: input.left_line,
+                    })
+                }
                 _ => None,
             };
             client
@@ -680,6 +686,10 @@ fn map_threads(threads: Vec<GitThread>, me: Option<&str>) -> Vec<PrThread> {
                     .as_ref()
                     .and_then(|ctx| ctx.right_file_start.as_ref())
                     .map(|position| position.line),
+                left_line: context
+                    .as_ref()
+                    .and_then(|ctx| ctx.left_file_start.as_ref())
+                    .map(|position| position.line),
                 comments: thread
                     .comments
                     .unwrap_or_default()
@@ -735,10 +745,32 @@ mod tests {
         assert_eq!(mapped.len(), 1);
         assert_eq!(mapped[0].file_path.as_deref(), Some("/src/app.ts"));
         assert_eq!(mapped[0].right_line, Some(12));
+        assert_eq!(mapped[0].left_line, None);
         assert_eq!(mapped[0].comments.len(), 2);
         assert!(!mapped[0].comments[0].is_system);
         assert!(mapped[0].comments[0].is_mine);
         assert!(mapped[0].comments[1].is_system);
+    }
+
+    #[test]
+    fn map_threads_reads_left_side_anchor() {
+        let threads: Vec<GitThread> = serde_json::from_value(serde_json::json!([
+            {
+                "id": 3,
+                "status": "active",
+                "threadContext": {
+                    "filePath": "/src/app.ts",
+                    "leftFileStart": { "line": 8, "offset": 1 }
+                },
+                "comments": [{ "id": 1, "content": "on the old line" }]
+            }
+        ]))
+        .unwrap();
+
+        let mapped = map_threads(threads, None);
+        assert_eq!(mapped.len(), 1);
+        assert_eq!(mapped[0].left_line, Some(8));
+        assert_eq!(mapped[0].right_line, None);
     }
 
     #[test]

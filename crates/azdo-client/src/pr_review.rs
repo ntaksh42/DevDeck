@@ -49,6 +49,7 @@ pub struct GitThreadComment {
 pub struct GitThreadContext {
     pub file_path: Option<String>,
     pub right_file_start: Option<GitFilePosition>,
+    pub left_file_start: Option<GitFilePosition>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -57,11 +58,13 @@ pub struct GitFilePosition {
     pub line: i64,
 }
 
-/// Anchor for a new file-scoped thread (right/target side of the diff).
+/// Anchor for a new file-scoped thread. Set `right_line` to anchor on the
+/// target (new) side of the diff, `left_line` to anchor on the base (old) side.
 #[derive(Debug, Clone)]
 pub struct NewThreadContext {
     pub file_path: String,
-    pub right_line: i64,
+    pub right_line: Option<i64>,
+    pub left_line: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -174,11 +177,16 @@ impl AdoClient {
             "status": 1
         });
         if let Some(context) = thread_context {
-            body["threadContext"] = json!({
-                "filePath": context.file_path,
-                "rightFileStart": { "line": context.right_line, "offset": 1 },
-                "rightFileEnd": { "line": context.right_line, "offset": 1 }
-            });
+            let mut thread_context = json!({ "filePath": context.file_path });
+            if let Some(line) = context.right_line {
+                thread_context["rightFileStart"] = json!({ "line": line, "offset": 1 });
+                thread_context["rightFileEnd"] = json!({ "line": line, "offset": 1 });
+            }
+            if let Some(line) = context.left_line {
+                thread_context["leftFileStart"] = json!({ "line": line, "offset": 1 });
+                thread_context["leftFileEnd"] = json!({ "line": line, "offset": 1 });
+            }
+            body["threadContext"] = thread_context;
         }
         self.post_json(&path, &[("api-version", "7.1-preview")], &body)
             .await
@@ -515,12 +523,52 @@ mod tests {
                 "New comment",
                 Some(NewThreadContext {
                     file_path: "/src/app.ts".to_string(),
-                    right_line: 12,
+                    right_line: Some(12),
+                    left_line: None,
                 }),
             )
             .await
             .unwrap();
         assert_eq!(thread.id, 9);
+    }
+
+    #[tokio::test]
+    async fn create_pull_request_thread_anchors_on_left_side() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path(
+                "/project-1/_apis/git/repositories/repo-1/pullRequests/42/threads",
+            ))
+            .and(body_partial_json(serde_json::json!({
+                "threadContext": {
+                    "filePath": "/src/app.ts",
+                    "leftFileStart": { "line": 7, "offset": 1 }
+                }
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 11,
+                "status": "active",
+                "comments": [{ "id": 1, "parentCommentId": 0, "content": "On the old line" }]
+            })))
+            .mount(&server)
+            .await;
+
+        let thread = test_client(&server)
+            .await
+            .create_pull_request_thread(
+                "project-1",
+                "repo-1",
+                42,
+                "On the old line",
+                Some(NewThreadContext {
+                    file_path: "/src/app.ts".to_string(),
+                    right_line: None,
+                    left_line: Some(7),
+                }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(thread.id, 11);
     }
 
     #[tokio::test]

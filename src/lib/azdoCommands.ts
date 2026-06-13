@@ -113,6 +113,7 @@ const prThreadSchema = z.object({
   isResolved: z.boolean(),
   filePath: z.string().nullable(),
   rightLine: z.number().nullable(),
+  leftLine: z.number().nullable().default(null),
   comments: z.array(prCommentSchema),
 });
 
@@ -465,6 +466,7 @@ export type PostPullRequestCommentInput = PrLocatorInput & {
   content: string;
   filePath?: string;
   rightLine?: number;
+  leftLine?: number;
 };
 
 export type SetPullRequestThreadStatusInput = PrLocatorInput & {
