@@ -1,0 +1,413 @@
+use azdo_client::{Build, BuildListCriteria, Timeline};
+use serde::{Deserialize, Serialize};
+
+use crate::auth::client_for_organization;
+use crate::commits::encode_path_segment;
+use crate::db::{AppDatabase, Organization};
+use crate::error::Result;
+use crate::projects::ProjectDirectory;
+use crate::secrets::SecretStore;
+
+const RUN_LIST_TOP: u32 = 50;
+const DEFINITION_LIST_TOP: u32 = 200;
+const DEFAULT_LOG_TAIL_LINES: usize = 200;
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListPipelineRunsInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub definition_id: Option<i64>,
+    pub branch: Option<String>,
+    pub result: Option<String>,
+    pub status: Option<String>,
+    pub requested_for_me: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListPipelineProjectsInput {
+    pub organization_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListPipelineDefinitionsInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub name_filter: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetPipelineRunInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub build_id: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetPipelineRunLogTailInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub build_id: i64,
+    pub log_id: i64,
+    pub max_lines: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RerunPipelineRunInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub definition_id: i64,
+    pub source_branch: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CancelPipelineRunInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub build_id: i64,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PipelineProjectOption {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PipelineDefinitionOption {
+    pub id: i64,
+    pub name: String,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PipelineRunSummary {
+    pub organization_id: String,
+    pub project_id: String,
+    pub project_name: String,
+    pub build_id: i64,
+    pub build_number: Option<String>,
+    pub definition_id: Option<i64>,
+    pub definition_name: Option<String>,
+    pub status: Option<String>,
+    pub result: Option<String>,
+    pub source_branch: Option<String>,
+    pub reason: Option<String>,
+    pub requested_for: Option<String>,
+    pub queue_time: Option<String>,
+    pub start_time: Option<String>,
+    pub finish_time: Option<String>,
+    pub web_url: String,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TimelineNode {
+    pub id: String,
+    pub parent_id: Option<String>,
+    pub node_type: Option<String>,
+    pub name: Option<String>,
+    pub state: Option<String>,
+    pub result: Option<String>,
+    pub start_time: Option<String>,
+    pub finish_time: Option<String>,
+    pub log_id: Option<i64>,
+    pub error_count: i64,
+    pub warning_count: i64,
+    pub order: Option<i64>,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PipelineRunDetail {
+    pub run: PipelineRunSummary,
+    pub timeline: Vec<TimelineNode>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PipelineLogTail {
+    pub lines: Vec<String>,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct PipelineService {
+    db: AppDatabase,
+    secrets: SecretStore,
+    projects: ProjectDirectory,
+}
+
+impl PipelineService {
+    pub fn new(db: AppDatabase, secrets: SecretStore) -> Self {
+        Self {
+            db,
+            secrets,
+            projects: ProjectDirectory::new(),
+        }
+    }
+
+    fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {
+        self.db.resolve_organization(id)
+    }
+
+    pub async fn list_runs(&self, input: ListPipelineRunsInput) -> Result<Vec<PipelineRunSummary>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
+
+        let requested_for = if input.requested_for_me.unwrap_or(false) {
+            organization.authenticated_user_id.clone()
+        } else {
+            None
+        };
+
+        let builds = client
+            .list_builds(
+                &project.id,
+                BuildListCriteria {
+                    definition_id: input.definition_id,
+                    branch: input.branch,
+                    result_filter: normalize_optional(input.result),
+                    status_filter: normalize_optional(input.status),
+                    requested_for,
+                    top: Some(RUN_LIST_TOP),
+                },
+            )
+            .await?;
+
+        Ok(builds
+            .into_iter()
+            .map(|build| build_to_summary(&organization, &project.id, &project.name, build))
+            .collect())
+    }
+
+    pub async fn list_projects(
+        &self,
+        input: ListPipelineProjectsInput,
+    ) -> Result<Vec<PipelineProjectOption>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let projects = self.projects.list(&client, &organization.id).await?;
+        let mut options: Vec<PipelineProjectOption> = projects
+            .into_iter()
+            .map(|p| PipelineProjectOption {
+                id: p.id,
+                name: p.name,
+            })
+            .collect();
+        options.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(options)
+    }
+
+    pub async fn list_definitions(
+        &self,
+        input: ListPipelineDefinitionsInput,
+    ) -> Result<Vec<PipelineDefinitionOption>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let defs = client
+            .list_build_definitions(
+                &input.project_id,
+                input.name_filter.as_deref(),
+                DEFINITION_LIST_TOP,
+            )
+            .await?;
+        let mut options: Vec<PipelineDefinitionOption> = defs
+            .into_iter()
+            .map(|d| PipelineDefinitionOption {
+                id: d.id,
+                name: d.name,
+            })
+            .collect();
+        options.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(options)
+    }
+
+    pub async fn get_run(&self, input: GetPipelineRunInput) -> Result<PipelineRunDetail> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
+        let build = client.get_build(&project.id, input.build_id).await?;
+        let timeline = client
+            .get_build_timeline(&project.id, input.build_id)
+            .await
+            .unwrap_or(Timeline { records: vec![] });
+        Ok(PipelineRunDetail {
+            run: build_to_summary(&organization, &project.id, &project.name, build),
+            timeline: timeline_to_nodes(timeline),
+        })
+    }
+
+    pub async fn get_run_log_tail(
+        &self,
+        input: GetPipelineRunLogTailInput,
+    ) -> Result<PipelineLogTail> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let max_lines = input
+            .max_lines
+            .unwrap_or(DEFAULT_LOG_TAIL_LINES)
+            .clamp(1, 2000);
+        let tail = client
+            .get_build_log_tail(&input.project_id, input.build_id, input.log_id, max_lines)
+            .await?;
+        Ok(PipelineLogTail {
+            lines: tail.lines,
+            truncated: tail.truncated,
+        })
+    }
+
+    pub async fn rerun_run(&self, input: RerunPipelineRunInput) -> Result<PipelineRunSummary> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
+        let build = client
+            .queue_build(&project.id, input.definition_id, &input.source_branch)
+            .await?;
+        Ok(build_to_summary(
+            &organization,
+            &project.id,
+            &project.name,
+            build,
+        ))
+    }
+
+    pub async fn cancel_run(&self, input: CancelPipelineRunInput) -> Result<PipelineRunSummary> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
+        let build = client.cancel_build(&project.id, input.build_id).await?;
+        Ok(build_to_summary(
+            &organization,
+            &project.id,
+            &project.name,
+            build,
+        ))
+    }
+}
+
+fn normalize_optional(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn build_web_url(organization: &Organization, project_name: &str, build_id: i64) -> String {
+    format!(
+        "{}/{}/_build/results?buildId={}",
+        organization.base_url.trim_end_matches('/'),
+        encode_path_segment(project_name),
+        build_id
+    )
+}
+
+fn build_to_summary(
+    organization: &Organization,
+    project_id: &str,
+    project_name: &str,
+    build: Build,
+) -> PipelineRunSummary {
+    let web_url = build_web_url(organization, project_name, build.id);
+    let (definition_id, definition_name) = match build.definition {
+        Some(def) => (Some(def.id), Some(def.name)),
+        None => (None, None),
+    };
+    PipelineRunSummary {
+        organization_id: organization.id.clone(),
+        project_id: project_id.to_string(),
+        project_name: project_name.to_string(),
+        build_id: build.id,
+        build_number: build.build_number,
+        definition_id,
+        definition_name,
+        status: build.status,
+        result: build.result,
+        source_branch: build.source_branch,
+        reason: build.reason,
+        requested_for: build.requested_for.and_then(|r| r.display_name),
+        queue_time: build.queue_time.map(|t| t.to_rfc3339()),
+        start_time: build.start_time.map(|t| t.to_rfc3339()),
+        finish_time: build.finish_time.map(|t| t.to_rfc3339()),
+        web_url,
+    }
+}
+
+fn timeline_to_nodes(timeline: Timeline) -> Vec<TimelineNode> {
+    timeline
+        .records
+        .into_iter()
+        .map(|record| TimelineNode {
+            id: record.id,
+            parent_id: record.parent_id,
+            node_type: record.record_type,
+            name: record.name,
+            state: record.state,
+            result: record.result,
+            start_time: record.start_time.map(|t| t.to_rfc3339()),
+            finish_time: record.finish_time.map(|t| t.to_rfc3339()),
+            log_id: record.log.map(|l| l.id),
+            error_count: record.error_count,
+            warning_count: record.warning_count,
+            order: record.order,
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn org() -> Organization {
+        Organization {
+            id: "contoso".to_string(),
+            name: "contoso".to_string(),
+            display_name: None,
+            base_url: "https://dev.azure.com/contoso/".to_string(),
+            auth_provider: "pat".to_string(),
+            credential_key: "azdodeck:org:contoso:pat".to_string(),
+            authenticated_user_id: None,
+            authenticated_user_display_name: None,
+            authenticated_user_unique_name: None,
+            created_at: "2026-06-13T00:00:00Z".to_string(),
+            updated_at: "2026-06-13T00:00:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn build_web_url_encodes_project_and_trims_slash() {
+        assert_eq!(
+            build_web_url(&org(), "Platform Team", 101),
+            "https://dev.azure.com/contoso/Platform%20Team/_build/results?buildId=101"
+        );
+    }
+
+    #[test]
+    fn normalize_optional_drops_blank() {
+        assert_eq!(normalize_optional(Some("  ".to_string())), None);
+        assert_eq!(
+            normalize_optional(Some(" failed ".to_string())),
+            Some("failed".to_string())
+        );
+    }
+}
