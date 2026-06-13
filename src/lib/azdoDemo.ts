@@ -86,6 +86,9 @@ let demoSettings: AppSettings = {
   notificationContentPreviewEnabled: true,
   notifyWorkItemAssignments: true,
   notifyWorkItemStateChanges: true,
+  notifyPrReviewRequests: true,
+  notifyPrVoteResets: true,
+  notifyPrCommentReplies: true,
 };
 const deletedDemoWorkItemComments = new Set<number>();
 let demoSyncStates: SyncState[] = [
@@ -472,6 +475,18 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
           input && "notifyWorkItemStateChanges" in input
             ? Boolean(input.notifyWorkItemStateChanges)
             : demoSettings.notifyWorkItemStateChanges,
+        notifyPrReviewRequests:
+          input && "notifyPrReviewRequests" in input
+            ? Boolean(input.notifyPrReviewRequests)
+            : demoSettings.notifyPrReviewRequests,
+        notifyPrVoteResets:
+          input && "notifyPrVoteResets" in input
+            ? Boolean(input.notifyPrVoteResets)
+            : demoSettings.notifyPrVoteResets,
+        notifyPrCommentReplies:
+          input && "notifyPrCommentReplies" in input
+            ? Boolean(input.notifyPrCommentReplies)
+            : demoSettings.notifyPrCommentReplies,
       };
       return demoSettings;
     }

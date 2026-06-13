@@ -29,6 +29,9 @@ const appSettingsSchema = z.object({
   notificationContentPreviewEnabled: z.boolean().default(true),
   notifyWorkItemAssignments: z.boolean().default(true),
   notifyWorkItemStateChanges: z.boolean().default(true),
+  notifyPrReviewRequests: z.boolean().default(true),
+  notifyPrVoteResets: z.boolean().default(true),
+  notifyPrCommentReplies: z.boolean().default(true),
 });
 
 export type AppSettings = z.infer<typeof appSettingsSchema>;
@@ -468,6 +471,9 @@ export type UpdateAppSettingsInput = {
   notificationContentPreviewEnabled?: boolean;
   notifyWorkItemAssignments?: boolean;
   notifyWorkItemStateChanges?: boolean;
+  notifyPrReviewRequests?: boolean;
+  notifyPrVoteResets?: boolean;
+  notifyPrCommentReplies?: boolean;
 };
 
 export type GetReviewResultPreviewInput = {

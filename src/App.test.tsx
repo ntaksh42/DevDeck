@@ -410,6 +410,9 @@ describe("App", () => {
           notificationContentPreviewEnabled: true,
           notifyWorkItemAssignments: true,
           notifyWorkItemStateChanges: true,
+          notifyPrReviewRequests: true,
+          notifyPrVoteResets: true,
+          notifyPrCommentReplies: true,
         },
       });
     });
@@ -463,6 +466,9 @@ describe("App", () => {
           notificationContentPreviewEnabled: true,
           notifyWorkItemAssignments: true,
           notifyWorkItemStateChanges: true,
+          notifyPrReviewRequests: true,
+          notifyPrVoteResets: true,
+          notifyPrCommentReplies: true,
         },
       });
     });
@@ -514,6 +520,9 @@ describe("App", () => {
           notificationContentPreviewEnabled: false,
           notifyWorkItemAssignments: true,
           notifyWorkItemStateChanges: false,
+          notifyPrReviewRequests: true,
+          notifyPrVoteResets: true,
+          notifyPrCommentReplies: true,
         },
       });
     });
@@ -564,6 +573,9 @@ describe("App", () => {
           notificationContentPreviewEnabled: true,
           notifyWorkItemAssignments: true,
           notifyWorkItemStateChanges: true,
+          notifyPrReviewRequests: true,
+          notifyPrVoteResets: true,
+          notifyPrCommentReplies: true,
         },
       });
     });

@@ -1,4 +1,4 @@
-use azdo_client::{AdoClient, AdoError, PullRequestStatus, TeamProject};
+use azdo_client::{AdoClient, AdoError, GitThread, PullRequestStatus, TeamProject};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinSet;
@@ -7,6 +7,7 @@ use crate::commits::encode_path_segment;
 use crate::db::{AppDatabase, CachedPr, CachedReviewPr, Organization};
 use crate::error::{AppError, Result};
 use crate::secrets::SecretStore;
+use crate::sync::{PrNotificationItem, PrNotificationKind};
 
 const PR_SYNC_CONCURRENCY: usize = 4;
 // Active PRs across one project; well above what a project realistically has.
@@ -596,6 +597,147 @@ async fn fetch_review_prs_for_project(
     (project_name, Ok(cached_reviews))
 }
 
+// Threads are only fetched for the most recently created review PRs each sync.
+pub(crate) const PR_COMMENT_SCAN_LIMIT: usize = 50;
+
+pub(crate) struct CommentHit {
+    pub author: Option<String>,
+    pub snippet: Option<String>,
+}
+
+// Azure DevOps stores mentions in comment content as `@<GUID>`. Matching the
+// authenticated user's id substring (case-insensitive) catches it without
+// depending on the exact bracket form.
+fn mentions_user(content: &str, me: &str) -> bool {
+    if me.is_empty() {
+        return false;
+    }
+    content.to_ascii_lowercase().contains(&me.to_ascii_lowercase())
+}
+
+fn truncate_snippet(value: &str, max: usize) -> String {
+    let trimmed = value.trim();
+    if trimmed.chars().count() <= max {
+        return trimmed.to_string();
+    }
+    let mut out: String = trimmed.chars().take(max.saturating_sub(1)).collect();
+    out.push('…');
+    out
+}
+
+/// Pure detection of comment replies/mentions for a single PR.
+///
+/// Returns the hits to notify about and the largest comment id observed (used to
+/// advance the per-PR "seen" cursor). A `last_seen` of `None` means this PR has
+/// never been observed, so nothing is notified (avoids backfilling history) and
+/// only the max id is reported. A comment is a hit when it is newer than
+/// `last_seen`, authored by someone other than `me`, not a system comment, and
+/// either lands in a thread the user has commented in (a reply) or mentions the
+/// user.
+pub(crate) fn pr_comment_notification_items(
+    threads: &[GitThread],
+    me: Option<&str>,
+    last_seen: Option<i64>,
+) -> (Vec<CommentHit>, Option<i64>) {
+    let Some(me) = me else {
+        return (Vec::new(), None);
+    };
+    let backfill = last_seen.is_none();
+    let threshold = last_seen.unwrap_or(0);
+    let mut max_id: Option<i64> = None;
+    let mut hits = Vec::new();
+    for thread in threads {
+        if thread.is_deleted {
+            continue;
+        }
+        let Some(comments) = thread.comments.as_ref() else {
+            continue;
+        };
+        let i_am_in_thread = comments
+            .iter()
+            .any(|c| c.author.as_ref().and_then(|a| a.id.as_deref()) == Some(me));
+        for comment in comments {
+            if comment.is_deleted {
+                continue;
+            }
+            max_id = Some(max_id.map_or(comment.id, |m| m.max(comment.id)));
+            if backfill || comment.id <= threshold {
+                continue;
+            }
+            let author_id = comment.author.as_ref().and_then(|a| a.id.as_deref());
+            if author_id == Some(me) {
+                continue;
+            }
+            if comment.comment_type.as_deref() == Some("system") {
+                continue;
+            }
+            let content = comment.content.as_deref().unwrap_or("");
+            if i_am_in_thread || mentions_user(content, me) {
+                hits.push(CommentHit {
+                    author: comment.author.as_ref().and_then(|a| a.display_name.clone()),
+                    snippet: Some(truncate_snippet(content, 90)),
+                });
+            }
+        }
+    }
+    (hits, max_id)
+}
+
+/// Fetches threads for the most recent review PRs, detects new reply/mention
+/// comments, advances the per-PR seen cursor, and returns notification items.
+/// A failure for one PR is logged and skipped so other PRs still get processed.
+pub(crate) async fn collect_pr_comment_notifications(
+    db: &AppDatabase,
+    client: &AdoClient,
+    org: &Organization,
+) -> Vec<PrNotificationItem> {
+    let reviews = match db.list_review_pull_requests(&org.id) {
+        Ok(reviews) => reviews,
+        Err(e) => {
+            tracing::warn!(org = %org.name, error = ?e, "pr-notify: failed to list review PRs");
+            return Vec::new();
+        }
+    };
+    let me = org.authenticated_user_id.clone();
+    let mut items = Vec::new();
+    for pr in reviews.into_iter().take(PR_COMMENT_SCAN_LIMIT) {
+        let threads = match client
+            .list_pull_request_threads(&pr.project_id, &pr.repository_id, pr.pull_request_id)
+            .await
+        {
+            Ok(threads) => threads,
+            Err(e) => {
+                tracing::warn!(org = %org.name, pr = pr.pull_request_id, error = ?e, "pr-notify: failed to fetch threads");
+                continue;
+            }
+        };
+        let last_seen = db
+            .get_pr_comment_seen(&org.id, &pr.repository_id, pr.pull_request_id)
+            .unwrap_or(None);
+        let (hits, max_id) = pr_comment_notification_items(&threads, me.as_deref(), last_seen);
+        for hit in hits {
+            items.push(PrNotificationItem {
+                kind: PrNotificationKind::CommentReply,
+                pull_request_id: pr.pull_request_id,
+                title: pr.title.clone(),
+                repository_name: pr.repository_name.clone(),
+                project_name: pr.project_name.clone(),
+                web_url: pr.web_url.clone(),
+                comment_author: hit.author,
+                snippet: hit.snippet,
+            });
+        }
+        if let Some(max_id) = max_id {
+            if let Err(e) =
+                db.set_pr_comment_seen(&org.id, &pr.repository_id, pr.pull_request_id, max_id)
+            {
+                tracing::warn!(org = %org.name, pr = pr.pull_request_id, error = ?e, "pr-notify: failed to update seen cursor");
+            }
+        }
+    }
+    items
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
@@ -608,6 +750,87 @@ mod tests {
 
     use super::*;
     use crate::db::OrganizationDraft;
+    use azdo_client::{GitThreadComment, IdentityRef};
+
+    fn comment(id: i64, author_id: &str, content: &str) -> GitThreadComment {
+        GitThreadComment {
+            id,
+            parent_comment_id: None,
+            content: Some(content.into()),
+            comment_type: Some("text".into()),
+            author: Some(IdentityRef {
+                id: Some(author_id.into()),
+                display_name: Some(author_id.into()),
+                unique_name: None,
+            }),
+            published_date: None,
+            is_deleted: false,
+        }
+    }
+
+    fn thread(id: i64, comments: Vec<GitThreadComment>) -> GitThread {
+        GitThread {
+            id,
+            status: Some("active".into()),
+            is_deleted: false,
+            comments: Some(comments),
+            thread_context: None,
+        }
+    }
+
+    #[test]
+    fn comment_items_suppressed_on_first_observation() {
+        let threads = vec![thread(
+            1,
+            vec![comment(10, "me", "q"), comment(11, "other", "a")],
+        )];
+        let (hits, max) = pr_comment_notification_items(&threads, Some("me"), None);
+        assert!(hits.is_empty());
+        assert_eq!(max, Some(11));
+    }
+
+    #[test]
+    fn comment_items_detects_reply_to_my_thread() {
+        let threads = vec![thread(
+            1,
+            vec![comment(10, "me", "q"), comment(12, "other", "a")],
+        )];
+        let (hits, max) = pr_comment_notification_items(&threads, Some("me"), Some(11));
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].author.as_deref(), Some("other"));
+        assert_eq!(max, Some(12));
+    }
+
+    #[test]
+    fn comment_items_detects_mention_without_my_thread() {
+        let threads = vec![thread(
+            1,
+            vec![comment(20, "other", "hello @<me-guid> please")],
+        )];
+        let (hits, _max) = pr_comment_notification_items(&threads, Some("me-guid"), Some(0));
+        assert_eq!(hits.len(), 1);
+    }
+
+    #[test]
+    fn comment_items_ignores_my_own_and_seen() {
+        let threads = vec![thread(
+            1,
+            vec![comment(30, "me", "note"), comment(31, "other", "unrelated")],
+        )];
+        let (hits, _max) = pr_comment_notification_items(&threads, Some("me"), Some(31));
+        assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn comment_items_ignores_unrelated_thread() {
+        let threads = vec![thread(
+            1,
+            vec![comment(40, "alice", "hi"), comment(41, "bob", "yo")],
+        )];
+        let (hits, max) = pr_comment_notification_items(&threads, Some("me"), Some(0));
+        assert!(hits.is_empty());
+        assert_eq!(max, Some(41));
+    }
 
     #[tokio::test]
     async fn pr_sync_skips_failing_project_and_preserves_its_cache() {
