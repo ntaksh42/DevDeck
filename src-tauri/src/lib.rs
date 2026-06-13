@@ -3,6 +3,7 @@ use std::str::FromStr;
 use serde::Deserialize;
 
 mod auth;
+mod code_search;
 mod commits;
 mod db;
 mod error;
@@ -17,6 +18,7 @@ mod settings;
 mod sync;
 mod work_items;
 
+use code_search::{CodeSearchResults, CodeSearchService, SearchCodeInput};
 use commits::{
     CommitChangeSet, CommitFileDiff, CommitRepositoryOption, CommitService, CommitSummary,
     GetCommitChangesInput, GetCommitFileDiffInput, ListCommitRepositoriesInput, SearchCommitsInput,
@@ -73,6 +75,7 @@ struct AppState {
     work_items: WorkItemService,
     commits: CommitService,
     pipelines: PipelineService,
+    code_search: CodeSearchService,
     settings: SettingsService,
     sync_trigger: mpsc::Sender<SyncTrigger>,
 }
@@ -539,6 +542,15 @@ async fn list_commit_repositories(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn search_code(
+    input: SearchCodeInput,
+    state: State<'_, AppState>,
+) -> Result<CodeSearchResults> {
+    state.code_search.search(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn get_commit_changes(
     input: GetCommitChangesInput,
     state: State<'_, AppState>,
@@ -702,6 +714,7 @@ pub fn run() {
                 work_items: WorkItemService::new(db.clone(), SecretStore),
                 commits: CommitService::new(db.clone(), SecretStore),
                 pipelines: PipelineService::new(db.clone(), SecretStore),
+                code_search: CodeSearchService::new(db.clone(), SecretStore),
                 settings: SettingsService::new(db.clone()),
                 sync_trigger: sync_tx,
             });
@@ -757,6 +770,7 @@ pub fn run() {
             set_work_items_priority,
             search_commits,
             list_commit_repositories,
+            search_code,
             get_commit_changes,
             get_commit_file_diff,
             list_pipeline_projects,

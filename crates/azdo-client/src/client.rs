@@ -332,7 +332,29 @@ impl AdoClient {
             .base_url
             .join(path)
             .map_err(|e| AdoError::Auth(e.to_string()))?;
+        self.post_json_to_url(url, query, body).await
+    }
 
+    /// POSTs to the Almsearch service host (Code/Work Item Search), which lives
+    /// on a different subdomain than the core REST API.
+    pub(crate) async fn post_json_almsearch<B: Serialize + ?Sized, T: DeserializeOwned>(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        body: &B,
+    ) -> Result<T> {
+        let url = almsearch_base_url(&self.base_url)?
+            .join(path)
+            .map_err(|e| AdoError::Auth(e.to_string()))?;
+        self.post_json_to_url(url, query, body).await
+    }
+
+    async fn post_json_to_url<B: Serialize + ?Sized, T: DeserializeOwned>(
+        &self,
+        url: Url,
+        query: &[(&str, &str)],
+        body: &B,
+    ) -> Result<T> {
         for attempt in 1..=self.retry_policy.attempts() {
             let auth = self.auth.auth_header_value().await?;
             let response = self
@@ -359,7 +381,7 @@ impl AdoClient {
                         let delay = self.retry_delay(attempt, retry_after);
                         tracing::warn!(
                             method = "POST",
-                            path,
+                            url = %url,
                             attempt,
                             status = status.as_u16(),
                             delay_ms = delay.as_millis(),
@@ -385,7 +407,7 @@ impl AdoClient {
                     let delay = self.retry_policy.backoff_delay(attempt);
                     tracing::warn!(
                         method = "POST",
-                        path,
+                        url = %url,
                         attempt,
                         delay_ms = delay.as_millis(),
                         error = %error,
@@ -726,6 +748,20 @@ fn vssps_base_url(base_url: &Url) -> Result<Url> {
         .filter(|segment| !segment.is_empty())
         .ok_or_else(|| AdoError::Auth("missing organization in base URL".to_string()))?;
     Url::parse(&format!("https://vssps.dev.azure.com/{organization}/"))
+        .map_err(|e| AdoError::Auth(e.to_string()))
+}
+
+fn almsearch_base_url(base_url: &Url) -> Result<Url> {
+    if base_url.host_str() != Some("dev.azure.com") {
+        return Ok(base_url.clone());
+    }
+
+    let organization = base_url
+        .path_segments()
+        .and_then(|mut segments| segments.next())
+        .filter(|segment| !segment.is_empty())
+        .ok_or_else(|| AdoError::Auth("missing organization in base URL".to_string()))?;
+    Url::parse(&format!("https://almsearch.dev.azure.com/{organization}/"))
         .map_err(|e| AdoError::Auth(e.to_string()))
 }
 
