@@ -1,4 +1,5 @@
 import {
+  type CSSProperties,
   type FormEvent,
   type ReactNode,
   forwardRef,
@@ -9,7 +10,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, Info, Loader2, Search } from "lucide-react";
+import { ChevronDown, ChevronUp, Info, Loader2, Maximize2, Minimize2, Search } from "lucide-react";
 import {
   searchCommits,
   listCommitRepositories,
@@ -21,14 +22,23 @@ import {
 import {
   clamp,
   storedNumbers,
+  storedNumber,
   gridColumnTemplate,
   isEditableTarget,
+  focusFilterInput,
+  focusPrimaryGrid,
+  focusPrimaryPreview,
   formatDate,
   formatRelativeDate,
 } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
-import { ColumnResizeHandle } from "@/components/ResizeHandle";
+import { ColumnResizeHandle, ResizeHandle } from "@/components/ResizeHandle";
 import { ErrorState } from "@/components/StateDisplay";
+
+const DEFAULT_COMMIT_PREVIEW_WIDTH = 460;
+const MIN_COMMIT_PREVIEW_WIDTH = 320;
+const MAX_COMMIT_PREVIEW_WIDTH = 8192;
+const COMMIT_PREVIEW_WIDTH_STORAGE_KEY = "azdodeck:layout:commitPreviewWidth";
 
 const DEFAULT_COMMIT_COLUMN_WIDTHS = [72, 80, 220, 140, 120];
 const COMMIT_COLUMN_MIN_WIDTHS = [66, 72, 160, 110, 96];
@@ -554,9 +564,10 @@ const CommitGridRow = forwardRef<
       onClick={onSelect}
       onKeyDown={(e) => {
         if ((e.target as HTMLElement).closest("button")) return;
-        if (e.key === "Enter" && commit.webUrl) {
+        if (e.key === "Enter") {
           e.stopPropagation();
-          openExternalUrl(commit.webUrl);
+          if (e.ctrlKey && commit.webUrl) openExternalUrl(commit.webUrl);
+          else focusPrimaryPreview();
         }
       }}
       className={`grid h-[29px] cursor-pointer select-none items-center gap-2 border-b border-border px-2 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
@@ -592,6 +603,103 @@ const CommitGridRow = forwardRef<
 });
 CommitGridRow.displayName = "CommitGridRow";
 
+function CommitPreviewPanel({
+  commit,
+  maximized,
+  onToggleMaximize,
+}: {
+  commit: CommitSummary | null;
+  maximized: boolean;
+  onToggleMaximize: () => void;
+}) {
+  // Esc / ← step back to the grid (mirrors the grid's Enter / → into here).
+  function handleKeyDown(event: ReactKeyboardEvent) {
+    if (isEditableTarget(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.key === "Escape" || event.key === "ArrowLeft") {
+      event.preventDefault();
+      focusPrimaryGrid();
+    }
+  }
+
+  return (
+    <aside
+      onKeyDown={handleKeyDown}
+      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-white focus-within:ring-2 focus-within:ring-ring"
+    >
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-1.5">
+        {commit ? (
+          <span className="shrink-0 font-mono text-xs font-semibold text-primary" title={commit.commitId}>
+            {commit.shortCommitId}
+          </span>
+        ) : (
+          <span className="text-sm text-muted-foreground">No commit selected</span>
+        )}
+        {commit?.webUrl ? (
+          <button
+            type="button"
+            onClick={() => openExternalUrl(commit.webUrl as string)}
+            title="Open in Azure DevOps (O)"
+            className="ml-auto shrink-0 rounded border border-border bg-white px-1.5 py-px text-[11px] text-primary hover:bg-secondary"
+          >
+            Open
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={onToggleMaximize}
+          aria-pressed={maximized}
+          aria-label={maximized ? "Restore split view" : "Maximize preview"}
+          title={`${maximized ? "Restore split view" : "Maximize preview"} (\\)`}
+          className={`shrink-0 rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${
+            commit?.webUrl ? "" : "ml-auto"
+          }`}
+        >
+          {maximized ? (
+            <Minimize2 className="h-3.5 w-3.5" aria-hidden="true" />
+          ) : (
+            <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
+          )}
+        </button>
+      </div>
+      <div
+        className="min-h-0 flex-1 overflow-y-auto outline-none"
+        data-primary-preview="true"
+        aria-keyshortcuts="Alt+P"
+        tabIndex={-1}
+      >
+        {commit ? (
+          <div className="px-3 py-2">
+            <p className="whitespace-pre-wrap break-words text-sm text-foreground">
+              {commit.comment || "(no comment)"}
+            </p>
+            <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <dt>Author</dt>
+              <dd className="text-foreground">
+                {commit.authorName ?? "—"}
+                {commit.authorEmail ? ` <${commit.authorEmail}>` : ""}
+              </dd>
+              <dt>Date</dt>
+              <dd className="text-foreground">
+                {commit.authorDate ? formatDate(commit.authorDate) : "—"}
+              </dd>
+              <dt>Repository</dt>
+              <dd className="text-foreground">
+                {commit.projectName} / {commit.repositoryName}
+              </dd>
+              <dt>Commit</dt>
+              <dd className="break-all font-mono text-foreground">{commit.commitId}</dd>
+            </dl>
+          </div>
+        ) : (
+          <div className="flex h-full items-center justify-center px-3 text-sm text-muted-foreground">
+            Select a commit.
+          </div>
+        )}
+      </div>
+    </aside>
+  );
+}
+
 function CommitResults({
   activeExternalFilterCount = 0,
   loading,
@@ -611,6 +719,15 @@ function CommitResults({
     storedNumbers(COMMIT_COLUMN_WIDTHS_STORAGE_KEY, DEFAULT_COMMIT_COLUMN_WIDTHS, COMMIT_COLUMN_MIN_WIDTHS, COMMIT_COLUMN_MAX_WIDTHS),
   );
   const [copyToast, setCopyToast] = useState<string | null>(null);
+  const [maximized, setMaximized] = useState(false);
+  const [previewWidth, setPreviewWidth] = useState(() =>
+    storedNumber(
+      COMMIT_PREVIEW_WIDTH_STORAGE_KEY,
+      DEFAULT_COMMIT_PREVIEW_WIDTH,
+      MIN_COMMIT_PREVIEW_WIDTH,
+      MAX_COMMIT_PREVIEW_WIDTH,
+    ),
+  );
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
   const restoreFocusRef = useRef(false);
   const [scrollerEl, setScrollerEl] = useState<HTMLDivElement | null>(null);
@@ -619,6 +736,10 @@ function CommitResults({
   useEffect(() => {
     localStorage.setItem(COMMIT_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
   }, [columnWidths]);
+
+  useEffect(() => {
+    localStorage.setItem(COMMIT_PREVIEW_WIDTH_STORAGE_KEY, String(Math.round(previewWidth)));
+  }, [previewWidth]);
 
   useEffect(() => {
     if (!scrollerEl) return;
@@ -702,15 +823,26 @@ function CommitResults({
 
   function handleKeyDown(e: ReactKeyboardEvent) {
     if (isEditableTarget(e.target)) return;
-    // Single-letter shortcuts must not swallow app-level chords (Ctrl+K etc.).
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.key === "ArrowDown") { e.preventDefault(); moveSelection(1); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); moveSelection(-1); }
+    // Single-letter shortcuts must not swallow app-level chords (Ctrl+K etc.);
+    // Ctrl+Enter stays grid-handled to open in Azure DevOps.
+    if (e.ctrlKey || e.metaKey || e.altKey) {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key === "Enter") {
+        e.preventDefault();
+        const commit = sorted[selectedIndex];
+        if (commit?.webUrl) openExternalUrl(commit.webUrl);
+      }
+      return;
+    }
+    if (e.key === "/") { e.preventDefault(); focusFilterInput(); return; }
+    if (e.key === "\\") { e.preventDefault(); setMaximized((value) => !value); return; }
+    if (e.key === "ArrowDown" || e.key === "j" || e.key === "J") { e.preventDefault(); moveSelection(1); }
+    else if (e.key === "ArrowUp" || e.key === "k" || e.key === "K") { e.preventDefault(); moveSelection(-1); }
     else if (e.key === "Home") { e.preventDefault(); moveSelectionTo(0); }
     else if (e.key === "End") { e.preventDefault(); moveSelectionTo(sorted.length - 1); }
     else if (e.key === "PageDown") { e.preventDefault(); moveSelection(10); }
     else if (e.key === "PageUp") { e.preventDefault(); moveSelection(-10); }
-    else if (e.key === "Enter") {
+    else if (e.key === "Enter" || e.key === "ArrowRight") { e.preventDefault(); focusPrimaryPreview(); }
+    else if (e.key === "o" || e.key === "O") {
       e.preventDefault();
       const commit = sorted[selectedIndex];
       if (commit?.webUrl) openExternalUrl(commit.webUrl);
@@ -749,8 +881,22 @@ function CommitResults({
   const virtualBottomPadding =
     Math.max(0, sorted.length - lastVirtualRow) * COMMIT_GRID_ROW_HEIGHT;
 
+  const selectedCommit = sorted[selectedIndex] ?? null;
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-white">
+    <div
+      className={
+        maximized
+          ? "flex min-h-0 flex-1"
+          : "grid min-h-0 flex-1 items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_8px_minmax(320px,var(--commit-preview-width))]"
+      }
+      style={{ "--commit-preview-width": `${previewWidth}px` } as CSSProperties}
+    >
+      <div
+        className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-white ${
+          maximized ? "hidden" : ""
+        }`}
+      >
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <h2 className="text-base font-semibold">Results</h2>
         <span className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -844,6 +990,25 @@ function CommitResults({
           </div>
         </div>
       )}
+      </div>
+
+      <ResizeHandle
+        ariaLabel="Resize commit preview"
+        className={maximized ? "hidden" : "hidden xl:flex"}
+        direction={-1}
+        max={MAX_COMMIT_PREVIEW_WIDTH}
+        min={MIN_COMMIT_PREVIEW_WIDTH}
+        onChange={setPreviewWidth}
+        onReset={() => setPreviewWidth(DEFAULT_COMMIT_PREVIEW_WIDTH)}
+        value={previewWidth}
+      />
+
+      <CommitPreviewPanel
+        commit={selectedCommit}
+        maximized={maximized}
+        onToggleMaximize={() => setMaximized((value) => !value)}
+      />
+
       {copyToast && (
         <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1 text-xs text-background shadow-lg">
           {copyToast}

@@ -1583,10 +1583,13 @@ describe("App", () => {
         },
       });
     });
-    expect(await screen.findByText("Add commit search")).toBeTruthy();
-    expect(screen.getByText("abcdef12")).toBeTruthy();
+    // Scope to the grid: the selected commit's message/SHA now also render in
+    // the preview pane, so unscoped queries would match twice.
+    const commitGrid = within(await main.findByRole("grid", { name: "Commit search results" }));
+    expect(commitGrid.getByText("Add commit search")).toBeTruthy();
+    expect(commitGrid.getByRole("button", { name: "abcdef12" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "abcdef12" }));
+    fireEvent.click(commitGrid.getByRole("button", { name: "abcdef12" }));
 
     await waitFor(() => {
       expect(openUrlMock).toHaveBeenCalledWith(
@@ -1626,7 +1629,7 @@ describe("App", () => {
     expect(invokeMock).not.toHaveBeenCalledWith("search_commits", expect.anything());
   });
 
-  it("filters my reviews by waiting author and opens the selected row by keyboard", async () => {
+  it("groups my reviews into collapsible sections and opens the selected row", async () => {
     invokeMock.mockImplementation((command: string, args?: unknown) => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
@@ -1729,27 +1732,26 @@ describe("App", () => {
     const main = within(await screen.findByRole("main"));
 
     expect(await main.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
-    expect(await main.findByText("Needs review")).toBeTruthy();
-    expect(main.queryByRole("tab", { name: "Rejected" })).toBeNull();
+    // The vote-filter tabs are gone; rows group into collapsible sections.
+    expect(main.queryByRole("tab", { name: "All" })).toBeNull();
 
-    // Rows group into reviewer-action sections (visible on the All tab).
-    fireEvent.keyDown(main.getByRole("grid", { name: "My review pull requests" }), {
-      key: "4",
-    });
-    expect(await main.findByText("Waiting for author")).toBeTruthy();
-    expect(main.getByText("Needs your review")).toBeTruthy();
-    expect(main.getByText("Rejected by you")).toBeTruthy();
-
-    fireEvent.keyDown(main.getByRole("grid", { name: "My review pull requests" }), {
-      key: "2",
-    });
-
-    expect(await main.findByText("Waiting on author")).toBeTruthy();
-    expect(main.queryByText("Needs review")).toBeNull();
+    // Section headers always show; "Needs your review" is expanded by default
+    // while the other sections start collapsed (their rows hidden).
+    expect(await main.findByRole("button", { name: /Needs your review/ })).toBeTruthy();
+    expect(main.getByText("Needs review")).toBeTruthy();
+    expect(main.getByRole("button", { name: /Waiting for author/ })).toBeTruthy();
+    expect(main.getByRole("button", { name: /Rejected by you/ })).toBeTruthy();
+    expect(main.queryByText("Waiting on author")).toBeNull();
     expect(main.queryByText("Rejected legacy path")).toBeNull();
+
+    // Expanding a section reveals its rows.
+    fireEvent.click(main.getByRole("button", { name: /Waiting for author/ }));
+    expect(await main.findByText("Waiting on author")).toBeTruthy();
     expect(main.getByText("Conflicts")).toBeTruthy();
 
-    // The local review-result preview moved to the Result tab of the panel.
+    // Select that row; the Result tab and Ctrl+Enter then act on it.
+    fireEvent.click(main.getByText("Waiting on author"));
+
     fireEvent.click(main.getByRole("tab", { name: "Result" }));
     expect(await main.findByText("review-PR102.html")).toBeTruthy();
 
