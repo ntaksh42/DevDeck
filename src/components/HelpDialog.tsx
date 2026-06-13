@@ -59,9 +59,12 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ PgUp PgDn Home End</kbd></div>
 
           <p className={section}>PR Search / WI Search / Commits</p>
-          <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>Enter</kbd></div>
-          <div className={row}><span>Move row</span><kbd className={kbd}>↑ ↓ PgUp PgDn Home End</kbd></div>
+          <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>
+          <div className={row}><span>Open / focus preview</span><kbd className={kbd}>Enter / →</kbd></div>
+          <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>O / Ctrl+Enter</kbd></div>
+          <div className={row}><span>Maximize preview</span><kbd className={kbd}>\</kbd></div>
           <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
+          <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ PgUp PgDn Home End</kbd></div>
           <div className={row}><span>Mark done / restore (My Reviews, My Items)</span><kbd className={kbd}>E</kbd></div>
 
           <p className={section}>Work Items</p>
