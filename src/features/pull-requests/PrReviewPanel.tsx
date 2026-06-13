@@ -6,24 +6,28 @@ import {
   getAppSettings,
   getPullRequestReview,
   getReviewResultPreview,
+  listPullRequestCommits,
   postPullRequestComment,
   setPullRequestThreadStatus,
   submitPullRequestVote,
   type PrLocatorInput,
-  type PrThread,
   type PullRequestReview,
   type ReviewPullRequestSummary,
 } from "@/lib/azdoCommands";
 import { formatDate, formatRelativeDate } from "@/lib/utils";
+import { MarkdownView } from "@/lib/markdown";
+import { openExternalUrl } from "@/lib/openExternal";
 import { ShortcutHint } from "@/components/ShortcutHint";
 import { LoadingState, ErrorState, PreviewEmptyState } from "@/components/StateDisplay";
 import { PrFilesTab } from "./PrFilesTab";
+import { PrThreadCard, isThreadResolved } from "./PrThreadCard";
 
-type PanelTab = "review" | "files" | "result";
+type PanelTab = "review" | "files" | "commits" | "result";
 
 const PANEL_TABS: { key: PanelTab; label: string }[] = [
   { key: "review", label: "Review" },
   { key: "files", label: "Files" },
+  { key: "commits", label: "Commits" },
   { key: "result", label: "Result" },
 ];
 
@@ -103,6 +107,8 @@ export function PrReviewPanel({ selectedPr }: { selectedPr: ReviewPullRequestSum
         />
       ) : tab === "files" ? (
         <PrFilesTab pr={selectedPr} threads={reviewQuery.data?.threads} />
+      ) : tab === "commits" ? (
+        <CommitsTab pr={selectedPr} />
       ) : (
         <ResultTab selectedPr={selectedPr} />
       )}
@@ -125,15 +131,11 @@ function ReviewTab({
 }) {
   const queryClient = useQueryClient();
   const [newComment, setNewComment] = useState("");
-  const [replyThreadId, setReplyThreadId] = useState<number | null>(null);
-  const [replyText, setReplyText] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
 
   // Reset draft state when another PR is selected.
   useEffect(() => {
     setNewComment("");
-    setReplyThreadId(null);
-    setReplyText("");
     setActionError(null);
   }, [pr.pullRequestId, pr.repositoryId]);
 
@@ -156,10 +158,6 @@ function ReviewTab({
     onSuccess: (_thread, variables) => {
       setActionError(null);
       if (variables.threadId == null) setNewComment("");
-      else {
-        setReplyThreadId(null);
-        setReplyText("");
-      }
       invalidateReview();
     },
     onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
@@ -246,9 +244,7 @@ function ReviewTab({
             ))}
           </div>
           {review.description ? (
-            <p className="mt-2 whitespace-pre-wrap break-words text-xs text-foreground">
-              {review.description}
-            </p>
+            <MarkdownView text={review.description} className="mt-2 text-xs text-foreground" />
           ) : (
             <p className="mt-2 text-xs italic text-muted-foreground">No description.</p>
           )}
@@ -263,25 +259,16 @@ function ReviewTab({
             <p className="text-xs text-muted-foreground">No comments yet.</p>
           ) : (
             userThreads.map((thread) => (
-              <ThreadCard
+              <PrThreadCard
                 key={thread.id}
                 thread={thread}
-                replying={replyThreadId === thread.id}
-                replyText={replyText}
                 busy={commentMutation.isPending || statusMutation.isPending}
-                onStartReply={() => {
-                  setReplyThreadId(thread.id);
-                  setReplyText("");
-                }}
-                onCancelReply={() => setReplyThreadId(null)}
-                onReplyTextChange={setReplyText}
-                onSubmitReply={() => {
-                  if (!replyText.trim()) return;
+                onReply={(content) => {
                   commentMutation.mutate({
                     ...prLocator(pr),
                     threadId: thread.id,
                     parentCommentId: thread.comments[0]?.id ?? 1,
-                    content: replyText,
+                    content,
                   });
                 }}
                 onToggleStatus={() => {
@@ -356,10 +343,6 @@ function ReviewTab({
   );
 }
 
-function isThreadResolved(thread: PrThread): boolean {
-  return thread.status != null && thread.status !== "active" && thread.status !== "pending";
-}
-
 function shortRef(value: string): string {
   return value.replace(/^refs\/heads\//, "");
 }
@@ -370,130 +353,67 @@ function VoteDot({ vote }: { vote: number }) {
   return <span className={`inline-block h-1.5 w-1.5 rounded-full ${cls}`} aria-hidden="true" />;
 }
 
-function ThreadCard({
-  thread,
-  replying,
-  replyText,
-  busy,
-  onStartReply,
-  onCancelReply,
-  onReplyTextChange,
-  onSubmitReply,
-  onToggleStatus,
-}: {
-  thread: PrThread;
-  replying: boolean;
-  replyText: string;
-  busy: boolean;
-  onStartReply: () => void;
-  onCancelReply: () => void;
-  onReplyTextChange: (value: string) => void;
-  onSubmitReply: () => void;
-  onToggleStatus: () => void;
-}) {
-  const resolved = isThreadResolved(thread);
+// ── Commits tab ──────────────────────────────────────────────────────────────
+
+function commitWebUrl(prWebUrl: string | null, commitId: string): string | null {
+  if (!prWebUrl) return null;
+  if (!/\/pullrequest\/\d+$/.test(prWebUrl)) return null;
+  return prWebUrl.replace(/\/pullrequest\/\d+$/, `/commit/${commitId}`);
+}
+
+function CommitsTab({ pr }: { pr: ReviewPullRequestSummary }) {
+  const commitsQuery = useQuery({
+    queryKey: ["prCommits", pr.organizationId, pr.repositoryId, pr.pullRequestId],
+    queryFn: () => listPullRequestCommits(prLocator(pr)),
+    staleTime: 60_000,
+  });
+
+  if (commitsQuery.isLoading) return <LoadingState />;
+  if (commitsQuery.isError) {
+    return <ErrorState message={commandErrorMessage(commitsQuery.error)} />;
+  }
+  const commits = commitsQuery.data ?? [];
+  if (commits.length === 0) return <PreviewEmptyState message="No commits." />;
+
   return (
-    <div className={`rounded-md border px-2 py-1.5 ${resolved ? "border-border bg-gray-50/60" : "border-border bg-white"}`}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-1.5">
-          {thread.status ? (
-            <span
-              className={`inline-flex shrink-0 items-center rounded border px-1 py-px text-[10px] font-medium ${
-                resolved
-                  ? "border-gray-200 bg-gray-100 text-gray-500"
-                  : "border-blue-200 bg-blue-50 text-blue-700"
-              }`}
-            >
-              {resolved ? "Resolved" : "Active"}
-            </span>
-          ) : null}
-          {thread.filePath ? (
-            <span
-              className="truncate font-mono text-[10px] text-muted-foreground"
-              title={`${thread.filePath}${thread.rightLine ? `:${thread.rightLine}` : ""}`}
-            >
-              {thread.filePath}
-              {thread.rightLine ? `:${thread.rightLine}` : ""}
-            </span>
-          ) : null}
-        </div>
-        {thread.status ? (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onToggleStatus}
-            className="shrink-0 rounded border border-border bg-white px-1.5 py-px text-[10px] text-muted-foreground hover:bg-secondary disabled:opacity-50"
+    <div
+      className="min-h-0 flex-1 overflow-y-auto outline-none"
+      data-primary-preview="true"
+      tabIndex={-1}
+    >
+      {commits.map((commit) => {
+        const webUrl = commitWebUrl(pr.webUrl, commit.commitId);
+        return (
+          <div
+            key={commit.commitId}
+            className="flex items-center gap-2 border-b border-border px-2 py-1.5 text-xs"
           >
-            {resolved ? "Reactivate" : "Resolve"}
-          </button>
-        ) : null}
-      </div>
-      <div className="mt-1 space-y-1.5">
-        {thread.comments
-          .filter((comment) => !comment.isSystem)
-          .map((comment) => (
-            <div key={comment.id} className="text-xs">
-              <span className="font-medium text-foreground">{comment.author ?? "Unknown"}</span>
-              {comment.publishedDate ? (
-                <span
-                  className="ml-1 text-[10px] text-muted-foreground"
-                  title={formatDate(comment.publishedDate)}
-                >
-                  {formatRelativeDate(comment.publishedDate)}
-                </span>
-              ) : null}
-              <p className="whitespace-pre-wrap break-words text-foreground">{comment.content ?? ""}</p>
-            </div>
-          ))}
-      </div>
-      {replying ? (
-        <div className="mt-1.5">
-          <textarea
-            autoFocus
-            value={replyText}
-            onChange={(event) => onReplyTextChange(event.target.value)}
-            onKeyDown={(event) => {
-              if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-                event.preventDefault();
-                onSubmitReply();
-              }
-              if (event.key === "Escape") {
-                event.stopPropagation();
-                onCancelReply();
-              }
-            }}
-            rows={2}
-            placeholder="Reply… (Ctrl+Enter to post)"
-            aria-label="Reply to thread"
-            className="w-full resize-y rounded border border-input bg-background px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-ring"
-          />
-          <div className="mt-1 flex justify-end gap-1">
             <button
               type="button"
-              onClick={onCancelReply}
-              className="rounded border border-border bg-white px-1.5 py-px text-[10px] hover:bg-secondary"
+              onClick={() => {
+                if (webUrl) openExternalUrl(webUrl);
+              }}
+              disabled={!webUrl}
+              className="shrink-0 rounded border border-border bg-gray-50 px-1.5 py-px font-mono text-[11px] text-primary hover:bg-secondary disabled:text-muted-foreground"
+              title={commit.commitId}
             >
-              Cancel
+              {commit.shortCommitId}
             </button>
-            <button
-              type="button"
-              disabled={!replyText.trim() || busy}
-              onClick={onSubmitReply}
-              className="rounded border border-border bg-white px-1.5 py-px text-[10px] hover:bg-secondary disabled:opacity-50"
-            >
-              Reply
-            </button>
+            <span className="min-w-0 flex-1 truncate text-foreground" title={commit.comment}>
+              {commit.comment}
+            </span>
+            <span className="shrink-0 text-muted-foreground">{commit.authorName ?? ""}</span>
+            {commit.authorDate ? (
+              <span
+                className="shrink-0 text-muted-foreground"
+                title={formatDate(commit.authorDate)}
+              >
+                {formatRelativeDate(commit.authorDate)}
+              </span>
+            ) : null}
           </div>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={onStartReply}
-          className="mt-1 rounded px-1 py-px text-[10px] text-muted-foreground hover:bg-secondary hover:text-foreground"
-        >
-          Reply
-        </button>
-      )}
+        );
+      })}
     </div>
   );
 }
