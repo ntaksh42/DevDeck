@@ -59,6 +59,7 @@ const DEFAULT_PR_SEARCH_COLUMN_WIDTHS = [56, 70, 220, 130, 104, 64, 120];
 const PR_SEARCH_COLUMN_MIN_WIDTHS = [52, 64, 160, 104, 86, 58, 100];
 const PR_SEARCH_COLUMN_MAX_WIDTHS = [120, 140, 720, 360, 280, 120, 360];
 const PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY = 'azdodeck:layout:prSearchGridColumnWidths:v2';
+const PR_SEARCH_QUERY_STORAGE_KEY = 'azdodeck:view:prSearchQuery';
 const PR_SEARCH_ROW_HEIGHT = 29;
 const PR_SEARCH_OVERSCAN = 8;
 type PrSearchFilterableColumn = "status" | "repository" | "createdBy" | "branch";
@@ -80,7 +81,10 @@ export function PullRequestSearch({
   onExternalSearchHandled?: () => void;
 }) {
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
-  const [query, setQuery] = useState("");
+  // Keep the last query across view switches (the component remounts on nav).
+  const [query, setQuery] = useState(
+    () => window.localStorage.getItem(PR_SEARCH_QUERY_STORAGE_KEY) ?? "",
+  );
   const [status, setStatus] = useState<SearchPullRequestsInput["status"]>("active");
   const [projectId, setProjectId] = useState("");
   const [repositoryId, setRepositoryId] = useState("");
@@ -112,6 +116,10 @@ export function PullRequestSearch({
   const mutation = useMutation({ mutationFn: searchPullRequests });
   const results = mutation.data ?? [];
   const activeSearchFilterCount = (query.trim() ? 1 : 0) + (projectId ? 1 : 0) + (repositoryId ? 1 : 0);
+
+  useEffect(() => {
+    window.localStorage.setItem(PR_SEARCH_QUERY_STORAGE_KEY, query);
+  }, [query]);
 
   useEffect(() => {
     if (!externalSearch) return;
