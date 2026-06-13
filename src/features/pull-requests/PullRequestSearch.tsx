@@ -176,7 +176,7 @@ export function PullRequestSearch({
               </select>
             </label>
           )}
-          <div className="grid gap-3 lg:grid-cols-[1fr_160px_200px_160px_auto]">
+          <div className="grid gap-3 lg:grid-cols-[1fr_160px_200px_auto]">
             <label className="grid gap-2">
               <span className="text-sm font-medium">Search</span>
               <div className="flex h-9 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
@@ -218,17 +218,6 @@ export function PullRequestSearch({
                 {filteredRepositories.map((r) => (
                   <option key={r.repositoryId} value={r.repositoryId}>{r.repositoryName}</option>
                 ))}
-              </select>
-            </label>
-
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Status</span>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as SearchPullRequestsInput["status"])}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="active">Active cached PRs</option>
               </select>
             </label>
 
