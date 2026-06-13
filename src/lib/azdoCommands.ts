@@ -131,6 +131,18 @@ const pullRequestReviewSchema = z.object({
 
 export type PullRequestReview = z.infer<typeof pullRequestReviewSchema>;
 
+const prCommitSchema = z.object({
+  commitId: z.string(),
+  shortCommitId: z.string(),
+  comment: z.string(),
+  authorName: z.string().nullable(),
+  authorDate: z.string().nullable(),
+});
+
+const prCommitsSchema = z.array(prCommitSchema);
+
+export type PrCommit = z.infer<typeof prCommitSchema>;
+
 const prChangedFileSchema = z.object({
   path: z.string(),
   changeType: z.string(),
@@ -420,6 +432,7 @@ export type PrLocatorInput = {
 
 export type GetPullRequestReviewInput = PrLocatorInput;
 export type ListPullRequestChangesInput = PrLocatorInput;
+export type ListPullRequestCommitsInput = PrLocatorInput;
 
 export type GetPullRequestFileDiffInput = PrLocatorInput & {
   filePath: string;
@@ -731,6 +744,13 @@ export async function listPullRequestChanges(
 ): Promise<PullRequestChanges> {
   const result = await invokeCommand("list_pull_request_changes", { input });
   return pullRequestChangesSchema.parse(result);
+}
+
+export async function listPullRequestCommits(
+  input: ListPullRequestCommitsInput,
+): Promise<PrCommit[]> {
+  const result = await invokeCommand("list_pull_request_commits", { input });
+  return prCommitsSchema.parse(result);
 }
 
 export async function getPullRequestFileDiff(

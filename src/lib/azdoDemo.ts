@@ -19,6 +19,7 @@ import type {
   Organization,
   PostPullRequestCommentInput,
   PrChangedFile,
+  PrCommit,
   PrFileDiff,
   PrThread,
   PullRequestChanges,
@@ -223,6 +224,30 @@ const DEMO_DIFF_BASE = `export function loadDashboard() {
   return fetchData(refreshIntervalMs);
 }
 `;
+const demoPrCommits: PrCommit[] = [
+  {
+    commitId: "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+    shortCommitId: "a1b2c3d4",
+    comment: "Make the refresh interval configurable",
+    authorName: "Avery Author",
+    authorDate: "2026-05-22T10:00:00Z",
+  },
+  {
+    commitId: "b2c3d4e5f60718293a4b5c6d7e8f901234567890",
+    shortCommitId: "b2c3d4e5",
+    comment: "Extract useDashboardData hook",
+    authorName: "Avery Author",
+    authorDate: "2026-05-21T16:30:00Z",
+  },
+  {
+    commitId: "c3d4e5f60718293a4b5c6d7e8f90123456789012",
+    shortCommitId: "c3d4e5f6",
+    comment: "Remove the legacy dashboard loader",
+    authorName: "Avery Author",
+    authorDate: "2026-05-20T09:15:00Z",
+  },
+];
+
 const DEMO_DIFF_TARGET = `export function loadDashboard(options: DashboardOptions) {
   const refreshIntervalMs = options.refreshIntervalMs ?? 30000;
   return fetchData(refreshIntervalMs);
@@ -351,6 +376,8 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       };
       return review;
     }
+    case "list_pull_request_commits":
+      return demoPrCommits;
     case "list_pull_request_changes": {
       const changes: PullRequestChanges = {
         baseCommitId: "demo-base",
