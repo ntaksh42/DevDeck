@@ -64,6 +64,55 @@ pub struct NewThreadContext {
     pub right_line: i64,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitIteration {
+    pub id: i64,
+    pub source_ref_commit: Option<GitCommitRefId>,
+    pub common_ref_commit: Option<GitCommitRefId>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCommitRefId {
+    pub commit_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitIterationChanges {
+    pub change_entries: Vec<GitChangeEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitChangeEntry {
+    pub change_type: Option<String>,
+    pub item: Option<GitChangeItem>,
+    /// Pre-rename path when the change is a rename.
+    pub source_server_item: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitChangeItem {
+    pub path: Option<String>,
+    pub is_folder: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitItemContent {
+    pub content: Option<String>,
+    pub content_metadata: Option<GitContentMetadata>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitContentMetadata {
+    pub is_binary: Option<bool>,
+}
+
 impl AdoClient {
     pub async fn get_pull_request_detail(
         &self,
@@ -175,6 +224,64 @@ impl AdoClient {
         let body = json!({ "vote": vote, "id": reviewer_id });
         self.put_json(&path, &[("api-version", "7.1-preview")], &body)
             .await
+    }
+
+    pub async fn list_pull_request_iterations(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        pull_request_id: i64,
+    ) -> Result<Vec<GitIteration>> {
+        let path = format!(
+            "{project_id}/_apis/git/repositories/{repository_id}/pullRequests/{pull_request_id}/iterations"
+        );
+        let response: ListResponse<GitIteration> = self
+            .get_json(&path, &[("api-version", "7.1-preview")])
+            .await?;
+        Ok(response.value)
+    }
+
+    /// `$compareTo=0` returns the cumulative changes against the PR base.
+    pub async fn get_pull_request_iteration_changes(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        pull_request_id: i64,
+        iteration_id: i64,
+    ) -> Result<Vec<GitChangeEntry>> {
+        let path = format!(
+            "{project_id}/_apis/git/repositories/{repository_id}/pullRequests/{pull_request_id}/iterations/{iteration_id}/changes"
+        );
+        let response: GitIterationChanges = self
+            .get_json(
+                &path,
+                &[("api-version", "7.1-preview"), ("$compareTo", "0")],
+            )
+            .await?;
+        Ok(response.change_entries)
+    }
+
+    /// Fetches the (text) content of a file at a specific commit.
+    pub async fn get_item_content(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        item_path: &str,
+        commit_id: &str,
+    ) -> Result<GitItemContent> {
+        let path = format!("{project_id}/_apis/git/repositories/{repository_id}/items");
+        self.get_json(
+            &path,
+            &[
+                ("api-version", "7.1-preview"),
+                ("path", item_path),
+                ("versionDescriptor.versionType", "commit"),
+                ("versionDescriptor.version", commit_id),
+                ("includeContent", "true"),
+                ("$format", "json"),
+            ],
+        )
+        .await
     }
 }
 
@@ -408,5 +515,86 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(reviewer.vote, 10);
+    }
+
+    #[tokio::test]
+    async fn list_pull_request_iterations_maps_commits() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/project-1/_apis/git/repositories/repo-1/pullRequests/42/iterations",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 1,
+                "value": [{
+                    "id": 3,
+                    "sourceRefCommit": { "commitId": "abc" },
+                    "commonRefCommit": { "commitId": "base" }
+                }]
+            })))
+            .mount(&server)
+            .await;
+
+        let iterations = test_client(&server)
+            .await
+            .list_pull_request_iterations("project-1", "repo-1", 42)
+            .await
+            .unwrap();
+        assert_eq!(iterations[0].id, 3);
+        assert_eq!(
+            iterations[0].common_ref_commit.as_ref().unwrap().commit_id,
+            "base"
+        );
+    }
+
+    #[tokio::test]
+    async fn get_pull_request_iteration_changes_compares_to_base() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/project-1/_apis/git/repositories/repo-1/pullRequests/42/iterations/3/changes",
+            ))
+            .and(query_param("$compareTo", "0"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "changeEntries": [{
+                    "changeType": "edit",
+                    "item": { "path": "/src/app.ts", "isFolder": false }
+                }]
+            })))
+            .mount(&server)
+            .await;
+
+        let changes = test_client(&server)
+            .await
+            .get_pull_request_iteration_changes("project-1", "repo-1", 42, 3)
+            .await
+            .unwrap();
+        assert_eq!(
+            changes[0].item.as_ref().unwrap().path.as_deref(),
+            Some("/src/app.ts")
+        );
+    }
+
+    #[tokio::test]
+    async fn get_item_content_requests_commit_version() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/git/repositories/repo-1/items"))
+            .and(query_param("path", "/src/app.ts"))
+            .and(query_param("versionDescriptor.version", "abc"))
+            .and(query_param("includeContent", "true"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "content": "const x = 1;\n",
+                "contentMetadata": { "isBinary": false }
+            })))
+            .mount(&server)
+            .await;
+
+        let item = test_client(&server)
+            .await
+            .get_item_content("project-1", "repo-1", "/src/app.ts", "abc")
+            .await
+            .unwrap();
+        assert_eq!(item.content.as_deref(), Some("const x = 1;\n"));
     }
 }

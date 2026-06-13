@@ -15,8 +15,9 @@ pub use git::{
 };
 pub use identity::{AuthenticatedUser, ConnectionData, Identity, IdentityPickerIdentity};
 pub use pr_review::{
-    GitFilePosition, GitPullRequestDetail, GitThread, GitThreadComment, GitThreadContext,
-    NewThreadContext,
+    GitChangeEntry, GitChangeItem, GitCommitRefId, GitContentMetadata, GitFilePosition,
+    GitItemContent, GitIteration, GitPullRequestDetail, GitThread, GitThreadComment,
+    GitThreadContext, NewThreadContext,
 };
 pub use work_items::{
     WorkItem, WorkItemComment, WorkItemFieldDefinition, WorkItemLink, WorkItemReference,
