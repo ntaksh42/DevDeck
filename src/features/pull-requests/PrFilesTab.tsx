@@ -545,14 +545,17 @@ function SplitCell({
     return <div className="border-r border-border/60 bg-muted/20" aria-hidden="true" />;
   }
   return (
-    <div className={`group grid grid-cols-[3rem_1fr] border-r border-border/60 ${rowBackground(cell.kind)}`}>
+    <div className={`group grid min-w-0 grid-cols-[3rem_1fr] border-r border-border/60 ${rowBackground(cell.kind)}`}>
       <span className="relative select-none border-r border-border/60 pr-1 text-right text-muted-foreground/70">
         {side === "right" ? (
           <CommentLineButton line={cell.line} onStartComment={onStartComment} />
         ) : null}
         {cell.line}
       </span>
-      <span className="whitespace-pre pl-1">{cell.text}</span>
+      {/* Long lines are clipped in split view; switch to unified to scroll. */}
+      <span className="overflow-hidden whitespace-pre pl-1" title={cell.text}>
+        {cell.text}
+      </span>
     </div>
   );
 }
