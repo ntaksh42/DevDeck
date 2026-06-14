@@ -187,7 +187,7 @@ export function CommandPalette({
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
-        className="w-full max-w-xl overflow-hidden rounded-lg border border-border bg-white shadow-xl"
+        className="w-full max-w-xl overflow-hidden rounded-lg border border-border bg-popover shadow-xl"
         onClick={(event) => event.stopPropagation()}
         onKeyDown={handleDialogKeyDown}
       >

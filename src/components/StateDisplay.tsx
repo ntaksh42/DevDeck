@@ -39,25 +39,25 @@ export function ErrorState({ message }: { message: string }) {
 
   const variants: Record<ErrorKind, { containerCls: string; textCls: string; icon: ReactNode; hint: string }> = {
     auth: {
-      containerCls: "border-amber-200 bg-amber-50",
-      textCls: "text-amber-800",
-      icon: <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />,
+      containerCls: "border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40",
+      textCls: "text-amber-800 dark:text-amber-300",
+      icon: <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />,
       hint: "Check your Personal Access Token in Settings — it may have expired.",
     },
     rateLimit: {
-      containerCls: "border-yellow-200 bg-yellow-50",
-      textCls: "text-yellow-800",
-      icon: <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-600" aria-hidden="true" />,
+      containerCls: "border-yellow-200 bg-yellow-50 dark:border-yellow-900 dark:bg-yellow-950/40",
+      textCls: "text-yellow-800 dark:text-yellow-300",
+      icon: <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-600 dark:text-yellow-400" aria-hidden="true" />,
       hint: "Azure DevOps rate limit reached. Wait a moment, then try again.",
     },
     network: {
-      containerCls: "border-gray-200 bg-gray-50",
-      textCls: "text-gray-700",
-      icon: <WifiOff className="h-4 w-4 shrink-0 text-gray-500" aria-hidden="true" />,
+      containerCls: "border-gray-200 bg-gray-50 dark:border-border dark:bg-muted",
+      textCls: "text-gray-700 dark:text-muted-foreground",
+      icon: <WifiOff className="h-4 w-4 shrink-0 text-gray-500 dark:text-muted-foreground" aria-hidden="true" />,
       hint: "Check your internet connection and try again.",
     },
     default: {
-      containerCls: "border-destructive/30 bg-red-50",
+      containerCls: "border-destructive/30 bg-red-50 dark:bg-red-950/40",
       textCls: "text-destructive",
       icon: <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />,
       hint: "",

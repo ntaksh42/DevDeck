@@ -107,11 +107,11 @@ function VoteBadge({ vote, label }: { vote: VoteValue; label: string }) {
 
 function RequiredBadge({ required }: { required: boolean }) {
   return required ? (
-    <span className="inline-flex items-center rounded border border-blue-200 bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-800">
+    <span className="inline-flex items-center rounded border border-blue-200 bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300">
       Required
     </span>
   ) : (
-    <span className="inline-flex items-center rounded border border-gray-200 bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-500">
+    <span className="inline-flex items-center rounded border border-border bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
       Optional
     </span>
   );
@@ -145,7 +145,7 @@ function renderPrCell(key: SortKey, pr: ReviewPullRequestSummary, isStale: boole
       return (
         <div className="flex min-w-0 items-center gap-1.5">
           {pr.isDraft && (
-            <span className="inline-flex shrink-0 items-center rounded border border-gray-300 bg-gray-50 px-1.5 py-0.5 text-xs text-gray-500">
+            <span className="inline-flex shrink-0 items-center rounded border border-input bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
               Draft
             </span>
           )}
@@ -154,7 +154,7 @@ function renderPrCell(key: SortKey, pr: ReviewPullRequestSummary, isStale: boole
           </span>
           {pr.mergeStatus === "conflicts" ? (
             <span
-              className="inline-flex shrink-0 items-center rounded border border-red-200 bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-800"
+              className="inline-flex shrink-0 items-center rounded border border-red-200 bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
               title="This pull request has merge conflicts"
             >
               Conflicts
@@ -1095,7 +1095,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
         </div>
       )}
       {/* Filter bar */}
-      <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-md border border-border bg-white px-3 py-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
         {organizations.length > 1 && (
           <select
             value={organizationId}
@@ -1143,7 +1143,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
               setShowDrafts(e.target.checked);
               setSelectedIndex(0);
             }}
-            className="h-3.5 w-3.5 rounded border-gray-300"
+            className="h-3.5 w-3.5 rounded border-input"
           />
           Show Drafts
         </label>
@@ -1160,7 +1160,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
       >
         {/* Grid */}
         <div
-          className={`flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-white ${
+          className={`flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-card ${
             maximized ? "hidden" : ""
           }`}
         >
@@ -1169,7 +1169,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
               {/* Column headers */}
               <div
                 role="row"
-                className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                className="grid items-center gap-2 border-b border-border bg-muted px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                 style={{ gridTemplateColumns: COLS }}
               >
                 {visibleColumns.map((col, i) => {
@@ -1287,7 +1287,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
                 className={`rounded border px-2 py-0.5 text-xs ${
                   showDone
                     ? "border-primary bg-primary/10 text-primary"
-                    : "border-border bg-white hover:bg-secondary"
+                    : "border-border bg-card hover:bg-secondary"
                 }`}
               >
                 {showDone ? "Back to inbox" : `Done (${archivedKeys.size})`}
@@ -1299,7 +1299,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
                   <button
                     type="button"
                     onClick={clearAllFilters}
-                    className="rounded border border-border bg-white px-2 py-0.5 text-xs hover:bg-secondary"
+                    className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary"
                   >
                     Clear filters
                   </button>
@@ -1308,7 +1308,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
               <button
                 type="button"
                 onClick={(event) => setColumnMenuRect(event.currentTarget.getBoundingClientRect())}
-                className="rounded border border-border bg-white px-2 py-0.5 text-xs hover:bg-secondary"
+                className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary"
               >
                 Columns
               </button>
@@ -1408,7 +1408,7 @@ function ColumnFilterDropdown({
   return (
     <div
       ref={dropdownRef}
-      className="fixed z-50 w-52 rounded-md border border-border bg-white shadow-lg"
+      className="fixed z-50 w-52 rounded-md border border-border bg-popover shadow-lg"
       style={{ top, left }}
     >
       <div className="border-b border-border p-1.5">

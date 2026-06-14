@@ -414,7 +414,7 @@ const WorkItemGridRow = forwardRef<
           e.stopPropagation();
           onCheckedChange(e.currentTarget.checked, e.shiftKey);
         }}
-        className="h-3.5 w-3.5 cursor-pointer rounded border-gray-300"
+        className="h-3.5 w-3.5 cursor-pointer rounded border-input"
       />
     </div>
     {visibleColumns.map((column) => (
@@ -1345,12 +1345,12 @@ export function WorkItemsGrid({
         }`}
         style={{ "--work-item-preview-width": `${previewWidth}px` } as CSSProperties}
       >
-        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-white">
+        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-card">
           <div ref={gridScrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
             <div className="min-w-[520px]">
               <div
                 role="row"
-                className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                className="grid items-center gap-2 border-b border-border bg-muted px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                 style={{ gridTemplateColumns: wiColTemplate }}
               >
                 <div role="columnheader" className="flex items-center justify-center">
@@ -1373,7 +1373,7 @@ export function WorkItemsGrid({
                       }
                       setLastCheckedIndex(null);
                     }}
-                    className="h-3.5 w-3.5 cursor-pointer rounded border-gray-300"
+                    className="h-3.5 w-3.5 cursor-pointer rounded border-input"
                   />
                 </div>
                 {visibleColumns.map((col, i) => (
@@ -1491,7 +1491,7 @@ export function WorkItemsGrid({
                   className={`rounded border px-2 py-0.5 text-xs ${
                     showDone
                       ? "border-primary bg-primary/10 text-primary"
-                      : "border-border bg-white hover:bg-secondary"
+                      : "border-border bg-card hover:bg-secondary"
                   }`}
                 >
                   {showDone ? "Back to inbox" : `Done (${archivedKeys.size})`}
@@ -1503,7 +1503,7 @@ export function WorkItemsGrid({
                   <button
                     type="button"
                     onClick={clearAllFilters}
-                    className="rounded border border-border bg-white px-2 py-0.5 text-xs hover:bg-secondary"
+                    className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary"
                   >
                     Clear filters
                   </button>
@@ -1512,7 +1512,7 @@ export function WorkItemsGrid({
               <button
                 type="button"
                 onClick={(event) => setColumnMenuRect(event.currentTarget.getBoundingClientRect())}
-                className="rounded border border-border bg-white px-2 py-0.5 text-xs hover:bg-secondary"
+                className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary"
               >
                 Columns
               </button>
@@ -1621,7 +1621,7 @@ function ColumnFilterDropdown({
   return (
     <div
       ref={dropdownRef}
-      className="fixed z-50 w-52 rounded-md border border-border bg-white shadow-lg"
+      className="fixed z-50 w-52 rounded-md border border-border bg-popover shadow-lg"
       style={{ top, left }}
     >
       <div className="border-b border-border p-1.5">
@@ -1711,7 +1711,7 @@ function ColumnVisibilityDropdown({
   return (
     <div
       ref={dropdownRef}
-      className="fixed z-50 w-56 rounded-md border border-border bg-white p-1 shadow-lg"
+      className="fixed z-50 w-56 rounded-md border border-border bg-popover p-1 shadow-lg"
       style={{ top, left }}
     >
       <div className="border-b border-border px-2 py-1.5 text-xs font-semibold text-foreground">
@@ -1758,7 +1758,7 @@ function BulkFailurePanel({
   onDismiss: () => void;
 }) {
   return (
-    <div className="mb-2 rounded-md border border-destructive/30 bg-red-50 px-3 py-2 text-xs text-destructive">
+    <div className="mb-2 rounded-md border border-destructive/30 bg-red-50 dark:bg-red-950/40 px-3 py-2 text-xs text-destructive">
       <div className="flex items-center justify-between gap-2">
         <span className="font-medium">
           {failures.length} bulk update failure{failures.length === 1 ? "" : "s"}
@@ -1766,7 +1766,7 @@ function BulkFailurePanel({
         <button
           type="button"
           onClick={onDismiss}
-          className="rounded px-1 text-destructive hover:bg-red-100"
+          className="rounded px-1 text-destructive hover:bg-red-100 dark:hover:bg-red-950"
         >
           Dismiss
         </button>
@@ -1842,14 +1842,14 @@ function BulkActionBar({
             type="button"
             disabled={statePending}
             onClick={() => onStateOpenChange(!stateOpen)}
-            className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-white px-2.5 text-xs font-medium hover:bg-secondary disabled:opacity-60"
+            className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-xs font-medium hover:bg-secondary disabled:opacity-60"
           >
             {statePending ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : null}
             State
             <ChevronDown className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
           </button>
           {stateOpen ? (
-            <div ref={stateListRef} className="absolute left-0 top-full z-30 mt-1 min-w-[130px] rounded-md border border-border bg-white py-1 shadow-lg">
+            <div ref={stateListRef} className="absolute left-0 top-full z-30 mt-1 min-w-[130px] rounded-md border border-border bg-popover py-1 shadow-lg">
               {stateLoading ? (
                 <div className="flex items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground">
                   <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> Loading…
@@ -1887,14 +1887,14 @@ function BulkActionBar({
             type="button"
             disabled={assignPending}
             onClick={() => onAssignOpenChange(!assignOpen)}
-            className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-white px-2.5 text-xs font-medium hover:bg-secondary disabled:opacity-60"
+            className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-xs font-medium hover:bg-secondary disabled:opacity-60"
           >
             {assignPending ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : null}
             Assignee
             <ChevronDown className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
           </button>
           {assignOpen ? (
-            <div className="absolute left-0 top-full z-30 mt-1 w-56 rounded-md border border-border bg-white p-1 shadow-lg">
+            <div className="absolute left-0 top-full z-30 mt-1 w-56 rounded-md border border-border bg-popover p-1 shadow-lg">
               <input
                 ref={assignInputRef}
                 autoFocus
@@ -1953,14 +1953,14 @@ function BulkActionBar({
             type="button"
             disabled={priorityPending}
             onClick={() => onPriorityOpenChange(!priorityOpen)}
-            className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-white px-2.5 text-xs font-medium hover:bg-secondary disabled:opacity-60"
+            className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-xs font-medium hover:bg-secondary disabled:opacity-60"
           >
             {priorityPending ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : null}
             Priority
             <ChevronDown className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
           </button>
           {priorityOpen ? (
-            <div ref={priorityListRef} className="absolute left-0 top-full z-30 mt-1 min-w-[96px] rounded-md border border-border bg-white py-1 shadow-lg">
+            <div ref={priorityListRef} className="absolute left-0 top-full z-30 mt-1 min-w-[96px] rounded-md border border-border bg-popover py-1 shadow-lg">
               {[1, 2, 3, 4].map((priority, index) => (
                 <button
                   key={priority}

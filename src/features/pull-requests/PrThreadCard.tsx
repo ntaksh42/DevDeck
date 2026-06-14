@@ -35,7 +35,7 @@ export function PrThreadCard({
   return (
     <div
       className={`rounded-md border px-2 py-1.5 ${
-        resolved ? "border-border bg-gray-50/60" : "border-border bg-white"
+        resolved ? "border-border bg-muted/60" : "border-border bg-card"
       }`}
     >
       <div className="flex items-center justify-between gap-2">
@@ -44,8 +44,8 @@ export function PrThreadCard({
             <span
               className={`inline-flex shrink-0 items-center rounded border px-1 py-px text-[10px] font-medium ${
                 resolved
-                  ? "border-gray-200 bg-gray-100 text-gray-500"
-                  : "border-blue-200 bg-blue-50 text-blue-700"
+                  ? "border-border bg-muted text-muted-foreground"
+                  : "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300"
               }`}
             >
               {resolved ? "Resolved" : "Active"}
@@ -66,7 +66,7 @@ export function PrThreadCard({
             type="button"
             disabled={busy}
             onClick={onToggleStatus}
-            className="shrink-0 rounded border border-border bg-white px-1.5 py-px text-[10px] text-muted-foreground hover:bg-secondary disabled:opacity-50"
+            className="shrink-0 rounded border border-border bg-card px-1.5 py-px text-[10px] text-muted-foreground hover:bg-secondary disabled:opacity-50"
           >
             {resolved ? "Reactivate" : "Resolve"}
           </button>

@@ -248,7 +248,7 @@ export function CommitSearch({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="shrink-0 rounded-md border border-border bg-white">
+      <div className="shrink-0 rounded-md border border-border bg-card">
         <form className="grid gap-3 p-3" onSubmit={onSubmit}>
           <div className="grid gap-3 xl:grid-cols-[minmax(240px,1fr)_180px_180px_170px_auto]">
             <label className="grid gap-2">
@@ -625,7 +625,7 @@ function CommitPreviewPanel({
   return (
     <aside
       onKeyDown={handleKeyDown}
-      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-white focus-within:ring-2 focus-within:ring-ring"
+      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card focus-within:ring-2 focus-within:ring-ring"
     >
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-1.5">
         {commit ? (
@@ -640,7 +640,7 @@ function CommitPreviewPanel({
             type="button"
             onClick={() => openExternalUrl(commit.webUrl as string)}
             title="Open in Azure DevOps (O)"
-            className="ml-auto shrink-0 rounded border border-border bg-white px-1.5 py-px text-[11px] text-primary hover:bg-secondary"
+            className="ml-auto shrink-0 rounded border border-border bg-card px-1.5 py-px text-[11px] text-primary hover:bg-secondary"
           >
             Open
           </button>
@@ -903,7 +903,7 @@ function CommitResults({
       style={{ "--commit-preview-width": `${previewWidth}px` } as CSSProperties}
     >
       <div
-        className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-white ${
+        className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card ${
           maximized ? "hidden" : ""
         }`}
       >
@@ -917,7 +917,7 @@ function CommitResults({
               <button
                 type="button"
                 onClick={onClearExternalFilters}
-                className="rounded border border-border bg-white px-2 py-0.5 text-xs hover:bg-secondary"
+                className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary"
               >
                 Clear filters
               </button>
@@ -946,7 +946,7 @@ function CommitResults({
           <div className="min-w-[680px]">
             <div
               role="row"
-              className="grid items-center gap-2 border-b border-border bg-gray-50 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+              className="grid items-center gap-2 border-b border-border bg-muted px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
               style={{ gridTemplateColumns: commitColTemplate }}
             >
               <div role="columnheader" className="relative min-w-0 truncate px-1">

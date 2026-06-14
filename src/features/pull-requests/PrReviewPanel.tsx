@@ -109,7 +109,7 @@ export function PrReviewPanel({
   return (
     <aside
       onKeyDown={handlePreviewKeyDown}
-      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-white focus-within:ring-2 focus-within:ring-ring"
+      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card focus-within:ring-2 focus-within:ring-ring"
     >
       {/* Persistent PR header (visible on every tab), GitHub-style. */}
       <div className="flex shrink-0 items-baseline gap-2 border-b border-border px-3 py-1.5">
@@ -156,7 +156,7 @@ export function PrReviewPanel({
       </div>
 
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-2 py-1.5">
-        <div className="flex items-center gap-0.5 rounded-md border border-border bg-gray-50 p-0.5" role="tablist" aria-label="PR review tabs">
+        <div className="flex items-center gap-0.5 rounded-md border border-border bg-muted p-0.5" role="tablist" aria-label="PR review tabs">
           {tabs.map((option) => (
             <button
               key={option.key}
@@ -166,7 +166,7 @@ export function PrReviewPanel({
               onClick={() => setTab(option.key)}
               className={`rounded px-2.5 py-0.5 text-xs font-medium transition-colors ${
                 tab === option.key
-                  ? "bg-white text-foreground shadow-sm"
+                  ? "bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -375,7 +375,7 @@ function ReviewTab({
             disabled={readOnly || updateMutation.isPending}
             title={readOnly ? "Read-only validation mode is enabled" : undefined}
             onClick={() => runPrAction("publish", "Publish this draft pull request?")}
-            className="rounded border border-border bg-white px-2 py-0.5 font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded border border-border bg-card px-2 py-0.5 font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
           >
             Publish
           </button>
@@ -411,7 +411,7 @@ function ReviewTab({
               `Complete (merge) this pull request using ${mergeStrategy}?`,
             )
           }
-          className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 font-medium text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 font-medium text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 dark:hover:bg-emerald-900"
         >
           Complete
         </button>
@@ -420,7 +420,7 @@ function ReviewTab({
           disabled={readOnly || updateMutation.isPending}
           title={readOnly ? "Read-only validation mode is enabled" : undefined}
           onClick={() => runPrAction("abandon", "Abandon this pull request?")}
-          className="rounded border border-border bg-white px-2 py-0.5 font-medium text-muted-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded border border-border bg-card px-2 py-0.5 font-medium text-muted-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
         >
           Abandon
         </button>
@@ -430,7 +430,7 @@ function ReviewTab({
       </div>
 
       {actionError ? (
-        <div className="m-2 shrink-0 rounded-md border border-destructive/30 bg-red-50 px-2 py-1 text-xs text-destructive">
+        <div className="m-2 shrink-0 rounded-md border border-destructive/30 bg-red-50 dark:bg-red-950/40 px-2 py-1 text-xs text-destructive">
           {actionError}
         </div>
       ) : null}
@@ -453,7 +453,7 @@ function ReviewTab({
             {review.reviewers.map((reviewer) => (
               <span
                 key={`${reviewer.displayName}-${reviewer.isMe}`}
-                className="inline-flex items-center gap-1 rounded border border-border bg-gray-50 px-1.5 py-0.5 text-[11px] text-muted-foreground"
+                className="inline-flex items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
                 title={`${reviewer.voteLabel}${reviewer.isRequired ? " (Required)" : ""}`}
               >
                 {reviewer.displayName}
@@ -595,7 +595,7 @@ function CommitsTab({ pr }: { pr: ReviewPullRequestSummary }) {
                 if (webUrl) openExternalUrl(webUrl);
               }}
               disabled={!webUrl}
-              className="shrink-0 rounded border border-border bg-gray-50 px-1.5 py-px font-mono text-[11px] text-primary hover:bg-secondary disabled:text-muted-foreground"
+              className="shrink-0 rounded border border-border bg-muted px-1.5 py-px font-mono text-[11px] text-primary hover:bg-secondary disabled:text-muted-foreground"
               title={commit.commitId}
             >
               {commit.shortCommitId}
@@ -648,7 +648,7 @@ function ResultTab({ selectedPr }: { selectedPr: ReviewPullRequestSummary }) {
   }
   if (previewQuery.isError) {
     return (
-      <div className="m-3 rounded-md border border-destructive/30 bg-red-50 p-3 text-sm text-destructive">
+      <div className="m-3 rounded-md border border-destructive/30 bg-red-50 dark:bg-red-950/40 p-3 text-sm text-destructive">
         {commandErrorMessage(previewQuery.error)}
       </div>
     );
@@ -674,7 +674,7 @@ function ResultTab({ selectedPr }: { selectedPr: ReviewPullRequestSummary }) {
         aria-keyshortcuts="Alt+P"
         sandbox=""
         srcDoc={preview.html}
-        className="min-h-0 flex-1 bg-white outline-none"
+        className="min-h-0 flex-1 bg-card outline-none"
         data-primary-preview="true"
         tabIndex={-1}
       />

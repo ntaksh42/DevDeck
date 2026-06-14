@@ -813,7 +813,7 @@ export function WorkItemViewsPanel({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       {/* Views panel — full width, responsive auto-fill grid */}
-      <div className="shrink-0 overflow-hidden rounded-md border border-border bg-white">
+      <div className="shrink-0 overflow-hidden rounded-md border border-border bg-card">
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <div>
             <h2 className="text-sm font-semibold">Views</h2>
@@ -1011,7 +1011,7 @@ export function WorkItemViewsPanel({
                         : "border-destructive bg-destructive/5 hover:bg-destructive/10"
                       : selected
                         ? "border-primary bg-secondary"
-                        : "border-border bg-white hover:bg-muted/60"
+                        : "border-border bg-card hover:bg-muted/60"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -1106,7 +1106,7 @@ export function WorkItemViewsPanel({
             role="dialog"
             aria-modal="true"
             aria-labelledby="view-dialog-title"
-            className="relative w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-white shadow-xl"
+            className="relative w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-popover shadow-xl"
             style={{ maxHeight: "90vh" }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1158,7 +1158,7 @@ export function WorkItemViewsPanel({
                   <p
                     className={`text-xs ${
                       urlStatus.severity === "success"
-                        ? "text-green-700"
+                        ? "text-green-700 dark:text-green-400"
                         : urlStatus.severity === "error"
                           ? "text-destructive"
                           : "text-muted-foreground"
@@ -1293,7 +1293,7 @@ export function WorkItemViewsPanel({
                         key={macro}
                         type="button"
                         onClick={() => insertWiqlText(macro)}
-                        className="rounded border border-border bg-white px-1.5 py-0.5 font-mono text-[10px] hover:bg-secondary"
+                        className="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[10px] hover:bg-secondary"
                       >
                         {macro}
                       </button>
@@ -1329,14 +1329,14 @@ export function WorkItemViewsPanel({
                   className="min-h-[120px] resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-xs leading-5 outline-none focus:ring-2 focus:ring-ring"
                 />
                 {wiqlCompletionsOpen && wiqlCompletions.length > 0 ? (
-                  <div className="flex max-h-24 flex-wrap gap-1 overflow-auto rounded-md border border-border bg-slate-50 p-1.5">
+                  <div className="flex max-h-24 flex-wrap gap-1 overflow-auto rounded-md border border-border bg-muted p-1.5">
                     {wiqlCompletions.map((completion) => (
                       <button
                         key={`${completion.label}:${completion.value}`}
                         type="button"
                         onMouseDown={(event) => event.preventDefault()}
                         onClick={() => applyWiqlCompletion(completion)}
-                        className="rounded border border-border bg-white px-1.5 py-0.5 text-left text-[11px] hover:bg-secondary"
+                        className="rounded border border-border bg-card px-1.5 py-0.5 text-left text-[11px] hover:bg-secondary"
                         title={completion.detail}
                       >
                         <span className="font-mono">{completion.label}</span>
@@ -1351,7 +1351,7 @@ export function WorkItemViewsPanel({
                       <p key={error} className="text-destructive">{error}</p>
                     ))}
                     {wiqlValidation.warnings.map((warning) => (
-                      <p key={warning} className="text-amber-700">{warning}</p>
+                      <p key={warning} className="text-amber-700 dark:text-amber-400">{warning}</p>
                     ))}
                   </div>
                 ) : null}

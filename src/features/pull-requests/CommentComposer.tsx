@@ -113,7 +113,7 @@ export function CommentComposer({
   const showMentions = mention != null && candidates.length > 0;
 
   return (
-    <div className="rounded-md border border-border bg-white">
+    <div className="rounded-md border border-border bg-card">
       <div className="flex items-center gap-0.5 border-b border-border px-1.5 py-1" role="tablist" aria-label="Comment editor mode">
         {(["edit", "preview"] as Mode[]).map((option) => (
           <button
@@ -184,7 +184,7 @@ export function CommentComposer({
             className="w-full resize-y bg-transparent px-2 py-1.5 text-xs outline-none placeholder:text-muted-foreground"
           />
           {showMentions ? (
-            <ul className="absolute left-2 top-full z-20 max-h-40 w-64 overflow-auto rounded-md border border-border bg-white shadow-lg">
+            <ul className="absolute left-2 top-full z-20 max-h-40 w-64 overflow-auto rounded-md border border-border bg-popover shadow-lg">
               {candidates.map((candidate, index) => (
                 <li key={candidate.id}>
                   <button
@@ -225,7 +225,7 @@ export function CommentComposer({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded border border-border bg-white px-1.5 py-px text-[10px] hover:bg-secondary"
+            className="rounded border border-border bg-card px-1.5 py-px text-[10px] hover:bg-secondary"
           >
             Cancel
           </button>
@@ -234,7 +234,7 @@ export function CommentComposer({
           type="button"
           disabled={!text.trim() || submitting || busy}
           onClick={submit}
-          className="rounded border border-border bg-white px-2 py-px text-[11px] hover:bg-secondary disabled:opacity-50"
+          className="rounded border border-border bg-card px-2 py-px text-[11px] hover:bg-secondary disabled:opacity-50"
         >
           {submitLabel}
         </button>

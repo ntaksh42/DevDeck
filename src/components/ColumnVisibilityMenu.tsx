@@ -49,7 +49,7 @@ export function ColumnVisibilityMenu<K extends string>({
   return (
     <div
       ref={ref}
-      className="fixed z-50 w-56 rounded-md border border-border bg-white p-1 shadow-lg"
+      className="fixed z-50 w-56 rounded-md border border-border bg-popover p-1 shadow-lg"
       style={{ top, left }}
     >
       <div className="border-b border-border px-2 py-1.5 text-xs font-semibold text-foreground">
