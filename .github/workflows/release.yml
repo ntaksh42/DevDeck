@@ -39,9 +39,14 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          # Native (git) non-zero exit codes are handled explicitly below
-          # (e.g. `git rev-parse --verify --quiet` returns 1 when a tag is
-          # absent), so do not let them terminate the script.
+          # The windows-latest runner now defaults
+          # $PSNativeCommandUseErrorActionPreference to $true, turning a native
+          # command's non-zero exit into a terminating error. git legitimately
+          # exits non-zero here (e.g. an absent tag), so disable that and branch
+          # on output instead. The success paths below also end with an explicit
+          # `exit 0`, because GitHub runs `exit $LASTEXITCODE` after this script
+          # and a leftover non-zero from such a check would otherwise fail the
+          # step.
           $PSNativeCommandUseErrorActionPreference = $false
 
           git fetch --force --tags origin
@@ -90,7 +95,10 @@ jobs:
           }
 
           $tag = "v$version"
-          if (git rev-parse --verify --quiet "refs/tags/$tag") {
+          # `git tag --list` always exits 0 (empty output when the tag is
+          # absent), unlike `git rev-parse --verify --quiet` which exits 1 and
+          # would leave a non-zero $LASTEXITCODE on the normal new-version path.
+          if (git tag --list "$tag") {
             throw "Tag $tag already exists, but master has unreleased commits. Create the next version tag manually or delete the stale tag."
           }
 
@@ -99,6 +107,7 @@ jobs:
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
           "commits_since_previous=$commitsSincePrevious" >> $env:GITHUB_OUTPUT
+          exit 0
 
       - name: Stop when there is nothing to release
         if: steps.release.outputs.should_release != 'true'
