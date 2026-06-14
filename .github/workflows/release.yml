@@ -39,6 +39,10 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          # Native (git) non-zero exit codes are handled explicitly below
+          # (e.g. `git rev-parse --verify --quiet` returns 1 when a tag is
+          # absent), so do not let them terminate the script.
+          $PSNativeCommandUseErrorActionPreference = $false
 
           git fetch --force --tags origin
 
@@ -125,6 +129,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $false
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
