@@ -215,6 +215,15 @@ impl SyncRunner {
                     continue;
                 }
             };
+            // Fetch the project list once per org and share it across the PR,
+            // work item, and commit syncs instead of each one re-listing.
+            let projects = match client.list_projects().await {
+                Ok(projects) => projects,
+                Err(e) => {
+                    tracing::error!(org = %org.name, error = ?e, "sync: failed to list projects");
+                    continue;
+                }
+            };
             if matches!(
                 scope,
                 SyncScope::All | SyncScope::Hot | SyncScope::MyReviews
@@ -224,7 +233,7 @@ impl SyncRunner {
                 } else {
                     Vec::new()
                 };
-                if let Err(e) = sync_prs_for_org(&self.db, &client, &org).await {
+                if let Err(e) = sync_prs_for_org(&self.db, &client, &org, &projects).await {
                     tracing::error!(org = %org.name, error = ?e, "sync: PR sync failed");
                 } else {
                     emit_sync_updated(handle, &org.id, vec![SyncScope::MyReviews]);
@@ -273,7 +282,7 @@ impl SyncRunner {
                 scope,
                 SyncScope::All | SyncScope::Hot | SyncScope::MyWorkItems
             ) {
-                if let Err(e) = sync_work_items_for_org(&self.db, &client, &org).await {
+                if let Err(e) = sync_work_items_for_org(&self.db, &client, &org, &projects).await {
                     tracing::error!(org = %org.name, error = ?e, "sync: WI sync failed");
                 } else {
                     emit_sync_updated(handle, &org.id, vec![SyncScope::MyWorkItems]);
@@ -304,7 +313,7 @@ impl SyncRunner {
                 }
             }
             if matches!(scope, SyncScope::All | SyncScope::Commits) {
-                if let Err(e) = sync_commits_for_org(&self.db, &client, &org).await {
+                if let Err(e) = sync_commits_for_org(&self.db, &client, &org, &projects).await {
                     tracing::error!(org = %org.name, error = ?e, "sync: commit sync failed");
                 } else {
                     emit_sync_updated(handle, &org.id, vec![SyncScope::Commits]);

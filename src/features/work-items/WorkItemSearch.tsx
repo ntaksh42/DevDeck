@@ -35,7 +35,8 @@ export function WorkItemSearch({
   const projects = projectsQuery.data ?? [];
 
   const mutation = useMutation({ mutationFn: searchWorkItems });
-  const results = mutation.data ?? [];
+  const results = mutation.data?.items ?? [];
+  const truncated = mutation.data?.truncated ?? false;
 
   useEffect(() => {
     if (!externalSearch) return;
@@ -152,6 +153,13 @@ export function WorkItemSearch({
 
       {mutation.isError ? (
         <ErrorState message={commandErrorMessage(mutation.error)} />
+      ) : null}
+
+      {truncated ? (
+        <p className="flex shrink-0 items-center gap-1.5 text-xs text-amber-600 dark:text-amber-500">
+          <Info className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+          Showing the first {results.length} matches. Add filters or a search term to narrow the results.
+        </p>
       ) : null}
 
       <WorkItemsGrid loading={mutation.isPending} results={results} searched={mutation.isSuccess} />

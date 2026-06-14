@@ -75,13 +75,17 @@ pub fn search_all(
     let mut pull_request_results = Vec::new();
     let mut commit_results = Vec::new();
     for org_id in &org_ids {
-        work_item_results.extend(work_items.search(SearchWorkItemsInput {
-            organization_id: Some(org_id.clone()),
-            query: Some(query.clone()),
-            state: None,
-            work_item_type: None,
-            project_id: None,
-        })?);
+        work_item_results.extend(
+            work_items
+                .search(SearchWorkItemsInput {
+                    organization_id: Some(org_id.clone()),
+                    query: Some(query.clone()),
+                    state: None,
+                    work_item_type: None,
+                    project_id: None,
+                })?
+                .items,
+        );
         pull_request_results.extend(pull_requests.search(SearchPullRequestsInput {
             organization_id: Some(org_id.clone()),
             query: Some(query.clone()),

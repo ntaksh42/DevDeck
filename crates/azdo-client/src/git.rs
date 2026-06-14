@@ -106,10 +106,33 @@ pub struct LinkRef {
 
 impl AdoClient {
     pub async fn list_projects(&self) -> Result<Vec<TeamProject>> {
-        let response: ListResponse<TeamProject> = self
-            .get_json("_apis/projects", &[("api-version", "7.1-preview")])
-            .await?;
-        Ok(response.value)
+        // `_apis/projects` returns at most `$top` projects (default 100) and
+        // signals more via the `x-ms-continuationtoken` header, so a large org
+        // needs every page. The page cap is a safety net against a server that
+        // never stops handing back tokens.
+        const PAGE_TOP: &str = "200";
+        const MAX_PAGES: usize = 50;
+        let mut projects = Vec::new();
+        let mut continuation: Option<String> = None;
+        for _ in 0..MAX_PAGES {
+            let next = {
+                let mut query: Vec<(&str, &str)> =
+                    vec![("api-version", "7.1-preview"), ("$top", PAGE_TOP)];
+                if let Some(token) = continuation.as_deref() {
+                    query.push(("continuationToken", token));
+                }
+                let (response, next): (ListResponse<TeamProject>, Option<String>) = self
+                    .get_json_with_continuation("_apis/projects", &query)
+                    .await?;
+                projects.extend(response.value);
+                next
+            };
+            match next {
+                Some(token) => continuation = Some(token),
+                None => break,
+            }
+        }
+        Ok(projects)
     }
 
     pub async fn list_repositories(&self, project_id: &str) -> Result<Vec<GitRepository>> {
@@ -285,7 +308,7 @@ mod tests {
     use std::sync::Arc;
 
     use url::Url;
-    use wiremock::matchers::{method, path, query_param};
+    use wiremock::matchers::{method, path, query_param, query_param_is_missing};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
@@ -314,6 +337,39 @@ mod tests {
         let projects = test_client(&server).await.list_projects().await.unwrap();
         assert_eq!(projects.len(), 1);
         assert_eq!(projects[0].name, "Platform");
+    }
+
+    #[tokio::test]
+    async fn list_projects_follows_continuation_token() {
+        let server = MockServer::start().await;
+        // First page advertises more results via the continuation header.
+        Mock::given(method("GET"))
+            .and(path("/_apis/projects"))
+            .and(query_param_is_missing("continuationToken"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("x-ms-continuationtoken", "page-2")
+                    .set_body_json(serde_json::json!({
+                        "count": 1,
+                        "value": [{ "id": "p1", "name": "Platform" }]
+                    })),
+            )
+            .mount(&server)
+            .await;
+        // Second page is fetched with the token and returns no further token.
+        Mock::given(method("GET"))
+            .and(path("/_apis/projects"))
+            .and(query_param("continuationToken", "page-2"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 1,
+                "value": [{ "id": "p2", "name": "Infra" }]
+            })))
+            .mount(&server)
+            .await;
+
+        let projects = test_client(&server).await.list_projects().await.unwrap();
+        let names: Vec<&str> = projects.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, vec!["Platform", "Infra"]);
     }
 
     #[tokio::test]

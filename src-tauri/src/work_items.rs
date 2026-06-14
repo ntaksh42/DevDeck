@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use azdo_client::{
-    AdoClient, AdoError, Identity, IdentityPickerIdentity, WorkItem,
+    AdoClient, AdoError, Identity, IdentityPickerIdentity, TeamProject, WorkItem,
     WorkItemComment as AzdoWorkItemComment, WorkItemRelation, WorkItemUpdate,
 };
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
@@ -12,6 +12,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::Mutex;
+use tokio::task::JoinSet;
 
 use crate::auth::client_for_organization;
 use crate::commits::encode_path_segment;
@@ -273,6 +274,21 @@ pub struct WorkItemSummary {
     pub depth: Option<u32>,
 }
 
+/// Work item search results plus whether the cache query hit its row cap, so
+/// the UI can tell the user the list was truncated instead of silently
+/// dropping older items.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemSearchResult {
+    pub items: Vec<WorkItemSummary>,
+    pub truncated: bool,
+}
+
+// These mirror the `LIMIT` clauses in db.rs `search_work_items` (500) and the
+// FTS search path (200). A returned count at the cap is reported as truncated.
+const WORK_ITEM_SEARCH_LIMIT: usize = 500;
+const WORK_ITEM_FTS_LIMIT: usize = 200;
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkItemProjectOption {
@@ -435,23 +451,27 @@ impl WorkItemService {
         Ok(candidates)
     }
 
-    pub fn search(&self, input: SearchWorkItemsInput) -> Result<Vec<WorkItemSummary>> {
+    pub fn search(&self, input: SearchWorkItemsInput) -> Result<WorkItemSearchResult> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let query = input.query.unwrap_or_default().trim().to_ascii_lowercase();
         let state = normalize_optional_filter(input.state);
         let work_item_type = normalize_optional_filter(input.work_item_type);
         let project_id = normalize_optional_filter(input.project_id);
 
-        let cached = if query.is_empty() {
-            self.db.search_work_items(
+        let (cached, truncated) = if query.is_empty() {
+            let results = self.db.search_work_items(
                 &organization.id,
                 project_id.as_deref(),
                 state.as_deref(),
                 work_item_type.as_deref(),
                 None,
-            )?
+            )?;
+            let truncated = results.len() >= WORK_ITEM_SEARCH_LIMIT;
+            (results, truncated)
         } else {
             let mut results = self.db.search_work_items_fts(&organization.id, &query)?;
+            // Capture truncation before client-side filtering trims the count.
+            let truncated = results.len() >= WORK_ITEM_FTS_LIMIT;
             results.retain(|item| {
                 project_id.as_deref().is_none_or(|p| item.project_id == p)
                     && state
@@ -461,10 +481,13 @@ impl WorkItemService {
                         .as_deref()
                         .is_none_or(|t| item.work_item_type.as_deref() == Some(t))
             });
-            results
+            (results, truncated)
         };
 
-        Ok(cached.into_iter().map(cached_wi_to_summary).collect())
+        Ok(WorkItemSearchResult {
+            items: cached.into_iter().map(cached_wi_to_summary).collect(),
+            truncated,
+        })
     }
 
     pub fn list_my(&self, input: ListMyWorkItemsInput) -> Result<Vec<WorkItemSummary>> {
@@ -2149,6 +2172,13 @@ const FULL_WI_SYNC_INTERVAL_HOURS: i64 = 24;
 // Cap sync queries well below that; ORDER BY ChangedDate DESC keeps the most
 // recently changed items.
 const SYNC_WORK_ITEM_QUERY_TOP: usize = 2000;
+// Projects are fetched concurrently, like the PR and commit syncs, so a large
+// org's work item sync is not serialized one project at a time.
+const WORK_ITEM_SYNC_CONCURRENCY: usize = 4;
+// A project with more than SYNC_WORK_ITEM_QUERY_TOP recently-changed items is
+// paged by walking the ChangedDate window backwards. The page cap bounds the
+// work for very large projects (up to MAX_SYNC_WI_PAGES * top items).
+const MAX_SYNC_WI_PAGES: usize = 10;
 
 struct SyncWorkItemsResult {
     warning: Option<String>,
@@ -2164,6 +2194,26 @@ fn wiql_with_changed_date_filter(base: &str, since_date: &str) -> String {
         " ORDER BY",
         &format!(" AND [System.ChangedDate] >= '{since_date}' ORDER BY"),
     )
+}
+
+// Adds an inclusive upper bound on ChangedDate so a follow-up page fetches the
+// items just past the previous window. `<=` (with day-precision dates) overlaps
+// the boundary day, so callers must dedupe by id.
+fn wiql_with_changed_date_upper_bound(base: &str, until_date: &str) -> String {
+    base.replace(
+        " ORDER BY",
+        &format!(" AND [System.ChangedDate] <= '{until_date}' ORDER BY"),
+    )
+}
+
+// Day-precision (YYYY-MM-DD) of the oldest ChangedDate among the fetched items,
+// used as the next page's upper bound. WIQL date literals are day-precision.
+fn oldest_changed_day(items: &[CachedWorkItem]) -> Option<String> {
+    items
+        .iter()
+        .filter_map(|item| item.changed_date.as_deref())
+        .min()
+        .map(|date| date.chars().take(10).collect())
 }
 
 // Returns the day-precision date for a delta sync, or None when a full sync
@@ -2203,11 +2253,12 @@ pub async fn sync_work_items_for_org(
     db: &AppDatabase,
     client: &AdoClient,
     org: &Organization,
+    projects: &[TeamProject],
 ) -> Result<()> {
     let scope = format!("work_items:{}", org.id);
     let error_count = db.get_sync_state(&scope)?.map_or(0, |s| s.error_count);
 
-    match do_sync_work_items(db, client, org).await {
+    match do_sync_work_items(db, client, org, projects).await {
         Ok(result) => {
             let now = Utc::now().to_rfc3339();
             db.update_sync_state(
@@ -2251,8 +2302,8 @@ async fn do_sync_work_items(
     db: &AppDatabase,
     client: &AdoClient,
     org: &Organization,
+    projects: &[TeamProject],
 ) -> Result<SyncWorkItemsResult> {
-    let projects = client.list_projects().await?;
     let fields: Vec<String> = WORK_ITEM_FIELDS.iter().map(ToString::to_string).collect();
     let delta_since = delta_sync_since(db, org);
     let all_wiql = match delta_since.as_deref() {
@@ -2267,74 +2318,43 @@ async fn do_sync_work_items(
     let mut large_query_count = 0usize;
     let mut largest_query_result = 0usize;
 
-    for project in &projects {
-        let (all_result, my_result) = tokio::join!(
-            fetch_sync_work_items(
-                client,
+    let mut tasks: JoinSet<ProjectWorkItemFetch> = JoinSet::new();
+    for project in projects {
+        while tasks.len() >= WORK_ITEM_SYNC_CONCURRENCY {
+            let fetch = join_work_item_task(&mut tasks).await?;
+            collect_project_work_items(
+                fetch,
                 org,
-                &project.id,
-                &project.name,
-                &all_wiql,
-                fields.clone(),
-                "work item",
-            ),
-            fetch_sync_work_items(
-                client,
-                org,
-                &project.id,
-                &project.name,
-                SYNC_MY_WI_WIQL,
-                fields.clone(),
-                "my work item",
-            ),
+                &mut all_cached,
+                &mut my_cached,
+                &mut synced_project_ids,
+                &mut skipped_projects,
+                &mut last_skip_error,
+                &mut large_query_count,
+                &mut largest_query_result,
+            );
+        }
+        tasks.spawn(fetch_project_work_items(
+            client.clone(),
+            org.clone(),
+            project.clone(),
+            all_wiql.clone(),
+            fields.clone(),
+        ));
+    }
+    while !tasks.is_empty() {
+        let fetch = join_work_item_task(&mut tasks).await?;
+        collect_project_work_items(
+            fetch,
+            org,
+            &mut all_cached,
+            &mut my_cached,
+            &mut synced_project_ids,
+            &mut skipped_projects,
+            &mut last_skip_error,
+            &mut large_query_count,
+            &mut largest_query_result,
         );
-
-        let project_all = match all_result {
-            Ok(Some(r)) => r,
-            Ok(None) => continue,
-            Err(e) => {
-                tracing::warn!(
-                    org = %org.name,
-                    project = %project.name,
-                    error = %e,
-                    "work item sync failed for project, preserving cached data"
-                );
-                skipped_projects.push(project.name.clone());
-                last_skip_error = Some(e);
-                continue;
-            }
-        };
-
-        let project_my = match my_result {
-            Ok(Some(r)) => r,
-            // The "my" query 404ing means the project itself is unreachable;
-            // skip it entirely so its cached my_work_items rows survive.
-            Ok(None) => continue,
-            Err(e) => {
-                tracing::warn!(
-                    org = %org.name,
-                    project = %project.name,
-                    error = %e,
-                    "my work item sync failed for project, preserving cached data"
-                );
-                skipped_projects.push(project.name.clone());
-                last_skip_error = Some(e);
-                continue;
-            }
-        };
-
-        synced_project_ids.push(project.id.clone());
-
-        if project_all.queried_count > SYNC_WORK_ITEM_BATCH_SIZE {
-            large_query_count += 1;
-            largest_query_result = largest_query_result.max(project_all.queried_count);
-        }
-        all_cached.extend(project_all.items);
-        if project_my.queried_count > SYNC_WORK_ITEM_BATCH_SIZE {
-            large_query_count += 1;
-            largest_query_result = largest_query_result.max(project_my.queried_count);
-        }
-        my_cached.extend(project_my.items);
     }
 
     // If every project failed with a real error (not 404), surface it rather than
@@ -2378,6 +2398,120 @@ async fn do_sync_work_items(
     })
 }
 
+struct ProjectWorkItemFetch {
+    project_id: String,
+    project_name: String,
+    all_result: Result<Option<SyncWorkItemFetchResult>>,
+    my_result: Result<Option<SyncWorkItemFetchResult>>,
+}
+
+// Fetches both the project-wide and the "my" work item snapshots for one
+// project. Runs as a spawned task so projects sync concurrently.
+async fn fetch_project_work_items(
+    client: AdoClient,
+    org: Organization,
+    project: TeamProject,
+    all_wiql: String,
+    fields: Vec<String>,
+) -> ProjectWorkItemFetch {
+    let (all_result, my_result) = tokio::join!(
+        fetch_sync_work_items(
+            &client,
+            &org,
+            &project.id,
+            &project.name,
+            &all_wiql,
+            fields.clone(),
+            "work item",
+        ),
+        fetch_sync_work_items(
+            &client,
+            &org,
+            &project.id,
+            &project.name,
+            SYNC_MY_WI_WIQL,
+            fields.clone(),
+            "my work item",
+        ),
+    );
+    ProjectWorkItemFetch {
+        project_id: project.id,
+        project_name: project.name,
+        all_result,
+        my_result,
+    }
+}
+
+async fn join_work_item_task(
+    tasks: &mut JoinSet<ProjectWorkItemFetch>,
+) -> Result<ProjectWorkItemFetch> {
+    tasks
+        .join_next()
+        .await
+        .expect("work item sync task set was unexpectedly empty")
+        .map_err(|e| AppError::AzureDevOps(format!("work item sync task failed: {e}")))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn collect_project_work_items(
+    fetch: ProjectWorkItemFetch,
+    org: &Organization,
+    all_cached: &mut Vec<CachedWorkItem>,
+    my_cached: &mut Vec<CachedWorkItem>,
+    synced_project_ids: &mut Vec<String>,
+    skipped_projects: &mut Vec<String>,
+    last_skip_error: &mut Option<AppError>,
+    large_query_count: &mut usize,
+    largest_query_result: &mut usize,
+) {
+    let project_all = match fetch.all_result {
+        Ok(Some(r)) => r,
+        Ok(None) => return,
+        Err(e) => {
+            tracing::warn!(
+                org = %org.name,
+                project = %fetch.project_name,
+                error = %e,
+                "work item sync failed for project, preserving cached data"
+            );
+            skipped_projects.push(fetch.project_name);
+            *last_skip_error = Some(e);
+            return;
+        }
+    };
+
+    let project_my = match fetch.my_result {
+        Ok(Some(r)) => r,
+        // The "my" query 404ing means the project itself is unreachable;
+        // skip it entirely so its cached my_work_items rows survive.
+        Ok(None) => return,
+        Err(e) => {
+            tracing::warn!(
+                org = %org.name,
+                project = %fetch.project_name,
+                error = %e,
+                "my work item sync failed for project, preserving cached data"
+            );
+            skipped_projects.push(fetch.project_name);
+            *last_skip_error = Some(e);
+            return;
+        }
+    };
+
+    synced_project_ids.push(fetch.project_id);
+
+    if project_all.queried_count > SYNC_WORK_ITEM_BATCH_SIZE {
+        *large_query_count += 1;
+        *largest_query_result = (*largest_query_result).max(project_all.queried_count);
+    }
+    all_cached.extend(project_all.items);
+    if project_my.queried_count > SYNC_WORK_ITEM_BATCH_SIZE {
+        *large_query_count += 1;
+        *largest_query_result = (*largest_query_result).max(project_my.queried_count);
+    }
+    my_cached.extend(project_my.items);
+}
+
 async fn fetch_sync_work_items(
     client: &AdoClient,
     org: &Organization,
@@ -2387,58 +2521,84 @@ async fn fetch_sync_work_items(
     fields: Vec<String>,
     label: &str,
 ) -> Result<Option<SyncWorkItemFetchResult>> {
-    let ids = match client
-        .query_work_item_ids(project_id, wiql, Some(SYNC_WORK_ITEM_QUERY_TOP))
-        .await
-    {
-        Ok(ids) => ids,
-        Err(e) if is_ado_not_found(&e) => {
-            tracing::warn!(
-                org = %org.name,
-                project = %project_name,
-                error = %e,
-                "{} query returned 404, skipping project",
-                label
-            );
-            return Ok(None);
-        }
-        Err(e) => return Err(e.into()),
-    };
-    let queried_count = ids.len();
-    if ids.is_empty() {
-        return Ok(Some(SyncWorkItemFetchResult {
-            items: Vec::new(),
-            queried_count,
-        }));
-    }
+    let mut seen_ids: HashSet<i64> = HashSet::new();
+    let mut items: Vec<CachedWorkItem> = Vec::new();
+    let mut queried_count = 0usize;
+    let mut until_date: Option<String> = None;
 
-    let mut work_items = Vec::new();
-    for chunk in ids.chunks(SYNC_WORK_ITEM_BATCH_SIZE) {
-        let chunk_work_items = match client
-            .get_work_items_batch(project_id, chunk.to_vec(), fields.clone())
+    for _ in 0..MAX_SYNC_WI_PAGES {
+        let page_wiql = match &until_date {
+            Some(date) => wiql_with_changed_date_upper_bound(wiql, date),
+            None => wiql.to_string(),
+        };
+        let ids = match client
+            .query_work_item_ids(project_id, &page_wiql, Some(SYNC_WORK_ITEM_QUERY_TOP))
             .await
         {
-            Ok(work_items) => work_items,
+            Ok(ids) => ids,
             Err(e) if is_ado_not_found(&e) => {
                 tracing::warn!(
                     org = %org.name,
                     project = %project_name,
                     error = %e,
-                    "{} batch returned 404, skipping project",
+                    "{} query returned 404, skipping project",
                     label
                 );
                 return Ok(None);
             }
             Err(e) => return Err(e.into()),
         };
-        work_items.extend(chunk_work_items);
+        let page_id_count = ids.len();
+        if page_id_count == 0 {
+            break;
+        }
+        // Drop ids already fetched on a prior page (the inclusive upper bound
+        // re-includes the boundary day); the dedupe keeps paging correct.
+        let new_ids: Vec<i64> = ids.into_iter().filter(|id| seen_ids.insert(*id)).collect();
+        if new_ids.is_empty() {
+            // No progress: more same-day items than a page can distinguish.
+            break;
+        }
+        queried_count += new_ids.len();
+
+        for chunk in new_ids.chunks(SYNC_WORK_ITEM_BATCH_SIZE) {
+            let chunk_work_items = match client
+                .get_work_items_batch(project_id, chunk.to_vec(), fields.clone())
+                .await
+            {
+                Ok(work_items) => work_items,
+                Err(e) if is_ado_not_found(&e) => {
+                    tracing::warn!(
+                        org = %org.name,
+                        project = %project_name,
+                        error = %e,
+                        "{} batch returned 404, skipping project",
+                        label
+                    );
+                    return Ok(None);
+                }
+                Err(e) => return Err(e.into()),
+            };
+            items.extend(
+                chunk_work_items
+                    .into_iter()
+                    .map(|wi| work_item_to_cached(org, project_id, project_name, &wi)),
+            );
+        }
+
+        // A short page was not capped, so the window is exhausted.
+        if page_id_count < SYNC_WORK_ITEM_QUERY_TOP {
+            break;
+        }
+        // Otherwise page again for items on or before the oldest day seen.
+        match oldest_changed_day(&items) {
+            Some(day) => until_date = Some(day),
+            None => break,
+        }
     }
 
     Ok(Some(SyncWorkItemFetchResult {
-        items: work_items
-            .into_iter()
-            .map(|wi| work_item_to_cached(org, project_id, project_name, &wi))
-            .collect(),
+        items,
         queried_count,
     }))
 }
@@ -3132,8 +3292,11 @@ mod tests {
         db.initialize().unwrap();
         let org = db.upsert_organization(make_org_draft()).unwrap();
         let client = test_client(&server).await;
+        let projects = client.list_projects().await.unwrap();
 
-        do_sync_work_items(&db, &client, &org).await.unwrap();
+        do_sync_work_items(&db, &client, &org, &projects)
+            .await
+            .unwrap();
 
         let cached = db
             .search_work_items(&org.id, None, None, None, None)
@@ -3153,6 +3316,50 @@ mod tests {
             "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project \
              AND [System.ChangedDate] >= '2026-06-10' ORDER BY [System.ChangedDate] DESC"
         );
+    }
+
+    #[test]
+    fn wiql_with_changed_date_upper_bound_inserts_condition_before_order_by() {
+        let paged = wiql_with_changed_date_upper_bound(SYNC_WI_WIQL, "2026-06-01");
+        assert_eq!(
+            paged,
+            "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project \
+             AND [System.ChangedDate] <= '2026-06-01' ORDER BY [System.ChangedDate] DESC"
+        );
+        // It composes with the delta filter so both bounds apply when paging.
+        let delta = wiql_with_changed_date_filter(SYNC_WI_WIQL, "2026-05-20");
+        let both = wiql_with_changed_date_upper_bound(&delta, "2026-06-01");
+        assert!(both.contains("[System.ChangedDate] >= '2026-05-20'"));
+        assert!(both.contains("[System.ChangedDate] <= '2026-06-01'"));
+        assert!(both.ends_with("ORDER BY [System.ChangedDate] DESC"));
+    }
+
+    #[test]
+    fn oldest_changed_day_returns_min_day_precision() {
+        let items = vec![
+            cached_with_changed_date(Some("2026-06-10T08:00:00Z")),
+            cached_with_changed_date(Some("2026-06-01T23:59:00Z")),
+            cached_with_changed_date(None),
+        ];
+        assert_eq!(oldest_changed_day(&items).as_deref(), Some("2026-06-01"));
+        assert_eq!(oldest_changed_day(&[]), None);
+        assert_eq!(oldest_changed_day(&[cached_with_changed_date(None)]), None);
+    }
+
+    fn cached_with_changed_date(changed: Option<&str>) -> CachedWorkItem {
+        CachedWorkItem {
+            org_id: "org".to_string(),
+            project_id: "p".to_string(),
+            project_name: "P".to_string(),
+            id: 1,
+            title: "t".to_string(),
+            work_item_type: None,
+            state: None,
+            assigned_to: None,
+            assigned_to_unique_name: None,
+            changed_date: changed.map(str::to_string),
+            web_url: None,
+        }
     }
 
     #[tokio::test]
@@ -3245,7 +3452,10 @@ mod tests {
         .unwrap();
 
         let client = test_client(&server).await;
-        let result = do_sync_work_items(&db, &client, &org).await.unwrap();
+        let projects = client.list_projects().await.unwrap();
+        let result = do_sync_work_items(&db, &client, &org, &projects)
+            .await
+            .unwrap();
         assert!(!result.was_full_sync);
 
         let cached = db
@@ -3351,8 +3561,11 @@ mod tests {
         db.initialize().unwrap();
         let org = db.upsert_organization(make_org_draft()).unwrap();
         let client = test_client(&server).await;
+        let projects = client.list_projects().await.unwrap();
 
-        sync_work_items_for_org(&db, &client, &org).await.unwrap();
+        sync_work_items_for_org(&db, &client, &org, &projects)
+            .await
+            .unwrap();
 
         let cached = db
             .search_work_items(&org.id, None, None, None, None)

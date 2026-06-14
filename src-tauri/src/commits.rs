@@ -481,11 +481,12 @@ pub async fn sync_commits_for_org(
     db: &AppDatabase,
     client: &AdoClient,
     org: &Organization,
+    projects: &[TeamProject],
 ) -> Result<()> {
     let scope = format!("commits:{}", org.id);
     let error_count = db.get_sync_state(&scope)?.map_or(0, |s| s.error_count);
 
-    match do_sync_commits(db, client, org).await {
+    match do_sync_commits(db, client, org, projects).await {
         Ok(()) => {
             let now = Utc::now().to_rfc3339();
             db.update_sync_state(&scope, &org.id, Some(&now), 0, None, None)?;
@@ -508,11 +509,15 @@ pub async fn sync_commits_for_org(
     }
 }
 
-async fn do_sync_commits(db: &AppDatabase, client: &AdoClient, org: &Organization) -> Result<()> {
+async fn do_sync_commits(
+    db: &AppDatabase,
+    client: &AdoClient,
+    org: &Organization,
+    projects: &[TeamProject],
+) -> Result<()> {
     let from_date = (Utc::now() - chrono::Duration::days(30)).to_rfc3339();
-    let projects = client.list_projects().await?;
     let mut tasks = JoinSet::new();
-    for project in &projects {
+    for project in projects {
         let repositories = match client.list_repositories(&project.id).await {
             Ok(repos) => repos,
             Err(e) => {

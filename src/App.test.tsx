@@ -722,32 +722,35 @@ describe("App", () => {
         ]);
       }
       if (command === "search_work_items") {
-        return Promise.resolve([
-          {
-            organizationId: "contoso",
-            projectId: "project-1",
-            projectName: "Platform",
-            id: 123,
-            title: "Fix save workflow",
-            workItemType: "Bug",
-            state: "Active",
-            assignedTo: "Test User",
-            changedDate: "2026-05-24T00:00:00Z",
-            webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/123",
-          },
-          {
-            organizationId: "contoso",
-            projectId: "project-1",
-            projectName: "Platform",
-            id: 124,
-            title: "Review save workflow",
-            workItemType: "Task",
-            state: "Active",
-            assignedTo: "Test User",
-            changedDate: "2026-05-23T00:00:00Z",
-            webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/124",
-          },
-        ]);
+        return Promise.resolve({
+          items: [
+            {
+              organizationId: "contoso",
+              projectId: "project-1",
+              projectName: "Platform",
+              id: 123,
+              title: "Fix save workflow",
+              workItemType: "Bug",
+              state: "Active",
+              assignedTo: "Test User",
+              changedDate: "2026-05-24T00:00:00Z",
+              webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/123",
+            },
+            {
+              organizationId: "contoso",
+              projectId: "project-1",
+              projectName: "Platform",
+              id: 124,
+              title: "Review save workflow",
+              workItemType: "Task",
+              state: "Active",
+              assignedTo: "Test User",
+              changedDate: "2026-05-23T00:00:00Z",
+              webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/124",
+            },
+          ],
+          truncated: false,
+        });
       }
       if (command === "get_work_item_preview") {
         return Promise.resolve({
@@ -1280,20 +1283,23 @@ describe("App", () => {
         return Promise.resolve([{ projectId: "project-1", projectName: "Platform" }]);
       }
       if (command === "search_work_items") {
-        return Promise.resolve([
-          {
-            organizationId: "contoso",
-            projectId: "project-1",
-            projectName: "Platform",
-            id: 123,
-            title: "Fix save workflow",
-            workItemType: "Bug",
-            state: "Active",
-            assignedTo: "Test User",
-            changedDate: "2026-05-24T00:00:00Z",
-            webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/123",
-          },
-        ]);
+        return Promise.resolve({
+          items: [
+            {
+              organizationId: "contoso",
+              projectId: "project-1",
+              projectName: "Platform",
+              id: 123,
+              title: "Fix save workflow",
+              workItemType: "Bug",
+              state: "Active",
+              assignedTo: "Test User",
+              changedDate: "2026-05-24T00:00:00Z",
+              webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/123",
+            },
+          ],
+          truncated: false,
+        });
       }
       if (command === "get_work_item_preview") {
         return Promise.resolve(makePreview("Tokyo"));
@@ -2278,20 +2284,23 @@ describe("App", () => {
         });
       }
       if (command === "search_work_items") {
-        return Promise.resolve([
-          {
-            organizationId: "contoso",
-            projectId: "project-1",
-            projectName: "Platform",
-            id: 123,
-            title: "Fix save workflow",
-            workItemType: "Bug",
-            state: "Active",
-            assignedTo: "Test User",
-            changedDate: "2026-05-24T00:00:00Z",
-            webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/123",
-          },
-        ]);
+        return Promise.resolve({
+          items: [
+            {
+              organizationId: "contoso",
+              projectId: "project-1",
+              projectName: "Platform",
+              id: 123,
+              title: "Fix save workflow",
+              workItemType: "Bug",
+              state: "Active",
+              assignedTo: "Test User",
+              changedDate: "2026-05-24T00:00:00Z",
+              webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/123",
+            },
+          ],
+          truncated: false,
+        });
       }
       return Promise.reject(new Error(`Unhandled command: ${command}`));
     });

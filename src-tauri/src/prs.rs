@@ -222,11 +222,12 @@ pub async fn sync_prs_for_org(
     db: &AppDatabase,
     client: &AdoClient,
     org: &Organization,
+    projects: &[TeamProject],
 ) -> Result<()> {
     let scope = format!("prs:{}", org.id);
     let error_count = db.get_sync_state(&scope)?.map_or(0, |s| s.error_count);
 
-    match do_sync_prs(db, client, org).await {
+    match do_sync_prs(db, client, org, projects).await {
         Ok(result) => {
             let now = Utc::now().to_rfc3339();
             db.update_sync_state(
@@ -260,8 +261,8 @@ async fn do_sync_prs(
     db: &AppDatabase,
     client: &AdoClient,
     org: &Organization,
+    projects: &[TeamProject],
 ) -> Result<SyncPrsResult> {
-    let projects = client.list_projects().await?;
     let mut cached_prs: Vec<CachedPr> = Vec::new();
     let mut synced_project_ids: Vec<String> = Vec::new();
     let mut skipped: Vec<String> = Vec::new();
@@ -291,7 +292,7 @@ async fn do_sync_prs(
         }
     };
 
-    for project in &projects {
+    for project in projects {
         while pr_tasks.len() >= PR_SYNC_CONCURRENCY {
             let fetch = join_pr_task(&mut pr_tasks).await?;
             collect(
@@ -344,7 +345,7 @@ async fn do_sync_prs(
         let mut review_tasks = JoinSet::new();
         let mut review_failed_projects: Vec<String> = Vec::new();
 
-        for project in &projects {
+        for project in projects {
             while review_tasks.len() >= PR_SYNC_CONCURRENCY {
                 let (project_name, result) = join_review_task(&mut review_tasks).await?;
                 collect_review_fetch(
@@ -934,7 +935,8 @@ mod tests {
             .unwrap()
             .with_base_url(base_url);
 
-        let result = do_sync_prs(&db, &client, &org).await.unwrap();
+        let projects = client.list_projects().await.unwrap();
+        let result = do_sync_prs(&db, &client, &org, &projects).await.unwrap();
 
         let cached = db.search_pull_requests(&org.id, None, None, None).unwrap();
         let titles: Vec<&str> = cached.iter().map(|pr| pr.title.as_str()).collect();

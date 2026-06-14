@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, Result};
 
-const SCHEMA_VERSION: i64 = 11;
+const SCHEMA_VERSION: i64 = 13;
 
 /// Max rows kept in the my_work_items snapshot queries; sync notification
 /// diffing must know this cap to avoid treating re-entering rows as new.
@@ -199,6 +199,14 @@ impl AppDatabase {
         // a UI read; NORMAL is durable enough under WAL and much faster.
         conn.busy_timeout(std::time::Duration::from_secs(3))?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
+        // Larger page cache, memory-mapped reads, and in-memory temp tables
+        // keep the bigger caches a large org produces responsive on the UI
+        // read path. cache_size is negative to mean KiB rather than pages.
+        conn.pragma_update(None, "cache_size", -16_000)?;
+        conn.pragma_update(None, "temp_store", "MEMORY")?;
+        // `PRAGMA mmap_size = N` echoes the resulting value as a row, so it
+        // must go through the result-aware setter like journal_mode does.
+        conn.pragma_update_and_check(None, "mmap_size", 268_435_456_i64, |_| Ok(()))?;
         Ok(conn)
     }
 
@@ -1052,6 +1060,73 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             "#,
         )?;
     }
+    if current < 12 {
+        // The default work item and commit list views filter by org (and
+        // optionally project/repository) and order by recency. Without these
+        // indexes those queries scan the whole org and sort; large caches make
+        // that noticeable on the UI read path. The table guards keep this step
+        // working against minimal legacy databases that predate a table.
+        if table_exists(conn, "work_items")? {
+            conn.execute_batch(
+                r#"
+                CREATE INDEX IF NOT EXISTS idx_wi_changed
+                    ON work_items(org_id, changed_date DESC);
+                CREATE INDEX IF NOT EXISTS idx_wi_project_changed
+                    ON work_items(org_id, project_id, changed_date DESC);
+                "#,
+            )?;
+        }
+        if table_exists(conn, "commits")? {
+            conn.execute_batch(
+                "CREATE INDEX IF NOT EXISTS idx_commits_org_date \
+                 ON commits(org_id, author_date DESC);",
+            )?;
+        }
+        conn.execute_batch("PRAGMA user_version = 12;")?;
+    }
+    if current < 13 {
+        // A trigram-tokenized mirror of work item text lets CJK substring
+        // searches use an index instead of scanning every cached row with
+        // LIKE. The primary unicode61 `work_items_fts` is untouched, so
+        // English word/prefix matching keeps its existing behavior; this
+        // table only backs the substring fallback for queries of 3+ chars.
+        if table_exists(conn, "work_items")? {
+            conn.execute_batch(
+                r#"
+            CREATE VIRTUAL TABLE IF NOT EXISTS work_items_trigram USING fts5(
+                org_id UNINDEXED,
+                item_id UNINDEXED,
+                title,
+                work_item_type,
+                assigned_to,
+                tokenize='trigram'
+            );
+
+            CREATE TRIGGER IF NOT EXISTS work_items_trigram_ai
+                AFTER INSERT ON work_items BEGIN
+                    INSERT INTO work_items_trigram(rowid, org_id, item_id, title, work_item_type, assigned_to)
+                    VALUES (new.rowid, new.org_id, new.id, new.title, new.work_item_type, new.assigned_to);
+                END;
+
+            CREATE TRIGGER IF NOT EXISTS work_items_trigram_ad
+                AFTER DELETE ON work_items BEGIN
+                    DELETE FROM work_items_trigram WHERE rowid = old.rowid;
+                END;
+
+            CREATE TRIGGER IF NOT EXISTS work_items_trigram_au
+                AFTER UPDATE ON work_items BEGIN
+                    DELETE FROM work_items_trigram WHERE rowid = old.rowid;
+                    INSERT INTO work_items_trigram(rowid, org_id, item_id, title, work_item_type, assigned_to)
+                    VALUES (new.rowid, new.org_id, new.id, new.title, new.work_item_type, new.assigned_to);
+                END;
+
+            INSERT INTO work_items_trigram(rowid, org_id, item_id, title, work_item_type, assigned_to)
+                SELECT rowid, org_id, id, title, work_item_type, assigned_to FROM work_items;
+            "#,
+            )?;
+        }
+        conn.execute_batch("PRAGMA user_version = 13;")?;
+    }
     Ok(())
 }
 
@@ -1064,6 +1139,15 @@ fn table_column_exists(conn: &Connection, table: &str, column: &str) -> Result<b
         }
     }
     Ok(false)
+}
+
+fn table_exists(conn: &Connection, table: &str) -> Result<bool> {
+    let count: i64 = conn.query_row(
+        "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+        [table],
+        |row| row.get(0),
+    )?;
+    Ok(count > 0)
 }
 
 // ── Private helpers — organizations ──────────────────────────────────────────
@@ -1582,9 +1666,14 @@ fn search_work_items_fts(
         text_matches.push(row?);
     }
     if text_matches.is_empty() {
-        // FTS tokenization cannot match substrings inside CJK text; fall back
-        // to a LIKE scan so Japanese queries still find cached work items.
-        text_matches = search_work_items_like(conn, org_id, query)?;
+        // FTS tokenization cannot match substrings inside CJK text. A single
+        // word of 3+ characters can use the trigram index (the common CJK
+        // case); shorter or multi-word queries fall back to a LIKE scan since
+        // the trigram tokenizer needs at least three characters.
+        text_matches = match trigram_match_query(query) {
+            Some(match_query) => search_work_items_trigram(conn, org_id, &match_query)?,
+            None => search_work_items_like(conn, org_id, query)?,
+        };
     }
     if result.is_empty() {
         return Ok(text_matches);
@@ -1652,6 +1741,46 @@ fn search_work_items_like(
         result.push(row?);
     }
     Ok(result)
+}
+
+fn search_work_items_trigram(
+    conn: &Connection,
+    org_id: &str,
+    match_query: &str,
+) -> Result<Vec<CachedWorkItem>> {
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT w.org_id, w.project_id, w.project_name, w.id, w.title,
+               w.work_item_type, w.state, w.assigned_to, w.changed_date, w.web_url,
+               w.assigned_to_unique_name
+        FROM work_items w
+        WHERE w.org_id = ?2
+          AND w.id IN (
+              SELECT item_id FROM work_items_trigram
+              WHERE work_items_trigram MATCH ?1 AND org_id = ?2
+          )
+        ORDER BY w.changed_date DESC
+        LIMIT 200
+        "#,
+    )?;
+    let rows = stmt.query_map(params![match_query, org_id], map_cached_work_item)?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
+/// Builds an FTS5 trigram MATCH phrase for the substring fallback, but only for
+/// a single whitespace-free term of at least three characters. The trigram
+/// tokenizer cannot index shorter terms, and multi-word queries keep the
+/// existing whole-string LIKE semantics, so those return `None`.
+fn trigram_match_query(input: &str) -> Option<String> {
+    let trimmed = input.trim();
+    if trimmed.chars().any(char::is_whitespace) || trimmed.chars().count() < 3 {
+        return None;
+    }
+    Some(format!("\"{}\"", trimmed.replace('"', "\"\"")))
 }
 
 fn escape_like_pattern(value: &str) -> String {
@@ -1992,6 +2121,14 @@ mod tests {
             .query_row("PRAGMA journal_mode", [], |row| row.get(0))
             .unwrap();
         assert_eq!(journal_mode, "wal");
+        let cache_size: i64 = conn
+            .query_row("PRAGMA cache_size", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(cache_size, -16000, "cache_size should be 16 MiB");
+        let temp_store: i64 = conn
+            .query_row("PRAGMA temp_store", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(temp_store, 2, "temp_store should be MEMORY");
     }
 
     #[test]
@@ -2642,6 +2779,58 @@ mod tests {
 
         let results = search_work_items_fts(&conn, "org1", "存在しない語").unwrap();
         assert!(results.is_empty());
+    }
+
+    #[test]
+    fn search_work_items_fts_uses_trigram_for_long_cjk_substrings() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        upsert_organization(&conn, make_org_draft("org1")).unwrap();
+
+        conn.execute(
+            "INSERT OR REPLACE INTO work_items(org_id, project_id, project_name, id, title) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params!["org1", "p1", "Project One", 7_i64, "ユーザーログイン機能を修正"],
+        )
+        .unwrap();
+
+        // A 3+ character mid-string CJK term is served by the trigram index.
+        let results = search_work_items_fts(&conn, "org1", "ログイン").unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, 7);
+
+        // Re-upsert must keep the trigram mirror in sync (no stale rows).
+        conn.execute(
+            "INSERT OR REPLACE INTO work_items(org_id, project_id, project_name, id, title) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params!["org1", "p1", "Project One", 7_i64, "別の作業項目に差し替え"],
+        )
+        .unwrap();
+        let trigram_count: i64 = conn
+            .query_row("SELECT count(*) FROM work_items_trigram", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(trigram_count, 1);
+        assert!(search_work_items_fts(&conn, "org1", "ログイン")
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            search_work_items_fts(&conn, "org1", "差し替え")
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn trigram_match_query_only_for_long_single_terms() {
+        assert_eq!(trigram_match_query("修正"), None);
+        assert_eq!(trigram_match_query("login bug"), None);
+        assert_eq!(
+            trigram_match_query("ログイン"),
+            Some("\"ログイン\"".to_string())
+        );
+        assert_eq!(
+            trigram_match_query("  検索機能  "),
+            Some("\"検索機能\"".to_string())
+        );
     }
 
     #[test]

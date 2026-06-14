@@ -694,7 +694,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     }
     case "search_work_items": {
       const input = (args as { input?: SearchWorkItemsInput } | undefined)?.input;
-      return demoWorkItems(input);
+      return { items: demoWorkItems(input), truncated: false };
     }
     case "search_all": {
       const input = (args as { input?: SearchAllInput } | undefined)?.input;

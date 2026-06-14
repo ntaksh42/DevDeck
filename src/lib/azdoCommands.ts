@@ -200,6 +200,13 @@ const workItemSummariesSchema = z.array(workItemSummarySchema);
 
 export type WorkItemSummary = z.infer<typeof workItemSummarySchema>;
 
+const workItemSearchResultSchema = z.object({
+  items: workItemSummariesSchema,
+  truncated: z.boolean().default(false),
+});
+
+export type WorkItemSearchResult = z.infer<typeof workItemSearchResultSchema>;
+
 const workItemProjectOptionSchema = z.object({
   projectId: z.string(),
   projectName: z.string(),
@@ -886,9 +893,9 @@ export async function searchAll(input: SearchAllInput): Promise<SearchAllResult>
 
 export async function searchWorkItems(
   input: SearchWorkItemsInput,
-): Promise<WorkItemSummary[]> {
+): Promise<WorkItemSearchResult> {
   const result = await invokeCommand("search_work_items", { input });
-  return workItemSummariesSchema.parse(result);
+  return workItemSearchResultSchema.parse(result);
 }
 
 export async function listMyWorkItems(

@@ -62,8 +62,8 @@ use work_items::{
     SavedQueryResult, SearchWorkItemAssigneesInput, SearchWorkItemMentionsInput,
     SearchWorkItemsInput, SetWorkItemsPriorityInput, SetWorkItemsStateInput,
     UpdateWorkItemFieldsInput, WorkItemAssigneeCandidate, WorkItemComment, WorkItemFieldOption,
-    WorkItemImage, WorkItemPreview, WorkItemProjectOption, WorkItemService, WorkItemSummary,
-    WorkItemUpdateSummary,
+    WorkItemImage, WorkItemPreview, WorkItemProjectOption, WorkItemSearchResult, WorkItemService,
+    WorkItemSummary, WorkItemUpdateSummary,
 };
 
 #[derive(Clone)]
@@ -317,7 +317,7 @@ async fn search_all(input: SearchAllInput, state: State<'_, AppState>) -> Result
 async fn search_work_items(
     input: SearchWorkItemsInput,
     state: State<'_, AppState>,
-) -> Result<Vec<WorkItemSummary>> {
+) -> Result<WorkItemSearchResult> {
     let service = state.work_items.clone();
     run_blocking(move || service.search(input)).await
 }
