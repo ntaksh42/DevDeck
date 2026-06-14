@@ -1,6 +1,6 @@
 import { type FormEvent, type KeyboardEvent as ReactKeyboardEvent, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Bell, Building2, Eye, EyeOff, FileText, Keyboard, Loader2, Plus, RefreshCw, Send, ShieldCheck, Trash2 } from 'lucide-react';
+import { Activity, Bell, Building2, Eye, EyeOff, FileText, Keyboard, Loader2, Monitor, Moon, Palette, Plus, RefreshCw, Send, ShieldCheck, Sun, Trash2 } from 'lucide-react';
 import {
   addAzureCliOrganization,
   addPatOrganization,
@@ -17,6 +17,12 @@ import {
   type UpdateAppSettingsInput,
 } from '@/lib/azdoCommands';
 import { sendTestDesktopNotification } from "@/lib/desktopNotifications";
+import {
+  loadThemePreference,
+  setThemePreference,
+  THEME_CHANGED_EVENT,
+  type ThemePreference,
+} from "@/lib/theme";
 export function OrganizationSettings({
   organizations,
 }: {
@@ -38,13 +44,14 @@ export function OrganizationSettings({
   return (
     <div className="space-y-3">
       <SetupPanel compact />
+      <ThemeSettings />
       <ShowWindowHotkeySettings />
       <DesktopNotificationSettings />
       <ReviewResultFolderSettings />
       <SyncHealthSettings organizations={organizations} />
       <DataCacheSettings />
       <ValidationModeSettings />
-      <div className="overflow-hidden rounded-md border border-border bg-white">
+      <div className="overflow-hidden rounded-md border border-border bg-card">
         <div className="border-b border-border px-3 py-2">
           <h2 className="text-base font-semibold">Organizations</h2>
         </div>
@@ -120,7 +127,7 @@ function SyncHealthSettings({ organizations }: { organizations: Organization[] }
   }
 
   return (
-    <div className="rounded-md border border-border bg-white">
+    <div className="rounded-md border border-border bg-card">
       <div className="border-b border-border px-3 py-2">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
@@ -170,7 +177,7 @@ function SyncHealthSettings({ organizations }: { organizations: Organization[] }
               return (
                 <div
                   key={state.scope}
-                  className="grid gap-3 bg-white px-3 py-2 text-sm md:grid-cols-[1fr_140px_100px_auto] md:items-center"
+                  className="grid gap-3 bg-card px-3 py-2 text-sm md:grid-cols-[1fr_140px_100px_auto] md:items-center"
                 >
                   <div className="min-w-0">
                     <p className="truncate font-medium">{formatSyncScope(state.scope)}</p>
@@ -189,8 +196,8 @@ function SyncHealthSettings({ organizations }: { organizations: Organization[] }
                         hasError
                           ? "font-medium text-destructive"
                           : hasWarning
-                            ? "font-medium text-amber-700"
-                            : "font-medium text-green-700"
+                            ? "font-medium text-amber-700 dark:text-amber-400"
+                            : "font-medium text-green-700 dark:text-green-400"
                       }
                     >
                       {hasError ? `${state.errorCount} failed` : hasWarning ? "Limited" : "Healthy"}
@@ -207,7 +214,7 @@ function SyncHealthSettings({ organizations }: { organizations: Organization[] }
                     ) : null}
                     {!state.lastError && state.lastWarning ? (
                       <span
-                        className="max-w-52 truncate text-xs text-amber-700"
+                        className="max-w-52 truncate text-xs text-amber-700 dark:text-amber-400"
                         title={state.lastWarning}
                       >
                         {state.lastWarning}
@@ -294,7 +301,7 @@ function DataCacheSettings() {
   }
 
   return (
-    <div className="rounded-md border border-border bg-white" data-cache-revision={revision}>
+    <div className="rounded-md border border-border bg-card" data-cache-revision={revision}>
       <div className="border-b border-border px-3 py-2">
         <h2 className="text-base font-semibold">Data cache</h2>
         <p className="text-sm text-muted-foreground">
@@ -361,6 +368,77 @@ function settingsInput(
   };
 }
 
+const THEME_OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
+  { value: "system", label: "System", icon: Monitor },
+];
+
+function ThemeSettings() {
+  const [preference, setPreference] = useState<ThemePreference>(loadThemePreference);
+
+  // Reflect changes made elsewhere (e.g. OS scheme follow) without re-reading.
+  useEffect(() => {
+    function onThemeChanged() {
+      setPreference(loadThemePreference());
+    }
+    window.addEventListener(THEME_CHANGED_EVENT, onThemeChanged);
+    return () => window.removeEventListener(THEME_CHANGED_EVENT, onThemeChanged);
+  }, []);
+
+  function selectTheme(next: ThemePreference) {
+    setPreference(next);
+    setThemePreference(next);
+  }
+
+  return (
+    <div className="rounded-md border border-border bg-card">
+      <div className="border-b border-border px-3 py-2">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
+            <Palette className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold">Appearance</h2>
+            <p className="text-sm text-muted-foreground">
+              Choose a theme. System follows your operating system setting.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-3">
+        <div
+          role="radiogroup"
+          aria-label="Theme"
+          className="inline-flex gap-1 rounded-md border border-border bg-muted p-0.5"
+        >
+          {THEME_OPTIONS.map(({ value, label, icon: Icon }) => {
+            const selected = preference === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => selectTheme(value)}
+                className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium ${
+                  selected
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Icon className="h-4 w-4" aria-hidden="true" />
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ValidationModeSettings() {
   const queryClient = useQueryClient();
   const settingsQuery = useQuery({
@@ -391,7 +469,7 @@ function ValidationModeSettings() {
   }
 
   return (
-    <div className="rounded-md border border-border bg-white">
+    <div className="rounded-md border border-border bg-card">
       <div className="border-b border-border px-3 py-2">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
@@ -430,7 +508,7 @@ function ValidationModeSettings() {
         ) : null}
 
         {mutation.isSuccess ? (
-          <p className="text-sm text-green-700">Validation mode saved.</p>
+          <p className="text-sm text-green-700 dark:text-green-400">Validation mode saved.</p>
         ) : null}
 
         <div>
@@ -515,7 +593,7 @@ function DesktopNotificationSettings() {
   }
 
   return (
-    <div className="rounded-md border border-border bg-white">
+    <div className="rounded-md border border-border bg-card">
       <div className="border-b border-border px-3 py-2">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
@@ -616,7 +694,7 @@ function DesktopNotificationSettings() {
         ) : null}
 
         {mutation.isSuccess ? (
-          <p className="text-sm text-green-700">Desktop notification settings saved.</p>
+          <p className="text-sm text-green-700 dark:text-green-400">Desktop notification settings saved.</p>
         ) : null}
 
         {testResult ? <p className="text-sm text-muted-foreground">{testResult}</p> : null}
@@ -677,7 +755,7 @@ export function ReviewResultFolderSettings() {
   }
 
   return (
-    <div className="rounded-md border border-border bg-white">
+    <div className="rounded-md border border-border bg-card">
       <div className="border-b border-border px-3 py-2">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
@@ -716,7 +794,7 @@ export function ReviewResultFolderSettings() {
         ) : null}
 
         {mutation.isSuccess ? (
-          <p className="text-sm text-green-700">Review result folder saved.</p>
+          <p className="text-sm text-green-700 dark:text-green-400">Review result folder saved.</p>
         ) : null}
 
         <div>
@@ -783,7 +861,7 @@ export function ShowWindowHotkeySettings() {
   }
 
   return (
-    <div className="rounded-md border border-border bg-white">
+    <div className="rounded-md border border-border bg-card">
       <div className="border-b border-border px-3 py-2">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
@@ -827,7 +905,7 @@ export function ShowWindowHotkeySettings() {
         ) : null}
 
         {mutation.isSuccess ? (
-          <p className="text-sm text-green-700">Show window hotkey saved.</p>
+          <p className="text-sm text-green-700 dark:text-green-400">Show window hotkey saved.</p>
         ) : null}
 
         <div>
@@ -933,7 +1011,7 @@ export function SetupPanel({ compact = false }: { compact?: boolean }) {
   const isConnecting = patMutation.isPending || azureCliMutation.isPending;
 
   return (
-    <div className="rounded-md border border-border bg-white">
+    <div className="rounded-md border border-border bg-card">
       <div className="border-b border-border px-3 py-2">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
@@ -1005,7 +1083,7 @@ export function SetupPanel({ compact = false }: { compact?: boolean }) {
         ) : null}
 
         {patMutation.isSuccess || azureCliMutation.isSuccess ? (
-          <p className="text-sm text-green-700">Organization connected.</p>
+          <p className="text-sm text-green-700 dark:text-green-400">Organization connected.</p>
         ) : null}
 
         <div className="flex flex-wrap gap-3">

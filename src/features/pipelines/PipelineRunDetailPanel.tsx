@@ -78,10 +78,10 @@ function TimelineRow({
         </span>
         <span className="truncate">{node.name ?? "(unnamed)"}</span>
         {node.errorCount > 0 ? (
-          <span className="shrink-0 text-xs text-red-700">{node.errorCount} err</span>
+          <span className="shrink-0 text-xs text-red-700 dark:text-red-400">{node.errorCount} err</span>
         ) : null}
         {node.warningCount > 0 ? (
-          <span className="shrink-0 text-xs text-amber-700">{node.warningCount} warn</span>
+          <span className="shrink-0 text-xs text-amber-700 dark:text-amber-400">{node.warningCount} warn</span>
         ) : null}
         <span className="ml-auto shrink-0 text-xs text-muted-foreground">
           {formatDuration(node.startTime, node.finishTime)}
@@ -205,7 +205,7 @@ export function PipelineRunDetailPanel({
   return (
     <aside
       onKeyDown={handleKeyDown}
-      className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-white focus-within:ring-2 focus-within:ring-ring"
+      className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-card focus-within:ring-2 focus-within:ring-ring"
     >
       <div
         className="min-h-0 flex-1 overflow-y-auto outline-none"
@@ -246,7 +246,7 @@ export function PipelineRunDetailPanel({
                   type="button"
                   onClick={() => openExternalUrl(run.webUrl)}
                   title="Open in Azure DevOps"
-                  className="ml-auto inline-flex shrink-0 items-center gap-1 rounded border border-border bg-white px-1.5 py-px text-[11px] text-primary hover:bg-secondary"
+                  className="ml-auto inline-flex shrink-0 items-center gap-1 rounded border border-border bg-card px-1.5 py-px text-[11px] text-primary hover:bg-secondary"
                 >
                   <ExternalLink className="h-3 w-3" aria-hidden="true" /> Open
                 </button>
@@ -275,7 +275,7 @@ export function PipelineRunDetailPanel({
                   onClick={onRerunClick}
                   disabled={!canRerun || readOnly || rerun.isPending}
                   title={readOnly ? "Read-only validation mode is enabled" : undefined}
-                  className="inline-flex items-center gap-1 rounded-md border border-border bg-white px-2 py-1 text-xs hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-xs hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {rerun.isPending ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
@@ -290,7 +290,7 @@ export function PipelineRunDetailPanel({
                     onClick={onCancelClick}
                     disabled={readOnly || cancel.isPending}
                     title={readOnly ? "Read-only validation mode is enabled" : undefined}
-                    className="inline-flex items-center gap-1 rounded-md border border-border bg-white px-2 py-1 text-xs hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-xs hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {cancel.isPending ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />

@@ -168,7 +168,7 @@ export function PullRequestSearch({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="shrink-0 rounded-md border border-border bg-white">
+      <div className="shrink-0 rounded-md border border-border bg-card">
         <form className="grid gap-3 p-3" onSubmit={onSubmit}>
           {organizations.length > 1 && (
             <label className="grid gap-2">
@@ -678,7 +678,7 @@ function PullRequestResults({
       style={{ "--pr-preview-width": `${previewWidth}px` } as CSSProperties}
     >
       <div
-        className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-white ${
+        className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card ${
           maximized ? "hidden" : ""
         }`}
       >
@@ -692,7 +692,7 @@ function PullRequestResults({
               <button
                 type="button"
                 onClick={clearAllFilters}
-                className="rounded border border-border bg-white px-2 py-0.5 text-xs hover:bg-secondary"
+                className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary"
               >
                 Clear filters
               </button>
@@ -701,7 +701,7 @@ function PullRequestResults({
           <button
             type="button"
             onClick={(event) => setColumnMenuRect(event.currentTarget.getBoundingClientRect())}
-            className="rounded border border-border bg-white px-2 py-0.5 text-xs hover:bg-secondary"
+            className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary"
           >
             Columns
           </button>
@@ -903,7 +903,7 @@ function ColumnFilterDropdown({
   return (
     <div
       ref={dropdownRef}
-      className="fixed z-50 w-52 rounded-md border border-border bg-white shadow-lg"
+      className="fixed z-50 w-52 rounded-md border border-border bg-popover shadow-lg"
       style={{ top, left }}
     >
       <div className="border-b border-border p-1.5">
@@ -954,9 +954,9 @@ function ColumnFilterDropdown({
 }
 
 const PR_STATUS_COLORS: Record<string, string> = {
-  active: "bg-blue-50 text-blue-700 border-blue-200",
-  completed: "bg-green-50 text-green-700 border-green-200",
-  abandoned: "bg-gray-50 text-gray-500 border-gray-200",
+  active: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900",
+  completed: "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/40 dark:text-green-300 dark:border-green-900",
+  abandoned: "bg-gray-50 text-gray-500 border-gray-200 dark:bg-muted dark:text-muted-foreground dark:border-border",
 };
 
 const PrSearchRow = forwardRef<

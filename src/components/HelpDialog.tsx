@@ -15,7 +15,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="help-title"
-        className="relative w-full max-w-md rounded-lg border border-border bg-white p-6 shadow-xl"
+        className="relative w-full max-w-md rounded-lg border border-border bg-popover p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">

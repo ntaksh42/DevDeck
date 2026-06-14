@@ -81,7 +81,7 @@ export function CodeSearchView({ organizations }: { organizations: Organization[
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="shrink-0 rounded-md border border-border bg-white">
+      <div className="shrink-0 rounded-md border border-border bg-card">
         <form className="grid gap-3 p-3" onSubmit={onSubmit}>
           <div className="grid gap-3 xl:grid-cols-[minmax(240px,1fr)_180px_auto]">
             <label className="grid gap-2">
@@ -203,7 +203,7 @@ export function CodeSearchView({ organizations }: { organizations: Organization[
 
       {mutation.isError ? <ErrorState message={commandErrorMessage(mutation.error)} /> : null}
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-white">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card">
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
           <h2 className="text-base font-semibold">Code results</h2>
           <span className="text-sm text-muted-foreground">
@@ -216,7 +216,7 @@ export function CodeSearchView({ organizations }: { organizations: Organization[
         </div>
 
         {mutation.data?.notice ? (
-          <p className="flex items-start gap-1.5 border-b border-border bg-yellow-50 px-3 py-2 text-xs text-yellow-800">
+          <p className="flex items-start gap-1.5 border-b border-border bg-yellow-50 px-3 py-2 text-xs text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-300">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             {mutation.data.notice}
           </p>

@@ -12,13 +12,13 @@ import { buildDiffLines, collapseDiff, type DiffLine } from "@/lib/diffView";
 const MAX_RENDERED_DIFF_LINES = 2000;
 
 type ChangeBadge = { label: string; cls: string };
-const ADD_BADGE: ChangeBadge = { label: "A", cls: "border-green-200 bg-green-100 text-green-800" };
-const DELETE_BADGE: ChangeBadge = { label: "D", cls: "border-red-200 bg-red-100 text-red-800" };
+const ADD_BADGE: ChangeBadge = { label: "A", cls: "border-green-200 bg-green-100 text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-300" };
+const DELETE_BADGE: ChangeBadge = { label: "D", cls: "border-red-200 bg-red-100 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300" };
 const RENAME_BADGE: ChangeBadge = {
   label: "R",
-  cls: "border-purple-200 bg-purple-100 text-purple-800",
+  cls: "border-purple-200 bg-purple-100 text-purple-800 dark:border-purple-900 dark:bg-purple-950 dark:text-purple-300",
 };
-const EDIT_BADGE: ChangeBadge = { label: "M", cls: "border-blue-200 bg-blue-100 text-blue-800" };
+const EDIT_BADGE: ChangeBadge = { label: "M", cls: "border-blue-200 bg-blue-100 text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300" };
 
 function changeTypeBadge(changeType: string): ChangeBadge {
   const tokens = changeType.toLowerCase().split(",").map((token) => token.trim());
@@ -98,7 +98,7 @@ export function CommitFilesPanel({
 
   return (
     <div className="border-t border-border">
-      <div className="border-b border-border bg-gray-50 px-3 py-1 text-[11px] font-medium text-muted-foreground">
+      <div className="border-b border-border bg-muted px-3 py-1 text-[11px] font-medium text-muted-foreground">
         {files.length} changed file{files.length === 1 ? "" : "s"}
       </div>
       <ul>
@@ -154,9 +154,9 @@ export function CommitFilesPanel({
 
 function rowBackground(kind: DiffLine["kind"]): string {
   return kind === "add"
-    ? "bg-green-50 text-green-900"
+    ? "bg-green-50 text-green-900 dark:bg-green-950/40 dark:text-green-200"
     : kind === "del"
-      ? "bg-red-50 text-red-900"
+      ? "bg-red-50 text-red-900 dark:bg-red-950/40 dark:text-red-200"
       : "";
 }
 
@@ -246,7 +246,7 @@ function CommitDiffView({
   return (
     <div className="font-mono text-[11px] leading-4">
       {partialNote ? (
-        <p className="border-b border-border bg-yellow-50 px-2 py-1 text-[11px] text-yellow-800">
+        <p className="border-b border-border bg-yellow-50 px-2 py-1 text-[11px] text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-300">
           {partialNote}
         </p>
       ) : null}

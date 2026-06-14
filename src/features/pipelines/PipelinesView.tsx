@@ -166,7 +166,7 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="shrink-0 rounded-md border border-border bg-white">
+      <div className="shrink-0 rounded-md border border-border bg-card">
         <div className="grid gap-3 p-3 md:grid-cols-2 xl:grid-cols-[160px_180px_minmax(140px,1fr)_150px_150px_auto_auto]">
           {organizations.length > 1 ? (
             <label className="grid gap-2">
@@ -288,7 +288,7 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
               disabled={!projectId || runsQuery.isFetching}
               title="Refresh runs"
               aria-label="Refresh runs"
-              className="flex h-9 items-center rounded-md border border-border bg-white px-2 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+              className="flex h-9 items-center rounded-md border border-border bg-card px-2 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
             >
               <RefreshCw
                 className={`h-4 w-4 ${runsQuery.isFetching ? "animate-spin" : ""}`}
@@ -305,7 +305,7 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
         className="grid min-h-0 flex-1 items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(360px,460px)]"
         style={{} as CSSProperties}
       >
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-white">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card">
           <div className="flex items-center justify-between border-b border-border px-3 py-2">
             <h2 className="text-base font-semibold">Runs</h2>
             <span className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -338,7 +338,7 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
               onKeyDown={handleGridKeyDown}
             >
               <div className="min-w-[760px]">
-                <div className="grid grid-cols-[96px_minmax(120px,1fr)_110px_minmax(120px,1fr)_110px_140px_120px_80px] items-center gap-2 border-b border-border bg-gray-50 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <div className="grid grid-cols-[96px_minmax(120px,1fr)_110px_minmax(120px,1fr)_110px_140px_120px_80px] items-center gap-2 border-b border-border bg-muted px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   <span>Status</span>
                   <span>Pipeline</span>
                   <span>Build</span>

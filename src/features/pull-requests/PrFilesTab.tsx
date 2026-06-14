@@ -85,13 +85,13 @@ function loadViewedKeys(key: string): Set<string> {
 
 type ChangeBadge = { label: string; cls: string };
 
-const ADD_BADGE: ChangeBadge = { label: "A", cls: "border-green-200 bg-green-100 text-green-800" };
-const DELETE_BADGE: ChangeBadge = { label: "D", cls: "border-red-200 bg-red-100 text-red-800" };
+const ADD_BADGE: ChangeBadge = { label: "A", cls: "border-green-200 bg-green-100 text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-300" };
+const DELETE_BADGE: ChangeBadge = { label: "D", cls: "border-red-200 bg-red-100 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300" };
 const RENAME_BADGE: ChangeBadge = {
   label: "R",
-  cls: "border-purple-200 bg-purple-100 text-purple-800",
+  cls: "border-purple-200 bg-purple-100 text-purple-800 dark:border-purple-900 dark:bg-purple-950 dark:text-purple-300",
 };
-const EDIT_BADGE: ChangeBadge = { label: "M", cls: "border-blue-200 bg-blue-100 text-blue-800" };
+const EDIT_BADGE: ChangeBadge = { label: "M", cls: "border-blue-200 bg-blue-100 text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300" };
 
 /** Token-aware badge: "undelete" is a restore, not a delete. */
 function changeTypeBadge(changeType: string): ChangeBadge {
@@ -546,10 +546,10 @@ export function PrFilesTab({
     >
       {/* Left: file list (GitHub-style file sidebar) */}
       <div className="flex w-2/5 min-w-[150px] max-w-[340px] shrink-0 flex-col border-r border-border">
-        <div className="flex shrink-0 items-center justify-between border-b border-border bg-gray-50 px-2 py-1 text-[11px] text-muted-foreground">
+        <div className="flex shrink-0 items-center justify-between border-b border-border bg-muted px-2 py-1 text-[11px] text-muted-foreground">
           <span>
             {files.length} file{files.length === 1 ? "" : "s"} ·{" "}
-            <span className={viewedCount === files.length ? "font-medium text-green-700" : ""}>
+            <span className={viewedCount === files.length ? "font-medium text-green-700 dark:text-green-400" : ""}>
               {viewedCount}/{files.length} viewed
             </span>
           </span>
@@ -609,7 +609,7 @@ export function PrFilesTab({
                   {row.name}
                 </span>
                 {threadCount > 0 ? (
-                  <span className="inline-flex shrink-0 items-center rounded-full border border-blue-200 bg-blue-50 px-1.5 text-[10px] font-medium text-blue-700">
+                  <span className="inline-flex shrink-0 items-center rounded-full border border-blue-200 bg-blue-50 px-1.5 text-[10px] font-medium text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
                     {threadCount}
                   </span>
                 ) : null}
@@ -622,7 +622,7 @@ export function PrFilesTab({
       {/* Right: selected file diff */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {selectedFile ? (
-          <div className="flex shrink-0 items-center gap-2 border-b border-border bg-gray-50 px-2 py-1">
+          <div className="flex shrink-0 items-center gap-2 border-b border-border bg-muted px-2 py-1">
             <span
               className="min-w-0 flex-1 truncate font-mono text-[11px]"
               dir="rtl"
@@ -653,13 +653,13 @@ export function PrFilesTab({
               className={`shrink-0 rounded border px-2 py-px text-[11px] font-medium ${
                 showWholeFile
                   ? "border-primary bg-primary/10 text-primary"
-                  : "border-border bg-white text-muted-foreground hover:bg-secondary"
+                  : "border-border bg-card text-muted-foreground hover:bg-secondary"
               }`}
             >
               Whole file
             </button>
             <div
-              className="flex shrink-0 items-center gap-0.5 rounded border border-border bg-white p-0.5"
+              className="flex shrink-0 items-center gap-0.5 rounded border border-border bg-card p-0.5"
               role="tablist"
               aria-label="Diff view mode"
             >
@@ -687,7 +687,7 @@ export function PrFilesTab({
         ) : null}
 
         {actionError ? (
-          <div className="m-2 shrink-0 rounded-md border border-destructive/30 bg-red-50 px-2 py-1 text-xs text-destructive">
+          <div className="m-2 shrink-0 rounded-md border border-destructive/30 bg-red-50 dark:bg-red-950/40 px-2 py-1 text-xs text-destructive">
             {actionError}
           </div>
         ) : null}
@@ -816,7 +816,7 @@ function DiffContent({
           <button
             type="button"
             onClick={() => openExternalUrl(webUrl)}
-            className="rounded border border-border bg-white px-2 py-0.5 text-xs hover:bg-secondary"
+            className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary"
           >
             Open in browser
           </button>
@@ -846,7 +846,7 @@ function DiffContent({
   }
 
   const note = partialNote ? (
-    <p className="border-b border-border bg-yellow-50 px-2 py-1 text-[11px] text-yellow-800">
+    <p className="border-b border-border bg-yellow-50 px-2 py-1 text-[11px] text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-300">
       {partialNote}
     </p>
   ) : null;
@@ -1023,9 +1023,9 @@ function TruncationNote() {
 
 function rowBackground(kind: SideBySideCell["kind"] | DiffLine["kind"]): string {
   return kind === "add"
-    ? "bg-green-50 text-green-900"
+    ? "bg-green-50 text-green-900 dark:bg-green-950/40 dark:text-green-200"
     : kind === "del"
-      ? "bg-red-50 text-red-900"
+      ? "bg-red-50 text-red-900 dark:bg-red-950/40 dark:text-red-200"
       : "";
 }
 
@@ -1040,7 +1040,7 @@ function LineText({
   kind: DiffLineKind;
 }) {
   if (!segments) return <>{text}</>;
-  const highlight = kind === "add" ? "rounded-sm bg-green-200/80" : "rounded-sm bg-red-200/80";
+  const highlight = kind === "add" ? "rounded-sm bg-green-200/80 dark:bg-green-700/50" : "rounded-sm bg-red-200/80 dark:bg-red-700/50";
   return (
     <>
       {segments.map((segment, index) =>

@@ -36,6 +36,12 @@ import {
   type SyncScope,
 } from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
+import {
+  applyTheme,
+  loadThemePreference,
+  THEME_CHANGED_EVENT,
+  watchSystemTheme,
+} from "@/lib/theme";
 import { listen } from "@tauri-apps/api/event";
 import { isTauriRuntime } from "@/lib/runtime";
 import {
@@ -956,6 +962,25 @@ function AppShell() {
     window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(sidebarWidth)));
   }, [sidebarWidth]);
 
+  // Follow the OS color scheme while the preference is "system". The watcher is
+  // rebuilt whenever the preference changes (emitted from the settings panel).
+  useEffect(() => {
+    let unwatch: (() => void) | undefined;
+    function sync() {
+      unwatch?.();
+      unwatch = undefined;
+      if (loadThemePreference() === "system") {
+        unwatch = watchSystemTheme(() => applyTheme("system"));
+      }
+    }
+    sync();
+    window.addEventListener(THEME_CHANGED_EVENT, sync);
+    return () => {
+      window.removeEventListener(THEME_CHANGED_EVENT, sync);
+      unwatch?.();
+    };
+  }, []);
+
   // The G chain runs in the capture phase so the second key wins over
   // grid-level single-letter shortcuts (S, P, C, …).
   useEffect(() => {
@@ -1142,7 +1167,7 @@ function AppShell() {
   return (
     <div className="h-screen overflow-hidden bg-background text-foreground">
       <aside
-        className="fixed inset-y-0 left-0 hidden flex-col border-r border-border bg-white lg:flex"
+        className="fixed inset-y-0 left-0 hidden flex-col border-r border-border bg-card lg:flex"
         style={{ width: sidebarWidth }}
       >
         <div className="flex h-12 min-w-0 items-center gap-2 border-b border-border px-4">
@@ -1287,7 +1312,7 @@ function AppShell() {
         className="flex h-screen flex-col lg:pl-[var(--sidebar-width)]"
         style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
       >
-        <header className="flex h-12 items-center justify-between border-b border-border bg-white px-4 lg:px-5">
+        <header className="flex h-12 items-center justify-between border-b border-border bg-card px-4 lg:px-5">
           <div>
             <h1 className="text-lg font-semibold">
               {activeView === "pullRequestSearch"
@@ -1336,7 +1361,7 @@ function AppShell() {
                 onClick={() => syncMutation.mutate({ scope: "all" })}
                 aria-keyshortcuts="Alt+S"
                 aria-label="Sync now"
-                className="flex items-center rounded-md border border-border bg-white p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+                className="flex items-center rounded-md border border-border bg-card p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
                 title="Sync now"
               >
                 <RefreshCw

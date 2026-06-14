@@ -990,12 +990,12 @@ export function WorkItemPreviewPanel({
     <>
       {stagedEntries.length > 0 ? (
         <span
-          className="flex shrink-0 items-center gap-1 rounded-full border border-amber-300 bg-amber-50 py-0.5 pl-2 pr-0.5 text-[11px]"
+          className="flex shrink-0 items-center gap-1 rounded-full border border-amber-300 bg-amber-50 py-0.5 pl-2 pr-0.5 text-[11px] dark:border-amber-800 dark:bg-amber-950/50"
           title={stagedEntries
             .map((entry) => `${entry.label}: ${entry.from} → ${entry.to}`)
             .join("\n")}
         >
-          <span className="font-medium text-amber-900">{stagedEntries.length} pending</span>
+          <span className="font-medium text-amber-900 dark:text-amber-200">{stagedEntries.length} pending</span>
           <button
             type="button"
             onClick={() => void applyStaged()}
@@ -1012,21 +1012,21 @@ export function WorkItemPreviewPanel({
             title="Discard (Esc)"
             onClick={discardStaged}
             disabled={applying}
-            className="rounded-full p-0.5 text-amber-900/70 hover:bg-amber-100 hover:text-amber-900 disabled:opacity-50"
+            className="rounded-full p-0.5 text-amber-900/70 hover:bg-amber-100 hover:text-amber-900 disabled:opacity-50 dark:text-amber-200/70 dark:hover:bg-amber-900 dark:hover:text-amber-100"
           >
             <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         </span>
       ) : null}
       {undoState && stagedEntries.length === 0 ? (
-        <span className="flex shrink-0 items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 py-0.5 pl-2 pr-0.5 text-[11px]">
-          <span className="text-emerald-900">Applied {undoState.count}</span>
+        <span className="flex shrink-0 items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 py-0.5 pl-2 pr-0.5 text-[11px] dark:border-emerald-800 dark:bg-emerald-950/50">
+          <span className="text-emerald-900 dark:text-emerald-200">Applied {undoState.count}</span>
           <button
             type="button"
             onClick={() => void undoLastApply()}
             disabled={applying}
             title="Undo (U)"
-            className="inline-flex items-center gap-1 rounded-full border border-border bg-white px-2 py-0.5 hover:bg-secondary disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-0.5 hover:bg-secondary disabled:opacity-50"
           >
             {applying ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : null}
             Undo
@@ -1035,7 +1035,7 @@ export function WorkItemPreviewPanel({
       ) : null}
       {applyError ? (
         <span
-          className="max-w-[220px] shrink-0 truncate rounded border border-destructive/30 bg-red-50 px-2 py-0.5 text-[11px] text-destructive"
+          className="max-w-[220px] shrink-0 truncate rounded border border-destructive/30 bg-red-50 dark:bg-red-950/40 px-2 py-0.5 text-[11px] text-destructive"
           title={applyError}
         >
           {applyError}
@@ -1047,7 +1047,7 @@ export function WorkItemPreviewPanel({
   return (
     <aside
       ref={panelRef}
-      className="flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-white shadow-sm transition-[border-color,box-shadow] focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/25"
+      className="flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-card shadow-sm transition-[border-color,box-shadow] focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/25"
       onKeyDown={handlePreviewPanelKeyDown}
     >
       {!selectedItem ? (
@@ -1055,7 +1055,7 @@ export function WorkItemPreviewPanel({
       ) : (
         <>
           {previewError ? (
-            <div className="m-3 rounded-md border border-destructive/30 bg-red-50 p-3 text-sm text-destructive">
+            <div className="m-3 rounded-md border border-destructive/30 bg-red-50 dark:bg-red-950/40 p-3 text-sm text-destructive">
               {previewError}
             </div>
           ) : preview ? (
@@ -1491,7 +1491,7 @@ function CommentComposer({
   }
 
   return (
-    <div className="bg-slate-50/70 p-2">
+    <div className="bg-muted/70 p-2">
       <form className="space-y-1" onSubmit={submitComment}>
         <div ref={mentionPickerRef} className="relative">
           <textarea
@@ -1513,10 +1513,10 @@ function CommentComposer({
             aria-keyshortcuts="M Alt+M Control+Enter Meta+Enter"
             placeholder="Add a comment..."
             rows={2}
-            className="min-h-[36px] w-full resize-none rounded-md border border-input bg-white px-2 py-1.5 text-sm outline-none transition-[border-color,box-shadow,min-height] focus:min-h-[64px] focus:border-primary focus:ring-4 focus:ring-primary/20"
+            className="min-h-[36px] w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none transition-[border-color,box-shadow,min-height] focus:min-h-[64px] focus:border-primary focus:ring-4 focus:ring-primary/20"
           />
           {showMentionOptions ? (
-            <div className="absolute bottom-full left-0 z-20 mb-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-white py-1 shadow-lg">
+            <div className="absolute bottom-full left-0 z-20 mb-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-popover py-1 shadow-lg">
               {mentionOptions.map((candidate, index) => (
                 <button
                   key={candidate.id}
@@ -1716,7 +1716,7 @@ function WorkItemPreviewDetails({
     <div
       aria-keyshortcuts="Alt+P"
       aria-label="Work item preview"
-      className="min-h-0 flex-1 overflow-auto bg-white px-2.5 pb-2 pt-1.5 text-xs outline-none focus:bg-primary/[0.02]"
+      className="min-h-0 flex-1 overflow-auto bg-card px-2.5 pb-2 pt-1.5 text-xs outline-none focus:bg-primary/[0.02]"
       data-primary-preview="true"
       onKeyDown={(event) => {
         // ← steps back to the grid (mirrors the grid's → into the preview).
@@ -1765,12 +1765,12 @@ function WorkItemPreviewDetails({
                 aria-label="Configure preview fields"
                 title="Configure preview fields"
                 onClick={() => setFieldMenuOpen((open) => !open)}
-                className="inline-flex h-5 w-5 items-center justify-center rounded border border-border bg-white text-muted-foreground hover:bg-secondary hover:text-foreground"
+                className="inline-flex h-5 w-5 items-center justify-center rounded border border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground"
               >
                 <SlidersHorizontal className="h-3 w-3" aria-hidden="true" />
               </button>
               {fieldMenuOpen ? (
-                <div className="absolute right-0 top-full z-30 mt-1 w-56 rounded-md border border-border bg-white p-1 shadow-lg">
+                <div className="absolute right-0 top-full z-30 mt-1 w-56 rounded-md border border-border bg-popover p-1 shadow-lg">
                   <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground">
                     Show attributes
                   </div>
@@ -1805,7 +1805,7 @@ function WorkItemPreviewDetails({
                       placeholder="Search fields from Azure DevOps"
                       className="mb-1 h-7 w-full rounded border border-input bg-background px-2 text-[11px] outline-none focus:ring-2 focus:ring-ring"
                     />
-                    <div className="mb-1.5 max-h-28 overflow-auto rounded border border-border bg-slate-50">
+                    <div className="mb-1.5 max-h-28 overflow-auto rounded border border-border bg-muted">
                       {fieldOptionsQuery.isFetching ? (
                         <div className="flex items-center gap-1.5 px-2 py-1.5 text-[11px] text-muted-foreground">
                           <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
@@ -1821,7 +1821,7 @@ function WorkItemPreviewDetails({
                             key={field.referenceName}
                             type="button"
                             onClick={() => addCustomFieldOption(field)}
-                            className="flex w-full min-w-0 items-center gap-2 px-2 py-1 text-left text-[11px] hover:bg-white"
+                            className="flex w-full min-w-0 items-center gap-2 px-2 py-1 text-left text-[11px] hover:bg-accent"
                           >
                             <span className="min-w-0 flex-1">
                               <span className="block truncate font-medium">{field.name}</span>
@@ -1829,7 +1829,7 @@ function WorkItemPreviewDetails({
                                 {field.referenceName}
                               </span>
                             </span>
-                            <span className="shrink-0 rounded border border-border bg-white px-1 text-[10px] text-muted-foreground">
+                            <span className="shrink-0 rounded border border-border bg-card px-1 text-[10px] text-muted-foreground">
                               {field.fieldType}
                             </span>
                           </button>
@@ -1855,7 +1855,7 @@ function WorkItemPreviewDetails({
                               aria-label={`Remove ${field.label}`}
                               title="Remove"
                               onClick={() => removeCustomField(field.referenceName)}
-                              className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-white hover:text-foreground"
+                              className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
                             >
                               <X className="h-3 w-3" aria-hidden="true" />
                             </button>
@@ -2001,7 +2001,7 @@ function WorkItemPreviewDetails({
                 onClick={() => {
                   if (relation.webUrl) openExternalUrl(relation.webUrl);
                 }}
-                className="flex w-full min-w-0 items-center gap-1.5 rounded border border-border bg-white px-1.5 py-1 text-left text-xs hover:bg-secondary"
+                className="flex w-full min-w-0 items-center gap-1.5 rounded border border-border bg-card px-1.5 py-1 text-left text-xs hover:bg-secondary"
                 title={relation.webUrl ?? undefined}
               >
                 <span className="w-16 shrink-0 truncate text-[11px] text-muted-foreground">
@@ -2133,7 +2133,7 @@ function WorkItemHistorySection({ preview }: { preview: WorkItemPreview }) {
             {updates.map((update) => (
               <article
                 key={update.id}
-                className="min-w-0 rounded border border-border bg-white px-1.5 py-1"
+                className="min-w-0 rounded border border-border bg-card px-1.5 py-1"
               >
                 <div className="flex min-w-0 items-baseline gap-1.5 text-[11px]">
                   <span className="min-w-0 truncate font-semibold">
@@ -2206,8 +2206,8 @@ function CollapsibleComment({
   const collapsible = commentHtml.length >= 700;
 
   return (
-    <article className="group min-w-0 overflow-hidden rounded-md border border-border bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-      <div className="flex min-w-0 items-center gap-1.5 border-b border-border bg-slate-50 px-1.5 py-0.5">
+    <article className="group min-w-0 overflow-hidden rounded-md border border-border bg-card shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <div className="flex min-w-0 items-center gap-1.5 border-b border-border bg-muted px-1.5 py-0.5">
         <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[10px] font-semibold text-blue-700">
           {commentAuthorInitials(createdBy)}
         </span>
@@ -2226,7 +2226,7 @@ function CollapsibleComment({
         <button
           type="button"
           aria-label={`Delete comment ${id}`}
-          className={`ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-transparent text-muted-foreground transition-opacity hover:border-border hover:bg-white hover:text-destructive disabled:cursor-not-allowed ${deleting ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"}`}
+          className={`ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-transparent text-muted-foreground transition-opacity hover:border-border hover:bg-accent hover:text-destructive disabled:cursor-not-allowed ${deleting ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"}`}
           disabled={deletePending}
           title="Delete comment"
           onClick={() => onDelete(id)}
@@ -2255,7 +2255,7 @@ function CollapsibleComment({
           <button
             type="button"
             onClick={() => setExpanded((value) => !value)}
-            className="mt-1 rounded border border-border bg-white px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+            className="mt-1 rounded border border-border bg-card px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
           >
             {expanded ? "Collapse" : "Expand"}
           </button>
@@ -2488,7 +2488,7 @@ function PreviewSection({
 
   return (
     <section className={`min-w-0 ${className}`}>
-      <div className="sticky top-0 z-10 mb-1 border-t border-border bg-white/95 pb-0.5 pt-1 backdrop-blur-sm">
+      <div className="sticky top-0 z-10 mb-1 border-t border-border bg-card/95 pb-0.5 pt-1 backdrop-blur-sm">
         {collapseId ? (
           <button
             type="button"
@@ -2553,7 +2553,7 @@ export function workItemStateDotClass(state: string): string {
 
 function WorkItemTypeBadge({ type }: { type: string }) {
   return (
-    <span className="inline-flex min-w-0 items-center gap-1 rounded border border-border bg-white px-1.5 text-[11px] font-medium leading-[18px] text-foreground">
+    <span className="inline-flex min-w-0 items-center gap-1 rounded border border-border bg-card px-1.5 text-[11px] font-medium leading-[18px] text-foreground">
       <span
         aria-hidden="true"
         className="h-2 w-2 shrink-0 rounded-[2px]"
@@ -2566,7 +2566,7 @@ function WorkItemTypeBadge({ type }: { type: string }) {
 
 function WorkItemStatePill({ state }: { state: string }) {
   return (
-    <span className="inline-flex min-w-0 items-center gap-1 rounded-full border border-border bg-white px-1.5 text-[11px] leading-[18px] text-foreground">
+    <span className="inline-flex min-w-0 items-center gap-1 rounded-full border border-border bg-card px-1.5 text-[11px] leading-[18px] text-foreground">
       <span
         aria-hidden="true"
         className={`h-2 w-2 shrink-0 rounded-full ${workItemStateDotClass(state)}`}
@@ -3123,7 +3123,7 @@ function ReasonEditor({
         <p className="mt-0.5 text-[10px] text-destructive">{error}</p>
       )}
       {open ? (
-        <div className="absolute left-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-white p-2 shadow-lg">
+        <div className="absolute left-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-popover p-2 shadow-lg">
           <input
             autoFocus
             value={draft}
@@ -3221,7 +3221,7 @@ function CustomFieldPicker({
         {open ? (
           <div
             ref={listRef}
-            className="absolute left-0 top-full z-30 mt-1 max-h-56 min-w-[160px] overflow-auto rounded-md border border-border bg-white py-1 shadow-lg"
+            className="absolute left-0 top-full z-30 mt-1 max-h-56 min-w-[160px] overflow-auto rounded-md border border-border bg-popover py-1 shadow-lg"
           >
             {loading ? (
               <div className="flex items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground">
@@ -3281,12 +3281,12 @@ function CustomFieldPicker({
                     }}
                     placeholder="Custom value"
                     aria-label={`Custom value for ${label}`}
-                    className="h-6 min-w-0 flex-1 rounded border border-input bg-white px-1.5 text-xs outline-none focus:border-primary"
+                    className="h-6 min-w-0 flex-1 rounded border border-input bg-background px-1.5 text-xs outline-none focus:border-primary"
                   />
                   <button
                     type="submit"
                     disabled={!customValue.trim()}
-                    className="h-6 rounded border border-border bg-white px-2 text-xs hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                    className="h-6 rounded border border-border bg-card px-2 text-xs hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Set
                   </button>
@@ -3350,7 +3350,7 @@ function StatePicker({
         <p className="mt-0.5 text-[10px] text-destructive">{error}</p>
       )}
       {open ? (
-        <div ref={listRef} className="absolute left-0 top-full z-30 mt-1 min-w-[120px] rounded-md border border-border bg-white py-1 shadow-lg">
+        <div ref={listRef} className="absolute left-0 top-full z-30 mt-1 min-w-[120px] rounded-md border border-border bg-popover py-1 shadow-lg">
           {loading ? (
             <div className="flex items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground">
               <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
@@ -3442,7 +3442,7 @@ function PriorityPicker({
         <p className="mt-0.5 text-[10px] text-destructive">{error}</p>
       )}
       {open ? (
-        <div ref={listRef} className="absolute left-0 top-full z-30 mt-1 min-w-[96px] rounded-md border border-border bg-white py-1 shadow-lg">
+        <div ref={listRef} className="absolute left-0 top-full z-30 mt-1 min-w-[96px] rounded-md border border-border bg-popover py-1 shadow-lg">
           {options.map((priority, index) => {
             const value = String(priority);
             return (
@@ -3538,7 +3538,7 @@ function AssigneePicker({
         <p className="mt-0.5 text-[10px] text-destructive">{mutationError}</p>
       )}
       {open ? (
-        <div className="absolute left-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-white p-1 shadow-lg">
+        <div className="absolute left-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-popover p-1 shadow-lg">
           <input
             ref={inputRef}
             autoFocus
@@ -3696,12 +3696,12 @@ function PresetMenu({
         aria-label="Field presets"
         title="Field presets — press 1-9 to apply"
         onClick={() => setOpen((current) => !current)}
-        className="inline-flex h-5 w-5 items-center justify-center rounded border border-border bg-white text-muted-foreground hover:bg-secondary hover:text-foreground"
+        className="inline-flex h-5 w-5 items-center justify-center rounded border border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground"
       >
         <Zap className="h-3 w-3" aria-hidden="true" />
       </button>
       {open ? (
-        <div className="absolute right-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-white p-1 shadow-lg">
+        <div className="absolute right-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-popover p-1 shadow-lg">
           <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground">
             Field presets
           </div>
@@ -3755,12 +3755,12 @@ function PresetMenu({
                   onChange={(event) => setName(event.target.value)}
                   placeholder={`Save ${stagedCount} pending as…`}
                   aria-label="New preset name"
-                  className="h-6 min-w-0 flex-1 rounded border border-input bg-white px-1.5 text-xs outline-none focus:border-primary"
+                  className="h-6 min-w-0 flex-1 rounded border border-input bg-background px-1.5 text-xs outline-none focus:border-primary"
                 />
                 <button
                   type="submit"
                   disabled={!name.trim() || presets.length >= MAX_FIELD_PRESETS}
-                  className="h-6 rounded border border-border bg-white px-2 text-xs hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                  className="h-6 rounded border border-border bg-card px-2 text-xs hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Save
                 </button>
