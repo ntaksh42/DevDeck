@@ -6,6 +6,9 @@ use serde_json::{json, Value};
 use crate::client::AdoClient;
 use crate::error::Result;
 
+/// Azure DevOps rejects a workitemsbatch request carrying more than 200 ids.
+const WORK_ITEMS_BATCH_LIMIT: usize = 200;
+
 #[derive(Debug, Serialize)]
 pub struct WiqlRequest {
     pub query: String,
@@ -253,15 +256,24 @@ impl AdoClient {
             return Ok(Vec::new());
         }
 
+        // The workitemsbatch API rejects requests with more than 200 ids, so
+        // split larger id lists into chunks and concatenate the responses.
         let path = format!("{project_id}/_apis/wit/workitemsbatch");
-        let response: crate::git::ListResponse<WorkItem> = self
-            .post_json(
-                &path,
-                &[("api-version", "7.1-preview")],
-                &WorkItemsBatchRequest { ids, fields },
-            )
-            .await?;
-        Ok(response.value)
+        let mut items = Vec::with_capacity(ids.len());
+        for chunk in ids.chunks(WORK_ITEMS_BATCH_LIMIT) {
+            let response: crate::git::ListResponse<WorkItem> = self
+                .post_json(
+                    &path,
+                    &[("api-version", "7.1-preview")],
+                    &WorkItemsBatchRequest {
+                        ids: chunk.to_vec(),
+                        fields: fields.clone(),
+                    },
+                )
+                .await?;
+            items.extend(response.value);
+        }
+        Ok(items)
     }
 
     pub async fn get_work_item_relations(
@@ -679,6 +691,31 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].id, 10);
         assert_eq!(items[0].fields["System.Title"], "Fix bug");
+    }
+
+    #[tokio::test]
+    async fn get_work_items_batch_splits_large_id_lists() {
+        let server = MockServer::start().await;
+        // 201 ids must be sent as one 200-id request plus one 1-id request,
+        // because the workitemsbatch API rejects more than 200 ids at once.
+        Mock::given(method("POST"))
+            .and(path("/project-1/_apis/wit/workitemsbatch"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 1,
+                "value": [{ "id": 1, "fields": { "System.Title": "T" } }]
+            })))
+            .expect(2)
+            .mount(&server)
+            .await;
+
+        let ids: Vec<i64> = (1..=201).collect();
+        let items = test_client(&server)
+            .await
+            .get_work_items_batch("project-1", ids, vec!["System.Title".to_string()])
+            .await
+            .unwrap();
+        // Both chunk responses are concatenated.
+        assert_eq!(items.len(), 2);
     }
 
     #[tokio::test]

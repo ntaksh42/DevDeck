@@ -233,7 +233,10 @@ export function CodeSearchView({ organizations }: { organizations: Organization[
         ) : (
           <ul className="min-h-0 flex-1 overflow-y-auto">
             {results.map((hit) => (
-              <CodeResultRow key={`${hit.repositoryName}:${hit.path}`} hit={hit} />
+              <CodeResultRow
+                key={`${hit.projectName}:${hit.repositoryName}:${hit.branch ?? ""}:${hit.path}`}
+                hit={hit}
+              />
             ))}
           </ul>
         )}

@@ -1,4 +1,4 @@
-import { type KeyboardEvent as ReactKeyboardEvent, useMemo, useState } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ExternalLink, Loader2, Play, Square } from "lucide-react";
 import {
@@ -111,6 +111,13 @@ export function PipelineRunDetailPanel({
 }) {
   const queryClient = useQueryClient();
   const [selectedLogId, setSelectedLogId] = useState<number | null>(null);
+
+  // Log ids are scoped to a single run, so a leftover selection would fetch a
+  // log that does not exist on the newly selected run. Clear it when the run
+  // changes.
+  useEffect(() => {
+    setSelectedLogId(null);
+  }, [buildId]);
 
   const appSettingsQuery = useQuery({
     queryKey: ["appSettings"],

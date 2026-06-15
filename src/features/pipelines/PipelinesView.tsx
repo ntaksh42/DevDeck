@@ -177,6 +177,9 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
                   setOrganizationId(event.target.value);
                   setProjectId("");
                   setDefinitionId(null);
+                  // The next org may not identify the user; drop the "mine"
+                  // filter so it can't silently re-apply once it's available.
+                  setRequestedForMe(false);
                 }}
                 className={selectClasses}
               >
