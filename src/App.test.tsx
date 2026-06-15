@@ -12,6 +12,7 @@ import App from "./App";
 
 const invokeMock = vi.fn();
 const openUrlMock = vi.fn();
+const openPathMock = vi.fn();
 const writeClipboardTextMock = vi.fn();
 const tauriEventHandlers = new Map<string, (event: { payload: unknown }) => void>();
 
@@ -43,6 +44,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
   openUrl: (url: string | URL) => openUrlMock(url),
+  openPath: (path: string) => openPathMock(path),
 }));
 
 function renderApp() {
@@ -68,6 +70,7 @@ describe("App", () => {
   beforeEach(() => {
     invokeMock.mockReset();
     openUrlMock.mockReset();
+    openPathMock.mockReset();
     writeClipboardTextMock.mockReset();
     window.localStorage.clear();
     invokeMock.mockImplementation((command: string) => {
@@ -1801,6 +1804,19 @@ describe("App", () => {
 
     fireEvent.click(main.getByRole("tab", { name: "Result" }));
     expect(await main.findByText("review-PR102.html")).toBeTruthy();
+
+    // The Result tab opens the local HTML in the browser via a button…
+    fireEvent.click(main.getByRole("button", { name: /Open in browser/ }));
+    await waitFor(() => {
+      expect(openPathMock).toHaveBeenCalledWith("C:\\reports\\review-PR102.html");
+    });
+
+    // …and via the `o` shortcut while the tab is focused.
+    openPathMock.mockClear();
+    fireEvent.keyDown(main.getByText("review-PR102.html"), { key: "o" });
+    await waitFor(() => {
+      expect(openPathMock).toHaveBeenCalledWith("C:\\reports\\review-PR102.html");
+    });
 
     fireEvent.keyDown(main.getByRole("grid", { name: "My review pull requests" }), {
       key: "Enter",
