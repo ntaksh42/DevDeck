@@ -33,7 +33,10 @@ test-results/
 # README reference it as the release flow)
 scripts/*
 !scripts/release.ps1
-.claude/
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/release-azdo-dashboard/
 entity_id
 local_id
 origin_id
