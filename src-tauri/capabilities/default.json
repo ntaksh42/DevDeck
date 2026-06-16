@@ -6,6 +6,7 @@
   "permissions": [
     "core:default",
     "notification:default",
-    "opener:default"
+    "opener:default",
+    "opener:allow-open-path"
   ]
 }
