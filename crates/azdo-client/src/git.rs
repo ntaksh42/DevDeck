@@ -133,6 +133,9 @@ impl AdoClient {
                 &[
                     ("api-version", "7.1-preview"),
                     ("searchCriteria.status", status.as_query_value()),
+                    // Without $top the server applies a small default page size,
+                    // silently truncating busy repositories.
+                    ("$top", "1000"),
                 ],
             )
             .await?;
