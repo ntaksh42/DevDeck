@@ -70,20 +70,22 @@ export async function showWorkItemNotificationEvent(
     });
   }
 
-  let result: DesktopNotificationResult = "denied";
+  const results: DesktopNotificationResult[] = [];
   for (const item of items) {
-    result = await sendDesktopNotification(workItemNotificationTitle(item), {
-      body: contentPreviewEnabled
-        ? workItemNotificationBody(event.organizationName, item)
-        : "Open AzDoDeck to review this work item update.",
-      onClick: item.webUrl
-        ? () => {
-            void openExternalUrl(item.webUrl!);
-          }
-        : undefined,
-    });
+    results.push(
+      await sendDesktopNotification(workItemNotificationTitle(item), {
+        body: contentPreviewEnabled
+          ? workItemNotificationBody(event.organizationName, item)
+          : "Open AzDoDeck to review this work item update.",
+        onClick: item.webUrl
+          ? () => {
+              void openExternalUrl(item.webUrl!);
+            }
+          : undefined,
+      }),
+    );
   }
-  return result;
+  return combineNotificationResults(results);
 }
 
 export async function showPullRequestNotificationEvent(
@@ -107,20 +109,35 @@ export async function showPullRequestNotificationEvent(
     });
   }
 
-  let result: DesktopNotificationResult = "denied";
+  const results: DesktopNotificationResult[] = [];
   for (const item of items) {
-    result = await sendDesktopNotification(pullRequestNotificationTitle(item), {
-      body: contentPreviewEnabled
-        ? pullRequestNotificationBody(event.organizationName, item)
-        : "Open AzDoDeck to review this pull request update.",
-      onClick: item.webUrl
-        ? () => {
-            void openExternalUrl(item.webUrl!);
-          }
-        : undefined,
-    });
+    results.push(
+      await sendDesktopNotification(pullRequestNotificationTitle(item), {
+        body: contentPreviewEnabled
+          ? pullRequestNotificationBody(event.organizationName, item)
+          : "Open AzDoDeck to review this pull request update.",
+        onClick: item.webUrl
+          ? () => {
+              void openExternalUrl(item.webUrl!);
+            }
+          : undefined,
+      }),
+    );
   }
-  return result;
+  return combineNotificationResults(results);
+}
+
+// Aggregates per-notification outcomes so a single failure is not masked by a
+// later success. Severity order: denied/unsupported (failures) beat sent, which
+// beats skipped.
+function combineNotificationResults(
+  results: DesktopNotificationResult[],
+): DesktopNotificationResult {
+  if (results.length === 0) return "skipped";
+  if (results.includes("denied")) return "denied";
+  if (results.includes("unsupported")) return "unsupported";
+  if (results.includes("sent")) return "sent";
+  return "skipped";
 }
 
 async function sendDesktopNotification(
