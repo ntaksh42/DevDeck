@@ -268,7 +268,13 @@ impl AppDatabase {
         last_seen_comment_id: i64,
     ) -> Result<()> {
         let conn = self.open()?;
-        set_pr_comment_seen(&conn, org_id, repository_id, pull_request_id, last_seen_comment_id)
+        set_pr_comment_seen(
+            &conn,
+            org_id,
+            repository_id,
+            pull_request_id,
+            last_seen_comment_id,
+        )
     }
 
     // ── Pull requests cache ───────────────────────────────────────────────────
@@ -1230,7 +1236,11 @@ fn update_app_settings(conn: &Connection, settings: AppSettings) -> Result<AppSe
         "notify_pr_review_requests",
         settings.notify_pr_review_requests,
     )?;
-    set_bool_setting(conn, "notify_pr_vote_resets", settings.notify_pr_vote_resets)?;
+    set_bool_setting(
+        conn,
+        "notify_pr_vote_resets",
+        settings.notify_pr_vote_resets,
+    )?;
     set_bool_setting(
         conn,
         "notify_pr_comment_replies",
