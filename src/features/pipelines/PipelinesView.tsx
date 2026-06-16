@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import {
@@ -6,6 +6,8 @@ import {
   listPipelineProjects,
   type Organization,
 } from "@/lib/azdoCommands";
+import { ResizeHandle } from "@/components/ResizeHandle";
+import { storedNumber } from "@/lib/utils";
 import { FilterableSelect } from "./FilterableSelect";
 import { PipelineRunDetailPanel } from "./PipelineRunDetailPanel";
 import { PipelineSubscriptionsBoard } from "./PipelineSubscriptionsBoard";
@@ -17,6 +19,11 @@ import {
   removeSubscription,
   savePipelineSubscriptions,
 } from "./pipelineSubscriptionsStorage";
+
+const DEFAULT_PIPELINE_PREVIEW_WIDTH = 460;
+const MIN_PIPELINE_PREVIEW_WIDTH = 320;
+const MAX_PIPELINE_PREVIEW_WIDTH = 8192;
+const PIPELINE_PREVIEW_WIDTH_STORAGE_KEY = "azdodeck:layout:pipelinePreviewWidth";
 
 export function PipelinesView({ organizations }: { organizations: Organization[] }) {
   const [organizationId, setOrganizationId] = useState(() => organizations[0]?.id ?? "");
@@ -32,6 +39,21 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
   const [subscriptions, setSubscriptions] = useState<PipelineSubscription[]>(() =>
     loadPipelineSubscriptions(),
   );
+  const [previewWidth, setPreviewWidth] = useState(() =>
+    storedNumber(
+      PIPELINE_PREVIEW_WIDTH_STORAGE_KEY,
+      DEFAULT_PIPELINE_PREVIEW_WIDTH,
+      MIN_PIPELINE_PREVIEW_WIDTH,
+      MAX_PIPELINE_PREVIEW_WIDTH,
+    ),
+  );
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      PIPELINE_PREVIEW_WIDTH_STORAGE_KEY,
+      String(Math.round(previewWidth)),
+    );
+  }, [previewWidth]);
 
   const selectedOrganizationId = organizationId || organizations[0]?.id || "";
 
@@ -193,7 +215,10 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(360px,460px)]">
+      <div
+        className="grid min-h-0 flex-1 items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_8px_minmax(320px,var(--pipeline-preview-width))]"
+        style={{ "--pipeline-preview-width": `${previewWidth}px` } as CSSProperties}
+      >
         <PipelineSubscriptionsBoard
           organizationId={selectedOrganizationId}
           subscriptions={subscriptions}
@@ -214,6 +239,17 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
               setDetailTarget(null);
             }
           }}
+        />
+
+        <ResizeHandle
+          ariaLabel="Resize pipeline preview"
+          className="hidden xl:flex"
+          direction={-1}
+          max={MAX_PIPELINE_PREVIEW_WIDTH}
+          min={MIN_PIPELINE_PREVIEW_WIDTH}
+          onChange={setPreviewWidth}
+          onReset={() => setPreviewWidth(DEFAULT_PIPELINE_PREVIEW_WIDTH)}
+          value={previewWidth}
         />
 
         <PipelineRunDetailPanel
