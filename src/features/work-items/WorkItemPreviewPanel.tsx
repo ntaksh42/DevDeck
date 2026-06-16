@@ -1924,7 +1924,7 @@ function WorkItemPreviewDetails({
         >
           {preview.title}
         </h2>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-x-2 gap-y-0.5 pt-1">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-x-2 gap-y-1 pt-1">
           {selectedFieldDefinitions.map((field) =>
             field.editable === "state" ? (
               <PreviewControl key={field.key} label={field.label} shortcut={field.shortcut}>
@@ -1973,6 +1973,7 @@ function WorkItemPreviewDetails({
             <PreviewSection collapseId="description" title="Description">
               <RichHtmlFrame
                 baseUrl={preview.webUrl}
+                framed={false}
                 html={descriptionHtml}
                 onImageOpen={setLightboxSrc}
                 resolveImageSource={resolveImageSource}
@@ -1984,6 +1985,7 @@ function WorkItemPreviewDetails({
             <PreviewSection collapseId="acceptanceCriteria" title="Acceptance Criteria">
               <RichHtmlFrame
                 baseUrl={preview.webUrl}
+                framed={false}
                 html={acceptanceCriteriaHtml}
                 onImageOpen={setLightboxSrc}
                 resolveImageSource={resolveImageSource}
@@ -1995,8 +1997,8 @@ function WorkItemPreviewDetails({
       )}
 
       {preview.relations.length > 0 ? (
-        <PreviewSection className="mt-2" collapseId="links" title={`Links (${preview.relations.length})`}>
-          <div className="space-y-1">
+        <PreviewSection className="mt-2" collapseId="links" title="Links" count={preview.relations.length}>
+          <div className="divide-y divide-border/50">
             {preview.relations.map((relation) => (
               <button
                 key={`${relation.relationType}:${relation.id}`}
@@ -2004,7 +2006,7 @@ function WorkItemPreviewDetails({
                 onClick={() => {
                   if (relation.webUrl) openExternalUrl(relation.webUrl);
                 }}
-                className="flex w-full min-w-0 items-center gap-1.5 rounded border border-border bg-card px-1.5 py-1 text-left text-xs hover:bg-secondary"
+                className="flex w-full min-w-0 items-center gap-1.5 rounded-sm px-1.5 py-1 text-left text-xs hover:bg-muted/60"
                 title={relation.webUrl ?? undefined}
               >
                 <span className="w-16 shrink-0 truncate text-[11px] text-muted-foreground">
@@ -2027,7 +2029,7 @@ function WorkItemPreviewDetails({
       ) : null}
 
       {preview.comments.length > 0 ? (
-        <PreviewSection className="mt-2" collapseId="comments" title={`Comments (${preview.comments.length})`}>
+        <PreviewSection className="mt-2" collapseId="comments" title="Comments" count={preview.comments.length}>
           {deleteCommentError ? (
             <p className="mb-1 text-[11px] leading-4 text-destructive">
               {deleteCommentError}
@@ -2112,18 +2114,29 @@ function WorkItemHistorySection({ preview }: { preview: WorkItemPreview }) {
 
   return (
     <section className="mt-2 min-w-0">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-        className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground"
-      >
-        History
-        <span aria-hidden="true">{open ? "▾" : "▸"}</span>
-        {open && updatesQuery.isFetching ? (
-          <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-        ) : null}
-      </button>
+      <div className="mb-1.5">
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+          className="flex w-full items-center gap-1.5 rounded text-left hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+        >
+          <span aria-hidden="true" className="h-3 w-[3px] shrink-0 rounded-full bg-primary" />
+          <h3 className="text-[11px] font-semibold uppercase tracking-wide leading-4 text-foreground">
+            History
+          </h3>
+          {open && updatesQuery.isFetching ? (
+            <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" aria-hidden="true" />
+          ) : null}
+          <ChevronRight
+            className={`ml-auto h-3 w-3 shrink-0 text-muted-foreground transition-transform ${
+              open ? "rotate-90" : ""
+            }`}
+            aria-hidden="true"
+          />
+        </button>
+        <div className="mt-1 border-b border-border" />
+      </div>
       {open ? (
         updatesQuery.isError ? (
           <p className="mt-1 text-[11px] text-destructive">
@@ -2209,8 +2222,8 @@ function CollapsibleComment({
   const collapsible = commentHtml.length >= 700;
 
   return (
-    <article className="group min-w-0 overflow-hidden rounded-md border border-border bg-card shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-      <div className="flex min-w-0 items-center gap-1.5 border-b border-border bg-muted px-1.5 py-0.5">
+    <article className="group min-w-0 overflow-hidden rounded-md border border-border/60 bg-card">
+      <div className="flex min-w-0 items-center gap-1.5 px-1.5 py-1">
         <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[10px] font-semibold text-blue-700">
           {commentAuthorInitials(createdBy)}
         </span>
@@ -2466,11 +2479,13 @@ function PreviewSection({
   children,
   className = "",
   collapseId,
+  count,
   title,
 }: {
   children: ReactNode;
   className?: string;
   collapseId?: string;
+  count?: number;
   title: string;
 }) {
   const [collapsed, setCollapsed] = useState(() =>
@@ -2489,31 +2504,45 @@ function PreviewSection({
     });
   }
 
+  // Accent tick + uppercase label make the section start unmistakable; the
+  // single rule below the heading carries the visual break so inner content
+  // no longer needs competing frames of its own.
+  const heading = (
+    <>
+      <span aria-hidden="true" className="h-3 w-[3px] shrink-0 rounded-full bg-primary" />
+      <h3 className="text-[11px] font-semibold uppercase tracking-wide leading-4 text-foreground">
+        {title}
+      </h3>
+      {count !== undefined ? (
+        <span className="shrink-0 rounded-full bg-muted px-1.5 text-[10px] font-medium leading-4 text-muted-foreground">
+          {count}
+        </span>
+      ) : null}
+    </>
+  );
+
   return (
     <section className={`min-w-0 ${className}`}>
-      <div className="sticky top-0 z-10 mb-1 border-t border-border bg-card/95 pb-0.5 pt-1 backdrop-blur-sm">
+      <div className="sticky top-0 z-10 mb-1.5 bg-card/95 pt-1 backdrop-blur-sm">
         {collapseId ? (
           <button
             type="button"
             aria-expanded={!collapsed}
             onClick={toggleCollapsed}
-            className="flex w-full items-center gap-1 rounded text-left hover:bg-muted/60 focus:outline-none focus:ring-1 focus:ring-ring"
+            className="flex w-full items-center gap-1.5 rounded text-left hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           >
+            {heading}
             <ChevronRight
-              className={`h-3 w-3 shrink-0 text-muted-foreground transition-transform ${
+              className={`ml-auto h-3 w-3 shrink-0 text-muted-foreground transition-transform ${
                 collapsed ? "" : "rotate-90"
               }`}
               aria-hidden="true"
             />
-            <h3 className="text-[11px] font-semibold leading-4 text-foreground/75">
-              {title}
-            </h3>
           </button>
         ) : (
-          <h3 className="text-[11px] font-semibold leading-4 text-foreground/75">
-            {title}
-          </h3>
+          <div className="flex w-full items-center gap-1.5">{heading}</div>
         )}
+        <div className="mt-1 border-b border-border" />
       </div>
       {collapsed ? null : children}
     </section>
