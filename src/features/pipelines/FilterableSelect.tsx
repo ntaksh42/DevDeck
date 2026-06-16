@@ -28,12 +28,12 @@ export function FilterableSelect({
   ariaLabel: string;
 }) {
   const [open, setOpen] = useState(false);
-  // While open, `query` holds the current text. We seed it with the selected
-  // label so the active value stays visible until the user types.
+  // The typed filter text. Empty while the list is open but untouched, so the
+  // full option list shows; the selected label is surfaced via the input
+  // placeholder rather than by seeding `query` (which would filter the list).
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const selectedLabel = options.find((option) => option.value === value)?.label ?? "";
 
@@ -43,10 +43,11 @@ export function FilterableSelect({
     return options.filter((option) => option.label.toLowerCase().includes(needle));
   }, [options, query]);
 
-  // Keep the active option in range as the filtered list shrinks/grows.
+  // Reset the active option to the top whenever the filtered set changes, so a
+  // new query never leaves the highlight on an unrelated option.
   useEffect(() => {
-    setActiveIndex((index) => Math.min(index, Math.max(filtered.length - 1, 0)));
-  }, [filtered.length]);
+    setActiveIndex(0);
+  }, [filtered]);
 
   // Close when a click lands outside the widget.
   useEffect(() => {
@@ -62,11 +63,10 @@ export function FilterableSelect({
 
   function openList() {
     if (disabled || open) return;
-    setQuery(selectedLabel);
+    setQuery("");
+    // Highlight the currently selected option so it is the default Enter target.
     setActiveIndex(Math.max(options.findIndex((option) => option.value === value), 0));
     setOpen(true);
-    // Select all so the first keystroke replaces the seeded label.
-    requestAnimationFrame(() => inputRef.current?.select());
   }
 
   function commit(option: SelectOption) {
@@ -112,14 +112,13 @@ export function FilterableSelect({
     <div ref={containerRef} className="relative" onBlur={handleBlur}>
       <div className="relative">
         <input
-          ref={inputRef}
           type="text"
           role="combobox"
           aria-expanded={open}
           aria-label={ariaLabel}
           disabled={disabled}
           value={open ? query : selectedLabel}
-          placeholder={placeholder}
+          placeholder={open && selectedLabel ? selectedLabel : placeholder}
           onMouseDown={() => {
             // Toggle on click so a second click closes the list.
             if (open) setOpen(false);

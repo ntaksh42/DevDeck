@@ -127,6 +127,7 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
                   setOrganizationId(event.target.value);
                   setProjectId("");
                   setDefinitionId(null);
+                  setDetailTarget(null);
                 }}
                 className={selectClasses}
               >
@@ -198,7 +199,7 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
           subscriptions={subscriptions}
           selectedBuildId={detailTarget?.buildId ?? null}
           onSelectRun={(selection) => setDetailTarget(selection)}
-          onRemove={(removeProjectId, definitionId) =>
+          onRemove={(removeProjectId, definitionId) => {
             persistSubscriptions(
               removeSubscription(
                 subscriptions,
@@ -206,8 +207,13 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
                 removeProjectId,
                 definitionId,
               ),
-            )
-          }
+            );
+            // Clear the detail panel if it is showing a run from the pipeline
+            // that was just unwatched.
+            if (detailTarget?.projectId === removeProjectId) {
+              setDetailTarget(null);
+            }
+          }}
         />
 
         <PipelineRunDetailPanel

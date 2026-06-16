@@ -27,6 +27,15 @@ describe("FilterableSelect", () => {
     expect(screen.getAllByRole("option")).toHaveLength(3);
   });
 
+  it("lists every option even when one is already selected", () => {
+    // Regression: opening must not pre-filter the list down to the selection.
+    const { input } = setup("2"); // Nightly selected
+    fireEvent.mouseDown(input);
+    expect(screen.getAllByRole("option")).toHaveLength(3);
+    // The selected label is surfaced via the placeholder, not by filtering.
+    expect(input.getAttribute("placeholder")).toBe("Nightly");
+  });
+
   it("toggles closed on a second click", () => {
     const { input } = setup();
     fireEvent.mouseDown(input);
