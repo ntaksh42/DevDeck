@@ -1378,6 +1378,7 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
             : `Demo value ${index + 1}`,
     })),
     webUrl: summary.webUrl,
+    commentsUnavailable: false,
     comments: [
       {
         id: 2,

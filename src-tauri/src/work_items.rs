@@ -19,6 +19,7 @@ use crate::db::{AppDatabase, CachedWorkItem, Organization};
 use crate::error::{AppError, Result};
 use crate::projects::ProjectDirectory;
 use crate::secrets::SecretStore;
+use crate::settings::SettingsService;
 
 const WORK_ITEM_FIELDS: &[&str] = &[
     "System.Id",
@@ -307,6 +308,9 @@ pub struct WorkItemPreview {
     pub custom_fields: Vec<WorkItemCustomField>,
     pub web_url: Option<String>,
     pub comments: Vec<WorkItemComment>,
+    /// True when the comment fetch failed, so the UI can distinguish "no
+    /// comments" from "comments could not be loaded".
+    pub comments_unavailable: bool,
     pub relations: Vec<WorkItemRelationSummary>,
 }
 
@@ -600,6 +604,7 @@ impl WorkItemService {
         let work_item = work_items_result?.into_iter().next().ok_or_else(|| {
             AppError::InvalidInput(format!("work item not found: {}", input.work_item_id))
         })?;
+        let comments_unavailable = comments_result.is_err();
         let comments = comments_result.unwrap_or_default();
         // Relations are a progressive enhancement; ignore failures.
         let raw_relations = relations_result.unwrap_or_default();
@@ -611,6 +616,7 @@ impl WorkItemService {
             work_item,
             comments,
         );
+        preview.comments_unavailable = comments_unavailable;
         preview.relations = self
             .resolve_preview_relations(
                 &client,
@@ -993,25 +999,31 @@ impl WorkItemService {
         if let Err(e) = self.db.upsert_work_items(std::slice::from_ref(&cached)) {
             tracing::warn!(error = %e, "failed to update work item cache after update_fields");
         }
-        if let Err(e) = self.db.update_my_work_item_if_present(&cached) {
+        if let Err(e) = self.db.update_my_work_item_if_present(
+            &cached,
+            organization.authenticated_user_unique_name.as_deref(),
+        ) {
             tracing::warn!(error = %e, "failed to update my_work_items cache after update_fields");
         }
-        let comments = client
+        let comments_result = client
             .list_work_item_comments(
                 &project.id,
                 input.work_item_id,
                 WORK_ITEM_PREVIEW_COMMENT_LIMIT,
             )
-            .await
-            .unwrap_or_default();
+            .await;
+        let comments_unavailable = comments_result.is_err();
+        let comments = comments_result.unwrap_or_default();
 
-        Ok(summarize_work_item_preview(
+        let mut preview = summarize_work_item_preview(
             &organization,
             &project.id,
             &project.name,
             work_item,
             comments,
-        ))
+        );
+        preview.comments_unavailable = comments_unavailable;
+        Ok(preview)
     }
 
     pub async fn list_field_allowed_values(
@@ -1090,6 +1102,9 @@ impl WorkItemService {
 
         let mut results = Vec::new();
         for id in input.work_item_ids {
+            if self.ensure_write_enabled().is_err() {
+                break;
+            }
             match client.update_work_item_state(&project.id, id, &state).await {
                 Ok(wi) => {
                     let cached =
@@ -1097,7 +1112,10 @@ impl WorkItemService {
                     if let Err(e) = self.db.upsert_work_items(std::slice::from_ref(&cached)) {
                         tracing::warn!(error = %e, "failed to update work item cache after set_items_state");
                     }
-                    if let Err(e) = self.db.update_my_work_item_if_present(&cached) {
+                    if let Err(e) = self.db.update_my_work_item_if_present(
+                        &cached,
+                        organization.authenticated_user_unique_name.as_deref(),
+                    ) {
                         tracing::warn!(error = %e, "failed to update my_work_items cache after set_items_state");
                     }
                     results.push(BulkWorkItemResult { id, error: None });
@@ -1109,6 +1127,21 @@ impl WorkItemService {
             }
         }
         Ok(results)
+    }
+
+    /// Re-checks read-only mode between bulk iterations so toggling it mid-run
+    /// stops further writes instead of letting the loop finish.
+    fn ensure_write_enabled(&self) -> Result<()> {
+        if SettingsService::new(self.db.clone())
+            .get()?
+            .read_only_validation_mode_enabled
+        {
+            return Err(AppError::InvalidInput(
+                "Read-only validation mode is enabled. Disable it in Settings to write to Azure DevOps."
+                    .to_string(),
+            ));
+        }
+        Ok(())
     }
 
     pub async fn assign_items(
@@ -1131,6 +1164,9 @@ impl WorkItemService {
 
         let mut results = Vec::new();
         for id in input.work_item_ids {
+            if self.ensure_write_enabled().is_err() {
+                break;
+            }
             match client
                 .update_work_item_assigned_to(&project.id, id, &assigned_to)
                 .await
@@ -1141,7 +1177,10 @@ impl WorkItemService {
                     if let Err(e) = self.db.upsert_work_items(std::slice::from_ref(&cached)) {
                         tracing::warn!(error = %e, "failed to update work item cache after assign_items");
                     }
-                    if let Err(e) = self.db.update_my_work_item_if_present(&cached) {
+                    if let Err(e) = self.db.update_my_work_item_if_present(
+                        &cached,
+                        organization.authenticated_user_unique_name.as_deref(),
+                    ) {
                         tracing::warn!(error = %e, "failed to update my_work_items cache after assign_items");
                     }
                     results.push(BulkWorkItemResult { id, error: None });
@@ -1176,6 +1215,9 @@ impl WorkItemService {
 
         let mut results = Vec::new();
         for id in input.work_item_ids {
+            if self.ensure_write_enabled().is_err() {
+                break;
+            }
             match client
                 .update_work_item_priority(&project.id, id, input.priority)
                 .await
@@ -1186,7 +1228,10 @@ impl WorkItemService {
                     if let Err(e) = self.db.upsert_work_items(std::slice::from_ref(&cached)) {
                         tracing::warn!(error = %e, "failed to update work item cache after set_items_priority");
                     }
-                    if let Err(e) = self.db.update_my_work_item_if_present(&cached) {
+                    if let Err(e) = self.db.update_my_work_item_if_present(
+                        &cached,
+                        organization.authenticated_user_unique_name.as_deref(),
+                    ) {
                         tracing::warn!(error = %e, "failed to update my_work_items cache after set_items_priority");
                     }
                     results.push(BulkWorkItemResult { id, error: None });
@@ -1872,6 +1917,7 @@ fn summarize_work_item_preview(
             .into_iter()
             .map(summarize_work_item_comment)
             .collect(),
+        comments_unavailable: false,
         relations: Vec::new(),
     }
 }

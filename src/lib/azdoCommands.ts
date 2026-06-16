@@ -271,6 +271,7 @@ const workItemPreviewSchema = z.object({
   customFields: z.array(workItemCustomFieldSchema).default([]),
   webUrl: z.string().nullable(),
   comments: z.array(workItemCommentSchema).default([]),
+  commentsUnavailable: z.boolean().default(false),
   relations: z.array(workItemRelationSchema).default([]),
 });
 

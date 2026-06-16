@@ -268,7 +268,13 @@ impl AppDatabase {
         last_seen_comment_id: i64,
     ) -> Result<()> {
         let conn = self.open()?;
-        set_pr_comment_seen(&conn, org_id, repository_id, pull_request_id, last_seen_comment_id)
+        set_pr_comment_seen(
+            &conn,
+            org_id,
+            repository_id,
+            pull_request_id,
+            last_seen_comment_id,
+        )
     }
 
     // ── Pull requests cache ───────────────────────────────────────────────────
@@ -384,8 +390,33 @@ impl AppDatabase {
         list_my_work_items(&conn, org_id)
     }
 
-    pub fn update_my_work_item_if_present(&self, item: &CachedWorkItem) -> Result<()> {
+    /// Keeps the my_work_items snapshot consistent after a single-item edit.
+    ///
+    /// When `my_unique_name` is known and the item is no longer assigned to that
+    /// user, the row is removed so a reassignment drops out of My Work Items
+    /// immediately instead of lingering until the next full sync. Otherwise the
+    /// existing row (if any) is updated in place.
+    pub fn update_my_work_item_if_present(
+        &self,
+        item: &CachedWorkItem,
+        my_unique_name: Option<&str>,
+    ) -> Result<()> {
+        let still_mine = match (my_unique_name, item.assigned_to_unique_name.as_deref()) {
+            (Some(me), Some(assignee)) => me.eq_ignore_ascii_case(assignee),
+            // Unknown identity or unassigned: fall back to update-only to avoid
+            // dropping a row we cannot confidently say left the snapshot.
+            (None, _) => true,
+            (Some(_), None) => false,
+        };
+
         let conn = self.open()?;
+        if !still_mine {
+            conn.execute(
+                "DELETE FROM my_work_items WHERE org_id=?1 AND id=?2",
+                rusqlite::params![item.org_id, item.id],
+            )?;
+            return Ok(());
+        }
         conn.execute(
             "UPDATE my_work_items SET title=?3, work_item_type=?4, state=?5, \
              assigned_to=?6, assigned_to_unique_name=?7, changed_date=?8, web_url=?9 \
@@ -1230,7 +1261,11 @@ fn update_app_settings(conn: &Connection, settings: AppSettings) -> Result<AppSe
         "notify_pr_review_requests",
         settings.notify_pr_review_requests,
     )?;
-    set_bool_setting(conn, "notify_pr_vote_resets", settings.notify_pr_vote_resets)?;
+    set_bool_setting(
+        conn,
+        "notify_pr_vote_resets",
+        settings.notify_pr_vote_resets,
+    )?;
     set_bool_setting(
         conn,
         "notify_pr_comment_replies",
@@ -2642,6 +2677,89 @@ mod tests {
 
         let results = search_work_items_fts(&conn, "org1", "存在しない語").unwrap();
         assert!(results.is_empty());
+    }
+
+    #[test]
+    fn update_my_work_item_removes_row_when_reassigned_away() {
+        let tf = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        let mine = CachedWorkItem {
+            org_id: "org1".to_string(),
+            project_id: "p1".to_string(),
+            project_name: "P1".to_string(),
+            id: 5,
+            title: "owned by me".to_string(),
+            work_item_type: None,
+            state: Some("Active".to_string()),
+            assigned_to: Some("Me".to_string()),
+            assigned_to_unique_name: Some("me@example.com".to_string()),
+            changed_date: None,
+            web_url: None,
+        };
+        db.replace_work_items(
+            "org1",
+            &["p1"],
+            std::slice::from_ref(&mine),
+            std::slice::from_ref(&mine),
+        )
+        .unwrap();
+        assert_eq!(db.list_my_work_items("org1").unwrap().len(), 1);
+
+        // Reassigned to someone else: the row must leave the my_work_items view.
+        let reassigned = CachedWorkItem {
+            assigned_to: Some("Other".to_string()),
+            assigned_to_unique_name: Some("other@example.com".to_string()),
+            ..mine.clone()
+        };
+        db.update_my_work_item_if_present(&reassigned, Some("me@example.com"))
+            .unwrap();
+        assert!(
+            db.list_my_work_items("org1").unwrap().is_empty(),
+            "reassigning away should drop the row immediately"
+        );
+    }
+
+    #[test]
+    fn update_my_work_item_keeps_row_when_still_mine() {
+        let tf = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        let mine = CachedWorkItem {
+            org_id: "org1".to_string(),
+            project_id: "p1".to_string(),
+            project_name: "P1".to_string(),
+            id: 5,
+            title: "owned by me".to_string(),
+            work_item_type: None,
+            state: Some("Active".to_string()),
+            assigned_to: Some("Me".to_string()),
+            assigned_to_unique_name: Some("me@example.com".to_string()),
+            changed_date: None,
+            web_url: None,
+        };
+        db.replace_work_items(
+            "org1",
+            &["p1"],
+            std::slice::from_ref(&mine),
+            std::slice::from_ref(&mine),
+        )
+        .unwrap();
+
+        // State edit while still assigned to me: row stays and is updated.
+        let updated = CachedWorkItem {
+            state: Some("Closed".to_string()),
+            ..mine.clone()
+        };
+        db.update_my_work_item_if_present(&updated, Some("ME@EXAMPLE.COM"))
+            .unwrap();
+        let rows = db.list_my_work_items("org1").unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].state.as_deref(), Some("Closed"));
     }
 
     #[test]
