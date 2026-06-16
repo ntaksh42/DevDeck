@@ -255,6 +255,10 @@ function AppShell() {
   );
   const navRef = useRef<HTMLElement | null>(null);
   const appSettingsRef = useRef<Awaited<ReturnType<typeof getAppSettings>> | null>(null);
+  // Notification events that arrived before settings finished loading. They are
+  // replayed once settings are available so the first events are not dropped.
+  const pendingWorkItemEventsRef = useRef<WorkItemNotificationEvent[]>([]);
+  const pendingPullRequestEventsRef = useRef<PullRequestNotificationEvent[]>([]);
   const startupHotSyncStartedRef = useRef(false);
   const lastHotSyncRequestedAtRef = useRef(0);
   const navTypeaheadRef = useRef<{ value: string; timer: number | null }>({
@@ -882,7 +886,20 @@ function AppShell() {
   }
 
   useEffect(() => {
-    appSettingsRef.current = appSettingsQuery.data ?? null;
+    const settings = appSettingsQuery.data ?? null;
+    appSettingsRef.current = settings;
+    if (!settings) return;
+    // Replay events that arrived before settings were ready.
+    const workItemEvents = pendingWorkItemEventsRef.current;
+    const pullRequestEvents = pendingPullRequestEventsRef.current;
+    pendingWorkItemEventsRef.current = [];
+    pendingPullRequestEventsRef.current = [];
+    for (const event of workItemEvents) {
+      void showWorkItemNotificationEvent(event, settings);
+    }
+    for (const event of pullRequestEvents) {
+      void showPullRequestNotificationEvent(event, settings);
+    }
   }, [appSettingsQuery.data]);
 
   useEffect(() => {
@@ -928,7 +945,10 @@ function AppShell() {
     let cleanup: (() => void) | undefined;
     listen<WorkItemNotificationEvent>("notifications:work-items", (event) => {
       const settings = appSettingsRef.current;
-      if (!settings) return;
+      if (!settings) {
+        pendingWorkItemEventsRef.current.push(event.payload);
+        return;
+      }
       void showWorkItemNotificationEvent(event.payload, settings);
     })
       .then((unlisten) => {
@@ -945,7 +965,10 @@ function AppShell() {
       "notifications:pull-requests",
       (event) => {
         const settings = appSettingsRef.current;
-        if (!settings) return;
+        if (!settings) {
+          pendingPullRequestEventsRef.current.push(event.payload);
+          return;
+        }
         void showPullRequestNotificationEvent(event.payload, settings);
       },
     )
