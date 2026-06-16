@@ -383,6 +383,16 @@ async fn do_sync_prs(
                 review_failed_projects.join(", ")
             ));
         }
+    } else {
+        // Without an authenticated user id we cannot compute "my reviews".
+        // Clearing the cache avoids freezing a stale list after a re-auth that
+        // dropped the user id; the grid then shows empty rather than wrong.
+        db.replace_review_pull_requests(&org.id, &[])?;
+        warning_parts.push(
+            "My Reviews could not be refreshed because the signed-in user is unknown; \
+             re-authenticate the organization to restore it."
+                .to_string(),
+        );
     }
 
     let warning = if warning_parts.is_empty() {
