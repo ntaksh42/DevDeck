@@ -2067,6 +2067,12 @@ function WorkItemPreviewDetails({
             ) : null}
           </div>
         </PreviewSection>
+      ) : preview.commentsUnavailable ? (
+        <PreviewSection className="mt-2" collapseId="comments" title="Comments">
+          <p className="text-[11px] leading-4 text-destructive">
+            Comments could not be loaded. Try refreshing.
+          </p>
+        </PreviewSection>
       ) : null}
       <WorkItemHistorySection preview={preview} />
       {lightboxSrc ? (

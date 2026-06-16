@@ -1378,6 +1378,7 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
             : `Demo value ${index + 1}`,
     })),
     webUrl: summary.webUrl,
+    commentsUnavailable: false,
     comments: [
       {
         id: 2,
@@ -1891,6 +1892,12 @@ function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
       webUrl: "https://dev.azure.com/contoso/Infrastructure/_git/terraform-aws/commit/babe1234567890abcdef1234567890abcdefbabe",
     },
   ];
+
+  // Mirror the backend contract: branch-scoped search needs a repository
+  // because it queries that repository's branch live instead of the cache.
+  if (input?.branch?.trim() && !input?.repositoryId) {
+    throw new Error("select a repository to search a specific branch");
+  }
 
   const query = input?.query?.trim().toLowerCase();
   const author = input?.author?.trim().toLowerCase();

@@ -210,6 +210,10 @@ export function CommitSearch({
       setValidationError("From date must be before or equal to To date.");
       return;
     }
+    if (branch.trim() && !repositoryId) {
+      setValidationError("Select a repository to search a specific branch.");
+      return;
+    }
     setValidationError(null);
     mutation.mutate({
       organizationId: selectedOrganizationId,

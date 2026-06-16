@@ -379,6 +379,7 @@ function makePreview(overrides: Partial<WorkItemPreview> = {}): WorkItemPreview 
     customFields: [],
     webUrl: null,
     comments: [],
+    commentsUnavailable: false,
     relations: [],
     ...overrides,
   };
