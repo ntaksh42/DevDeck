@@ -218,7 +218,7 @@ impl AdoClient {
                 Ok(resp) => {
                     let status = resp.status();
                     if status.is_success() {
-                        return Ok(resp.json().await?);
+                        return decode_json(resp).await;
                     }
                     if status == StatusCode::UNAUTHORIZED {
                         return Err(AdoError::Unauthorized);
@@ -370,7 +370,7 @@ impl AdoClient {
                 Ok(resp) => {
                     let status = resp.status();
                     if status.is_success() {
-                        return Ok(resp.json().await?);
+                        return decode_json(resp).await;
                     }
                     if status == StatusCode::UNAUTHORIZED {
                         return Err(AdoError::Unauthorized);
@@ -448,7 +448,7 @@ impl AdoClient {
                 Ok(resp) => {
                     let status = resp.status();
                     if status.is_success() {
-                        return Ok(resp.json().await?);
+                        return decode_json(resp).await;
                     }
                     if status == StatusCode::UNAUTHORIZED {
                         return Err(AdoError::Unauthorized);
@@ -600,7 +600,7 @@ impl AdoClient {
                 Ok(resp) => {
                     let status = resp.status();
                     if status.is_success() {
-                        return Ok(resp.json().await?);
+                        return decode_json(resp).await;
                     }
                     if status == StatusCode::UNAUTHORIZED {
                         return Err(AdoError::Unauthorized);
@@ -763,6 +763,17 @@ fn almsearch_base_url(base_url: &Url) -> Result<Url> {
         .ok_or_else(|| AdoError::Auth("missing organization in base URL".to_string()))?;
     Url::parse(&format!("https://almsearch.dev.azure.com/{organization}/"))
         .map_err(|e| AdoError::Auth(e.to_string()))
+}
+
+/// Reads a successful response body and deserializes it as JSON.
+///
+/// A failure to decode a 2xx body is a payload-shape problem, not a transport
+/// problem, so it surfaces as `AdoError::Parse` rather than `AdoError::Network`.
+/// Reading the body itself can still fail at the transport layer (e.g. a
+/// dropped connection mid-stream), which remains `AdoError::Network`.
+async fn decode_json<T: DeserializeOwned>(resp: reqwest::Response) -> Result<T> {
+    let bytes = resp.bytes().await?;
+    Ok(serde_json::from_slice(&bytes)?)
 }
 
 fn parse_retry_after(headers: &HeaderMap) -> Option<Duration> {
@@ -954,6 +965,27 @@ mod tests {
             AdoError::RateLimited(d) => assert_eq!(d, Duration::from_secs(30)),
             other => panic!("expected RateLimited, got {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn malformed_json_body_is_parse_error() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/_apis/connectionData"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("Content-Type", "application/json")
+                    .set_body_string("{ this is not json"),
+            )
+            .mount(&server)
+            .await;
+
+        let client = test_client(&server).await;
+        let err = client.connection_data().await.unwrap_err();
+        assert!(
+            matches!(err, AdoError::Parse(_)),
+            "expected Parse error, got {err:?}"
+        );
     }
 
     #[tokio::test]
