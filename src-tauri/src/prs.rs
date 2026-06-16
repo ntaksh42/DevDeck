@@ -612,7 +612,9 @@ fn mentions_user(content: &str, me: &str) -> bool {
     if me.is_empty() {
         return false;
     }
-    content.to_ascii_lowercase().contains(&me.to_ascii_lowercase())
+    content
+        .to_ascii_lowercase()
+        .contains(&me.to_ascii_lowercase())
 }
 
 fn truncate_snippet(value: &str, max: usize) -> String {

@@ -220,7 +220,9 @@ impl SyncRunner {
                 SyncScope::All | SyncScope::Hot | SyncScope::MyReviews
             ) {
                 let previous_reviews = if should_collect_pr_notifications {
-                    self.db.list_review_pull_requests(&org.id).unwrap_or_default()
+                    self.db
+                        .list_review_pull_requests(&org.id)
+                        .unwrap_or_default()
                 } else {
                     Vec::new()
                 };
@@ -229,8 +231,10 @@ impl SyncRunner {
                 } else {
                     emit_sync_updated(handle, &org.id, vec![SyncScope::MyReviews]);
                     if should_collect_pr_notifications {
-                        let current_reviews =
-                            self.db.list_review_pull_requests(&org.id).unwrap_or_default();
+                        let current_reviews = self
+                            .db
+                            .list_review_pull_requests(&org.id)
+                            .unwrap_or_default();
                         let mut items = pr_review_notification_items(
                             &previous_reviews,
                             &current_reviews,
