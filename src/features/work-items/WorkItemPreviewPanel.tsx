@@ -647,6 +647,9 @@ export function WorkItemPreviewPanel({
       await applyChangeSet(undo.changes);
     } catch (error) {
       setApplyError(commandErrorMessage(error));
+      // The undo write failed, so the apply still stands. Restore the undo
+      // affordance (same item only) so the user can retry.
+      if (selectedItem.id === undo.workItemId) setUndoState(undo);
     } finally {
       setApplying(false);
       restorePanelFocus(previousFocus);

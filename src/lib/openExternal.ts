@@ -1,4 +1,4 @@
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import { isTauriRuntime } from "@/lib/runtime";
 
 export async function openExternalUrl(url: string): Promise<void> {
@@ -13,4 +13,14 @@ export async function openExternalUrl(url: string): Promise<void> {
   }
 
   window.open(parsedUrl.toString(), "_blank", "noopener,noreferrer");
+}
+
+/** Opens a local file in its default OS handler (e.g. an HTML review result in
+ * the browser). Only works in the desktop runtime; the browser dev preview has
+ * no filesystem access. */
+export async function openLocalPath(path: string): Promise<void> {
+  if (!isTauriRuntime()) {
+    throw new Error("Opening local files is only available in the desktop app.");
+  }
+  await openPath(path);
 }
