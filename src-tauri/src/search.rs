@@ -34,7 +34,7 @@ pub struct SearchAllResult {
     pub totals: SearchAllTotals,
 }
 
-pub fn search_all(
+pub async fn search_all(
     db: &AppDatabase,
     work_items: &WorkItemService,
     pull_requests: &PullRequestService,
@@ -89,16 +89,20 @@ pub fn search_all(
             project_id: None,
             repository_id: None,
         })?);
-        commit_results.extend(commits.search(SearchCommitsInput {
-            organization_id: Some(org_id.clone()),
-            query: Some(query.clone()),
-            author: None,
-            branch: None,
-            from_date: None,
-            to_date: None,
-            project_id: None,
-            repository_id: None,
-        })?);
+        commit_results.extend(
+            commits
+                .search(SearchCommitsInput {
+                    organization_id: Some(org_id.clone()),
+                    query: Some(query.clone()),
+                    author: None,
+                    branch: None,
+                    from_date: None,
+                    to_date: None,
+                    project_id: None,
+                    repository_id: None,
+                })
+                .await?,
+        );
     }
     if org_ids.len() > 1 {
         work_item_results.sort_by(|a, b| b.changed_date.cmp(&a.changed_date));
@@ -230,8 +234,8 @@ mod tests {
         )
     }
 
-    #[test]
-    fn search_all_groups_results_by_kind() {
+    #[tokio::test]
+    async fn search_all_groups_results_by_kind() {
         let (_db_file, db, work_items, pull_requests, commits) = make_services();
 
         let result = search_all(
@@ -245,6 +249,7 @@ mod tests {
                 limit_per_kind: None,
             },
         )
+        .await
         .unwrap();
 
         assert_eq!(result.work_items.len(), 1);
@@ -263,8 +268,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn search_all_numeric_query_matches_work_item_and_pr_ids() {
+    #[tokio::test]
+    async fn search_all_numeric_query_matches_work_item_and_pr_ids() {
         let (_db_file, db, work_items, pull_requests, commits) = make_services();
 
         let result = search_all(
@@ -278,6 +283,7 @@ mod tests {
                 limit_per_kind: None,
             },
         )
+        .await
         .unwrap();
 
         assert_eq!(result.work_items.len(), 1);
@@ -287,8 +293,8 @@ mod tests {
         assert_eq!(result.pull_requests[0].pull_request_id, 421);
     }
 
-    #[test]
-    fn search_all_empty_query_returns_nothing() {
+    #[tokio::test]
+    async fn search_all_empty_query_returns_nothing() {
         let (_db_file, db, work_items, pull_requests, commits) = make_services();
 
         let result = search_all(
@@ -302,6 +308,7 @@ mod tests {
                 limit_per_kind: None,
             },
         )
+        .await
         .unwrap();
 
         assert!(result.work_items.is_empty());
@@ -309,8 +316,8 @@ mod tests {
         assert!(result.commits.is_empty());
     }
 
-    #[test]
-    fn search_all_without_organization_searches_every_org() {
+    #[tokio::test]
+    async fn search_all_without_organization_searches_every_org() {
         let (_db_file, db, work_items, pull_requests, commits) = make_services();
         db.upsert_organization(OrganizationDraft {
             id: "fabrikam".to_string(),
@@ -350,6 +357,7 @@ mod tests {
                 limit_per_kind: None,
             },
         )
+        .await
         .unwrap();
 
         let orgs: Vec<&str> = result
@@ -363,8 +371,8 @@ mod tests {
         assert_eq!(result.work_items[0].id, 900);
     }
 
-    #[test]
-    fn search_all_respects_limit_per_kind() {
+    #[tokio::test]
+    async fn search_all_respects_limit_per_kind() {
         let (_db_file, db, work_items, pull_requests, commits) = make_services();
 
         let extra: Vec<CachedWorkItem> = (100..110)
@@ -395,6 +403,7 @@ mod tests {
                 limit_per_kind: Some(3),
             },
         )
+        .await
         .unwrap();
 
         assert_eq!(result.work_items.len(), 3);

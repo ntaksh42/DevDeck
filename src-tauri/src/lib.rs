@@ -308,8 +308,7 @@ async fn search_all(input: SearchAllInput, state: State<'_, AppState>) -> Result
     let work_items = state.work_items.clone();
     let pull_requests = state.pull_requests.clone();
     let commits = state.commits.clone();
-    run_blocking(move || search::search_all(&db, &work_items, &pull_requests, &commits, input))
-        .await
+    search::search_all(&db, &work_items, &pull_requests, &commits, input).await
 }
 
 #[tauri::command]
@@ -527,7 +526,7 @@ async fn search_commits(
     state: State<'_, AppState>,
 ) -> Result<Vec<CommitSummary>> {
     let service = state.commits.clone();
-    run_blocking(move || service.search(input)).await
+    service.search(input).await
 }
 
 #[tauri::command]

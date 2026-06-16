@@ -118,12 +118,11 @@ impl CommitService {
         Self { db, secrets }
     }
 
-    pub fn search(&self, input: SearchCommitsInput) -> Result<Vec<CommitSummary>> {
+    pub async fn search(&self, input: SearchCommitsInput) -> Result<Vec<CommitSummary>> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let query = input.query.unwrap_or_default().trim().to_ascii_lowercase();
         let author = normalize_optional(input.author);
-        // branch はキャッシュに未対応(sync はデフォルトブランチのみ取得)。
-        let _ = input.branch;
+        let branch = normalize_optional(input.branch);
         let from_date = normalize_date(input.from_date.as_deref(), false)?;
         let to_date = normalize_date(input.to_date.as_deref(), true)?;
         if let (Some(from_date), Some(to_date)) = (&from_date, &to_date) {
@@ -139,7 +138,25 @@ impl CommitService {
         let from_rfc = from_date.as_ref().map(DateTime::to_rfc3339);
         let to_rfc = to_date.as_ref().map(DateTime::to_rfc3339);
 
-        let cached = if query.is_empty() {
+        // Branch-scoped search bypasses the cache: sync only fetches each
+        // repository's default branch, so non-default branches never land in
+        // SQLite. Query Azure DevOps live for the requested branch instead.
+        let is_branch_search = branch.is_some();
+        let cached = if let Some(branch) = branch {
+            let Some(repository_id) = repository_filter.as_deref() else {
+                return Err(AppError::InvalidInput(
+                    "select a repository to search a specific branch".to_string(),
+                ));
+            };
+            self.fetch_branch_commits(
+                &organization,
+                repository_id,
+                &branch,
+                from_rfc.as_deref(),
+                to_rfc.as_deref(),
+            )
+            .await?
+        } else if query.is_empty() {
             // SQL 側で日付・リポジトリ絞り込み済み
             self.db.search_commits(
                 &organization.id,
@@ -169,7 +186,13 @@ impl CommitService {
         let mut results: Vec<CommitSummary> = cached
             .into_iter()
             .filter(|c| {
-                project_filter.as_deref().is_none_or(|p| c.project_id == p)
+                // FTS already applied the text query for the cached path; the
+                // live branch path returns unfiltered commits, so match the
+                // query against the comment here.
+                (!is_branch_search
+                    || query.is_empty()
+                    || c.comment.to_ascii_lowercase().contains(&query))
+                    && project_filter.as_deref().is_none_or(|p| c.project_id == p)
                     && author.as_deref().is_none_or(|a| {
                         let al = a.to_ascii_lowercase();
                         c.author_name
@@ -196,6 +219,56 @@ impl CommitService {
             "commit search completed"
         );
         Ok(results)
+    }
+
+    /// Fetches commits for a specific branch directly from Azure DevOps,
+    /// converting them into the same cache shape the offline path produces so
+    /// downstream filtering and ranking stay identical.
+    async fn fetch_branch_commits(
+        &self,
+        organization: &Organization,
+        repository_id: &str,
+        branch: &str,
+        from_date: Option<&str>,
+        to_date: Option<&str>,
+    ) -> Result<Vec<CachedCommit>> {
+        let repository = self
+            .db
+            .list_commit_repositories(&organization.id)?
+            .into_iter()
+            .find(|r| r.repository_id == repository_id)
+            .ok_or_else(|| {
+                AppError::InvalidInput("unknown repository for this organization".to_string())
+            })?;
+
+        let client = client_for_organization(organization, &self.secrets)?;
+        let commits = client
+            .list_commits(
+                &repository.project_id,
+                &repository.repository_id,
+                CommitSearchCriteria {
+                    author: None,
+                    branch: Some(branch.to_string()),
+                    from_date: from_date.map(str::to_string),
+                    to_date: to_date.map(str::to_string),
+                    top: Some(100),
+                },
+            )
+            .await?;
+
+        Ok(commits
+            .into_iter()
+            .map(|c| {
+                commit_to_cached(
+                    organization,
+                    &repository.project_id,
+                    &repository.project_name,
+                    &repository.repository_id,
+                    &repository.repository_name,
+                    c,
+                )
+            })
+            .collect())
     }
 
     pub fn list_repositories(

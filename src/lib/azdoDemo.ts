@@ -1892,6 +1892,12 @@ function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
     },
   ];
 
+  // Mirror the backend contract: branch-scoped search needs a repository
+  // because it queries that repository's branch live instead of the cache.
+  if (input?.branch?.trim() && !input?.repositoryId) {
+    throw new Error("select a repository to search a specific branch");
+  }
+
   const query = input?.query?.trim().toLowerCase();
   const author = input?.author?.trim().toLowerCase();
   const fromDate = input?.fromDate ? new Date(`${input.fromDate}T00:00:00Z`) : null;
