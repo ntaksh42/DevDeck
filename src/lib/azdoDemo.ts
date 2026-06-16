@@ -332,7 +332,7 @@ function demoPipelineDefinitions() {
 function demoPipelineRuns() {
   return [
     {
-      organizationId: "demo-org",
+      organizationId: "contoso",
       projectId: "demo-project",
       projectName: "Demo Project",
       buildId: 1001,
@@ -350,7 +350,7 @@ function demoPipelineRuns() {
       webUrl: "https://dev.azure.com/demo/demo/_build/results?buildId=1001",
     },
     {
-      organizationId: "demo-org",
+      organizationId: "contoso",
       projectId: "demo-project",
       projectName: "Demo Project",
       buildId: 1002,
@@ -368,7 +368,7 @@ function demoPipelineRuns() {
       webUrl: "https://dev.azure.com/demo/demo/_build/results?buildId=1002",
     },
     {
-      organizationId: "demo-org",
+      organizationId: "contoso",
       projectId: "demo-project",
       projectName: "Demo Project",
       buildId: 1003,

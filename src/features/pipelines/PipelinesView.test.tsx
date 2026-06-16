@@ -1,15 +1,17 @@
-import { describe, expect, it } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { afterEach, describe, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Organization } from "@/lib/azdoCommands";
 import { PipelinesView } from "./PipelinesView";
 
+// The demo subscriptions seeded by loadPipelineSubscriptions() live under the
+// "contoso" org, matching the browser demo data.
 const organizations: Organization[] = [
   {
-    id: "demo-org",
-    name: "demo-org",
-    displayName: "Demo Org",
-    baseUrl: "https://dev.azure.com/demo-org",
+    id: "contoso",
+    name: "contoso",
+    displayName: "Contoso",
+    baseUrl: "https://dev.azure.com/contoso",
     authProvider: "pat",
     credentialKey: "k",
     authenticatedUserId: "user-1",
@@ -19,6 +21,10 @@ const organizations: Organization[] = [
     updatedAt: "2026-06-13T00:00:00Z",
   },
 ];
+
+afterEach(() => {
+  window.localStorage.clear();
+});
 
 function renderView() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -31,18 +37,18 @@ function renderView() {
 
 describe("PipelinesView", () => {
   it(
-    "lists runs for the auto-selected project with status badges",
+    "shows seeded watched pipelines and reveals run history on expand",
     async () => {
       renderView();
-      // The view auto-selects the first demo project, then loads its runs
-      // (two sequential demo-delayed calls), so allow a generous timeout.
-      await screen.findByText(/20260613\.4/, undefined, { timeout: 8000 });
-      // Scope badge assertions to the grid; "Failed"/"Succeeded" also appear
-      // as result-filter dropdown options in the control bar.
-      const grid = screen.getByRole("grid", { name: "Pipeline runs" });
-      expect(within(grid).getByText("Failed")).toBeTruthy();
-      expect(within(grid).getByText("Succeeded")).toBeTruthy();
-      expect(within(grid).getByText("Running")).toBeTruthy();
+      // The browser demo seeds CI and Nightly as watched pipelines.
+      await screen.findByText("Watched pipelines", undefined, { timeout: 8000 });
+      const nightlyRow = await screen.findByRole("button", {
+        name: /Nightly/,
+        expanded: false,
+      });
+      fireEvent.click(nightlyRow);
+      // Expanding loads the pipeline's run history (demo-delayed call).
+      await screen.findByText(/20260613\.5/, undefined, { timeout: 8000 });
     },
     15000,
   );

@@ -166,7 +166,7 @@ export function PipelineRunDetailPanel({
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: ["pipelineRuns", organizationId, projectId],
+        queryKey: ["pipelineSubscriptionHistory", organizationId, projectId],
       });
     },
   });
@@ -178,7 +178,7 @@ export function PipelineRunDetailPanel({
         queryKey: ["pipelineRun", organizationId, projectId, buildId],
       });
       void queryClient.invalidateQueries({
-        queryKey: ["pipelineRuns", organizationId, projectId],
+        queryKey: ["pipelineSubscriptionHistory", organizationId, projectId],
       });
     },
   });
