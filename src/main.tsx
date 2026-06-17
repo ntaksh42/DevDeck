@@ -2,6 +2,9 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
+// Self-hosted variable font (bundled by Vite) so the desktop app renders the
+// brand typeface offline without a webfont CDN.
+import "@fontsource-variable/hanken-grotesk";
 import "./index.css";
 import { applyTheme, loadThemePreference } from "./lib/theme";
 

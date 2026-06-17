@@ -1,0 +1,16 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="deck" x1="6" y1="4" x2="26" y2="28" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7C5CF5"/>
+      <stop offset="1" stop-color="#5B36EC"/>
+    </linearGradient>
+  </defs>
+  <!-- Back card of the deck -->
+  <rect x="9" y="4" width="17" height="22" rx="3.5" fill="#5B36EC" opacity="0.28"/>
+  <!-- Front card of the deck -->
+  <rect x="6" y="6" width="17" height="22" rx="3.5" fill="url(#deck)"/>
+  <!-- Stacked rows hinting at a dense data deck -->
+  <rect x="9.5" y="10.5" width="10" height="2" rx="1" fill="#fff" opacity="0.9"/>
+  <rect x="9.5" y="15" width="10" height="2" rx="1" fill="#fff" opacity="0.65"/>
+  <rect x="9.5" y="19.5" width="7" height="2" rx="1" fill="#fff" opacity="0.45"/>
+</svg>
