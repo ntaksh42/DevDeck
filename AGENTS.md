@@ -162,6 +162,22 @@ shortcuts, make them discoverable in the UI, avoid stealing focus during normal
 row navigation, and preserve the expected tab order for grids, preview panes,
 filters, and comment editors.
 
+Keyboard operability is a hard requirement, not a nice-to-have: every
+interactive element must have a complete keyboard path, and you should always
+build one when adding UI. A feature that can only be driven by the mouse is
+incomplete. Concretely, for any new popover, menu, or dialog:
+
+- Open it focused on a sensible first control, and let the user move between all
+  controls and activate them with the keyboard alone (arrow keys to move,
+  Enter/Space to confirm, Escape to cancel).
+- Contain navigation keys within the popup so the underlying grid does not also
+  react (e.g. stop arrow/Enter propagation).
+- On close — whether confirmed, cancelled, or dismissed — return focus to the
+  element that owned it (typically the originating grid) so keyboard navigation
+  resumes without being stranded on the preview pane or `<body>`.
+
+Verify new keyboard flows end to end, not just that the click path works.
+
 Prefer dense, work-focused screens. Avoid large unused panels and decorative
 spacing in operational views; use available height for grids, previews,
 comments, and relevant metadata. Long lists should be virtualized with the

@@ -20,12 +20,24 @@ export function SnoozeMenu({
   const [customValue, setCustomValue] = useState("");
 
   // Focus the first preset on open so the whole flow (Z → arrows → Enter) is
-  // keyboard-driven without touching the mouse.
+  // keyboard-driven without touching the mouse. On unmount, return focus to the
+  // grid container so keyboard navigation resumes from the grid (and never gets
+  // stranded on the preview pane). The grid is looked up fresh at restore time
+  // because a re-render — e.g. after confirming a snooze removes the row — can
+  // replace its DOM node. Deferred a frame so it wins over the grid's own
+  // post-data-change focus restore.
   useEffect(() => {
     const first = menuRef.current?.querySelector<HTMLElement>(
       '[data-snooze-item="true"]',
     );
     first?.focus();
+    return () => {
+      window.setTimeout(() => {
+        document
+          .querySelector<HTMLElement>('[data-primary-grid="true"]')
+          ?.focus();
+      }, 0);
+    };
   }, []);
 
   useEffect(() => {
