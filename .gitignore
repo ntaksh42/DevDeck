@@ -34,9 +34,12 @@ test-results/
 scripts/*
 !scripts/release.ps1
 .claude/*
+!.claude/hooks/
+!.claude/agents/
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/release-azdo-dashboard/
+!.claude/skills/add-ipc-command/
 entity_id
 local_id
 origin_id
