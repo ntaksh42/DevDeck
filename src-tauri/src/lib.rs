@@ -15,6 +15,7 @@ mod prs;
 mod search;
 mod secrets;
 mod settings;
+mod snooze;
 mod sync;
 mod work_items;
 
@@ -49,6 +50,9 @@ use settings::{
     normalize_app_settings, GetReviewResultPreviewInput, ReviewResultPreview, SettingsService,
     UpdateAppSettingsInput,
 };
+use snooze::{
+    ListSnoozedItemsInput, SnoozeItemInput, SnoozeService, SnoozedItemSummary, UnsnoozeItemInput,
+};
 use sync::{SyncRunner, SyncScope, SyncTrigger};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
@@ -77,6 +81,7 @@ struct AppState {
     pipelines: PipelineService,
     code_search: CodeSearchService,
     settings: SettingsService,
+    snooze: SnoozeService,
     sync_trigger: mpsc::Sender<SyncTrigger>,
 }
 
@@ -139,6 +144,30 @@ async fn get_review_result_preview(
 async fn list_sync_states(state: State<'_, AppState>) -> Result<Vec<SyncState>> {
     let db = state.db.clone();
     run_blocking(move || db.list_sync_states()).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn snooze_item(input: SnoozeItemInput, state: State<'_, AppState>) -> Result<()> {
+    let service = state.snooze.clone();
+    run_blocking(move || service.snooze_item(input)).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn unsnooze_item(input: UnsnoozeItemInput, state: State<'_, AppState>) -> Result<()> {
+    let service = state.snooze.clone();
+    run_blocking(move || service.unsnooze_item(input)).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn list_snoozed_items(
+    input: ListSnoozedItemsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<SnoozedItemSummary>> {
+    let service = state.snooze.clone();
+    run_blocking(move || service.list_snoozed_items(input)).await
 }
 
 fn ensure_write_enabled(state: &State<'_, AppState>) -> Result<()> {
@@ -715,6 +744,7 @@ pub fn run() {
                 pipelines: PipelineService::new(db.clone(), SecretStore),
                 code_search: CodeSearchService::new(db.clone(), SecretStore),
                 settings: SettingsService::new(db.clone()),
+                snooze: SnoozeService::new(db.clone()),
                 sync_trigger: sync_tx,
             });
             tauri::async_runtime::spawn(
@@ -728,6 +758,9 @@ pub fn run() {
             update_app_settings,
             get_review_result_preview,
             list_sync_states,
+            snooze_item,
+            unsnooze_item,
+            list_snoozed_items,
             delete_organization,
             add_pat_organization,
             add_azure_cli_organization,

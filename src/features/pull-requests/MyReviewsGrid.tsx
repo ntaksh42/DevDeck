@@ -14,10 +14,13 @@ import {
   listMyReviewPullRequests,
   commandErrorMessage,
   prLocator,
+  snoozeItem,
   submitPullRequestVote,
   type Organization,
   type ReviewPullRequestSummary,
 } from '@/lib/azdoCommands';
+import { SnoozeMenu } from '@/components/SnoozeMenu';
+import { SnoozedItemsPanel } from '@/components/SnoozedItemsPanel';
 import {
 
   matchesAllSearchTerms,
@@ -528,6 +531,21 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     },
   });
 
+  const [showSnoozed, setShowSnoozed] = useState(false);
+  const [snoozeAnchorRect, setSnoozeAnchorRect] = useState<DOMRect | null>(null);
+  // Captured when the snooze menu opens so the action targets the row the user
+  // had selected, even if selection changes while the menu is open.
+  const snoozeTargetRef = useRef<ReviewPullRequestSummary | null>(null);
+  const snoozeMutation = useMutation({
+    mutationFn: snoozeItem,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["myReviews"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["snoozedItems", "pull_request"],
+      });
+    },
+  });
+
   const [textFilter, setTextFilter] = useState(initialViewState.textFilter);
   const [collapsedSections, setCollapsedSections] = useState<Set<ReviewSection>>(
     initialViewState.collapsedSections,
@@ -947,6 +965,18 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
       }
       return;
     }
+    if (e.key === "z" || e.key === "Z") {
+      e.preventDefault();
+      const pr = sortedPrs[selectedIndex];
+      if (pr) {
+        snoozeTargetRef.current = pr;
+        const rowEl = rowRefs.current[selectedIndex];
+        setSnoozeAnchorRect(
+          (rowEl ?? containerRef.current)?.getBoundingClientRect() ?? null,
+        );
+      }
+      return;
+    }
     if (e.key === "c" || e.key === "C") {
       e.preventDefault();
       const pr = sortedPrs[selectedIndex];
@@ -1164,6 +1194,15 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
             maximized ? "hidden" : ""
           }`}
         >
+          {showSnoozed ? (
+            <SnoozedItemsPanel
+              organizationId={organizationId}
+              itemType="pull_request"
+              onUnsnoozed={() =>
+                queryClient.invalidateQueries({ queryKey: ["myReviews"] })
+              }
+            />
+          ) : (
           <div ref={gridScrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
             <div className="min-w-[720px]">
               {/* Column headers */}
@@ -1268,6 +1307,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
               )}
             </div>
           </div>
+          )}
 
           {/* Status bar */}
           <div className="flex items-center justify-between border-t border-border px-2 py-1 text-xs text-muted-foreground">
@@ -1291,6 +1331,19 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
                 }`}
               >
                 {showDone ? "Back to inbox" : `Done (${archivedKeys.size})`}
+              </button>
+              <button
+                type="button"
+                aria-pressed={showSnoozed}
+                title="Toggle snoozed view (Z snoozes the selected row)"
+                onClick={() => setShowSnoozed((value) => !value)}
+                className={`rounded border px-2 py-0.5 text-xs ${
+                  showSnoozed
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-card hover:bg-secondary"
+                }`}
+              >
+                {showSnoozed ? "Back to inbox" : "Snoozed"}
               </button>
               {isFiltered ? (
                 <>
@@ -1355,6 +1408,26 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
           onToggle={toggleColumnVisibility}
           onReset={resetColumnVisibility}
           onClose={() => setColumnMenuRect(null)}
+        />
+      ) : null}
+      {snoozeAnchorRect ? (
+        <SnoozeMenu
+          anchorRect={snoozeAnchorRect}
+          onSnooze={(snoozeUntil) => {
+            const target = snoozeTargetRef.current;
+            if (target) {
+              snoozeMutation.mutate({
+                organizationId,
+                itemType: "pull_request",
+                itemKey: `${target.repositoryId}:${target.pullRequestId}`,
+                snoozeUntil,
+              });
+              setCopyToast("Snoozed");
+              setTimeout(() => setCopyToast(null), 1500);
+            }
+            setSnoozeAnchorRect(null);
+          }}
+          onClose={() => setSnoozeAnchorRect(null)}
         />
       ) : null}
     </div>

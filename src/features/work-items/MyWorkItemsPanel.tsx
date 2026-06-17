@@ -99,6 +99,7 @@ export function MyWorkItemsPanel({ organizations }: { organizations: Organizatio
         searched={query.isSuccess || query.isFetching}
         autoFocus
         triageScope={`myWorkItems:${selectedOrganizationId}`}
+        snoozeOrganizationId={selectedOrganizationId}
       />
     </div>
   );
