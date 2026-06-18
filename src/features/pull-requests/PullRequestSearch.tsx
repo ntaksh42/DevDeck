@@ -10,7 +10,7 @@ import {
   useState,
 } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Filter, Loader2, Search } from 'lucide-react';
+import { Filter, Layers, Loader2, Search } from 'lucide-react';
 import {
   searchPullRequests,
   listCommitRepositories,
@@ -20,6 +20,12 @@ import {
   type PullRequestSummary,
   type ReviewPullRequestSummary,
 } from '@/lib/azdoCommands';
+import {
+  detectPrChains,
+  orderByChain,
+  type PrChainNode,
+  type PrChainResult,
+} from '@/lib/prChains';
 import {
   clamp,
   storedNumbers,
@@ -60,8 +66,17 @@ const PR_SEARCH_COLUMN_MIN_WIDTHS = [52, 64, 160, 104, 86, 58, 100];
 const PR_SEARCH_COLUMN_MAX_WIDTHS = [120, 140, 720, 360, 280, 120, 360];
 const PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY = 'azdodeck:layout:prSearchGridColumnWidths:v2';
 const PR_SEARCH_QUERY_STORAGE_KEY = 'azdodeck:view:prSearchQuery';
+const PR_SEARCH_GROUP_BY_CHAIN_STORAGE_KEY = 'azdodeck:view:prSearchGroupByChain';
 const PR_SEARCH_ROW_HEIGHT = 29;
 const PR_SEARCH_OVERSCAN = 8;
+// Indentation per chain depth level, in pixels, applied to the title cell.
+const PR_CHAIN_INDENT_PX = 16;
+
+// Stable identity for a PR within a result set; chains are scoped per repo so
+// the repository id is part of the key.
+function prKey(pr: PullRequestSummary): string {
+  return `${pr.repositoryId}:${pr.pullRequestId}`;
+}
 type PrSearchFilterableColumn = "status" | "repository" | "createdBy" | "branch";
 
 const PR_SEARCH_FILTERABLE_COLUMNS: Record<PrSearchFilterableColumn, (pr: PullRequestSummary) => string> = {
@@ -321,7 +336,12 @@ function loadPrSearchVisibleColumns(): PrSearchColumnKey[] {
 }
 
 // Cells stay direct grid items (keyed Fragment) so the column template lines up.
-function renderPrSearchCell(key: PrSearchColumnKey, pr: PullRequestSummary): ReactNode {
+function renderPrSearchCell(
+  key: PrSearchColumnKey,
+  pr: PullRequestSummary,
+  chain: PrChainNode | undefined,
+  indent: boolean,
+): ReactNode {
   switch (key) {
     case "pullRequestId":
       return (
@@ -342,12 +362,31 @@ function renderPrSearchCell(key: PrSearchColumnKey, pr: PullRequestSummary): Rea
         </span>
       );
     }
-    case "title":
+    case "title": {
+      const inChain = chain?.inChain ?? false;
+      const indentPx = indent && chain ? chain.depth * PR_CHAIN_INDENT_PX : 0;
+      const chainTitle =
+        chain && inChain
+          ? chain.parentKey
+            ? "Stacked PR: depends on a parent PR (merge the parent first)"
+            : "Stacked PR: has dependent child PRs (merge this first)"
+          : undefined;
       return (
-        <span className="truncate font-medium text-foreground" title={pr.title}>
-          {pr.title}
-        </span>
+        <div className="flex min-w-0 items-center gap-1.5" style={{ paddingLeft: indentPx }}>
+          {inChain ? (
+            <span title={chainTitle} className="flex shrink-0 items-center">
+              <Layers
+                className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400"
+                aria-label={chainTitle}
+              />
+            </span>
+          ) : null}
+          <span className="truncate font-medium text-foreground" title={pr.title}>
+            {pr.title}
+          </span>
+        </div>
       );
+    }
     case "repository":
       return (
         <span className="truncate text-xs text-muted-foreground" title={`${pr.projectName} / ${pr.repositoryName}`}>
@@ -496,6 +535,53 @@ function PullRequestResults({
     });
   }, [columnFilters, results]);
 
+  const [groupByChain, setGroupByChain] = useState(
+    () => window.localStorage.getItem(PR_SEARCH_GROUP_BY_CHAIN_STORAGE_KEY) === "1",
+  );
+  useEffect(() => {
+    window.localStorage.setItem(PR_SEARCH_GROUP_BY_CHAIN_STORAGE_KEY, groupByChain ? "1" : "0");
+  }, [groupByChain]);
+
+  // Chain detection runs over the filtered set so icons/grouping reflect what is
+  // actually on screen. Pure + defensive against cycles (see prChains.ts).
+  const chainResult: PrChainResult = useMemo(
+    () =>
+      detectPrChains(
+        filteredResults.map((pr) => ({
+          key: prKey(pr),
+          repositoryId: pr.repositoryId,
+          sourceRefName: pr.sourceRefName,
+          targetRefName: pr.targetRefName,
+        })),
+      ),
+    [filteredResults],
+  );
+
+  const chainCount = useMemo(() => {
+    const roots = new Set<string>();
+    for (const node of chainResult.nodes.values()) {
+      if (node.inChain && node.chainId) roots.add(node.chainId);
+    }
+    return roots.size;
+  }, [chainResult]);
+
+  // When grouping is on, reorder rows so chain members sit together; otherwise
+  // keep the search order untouched.
+  const displayedResults = useMemo(() => {
+    if (!groupByChain || chainCount === 0) return filteredResults;
+    const byKey = new Map(filteredResults.map((pr) => [prKey(pr), pr]));
+    const order = orderByChain(
+      filteredResults.map((pr) => ({
+        key: prKey(pr),
+        repositoryId: pr.repositoryId,
+        sourceRefName: pr.sourceRefName,
+        targetRefName: pr.targetRefName,
+      })),
+      chainResult,
+    );
+    return order.map((key) => byKey.get(key)!).filter(Boolean);
+  }, [groupByChain, chainCount, filteredResults, chainResult]);
+
   const columnFilterCount = activeColumnFilterCount(columnFilters);
   const hasActiveColumnFilters = columnFilterCount > 0;
   const activeFilterCount = Math.max(0, activeExternalFilterCount) + columnFilterCount;
@@ -602,7 +688,7 @@ function PullRequestResults({
     if (e.ctrlKey || e.metaKey || e.altKey) {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key === "Enter") {
         e.preventDefault();
-        const pr = filteredResults[selectedIndex];
+        const pr = displayedResults[selectedIndex];
         if (pr?.webUrl) openExternalUrl(pr.webUrl);
       }
       return;
@@ -633,12 +719,12 @@ function PullRequestResults({
     else if (e.key === "Enter" || e.key === "ArrowRight") { e.preventDefault(); focusPrimaryPreview(); }
     else if (e.key === "o" || e.key === "O") {
       e.preventDefault();
-      const pr = filteredResults[selectedIndex];
+      const pr = displayedResults[selectedIndex];
       if (pr?.webUrl) openExternalUrl(pr.webUrl);
     }
     else if (e.key === "c" || e.key === "C") {
       e.preventDefault();
-      const pr = filteredResults[selectedIndex];
+      const pr = displayedResults[selectedIndex];
       if (pr?.webUrl) {
         void navigator.clipboard.writeText(pr.webUrl).then(() => {
           setCopyToast("URL copied");
@@ -656,17 +742,49 @@ function PullRequestResults({
     Math.max(gridViewport.height, PR_SEARCH_ROW_HEIGHT) / PR_SEARCH_ROW_HEIGHT,
   );
   const lastVirtualRow = Math.min(
-    filteredResults.length,
+    displayedResults.length,
     firstVirtualRow + visibleRowCount + PR_SEARCH_OVERSCAN * 2,
   );
-  const virtualRows = filteredResults.slice(firstVirtualRow, lastVirtualRow);
+  const virtualRows = displayedResults.slice(firstVirtualRow, lastVirtualRow);
   const virtualTopPadding = firstVirtualRow * PR_SEARCH_ROW_HEIGHT;
   const virtualBottomPadding =
-    Math.max(0, filteredResults.length - lastVirtualRow) * PR_SEARCH_ROW_HEIGHT;
+    Math.max(0, displayedResults.length - lastVirtualRow) * PR_SEARCH_ROW_HEIGHT;
 
-  const selectedPr = filteredResults[selectedIndex]
-    ? toReviewSummary(filteredResults[selectedIndex])
-    : null;
+  const selectedResult = displayedResults[selectedIndex] ?? null;
+  const selectedPr = selectedResult ? toReviewSummary(selectedResult) : null;
+
+  // Parent/child context + suggested merge order for the selected PR, shown as a
+  // compact banner so reviewers don't merge a stacked PR out of order.
+  const selectedChain = selectedResult
+    ? chainResult.nodes.get(prKey(selectedResult))
+    : undefined;
+  const chainContext = useMemo(() => {
+    if (!selectedResult || !selectedChain || !selectedChain.inChain) return null;
+    const byKey = new Map(displayedResults.map((pr) => [prKey(pr), pr]));
+    const parent = selectedChain.parentKey ? byKey.get(selectedChain.parentKey) : null;
+    const children = selectedChain.childKeys
+      .map((key) => byKey.get(key))
+      .filter((pr): pr is PullRequestSummary => Boolean(pr));
+    // Walk to the root to build the full parent->child merge order of the chain.
+    const rootKey = selectedChain.chainId;
+    const orderKeys = rootKey
+      ? orderByChain(
+          displayedResults
+            .filter((pr) => chainResult.nodes.get(prKey(pr))?.chainId === rootKey)
+            .map((pr) => ({
+              key: prKey(pr),
+              repositoryId: pr.repositoryId,
+              sourceRefName: pr.sourceRefName,
+              targetRefName: pr.targetRefName,
+            })),
+          chainResult,
+        )
+      : [];
+    const mergeOrder = orderKeys
+      .map((key) => byKey.get(key))
+      .filter((pr): pr is PullRequestSummary => Boolean(pr));
+    return { parent, children, mergeOrder };
+  }, [selectedResult, selectedChain, displayedResults, chainResult]);
 
   return (
     <div
@@ -700,6 +818,28 @@ function PullRequestResults({
           ) : null}
           <button
             type="button"
+            aria-pressed={groupByChain}
+            disabled={chainCount === 0}
+            title={
+              chainCount === 0
+                ? "No stacked PR chains in the current results"
+                : "Group dependent (stacked) PRs together"
+            }
+            onClick={() => {
+              setGroupByChain((value) => !value);
+              setSelectedIndex(0);
+            }}
+            className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs disabled:cursor-not-allowed disabled:opacity-50 ${
+              groupByChain
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border bg-card hover:bg-secondary"
+            }`}
+          >
+            <Layers className="h-3 w-3" aria-hidden="true" />
+            Group chains{chainCount > 0 ? ` (${chainCount})` : ""}
+          </button>
+          <button
+            type="button"
             onClick={(event) => setColumnMenuRect(event.currentTarget.getBoundingClientRect())}
             className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary"
           >
@@ -707,6 +847,36 @@ function PullRequestResults({
           </button>
         </span>
       </div>
+      {chainContext ? (
+        <div className="flex flex-col gap-0.5 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+          <span className="flex items-center gap-1.5 font-medium">
+            <Layers className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            Stacked PR chain
+          </span>
+          {chainContext.parent ? (
+            <span>
+              Depends on parent <span className="font-mono">#{chainContext.parent.pullRequestId}</span>{" "}
+              {chainContext.parent.title} — merge it first.
+            </span>
+          ) : (
+            <span>Root of the chain — merge this before its dependents.</span>
+          )}
+          {chainContext.children.length > 0 ? (
+            <span>
+              {chainContext.children.length} dependent PR
+              {chainContext.children.length === 1 ? "" : "s"} target this branch.
+            </span>
+          ) : null}
+          {chainContext.mergeOrder.length > 1 ? (
+            <span className="truncate">
+              Suggested merge order:{" "}
+              {chainContext.mergeOrder
+                .map((pr) => `#${pr.pullRequestId}`)
+                .join(" → ")}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       {!searched && !loading ? (
         <div className="px-3 py-6 text-center text-sm text-muted-foreground">
           Run a search to load pull requests.
@@ -790,6 +960,8 @@ function PullRequestResults({
                     key={`${pr.repositoryId}:${pr.pullRequestId}`}
                     ref={(el) => { rowRefs.current[index] = el; }}
                     pr={pr}
+                    chain={chainResult.nodes.get(prKey(pr))}
+                    indent={groupByChain}
                     selected={index === selectedIndex}
                     columnTemplate={columnTemplate}
                     visibleColumns={visibleColumns}
@@ -963,12 +1135,14 @@ const PrSearchRow = forwardRef<
   HTMLDivElement,
   {
     pr: PullRequestSummary;
+    chain: PrChainNode | undefined;
+    indent: boolean;
     selected: boolean;
     columnTemplate: string;
     visibleColumns: PrSearchColumnKey[];
     onSelect: () => void;
   }
->(({ pr, selected, columnTemplate, visibleColumns, onSelect }, ref) => {
+>(({ pr, chain, indent, selected, columnTemplate, visibleColumns, onSelect }, ref) => {
   return (
     <div
       ref={ref}
@@ -990,7 +1164,7 @@ const PrSearchRow = forwardRef<
       style={{ gridTemplateColumns: columnTemplate }}
     >
       {visibleColumns.map((key) => (
-        <Fragment key={key}>{renderPrSearchCell(key, pr)}</Fragment>
+        <Fragment key={key}>{renderPrSearchCell(key, pr, chain, indent)}</Fragment>
       ))}
     </div>
   );

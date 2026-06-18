@@ -1063,6 +1063,23 @@ function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[]
       webUrl: "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/103",
     },
     {
+      // Stacked on top of PR 103: targets feature/oauth-pkce, so 103 must merge
+      // first. Exercises the stacked-PR chain detection and grouping.
+      organizationId: "contoso",
+      projectId: "platform",
+      projectName: "Platform",
+      repositoryId: "api-gateway",
+      repositoryName: "api-gateway",
+      pullRequestId: 104,
+      title: "Add token refresh on top of OAuth 2.0 PKCE",
+      status: "active",
+      createdBy: "Dave Kim",
+      creationDate: ago(4 * hr),
+      sourceRefName: "feature/oauth-refresh",
+      targetRefName: "feature/oauth-pkce",
+      webUrl: "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/104",
+    },
+    {
       organizationId: "contoso",
       projectId: "platform",
       projectName: "Platform",
