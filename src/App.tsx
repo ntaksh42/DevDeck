@@ -107,8 +107,10 @@ const PullRequestSearch = lazy(() =>
 import {
   showWorkItemNotificationEvent,
   showPullRequestNotificationEvent,
+  showSyncFailedNotificationEvent,
   type WorkItemNotificationEvent,
   type PullRequestNotificationEvent,
+  type SyncFailedEvent,
 } from "@/lib/desktopNotifications";
 
 type View =
@@ -257,6 +259,7 @@ function AppShell() {
   // replayed once settings are available so the first events are not dropped.
   const pendingWorkItemEventsRef = useRef<WorkItemNotificationEvent[]>([]);
   const pendingPullRequestEventsRef = useRef<PullRequestNotificationEvent[]>([]);
+  const pendingSyncFailedEventsRef = useRef<SyncFailedEvent[]>([]);
   const startupHotSyncStartedRef = useRef(false);
   const lastHotSyncRequestedAtRef = useRef(0);
   const navTypeaheadRef = useRef<{ value: string; timer: number | null }>({
@@ -890,13 +893,18 @@ function AppShell() {
     // Replay events that arrived before settings were ready.
     const workItemEvents = pendingWorkItemEventsRef.current;
     const pullRequestEvents = pendingPullRequestEventsRef.current;
+    const syncFailedEvents = pendingSyncFailedEventsRef.current;
     pendingWorkItemEventsRef.current = [];
     pendingPullRequestEventsRef.current = [];
+    pendingSyncFailedEventsRef.current = [];
     for (const event of workItemEvents) {
       void showWorkItemNotificationEvent(event, settings);
     }
     for (const event of pullRequestEvents) {
       void showPullRequestNotificationEvent(event, settings);
+    }
+    for (const event of syncFailedEvents) {
+      void showSyncFailedNotificationEvent(event, settings);
     }
   }, [appSettingsQuery.data]);
 
@@ -955,6 +963,20 @@ function AppShell() {
           return;
         }
         void showPullRequestNotificationEvent(payload, settings);
+      },
+    );
+  }, []);
+
+  useEffect(() => {
+    return subscribeTauriEvent<SyncFailedEvent>(
+      "notifications:sync-failed",
+      (payload) => {
+        const settings = appSettingsRef.current;
+        if (!settings) {
+          pendingSyncFailedEventsRef.current.push(payload);
+          return;
+        }
+        void showSyncFailedNotificationEvent(payload, settings);
       },
     );
   }, []);
