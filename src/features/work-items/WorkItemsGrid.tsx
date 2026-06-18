@@ -41,7 +41,7 @@ import { readStoredJson, writeStoredJson } from '@/lib/storage';
 import { openExternalUrl } from '@/lib/openExternal';
 import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
-import { LoadingState } from '@/components/StateDisplay';
+import { LoadingState, CompletedEmptyState } from '@/components/StateDisplay';
 import { WorkItemPreviewPanel } from './WorkItemPreviewPanel';
 import { invalidateWorkItemMutationCaches, workItemQueryKeys } from './queryKeys';
 import {
@@ -1532,9 +1532,23 @@ export function WorkItemsGrid({
                   {emptyMessage ?? "Run a search to load work items."}
                 </div>
               ) : sorted.length === 0 ? (
-                <div className="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
-                  No work items matched.
-                </div>
+                showDone ? (
+                  // Done/triage view emptied out — everything has been triaged.
+                  <CompletedEmptyState message="Everything's triaged! Great work." />
+                ) : triageScope && results.length > 0 ? (
+                  // Inbox cleared because every item was archived to the Done view.
+                  <CompletedEmptyState message="Everything's triaged! Great work." />
+                ) : snoozeOrganizationId && activeExternalFilterCount === 0 ? (
+                  // My Work Items with nothing assigned and no filter narrowing it:
+                  // an empty active queue is a win, not a dead end.
+                  <CompletedEmptyState message="No active work items. Enjoy the quiet!" />
+                ) : (
+                  // Saved view / search with no rows, or a filter that matched
+                  // nothing: neutral, since "no search hits" is not an achievement.
+                  <div className="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
+                    No work items matched.
+                  </div>
+                )
               ) : displayed.length === 0 ? (
                 <div className="flex min-h-24 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
                   <span>No items match the active filters.</span>

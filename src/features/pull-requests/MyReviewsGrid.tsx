@@ -38,7 +38,7 @@ import { openExternalUrl } from '@/lib/openExternal';
 import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
-import { LoadingState, ErrorState } from '@/components/StateDisplay';
+import { LoadingState, ErrorState, CompletedEmptyState } from '@/components/StateDisplay';
 import { PrReviewPanel } from './PrReviewPanel';
 import { VOTE_BADGE_CLASSES, voteTone } from './voteVisual';
 
@@ -1243,11 +1243,14 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
               ) : query.isError ? (
                 <ErrorState message={commandErrorMessage(query.error)} />
               ) : sortedPrs.length === 0 ? (
-                <div className="flex min-h-24 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
-                  <span>
-                    {allPrs.length === 0 ? "No pull requests assigned to you." : "No results match the current filter."}
-                  </span>
-                  {isFiltered ? (
+                showDone ? (
+                  // Done/triage view emptied out — everything has been triaged.
+                  <CompletedEmptyState message="Everything's triaged! Great work." />
+                ) : isFiltered ? (
+                  // A filter is applied and matches nothing: the reviewer has
+                  // nothing pending under that filter — a small win, plus a way out.
+                  <div className="flex min-h-24 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+                    <CompletedEmptyState message="All caught up! No pending reviews." />
                     <button
                       type="button"
                       onClick={clearAllFilters}
@@ -1255,8 +1258,15 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
                     >
                       Clear filters
                     </button>
-                  ) : null}
-                </div>
+                  </div>
+                ) : (
+                  // No filter and nothing to show: neutral empty state, no reward.
+                  <div className="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
+                    {allPrs.length === 0
+                      ? "No pull requests assigned to you."
+                      : "No results match the current filter."}
+                  </div>
+                )
               ) : (
                 <div
                   role="grid"

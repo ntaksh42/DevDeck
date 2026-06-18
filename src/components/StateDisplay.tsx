@@ -1,10 +1,22 @@
 import { type ReactNode } from "react";
-import { Loader2, AlertTriangle, WifiOff } from "lucide-react";
+import { Loader2, AlertTriangle, WifiOff, CheckCircle2 } from "lucide-react";
 
 export function PreviewEmptyState({ message }: { message: string }) {
   return (
     <div className="flex flex-1 items-center justify-center px-4 text-center text-sm text-muted-foreground">
       {message}
+    </div>
+  );
+}
+
+// Positive "you cleared the queue" empty state, shown when a filter or triage
+// view reaches zero items. Distinct from a neutral no-results message so the
+// achievement reads as a reward rather than an absence of data.
+export function CompletedEmptyState({ message }: { message: string }) {
+  return (
+    <div className="flex min-h-24 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
+      <CheckCircle2 className="h-6 w-6 text-emerald-500 dark:text-emerald-400" aria-hidden="true" />
+      <span className="font-medium text-foreground">{message}</span>
     </div>
   );
 }
