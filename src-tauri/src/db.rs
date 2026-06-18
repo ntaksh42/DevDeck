@@ -1751,6 +1751,10 @@ fn search_work_items_fts(
             result.push(item);
         }
     }
+    // The id-prefix and text matches are each ordered by changed_date DESC, but
+    // concatenating them breaks that order. Re-sort so the combined result stays
+    // date-descending, matching the ordering the search palette expects.
+    result.sort_by(|a, b| b.changed_date.cmp(&a.changed_date));
     Ok(result)
 }
 
@@ -2541,6 +2545,35 @@ mod tests {
         assert!(ids.contains(&421));
         assert!(ids.contains(&9));
         assert_eq!(ids.len(), 3);
+    }
+
+    #[test]
+    fn search_work_items_fts_orders_mixed_matches_by_changed_date_desc() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        upsert_organization(&conn, make_org_draft("org1")).unwrap();
+
+        // A numeric query produces both id-prefix matches and FTS text matches.
+        // They must be merged into a single changed_date DESC ordering.
+        for (id, title, changed) in [
+            (42_i64, "id prefix match", "2024-01-01T00:00:00Z"),
+            (421_i64, "another id prefix", "2024-05-01T00:00:00Z"),
+            (9_i64, "release 42 text match", "2024-03-01T00:00:00Z"),
+        ] {
+            conn.execute(
+                "INSERT OR REPLACE INTO work_items(org_id, project_id, project_name, id, title, changed_date) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params!["org1", "p1", "Project One", id, title, changed],
+            )
+            .unwrap();
+        }
+
+        let results = search_work_items_fts(&conn, "org1", "42").unwrap();
+        let changed: Vec<Option<String>> =
+            results.iter().map(|item| item.changed_date.clone()).collect();
+        let mut sorted = changed.clone();
+        sorted.sort_by(|a, b| b.cmp(a));
+        assert_eq!(changed, sorted);
+        assert_eq!(results[0].id, 421);
     }
 
     fn make_cached_wi(id: i64, title: &str, changed: &str) -> CachedWorkItem {
