@@ -233,6 +233,10 @@ impl SyncRunner {
                     tracing::error!(org = %org.name, error = ?e, "sync: PR sync failed");
                 } else {
                     emit_sync_updated(handle, &org.id, vec![SyncScope::MyReviews]);
+                    // Keep the tray badge in step with the freshly synced review
+                    // cache so the unvoted-required count stays accurate while
+                    // the window is minimized.
+                    crate::tray::refresh_badge(handle);
                     let current_reviews = self
                         .db
                         .list_review_pull_requests(&org.id)

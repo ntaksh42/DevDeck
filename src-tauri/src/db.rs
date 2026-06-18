@@ -371,6 +371,20 @@ impl AppDatabase {
         list_review_pull_requests(&conn, org_id)
     }
 
+    /// Counts review PRs the signed-in user is a required reviewer on but has not
+    /// voted on yet, across every organization. Drafts are excluded because they
+    /// are not actionable. Backs the system tray badge.
+    pub fn count_unvoted_required_review_prs(&self) -> Result<i64> {
+        let conn = self.open()?;
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM review_pull_requests \
+             WHERE my_vote = 0 AND my_is_required = 1 AND is_draft = 0",
+            [],
+            |row| row.get(0),
+        )?;
+        Ok(count)
+    }
+
     pub fn replace_review_pull_requests(&self, org_id: &str, prs: &[CachedReviewPr]) -> Result<()> {
         let conn = self.open()?;
         let tx = conn.unchecked_transaction()?;

@@ -959,6 +959,15 @@ function AppShell() {
     );
   }, []);
 
+  // Activating the system tray icon brings the window forward (handled in Rust)
+  // and asks the app to open My Reviews so the user lands on the PRs awaiting
+  // their vote.
+  useEffect(() => {
+    return subscribeTauriEvent("tray:open-my-reviews", () => {
+      setView("myReviews");
+    });
+  }, []);
+
   useEffect(() => {
     window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(sidebarWidth)));
   }, [sidebarWidth]);

@@ -17,6 +17,7 @@ mod secrets;
 mod settings;
 mod snooze;
 mod sync;
+mod tray;
 mod work_items;
 
 use code_search::{CodeSearchResults, CodeSearchService, SearchCodeInput};
@@ -286,9 +287,14 @@ async fn set_pull_request_thread_status(
 async fn submit_pull_request_vote(
     input: SubmitPullRequestVoteInput,
     state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<PrReviewer> {
     ensure_write_enabled(&state)?;
-    state.pr_review.submit_vote(input).await
+    let reviewer = state.pr_review.submit_vote(input).await?;
+    // Voting updates the cached review row, so refresh the tray badge now
+    // rather than waiting for the next background sync.
+    tray::refresh_badge(&app);
+    Ok(reviewer)
 }
 
 #[tauri::command]
@@ -747,6 +753,10 @@ pub fn run() {
                 snooze: SnoozeService::new(db.clone()),
                 sync_trigger: sync_tx,
             });
+            tray::create_tray(app.handle())?;
+            // Render the badge from cached data right away so the count is
+            // correct before the first sync completes.
+            tray::refresh_badge(app.handle());
             tauri::async_runtime::spawn(
                 SyncRunner::new(db, SecretStore).run(app.handle().clone(), sync_rx),
             );
