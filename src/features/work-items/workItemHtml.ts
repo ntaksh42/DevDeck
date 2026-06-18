@@ -5,6 +5,8 @@
  * No React — kept separate from the component so it can be unit-tested.
  */
 
+import DOMPurify from "dompurify";
+
 export function hydrateAuthenticatedImages(
   doc: Document,
   baseUrl: string | null | undefined,
@@ -65,6 +67,32 @@ function toAbsoluteHttpUrl(src: string, baseUrl: string | null | undefined): str
   }
 }
 
+// Strip raw Azure DevOps service HTML to a safe subset before it reaches the
+// preview iframe. DOMPurify removes <script>, <meta> (so meta-refresh cannot
+// run), on* handlers, and dangerous URI schemes while keeping the markup the
+// web UI relies on (mentions, links, images, tables). `data-*` attributes such
+// as `data-vss-mention` and the hydration markers survive the html profile.
+// `target`/`referrerpolicy` are allowed so links keep opening in a new tab and
+// images do not leak a Referer to external trackers. The image hook is scoped
+// to this call so it cannot affect other DOMPurify users (e.g. markdown.tsx).
+function setImageReferrerPolicy(node: Element) {
+  if (node.tagName === "IMG") {
+    node.setAttribute("referrerpolicy", "no-referrer");
+  }
+}
+
+function sanitizeRichHtml(html: string): string {
+  DOMPurify.addHook("afterSanitizeAttributes", setImageReferrerPolicy);
+  try {
+    return DOMPurify.sanitize(html, {
+      USE_PROFILES: { html: true },
+      ADD_ATTR: ["target", "referrerpolicy"],
+    });
+  } finally {
+    DOMPurify.removeHook("afterSanitizeAttributes");
+  }
+}
+
 export function buildRichHtmlDocument(
   html: string,
   density: "compact" | "comfortable" = "compact",
@@ -72,6 +100,7 @@ export function buildRichHtmlDocument(
   const fontSize = density === "comfortable" ? 14 : 12;
   const lineHeight = density === "comfortable" ? 1.55 : 1.35;
   const paragraphMargin = density === "comfortable" ? 10 : 6;
+  const safeHtml = sanitizeRichHtml(html);
   return `<!doctype html>
 <html>
 <head>
@@ -113,7 +142,7 @@ export function buildRichHtmlDocument(
     blockquote { margin: 0 0 6px; padding-left: 8px; border-left: 2px solid #cbd5e1; color: #475569; }
   </style>
 </head>
-<body>${html}</body>
+<body>${safeHtml}</body>
 </html>`;
 }
 
