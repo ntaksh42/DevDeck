@@ -967,6 +967,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     case "delete_organization":
     case "record_mention_interaction":
     case "record_assignee_interaction":
+      return null;
     case "trigger_sync":
       demoSyncStates = demoSyncStates.map((state) => ({
         ...state,
