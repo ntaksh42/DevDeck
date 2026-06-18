@@ -555,19 +555,12 @@ impl AppDatabase {
         &self,
         org_id: &str,
         repository_id: Option<&str>,
-        author_email: Option<&str>,
+        author: Option<&str>,
         from_date: Option<&str>,
         to_date: Option<&str>,
     ) -> Result<Vec<CachedCommit>> {
         let conn = self.open()?;
-        search_commits(
-            &conn,
-            org_id,
-            repository_id,
-            author_email,
-            from_date,
-            to_date,
-        )
+        search_commits(&conn, org_id, repository_id, author, from_date, to_date)
     }
 
     pub fn search_commits_fts(
@@ -1912,10 +1905,14 @@ fn search_commits(
     conn: &Connection,
     org_id: &str,
     repository_id: Option<&str>,
-    author_email: Option<&str>,
+    author: Option<&str>,
     from_date: Option<&str>,
     to_date: Option<&str>,
 ) -> Result<Vec<CachedCommit>> {
+    // Match the in-memory author filter (commits.rs): case-insensitive
+    // substring against author name OR email. Applying it in SQL keeps the
+    // LIMIT 500 cap from dropping matching commits that sort after the cap.
+    let author_pattern = author.map(|a| format!("%{}%", escape_like_pattern(&a.to_lowercase())));
     let mut stmt = conn.prepare(
         r#"
         SELECT org_id, project_id, project_name, repository_id, repository_name,
@@ -1923,7 +1920,9 @@ fn search_commits(
         FROM commits
         WHERE org_id = ?1
           AND (?2 IS NULL OR repository_id = ?2)
-          AND (?3 IS NULL OR author_email = ?3)
+          AND (?3 IS NULL
+               OR lower(author_name) LIKE ?3 ESCAPE '\'
+               OR lower(author_email) LIKE ?3 ESCAPE '\')
           AND (?4 IS NULL OR author_date >= ?4)
           AND (?5 IS NULL OR author_date <= ?5)
         ORDER BY author_date DESC
@@ -1931,7 +1930,7 @@ fn search_commits(
         "#,
     )?;
     let rows = stmt.query_map(
-        params![org_id, repository_id, author_email, from_date, to_date],
+        params![org_id, repository_id, author_pattern, from_date, to_date],
         map_cached_commit,
     )?;
     let mut result = Vec::new();
@@ -3212,6 +3211,64 @@ mod tests {
         let results = db.search_work_items_fts("org1", "Alice").unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].assigned_to.as_deref(), Some("Alice"));
+    }
+
+    #[test]
+    fn search_commits_author_filter_survives_limit_cap() {
+        let tf = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        // 600 commits ordered newest-first. The single commit by the target
+        // author is the oldest, so it sorts past the LIMIT 500 cap. An
+        // in-memory author filter would drop it; the SQL filter must keep it.
+        let mut commits = Vec::new();
+        for i in 0..600 {
+            let is_target = i == 599;
+            let year = 2000 + (599 - i); // larger i => older date
+            commits.push(CachedCommit {
+                org_id: "org1".to_string(),
+                project_id: "p1".to_string(),
+                project_name: "P1".to_string(),
+                repository_id: "repo1".to_string(),
+                repository_name: "Repo1".to_string(),
+                commit_id: format!("c{i}"),
+                comment: "msg".to_string(),
+                author_name: Some(if is_target {
+                    "Grace Hopper".to_string()
+                } else {
+                    "Someone Else".to_string()
+                }),
+                author_email: Some(if is_target {
+                    "grace@example.com".to_string()
+                } else {
+                    "other@example.com".to_string()
+                }),
+                author_date: Some(format!("{year:04}-01-01T00:00:00+00:00")),
+                web_url: None,
+            });
+        }
+        db.replace_commits_for_repo("org1", "repo1", &commits)
+            .unwrap();
+
+        // Substring, case-insensitive, matches on name.
+        let by_name = db
+            .search_commits("org1", None, Some("grace"), None, None)
+            .unwrap();
+        assert_eq!(by_name.len(), 1);
+        assert_eq!(by_name[0].commit_id, "c599");
+
+        // Also matches on email.
+        let by_email = db
+            .search_commits("org1", None, Some("grace@example"), None, None)
+            .unwrap();
+        assert_eq!(by_email.len(), 1);
+        assert_eq!(by_email[0].commit_id, "c599");
+
+        // No filter still hits the cap.
+        let all = db.search_commits("org1", None, None, None, None).unwrap();
+        assert_eq!(all.len(), 500);
     }
 
     #[test]

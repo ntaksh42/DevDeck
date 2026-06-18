@@ -164,11 +164,12 @@ impl CommitService {
             )
             .await?
         } else if query.is_empty() {
-            // SQL 側で日付・リポジトリ絞り込み済み
+            // SQL 側で日付・リポジトリ・author を絞り込む。author を SQL に渡さず
+            // メモリ内で絞ると、LIMIT 500 の外にある一致コミットを取りこぼすため。
             self.db.search_commits(
                 &organization.id,
                 repository_filter.as_deref(),
-                None,
+                author.as_deref(),
                 from_rfc.as_deref(),
                 to_rfc.as_deref(),
             )?
