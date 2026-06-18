@@ -73,10 +73,11 @@ impl OrganizationService {
     }
 
     pub fn delete(&self, id: &str) -> Result<()> {
-        let org = self
-            .db
-            .get_organization(id)?
-            .ok_or_else(|| AppError::InvalidInput(format!("organization '{id}' not found")))?;
+        // Deleting is idempotent: a missing organization (e.g. a double delete or
+        // a race with another action) is treated as already deleted, not an error.
+        let Some(org) = self.db.get_organization(id)? else {
+            return Ok(());
+        };
         self.secrets.delete_credential(&org.credential_key)?;
         self.db.delete_organization(id)
     }
@@ -184,5 +185,18 @@ mod tests {
             azure_cli_credential_key("contoso"),
             "azdodeck:org:contoso:azure-cli".to_string()
         );
+    }
+
+    #[test]
+    fn delete_is_idempotent_for_missing_organization() {
+        let db_file = tempfile::NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(db_file.path().to_path_buf());
+        db.initialize().unwrap();
+        let service = OrganizationService::new(db, SecretStore);
+
+        // Deleting an organization that was never added must succeed, and a
+        // repeated delete must stay successful rather than erroring.
+        assert!(service.delete("never-existed").is_ok());
+        assert!(service.delete("never-existed").is_ok());
     }
 }
