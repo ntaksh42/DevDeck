@@ -341,6 +341,24 @@ function extraColumnLabel(referenceName: string): string {
   return referenceName.split(".").pop() || referenceName;
 }
 
+const PRIORITY_REFERENCE_NAME = "Microsoft.VSTS.Common.Priority";
+
+function setPriorityExtraField(
+  extraFields: WorkItemSummary["extraFields"],
+  priority: number,
+): WorkItemSummary["extraFields"] {
+  const value = String(priority);
+  const existingIndex = extraFields.findIndex(
+    (field) => field.referenceName.toLowerCase() === PRIORITY_REFERENCE_NAME.toLowerCase(),
+  );
+  if (existingIndex === -1) {
+    return [...extraFields, { referenceName: PRIORITY_REFERENCE_NAME, value }];
+  }
+  return extraFields.map((field, index) =>
+    index === existingIndex ? { ...field, value } : field,
+  );
+}
+
 type FilterableColumn = "workItemType" | "state" | "projectName" | "assignedTo";
 const FILTERABLE_COLUMNS: Record<FilterableColumn, (item: WorkItemSummary) => string> = {
   workItemType: (item) => item.workItemType ?? "(empty)",
@@ -843,7 +861,22 @@ export function WorkItemsGrid({
       }
       return allResults;
     },
-    onSuccess: (results) => {
+    onSuccess: (results, state) => {
+      const succeededIds = new Set(results.filter((result) => !result.error).map((result) => result.id));
+      if (succeededIds.size > 0) {
+        setItemOverrides((current) => {
+          const next = new Map(current);
+          for (const item of checkedItems) {
+            if (!succeededIds.has(item.id)) continue;
+            const key = workItemSummaryKey(item);
+            next.set(key, {
+              ...(next.get(key) ?? {}),
+              state,
+            });
+          }
+          return next;
+        });
+      }
       setBulkStateOpen(false);
       setCheckedIds(new Set());
       setLastCheckedIndex(null);
@@ -942,7 +975,25 @@ export function WorkItemsGrid({
       }
       return allResults;
     },
-    onSuccess: (results) => {
+    onSuccess: (results, priority) => {
+      const succeededIds = new Set(results.filter((result) => !result.error).map((result) => result.id));
+      if (succeededIds.size > 0) {
+        setItemOverrides((current) => {
+          const next = new Map(current);
+          for (const item of checkedItems) {
+            if (!succeededIds.has(item.id)) continue;
+            const key = workItemSummaryKey(item);
+            const override = next.get(key) ?? {};
+            const baseFields = override.extraFields ?? item.extraFields;
+            const extraFields = setPriorityExtraField(baseFields, priority);
+            next.set(key, {
+              ...override,
+              extraFields,
+            });
+          }
+          return next;
+        });
+      }
       setBulkPriorityOpen(false);
       setCheckedIds(new Set());
       setLastCheckedIndex(null);
