@@ -170,10 +170,7 @@ impl AdoClient {
                     }
 
                     let body = resp.text().await.unwrap_or_default();
-                    return Err(AdoError::Api {
-                        status: status.as_u16(),
-                        body,
-                    });
+                    return Err(AdoError::api(status.as_u16(), body));
                 }
                 Err(error) if self.should_retry_error(&error, attempt) => {
                     let delay = self.retry_policy.backoff_delay(attempt);
@@ -246,10 +243,7 @@ impl AdoClient {
                     }
 
                     let body = resp.text().await.unwrap_or_default();
-                    return Err(AdoError::Api {
-                        status: status.as_u16(),
-                        body,
-                    });
+                    return Err(AdoError::api(status.as_u16(), body));
                 }
                 Err(error) if self.should_retry_error(&error, attempt) => {
                     let delay = self.retry_policy.backoff_delay(attempt);
@@ -307,10 +301,7 @@ impl AdoClient {
                         ));
                     }
                     let body = resp.text().await.unwrap_or_default();
-                    return Err(AdoError::Api {
-                        status: status.as_u16(),
-                        body,
-                    });
+                    return Err(AdoError::api(status.as_u16(), body));
                 }
                 Err(error) if self.should_retry_error(&error, attempt) => {
                     sleep(self.retry_policy.backoff_delay(attempt)).await;
@@ -398,10 +389,7 @@ impl AdoClient {
                     }
 
                     let body = resp.text().await.unwrap_or_default();
-                    return Err(AdoError::Api {
-                        status: status.as_u16(),
-                        body,
-                    });
+                    return Err(AdoError::api(status.as_u16(), body));
                 }
                 Err(error) if self.should_retry_error(&error, attempt) => {
                     let delay = self.retry_policy.backoff_delay(attempt);
@@ -476,10 +464,7 @@ impl AdoClient {
                     }
 
                     let body = resp.text().await.unwrap_or_default();
-                    return Err(AdoError::Api {
-                        status: status.as_u16(),
-                        body,
-                    });
+                    return Err(AdoError::api(status.as_u16(), body));
                 }
                 Err(error) if self.should_retry_error(&error, attempt) => {
                     let delay = self.retry_policy.backoff_delay(attempt);
@@ -548,10 +533,7 @@ impl AdoClient {
                     }
 
                     let body = resp.text().await.unwrap_or_default();
-                    return Err(AdoError::Api {
-                        status: status.as_u16(),
-                        body,
-                    });
+                    return Err(AdoError::api(status.as_u16(), body));
                 }
                 Err(error) if self.should_retry_error(&error, attempt) => {
                     let delay = self.retry_policy.backoff_delay(attempt);
@@ -628,10 +610,7 @@ impl AdoClient {
                     }
 
                     let body = resp.text().await.unwrap_or_default();
-                    return Err(AdoError::Api {
-                        status: status.as_u16(),
-                        body,
-                    });
+                    return Err(AdoError::api(status.as_u16(), body));
                 }
                 Err(error) if self.should_retry_error(&error, attempt) => {
                     let delay = self.retry_policy.backoff_delay(attempt);
@@ -1000,9 +979,16 @@ mod tests {
         let client = test_client(&server).await;
         let err = client.connection_data().await.unwrap_err();
         match err {
-            AdoError::Api { status, body } => {
+            AdoError::Api {
+                status,
+                body,
+                message,
+                type_key,
+            } => {
                 assert_eq!(status, 500);
                 assert_eq!(body, "internal error");
+                assert!(message.is_none());
+                assert!(type_key.is_none());
             }
             other => panic!("expected Api error, got {other:?}"),
         }
