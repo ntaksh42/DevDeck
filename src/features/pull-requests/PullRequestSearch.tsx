@@ -35,6 +35,7 @@ import { openExternalUrl } from '@/lib/openExternal';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { ErrorState, LoadingState } from '@/components/StateDisplay';
+import { ActiveFilters } from '@/components/ActiveFilters';
 import { PrReviewPanel } from './PrReviewPanel';
 
 const DEFAULT_PR_SEARCH_PREVIEW_WIDTH = 460;
@@ -499,7 +500,6 @@ function PullRequestResults({
   const columnFilterCount = activeColumnFilterCount(columnFilters);
   const hasActiveColumnFilters = columnFilterCount > 0;
   const activeFilterCount = Math.max(0, activeExternalFilterCount) + columnFilterCount;
-  const hasActiveFilters = activeFilterCount > 0;
 
   useEffect(() => {
     setSelectedIndex((index) => Math.min(index, Math.max(filteredResults.length - 1, 0)));
@@ -686,18 +686,7 @@ function PullRequestResults({
         <h2 className="text-base font-semibold">Results</h2>
         <span className="flex items-center gap-2 text-sm text-muted-foreground">
           {countLabel}
-          {hasActiveFilters ? (
-            <>
-              <span>{activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"} active</span>
-              <button
-                type="button"
-                onClick={clearAllFilters}
-                className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary"
-              >
-                Clear filters
-              </button>
-            </>
-          ) : null}
+          <ActiveFilters count={activeFilterCount} onClear={clearAllFilters} />
           <button
             type="button"
             onClick={(event) => setColumnMenuRect(event.currentTarget.getBoundingClientRect())}

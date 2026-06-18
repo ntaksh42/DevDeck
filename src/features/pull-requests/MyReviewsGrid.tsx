@@ -39,6 +39,7 @@ import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { LoadingState, ErrorState } from '@/components/StateDisplay';
+import { ActiveFilters } from '@/components/ActiveFilters';
 import { PrReviewPanel } from './PrReviewPanel';
 import { VOTE_BADGE_CLASSES, voteTone } from './voteVisual';
 
@@ -1345,19 +1346,11 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
               >
                 {showSnoozed ? "Back to inbox" : "Snoozed"}
               </button>
-              {isFiltered ? (
-                <>
-                  <span>{activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"} active</span>
-                  <span>{sortedPrs.length} shown</span>
-                  <button
-                    type="button"
-                    onClick={clearAllFilters}
-                    className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary"
-                  >
-                    Clear filters
-                  </button>
-                </>
-              ) : null}
+              <ActiveFilters
+                count={activeFilterCount}
+                shownCount={sortedPrs.length}
+                onClear={clearAllFilters}
+              />
               <button
                 type="button"
                 onClick={(event) => setColumnMenuRect(event.currentTarget.getBoundingClientRect())}

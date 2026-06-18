@@ -42,6 +42,7 @@ import { openExternalUrl } from '@/lib/openExternal';
 import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { LoadingState } from '@/components/StateDisplay';
+import { ActiveFilters } from '@/components/ActiveFilters';
 import { WorkItemPreviewPanel } from './WorkItemPreviewPanel';
 import { invalidateWorkItemMutationCaches, workItemQueryKeys } from './queryKeys';
 import {
@@ -1348,7 +1349,6 @@ export function WorkItemsGrid({
   const columnFilterCount = activeColumnFilterCount(columnFilters);
   const activeFilterCount = Math.max(0, activeExternalFilterCount) + columnFilterCount;
   const hasActiveColumnFilters = columnFilterCount > 0;
-  const hasActiveFilters = activeFilterCount > 0;
   const showBlockingLoading = loading && sorted.length === 0;
   const firstVirtualRow = Math.max(
     0,
@@ -1632,18 +1632,7 @@ export function WorkItemsGrid({
                   {showSnoozed ? "Back to inbox" : "Snoozed"}
                 </button>
               ) : null}
-              {hasActiveFilters ? (
-                <>
-                  <span>{activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"} active</span>
-                  <button
-                    type="button"
-                    onClick={clearAllFilters}
-                    className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary"
-                  >
-                    Clear filters
-                  </button>
-                </>
-              ) : null}
+              <ActiveFilters count={activeFilterCount} onClear={clearAllFilters} />
               <button
                 type="button"
                 onClick={(event) => setColumnMenuRect(event.currentTarget.getBoundingClientRect())}
