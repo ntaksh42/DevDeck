@@ -38,7 +38,13 @@ pub enum SyncScope {
 #[serde(rename_all = "camelCase")]
 pub struct SyncUpdatedEvent {
     pub org_id: String,
+    /// Scopes whose sync succeeded and whose cached data is now fresh.
     pub scopes: Vec<SyncScope>,
+    /// Scopes whose sync failed during this pass. The frontend uses this to
+    /// distinguish "synced and unchanged" from "sync ran but failed" instead of
+    /// receiving no event at all on failure.
+    #[serde(default)]
+    pub failed_scopes: Vec<SyncScope>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -175,6 +181,7 @@ impl SyncRunner {
                     SyncUpdatedEvent {
                         org_id: "*".to_string(),
                         scopes: vec![SyncScope::All],
+                        failed_scopes: Vec::new(),
                     },
                 ) {
                     tracing::warn!(error = ?e, "failed to emit sync:updated");
@@ -215,6 +222,7 @@ impl SyncRunner {
                 Ok(c) => c,
                 Err(e) => {
                     tracing::error!(org = %org.name, error = ?e, "sync: failed to create client");
+                    emit_sync_failed(handle, &org.id, failed_scopes_for(scope));
                     continue;
                 }
             };
@@ -231,6 +239,7 @@ impl SyncRunner {
                 };
                 if let Err(e) = sync_prs_for_org(&self.db, &client, &org).await {
                     tracing::error!(org = %org.name, error = ?e, "sync: PR sync failed");
+                    emit_sync_failed(handle, &org.id, vec![SyncScope::MyReviews]);
                 } else {
                     emit_sync_updated(handle, &org.id, vec![SyncScope::MyReviews]);
                     let current_reviews = self
@@ -298,6 +307,7 @@ impl SyncRunner {
             ) {
                 if let Err(e) = sync_work_items_for_org(&self.db, &client, &org).await {
                     tracing::error!(org = %org.name, error = ?e, "sync: WI sync failed");
+                    emit_sync_failed(handle, &org.id, vec![SyncScope::MyWorkItems]);
                 } else {
                     emit_sync_updated(handle, &org.id, vec![SyncScope::MyWorkItems]);
                     match self.db.list_my_work_items(&org.id) {
@@ -345,11 +355,29 @@ impl SyncRunner {
             if matches!(scope, SyncScope::All | SyncScope::Commits) {
                 if let Err(e) = sync_commits_for_org(&self.db, &client, &org).await {
                     tracing::error!(org = %org.name, error = ?e, "sync: commit sync failed");
+                    emit_sync_failed(handle, &org.id, vec![SyncScope::Commits]);
                 } else {
                     emit_sync_updated(handle, &org.id, vec![SyncScope::Commits]);
                 }
             }
         }
+    }
+}
+
+/// The concrete per-data-type scopes a requested scope expands to, used to
+/// report failures when a whole org is skipped (e.g. its client cannot be
+/// built) before any individual data-type sync runs.
+fn failed_scopes_for(scope: SyncScope) -> Vec<SyncScope> {
+    match scope {
+        SyncScope::All => vec![
+            SyncScope::MyReviews,
+            SyncScope::MyWorkItems,
+            SyncScope::Commits,
+        ],
+        SyncScope::Hot => vec![SyncScope::MyReviews, SyncScope::MyWorkItems],
+        SyncScope::MyReviews => vec![SyncScope::MyReviews],
+        SyncScope::MyWorkItems => vec![SyncScope::MyWorkItems],
+        SyncScope::Commits => vec![SyncScope::Commits],
     }
 }
 
@@ -389,6 +417,23 @@ fn emit_sync_updated(handle: &AppHandle, org_id: &str, scopes: Vec<SyncScope>) {
         SyncUpdatedEvent {
             org_id: org_id.to_string(),
             scopes,
+            failed_scopes: Vec::new(),
+        },
+    ) {
+        tracing::warn!(error = ?e, "failed to emit sync:updated");
+    }
+}
+
+/// Emits a `sync:updated` event reporting that a scope's sync failed. The
+/// frontend can use `failed_scopes` to surface the failure instead of seeing no
+/// event at all, while `scopes` stays empty so no stale cache is invalidated.
+fn emit_sync_failed(handle: &AppHandle, org_id: &str, scopes: Vec<SyncScope>) {
+    if let Err(e) = handle.emit(
+        "sync:updated",
+        SyncUpdatedEvent {
+            org_id: org_id.to_string(),
+            scopes: Vec::new(),
+            failed_scopes: scopes,
         },
     ) {
         tracing::warn!(error = ?e, "failed to emit sync:updated");
@@ -475,6 +520,38 @@ fn work_item_notification_item(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failed_scopes_for_expands_aggregate_scopes() {
+        assert_eq!(
+            failed_scopes_for(SyncScope::All),
+            vec![
+                SyncScope::MyReviews,
+                SyncScope::MyWorkItems,
+                SyncScope::Commits,
+            ]
+        );
+        assert_eq!(
+            failed_scopes_for(SyncScope::Hot),
+            vec![SyncScope::MyReviews, SyncScope::MyWorkItems]
+        );
+        assert_eq!(
+            failed_scopes_for(SyncScope::Commits),
+            vec![SyncScope::Commits]
+        );
+    }
+
+    #[test]
+    fn sync_updated_event_reports_failed_scopes() {
+        let event = SyncUpdatedEvent {
+            org_id: "org".to_string(),
+            scopes: Vec::new(),
+            failed_scopes: vec![SyncScope::MyReviews],
+        };
+        let json = serde_json::to_value(&event).expect("serialize");
+        assert_eq!(json["scopes"], serde_json::json!([]));
+        assert_eq!(json["failedScopes"], serde_json::json!(["myReviews"]));
+    }
 
     #[test]
     fn work_item_notification_items_skips_assignment_on_first_snapshot() {

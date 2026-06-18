@@ -927,6 +927,9 @@ function AppShell() {
   useEffect(() => {
     return subscribeTauriEvent("sync:updated", (payload) => {
       const parsed = syncUpdatedEventSchema.safeParse(payload);
+      // Failed scopes carry no fresh data, so only invalidate the scopes that
+      // succeeded. A failure-only event still refreshes sync states (always
+      // invalidated below), which surfaces the recorded error in the UI.
       invalidateSyncedDataQueries(queryClient, parsed.success ? parsed.data.scopes : ["all"]);
     });
   }, [queryClient]);

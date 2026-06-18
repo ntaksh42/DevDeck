@@ -468,6 +468,10 @@ export type SyncState = z.infer<typeof syncStateSchema>;
 export const syncUpdatedEventSchema = z.object({
   orgId: z.string(),
   scopes: z.array(syncScopeSchema),
+  // Scopes whose sync failed during this pass. Present so the UI can tell a
+  // failed sync apart from one that simply produced no changes; defaults to
+  // empty for events emitted before this field existed.
+  failedScopes: z.array(syncScopeSchema).default([]),
 });
 
 export type AddPatOrganizationInput = {
