@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::auth::client_for_organization;
 use crate::commits::encode_path_segment;
 use crate::db::{AppDatabase, Organization};
-use crate::error::Result;
+use crate::error::{AppError, Result};
 use crate::projects::ProjectDirectory;
 use crate::secrets::SecretStore;
 
@@ -161,17 +161,15 @@ impl PipelineService {
 
     pub async fn list_runs(&self, input: ListPipelineRunsInput) -> Result<Vec<PipelineRunSummary>> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let requested_for = resolve_requested_for(
+            input.requested_for_me.unwrap_or(false),
+            organization.authenticated_user_id.as_deref(),
+        )?;
         let client = client_for_organization(&organization, &self.secrets)?;
         let project = self
             .projects
             .project(&client, &organization.id, &input.project_id)
             .await?;
-
-        let requested_for = if input.requested_for_me.unwrap_or(false) {
-            organization.authenticated_user_id.clone()
-        } else {
-            None
-        };
 
         let builds = client
             .list_builds(
@@ -307,6 +305,27 @@ impl PipelineService {
     }
 }
 
+/// Resolves the `requestedFor` filter for a run listing.
+///
+/// When `requested_for_me` is set the caller wants to see only their own runs,
+/// so an absent authenticated user id is an error: silently dropping the filter
+/// would return every user's runs instead of none.
+fn resolve_requested_for(
+    requested_for_me: bool,
+    authenticated_user_id: Option<&str>,
+) -> Result<Option<String>> {
+    if !requested_for_me {
+        return Ok(None);
+    }
+    authenticated_user_id
+        .map(|id| Some(id.to_string()))
+        .ok_or_else(|| {
+            AppError::InvalidInput(
+                "organization has no authenticated user id; re-add the organization".to_string(),
+            )
+        })
+}
+
 fn normalize_optional(value: Option<String>) -> Option<String> {
     value
         .map(|value| value.trim().to_string())
@@ -409,5 +428,25 @@ mod tests {
             normalize_optional(Some(" failed ".to_string())),
             Some("failed".to_string())
         );
+    }
+
+    #[test]
+    fn resolve_requested_for_without_flag_is_none() {
+        assert_eq!(resolve_requested_for(false, None).unwrap(), None);
+        assert_eq!(resolve_requested_for(false, Some("user-1")).unwrap(), None);
+    }
+
+    #[test]
+    fn resolve_requested_for_uses_authenticated_user_id() {
+        assert_eq!(
+            resolve_requested_for(true, Some("user-1")).unwrap(),
+            Some("user-1".to_string())
+        );
+    }
+
+    #[test]
+    fn resolve_requested_for_errors_when_user_id_missing() {
+        let err = resolve_requested_for(true, None).unwrap_err();
+        assert!(matches!(err, AppError::InvalidInput(_)));
     }
 }
