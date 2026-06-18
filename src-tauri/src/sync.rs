@@ -82,6 +82,7 @@ pub struct PullRequestNotificationEvent {
 pub struct PrNotificationItem {
     pub kind: PrNotificationKind,
     pub pull_request_id: i64,
+    pub repository_id: String,
     pub title: String,
     pub repository_name: String,
     pub project_name: String,
@@ -102,6 +103,7 @@ fn pr_review_item(pr: &CachedReviewPr, kind: PrNotificationKind) -> PrNotificati
     PrNotificationItem {
         kind,
         pull_request_id: pr.pull_request_id,
+        repository_id: pr.repository_id.clone(),
         title: pr.title.clone(),
         repository_name: pr.repository_name.clone(),
         project_name: pr.project_name.clone(),
@@ -121,12 +123,14 @@ pub fn pr_review_notification_items(
     current: &[CachedReviewPr],
     settings: &AppSettings,
 ) -> Vec<PrNotificationItem> {
-    let prev_by_id: HashMap<i64, &CachedReviewPr> =
-        previous.iter().map(|pr| (pr.pull_request_id, pr)).collect();
+    let prev_by_key: HashMap<(&str, i64), &CachedReviewPr> = previous
+        .iter()
+        .map(|pr| ((pr.repository_id.as_str(), pr.pull_request_id), pr))
+        .collect();
     let first_snapshot = previous.is_empty();
     let mut items = Vec::new();
     for pr in current {
-        match prev_by_id.get(&pr.pull_request_id) {
+        match prev_by_key.get(&(pr.repository_id.as_str(), pr.pull_request_id)) {
             None => {
                 if settings.notify_pr_review_requests && !first_snapshot {
                     items.push(pr_review_item(pr, PrNotificationKind::ReviewRequested));
@@ -258,15 +262,18 @@ impl SyncRunner {
                     // Revive snoozed PRs past their deadline or with new activity,
                     // and learn which PRs remain snoozed so their notifications
                     // can be suppressed.
-                    let snoozed_pr_ids = match snooze.reconcile_pull_requests(&org.id, &now) {
-                        Ok(reconcile) => still_snoozed_pr_ids(&reconcile.still_snoozed),
+                    let snoozed_pr_keys = match snooze.reconcile_pull_requests(&org.id, &now) {
+                        Ok(reconcile) => still_snoozed_pr_keys(&reconcile.still_snoozed),
                         Err(e) => {
                             tracing::warn!(org = %org.name, error = ?e, "sync: PR snooze reconcile failed");
                             HashSet::new()
                         }
                     };
                     if should_collect_pr_notifications {
-                        items.retain(|item| !snoozed_pr_ids.contains(&item.pull_request_id));
+                        items.retain(|item| {
+                            !snoozed_pr_keys
+                                .contains(&(item.repository_id.clone(), item.pull_request_id))
+                        });
                         if !items.is_empty() {
                             let event = PullRequestNotificationEvent {
                                 organization_id: org.id.clone(),
@@ -371,11 +378,17 @@ fn combined_scope(triggers: &[SyncTrigger]) -> SyncScope {
     first
 }
 
-/// Maps still-snoozed PR keys (`{repo}:{pr_id}`) to their pull request ids so
-/// notification items, which only carry the id, can be filtered.
-fn still_snoozed_pr_ids(keys: &[String]) -> HashSet<i64> {
+/// Parses still-snoozed PR keys (`{repository_id}:{pr_id}`) into
+/// `(repository_id, pull_request_id)` pairs so notification items can be
+/// filtered with the same repo-aware key the cache uses. A repository id can
+/// itself contain colons, so the last colon separates the id (matching
+/// `snooze::pr_item_key`).
+fn still_snoozed_pr_keys(keys: &[String]) -> HashSet<(String, i64)> {
     keys.iter()
-        .filter_map(|key| key.rsplit_once(':').and_then(|(_, id)| id.parse().ok()))
+        .filter_map(|key| {
+            let (repo, id) = key.rsplit_once(':')?;
+            Some((repo.to_string(), id.parse().ok()?))
+        })
         .collect()
 }
 
@@ -488,12 +501,16 @@ mod tests {
     }
 
     fn review_pr(pr_id: i64, my_vote: i32) -> CachedReviewPr {
+        review_pr_in_repo("r", pr_id, my_vote)
+    }
+
+    fn review_pr_in_repo(repository_id: &str, pr_id: i64, my_vote: i32) -> CachedReviewPr {
         CachedReviewPr {
             org_id: "o".into(),
             project_id: "p".into(),
             project_name: "Proj".into(),
-            repository_id: "r".into(),
-            repository_name: "Repo".into(),
+            repository_id: repository_id.into(),
+            repository_name: format!("Repo {repository_id}"),
             pull_request_id: pr_id,
             title: format!("PR {pr_id}"),
             created_by: None,
@@ -544,6 +561,66 @@ mod tests {
         let curr = vec![review_pr(1, 0), review_pr(2, 0)];
         let items = pr_review_notification_items(&prev, &curr, &pr_settings(false, false));
         assert!(items.is_empty());
+    }
+
+    #[test]
+    fn pr_review_items_keyed_per_repo_for_duplicate_pr_ids() {
+        // Same pull request id #42 exists in two repos within one org.
+        let prev = vec![
+            review_pr_in_repo("repo-a", 42, 10),
+            review_pr_in_repo("repo-b", 42, 0),
+        ];
+        let curr = vec![
+            // repo-a #42: vote went 10 -> 0, expect a VoteReset for repo-a only.
+            review_pr_in_repo("repo-a", 42, 0),
+            // repo-b #42: unchanged, no notification.
+            review_pr_in_repo("repo-b", 42, 0),
+            // repo-b #42 is not new; a genuinely new PR in repo-b should still
+            // be a ReviewRequested even though repo-a has the same id present.
+            review_pr_in_repo("repo-b", 7, 0),
+        ];
+        let items = pr_review_notification_items(&prev, &curr, &pr_settings(true, true));
+
+        let vote_resets: Vec<_> = items
+            .iter()
+            .filter(|i| i.kind == PrNotificationKind::VoteReset)
+            .collect();
+        assert_eq!(vote_resets.len(), 1);
+        assert_eq!(vote_resets[0].pull_request_id, 42);
+        assert_eq!(vote_resets[0].repository_id, "repo-a");
+
+        // repo-b #42 must not be flagged as a new review request just because
+        // repo-a #42 was the snapshot match before the fix.
+        assert!(!items
+            .iter()
+            .any(|i| i.repository_id == "repo-b" && i.pull_request_id == 42));
+        assert!(items
+            .iter()
+            .any(|i| i.kind == PrNotificationKind::ReviewRequested
+                && i.repository_id == "repo-b"
+                && i.pull_request_id == 7));
+    }
+
+    #[test]
+    fn still_snoozed_pr_keys_suppress_only_matching_repo() {
+        // repo-a:#42 is snoozed; repo-b:#42 is not.
+        let snoozed = still_snoozed_pr_keys(&["repo-a:42".to_string()]);
+        let mut items = vec![
+            pr_review_item(
+                &review_pr_in_repo("repo-a", 42, 0),
+                PrNotificationKind::ReviewRequested,
+            ),
+            pr_review_item(
+                &review_pr_in_repo("repo-b", 42, 0),
+                PrNotificationKind::ReviewRequested,
+            ),
+        ];
+        items.retain(|item| {
+            !snoozed.contains(&(item.repository_id.clone(), item.pull_request_id))
+        });
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].repository_id, "repo-b");
+        assert_eq!(items[0].pull_request_id, 42);
     }
 
     #[test]

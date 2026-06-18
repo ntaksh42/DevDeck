@@ -36,6 +36,7 @@ export type PullRequestNotificationEvent = {
 type PullRequestNotificationItem = {
   kind: "reviewRequested" | "voteReset" | "commentReply";
   pullRequestId: number;
+  repositoryId: string;
   title: string;
   repositoryName: string;
   projectName: string;
