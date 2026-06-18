@@ -1047,7 +1047,11 @@ function AppShell() {
         !event.shiftKey &&
         (event.key === "f" || event.key === "F")
       ) {
-        if (focusFilterInput()) event.preventDefault();
+        // Always claim Ctrl/Cmd+F so the browser's native find bar never opens.
+        // Focusing the filter input is best-effort; views without a filter
+        // simply swallow the shortcut instead of behaving inconsistently.
+        event.preventDefault();
+        focusFilterInput();
         return;
       }
 
