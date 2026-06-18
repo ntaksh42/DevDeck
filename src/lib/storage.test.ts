@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { readStoredJson, writeStoredJson } from "./storage";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { readStoredJson, writeStoredJson, writeStoredString } from "./storage";
 
 const KEY = "test:storage";
 
 afterEach(() => {
   window.localStorage.clear();
+  vi.restoreAllMocks();
 });
 
 describe("readStoredJson", () => {
@@ -52,5 +53,26 @@ describe("writeStoredJson", () => {
       { count: 0 },
     );
     expect(result).toEqual({ count: 7 });
+  });
+
+  it("swallows quota-exceeded errors", () => {
+    vi.spyOn(window.localStorage, "setItem").mockImplementation(() => {
+      throw new DOMException("exceeded the quota", "QuotaExceededError");
+    });
+    expect(() => writeStoredJson(KEY, { a: 1 })).not.toThrow();
+  });
+});
+
+describe("writeStoredString", () => {
+  it("writes the raw string", () => {
+    writeStoredString(KEY, "hello");
+    expect(window.localStorage.getItem(KEY)).toBe("hello");
+  });
+
+  it("swallows quota-exceeded errors", () => {
+    vi.spyOn(window.localStorage, "setItem").mockImplementation(() => {
+      throw new DOMException("exceeded the quota", "QuotaExceededError");
+    });
+    expect(() => writeStoredString(KEY, "hello")).not.toThrow();
   });
 });

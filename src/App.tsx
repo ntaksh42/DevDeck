@@ -35,6 +35,7 @@ import {
   type SyncScope,
 } from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
+import { writeStoredJson, writeStoredString } from "@/lib/storage";
 import {
   applyTheme,
   loadThemePreference,
@@ -215,7 +216,7 @@ function recordRecentPaletteItem(item: RecentPaletteItem) {
     0,
     PALETTE_RECENT_ITEMS_MAX,
   );
-  window.localStorage.setItem(PALETTE_RECENT_ITEMS_STORAGE_KEY, JSON.stringify(items));
+  writeStoredJson(PALETTE_RECENT_ITEMS_STORAGE_KEY, items);
 }
 
 // Linear-style two-key navigation: press G, then one of these.
@@ -960,7 +961,7 @@ function AppShell() {
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(sidebarWidth)));
+    writeStoredString(SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(sidebarWidth)));
   }, [sidebarWidth]);
 
   // Follow the OS color scheme while the preference is "system". The watcher is

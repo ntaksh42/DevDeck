@@ -38,3 +38,13 @@ export function writeStoredJson(key: string, value: unknown): void {
     // Storage can be unavailable or full; persistence is best-effort.
   }
 }
+
+/** Writes a raw string into localStorage, ignoring storage failures. */
+export function writeStoredString(key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Storage can be unavailable or full; persistence is best-effort.
+  }
+}
