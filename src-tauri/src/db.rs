@@ -211,6 +211,10 @@ impl AppDatabase {
         // Wait instead of failing with SQLITE_BUSY when a sync write overlaps
         // a UI read; NORMAL is durable enough under WAL and much faster.
         conn.busy_timeout(std::time::Duration::from_secs(3))?;
+        // Ensure WAL is applied on every open, not just first-run migration, so
+        // a pre-existing non-WAL DB is upgraded rather than left on a rollback
+        // journal where synchronous=NORMAL weakens crash durability.
+        conn.pragma_update_and_check(None, "journal_mode", "WAL", |_| Ok(()))?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         Ok(conn)
     }
@@ -2146,6 +2150,31 @@ mod tests {
             .query_row("PRAGMA journal_mode", [], |row| row.get(0))
             .unwrap();
         assert_eq!(journal_mode, "wal");
+    }
+
+    #[test]
+    fn open_upgrades_existing_non_wal_db_to_wal() {
+        let db_file = tempfile::NamedTempFile::new().unwrap();
+        let path = db_file.path().to_path_buf();
+
+        // Simulate a pre-existing DB that is on a rollback journal rather than
+        // WAL (e.g. created before WAL was applied, or downgraded externally).
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.pragma_update_and_check(None, "journal_mode", "DELETE", |_| Ok(()))
+                .unwrap();
+            let mode: String = conn
+                .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+                .unwrap();
+            assert_eq!(mode, "delete", "DB should start in a non-WAL mode");
+        }
+
+        let db = AppDatabase::new(path);
+        let conn = db.open().unwrap();
+        let journal_mode: String = conn
+            .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(journal_mode, "wal", "open() should re-apply WAL");
     }
 
     #[test]
