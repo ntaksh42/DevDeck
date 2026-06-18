@@ -76,6 +76,21 @@ const REVIEW_SECTION_LABELS: Record<ReviewSection, string> = {
   draft: "Drafts",
 };
 
+function voteLabelOf(vote: number): string {
+  switch (vote) {
+    case 10:
+      return "Approved";
+    case 5:
+      return "Approved w/ Suggestions";
+    case -5:
+      return "Waiting for Author";
+    case -10:
+      return "Rejected";
+    default:
+      return "No Vote";
+  }
+}
+
 function reviewSectionOf(pr: ReviewPullRequestSummary): ReviewSection {
   if (pr.isDraft) return "draft";
   if (pr.myVote === 10 || pr.myVote === 5) return "approved";
@@ -526,6 +541,27 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
   const queryClient = useQueryClient();
   const voteMutation = useMutation({
     mutationFn: submitPullRequestVote,
+    // Optimistically move the row to its new section immediately; the grid
+    // re-sections from myVote, so applying the vote locally avoids waiting for
+    // the server round-trip and refetch.
+    onMutate: async (input) => {
+      const key = ["myReviews", input.organizationId];
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<ReviewPullRequestSummary[]>(key);
+      queryClient.setQueryData<ReviewPullRequestSummary[]>(key, (current) =>
+        current?.map((pr) =>
+          pr.repositoryId === input.repositoryId && pr.pullRequestId === input.pullRequestId
+            ? { ...pr, myVote: input.vote, myVoteLabel: voteLabelOf(input.vote) }
+            : pr,
+        ),
+      );
+      return { key, previous };
+    },
+    onError: (_error, _input, context) => {
+      if (context) {
+        queryClient.setQueryData(context.key, context.previous);
+      }
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["myReviews"] });
     },
