@@ -1033,14 +1033,14 @@ mod tests {
 
     #[test]
     fn is_ado_not_found_only_matches_404_api_errors() {
-        assert!(is_ado_not_found(&AdoError::Api {
-            status: 404,
-            body: "not found".to_string(),
-        }));
-        assert!(!is_ado_not_found(&AdoError::Api {
-            status: 500,
-            body: "server error".to_string(),
-        }));
+        assert!(is_ado_not_found(&AdoError::api(
+            404,
+            "not found".to_string()
+        )));
+        assert!(!is_ado_not_found(&AdoError::api(
+            500,
+            "server error".to_string()
+        )));
         assert!(!is_ado_not_found(&AdoError::Unauthorized));
     }
 }

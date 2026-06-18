@@ -50,9 +50,15 @@ impl From<keyring::Error> for AppError {
 
 fn format_ado_error(error: azdo_client::AdoError) -> String {
     match error {
-        azdo_client::AdoError::Api { status, body } => {
-            let message =
-                azure_devops_error_message(&body).unwrap_or_else(|| body.trim().to_string());
+        azdo_client::AdoError::Api {
+            status,
+            body,
+            message,
+            ..
+        } => {
+            let message = message
+                .or_else(|| azure_devops_error_message(&body))
+                .unwrap_or_else(|| body.trim().to_string());
             if message.is_empty() {
                 format!("API request failed with status {status}")
             } else {
@@ -81,14 +87,27 @@ mod tests {
 
     #[test]
     fn app_error_from_ado_api_error_extracts_message() {
-        let error = AppError::from(azdo_client::AdoError::Api {
-            status: 400,
-            body: r#"{"message":"TF401232: Project does not exist."}"#.to_string(),
-        });
+        let error = AppError::from(azdo_client::AdoError::api(
+            400,
+            r#"{"message":"TF401232: Project does not exist."}"#.to_string(),
+        ));
 
         assert_eq!(
             error.to_string(),
             "Azure DevOps error: API request failed with status 400: TF401232: Project does not exist."
+        );
+    }
+
+    #[test]
+    fn app_error_from_ado_api_error_falls_back_to_value_message_shape() {
+        let error = AppError::from(azdo_client::AdoError::api(
+            400,
+            r#"{"value":{"Message":"Legacy shaped error."}}"#.to_string(),
+        ));
+
+        assert_eq!(
+            error.to_string(),
+            "Azure DevOps error: API request failed with status 400: Legacy shaped error."
         );
     }
 }
