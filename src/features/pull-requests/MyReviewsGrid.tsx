@@ -21,6 +21,8 @@ import {
 } from '@/lib/azdoCommands';
 import { SnoozeMenu } from '@/components/SnoozeMenu';
 import { SnoozedItemsPanel } from '@/components/SnoozedItemsPanel';
+import { StarButton } from '@/components/StarButton';
+import { toggleStar, useStarredItems } from '@/lib/starredItems';
 import {
 
   matchesAllSearchTerms,
@@ -200,9 +202,11 @@ const ReviewPrRow = forwardRef<
     selected: boolean;
     columnTemplate: string;
     visibleColumns: SortKey[];
+    starred: boolean;
+    onToggleStar: () => void;
     onSelect: () => void;
   }
->(({ pr, selected, columnTemplate, visibleColumns, onSelect }, ref) => {
+>(({ pr, selected, columnTemplate, visibleColumns, starred, onToggleStar, onSelect }, ref) => {
   const createdTime = new Date(pr.creationDate).getTime();
   const isStale = Number.isFinite(createdTime)
     ? Math.floor((Date.now() - createdTime) / 86_400_000) >= 3
@@ -232,6 +236,9 @@ const ReviewPrRow = forwardRef<
           : "hover:bg-muted/50"}`}
       style={{ gridTemplateColumns: columnTemplate }}
     >
+      <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+        <StarButton starred={starred} onToggle={onToggleStar} label={`PR #${pr.pullRequestId}`} />
+      </div>
       {visibleColumns.map((key) => (
         <Fragment key={key}>{renderPrCell(key, pr, isStale)}</Fragment>
       ))}
@@ -530,6 +537,30 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
       void queryClient.invalidateQueries({ queryKey: ["myReviews"] });
     },
   });
+
+  const starredItems = useStarredItems();
+  const starredPrIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const star of starredItems) {
+      if (star.itemType === "pull_request") {
+        ids.add(`${star.organizationId}:${star.itemId}`);
+      }
+    }
+    return ids;
+  }, [starredItems]);
+  function isPrStarred(pr: ReviewPullRequestSummary): boolean {
+    return starredPrIds.has(`${pr.organizationId}:${pr.pullRequestId}`);
+  }
+  function togglePrStar(pr: ReviewPullRequestSummary): void {
+    toggleStar({
+      organizationId: pr.organizationId,
+      itemType: "pull_request",
+      itemId: String(pr.pullRequestId),
+      title: `PR ${pr.pullRequestId} ${pr.title}`,
+      webUrl: pr.webUrl ?? null,
+      subtitle: pr.repositoryName,
+    });
+  }
 
   const [showSnoozed, setShowSnoozed] = useState(false);
   const [snoozeAnchorRect, setSnoozeAnchorRect] = useState<DOMRect | null>(null);
@@ -1013,6 +1044,12 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
       voteSelected(0, "No vote");
       return;
     }
+    if (e.key === "*") {
+      e.preventDefault();
+      const pr = sortedPrs[selectedIndex];
+      if (pr) togglePrStar(pr);
+      return;
+    }
     if (e.key === "Escape") {
       e.preventDefault();
       if (openFilterCol) {
@@ -1076,7 +1113,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     (column) => columnWidths[PR_GRID_KEYS.indexOf(column)],
   );
   const titleFlexIndex = Math.max(0, visibleColumns.indexOf("title"));
-  const COLS = gridColumnTemplate(visibleColumnWidths, titleFlexIndex);
+  const COLS = gridColumnTemplate(visibleColumnWidths, titleFlexIndex, ["22px"]);
   const firstVirtualRow = Math.max(
     0,
     Math.floor(gridViewport.scrollTop / PR_GRID_ROW_HEIGHT) - PR_GRID_OVERSCAN,
@@ -1211,6 +1248,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
                 className="grid items-center gap-2 border-b border-border bg-muted px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                 style={{ gridTemplateColumns: COLS }}
               >
+                <div role="columnheader" aria-label="Star" className="flex items-center justify-center" />
                 {visibleColumns.map((col, i) => {
                   const fullIndex = PR_GRID_KEYS.indexOf(col);
                   const isLast = i === visibleColumns.length - 1;
@@ -1296,6 +1334,8 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
                         pr={row.pr}
                         selected={row.prIndex === selectedIndex}
                         visibleColumns={visibleColumns}
+                        starred={isPrStarred(row.pr)}
+                        onToggleStar={() => togglePrStar(row.pr)}
                         onSelect={() => setSelectedIndex(row.prIndex)}
                       />
                     );

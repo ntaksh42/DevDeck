@@ -35,6 +35,7 @@ import {
   type SyncScope,
 } from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
+import { useStarredItems } from "@/lib/starredItems";
 import {
   applyTheme,
   loadThemePreference,
@@ -238,6 +239,7 @@ function AppShell() {
   const [view, setView] = useState<View>("myReviews");
   const [helpOpen, setHelpOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const starredItems = useStarredItems();
   const [navExpanded, setNavExpanded] = useState<Record<NavSectionId, boolean>>({
     pullRequests: true,
     workItems: true,
@@ -496,6 +498,28 @@ function AppShell() {
         : undefined,
     }));
   }, [commandPaletteOpen, debouncedPaletteSearchText, organizations.length]);
+
+  // Locally starred items, shown as a quick-access group when the palette query
+  // is empty. Opening goes straight to the item's browser URL; orphaned stars
+  // without a known URL fall back to a no-op (the star itself is the bookmark).
+  const paletteStarredItems = useMemo<CommandPaletteSearchItem[]>(() => {
+    if (!commandPaletteOpen) return [];
+    if (debouncedPaletteSearchText.trim().length > 0) return [];
+    return starredItems.map((item) => ({
+      id: `starred:${item.organizationId}:${item.itemType}:${item.itemId}`,
+      group: "Starred",
+      label: item.title,
+      detail: item.subtitle,
+      run: () => {
+        if (item.webUrl) void openExternalUrl(item.webUrl);
+      },
+      runAlt: item.webUrl
+        ? () => {
+            void openExternalUrl(item.webUrl as string);
+          }
+        : undefined,
+    }));
+  }, [commandPaletteOpen, debouncedPaletteSearchText, starredItems]);
 
   function closeCommandPalette(): void {
     setCommandPaletteOpen(false);
@@ -1434,7 +1458,7 @@ function AppShell() {
           search={
             organizations.length > 0
               ? {
-                  items: [...paletteSearchItems, ...paletteRecentItems],
+                  items: [...paletteStarredItems, ...paletteSearchItems, ...paletteRecentItems],
                   pending: paletteSearchEnabled && searchAllQuery.isFetching,
                   onQueryChange: setPaletteSearchText,
                 }

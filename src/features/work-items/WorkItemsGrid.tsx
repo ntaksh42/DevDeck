@@ -26,6 +26,8 @@ import {
 } from '@/lib/azdoCommands';
 import { SnoozeMenu } from '@/components/SnoozeMenu';
 import { SnoozedItemsPanel } from '@/components/SnoozedItemsPanel';
+import { StarButton } from '@/components/StarButton';
+import { toggleStar, useStarredItems } from '@/lib/starredItems';
 import {
   storedNumbers,
   storedNumber,
@@ -409,10 +411,12 @@ const WorkItemGridRow = forwardRef<
     columnTemplate: string;
     visibleColumns: WiSortKey[];
     extraColumns: string[];
+    starred: boolean;
+    onToggleStar: () => void;
     onSelect: () => void;
     onCheckedChange: (checked: boolean, shiftKey: boolean) => void;
   }
->(({ item, selected, checked, columnTemplate, visibleColumns, extraColumns, onSelect, onCheckedChange }, ref) => (
+>(({ item, selected, checked, columnTemplate, visibleColumns, extraColumns, starred, onToggleStar, onSelect, onCheckedChange }, ref) => (
   <div
     ref={ref}
     tabIndex={selected ? 0 : -1}
@@ -435,6 +439,9 @@ const WorkItemGridRow = forwardRef<
     }`}
     style={{ gridTemplateColumns: columnTemplate }}
   >
+    <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+      <StarButton starred={starred} onToggle={onToggleStar} label={`#${item.id}`} />
+    </div>
     <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
       <input
         type="checkbox"
@@ -592,6 +599,30 @@ export function WorkItemsGrid({
       });
     },
   });
+
+  const starredItems = useStarredItems();
+  const starredWorkItemIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const star of starredItems) {
+      if (star.itemType === "work_item") {
+        ids.add(`${star.organizationId}:${star.itemId}`);
+      }
+    }
+    return ids;
+  }, [starredItems]);
+  function isWorkItemStarred(item: WorkItemSummary): boolean {
+    return starredWorkItemIds.has(`${item.organizationId}:${item.id}`);
+  }
+  function toggleWorkItemStar(item: WorkItemSummary): void {
+    toggleStar({
+      organizationId: item.organizationId,
+      itemType: "work_item",
+      itemId: String(item.id),
+      title: `#${item.id} ${item.title}`,
+      webUrl: item.webUrl ?? null,
+      subtitle: item.projectName,
+    });
+  }
 
   useEffect(() => {
     setWiSort(initialSort ?? loadWorkItemSort(sortStorageKey, defaultWorkItemSort()));
@@ -1320,6 +1351,10 @@ export function WorkItemsGrid({
     } else if (e.key === "f" || e.key === "F") {
       e.preventDefault();
       setOpenFieldRequest((value) => value + 1);
+    } else if (e.key === "*") {
+      e.preventDefault();
+      const item = displayed[selectedIndex];
+      if (item) toggleWorkItemStar(item);
     }
   }
 
@@ -1342,7 +1377,7 @@ export function WorkItemsGrid({
   );
   const wiFlexibleIndex = Math.max(0, visibleColumns.indexOf("title"));
   const wiColTemplate = [
-    gridColumnTemplate(visibleColumnWidths, wiFlexibleIndex, ["28px"]),
+    gridColumnTemplate(visibleColumnWidths, wiFlexibleIndex, ["22px", "28px"]),
     ...extraColumns.map(() => "120px"),
   ].join(" ");
   const columnFilterCount = activeColumnFilterCount(columnFilters);
@@ -1469,6 +1504,11 @@ export function WorkItemsGrid({
                 className="grid items-center gap-2 border-b border-border bg-muted px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                 style={{ gridTemplateColumns: wiColTemplate }}
               >
+                <div
+                  role="columnheader"
+                  aria-label="Star"
+                  className="flex items-center justify-center"
+                />
                 <div role="columnheader" className="flex items-center justify-center">
                   <input
                     type="checkbox"
@@ -1570,6 +1610,8 @@ export function WorkItemsGrid({
                         columnTemplate={wiColTemplate}
                         visibleColumns={visibleColumns}
                         extraColumns={extraColumns}
+                        starred={isWorkItemStarred(item)}
+                        onToggleStar={() => toggleWorkItemStar(item)}
                         onSelect={() => setSelectedIndex(i)}
                         onCheckedChange={(checked, shiftKey) => handleCheckboxChange(i, checked, shiftKey)}
                       />
