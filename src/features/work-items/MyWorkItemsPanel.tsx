@@ -93,6 +93,7 @@ export function MyWorkItemsPanel({ organizations }: { organizations: Organizatio
       <WorkItemsGrid
         activeExternalFilterCount={filter.trim() ? 1 : 0}
         dataUpdatedAt={query.dataUpdatedAt}
+        isFetching={query.isFetching && query.data !== undefined}
         loading={query.isFetching && query.data === undefined}
         onClearExternalFilters={() => setFilter("")}
         results={results}

@@ -1074,6 +1074,7 @@ export function WorkItemViewsPanel({
           <WorkItemsGrid
             key={selectedView.id}
             dataUpdatedAt={selectedQuery?.dataUpdatedAt}
+            isFetching={!!selectedQuery?.isFetching && selectedQuery.data !== undefined}
             loading={selectedQueryInitialLoading}
             results={selectedResults}
             searched={!!selectedQuery}
