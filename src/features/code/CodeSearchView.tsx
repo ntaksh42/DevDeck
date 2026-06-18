@@ -210,7 +210,9 @@ export function CodeSearchView({ organizations }: { organizations: Organization[
             {mutation.isPending
               ? "Searching"
               : mutation.isSuccess
-                ? `${mutation.data.count} match${mutation.data.count === 1 ? "" : "es"}`
+                ? mutation.data.count > results.length
+                  ? `Showing ${results.length} of ${mutation.data.count} matches`
+                  : `${mutation.data.count} match${mutation.data.count === 1 ? "" : "es"}`
                 : "Ready"}
           </span>
         </div>
