@@ -228,7 +228,7 @@ function ReviewTab({
     void queryClient.invalidateQueries({
       queryKey: ["prReview", pr.organizationId, pr.repositoryId, pr.pullRequestId],
     });
-    void queryClient.invalidateQueries({ queryKey: ["myReviews"] });
+    void queryClient.invalidateQueries({ queryKey: ["myReviews", pr.organizationId] });
   }
 
   const voteMutation = useMutation({
