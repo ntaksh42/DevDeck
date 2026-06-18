@@ -155,6 +155,33 @@ pub struct ListWorkItemFieldsInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ListWorkItemTypesInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateWorkItemInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_type: String,
+    pub title: String,
+    pub assigned_to: Option<String>,
+    pub priority: Option<i64>,
+    pub area_path: Option<String>,
+    pub iteration_path: Option<String>,
+    pub tags: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemTypeOption {
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetSavedQueryInput {
     pub organization_id: Option<String>,
     pub project_id: String,

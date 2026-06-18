@@ -455,6 +455,28 @@ impl WorkItemService {
         Ok(fields)
     }
 
+    pub async fn list_types(
+        &self,
+        input: ListWorkItemTypesInput,
+    ) -> Result<Vec<WorkItemTypeOption>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
+        let mut types = client
+            .list_work_item_types(&project.id)
+            .await?
+            .into_iter()
+            .map(|definition| WorkItemTypeOption {
+                name: definition.name,
+            })
+            .collect::<Vec<_>>();
+        types.sort_by(|left, right| left.name.cmp(&right.name));
+        Ok(types)
+    }
+
     pub async fn get_saved_query(&self, input: GetSavedQueryInput) -> Result<SavedQueryResult> {
         let query_id = input.query_id.trim().to_string();
         if query_id.is_empty() {

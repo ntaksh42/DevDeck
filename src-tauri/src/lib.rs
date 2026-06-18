@@ -58,16 +58,17 @@ use tauri::{AppHandle, Manager, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tokio::sync::{mpsc, oneshot};
 use work_items::{
-    AddWorkItemCommentInput, AssignWorkItemsInput, BulkWorkItemResult, DeleteWorkItemCommentInput,
-    FetchWorkItemImageInput, GetSavedQueryInput, GetWorkItemPreviewInput, ListMyWorkItemsInput,
-    ListWorkItemFieldAllowedValuesInput, ListWorkItemFieldsInput, ListWorkItemProjectsInput,
-    ListWorkItemTypeStatesInput, ListWorkItemUpdatesInput, MentionCandidate,
+    AddWorkItemCommentInput, AssignWorkItemsInput, BulkWorkItemResult, CreateWorkItemInput,
+    DeleteWorkItemCommentInput, FetchWorkItemImageInput, GetSavedQueryInput,
+    GetWorkItemPreviewInput, ListMyWorkItemsInput, ListWorkItemFieldAllowedValuesInput,
+    ListWorkItemFieldsInput, ListWorkItemProjectsInput, ListWorkItemTypeStatesInput,
+    ListWorkItemTypesInput, ListWorkItemUpdatesInput, MentionCandidate,
     RecordAssigneeInteractionInput, RecordMentionInteractionInput, RunWorkItemQueryInput,
     SavedQueryResult, SearchWorkItemAssigneesInput, SearchWorkItemMentionsInput,
     SearchWorkItemsInput, SetWorkItemsPriorityInput, SetWorkItemsStateInput,
     UpdateWorkItemFieldsInput, WorkItemAssigneeCandidate, WorkItemComment, WorkItemFieldOption,
     WorkItemImage, WorkItemPreview, WorkItemProjectOption, WorkItemService, WorkItemSummary,
-    WorkItemUpdateSummary,
+    WorkItemTypeOption, WorkItemUpdateSummary,
 };
 
 #[derive(Clone)]
@@ -541,6 +542,25 @@ async fn list_work_item_fields(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn list_work_item_types(
+    input: ListWorkItemTypesInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<WorkItemTypeOption>> {
+    state.work_items.list_types(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn create_work_item(
+    input: CreateWorkItemInput,
+    state: State<'_, AppState>,
+) -> Result<WorkItemSummary> {
+    ensure_write_enabled(&state)?;
+    state.work_items.create(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn get_saved_query(
     input: GetSavedQueryInput,
     state: State<'_, AppState>,
@@ -796,6 +816,8 @@ pub fn run() {
             list_work_item_field_allowed_values,
             list_work_item_type_states,
             list_work_item_fields,
+            list_work_item_types,
+            create_work_item,
             get_saved_query,
             set_work_items_state,
             assign_work_items,

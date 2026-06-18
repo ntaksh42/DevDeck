@@ -235,6 +235,14 @@ const workItemFieldOptionsSchema = z.array(workItemFieldOptionSchema);
 
 export type WorkItemFieldOption = z.infer<typeof workItemFieldOptionSchema>;
 
+const workItemTypeOptionSchema = z.object({
+  name: z.string(),
+});
+
+const workItemTypeOptionsSchema = z.array(workItemTypeOptionSchema);
+
+export type WorkItemTypeOption = z.infer<typeof workItemTypeOptionSchema>;
+
 const workItemCommentSchema = z.object({
   id: z.number(),
   text: z.string().nullable(),
@@ -694,6 +702,23 @@ export type ListWorkItemFieldsInput = {
   projectId: string;
 };
 
+export type ListWorkItemTypesInput = {
+  organizationId?: string;
+  projectId: string;
+};
+
+export type CreateWorkItemInput = {
+  organizationId?: string;
+  projectId: string;
+  workItemType: string;
+  title: string;
+  assignedTo?: string;
+  priority?: number;
+  areaPath?: string;
+  iterationPath?: string;
+  tags?: string;
+};
+
 export type BulkWorkItemResult = {
   id: number;
   error: string | null;
@@ -1031,6 +1056,20 @@ export async function listWorkItemFields(
 ): Promise<WorkItemFieldOption[]> {
   const result = await invokeCommand("list_work_item_fields", { input });
   return workItemFieldOptionsSchema.parse(result);
+}
+
+export async function listWorkItemTypes(
+  input: ListWorkItemTypesInput,
+): Promise<WorkItemTypeOption[]> {
+  const result = await invokeCommand("list_work_item_types", { input });
+  return workItemTypeOptionsSchema.parse(result);
+}
+
+export async function createWorkItem(
+  input: CreateWorkItemInput,
+): Promise<WorkItemSummary> {
+  const result = await invokeCommand("create_work_item", { input });
+  return workItemSummarySchema.parse(result);
 }
 
 export async function setWorkItemsState(

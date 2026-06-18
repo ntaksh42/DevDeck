@@ -3,18 +3,18 @@
 //! changes. Each keeps the local cache in sync after a successful write, and the
 //! bulk operations re-check read-only mode between iterations.
 
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use crate::auth::client_for_organization;
 use crate::error::{AppError, Result};
 use crate::settings::SettingsService;
 
 use super::{
-    summarize_work_item_comment, summarize_work_item_preview, validate_update_field_reference_name,
-    work_item_to_cached, AddWorkItemCommentInput, AssignWorkItemsInput, BulkWorkItemResult,
-    DeleteWorkItemCommentInput, SetWorkItemsPriorityInput, SetWorkItemsStateInput,
-    UpdateWorkItemFieldsInput, WorkItemComment, WorkItemPreview, WorkItemService,
-    WORK_ITEM_PREVIEW_COMMENT_LIMIT,
+    summarize_work_item, summarize_work_item_comment, summarize_work_item_preview,
+    validate_update_field_reference_name, work_item_to_cached, AddWorkItemCommentInput,
+    AssignWorkItemsInput, BulkWorkItemResult, CreateWorkItemInput, DeleteWorkItemCommentInput,
+    SetWorkItemsPriorityInput, SetWorkItemsStateInput, UpdateWorkItemFieldsInput, WorkItemComment,
+    WorkItemPreview, WorkItemService, WorkItemSummary, WORK_ITEM_PREVIEW_COMMENT_LIMIT,
 };
 
 impl WorkItemService {
@@ -179,6 +179,81 @@ impl WorkItemService {
             }
         }
         Ok(results)
+    }
+
+    /// Creates a new work item and adds it to the local cache so it shows up in
+    /// the grid before the next sync. The optional fields are only sent when
+    /// provided, letting Azure DevOps apply its type defaults otherwise.
+    pub async fn create(&self, input: CreateWorkItemInput) -> Result<WorkItemSummary> {
+        let work_item_type = input.work_item_type.trim();
+        if work_item_type.is_empty() {
+            return Err(AppError::InvalidInput(
+                "work item type is required".to_string(),
+            ));
+        }
+        let title = input.title.trim();
+        if title.is_empty() {
+            return Err(AppError::InvalidInput("title is required".to_string()));
+        }
+
+        let mut fields: Vec<(String, Value)> = vec![("System.Title".to_string(), json!(title))];
+        if let Some(assigned_to) = input.assigned_to.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+            fields.push(("System.AssignedTo".to_string(), json!(assigned_to)));
+        }
+        if let Some(priority) = input.priority {
+            if priority <= 0 {
+                return Err(AppError::InvalidInput(
+                    "priority must be positive".to_string(),
+                ));
+            }
+            fields.push(("Microsoft.VSTS.Common.Priority".to_string(), json!(priority)));
+        }
+        if let Some(area_path) = input.area_path.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+            fields.push(("System.AreaPath".to_string(), json!(area_path)));
+        }
+        if let Some(iteration_path) = input.iteration_path.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+            fields.push(("System.IterationPath".to_string(), json!(iteration_path)));
+        }
+        if let Some(tags) = input.tags.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+            fields.push(("System.Tags".to_string(), json!(tags)));
+        }
+
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
+
+        let work_item = client
+            .create_work_item(&project.id, work_item_type, &fields)
+            .await?;
+
+        let cached = work_item_to_cached(&organization, &project.id, &project.name, &work_item);
+        if let Err(e) = self.db.upsert_work_items(std::slice::from_ref(&cached)) {
+            tracing::warn!(error = %e, "failed to add created work item to cache");
+        }
+        // Optimistically surface the item in My Work Items when it was assigned
+        // to the authenticated user; the next sync reconciles it either way.
+        let assigned_to_me = match (
+            organization.authenticated_user_unique_name.as_deref(),
+            cached.assigned_to_unique_name.as_deref(),
+        ) {
+            (Some(me), Some(assignee)) => me.eq_ignore_ascii_case(assignee),
+            _ => false,
+        };
+        if assigned_to_me {
+            if let Err(e) = self.db.add_my_work_item(&cached) {
+                tracing::warn!(error = %e, "failed to add created work item to my_work_items cache");
+            }
+        }
+
+        Ok(summarize_work_item(
+            &organization,
+            &project.id,
+            &project.name,
+            work_item,
+        ))
     }
 
     pub async fn add_comment(&self, input: AddWorkItemCommentInput) -> Result<WorkItemComment> {

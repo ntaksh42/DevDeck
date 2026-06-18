@@ -157,6 +157,18 @@ pub struct WorkItemTypeStatesList {
     pub value: Vec<WorkItemTypeState>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemTypeDefinition {
+    pub name: String,
+    pub reference_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct WorkItemTypesList {
+    pub value: Vec<WorkItemTypeDefinition>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkItemFieldDefinition {
@@ -497,6 +509,45 @@ impl AdoClient {
             .get_json(&path, &[("api-version", "7.1-preview.1")])
             .await?;
         Ok(response.value.into_iter().map(|s| s.name).collect())
+    }
+
+    /// Lists the work item types defined for a project (Bug, Task, ...).
+    pub async fn list_work_item_types(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<WorkItemTypeDefinition>> {
+        let path = format!("{project_id}/_apis/wit/workitemtypes");
+        let response: WorkItemTypesList = self
+            .get_json(&path, &[("api-version", "7.1-preview")])
+            .await?;
+        Ok(response.value)
+    }
+
+    /// Creates a work item of the given type from a set of field values, sent
+    /// as a JSON Patch document to `POST .../wit/workitems/${type}`.
+    pub async fn create_work_item(
+        &self,
+        project_id: &str,
+        work_item_type: &str,
+        fields: &[(String, Value)],
+    ) -> Result<WorkItem> {
+        let encoded_type = encode_path_segment(work_item_type);
+        let path = format!("{project_id}/_apis/wit/workitems/${encoded_type}");
+        let operations: Vec<WorkItemPatchOperation> = fields
+            .iter()
+            .map(|(reference_name, value)| WorkItemPatchOperation {
+                op: "add",
+                path: format!("/fields/{reference_name}"),
+                value: value.clone(),
+            })
+            .collect();
+        self.post_json_with_content_type(
+            &path,
+            &[("api-version", "7.1-preview")],
+            "application/json-patch+json",
+            &operations,
+        )
+        .await
     }
 
     pub async fn list_work_item_fields(
@@ -1192,6 +1243,87 @@ mod tests {
         assert_eq!(fields[0].name, "Release Train");
         assert_eq!(fields[0].reference_name, "Custom.ReleaseTrain");
         assert_eq!(fields[0].field_type, "string");
+    }
+
+    #[tokio::test]
+    async fn list_work_item_types_returns_names() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/wit/workitemtypes"))
+            .and(query_param("api-version", "7.1-preview"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 2,
+                "value": [
+                    { "name": "Bug", "referenceName": "Microsoft.VSTS.WorkItemTypes.Bug" },
+                    { "name": "Task", "referenceName": "Microsoft.VSTS.WorkItemTypes.Task" }
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let types = test_client(&server)
+            .await
+            .list_work_item_types("project-1")
+            .await
+            .unwrap();
+
+        assert_eq!(types.len(), 2);
+        assert_eq!(types[0].name, "Bug");
+        assert_eq!(
+            types[0].reference_name.as_deref(),
+            Some("Microsoft.VSTS.WorkItemTypes.Bug")
+        );
+    }
+
+    #[tokio::test]
+    async fn create_work_item_posts_json_patch_to_type_path() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/project-1/_apis/wit/workitems/$User%20Story"))
+            .and(query_param("api-version", "7.1-preview"))
+            .and(body_json(serde_json::json!([
+                {
+                    "op": "add",
+                    "path": "/fields/System.Title",
+                    "value": "New story"
+                },
+                {
+                    "op": "add",
+                    "path": "/fields/Microsoft.VSTS.Common.Priority",
+                    "value": 2
+                }
+            ])))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 42,
+                "fields": {
+                    "System.Title": "New story",
+                    "System.WorkItemType": "User Story",
+                    "System.State": "New",
+                    "Microsoft.VSTS.Common.Priority": 2
+                }
+            })))
+            .mount(&server)
+            .await;
+
+        let item = test_client(&server)
+            .await
+            .create_work_item(
+                "project-1",
+                "User Story",
+                &[
+                    ("System.Title".to_string(), serde_json::json!("New story")),
+                    (
+                        "Microsoft.VSTS.Common.Priority".to_string(),
+                        serde_json::json!(2),
+                    ),
+                ],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(item.id, 42);
+        assert_eq!(item.fields["System.Title"].as_str(), Some("New story"));
+        assert_eq!(item.fields["System.State"].as_str(), Some("New"));
     }
 
     #[test]

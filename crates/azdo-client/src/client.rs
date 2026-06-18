@@ -631,6 +631,86 @@ impl AdoClient {
         unreachable!("retry policy always has at least one attempt")
     }
 
+    /// POSTs with an explicit `Content-Type` (e.g. `application/json-patch+json`
+    /// for work item creation). Treated as non-idempotent, so a 5xx response is
+    /// not retried to avoid creating duplicates.
+    pub(crate) async fn post_json_with_content_type<B: Serialize + ?Sized, T: DeserializeOwned>(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        content_type: &str,
+        body: &B,
+    ) -> Result<T> {
+        let url = self
+            .base_url
+            .join(path)
+            .map_err(|e| AdoError::Auth(e.to_string()))?;
+
+        for attempt in 1..=self.retry_policy.attempts() {
+            let auth = self.auth.auth_header_value().await?;
+            let response = self
+                .http
+                .post(url.clone())
+                .query(query)
+                .header("Authorization", &auth)
+                .header("Content-Type", content_type)
+                .json(body)
+                .send()
+                .await;
+
+            match response {
+                Ok(resp) => {
+                    let status = resp.status();
+                    if status.is_success() {
+                        return decode_json(resp).await;
+                    }
+                    if status == StatusCode::UNAUTHORIZED {
+                        return Err(AdoError::Unauthorized);
+                    }
+
+                    let retry_after = parse_retry_after(resp.headers());
+                    if self.should_retry_status(status, attempt, false) {
+                        let delay = self.retry_delay(attempt, retry_after);
+                        tracing::warn!(
+                            method = "POST",
+                            path,
+                            attempt,
+                            status = status.as_u16(),
+                            delay_ms = delay.as_millis(),
+                            "retrying Azure DevOps request after response"
+                        );
+                        sleep(delay).await;
+                        continue;
+                    }
+
+                    if status == StatusCode::TOO_MANY_REQUESTS {
+                        return Err(AdoError::RateLimited(
+                            retry_after.unwrap_or(Duration::from_secs(60)),
+                        ));
+                    }
+
+                    let body = resp.text().await.unwrap_or_default();
+                    return Err(AdoError::api(status.as_u16(), body));
+                }
+                Err(error) if self.should_retry_error(&error, attempt, false) => {
+                    let delay = self.retry_policy.backoff_delay(attempt);
+                    tracing::warn!(
+                        method = "POST",
+                        path,
+                        attempt,
+                        delay_ms = delay.as_millis(),
+                        error = %error,
+                        "retrying Azure DevOps request after network error"
+                    );
+                    sleep(delay).await;
+                }
+                Err(error) => return Err(AdoError::Network(error)),
+            }
+        }
+
+        unreachable!("retry policy always has at least one attempt")
+    }
+
     /// Decides whether a non-success status should be retried.
     ///
     /// `idempotent` must be `false` for non-idempotent requests (POST). A 5xx
@@ -1144,7 +1224,7 @@ mod tests {
             .unwrap_err();
 
         match err {
-            AdoError::Api { status, body } => {
+            AdoError::Api { status, body, .. } => {
                 assert_eq!(status, 500);
                 assert_eq!(body, "boom");
             }

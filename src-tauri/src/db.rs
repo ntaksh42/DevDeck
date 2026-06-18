@@ -492,6 +492,14 @@ impl AppDatabase {
         Ok(())
     }
 
+    /// Optimistically inserts a single item into the My Work Items snapshot
+    /// (used after creating a work item assigned to the current user). The next
+    /// full sync reconciles the row.
+    pub fn add_my_work_item(&self, item: &CachedWorkItem) -> Result<()> {
+        let conn = self.open()?;
+        upsert_my_work_items(&conn, std::slice::from_ref(item))
+    }
+
     pub fn replace_work_items(
         &self,
         org_id: &str,

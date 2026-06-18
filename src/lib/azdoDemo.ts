@@ -6,6 +6,7 @@ import type {
   AssignWorkItemsInput,
   CommitRepositoryOption,
   CommitSummary,
+  CreateWorkItemInput,
   DeleteWorkItemCommentInput,
   DeletePullRequestCommentInput,
   EditPullRequestCommentInput,
@@ -15,6 +16,7 @@ import type {
   GetSavedQueryInput,
   GetWorkItemPreviewInput,
   ListWorkItemTypeStatesInput,
+  ListWorkItemTypesInput,
   ListWorkItemFieldsInput,
   MentionCandidate,
   Organization,
@@ -52,6 +54,7 @@ import type {
   WorkItemPreview,
   WorkItemProjectOption,
   WorkItemSummary,
+  WorkItemTypeOption,
   WorkItemUpdateSummary,
 } from "@/lib/azdoCommands";
 import {
@@ -114,6 +117,7 @@ let demoSyncStates: SyncState[] = [
 const writeCommands = new Set([
   "add_work_item_comment",
   "delete_work_item_comment",
+  "create_work_item",
   "update_work_item_fields",
   "set_work_items_state",
   "assign_work_items",
@@ -828,6 +832,14 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     case "list_work_item_fields": {
       const input = (args as { input?: ListWorkItemFieldsInput } | undefined)?.input;
       return demoListWorkItemFields(input);
+    }
+    case "list_work_item_types": {
+      const input = (args as { input?: ListWorkItemTypesInput } | undefined)?.input;
+      return demoListWorkItemTypes(input);
+    }
+    case "create_work_item": {
+      const input = (args as { input?: CreateWorkItemInput } | undefined)?.input;
+      return demoCreateWorkItem(input);
     }
     case "set_work_items_state": {
       const input = (args as { input?: SetWorkItemsStateInput } | undefined)?.input;
@@ -1589,6 +1601,37 @@ function demoListWorkItemFields(_input?: ListWorkItemFieldsInput): WorkItemField
     { name: "Severity", referenceName: "Microsoft.VSTS.Common.Severity", fieldType: "string", custom: false },
     { name: "Story Points", referenceName: "Microsoft.VSTS.Scheduling.StoryPoints", fieldType: "double", custom: false },
   ];
+}
+
+function demoListWorkItemTypes(_input?: ListWorkItemTypesInput): WorkItemTypeOption[] {
+  return ["Bug", "Epic", "Feature", "Issue", "Task", "User Story"].map((name) => ({
+    name,
+  }));
+}
+
+let demoCreatedWorkItemSeq = 9000;
+
+function demoCreateWorkItem(input?: CreateWorkItemInput): WorkItemSummary {
+  const project = demoWorkItemProjects().find(
+    (option) => option.projectId === input?.projectId,
+  );
+  const id = ++demoCreatedWorkItemSeq;
+  return {
+    organizationId: input?.organizationId ?? "contoso",
+    projectId: input?.projectId ?? project?.projectId ?? "platform",
+    projectName: project?.projectName ?? "Platform",
+    id,
+    title: input?.title?.trim() || "(untitled)",
+    workItemType: input?.workItemType ?? "Task",
+    state: "New",
+    assignedTo: input?.assignedTo?.trim() || "Demo User",
+    changedDate: new Date().toISOString(),
+    webUrl: `https://dev.azure.com/contoso/${encodeURIComponent(
+      project?.projectName ?? "Platform",
+    )}/_workitems/edit/${id}`,
+    extraFields: [],
+    depth: null,
+  };
 }
 
 const demoMentionPeople: MentionCandidate[] = [

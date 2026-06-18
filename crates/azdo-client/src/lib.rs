@@ -28,5 +28,5 @@ pub use pr_review::{
 };
 pub use work_items::{
     WorkItem, WorkItemComment, WorkItemFieldDefinition, WorkItemLink, WorkItemReference,
-    WorkItemRelation, WorkItemUpdate,
+    WorkItemRelation, WorkItemTypeDefinition, WorkItemUpdate,
 };
