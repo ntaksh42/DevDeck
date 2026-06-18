@@ -46,7 +46,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Focus grid</span><kbd className={kbd}>Alt+G</kbd></div>
           <div className={row}><span>Focus preview</span><kbd className={kbd}>Alt+P</kbd></div>
           <div className={row}><span>Grid → preview / back to grid</span><kbd className={kbd}>Enter / → · Esc / ←</kbd></div>
-          <div className={row}><span>Focus views panel</span><kbd className={kbd}>Alt+V</kbd></div>
+          <div className={row}><span>Focus views panel (Work Item Views only)</span><kbd className={kbd}>Alt+V</kbd></div>
 
           <p className={section}>My Reviews</p>
           <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>
