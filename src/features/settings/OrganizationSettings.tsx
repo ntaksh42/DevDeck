@@ -18,6 +18,12 @@ import {
 } from '@/lib/azdoCommands';
 import { sendTestDesktopNotification } from "@/lib/desktopNotifications";
 import {
+  DEFAULT_VIEW_OPTIONS,
+  loadDefaultView,
+  storeDefaultView,
+  type DefaultView,
+} from "@/features/today/defaultViewStorage";
+import {
   loadThemePreference,
   setThemePreference,
   THEME_CHANGED_EVENT,
@@ -44,6 +50,7 @@ export function OrganizationSettings({
   return (
     <div className="space-y-3">
       <SetupPanel compact />
+      <StartupViewSettings />
       <ThemeSettings />
       <ShowWindowHotkeySettings />
       <DesktopNotificationSettings />
@@ -373,6 +380,61 @@ const THEME_OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }
   { value: "dark", label: "Dark", icon: Moon },
   { value: "system", label: "System", icon: Monitor },
 ];
+
+function StartupViewSettings() {
+  const [defaultView, setDefaultView] = useState<DefaultView>(loadDefaultView);
+
+  function selectView(next: DefaultView) {
+    setDefaultView(next);
+    storeDefaultView(next);
+  }
+
+  return (
+    <div className="rounded-md border border-border bg-card">
+      <div className="border-b border-border px-3 py-2">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
+            <Sun className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold">Startup view</h2>
+            <p className="text-sm text-muted-foreground">
+              Choose the screen the app opens on. Applies the next time you launch.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-3">
+        <div
+          role="radiogroup"
+          aria-label="Startup view"
+          className="inline-flex gap-1 rounded-md border border-border bg-muted p-0.5"
+        >
+          {DEFAULT_VIEW_OPTIONS.map(({ value, label }) => {
+            const selected = defaultView === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => selectView(value)}
+                className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium ${
+                  selected
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ThemeSettings() {
   const [preference, setPreference] = useState<ThemePreference>(loadThemePreference);

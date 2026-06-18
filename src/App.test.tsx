@@ -73,6 +73,9 @@ describe("App", () => {
     openPathMock.mockReset();
     writeClipboardTextMock.mockReset();
     window.localStorage.clear();
+    // These tests exercise specific views; pin the startup view to My Reviews so
+    // the app does not open on the Today aggregate view by default.
+    window.localStorage.setItem("azdodeck:view:default:v1", "myReviews");
     invokeMock.mockImplementation((command: string) => {
       if (command === "get_app_settings") {
         return Promise.resolve({ reviewResultFolderPath: null });

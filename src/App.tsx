@@ -24,6 +24,7 @@ import {
   ListChecks,
   RefreshCw,
   Settings,
+  Sun,
 } from "lucide-react";
 import {
   commandErrorMessage,
@@ -66,6 +67,8 @@ import {
 } from '@/features/work-items/workItemViewsStorage';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from '@/features/work-items/queryKeys';
 import { MyReviewsGrid } from '@/features/pull-requests/MyReviewsGrid';
+import { TodayView } from '@/features/today/TodayView';
+import { loadDefaultView } from '@/features/today/defaultViewStorage';
 
 // Only the default view (My Reviews) loads eagerly; the other views are
 // code-split so app startup does not pay for panels that may never open.
@@ -112,6 +115,7 @@ import {
 } from "@/lib/desktopNotifications";
 
 type View =
+  | "today"
   | "pullRequestSearch"
   | "myReviews"
   | "workItems"
@@ -220,6 +224,7 @@ function recordRecentPaletteItem(item: RecentPaletteItem) {
 
 // Linear-style two-key navigation: press G, then one of these.
 const GOTO_VIEW_KEYS: Record<string, View> = {
+  t: "today",
   r: "myReviews",
   p: "pullRequestSearch",
   w: "myWorkItems",
@@ -235,7 +240,7 @@ const GOTO_CHAIN_TIMEOUT_MS = 1500;
 
 
 function AppShell() {
-  const [view, setView] = useState<View>("myReviews");
+  const [view, setView] = useState<View>(() => loadDefaultView());
   const [helpOpen, setHelpOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [navExpanded, setNavExpanded] = useState<Record<NavSectionId, boolean>>({
@@ -570,6 +575,7 @@ function AppShell() {
   }
 
   function currentViewSyncScope(): SyncScope {
+    if (activeView === "today") return "hot";
     if (activeView === "commits") return "commits";
     if (
       activeView === "workItems" ||
@@ -604,6 +610,14 @@ function AppShell() {
   }
 
   const commandActions: CommandPaletteAction[] = [
+    {
+      disabled: organizations.length === 0,
+      group: "Navigation",
+      id: "nav.today",
+      keywords: ["focus", "review", "work item", "home"],
+      label: "Go to Today",
+      run: () => setView("today"),
+    },
     {
       disabled: organizations.length === 0,
       group: "Navigation",
@@ -1185,6 +1199,13 @@ function AppShell() {
           onKeyDown={handleNavKeyDown}
         >
           <div className="space-y-1">
+            <NavButton
+              active={activeView === "today"}
+              disabled={organizations.length === 0}
+              icon={<Sun className="h-4 w-4" aria-hidden="true" />}
+              label="Today"
+              onClick={() => setView("today")}
+            />
             {/* Pull Requests section */}
             <NavSection
               id="pullRequests"
@@ -1314,7 +1335,9 @@ function AppShell() {
         <header className="flex h-12 items-center justify-between border-b border-border bg-card px-4 lg:px-5">
           <div>
             <h1 className="text-lg font-semibold">
-              {activeView === "pullRequestSearch"
+              {activeView === "today"
+                ? "Today"
+                : activeView === "pullRequestSearch"
                 ? "Pull Requests"
                 : activeView === "myReviews"
                   ? "My Reviews"
@@ -1333,7 +1356,9 @@ function AppShell() {
                               : "Settings"}
             </h1>
             <p className="text-sm text-muted-foreground">
-              {activeView === "pullRequestSearch"
+              {activeView === "today"
+                ? "Required reviews and active work items that need you today"
+                : activeView === "pullRequestSearch"
                 ? "Search Azure DevOps pull requests across projects and repositories"
                 : activeView === "myReviews"
                   ? "Pull requests assigned to you for review"
@@ -1384,6 +1409,8 @@ function AppShell() {
             <LoadingState />
           ) : organizationsQuery.isError ? (
             <ErrorState message={commandErrorMessage(organizationsQuery.error)} />
+          ) : activeView === "today" ? (
+            <TodayView organizations={organizations} />
           ) : activeView === "pullRequestSearch" ? (
             <PullRequestSearch
               organizations={organizations}

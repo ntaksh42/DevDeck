@@ -48,6 +48,12 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Grid → preview / back to grid</span><kbd className={kbd}>Enter / → · Esc / ←</kbd></div>
           <div className={row}><span>Focus views panel</span><kbd className={kbd}>Alt+V</kbd></div>
 
+          <p className={section}>Today</p>
+          <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ Home End</kbd></div>
+          <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>O / Enter / Ctrl+Enter</kbd></div>
+          <div className={row}><span>Vote PR: Approve / Suggestions / Wait / Reject / None</span><kbd className={kbd}>A / S / W / X / 0</kbd></div>
+          <div className={row}><span>Change work item state</span><kbd className={kbd}>S</kbd></div>
+
           <p className={section}>My Reviews</p>
           <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>
           <div className={row}><span>Open / focus preview</span><kbd className={kbd}>Enter / →</kbd></div>
@@ -94,7 +100,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Save (in dialog)</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
 
           <p className={section}>General</p>
-          <div className={row}><span>Go to view</span><kbd className={kbd}>G then R/P/W/I/V/C/S</kbd></div>
+          <div className={row}><span>Go to view</span><kbd className={kbd}>G then T/R/P/W/I/V/C/S</kbd></div>
           <div className={row}><span>Show this help</span><kbd className={kbd}>F1 / ?</kbd></div>
           <div className={row}><span>Close dialog</span><kbd className={kbd}>Esc</kbd></div>
         </div>
