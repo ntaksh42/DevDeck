@@ -1,5 +1,8 @@
 import { readStoredJson, writeStoredJson } from "@/lib/storage";
 
+// These keys have never needed a migration, so they stay bare. If the stored
+// shape ever changes incompatibly, bump them with `storageKey(name, version)`
+// from "@/lib/storage" rather than hand-spelling a `:vN` suffix.
 const PREVIEW_FIELDS_STORAGE_KEY = "azdodeck:workItems:previewFields";
 const PREVIEW_CUSTOM_FIELDS_STORAGE_KEY = "azdodeck:workItems:previewCustomFields";
 
