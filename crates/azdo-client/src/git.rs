@@ -215,6 +215,9 @@ impl AdoClient {
             ("api-version", "7.1-preview".to_string()),
             ("$top", criteria.top.unwrap_or(50).to_string()),
         ];
+        if let Some(skip) = criteria.skip.filter(|value| *value > 0) {
+            query.push(("$skip", skip.to_string()));
+        }
         if let Some(author) = criteria.author.filter(|value| !value.trim().is_empty()) {
             query.push(("searchCriteria.author", author));
         }
@@ -280,6 +283,7 @@ pub struct CommitSearchCriteria {
     pub from_date: Option<String>,
     pub to_date: Option<String>,
     pub top: Option<u32>,
+    pub skip: Option<u32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -306,7 +310,7 @@ mod tests {
     use std::sync::Arc;
 
     use url::Url;
-    use wiremock::matchers::{method, path, query_param};
+    use wiremock::matchers::{method, path, query_param, query_param_is_missing};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
@@ -650,6 +654,7 @@ mod tests {
                     from_date: Some("2026-05-01T00:00:00Z".to_string()),
                     to_date: Some("2026-05-24T23:59:59Z".to_string()),
                     top: Some(25),
+                    skip: None,
                 },
             )
             .await
@@ -660,5 +665,63 @@ mod tests {
             commits[0].author.as_ref().unwrap().name.as_deref(),
             Some("Test User")
         );
+    }
+
+    #[tokio::test]
+    async fn list_commits_sends_skip_when_set() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/git/repositories/repo-1/commits"))
+            .and(query_param("$top", "100"))
+            .and(query_param("$skip", "100"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 1,
+                "value": [{ "commitId": "page2", "comment": "second page" }]
+            })))
+            .mount(&server)
+            .await;
+
+        let commits = test_client(&server)
+            .await
+            .list_commits(
+                "project-1",
+                "repo-1",
+                CommitSearchCriteria {
+                    top: Some(100),
+                    skip: Some(100),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(commits.len(), 1);
+        assert_eq!(commits[0].commit_id, "page2");
+    }
+
+    #[tokio::test]
+    async fn list_commits_omits_skip_when_zero() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/git/repositories/repo-1/commits"))
+            .and(query_param_is_missing("$skip"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 0,
+                "value": []
+            })))
+            .mount(&server)
+            .await;
+
+        test_client(&server)
+            .await
+            .list_commits(
+                "project-1",
+                "repo-1",
+                CommitSearchCriteria {
+                    skip: Some(0),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
     }
 }
