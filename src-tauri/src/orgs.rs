@@ -53,6 +53,7 @@ impl OrganizationService {
         let client = AdoClient::new(&organization, Arc::new(PatProvider::new(pat)))?;
         let connection_data = client.connection_data().await?;
         let credential_key = credential_key(&organization);
+        self.purge_stale_credential(&organization, &credential_key)?;
         self.secrets.set_pat(&credential_key, pat)?;
 
         let authenticated_user_unique_name =
@@ -82,6 +83,18 @@ impl OrganizationService {
         self.db.delete_organization(id)
     }
 
+    /// Remove any credential stored for `organization` that does not match the
+    /// credential key about to be written. When an organization is re-added with
+    /// a different auth provider the previous provider's secret (for example a
+    /// PAT replaced by Azure CLI) would otherwise stay in the OS credential
+    /// store, so it is deleted here before the new credential is stored.
+    fn purge_stale_credential(&self, organization: &str, new_key: &str) -> Result<()> {
+        for stale_key in stale_credential_keys(organization, new_key) {
+            self.secrets.delete_credential(&stale_key)?;
+        }
+        Ok(())
+    }
+
     pub async fn add_azure_cli_organization(
         &self,
         input: AddAzureCliOrganizationInput,
@@ -95,6 +108,7 @@ impl OrganizationService {
         let client = AdoClient::new(&organization, Arc::new(AzureCliProvider::new()))?;
         let connection_data = client.connection_data().await?;
         let credential_key = azure_cli_credential_key(&organization);
+        self.purge_stale_credential(&organization, &credential_key)?;
 
         let authenticated_user_unique_name =
             authenticated_user_unique_name(&connection_data.authenticated_user);
@@ -156,6 +170,20 @@ fn azure_cli_credential_key(organization: &str) -> String {
     format!("azdodeck:org:{organization}:azure-cli")
 }
 
+/// The credential keys for `organization` that should be removed when the
+/// credential `new_key` is about to be stored. Returns every provider key for
+/// the organization except `new_key`, so re-adding an organization under a
+/// different auth provider does not leave the previous provider's secret behind.
+fn stale_credential_keys(organization: &str, new_key: &str) -> Vec<String> {
+    [
+        credential_key(organization),
+        azure_cli_credential_key(organization),
+    ]
+    .into_iter()
+    .filter(|key| key != new_key)
+    .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -184,6 +212,20 @@ mod tests {
         assert_eq!(
             azure_cli_credential_key("contoso"),
             "azdodeck:org:contoso:azure-cli".to_string()
+        );
+    }
+
+    #[test]
+    fn switching_provider_purges_the_other_credential_key() {
+        // Re-adding an org with PAT auth must target the azure-cli key for
+        // removal (and vice versa), while never deleting the key being written.
+        assert_eq!(
+            stale_credential_keys("contoso", &credential_key("contoso")),
+            vec!["azdodeck:org:contoso:azure-cli".to_string()]
+        );
+        assert_eq!(
+            stale_credential_keys("contoso", &azure_cli_credential_key("contoso")),
+            vec!["azdodeck:org:contoso:pat".to_string()]
         );
     }
 
