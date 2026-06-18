@@ -904,6 +904,11 @@ export function WorkItemsGrid({
         groups.get(key)!.push(item);
       }
       const allResults: BulkWorkItemResult[] = [];
+      // BulkWorkItemResult carries only the work item id, which collides across
+      // organizations/projects. Track succeeded items by their fully-qualified
+      // summary key so optimistic overrides and history land on the right items.
+      const succeededKeys = new Set<string>();
+      const succeededOrgIds = new Set<string>();
       for (const [, items] of groups) {
         const r = await assignWorkItems({
           organizationId: items[0].organizationId,
@@ -912,18 +917,18 @@ export function WorkItemsGrid({
           assignedTo: candidate.assignValue,
         });
         allResults.push(...r);
+        const failedIds = new Set(r.filter((result) => result.error).map((result) => result.id));
+        for (const item of items) {
+          if (failedIds.has(item.id)) continue;
+          succeededKeys.add(workItemSummaryKey(item));
+          succeededOrgIds.add(item.organizationId);
+        }
       }
-      return allResults;
+      return { results: allResults, succeededKeys, succeededOrgIds };
     },
-    onSuccess: (results, candidate) => {
-      const succeededIds = new Set(results.filter((result) => !result.error).map((result) => result.id));
-      if (succeededIds.size > 0 && candidate.uniqueName) {
-        const organizationIds = new Set(
-          checkedItems
-            .filter((item) => succeededIds.has(item.id))
-            .map((item) => item.organizationId),
-        );
-        for (const organizationId of organizationIds) {
+    onSuccess: ({ results, succeededKeys, succeededOrgIds }, candidate) => {
+      if (succeededKeys.size > 0 && candidate.uniqueName) {
+        for (const organizationId of succeededOrgIds) {
           void recordAssigneeInteraction({
             organizationId,
             userId: candidate.id,
@@ -934,12 +939,12 @@ export function WorkItemsGrid({
           });
         }
       }
-      if (succeededIds.size > 0) {
+      if (succeededKeys.size > 0) {
         setItemOverrides((current) => {
           const next = new Map(current);
           for (const item of checkedItems) {
-            if (!succeededIds.has(item.id)) continue;
             const key = workItemSummaryKey(item);
+            if (!succeededKeys.has(key)) continue;
             next.set(key, {
               ...(next.get(key) ?? {}),
               assignedTo: candidate.displayName,
