@@ -35,6 +35,7 @@ import {
   type SyncScope,
 } from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
+import { loadRecentPaletteEntries } from "@/lib/recentItems";
 import {
   applyTheme,
   loadThemePreference,
@@ -177,46 +178,6 @@ function commitFirstLine(text: string): string {
   return index === -1 ? text : text.slice(0, index);
 }
 
-type RecentPaletteItem = {
-  kind: PaletteSearchKind;
-  key: string;
-  label: string;
-  detail?: string;
-  query: string;
-  organizationId?: string;
-  webUrl?: string | null;
-};
-
-const PALETTE_RECENT_ITEMS_STORAGE_KEY = "azdodeck:commandPalette:recentItems:v1";
-const PALETTE_RECENT_ITEMS_MAX = 15;
-
-function loadRecentPaletteItems(): RecentPaletteItem[] {
-  try {
-    const parsed = JSON.parse(
-      window.localStorage.getItem(PALETTE_RECENT_ITEMS_STORAGE_KEY) ?? "[]",
-    );
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (item): item is RecentPaletteItem =>
-        !!item &&
-        typeof item === "object" &&
-        typeof item.key === "string" &&
-        typeof item.label === "string" &&
-        typeof item.query === "string" &&
-        (item.kind === "workItems" || item.kind === "pullRequests" || item.kind === "commits"),
-    );
-  } catch {
-    return [];
-  }
-}
-
-function recordRecentPaletteItem(item: RecentPaletteItem) {
-  const items = [item, ...loadRecentPaletteItems().filter((entry) => entry.key !== item.key)].slice(
-    0,
-    PALETTE_RECENT_ITEMS_MAX,
-  );
-  window.localStorage.setItem(PALETTE_RECENT_ITEMS_STORAGE_KEY, JSON.stringify(items));
-}
 
 // Linear-style two-key navigation: press G, then one of these.
 const GOTO_VIEW_KEYS: Record<string, View> = {
@@ -343,9 +304,9 @@ function AppShell() {
 
     if (!kind || kind === "workItems") {
       for (const item of data.workItems) {
-        const recent: RecentPaletteItem = {
-          kind: "workItems",
-          key: `wi:${item.organizationId}:${item.id}`,
+        items.push({
+          id: `wi:${item.organizationId}:${item.id}`,
+          group: "Work Items",
           label: `#${item.id} ${item.title}`,
           detail: [
             showOrg ? item.organizationId : null,
@@ -355,18 +316,8 @@ function AppShell() {
           ]
             .filter(Boolean)
             .join(" · "),
-          query: String(item.id),
-          organizationId: item.organizationId,
-          webUrl: item.webUrl,
-        };
-        items.push({
-          id: recent.key,
-          group: "Work Items",
-          label: recent.label,
-          detail: recent.detail,
           run: () => {
-            recordRecentPaletteItem(recent);
-            openSearchTarget("workItems", recent.query, recent.organizationId);
+            openSearchTarget("workItems", String(item.id), item.organizationId);
           },
           runAlt: item.webUrl
             ? () => {
@@ -389,25 +340,15 @@ function AppShell() {
     }
     if (!kind || kind === "pullRequests") {
       for (const pr of data.pullRequests) {
-        const recent: RecentPaletteItem = {
-          kind: "pullRequests",
-          key: `pr:${pr.organizationId}:${pr.repositoryId}:${pr.pullRequestId}`,
+        items.push({
+          id: `pr:${pr.organizationId}:${pr.repositoryId}:${pr.pullRequestId}`,
+          group: "Pull Requests (active)",
           label: `PR ${pr.pullRequestId} ${pr.title}`,
           detail: [showOrg ? pr.organizationId : null, pr.repositoryName, pr.createdBy]
             .filter(Boolean)
             .join(" · "),
-          query: String(pr.pullRequestId),
-          organizationId: pr.organizationId,
-          webUrl: pr.webUrl,
-        };
-        items.push({
-          id: recent.key,
-          group: "Pull Requests (active)",
-          label: recent.label,
-          detail: recent.detail,
           run: () => {
-            recordRecentPaletteItem(recent);
-            openSearchTarget("pullRequests", recent.query, recent.organizationId);
+            openSearchTarget("pullRequests", String(pr.pullRequestId), pr.organizationId);
           },
           runAlt: pr.webUrl
             ? () => {
@@ -430,9 +371,9 @@ function AppShell() {
     }
     if (!kind || kind === "commits") {
       for (const commit of data.commits) {
-        const recent: RecentPaletteItem = {
-          kind: "commits",
-          key: `c:${commit.organizationId}:${commit.repositoryId}:${commit.commitId}`,
+        items.push({
+          id: `c:${commit.organizationId}:${commit.repositoryId}:${commit.commitId}`,
+          group: "Commits",
           label: `${commit.shortCommitId} ${commitFirstLine(commit.comment)}`,
           detail: [
             showOrg ? commit.organizationId : null,
@@ -441,18 +382,8 @@ function AppShell() {
           ]
             .filter(Boolean)
             .join(" · "),
-          query: rawQuery,
-          organizationId: commit.organizationId,
-          webUrl: commit.webUrl,
-        };
-        items.push({
-          id: recent.key,
-          group: "Commits",
-          label: recent.label,
-          detail: recent.detail,
           run: () => {
-            recordRecentPaletteItem(recent);
-            openSearchTarget("commits", recent.query, recent.organizationId);
+            openSearchTarget("commits", rawQuery, commit.organizationId);
           },
           runAlt: commit.webUrl
             ? () => {
@@ -476,26 +407,43 @@ function AppShell() {
     return items;
   }, [paletteSearch.kind, paletteSearch.query, paletteSearchEnabled, searchAllQuery.data]);
 
-  // With an empty query the palette surfaces recently opened items instead.
+  // The palette surfaces recently opened Work Items and PRs. With an empty query
+  // it lists them newest-first; while typing it narrows them by id or title so a
+  // previously opened item is reachable without re-running a search.
   const paletteRecentItems = useMemo<CommandPaletteSearchItem[]>(() => {
     if (!commandPaletteOpen || organizations.length === 0) return [];
-    if (debouncedPaletteSearchText.trim().length > 0) return [];
-    return loadRecentPaletteItems().map((item) => ({
-      id: `recent:${item.key}`,
+    // A prefixed search (wi:/pr:/c:) is an explicit live search, not a recents lookup.
+    if (paletteSearch.kind !== null) return [];
+    // Once live cross-org search kicks in, those results stand on their own;
+    // recents are the fallback for an empty or too-short query.
+    if (paletteSearchEnabled) return [];
+    const filterText = debouncedPaletteSearchText.trim().toLowerCase();
+    const matches = loadRecentPaletteEntries(organizations.length > 1).filter((entry) => {
+      if (filterText.length === 0) return true;
+      const needle = filterText.replace(/^#/, "");
+      return entry.label.toLowerCase().includes(needle) || entry.query.includes(needle);
+    });
+    return matches.map((entry) => ({
+      id: `recent:${entry.key}`,
       group: "Recent",
-      label: item.label,
-      detail: item.detail,
+      label: entry.label,
+      detail: entry.detail,
       run: () => {
-        recordRecentPaletteItem(item);
-        openSearchTarget(item.kind, item.query, item.organizationId);
+        openSearchTarget(entry.kind, entry.query, entry.organizationId);
       },
-      runAlt: item.webUrl
+      runAlt: entry.webUrl
         ? () => {
-            void openExternalUrl(item.webUrl as string);
+            void openExternalUrl(entry.webUrl as string);
           }
         : undefined,
     }));
-  }, [commandPaletteOpen, debouncedPaletteSearchText, organizations.length]);
+  }, [
+    commandPaletteOpen,
+    debouncedPaletteSearchText,
+    organizations.length,
+    paletteSearch.kind,
+    paletteSearchEnabled,
+  ]);
 
   function closeCommandPalette(): void {
     setCommandPaletteOpen(false);

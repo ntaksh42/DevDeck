@@ -35,6 +35,7 @@ import {
   type SortDirection,
 } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
+import { recordRecentPullRequest } from '@/lib/recentItems';
 import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
@@ -736,6 +737,10 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
   useEffect(() => {
     containerRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (selectedPr) recordRecentPullRequest(selectedPr);
+  }, [selectedPr]);
 
   useEffect(() => {
     window.localStorage.setItem(

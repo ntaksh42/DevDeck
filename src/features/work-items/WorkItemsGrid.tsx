@@ -38,6 +38,7 @@ import {
 } from '@/lib/utils';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { readStoredJson, writeStoredJson } from '@/lib/storage';
+import { recordRecentWorkItem } from '@/lib/recentItems';
 import { openExternalUrl } from '@/lib/openExternal';
 import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
@@ -63,7 +64,6 @@ const MAX_WORK_ITEM_PREVIEW_WIDTH = 8192;
 const WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY = "azdodeck:layout:workItemPreviewWidth";
 const WI_GRID_ROW_HEIGHT = 29;
 const WI_GRID_OVERSCAN = 8;
-const RECENT_WORK_ITEMS_STORAGE_KEY = "azdodeck:workItems:recent";
 type WiSortKey =
   | "id"
   | "workItemType"
@@ -372,32 +372,6 @@ const FILTERABLE_COLUMNS: Record<FilterableColumn, (item: WorkItemSummary) => st
 };
 function isFilterableColumn(col: WiSortKey): col is FilterableColumn {
   return col in FILTERABLE_COLUMNS;
-}
-
-function recordRecentWorkItem(item: WorkItemSummary) {
-  try {
-    const current = JSON.parse(
-      window.localStorage.getItem(RECENT_WORK_ITEMS_STORAGE_KEY) ?? "[]",
-    );
-    const list = Array.isArray(current) ? current : [];
-    const key = `${item.organizationId}:${item.projectId}:${item.id}`;
-    const next = [
-      {
-        key,
-        id: item.id,
-        organizationId: item.organizationId,
-        projectId: item.projectId,
-        projectName: item.projectName,
-        title: item.title,
-        viewedAt: new Date().toISOString(),
-        webUrl: item.webUrl,
-      },
-      ...list.filter((entry) => entry?.key !== key),
-    ].slice(0, 20);
-    window.localStorage.setItem(RECENT_WORK_ITEMS_STORAGE_KEY, JSON.stringify(next));
-  } catch {
-    // Recent items are a convenience only.
-  }
 }
 
 const WorkItemGridRow = forwardRef<
