@@ -1,6 +1,20 @@
 import { type ReactNode } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
+// Small count badge shown next to a nav item. Stays compact so it survives a
+// narrow sidebar; large counts are capped to keep the width bounded.
+function NavCountBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span
+      aria-hidden="true"
+      className="ml-auto shrink-0 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-medium leading-none text-muted-foreground tabular-nums group-hover:bg-background"
+    >
+      {count > 999 ? "999+" : count}
+    </span>
+  );
+}
+
 export function NavButton({
   active,
   disabled = false,
@@ -85,11 +99,13 @@ export function NavSubItem({
   active,
   disabled = false,
   label,
+  count,
   onClick,
 }: {
   active: boolean;
   disabled?: boolean;
   label: string;
+  count?: number;
   onClick: () => void;
 }) {
   return (
@@ -97,7 +113,7 @@ export function NavSubItem({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      aria-label={label}
+      aria-label={count && count > 0 ? `${label}, ${count}` : label}
       data-nav-item="true"
       data-nav-active={active ? "true" : undefined}
       data-nav-label={label}
@@ -106,6 +122,7 @@ export function NavSubItem({
       } disabled:cursor-not-allowed disabled:opacity-50`}
     >
       <span className="min-w-0 truncate">{label}</span>
+      {typeof count === "number" ? <NavCountBadge count={count} /> : null}
     </button>
   );
 }

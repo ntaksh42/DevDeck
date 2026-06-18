@@ -12,6 +12,7 @@ import {
   keepPreviousData,
   type QueryClient,
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -27,8 +28,12 @@ import {
 } from "lucide-react";
 import {
   commandErrorMessage,
+  countWorkItemQuery,
   getAppSettings,
+  listMyReviewPullRequests,
+  listMyWorkItems,
   listOrganizations,
+  listWorkItemProjects,
   searchAll,
   syncUpdatedEventSchema,
   triggerSync,
@@ -506,6 +511,74 @@ function AppShell() {
   const pinnedWorkItemViews = workItemNavViews.filter((item) => item.pinned);
   const activePinnedWorkItemView = pinnedWorkItemViews.find(
     (item) => item.id === activeWorkItemViewId,
+  );
+
+  // Sidebar count badges for the first configured organization. They reuse the
+  // same query keys as the feature panels, so they share the cache and are
+  // refreshed by the same sync invalidations. Count failures stay isolated:
+  // the queries are read for their data only and never block navigation.
+  const badgeOrganizationId = organizations[0]?.id ?? "";
+
+  const myReviewsBadgeQuery = useQuery({
+    queryKey: ["myReviews", badgeOrganizationId],
+    queryFn: () => listMyReviewPullRequests({ organizationId: badgeOrganizationId }),
+    enabled: !!badgeOrganizationId,
+    staleTime: 5 * 60_000,
+  });
+  // "My Reviews" surfaces the No Vote backlog: published PRs awaiting your vote.
+  const myReviewsNoVoteCount = (myReviewsBadgeQuery.data ?? []).filter(
+    (pr) => !pr.isDraft && pr.myVote === 0,
+  ).length;
+
+  const myItemsBadgeQuery = useQuery({
+    queryKey: workItemQueryKeys.myItems(badgeOrganizationId),
+    queryFn: () => listMyWorkItems({ organizationId: badgeOrganizationId }),
+    enabled: !!badgeOrganizationId,
+    staleTime: 5 * 60_000,
+  });
+  const myItemsCount = myItemsBadgeQuery.data?.length ?? 0;
+
+  // Pinned views with an unset project fall back to the first project, matching
+  // WorkItemViewsPanel. Only fetch the project list when a pinned view needs it.
+  const pinnedNeedsProjectFallback = pinnedWorkItemViews.some((view) => !view.projectId);
+  const badgeProjectsQuery = useQuery({
+    queryKey: workItemQueryKeys.projects(badgeOrganizationId),
+    queryFn: () => listWorkItemProjects({ organizationId: badgeOrganizationId }),
+    enabled: !!badgeOrganizationId && pinnedNeedsProjectFallback,
+    staleTime: 5 * 60_000,
+  });
+  const fallbackProjectId = badgeProjectsQuery.data?.[0]?.projectId;
+
+  const pinnedViewCountQueries = useQueries({
+    queries: pinnedWorkItemViews.map((view) => {
+      const projectId = view.projectId || fallbackProjectId;
+      return {
+        queryKey: workItemQueryKeys.queryCount({
+          organizationId: badgeOrganizationId,
+          viewId: view.id,
+          projectId,
+          wiql: view.wiql,
+          limit: view.limit,
+        }),
+        queryFn: () =>
+          countWorkItemQuery({
+            organizationId: badgeOrganizationId,
+            projectId: projectId ?? "",
+            wiql: view.wiql,
+            limit: view.limit,
+          }),
+        enabled: !!badgeOrganizationId && !!projectId && !!view.wiql.trim(),
+        staleTime: 5 * 60_000,
+      };
+    }),
+  });
+  const pinnedViewCounts = new Map<string, number>(
+    pinnedWorkItemViews
+      .map((view, index): [string, number] | null => {
+        const count = pinnedViewCountQueries[index]?.data;
+        return typeof count === "number" ? [view.id, count] : null;
+      })
+      .filter((entry): entry is [string, number] => entry !== null),
   );
 
   function getNavItems(): HTMLButtonElement[] {
