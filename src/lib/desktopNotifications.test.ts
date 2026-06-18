@@ -78,6 +78,35 @@ describe("sendTauriDesktopNotification click wiring", () => {
     );
   });
 
+  it("opens the first item url when an aggregated summary notification is clicked", async () => {
+    const items = Array.from({ length: 5 }, (_, index) => ({
+      kind: "assigned" as const,
+      id: index + 1,
+      title: `Item ${index + 1}`,
+      projectName: "Proj",
+      state: null,
+      previousState: null,
+      assignedTo: null,
+      webUrl: `https://dev.azure.com/org/_workitems/edit/${index + 1}`,
+    }));
+
+    const result = await showWorkItemNotificationEvent(
+      { organizationId: "org", organizationName: "Org", items },
+      settings,
+    );
+
+    expect(result).toBe("sent");
+    // A single summary notification is sent for 4+ updates.
+    expect(sendNotification).toHaveBeenCalledTimes(1);
+    const sent = sendNotification.mock.calls[0][0] as { id?: number };
+    expect(typeof sent.id).toBe("number");
+
+    actionCb?.({ id: sent.id });
+    expect(openExternalUrl).toHaveBeenCalledWith(
+      "https://dev.azure.com/org/_workitems/edit/1",
+    );
+  });
+
   it("ignores action events for unknown notification ids", async () => {
     await showWorkItemNotificationEvent(
       {

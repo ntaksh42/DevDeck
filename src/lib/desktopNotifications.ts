@@ -61,6 +61,7 @@ export async function showWorkItemNotificationEvent(
   const contentPreviewEnabled = settings.notificationContentPreviewEnabled;
   const items = event.items.slice(0, 20);
   if (items.length > 3) {
+    const jumpUrl = items.find((item) => item.webUrl)?.webUrl ?? null;
     return sendDesktopNotification(`${items.length} work item updates`, {
       body: contentPreviewEnabled
         ? `${event.organizationName}: ${items
@@ -68,6 +69,11 @@ export async function showWorkItemNotificationEvent(
             .map((item) => `#${item.id} ${item.title}`)
             .join(", ")}`
         : "Open AzDoDeck to review the latest work item updates.",
+      onClick: jumpUrl
+        ? () => {
+            void openExternalUrl(jumpUrl);
+          }
+        : undefined,
     });
   }
 
@@ -100,6 +106,7 @@ export async function showPullRequestNotificationEvent(
   const contentPreviewEnabled = settings.notificationContentPreviewEnabled;
   const items = event.items.slice(0, 20);
   if (items.length > 3) {
+    const jumpUrl = items.find((item) => item.webUrl)?.webUrl ?? null;
     return sendDesktopNotification(`${items.length} pull request updates`, {
       body: contentPreviewEnabled
         ? `${event.organizationName}: ${items
@@ -107,6 +114,11 @@ export async function showPullRequestNotificationEvent(
             .map((item) => `!${item.pullRequestId} ${item.title}`)
             .join(", ")}`
         : "Open AzDoDeck to review the latest pull request updates.",
+      onClick: jumpUrl
+        ? () => {
+            void openExternalUrl(jumpUrl);
+          }
+        : undefined,
     });
   }
 
