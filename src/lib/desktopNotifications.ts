@@ -1,5 +1,6 @@
 import {
   isPermissionGranted,
+  onAction,
   requestPermission,
   sendNotification,
 } from "@tauri-apps/plugin-notification";
@@ -169,6 +170,38 @@ async function sendDesktopNotification(
   return "sent";
 }
 
+// The Tauri notification plugin does not invoke a JS callback directly; instead
+// it emits an `actionPerformed` event (via `onAction`) when the user clicks a
+// toast, identifying the notification by its numeric id. We assign each
+// notification a unique id, remember its click handler, and dispatch the stored
+// handler when the matching event arrives.
+const MAX_PENDING_TAURI_HANDLERS = 100;
+const tauriNotificationHandlers = new Map<number, () => void>();
+let nextTauriNotificationId = 1;
+let tauriActionListenerPromise: Promise<unknown> | null = null;
+
+function ensureTauriActionListener(): void {
+  if (tauriActionListenerPromise) {
+    return;
+  }
+  tauriActionListenerPromise = onAction((notification) => {
+    const id = notification.id;
+    if (typeof id !== "number") {
+      return;
+    }
+    const handler = tauriNotificationHandlers.get(id);
+    if (handler) {
+      tauriNotificationHandlers.delete(id);
+      handler();
+    }
+  }).catch(() => {
+    // If the listener fails to register, clear the promise so a later
+    // notification can retry. Returning (not rethrowing) avoids an unhandled
+    // rejection, since nothing awaits this promise.
+    tauriActionListenerPromise = null;
+  });
+}
+
 async function sendTauriDesktopNotification(
   title: string,
   options: { body: string; onClick?: () => void },
@@ -182,7 +215,23 @@ async function sendTauriDesktopNotification(
     return "denied";
   }
 
+  let id: number | undefined;
+  if (options.onClick) {
+    ensureTauriActionListener();
+    id = nextTauriNotificationId++;
+    // Toasts that are dismissed without a click never fire `actionPerformed`,
+    // so bound the map to avoid leaking handlers over a long-lived session.
+    if (tauriNotificationHandlers.size >= MAX_PENDING_TAURI_HANDLERS) {
+      const oldest = tauriNotificationHandlers.keys().next().value;
+      if (oldest !== undefined) {
+        tauriNotificationHandlers.delete(oldest);
+      }
+    }
+    tauriNotificationHandlers.set(id, options.onClick);
+  }
+
   sendNotification({
+    id,
     title,
     body: options.body,
   });
