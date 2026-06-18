@@ -73,6 +73,28 @@ fn make_org_draft() -> OrganizationDraft {
 }
 
 #[test]
+fn pull_request_id_from_artifact_parses_git_links() {
+    assert_eq!(
+        pull_request_id_from_artifact("vstfs:///Git/PullRequestId/proj-guid%2Frepo-guid%2F4321"),
+        Some(4321)
+    );
+    // Already-decoded separators are tolerated too.
+    assert_eq!(
+        pull_request_id_from_artifact("vstfs:///Git/PullRequestId/proj/repo/77"),
+        Some(77)
+    );
+    // Non-PR artifact links and work item links are ignored.
+    assert_eq!(
+        pull_request_id_from_artifact("vstfs:///Git/Commit/proj%2Frepo%2Fabc"),
+        None
+    );
+    assert_eq!(
+        pull_request_id_from_artifact("https://dev.azure.com/org/_apis/wit/workItems/5"),
+        None
+    );
+}
+
+#[test]
 fn summarize_maps_identity_object() {
     let organization = Organization {
         id: "contoso".to_string(),

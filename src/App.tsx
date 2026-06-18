@@ -110,6 +110,13 @@ import {
   type WorkItemNotificationEvent,
   type PullRequestNotificationEvent,
 } from "@/lib/desktopNotifications";
+import {
+  NAVIGATE_WORK_ITEM_EVENT,
+  NAVIGATE_PULL_REQUEST_EVENT,
+  type NavigateWorkItemDetail,
+  type NavigatePullRequestDetail,
+} from "@/lib/crossLinks";
+import type { MyReviewsSelectRequest } from "@/features/pull-requests/MyReviewsGrid";
 
 type View =
   | "pullRequestSearch"
@@ -292,11 +299,45 @@ function AppShell() {
     useState<ExternalSearchRequest | null>(null);
   const [commitSearchRequest, setCommitSearchRequest] =
     useState<ExternalSearchRequest | null>(null);
+  const [myReviewsSelectRequest, setMyReviewsSelectRequest] =
+    useState<MyReviewsSelectRequest | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedPaletteSearchText(paletteSearchText), 200);
     return () => window.clearTimeout(timer);
   }, [paletteSearchText]);
+
+  // Cross-links from the preview panels: jump between a work item and its
+  // linked pull requests by switching tabs and targeting the requested item.
+  useEffect(() => {
+    function onNavigateWorkItem(event: Event) {
+      const detail = (event as CustomEvent<NavigateWorkItemDetail>).detail;
+      if (!detail) return;
+      setWorkItemSearchRequest({
+        query: String(detail.workItemId),
+        requestId: Date.now(),
+        organizationId: detail.organizationId,
+      });
+      setView("workItems");
+    }
+    function onNavigatePullRequest(event: Event) {
+      const detail = (event as CustomEvent<NavigatePullRequestDetail>).detail;
+      if (!detail) return;
+      setMyReviewsSelectRequest({
+        pullRequestId: detail.pullRequestId,
+        repositoryId: detail.repositoryId ?? null,
+        organizationId: detail.organizationId,
+        requestId: Date.now(),
+      });
+      setView("myReviews");
+    }
+    window.addEventListener(NAVIGATE_WORK_ITEM_EVENT, onNavigateWorkItem);
+    window.addEventListener(NAVIGATE_PULL_REQUEST_EVENT, onNavigatePullRequest);
+    return () => {
+      window.removeEventListener(NAVIGATE_WORK_ITEM_EVENT, onNavigateWorkItem);
+      window.removeEventListener(NAVIGATE_PULL_REQUEST_EVENT, onNavigatePullRequest);
+    };
+  }, []);
 
   const paletteSearch = parsePaletteSearch(debouncedPaletteSearchText);
   const paletteSearchEnabled =
@@ -1391,7 +1432,11 @@ function AppShell() {
               onExternalSearchHandled={() => setPullRequestSearchRequest(null)}
             />
           ) : activeView === "myReviews" ? (
-            <MyReviewsGrid organizations={organizations} />
+            <MyReviewsGrid
+              organizations={organizations}
+              selectRequest={myReviewsSelectRequest}
+              onSelectRequestHandled={() => setMyReviewsSelectRequest(null)}
+            />
           ) : activeView === "workItems" ? (
             <WorkItemSearch
               organizations={organizations}

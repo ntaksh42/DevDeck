@@ -261,6 +261,17 @@ const workItemRelationSchema = z.object({
   webUrl: z.string().nullable(),
 });
 
+const workItemPullRequestLinkSchema = z.object({
+  pullRequestId: z.number(),
+  repositoryId: z.string().nullable(),
+  title: z.string().nullable(),
+  status: z.string().nullable(),
+  myVoteLabel: z.string().nullable(),
+  webUrl: z.string().nullable(),
+});
+
+export type WorkItemPullRequestLink = z.infer<typeof workItemPullRequestLinkSchema>;
+
 const workItemPreviewSchema = z.object({
   organizationId: z.string(),
   projectId: z.string(),
@@ -288,6 +299,7 @@ const workItemPreviewSchema = z.object({
   comments: z.array(workItemCommentSchema).default([]),
   commentsUnavailable: z.boolean().default(false),
   relations: z.array(workItemRelationSchema).default([]),
+  pullRequests: z.array(workItemPullRequestLinkSchema).default([]),
 });
 
 export type WorkItemPreview = z.infer<typeof workItemPreviewSchema>;

@@ -559,7 +559,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         pullRequestId: prId,
         title: summary?.title ?? `Demo pull request #${prId}`,
         description:
-          "## Summary\nImproves the dashboard loading flow.\n\n- configurable refresh interval\n- removes the legacy loader",
+          "## Summary\nImproves the dashboard loading flow. Implements AB#123 and partially addresses AB#187.\n\n- configurable refresh interval\n- removes the legacy loader",
         // Backend strips refs/heads/ in get_review; mirror that here.
         sourceRefName: "feature/dashboard-loading",
         targetRefName: summary?.targetRefName ?? "main",
@@ -1485,6 +1485,24 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
         state: "Closed",
         workItemType: "Bug",
         webUrl: `https://dev.azure.com/contoso/${encodeURIComponent(summary.projectName)}/_workitems/edit/77`,
+      },
+    ],
+    pullRequests: [
+      {
+        pullRequestId: 101,
+        repositoryId: "api-gateway",
+        title: "Add rate limiter to API gateway",
+        status: "Active",
+        myVoteLabel: "No Vote",
+        webUrl: "https://dev.azure.com/contoso/demo-project/_git/api-gateway/pullrequest/101",
+      },
+      {
+        pullRequestId: 9001,
+        repositoryId: null,
+        title: null,
+        status: null,
+        myVoteLabel: null,
+        webUrl: null,
       },
     ],
   });

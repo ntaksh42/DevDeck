@@ -17,6 +17,7 @@ import type {
 import { commandErrorMessage, listWorkItemFields, listWorkItemUpdates } from "@/lib/azdoCommands";
 import { focusPrimaryGrid, formatRelativeDate, isEditableTarget } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
+import { navigateToPullRequest } from "@/lib/crossLinks";
 import { readStoredJson, writeStoredJson } from "@/lib/storage";
 import { ShortcutHint } from "@/components/ShortcutHint";
 import { workItemQueryKeys } from "./queryKeys";
@@ -520,6 +521,60 @@ export function WorkItemPreviewDetails({
                 {relation.state ? <WorkItemStatePill state={relation.state} /> : null}
               </button>
             ))}
+          </div>
+        </PreviewSection>
+      ) : null}
+
+      {preview.pullRequests.length > 0 ? (
+        <PreviewSection
+          className="mt-2"
+          collapseId="pullRequests"
+          title={`Pull Requests (${preview.pullRequests.length})`}
+        >
+          <div className="space-y-1">
+            {preview.pullRequests.map((pr) => {
+              const inReviews = !!pr.repositoryId;
+              return (
+                <button
+                  key={pr.pullRequestId}
+                  type="button"
+                  onClick={() => {
+                    if (inReviews) {
+                      navigateToPullRequest({
+                        organizationId: preview.organizationId,
+                        repositoryId: pr.repositoryId,
+                        pullRequestId: pr.pullRequestId,
+                      });
+                    } else if (pr.webUrl) {
+                      openExternalUrl(pr.webUrl);
+                    }
+                  }}
+                  disabled={!inReviews && !pr.webUrl}
+                  className="flex w-full min-w-0 items-center gap-1.5 rounded border border-border bg-card px-1.5 py-1 text-left text-xs hover:bg-secondary disabled:cursor-default disabled:opacity-60"
+                  title={
+                    inReviews
+                      ? "Open in My Reviews"
+                      : pr.webUrl ?? "Pull request not in My Reviews"
+                  }
+                >
+                  <span className="w-16 shrink-0 truncate text-[11px] text-muted-foreground">
+                    {inReviews ? "Review" : "PR"}
+                  </span>
+                  <span className="shrink-0 font-mono text-[11px] text-primary">
+                    !{pr.pullRequestId}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">
+                    {pr.title ?? "(not in My Reviews)"}
+                  </span>
+                  {pr.myVoteLabel ? (
+                    <span className="shrink-0 rounded border border-border bg-muted px-1 py-px text-[10px] text-muted-foreground">
+                      {pr.myVoteLabel}
+                    </span>
+                  ) : null}
+                  {pr.status ? <WorkItemStatePill state={pr.status} /> : null}
+                </button>
+              );
+            })}
           </div>
         </PreviewSection>
       ) : null}

@@ -218,7 +218,20 @@ pub(super) fn summarize_work_item_preview(
             .collect(),
         comments_unavailable: false,
         relations: Vec::new(),
+        pull_requests: Vec::new(),
     }
+}
+
+/// Parses the pull request id from an `ArtifactLink` relation URL. Git PR links
+/// look like `vstfs:///Git/PullRequestId/{projGuid}%2F{repoGuid}%2F{prId}`,
+/// so the PR id is the final segment after URL-decoding the `%2F` separators.
+pub(super) fn pull_request_id_from_artifact(url: &str) -> Option<i64> {
+    let lowered = url.to_ascii_lowercase();
+    if !lowered.contains("/git/pullrequestid/") {
+        return None;
+    }
+    let decoded = url.replace("%2F", "/").replace("%2f", "/");
+    decoded.rsplit('/').next()?.parse::<i64>().ok()
 }
 
 /// Maps an Azure DevOps link relation to (display label, sort rank).
