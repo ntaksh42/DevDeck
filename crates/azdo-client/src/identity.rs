@@ -148,7 +148,8 @@ impl AdoClient {
         query: &str,
         top: usize,
     ) -> Result<Vec<IdentityPickerIdentity>> {
-        if top == 0 {
+        let query = query.trim();
+        if query.is_empty() || top == 0 {
             return Ok(Vec::new());
         }
 
@@ -158,7 +159,7 @@ impl AdoClient {
                 "_apis/IdentityPicker/Identities",
                 &[("api-version", "5.0-preview.1")],
                 &IdentityPickerRequest {
-                    query: query.trim(),
+                    query,
                     identity_types: ["user"],
                     // "ims" only: search identities already known to the
                     // organization, not the whole backing directory (Entra ID).
@@ -559,6 +560,23 @@ mod tests {
 
         assert_eq!(identities.len(), 1);
         assert_eq!(identities[0].display_name.as_deref(), Some("Alice Johnson"));
+    }
+
+    #[tokio::test]
+    async fn search_identity_picker_skips_request_for_blank_query() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/testorg/_apis/IdentityPicker/Identities"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(0)
+            .mount(&server)
+            .await;
+
+        let client = test_client(&server).await;
+        for query in ["", "   "] {
+            let identities = client.search_identity_picker(query, 40).await.unwrap();
+            assert!(identities.is_empty());
+        }
     }
 
     #[tokio::test]
