@@ -710,11 +710,17 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       };
     }
     case "update_pull_request": {
-      const input = (args as { input?: { action?: string } } | undefined)?.input;
+      const input = (args as { input?: { action?: string; pullRequestId?: number } } | undefined)
+        ?.input;
       const action = input?.action;
+      // publish and complete clear draft; abandon/reactivate keep the PR's original draft state.
+      const originalDraft =
+        demoReviewPullRequests().find((pr) => pr.pullRequestId === input?.pullRequestId)?.isDraft ??
+        false;
+      const isDraft = action === "publish" || action === "complete" ? false : originalDraft;
       return {
         status: action === "abandon" ? "abandoned" : action === "complete" ? "completed" : "active",
-        isDraft: action === "publish" ? false : true,
+        isDraft,
       };
     }
     case "search_work_items": {
