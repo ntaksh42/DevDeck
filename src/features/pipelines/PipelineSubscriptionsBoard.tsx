@@ -19,6 +19,7 @@ const IDLE_REFRESH_INTERVAL_MS = 60_000;
 type RunSelection = {
   organizationId: string;
   projectId: string;
+  definitionId: number;
   buildId: number;
 };
 
@@ -104,7 +105,11 @@ export function PipelineSubscriptionsBoard({
   }
 
   // Arrow / j-k navigation across the run rows of one expanded pipeline.
-  function handleRunKeyDown(event: ReactKeyboardEvent, rows: PipelineRunSummary[]) {
+  function handleRunKeyDown(
+    event: ReactKeyboardEvent,
+    rows: PipelineRunSummary[],
+    definitionId: number,
+  ) {
     // Ignore the Open button and any modified chords.
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     const target = event.target as HTMLElement;
@@ -131,6 +136,7 @@ export function PipelineSubscriptionsBoard({
       onSelectRun({
         organizationId: run.organizationId,
         projectId: run.projectId,
+        definitionId,
         buildId: run.buildId,
       });
       return;
@@ -252,7 +258,7 @@ export function PipelineSubscriptionsBoard({
                     aria-label={`${sub.definitionName} runs`}
                     data-primary-grid={key === primaryGridKey ? "true" : undefined}
                     className="overflow-x-auto bg-muted/20 pl-6 outline-none"
-                    onKeyDown={(event) => handleRunKeyDown(event, runs)}
+                    onKeyDown={(event) => handleRunKeyDown(event, runs, sub.definitionId)}
                   >
                     <div className="min-w-[660px]">
                       {runs.map((run, runIndex) => {
@@ -268,6 +274,7 @@ export function PipelineSubscriptionsBoard({
                               onSelectRun({
                                 organizationId: run.organizationId,
                                 projectId: run.projectId,
+                                definitionId: sub.definitionId,
                                 buildId: run.buildId,
                               })
                             }

@@ -34,6 +34,7 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
   const [detailTarget, setDetailTarget] = useState<{
     organizationId: string;
     projectId: string;
+    definitionId: number;
     buildId: number;
   } | null>(null);
   const [subscriptions, setSubscriptions] = useState<PipelineSubscription[]>(() =>
@@ -224,18 +225,22 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
           subscriptions={subscriptions}
           selectedBuildId={detailTarget?.buildId ?? null}
           onSelectRun={(selection) => setDetailTarget(selection)}
-          onRemove={(removeProjectId, definitionId) => {
+          onRemove={(removeProjectId, removeDefinitionId) => {
             persistSubscriptions(
               removeSubscription(
                 subscriptions,
                 selectedOrganizationId,
                 removeProjectId,
-                definitionId,
+                removeDefinitionId,
               ),
             );
-            // Clear the detail panel if it is showing a run from the pipeline
-            // that was just unwatched.
-            if (detailTarget?.projectId === removeProjectId) {
+            // Clear the detail panel only if it is showing a run from the exact
+            // pipeline that was just unwatched, identified by project and
+            // definition (other pipelines in the same project stay shown).
+            if (
+              detailTarget?.projectId === removeProjectId &&
+              detailTarget?.definitionId === removeDefinitionId
+            ) {
               setDetailTarget(null);
             }
           }}
