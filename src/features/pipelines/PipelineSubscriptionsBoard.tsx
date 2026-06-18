@@ -143,12 +143,26 @@ export function PipelineSubscriptionsBoard({
     rowEls[nextIndex]?.focus();
   }
 
-  // focusPrimaryGrid() targets a single [data-primary-grid] element, so only
-  // the first expanded pipeline's run grid carries the marker.
-  const primaryGridKey =
-    orgSubscriptions
-      .map((sub) => subscriptionKey(sub.organizationId, sub.projectId, sub.definitionId))
-      .find((key) => expanded.has(key)) ?? null;
+  // focusPrimaryGrid() targets a single [data-primary-grid] element, so the
+  // marker must sit on the grid holding the selected run; otherwise returning
+  // from the detail panel strands focus on a different pipeline. Prefer the
+  // expanded grid that contains the selection, falling back to the first
+  // expanded grid when nothing is selected there.
+  const primaryGridKey = useMemo(() => {
+    const expandedSubs = orgSubscriptions
+      .map((sub, index) => ({
+        key: subscriptionKey(sub.organizationId, sub.projectId, sub.definitionId),
+        runs: queries[index]?.data ?? [],
+      }))
+      .filter(({ key }) => expanded.has(key));
+    if (selectedBuildId != null) {
+      const withSelection = expandedSubs.find(({ runs }) =>
+        runs.some((run) => run.buildId === selectedBuildId),
+      );
+      if (withSelection) return withSelection.key;
+    }
+    return expandedSubs[0]?.key ?? null;
+  }, [orgSubscriptions, queries, expanded, selectedBuildId]);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-card">
