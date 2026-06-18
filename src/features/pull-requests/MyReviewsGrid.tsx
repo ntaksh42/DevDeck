@@ -38,6 +38,7 @@ import { openExternalUrl } from '@/lib/openExternal';
 import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
+import { RowShortcutHints } from '@/components/RowShortcutHints';
 import { LoadingState, ErrorState } from '@/components/StateDisplay';
 import { PrReviewPanel } from './PrReviewPanel';
 import { VOTE_BADGE_CLASSES, voteTone } from './voteVisual';
@@ -1311,9 +1312,21 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
 
           {/* Status bar */}
           <div className="flex items-center justify-between border-t border-border px-2 py-1 text-xs text-muted-foreground">
-            <span>
-              {visiblePrs.length} total,{" "}
-              <span className="font-medium text-foreground">{noVoteCount}</span> not voted
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="shrink-0">
+                {visiblePrs.length} total,{" "}
+                <span className="font-medium text-foreground">{noVoteCount}</span> not voted
+              </span>
+              {!showSnoozed && selectedPr ? (
+                <RowShortcutHints
+                  shortcuts={[
+                    { keys: "Enter", label: "Preview" },
+                    { keys: "Ctrl+Enter", label: "Open" },
+                    { keys: "C", label: "Copy" },
+                    { keys: "D", label: "Drafts" },
+                  ]}
+                />
+              ) : null}
             </span>
             <span className="flex items-center gap-2">
               <button

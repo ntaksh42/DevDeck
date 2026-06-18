@@ -42,6 +42,7 @@ import { openExternalUrl } from '@/lib/openExternal';
 import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { LoadingState } from '@/components/StateDisplay';
+import { RowShortcutHints } from '@/components/RowShortcutHints';
 import { WorkItemPreviewPanel } from './WorkItemPreviewPanel';
 import { invalidateWorkItemMutationCaches, workItemQueryKeys } from './queryKeys';
 import {
@@ -1585,15 +1586,32 @@ export function WorkItemsGrid({
           )}
 
           <div className="flex items-center justify-between gap-2 border-t border-border px-2 py-1 text-xs text-muted-foreground">
-            <span>
-              {loading
-                ? "Loading…"
-                : searched
-                  ? hasActiveColumnFilters
-                    ? `${displayed.length} of ${sorted.length} item${sorted.length === 1 ? "" : "s"}`
-                    : `${displayed.length} item${displayed.length === 1 ? "" : "s"}`
-                  : "Ready"}
-              {dataUpdatedAt ? ` · data ${formatRelativeDate(new Date(dataUpdatedAt).toISOString())}` : ""}
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="shrink-0">
+                {loading
+                  ? "Loading…"
+                  : searched
+                    ? hasActiveColumnFilters
+                      ? `${displayed.length} of ${sorted.length} item${sorted.length === 1 ? "" : "s"}`
+                      : `${displayed.length} item${displayed.length === 1 ? "" : "s"}`
+                    : "Ready"}
+                {dataUpdatedAt ? ` · data ${formatRelativeDate(new Date(dataUpdatedAt).toISOString())}` : ""}
+              </span>
+              {!showSnoozed && checkedItems.length === 0 && selectedItem ? (
+                <RowShortcutHints
+                  shortcuts={[
+                    { keys: "S", label: "State" },
+                    { keys: "A", label: "Assignee" },
+                    { keys: "P", label: "Priority" },
+                    ...(previewVisible
+                      ? ([
+                          { keys: "M", label: "Comment" },
+                          { keys: "Ctrl+Enter", label: "Post" },
+                        ] as const)
+                      : []),
+                  ]}
+                />
+              ) : null}
             </span>
             <span className="flex items-center gap-2">
               {triageScope ? (
