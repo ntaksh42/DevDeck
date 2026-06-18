@@ -4,6 +4,25 @@ use std::time::{Duration, Instant};
 
 use crate::error::{AdoError, Result};
 
+/// Cloud-neutral Azure DevOps application (resource) ID used when requesting an
+/// Azure CLI access token. This GUID is the same across the public and national
+/// clouds (Azure US Government, Azure China, ...).
+const DEFAULT_AZURE_DEVOPS_RESOURCE: &str = "499b84ac-1321-427f-aa17-267ca6975798";
+
+/// Environment variable that overrides the resource passed to
+/// `az account get-access-token --resource`. National-cloud users who need a
+/// different audience can set this; when unset the cloud-neutral default is used.
+const AZURE_CLI_RESOURCE_ENV: &str = "AZDO_CLI_RESOURCE";
+
+/// Resolve the resource ID for the Azure CLI token request. An explicit, non-empty
+/// `AZDO_CLI_RESOURCE` override wins; otherwise the cloud-neutral default applies.
+fn resolve_cli_resource(override_value: Option<&str>) -> String {
+    match override_value.map(str::trim) {
+        Some(value) if !value.is_empty() => value.to_string(),
+        _ => DEFAULT_AZURE_DEVOPS_RESOURCE.to_string(),
+    }
+}
+
 #[async_trait::async_trait]
 pub trait AdoCredentialProvider: Send + Sync {
     async fn auth_header_value(&self) -> Result<String>;
@@ -36,8 +55,9 @@ pub struct AzureCliProvider {
 
 impl AzureCliProvider {
     pub fn new() -> Self {
+        let resource = resolve_cli_resource(std::env::var(AZURE_CLI_RESOURCE_ENV).ok().as_deref());
         Self {
-            token_source: Arc::new(AzCommandTokenSource),
+            token_source: Arc::new(AzCommandTokenSource { resource }),
             cache: Mutex::new(None),
             token_ttl: Duration::from_secs(300),
         }
@@ -116,7 +136,9 @@ trait AzureCliTokenSource: Send + Sync {
     fn access_token(&self) -> Result<String>;
 }
 
-struct AzCommandTokenSource;
+struct AzCommandTokenSource {
+    resource: String,
+}
 
 impl AzureCliTokenSource for AzCommandTokenSource {
     fn access_token(&self) -> Result<String> {
@@ -125,7 +147,7 @@ impl AzureCliTokenSource for AzCommandTokenSource {
                 "account",
                 "get-access-token",
                 "--resource",
-                "499b84ac-1321-427f-aa17-267ca6975798",
+                &self.resource,
                 "--query",
                 "accessToken",
                 "--output",
@@ -182,6 +204,27 @@ mod tests {
             self.calls.fetch_add(1, Ordering::SeqCst);
             Ok(self.token.clone())
         }
+    }
+
+    #[test]
+    fn resolve_cli_resource_defaults_to_cloud_neutral_id() {
+        assert_eq!(resolve_cli_resource(None), DEFAULT_AZURE_DEVOPS_RESOURCE);
+    }
+
+    #[test]
+    fn resolve_cli_resource_ignores_blank_override() {
+        assert_eq!(
+            resolve_cli_resource(Some("   ")),
+            DEFAULT_AZURE_DEVOPS_RESOURCE
+        );
+    }
+
+    #[test]
+    fn resolve_cli_resource_uses_trimmed_override() {
+        assert_eq!(
+            resolve_cli_resource(Some("  https://datawarehouse.usgovcloudapi.net  ")),
+            "https://datawarehouse.usgovcloudapi.net"
+        );
     }
 
     #[tokio::test]
