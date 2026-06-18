@@ -169,7 +169,7 @@ impl SyncRunner {
             }
             let scope = combined_scope(&waiters);
             self.sync_once(&handle, scope).await;
-            if matches!(scope, SyncScope::All) {
+            if scope == ResolvedScope::ALL {
                 if let Err(e) = handle.emit(
                     "sync:updated",
                     SyncUpdatedEvent {
@@ -186,7 +186,7 @@ impl SyncRunner {
         }
     }
 
-    async fn sync_once(&self, handle: &AppHandle, scope: SyncScope) {
+    async fn sync_once(&self, handle: &AppHandle, scope: ResolvedScope) {
         let settings = match self.db.get_app_settings() {
             Ok(settings) => settings,
             Err(e) => {
@@ -218,10 +218,7 @@ impl SyncRunner {
                     continue;
                 }
             };
-            if matches!(
-                scope,
-                SyncScope::All | SyncScope::Hot | SyncScope::MyReviews
-            ) {
+            if scope.reviews {
                 let previous_reviews = if should_collect_pr_notifications {
                     self.db
                         .list_review_pull_requests(&org.id)
@@ -292,10 +289,7 @@ impl SyncRunner {
                 Vec::new()
             };
 
-            if matches!(
-                scope,
-                SyncScope::All | SyncScope::Hot | SyncScope::MyWorkItems
-            ) {
+            if scope.work_items {
                 if let Err(e) = sync_work_items_for_org(&self.db, &client, &org).await {
                     tracing::error!(org = %org.name, error = ?e, "sync: WI sync failed");
                 } else {
@@ -342,7 +336,7 @@ impl SyncRunner {
                     }
                 }
             }
-            if matches!(scope, SyncScope::All | SyncScope::Commits) {
+            if scope.commits {
                 if let Err(e) = sync_commits_for_org(&self.db, &client, &org).await {
                     tracing::error!(org = %org.name, error = ?e, "sync: commit sync failed");
                 } else {
@@ -353,22 +347,59 @@ impl SyncRunner {
     }
 }
 
-fn combined_scope(triggers: &[SyncTrigger]) -> SyncScope {
-    if triggers.is_empty()
-        || triggers
-            .iter()
-            .any(|trigger| trigger.scope == SyncScope::All)
-    {
-        return SyncScope::All;
+/// The union of data areas requested by a batch of triggers. Merging triggered
+/// scopes by area (instead of escalating any heterogeneous pair to `All`) keeps
+/// a sync pass from touching areas nobody asked for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+struct ResolvedScope {
+    reviews: bool,
+    work_items: bool,
+    commits: bool,
+}
+
+impl ResolvedScope {
+    const ALL: Self = Self {
+        reviews: true,
+        work_items: true,
+        commits: true,
+    };
+
+    fn merge(self, scope: SyncScope) -> Self {
+        match scope {
+            SyncScope::All => Self::ALL,
+            // Hot is the union of the two "my" areas.
+            SyncScope::Hot => Self {
+                reviews: true,
+                work_items: true,
+                ..self
+            },
+            SyncScope::MyReviews => Self {
+                reviews: true,
+                ..self
+            },
+            SyncScope::MyWorkItems => Self {
+                work_items: true,
+                ..self
+            },
+            SyncScope::Commits => Self {
+                commits: true,
+                ..self
+            },
+        }
     }
-    let first = triggers[0].scope;
-    if triggers.iter().all(|trigger| trigger.scope == first) {
-        return first;
+}
+
+/// Resolves the union of areas to sync. An empty batch (e.g. the periodic tick)
+/// syncs everything; otherwise only the areas covered by the queued triggers run.
+fn combined_scope(triggers: &[SyncTrigger]) -> ResolvedScope {
+    if triggers.is_empty() {
+        return ResolvedScope::ALL;
     }
-    if triggers.len() > 1 {
-        return SyncScope::All;
-    }
-    first
+    triggers
+        .iter()
+        .fold(ResolvedScope::default(), |acc, trigger| {
+            acc.merge(trigger.scope)
+        })
 }
 
 /// Maps still-snoozed PR keys (`{repo}:{pr_id}`) to their pull request ids so
@@ -475,6 +506,64 @@ fn work_item_notification_item(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn trigger(scope: SyncScope) -> SyncTrigger {
+        let (done, _rx) = oneshot::channel();
+        SyncTrigger { scope, done }
+    }
+
+    #[test]
+    fn combined_scope_empty_batch_syncs_all() {
+        assert_eq!(combined_scope(&[]), ResolvedScope::ALL);
+    }
+
+    #[test]
+    fn combined_scope_single_trigger_targets_one_area() {
+        assert_eq!(
+            combined_scope(&[trigger(SyncScope::Commits)]),
+            ResolvedScope {
+                commits: true,
+                ..ResolvedScope::default()
+            }
+        );
+    }
+
+    #[test]
+    fn combined_scope_heterogeneous_pair_unions_without_escalating_to_all() {
+        let resolved = combined_scope(&[
+            trigger(SyncScope::MyReviews),
+            trigger(SyncScope::Commits),
+        ]);
+        assert_eq!(
+            resolved,
+            ResolvedScope {
+                reviews: true,
+                work_items: false,
+                commits: true,
+            }
+        );
+        assert_ne!(resolved, ResolvedScope::ALL);
+    }
+
+    #[test]
+    fn combined_scope_hot_covers_reviews_and_work_items_only() {
+        assert_eq!(
+            combined_scope(&[trigger(SyncScope::Hot)]),
+            ResolvedScope {
+                reviews: true,
+                work_items: true,
+                commits: false,
+            }
+        );
+    }
+
+    #[test]
+    fn combined_scope_all_trigger_escalates_to_all() {
+        assert_eq!(
+            combined_scope(&[trigger(SyncScope::MyReviews), trigger(SyncScope::All)]),
+            ResolvedScope::ALL
+        );
+    }
 
     #[test]
     fn work_item_notification_items_skips_assignment_on_first_snapshot() {
