@@ -149,7 +149,7 @@ impl AdoClient {
                     }
 
                     let retry_after = parse_retry_after(resp.headers());
-                    if self.should_retry_status(status, attempt) {
+                    if self.should_retry_status(status, attempt, true) {
                         let delay = self.retry_delay(attempt, retry_after);
                         tracing::warn!(
                             method = "GET",
@@ -175,7 +175,7 @@ impl AdoClient {
                         body,
                     });
                 }
-                Err(error) if self.should_retry_error(&error, attempt) => {
+                Err(error) if self.should_retry_error(&error, attempt, true) => {
                     let delay = self.retry_policy.backoff_delay(attempt);
                     tracing::warn!(
                         method = "GET",
@@ -225,7 +225,7 @@ impl AdoClient {
                     }
 
                     let retry_after = parse_retry_after(resp.headers());
-                    if self.should_retry_status(status, attempt) {
+                    if self.should_retry_status(status, attempt, true) {
                         let delay = self.retry_delay(attempt, retry_after);
                         tracing::warn!(
                             method = "GET",
@@ -251,7 +251,7 @@ impl AdoClient {
                         body,
                     });
                 }
-                Err(error) if self.should_retry_error(&error, attempt) => {
+                Err(error) if self.should_retry_error(&error, attempt, true) => {
                     let delay = self.retry_policy.backoff_delay(attempt);
                     tracing::warn!(
                         method = "GET",
@@ -296,7 +296,7 @@ impl AdoClient {
                         return Err(AdoError::Unauthorized);
                     }
                     let retry_after = parse_retry_after(resp.headers());
-                    if self.should_retry_status(status, attempt) {
+                    if self.should_retry_status(status, attempt, true) {
                         let delay = self.retry_delay(attempt, retry_after);
                         sleep(delay).await;
                         continue;
@@ -312,7 +312,7 @@ impl AdoClient {
                         body,
                     });
                 }
-                Err(error) if self.should_retry_error(&error, attempt) => {
+                Err(error) if self.should_retry_error(&error, attempt, true) => {
                     sleep(self.retry_policy.backoff_delay(attempt)).await;
                 }
                 Err(error) => return Err(AdoError::Network(error)),
@@ -377,7 +377,7 @@ impl AdoClient {
                     }
 
                     let retry_after = parse_retry_after(resp.headers());
-                    if self.should_retry_status(status, attempt) {
+                    if self.should_retry_status(status, attempt, false) {
                         let delay = self.retry_delay(attempt, retry_after);
                         tracing::warn!(
                             method = "POST",
@@ -403,7 +403,7 @@ impl AdoClient {
                         body,
                     });
                 }
-                Err(error) if self.should_retry_error(&error, attempt) => {
+                Err(error) if self.should_retry_error(&error, attempt, false) => {
                     let delay = self.retry_policy.backoff_delay(attempt);
                     tracing::warn!(
                         method = "POST",
@@ -455,7 +455,7 @@ impl AdoClient {
                     }
 
                     let retry_after = parse_retry_after(resp.headers());
-                    if self.should_retry_status(status, attempt) {
+                    if self.should_retry_status(status, attempt, true) {
                         let delay = self.retry_delay(attempt, retry_after);
                         tracing::warn!(
                             method = "PUT",
@@ -481,7 +481,7 @@ impl AdoClient {
                         body,
                     });
                 }
-                Err(error) if self.should_retry_error(&error, attempt) => {
+                Err(error) if self.should_retry_error(&error, attempt, true) => {
                     let delay = self.retry_policy.backoff_delay(attempt);
                     tracing::warn!(
                         method = "PUT",
@@ -527,7 +527,7 @@ impl AdoClient {
                     }
 
                     let retry_after = parse_retry_after(resp.headers());
-                    if self.should_retry_status(status, attempt) {
+                    if self.should_retry_status(status, attempt, true) {
                         let delay = self.retry_delay(attempt, retry_after);
                         tracing::warn!(
                             method = "DELETE",
@@ -553,7 +553,7 @@ impl AdoClient {
                         body,
                     });
                 }
-                Err(error) if self.should_retry_error(&error, attempt) => {
+                Err(error) if self.should_retry_error(&error, attempt, true) => {
                     let delay = self.retry_policy.backoff_delay(attempt);
                     tracing::warn!(
                         method = "DELETE",
@@ -607,7 +607,7 @@ impl AdoClient {
                     }
 
                     let retry_after = parse_retry_after(resp.headers());
-                    if self.should_retry_status(status, attempt) {
+                    if self.should_retry_status(status, attempt, true) {
                         let delay = self.retry_delay(attempt, retry_after);
                         tracing::warn!(
                             method = "PATCH",
@@ -633,7 +633,7 @@ impl AdoClient {
                         body,
                     });
                 }
-                Err(error) if self.should_retry_error(&error, attempt) => {
+                Err(error) if self.should_retry_error(&error, attempt, true) => {
                     let delay = self.retry_policy.backoff_delay(attempt);
                     tracing::warn!(
                         method = "PATCH",
@@ -652,13 +652,34 @@ impl AdoClient {
         unreachable!("retry policy always has at least one attempt")
     }
 
-    fn should_retry_status(&self, status: StatusCode, attempt: usize) -> bool {
-        attempt < self.retry_policy.attempts()
-            && (status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error())
+    /// Decides whether a non-success status should be retried.
+    ///
+    /// `idempotent` must be `false` for non-idempotent requests (POST). A 5xx
+    /// response to a POST is ambiguous: the server may have already applied the
+    /// effect (e.g. created a PR comment or queued a build) before failing, so
+    /// retrying risks a duplicate. We therefore only retry POST on `429 Too Many
+    /// Requests`, which means the request was rejected before processing.
+    fn should_retry_status(&self, status: StatusCode, attempt: usize, idempotent: bool) -> bool {
+        if attempt >= self.retry_policy.attempts() {
+            return false;
+        }
+        if status == StatusCode::TOO_MANY_REQUESTS {
+            return true;
+        }
+        idempotent && status.is_server_error()
     }
 
-    fn should_retry_error(&self, error: &reqwest::Error, attempt: usize) -> bool {
-        attempt < self.retry_policy.attempts() && (error.is_connect() || error.is_timeout())
+    /// Decides whether a transport error should be retried.
+    ///
+    /// For non-idempotent requests (POST), only connection errors are safe to
+    /// retry: the connection was never established, so the server cannot have
+    /// processed the request. A timeout is ambiguous (the request may have been
+    /// received and applied), so it is not retried for non-idempotent requests.
+    fn should_retry_error(&self, error: &reqwest::Error, attempt: usize, idempotent: bool) -> bool {
+        if attempt >= self.retry_policy.attempts() {
+            return false;
+        }
+        error.is_connect() || (idempotent && error.is_timeout())
     }
 
     fn retry_delay(&self, attempt: usize, retry_after: Option<Duration>) -> Duration {
@@ -1066,5 +1087,72 @@ mod tests {
             .unwrap();
 
         assert_eq!(value["workItems"], serde_json::json!([]));
+    }
+
+    #[tokio::test]
+    async fn does_not_retry_post_after_server_error() {
+        // A POST is non-idempotent: the server may have already applied the
+        // effect before returning 5xx, so the client must not retry and risk a
+        // duplicate. The mock asserts it is called exactly once.
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/project-1/_apis/wit/wiql"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("boom"))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let client = retrying_test_client(&server).await;
+        let err = client
+            .post_json::<_, serde_json::Value>(
+                "project-1/_apis/wit/wiql",
+                &[("api-version", "7.1-preview")],
+                &serde_json::json!({ "query": "SELECT [System.Id] FROM WorkItems" }),
+            )
+            .await
+            .unwrap_err();
+
+        match err {
+            AdoError::Api { status, body } => {
+                assert_eq!(status, 500);
+                assert_eq!(body, "boom");
+            }
+            other => panic!("expected Api error, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn retries_put_after_transient_500() {
+        // A PUT is idempotent, so retrying after a transient 5xx is safe and
+        // expected. This guards against the POST fix accidentally disabling
+        // retries for idempotent methods.
+        let server = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/project-1/_apis/resource/1"))
+            .respond_with(ResponseTemplate::new(503).set_body_string("try again"))
+            .up_to_n_times(1)
+            .with_priority(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/project-1/_apis/resource/1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "ok": true
+            })))
+            .with_priority(2)
+            .mount(&server)
+            .await;
+
+        let client = retrying_test_client(&server).await;
+        let value: serde_json::Value = client
+            .put_json(
+                "project-1/_apis/resource/1",
+                &[("api-version", "7.1-preview")],
+                &serde_json::json!({ "value": 1 }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(value["ok"], serde_json::json!(true));
     }
 }
