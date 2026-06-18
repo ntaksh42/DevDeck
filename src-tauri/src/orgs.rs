@@ -78,8 +78,12 @@ impl OrganizationService {
         let Some(org) = self.db.get_organization(id)? else {
             return Ok(());
         };
-        self.secrets.delete_credential(&org.credential_key)?;
-        self.db.delete_organization(id)
+        // Delete the DB row first. If it fails (e.g. SQLITE_BUSY), the secret
+        // is still intact and the organization stays usable, rather than
+        // becoming an un-authenticatable zombie. delete_credential treats a
+        // missing entry as success, so a retried delete remains idempotent.
+        self.db.delete_organization(id)?;
+        self.secrets.delete_credential(&org.credential_key)
     }
 
     pub async fn add_azure_cli_organization(
