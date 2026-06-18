@@ -450,38 +450,28 @@ impl AppDatabase {
         item: &CachedWorkItem,
         my_unique_name: Option<&str>,
     ) -> Result<()> {
-        let still_mine = match (my_unique_name, item.assigned_to_unique_name.as_deref()) {
-            (Some(me), Some(assignee)) => me.eq_ignore_ascii_case(assignee),
-            // Unknown identity or unassigned: fall back to update-only to avoid
-            // dropping a row we cannot confidently say left the snapshot.
-            (None, _) => true,
-            (Some(_), None) => false,
-        };
-
         let conn = self.open()?;
-        if !still_mine {
-            conn.execute(
-                "DELETE FROM my_work_items WHERE org_id=?1 AND id=?2",
-                rusqlite::params![item.org_id, item.id],
-            )?;
+        update_my_work_item_if_present(&conn, item, my_unique_name)
+    }
+
+    /// Reflects a batch of single-item edits (the successful subset of a bulk
+    /// state/assignee/priority operation) into the local cache in a single
+    /// connection and transaction, instead of reopening SQLite once per item.
+    pub fn apply_work_item_updates(
+        &self,
+        items: &[CachedWorkItem],
+        my_unique_name: Option<&str>,
+    ) -> Result<()> {
+        if items.is_empty() {
             return Ok(());
         }
-        conn.execute(
-            "UPDATE my_work_items SET title=?3, work_item_type=?4, state=?5, \
-             assigned_to=?6, assigned_to_unique_name=?7, changed_date=?8, web_url=?9 \
-             WHERE org_id=?1 AND id=?2",
-            rusqlite::params![
-                item.org_id,
-                item.id,
-                item.title,
-                item.work_item_type,
-                item.state,
-                item.assigned_to,
-                item.assigned_to_unique_name,
-                item.changed_date,
-                item.web_url
-            ],
-        )?;
+        let conn = self.open()?;
+        let tx = conn.unchecked_transaction()?;
+        upsert_work_items(&tx, items)?;
+        for item in items {
+            update_my_work_item_if_present(&tx, item, my_unique_name)?;
+        }
+        tx.commit()?;
         Ok(())
     }
 
@@ -1663,6 +1653,51 @@ fn upsert_work_items(conn: &Connection, items: &[CachedWorkItem]) -> Result<()> 
             item.assigned_to_unique_name
         ])?;
     }
+    Ok(())
+}
+
+/// Keeps the my_work_items snapshot consistent after a single-item edit.
+///
+/// When `my_unique_name` is known and the item is no longer assigned to that
+/// user, the row is removed so a reassignment drops out of My Work Items
+/// immediately instead of lingering until the next full sync. Otherwise the
+/// existing row (if any) is updated in place.
+fn update_my_work_item_if_present(
+    conn: &Connection,
+    item: &CachedWorkItem,
+    my_unique_name: Option<&str>,
+) -> Result<()> {
+    let still_mine = match (my_unique_name, item.assigned_to_unique_name.as_deref()) {
+        (Some(me), Some(assignee)) => me.eq_ignore_ascii_case(assignee),
+        // Unknown identity or unassigned: fall back to update-only to avoid
+        // dropping a row we cannot confidently say left the snapshot.
+        (None, _) => true,
+        (Some(_), None) => false,
+    };
+
+    if !still_mine {
+        conn.execute(
+            "DELETE FROM my_work_items WHERE org_id=?1 AND id=?2",
+            rusqlite::params![item.org_id, item.id],
+        )?;
+        return Ok(());
+    }
+    conn.execute(
+        "UPDATE my_work_items SET title=?3, work_item_type=?4, state=?5, \
+         assigned_to=?6, assigned_to_unique_name=?7, changed_date=?8, web_url=?9 \
+         WHERE org_id=?1 AND id=?2",
+        rusqlite::params![
+            item.org_id,
+            item.id,
+            item.title,
+            item.work_item_type,
+            item.state,
+            item.assigned_to,
+            item.assigned_to_unique_name,
+            item.changed_date,
+            item.web_url
+        ],
+    )?;
     Ok(())
 }
 
@@ -2925,6 +2960,72 @@ mod tests {
         let rows = db.list_my_work_items("org1").unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].state.as_deref(), Some("Closed"));
+    }
+
+    #[test]
+    fn apply_work_item_updates_batches_upsert_and_my_items() {
+        let tf = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        let mine = |id: i64, state: &str| CachedWorkItem {
+            org_id: "org1".to_string(),
+            project_id: "p1".to_string(),
+            project_name: "P1".to_string(),
+            id,
+            title: format!("item {id}"),
+            work_item_type: None,
+            state: Some(state.to_string()),
+            assigned_to: Some("Me".to_string()),
+            assigned_to_unique_name: Some("me@example.com".to_string()),
+            changed_date: Some(format!("2024-01-0{id}T00:00:00Z")),
+            web_url: None,
+        };
+
+        let seed = [mine(1, "Active"), mine(2, "Active")];
+        db.replace_work_items("org1", &["p1"], &seed, &seed)
+            .unwrap();
+        assert_eq!(db.list_my_work_items("org1").unwrap().len(), 2);
+
+        // Item 1 stays mine but changes state; item 2 is reassigned away.
+        let item1 = CachedWorkItem {
+            state: Some("Closed".to_string()),
+            changed_date: Some("2024-02-01T00:00:00Z".to_string()),
+            ..mine(1, "Active")
+        };
+        let item2 = CachedWorkItem {
+            assigned_to: Some("Other".to_string()),
+            assigned_to_unique_name: Some("other@example.com".to_string()),
+            changed_date: Some("2024-02-02T00:00:00Z".to_string()),
+            ..mine(2, "Active")
+        };
+        db.apply_work_item_updates(&[item1, item2], Some("me@example.com"))
+            .unwrap();
+
+        // work_items reflects both edits.
+        let all = db
+            .search_work_items("org1", None, None, None, None)
+            .unwrap();
+        let state_of = |id: i64| {
+            all.iter()
+                .find(|w| w.id == id)
+                .and_then(|w| w.state.clone())
+        };
+        assert_eq!(state_of(1).as_deref(), Some("Closed"));
+        assert_eq!(
+            all.iter()
+                .find(|w| w.id == 2)
+                .and_then(|w| w.assigned_to.clone())
+                .as_deref(),
+            Some("Other")
+        );
+
+        // my_work_items: item 1 updated in place, item 2 dropped.
+        let mine_rows = db.list_my_work_items("org1").unwrap();
+        assert_eq!(mine_rows.len(), 1);
+        assert_eq!(mine_rows[0].id, 1);
+        assert_eq!(mine_rows[0].state.as_deref(), Some("Closed"));
     }
 
     #[test]
