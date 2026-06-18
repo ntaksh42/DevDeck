@@ -482,16 +482,21 @@ impl WorkItemService {
         work_item_id: i64,
     ) -> Result<Vec<WorkItemAssigneeCandidate>> {
         let key = (org_id.to_string(), project_id.to_string(), work_item_id);
-        let mut cache = self.update_candidates.lock().await;
-        if let Some((fetched_at, candidates)) = cache.get(&key) {
-            if fetched_at.elapsed() < UPDATE_CANDIDATES_TTL {
-                return Ok(candidates.clone());
+        {
+            let cache = self.update_candidates.lock().await;
+            if let Some((fetched_at, candidates)) = cache.get(&key) {
+                if fetched_at.elapsed() < UPDATE_CANDIDATES_TTL {
+                    return Ok(candidates.clone());
+                }
             }
         }
+        // Run the HTTP request without holding the lock so candidate fetches
+        // for different work items are not serialized behind one another.
         let updates = client
             .list_work_item_updates(project_id, work_item_id, 50)
             .await?;
         let candidates = assignee_candidates_from_updates(updates);
+        let mut cache = self.update_candidates.lock().await;
         if cache.len() >= UPDATE_CANDIDATES_CACHE_CAP {
             cache.clear();
         }
