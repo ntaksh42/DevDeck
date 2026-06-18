@@ -164,26 +164,44 @@ impl AdoClient {
         Ok(response.value)
     }
 
+    /// Lists every active PR where `reviewer_id` is a reviewer, paging through
+    /// the result set with `$skip`/`$top` so projects with more reviewer PRs
+    /// than a single page (`page_size`) are returned in full rather than being
+    /// silently truncated.
     pub async fn list_pull_requests_by_reviewer(
         &self,
         project_id: &str,
         reviewer_id: &str,
-        top: u32,
+        page_size: u32,
     ) -> Result<Vec<GitPullRequest>> {
         let path = format!("{project_id}/_apis/git/pullrequests");
-        let top_str = top.to_string();
-        let response: ListResponse<GitPullRequest> = self
-            .get_json(
-                &path,
-                &[
-                    ("api-version", "7.1-preview"),
-                    ("searchCriteria.reviewerId", reviewer_id),
-                    ("searchCriteria.status", "active"),
-                    ("$top", &top_str),
-                ],
-            )
-            .await?;
-        Ok(response.value)
+        let page_size = page_size.max(1);
+        let top_str = page_size.to_string();
+        let mut all = Vec::new();
+        let mut skip: u32 = 0;
+        loop {
+            let skip_str = skip.to_string();
+            let response: ListResponse<GitPullRequest> = self
+                .get_json(
+                    &path,
+                    &[
+                        ("api-version", "7.1-preview"),
+                        ("searchCriteria.reviewerId", reviewer_id),
+                        ("searchCriteria.status", "active"),
+                        ("$top", &top_str),
+                        ("$skip", &skip_str),
+                    ],
+                )
+                .await?;
+            let page_len = response.value.len() as u32;
+            all.extend(response.value);
+            // A short page means the server has no more results to return.
+            if page_len < page_size {
+                break;
+            }
+            skip += page_size;
+        }
+        Ok(all)
     }
 
     pub async fn list_commits(
@@ -425,6 +443,7 @@ mod tests {
             .and(query_param("searchCriteria.reviewerId", "user-42"))
             .and(query_param("searchCriteria.status", "active"))
             .and(query_param("$top", "200"))
+            .and(query_param("$skip", "0"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "count": 1,
                 "value": [{
@@ -459,6 +478,69 @@ mod tests {
         let reviewers = prs[0].reviewers.as_ref().unwrap();
         assert_eq!(reviewers[0].vote, 0);
         assert!(reviewers[0].is_required);
+    }
+
+    #[tokio::test]
+    async fn list_pull_requests_by_reviewer_pages_through_all_results() {
+        fn reviewer_pr(id: i64) -> serde_json::Value {
+            serde_json::json!({
+                "pullRequestId": id,
+                "title": format!("PR {id}"),
+                "status": "active",
+                "creationDate": "2026-05-20T00:00:00Z",
+                "createdBy": { "id": "author-1", "displayName": "Author" },
+                "repository": {
+                    "id": "repo-1",
+                    "name": "dashboard",
+                    "project": { "id": "project-1", "name": "Platform" }
+                },
+                "sourceRefName": "refs/heads/fix/bug",
+                "targetRefName": "refs/heads/main",
+                "isDraft": false,
+                "reviewers": [
+                    { "id": "user-42", "displayName": "Me", "vote": 0, "isRequired": true }
+                ]
+            })
+        }
+
+        let server = MockServer::start().await;
+
+        // Page 1: a full page (page_size = 2) means the client must keep paging.
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/git/pullrequests"))
+            .and(query_param("searchCriteria.reviewerId", "user-42"))
+            .and(query_param("$top", "2"))
+            .and(query_param("$skip", "0"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 2,
+                "value": [reviewer_pr(1), reviewer_pr(2)]
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        // Page 2: a short page (1 < page_size) ends the pagination loop.
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/git/pullrequests"))
+            .and(query_param("searchCriteria.reviewerId", "user-42"))
+            .and(query_param("$top", "2"))
+            .and(query_param("$skip", "2"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 1,
+                "value": [reviewer_pr(3)]
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let prs = test_client(&server)
+            .await
+            .list_pull_requests_by_reviewer("project-1", "user-42", 2)
+            .await
+            .unwrap();
+
+        let ids: Vec<i64> = prs.iter().map(|pr| pr.pull_request_id).collect();
+        assert_eq!(ids, vec![1, 2, 3]);
     }
 
     #[tokio::test]
