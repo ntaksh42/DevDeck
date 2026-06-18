@@ -12,6 +12,13 @@ use crate::secrets::SecretStore;
 
 const COMMIT_SYNC_CONCURRENCY: usize = 4;
 const MAX_DIFF_CONTENT_BYTES: usize = 256 * 1024;
+/// Sync window in days. Must cover the largest date preset offered by the
+/// commit search UI (`src/features/commits/CommitSearch.tsx`, 90d) so that
+/// preset does not silently return near-empty results.
+const COMMIT_SYNC_WINDOW_DAYS: i64 = 90;
+/// Page size for the paginated commit sync. The REST API caps `$top`, so the
+/// sync walks pages with `$skip` until a short page signals the end.
+const COMMIT_SYNC_PAGE_SIZE: u32 = 100;
 type CommitSyncTaskResult = Result<Option<(String, Vec<CachedCommit>)>>;
 
 #[derive(Debug, Deserialize)]
@@ -252,6 +259,7 @@ impl CommitService {
                     from_date: from_date.map(str::to_string),
                     to_date: to_date.map(str::to_string),
                     top: Some(100),
+                    skip: None,
                 },
             )
             .await?;
@@ -582,7 +590,7 @@ pub async fn sync_commits_for_org(
 }
 
 async fn do_sync_commits(db: &AppDatabase, client: &AdoClient, org: &Organization) -> Result<()> {
-    let from_date = (Utc::now() - chrono::Duration::days(30)).to_rfc3339();
+    let from_date = (Utc::now() - chrono::Duration::days(COMMIT_SYNC_WINDOW_DAYS)).to_rfc3339();
     let projects = client.list_projects().await?;
     let mut tasks = JoinSet::new();
     for project in &projects {
@@ -639,35 +647,38 @@ async fn fetch_commits_for_repo(
     from_date: String,
 ) -> Result<Option<(String, Vec<CachedCommit>)>> {
     let repository_id = repository.id.clone();
-    let commits = match client
-        .list_commits(
-            &project.id,
-            &repository.id,
-            CommitSearchCriteria {
-                author: None,
-                branch: None,
-                from_date: Some(from_date),
-                to_date: None,
-                top: Some(100),
-            },
-        )
-        .await
-    {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::warn!(
-                org = %org.name,
-                project = %project.name,
-                repository = %repository.name,
-                error = %e,
-                "failed to list commits, skipping repository"
-            );
-            return Ok(None);
-        }
-    };
-    let cached: Vec<CachedCommit> = commits
-        .into_iter()
-        .map(|c| {
+    let mut cached: Vec<CachedCommit> = Vec::new();
+    let mut skip = 0u32;
+    loop {
+        let page = match client
+            .list_commits(
+                &project.id,
+                &repository.id,
+                CommitSearchCriteria {
+                    author: None,
+                    branch: None,
+                    from_date: Some(from_date.clone()),
+                    to_date: None,
+                    top: Some(COMMIT_SYNC_PAGE_SIZE),
+                    skip: Some(skip),
+                },
+            )
+            .await
+        {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!(
+                    org = %org.name,
+                    project = %project.name,
+                    repository = %repository.name,
+                    error = %e,
+                    "failed to list commits, skipping repository"
+                );
+                return Ok(None);
+            }
+        };
+        let page_len = page.len() as u32;
+        cached.extend(page.into_iter().map(|c| {
             commit_to_cached(
                 &org,
                 &project.id,
@@ -676,8 +687,13 @@ async fn fetch_commits_for_repo(
                 &repository.name,
                 c,
             )
-        })
-        .collect();
+        }));
+        // A short page (fewer than requested) means the API has no more rows.
+        if page_len < COMMIT_SYNC_PAGE_SIZE {
+            break;
+        }
+        skip += page_len;
+    }
     Ok(Some((repository_id, cached)))
 }
 
