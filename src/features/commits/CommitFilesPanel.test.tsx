@@ -19,13 +19,19 @@ function renderPanel() {
 
 describe("CommitFilesPanel", () => {
   it(
-    "lists changed files and shows a diff on selection",
+    "lists changed files and shows a word-highlighted diff on selection",
     async () => {
-      renderPanel();
+      const { container } = renderPanel();
       const fileButton = await screen.findByText("app.ts", undefined, { timeout: 8000 });
       fireEvent.click(fileButton);
       // The demo diff adds `const z = 4;`.
       expect(await screen.findByText(/const z = 4/, undefined, { timeout: 8000 })).toBeTruthy();
+      // It also modifies `const y = 2;` -> `const y = 3;`; the changed token is
+      // rendered as a highlighted segment span, matching the PR diff view.
+      const highlights = container.querySelectorAll(
+        'span[class*="bg-green-200"], span[class*="bg-red-200"]',
+      );
+      expect(highlights.length).toBeGreaterThan(0);
     },
     15000,
   );
