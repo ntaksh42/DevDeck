@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, Result};
 
-const SCHEMA_VERSION: i64 = 12;
+const SCHEMA_VERSION: i64 = 13;
 
 /// Max rows kept in the my_work_items snapshot queries; sync notification
 /// diffing must know this cap to avoid treating re-entering rows as new.
@@ -127,6 +127,7 @@ pub struct CachedWorkItem {
     pub assigned_to_unique_name: Option<String>,
     pub changed_date: Option<String>,
     pub web_url: Option<String>,
+    pub priority: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -475,7 +476,8 @@ impl AppDatabase {
         }
         conn.execute(
             "UPDATE my_work_items SET title=?3, work_item_type=?4, state=?5, \
-             assigned_to=?6, assigned_to_unique_name=?7, changed_date=?8, web_url=?9 \
+             assigned_to=?6, assigned_to_unique_name=?7, changed_date=?8, web_url=?9, \
+             priority=?10 \
              WHERE org_id=?1 AND id=?2",
             rusqlite::params![
                 item.org_id,
@@ -486,7 +488,8 @@ impl AppDatabase {
                 item.assigned_to,
                 item.assigned_to_unique_name,
                 item.changed_date,
-                item.web_url
+                item.web_url,
+                item.priority
             ],
         )?;
         Ok(())
@@ -1149,6 +1152,17 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             "#,
         )?;
     }
+    if current < 13 {
+        // Triage view filters on whether priority is unset, so the cached work
+        // item snapshots need the value alongside the existing fields.
+        if !table_column_exists(conn, "work_items", "priority")? {
+            conn.execute_batch("ALTER TABLE work_items ADD COLUMN priority INTEGER;")?;
+        }
+        if !table_column_exists(conn, "my_work_items", "priority")? {
+            conn.execute_batch("ALTER TABLE my_work_items ADD COLUMN priority INTEGER;")?;
+        }
+        conn.execute_batch("PRAGMA user_version = 13;")?;
+    }
     Ok(())
 }
 
@@ -1633,8 +1647,8 @@ fn upsert_work_items(conn: &Connection, items: &[CachedWorkItem]) -> Result<()> 
         INSERT INTO work_items(
             org_id, project_id, project_name, id, title,
             work_item_type, state, assigned_to, changed_date, web_url,
-            assigned_to_unique_name
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            assigned_to_unique_name, priority
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
         ON CONFLICT(org_id, id) DO UPDATE SET
             project_id = excluded.project_id,
             project_name = excluded.project_name,
@@ -1644,7 +1658,8 @@ fn upsert_work_items(conn: &Connection, items: &[CachedWorkItem]) -> Result<()> 
             assigned_to = excluded.assigned_to,
             changed_date = excluded.changed_date,
             web_url = excluded.web_url,
-            assigned_to_unique_name = excluded.assigned_to_unique_name
+            assigned_to_unique_name = excluded.assigned_to_unique_name,
+            priority = excluded.priority
         WHERE excluded.changed_date IS NOT work_items.changed_date
         "#,
     )?;
@@ -1660,7 +1675,8 @@ fn upsert_work_items(conn: &Connection, items: &[CachedWorkItem]) -> Result<()> 
             item.assigned_to,
             item.changed_date,
             item.web_url,
-            item.assigned_to_unique_name
+            item.assigned_to_unique_name,
+            item.priority
         ])?;
     }
     Ok(())
@@ -1678,7 +1694,7 @@ fn search_work_items(
         r#"
         SELECT org_id, project_id, project_name, id, title,
                work_item_type, state, assigned_to, changed_date, web_url,
-               assigned_to_unique_name
+               assigned_to_unique_name, priority
         FROM work_items
         WHERE org_id = ?1
           AND (?2 IS NULL OR project_id = ?2)
@@ -1719,7 +1735,7 @@ fn search_work_items_fts(
         r#"
         SELECT w.org_id, w.project_id, w.project_name, w.id, w.title,
                w.work_item_type, w.state, w.assigned_to, w.changed_date, w.web_url,
-               w.assigned_to_unique_name
+               w.assigned_to_unique_name, w.priority
         FROM work_items w
         WHERE w.org_id = ?2
           AND w.id IN (
@@ -1764,7 +1780,7 @@ fn search_work_items_by_id_prefix(
         r#"
         SELECT org_id, project_id, project_name, id, title,
                work_item_type, state, assigned_to, changed_date, web_url,
-               assigned_to_unique_name
+               assigned_to_unique_name, priority
         FROM work_items
         WHERE org_id = ?1
           AND CAST(id AS TEXT) LIKE ?2
@@ -1790,7 +1806,7 @@ fn search_work_items_like(
         r#"
         SELECT org_id, project_id, project_name, id, title,
                work_item_type, state, assigned_to, changed_date, web_url,
-               assigned_to_unique_name
+               assigned_to_unique_name, priority
         FROM work_items
         WHERE org_id = ?1
           AND (title LIKE ?2 ESCAPE '\'
@@ -1821,8 +1837,8 @@ fn upsert_my_work_items(conn: &Connection, items: &[CachedWorkItem]) -> Result<(
         INSERT OR REPLACE INTO my_work_items(
             org_id, project_id, project_name, id, title,
             work_item_type, state, assigned_to, changed_date, web_url,
-            assigned_to_unique_name
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            assigned_to_unique_name, priority
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
         "#,
     )?;
     for item in items {
@@ -1837,7 +1853,8 @@ fn upsert_my_work_items(conn: &Connection, items: &[CachedWorkItem]) -> Result<(
             item.assigned_to,
             item.changed_date,
             item.web_url,
-            item.assigned_to_unique_name
+            item.assigned_to_unique_name,
+            item.priority
         ])?;
     }
     Ok(())
@@ -1848,7 +1865,7 @@ fn list_my_work_items(conn: &Connection, org_id: &str) -> Result<Vec<CachedWorkI
         r#"
         SELECT org_id, project_id, project_name, id, title,
                work_item_type, state, assigned_to, changed_date, web_url,
-               assigned_to_unique_name
+               assigned_to_unique_name, priority
         FROM my_work_items
         WHERE org_id = ?1
         ORDER BY changed_date DESC
@@ -2082,6 +2099,7 @@ fn map_cached_work_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<CachedWorkI
         changed_date: row.get(8)?,
         web_url: row.get(9)?,
         assigned_to_unique_name: row.get(10)?,
+        priority: row.get(11)?,
     })
 }
 
@@ -2556,6 +2574,7 @@ mod tests {
             assigned_to_unique_name: None,
             changed_date: Some(changed.to_string()),
             web_url: None,
+            priority: None,
         }
     }
 
@@ -2955,6 +2974,7 @@ mod tests {
             assigned_to_unique_name: Some("me@example.com".to_string()),
             changed_date: None,
             web_url: None,
+            priority: None,
         };
         db.replace_work_items(
             "org1",
@@ -2998,6 +3018,7 @@ mod tests {
             assigned_to_unique_name: Some("me@example.com".to_string()),
             changed_date: None,
             web_url: None,
+            priority: None,
         };
         db.replace_work_items(
             "org1",
@@ -3038,6 +3059,7 @@ mod tests {
             assigned_to_unique_name: None,
             changed_date: None,
             web_url: None,
+            priority: None,
         };
 
         // Seed both tables (distinct IDs per table: work=1, my=10)
@@ -3088,6 +3110,7 @@ mod tests {
             assigned_to_unique_name: None,
             changed_date: None,
             web_url: None,
+            priority: None,
         };
 
         // Seed p1 and p2

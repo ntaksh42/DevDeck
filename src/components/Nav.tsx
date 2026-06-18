@@ -85,19 +85,22 @@ export function NavSubItem({
   active,
   disabled = false,
   label,
+  badge,
   onClick,
 }: {
   active: boolean;
   disabled?: boolean;
   label: string;
+  badge?: number;
   onClick: () => void;
 }) {
+  const showBadge = typeof badge === "number" && badge > 0;
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={onClick}
-      aria-label={label}
+      aria-label={showBadge ? `${label} (${badge})` : label}
       data-nav-item="true"
       data-nav-active={active ? "true" : undefined}
       data-nav-label={label}
@@ -106,6 +109,11 @@ export function NavSubItem({
       } disabled:cursor-not-allowed disabled:opacity-50`}
     >
       <span className="min-w-0 truncate">{label}</span>
+      {showBadge ? (
+        <span className="ml-auto shrink-0 rounded-full bg-primary/15 px-1.5 text-xs font-medium tabular-nums text-primary">
+          {badge}
+        </span>
+      ) : null}
     </button>
   );
 }

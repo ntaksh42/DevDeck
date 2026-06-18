@@ -39,6 +39,7 @@ const WORK_ITEM_FIELDS: &[&str] = &[
     "System.State",
     "System.AssignedTo",
     "System.ChangedDate",
+    "Microsoft.VSTS.Common.Priority",
 ];
 
 const WORK_ITEM_PREVIEW_FIELDS: &[&str] = &[

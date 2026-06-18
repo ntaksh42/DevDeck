@@ -363,6 +363,14 @@ pub(super) fn string_field(work_item: &WorkItem, field: &str) -> Option<String> 
     }
 }
 
+pub(super) fn i64_field(work_item: &WorkItem, field: &str) -> Option<i64> {
+    match work_item.fields.get(field)? {
+        Value::Number(value) => value.as_i64(),
+        Value::String(value) => value.trim().parse().ok(),
+        _ => None,
+    }
+}
+
 pub(super) fn first_string_field(work_item: &WorkItem, fields: &[&str]) -> Option<String> {
     fields
         .iter()
@@ -442,7 +450,17 @@ pub(super) fn cached_wi_to_summary(wi: CachedWorkItem) -> WorkItemSummary {
         assigned_to: wi.assigned_to,
         changed_date: wi.changed_date,
         web_url: wi.web_url,
-        extra_fields: Vec::new(),
+        // Surface cached priority through the same extra-field channel the grid
+        // already understands, so the Triage view can detect "priority unset".
+        extra_fields: wi
+            .priority
+            .map(|priority| {
+                vec![WorkItemCustomField {
+                    reference_name: "Microsoft.VSTS.Common.Priority".to_string(),
+                    value: Some(priority.to_string()),
+                }]
+            })
+            .unwrap_or_default(),
         depth: None,
     }
 }
@@ -471,5 +489,6 @@ pub(super) fn work_item_to_cached(
         assigned_to_unique_name: identity_unique_name_field(wi, "System.AssignedTo"),
         changed_date: string_field(wi, "System.ChangedDate"),
         web_url: Some(web_url),
+        priority: i64_field(wi, "Microsoft.VSTS.Common.Priority"),
     }
 }

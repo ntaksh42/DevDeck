@@ -28,12 +28,14 @@ import {
 import {
   commandErrorMessage,
   getAppSettings,
+  listMyWorkItems,
   listOrganizations,
   searchAll,
   syncUpdatedEventSchema,
   triggerSync,
   type SyncScope,
 } from "@/lib/azdoCommands";
+import { filterTriageWorkItems } from "@/features/work-items/triageFilter";
 import { openExternalUrl } from "@/lib/openExternal";
 import {
   applyTheme,
@@ -86,6 +88,11 @@ const WorkItemViewsPanel = lazy(() =>
     default: m.WorkItemViewsPanel,
   })),
 );
+const TriagePanel = lazy(() =>
+  import("@/features/work-items/TriagePanel").then((m) => ({
+    default: m.TriagePanel,
+  })),
+);
 const MyWorkItemsPanel = lazy(() =>
   import("@/features/work-items/MyWorkItemsPanel").then((m) => ({
     default: m.MyWorkItemsPanel,
@@ -116,6 +123,7 @@ type View =
   | "myReviews"
   | "workItems"
   | "myWorkItems"
+  | "triage"
   | "workItemViews"
   | "commits"
   | "pipelines"
@@ -223,6 +231,7 @@ const GOTO_VIEW_KEYS: Record<string, View> = {
   r: "myReviews",
   p: "pullRequestSearch",
   w: "myWorkItems",
+  t: "triage",
   i: "workItems",
   v: "workItemViews",
   c: "commits",
@@ -283,6 +292,18 @@ function AppShell() {
   });
 
   const activeView = organizations.length === 0 ? "settings" : view;
+
+  // Triage badge: reuses the My Items snapshot for the primary org, so it shares
+  // the query cache with the Triage panel instead of issuing a separate fetch.
+  const triageOrganizationId = organizations[0]?.id ?? "";
+  const triageCountQuery = useQuery({
+    queryKey: workItemQueryKeys.myItems(triageOrganizationId),
+    queryFn: () => listMyWorkItems({ organizationId: triageOrganizationId }),
+    enabled: !!triageOrganizationId,
+    staleTime: 5 * 60_000,
+    select: (items) => filterTriageWorkItems(items).length,
+  });
+  const triageCount = triageCountQuery.data ?? 0;
 
   const [paletteSearchText, setPaletteSearchText] = useState("");
   const [debouncedPaletteSearchText, setDebouncedPaletteSearchText] = useState("");
@@ -574,6 +595,7 @@ function AppShell() {
     if (
       activeView === "workItems" ||
       activeView === "myWorkItems" ||
+      activeView === "triage" ||
       activeView === "workItemViews"
     ) {
       return "myWorkItems";
@@ -627,6 +649,14 @@ function AppShell() {
       keywords: ["work item", "assigned"],
       label: "Go to My Work Items",
       run: () => setView("myWorkItems"),
+    },
+    {
+      disabled: organizations.length === 0,
+      group: "Navigation",
+      id: "nav.triage",
+      keywords: ["work item", "triage", "unassigned", "priority", "inbox"],
+      label: "Go to Triage",
+      run: () => setView("triage"),
     },
     {
       disabled: organizations.length === 0,
@@ -715,6 +745,7 @@ function AppShell() {
     {
       disabled:
         activeView !== "myWorkItems" &&
+        activeView !== "triage" &&
         activeView !== "workItems" &&
         activeView !== "workItemViews",
       group: "Work Items",
@@ -727,6 +758,7 @@ function AppShell() {
     {
       disabled:
         activeView !== "myWorkItems" &&
+        activeView !== "triage" &&
         activeView !== "workItems" &&
         activeView !== "workItemViews",
       group: "Work Items",
@@ -739,6 +771,7 @@ function AppShell() {
     {
       disabled:
         activeView !== "myWorkItems" &&
+        activeView !== "triage" &&
         activeView !== "workItems" &&
         activeView !== "workItemViews",
       group: "Work Items",
@@ -751,6 +784,7 @@ function AppShell() {
     {
       disabled:
         activeView !== "myWorkItems" &&
+        activeView !== "triage" &&
         activeView !== "workItems" &&
         activeView !== "workItemViews",
       group: "Work Items",
@@ -763,6 +797,7 @@ function AppShell() {
     {
       disabled:
         activeView !== "myWorkItems" &&
+        activeView !== "triage" &&
         activeView !== "workItems" &&
         activeView !== "workItemViews",
       group: "Work Items",
@@ -775,6 +810,7 @@ function AppShell() {
     {
       disabled:
         activeView !== "myWorkItems" &&
+        activeView !== "triage" &&
         activeView !== "workItems" &&
         activeView !== "workItemViews",
       group: "Work Items",
@@ -1072,6 +1108,7 @@ function AppShell() {
       ) {
         if (
           activeView === "myWorkItems" ||
+          activeView === "triage" ||
           activeView === "workItems" ||
           activeView === "workItemViews"
         ) {
@@ -1138,6 +1175,7 @@ function AppShell() {
       if (event.key === "m" || event.key === "M") {
         if (
           activeView === "myWorkItems" ||
+          activeView === "triage" ||
           activeView === "workItems" ||
           activeView === "workItemViews"
         ) {
@@ -1220,6 +1258,13 @@ function AppShell() {
                 disabled={organizations.length === 0}
                 label="My Items"
                 onClick={() => setView("myWorkItems")}
+              />
+              <NavSubItem
+                active={activeView === "triage"}
+                disabled={organizations.length === 0}
+                label="Triage"
+                badge={triageCount}
+                onClick={() => setView("triage")}
               />
               <NavSubGroup
                 id="workItemViews"
@@ -1322,6 +1367,8 @@ function AppShell() {
                     ? "Work Items"
                     : activeView === "myWorkItems"
                       ? "My Work Items"
+                      : activeView === "triage"
+                        ? "Triage"
                       : activeView === "workItemViews"
                         ? "Work Item Views"
                         : activeView === "commits"
@@ -1341,6 +1388,8 @@ function AppShell() {
                     ? "Search Azure DevOps work items across projects"
                     : activeView === "myWorkItems"
                       ? "Work items assigned to you"
+                      : activeView === "triage"
+                        ? "Active items missing an assignee or a priority"
                       : activeView === "workItemViews"
                         ? "Saved WIQL views with counts, grid results, and preview"
                         : activeView === "commits"
@@ -1400,6 +1449,8 @@ function AppShell() {
             />
           ) : activeView === "myWorkItems" ? (
             <MyWorkItemsPanel organizations={organizations} />
+          ) : activeView === "triage" ? (
+            <TriagePanel organizations={organizations} />
           ) : activeView === "workItemViews" ? (
             <WorkItemViewsPanel
               organizations={organizations}

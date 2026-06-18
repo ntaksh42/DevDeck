@@ -1280,8 +1280,12 @@ function demoWorkItems(input?: SearchWorkItemsInput): WorkItemSummary[] {
 }
 
 function demoMyWorkItems(): WorkItemSummary[] {
-  return applyWorkItemScenario(withEmptyExtraFields([
+  const priorityField = (priority: number) => [
+    { referenceName: "Microsoft.VSTS.Common.Priority", value: String(priority) },
+  ];
+  return applyWorkItemScenario([
     {
+      // Unassigned and no priority: a Triage candidate on both counts.
       organizationId: "contoso",
       projectId: "platform",
       projectName: "Platform",
@@ -1289,11 +1293,14 @@ function demoMyWorkItems(): WorkItemSummary[] {
       title: "Implement My Work Items panel",
       workItemType: "Task",
       state: "Active",
-      assignedTo: "Demo User",
+      assignedTo: null,
       changedDate: "2026-05-27T08:00:00Z",
       webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/201",
+      extraFields: [],
+      depth: null,
     },
     {
+      // Assigned with a priority: fully triaged, excluded from the view.
       organizationId: "contoso",
       projectId: "platform",
       projectName: "Platform",
@@ -1304,8 +1311,11 @@ function demoMyWorkItems(): WorkItemSummary[] {
       assignedTo: "Demo User",
       changedDate: "2026-05-26T10:00:00Z",
       webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/123",
+      extraFields: priorityField(2),
+      depth: null,
     },
     {
+      // Assigned but priority unset: a Triage candidate.
       organizationId: "contoso",
       projectId: "mobile",
       projectName: "Mobile",
@@ -1316,8 +1326,11 @@ function demoMyWorkItems(): WorkItemSummary[] {
       assignedTo: "Demo User",
       changedDate: "2026-05-25T14:30:00Z",
       webUrl: "https://dev.azure.com/contoso/Mobile/_workitems/edit/187",
+      extraFields: [],
+      depth: null,
     },
     {
+      // Unassigned but with a priority: still a Triage candidate (unassigned).
       organizationId: "contoso",
       projectId: "platform",
       projectName: "Platform",
@@ -1325,11 +1338,14 @@ function demoMyWorkItems(): WorkItemSummary[] {
       title: "Write ADR for auth middleware rewrite",
       workItemType: "Task",
       state: "New",
-      assignedTo: "Demo User",
+      assignedTo: null,
       changedDate: "2026-05-24T10:00:00Z",
       webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/155",
+      extraFields: priorityField(3),
+      depth: null,
     },
     {
+      // Assigned with a priority: fully triaged, excluded from the view.
       organizationId: "contoso",
       projectId: "infrastructure",
       projectName: "Infrastructure",
@@ -1340,8 +1356,10 @@ function demoMyWorkItems(): WorkItemSummary[] {
       assignedTo: "Demo User",
       changedDate: "2026-05-23T07:00:00Z",
       webUrl: "https://dev.azure.com/contoso/Infrastructure/_workitems/edit/51",
+      extraFields: priorityField(1),
+      depth: null,
     },
-  ]));
+  ]);
 }
 
 function demoWorkItemProjects(): WorkItemProjectOption[] {
