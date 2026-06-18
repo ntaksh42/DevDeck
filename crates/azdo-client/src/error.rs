@@ -14,6 +14,8 @@ pub enum AdoError {
     Parse(#[from] serde_json::Error),
     #[error("auth provider error: {0}")]
     Auth(String),
+    #[error("wiql query shape mismatch: {0}")]
+    WiqlQueryShape(String),
 }
 
 pub type Result<T> = std::result::Result<T, AdoError>;
