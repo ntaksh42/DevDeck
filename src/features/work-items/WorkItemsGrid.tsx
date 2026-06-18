@@ -239,7 +239,9 @@ function loadWorkItemColumnFilters(
         const values = parsed[column];
         if (Array.isArray(values)) {
           const cleaned = values.filter((value): value is string => typeof value === "string");
-          if (cleaned.length > 0) filters[column] = new Set(cleaned);
+          // An empty array is a meaningful "none selected" state, distinct from
+          // an absent key which means "show all", so preserve it.
+          filters[column] = new Set(cleaned);
         }
       }
       return filters;
@@ -255,7 +257,9 @@ function storeWorkItemColumnFilters(
   const serialized: Partial<Record<FilterableColumn, string[]>> = {};
   for (const column of Object.keys(FILTERABLE_COLUMNS) as FilterableColumn[]) {
     const values = filters[column];
-    if (values && values.size > 0) serialized[column] = [...values];
+    // Persist a present set even when empty ("none selected"); only an absent
+    // key means "show all".
+    if (values) serialized[column] = [...values];
   }
   writeStoredJson(key, serialized);
 }
@@ -264,7 +268,7 @@ function activeColumnFilterCount(
   filters: Partial<Record<FilterableColumn, Set<string>>>,
 ): number {
   return (Object.values(filters) as (Set<string> | undefined)[]).filter(
-    (values) => values && values.size > 0,
+    (values) => values !== undefined,
   ).length;
 }
 
@@ -682,12 +686,14 @@ export function WorkItemsGrid({
   }, [effectiveResults]);
 
   const displayed = useMemo(() => {
-    const hasFilters = (Object.values(columnFilters) as (Set<string> | undefined)[]).some(v => v && v.size > 0);
+    const hasFilters = (Object.keys(columnFilters) as FilterableColumn[]).some(
+      col => columnFilters[col] !== undefined,
+    );
     if (!hasFilters) return sorted;
     return sorted.filter(item => {
       for (const col of Object.keys(columnFilters) as FilterableColumn[]) {
         const activeValues = columnFilters[col];
-        if (!activeValues || activeValues.size === 0) continue;
+        if (!activeValues) continue;
         if (!activeValues.has(FILTERABLE_COLUMNS[col](item))) return false;
       }
       return true;
@@ -1124,18 +1130,15 @@ export function WorkItemsGrid({
     const allValues = columnUniqueValues[col] ?? [];
     setColumnFilters(prev => {
       const current = prev[col];
-      if (!current || current.size === 0) {
+      // No active filter (absent key) means every value is checked, so the
+      // first toggle deselects just the clicked value.
+      if (!current) {
         const next = new Set(allValues.filter(v => v !== value));
-        if (next.size === 0) return prev;
         return { ...prev, [col]: next };
       }
       const next = new Set(current);
       if (next.has(value)) {
         next.delete(value);
-        if (next.size === 0) {
-          const { [col]: _, ...rest } = prev;
-          return rest;
-        }
       } else {
         next.add(value);
         if (next.size === allValues.length) {
@@ -1147,11 +1150,18 @@ export function WorkItemsGrid({
     });
   }
 
+  // Removes the column filter entirely, which means "show all" / (All).
   function clearColumnFilter(col: FilterableColumn) {
     setColumnFilters(prev => {
       const { [col]: _, ...rest } = prev;
       return rest;
     });
+  }
+
+  // Unchecks every value for the column, leaving an explicit empty selection so
+  // the user can then pick exactly the values they want.
+  function uncheckAllColumnFilter(col: FilterableColumn) {
+    setColumnFilters(prev => ({ ...prev, [col]: new Set<string>() }));
   }
 
   function clearAllFilters() {
@@ -1483,7 +1493,7 @@ export function WorkItemsGrid({
                     column={col}
                     sort={sort}
                     onSort={applyWiSort}
-                    filterActive={isFilterableColumn(col) && !!(columnFilters[col]?.size)}
+                    filterActive={isFilterableColumn(col) && columnFilters[col] !== undefined}
                     onFilterOpen={isFilterableColumn(col) ? (el) => openFilter(col, el) : undefined}
                     resizeHandle={
                       i < visibleColumns.length - 1 ? (
@@ -1680,6 +1690,7 @@ export function WorkItemsGrid({
           activeValues={columnFilters[openFilterCol]}
           onToggle={(value) => toggleFilter(openFilterCol, value)}
           onClearAll={() => clearColumnFilter(openFilterCol)}
+          onUncheckAll={() => uncheckAllColumnFilter(openFilterCol)}
           onClose={() => { setOpenFilterCol(null); setFilterAnchorRect(null); }}
         />
       ) : null}
@@ -1720,6 +1731,7 @@ function ColumnFilterDropdown({
   activeValues,
   onToggle,
   onClearAll,
+  onUncheckAll,
   onClose,
 }: {
   anchorRect: DOMRect;
@@ -1727,6 +1739,7 @@ function ColumnFilterDropdown({
   activeValues: Set<string> | undefined;
   onToggle: (value: string) => void;
   onClearAll: () => void;
+  onUncheckAll: () => void;
   onClose: () => void;
 }) {
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -1748,7 +1761,8 @@ function ColumnFilterDropdown({
     return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [onClose]);
 
-  const isAllChecked = !activeValues || activeValues.size === 0;
+  const isAllChecked = activeValues === undefined;
+  const anyChecked = isAllChecked || (activeValues?.size ?? 0) > 0;
   const filteredValues = search.trim()
     ? allValues.filter(v => v.toLowerCase().includes(search.trim().toLowerCase()))
     : allValues;
@@ -1771,15 +1785,23 @@ function ColumnFilterDropdown({
           className="w-full rounded border border-input bg-background px-2 py-0.5 text-xs outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
-      <div className="border-b border-border p-1">
+      <div className="flex items-center gap-1 border-b border-border p-1">
         <button
           type="button"
           onClick={onClearAll}
-          className={`w-full rounded px-2 py-0.5 text-left text-xs hover:bg-secondary ${
+          className={`flex-1 rounded px-2 py-0.5 text-left text-xs hover:bg-secondary ${
             isAllChecked ? "font-medium text-foreground" : "text-muted-foreground"
           }`}
         >
           (All)
+        </button>
+        <button
+          type="button"
+          onClick={onUncheckAll}
+          disabled={!anyChecked}
+          className="rounded px-2 py-0.5 text-xs text-muted-foreground hover:bg-secondary disabled:cursor-default disabled:opacity-40"
+        >
+          Uncheck all
         </button>
       </div>
       <div className="max-h-44 overflow-auto p-1">
