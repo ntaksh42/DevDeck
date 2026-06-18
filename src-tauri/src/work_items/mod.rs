@@ -303,19 +303,10 @@ impl WorkItemService {
         fallback_project_name: &str,
         raw_relations: Vec<WorkItemRelation>,
     ) -> Vec<WorkItemRelationSummary> {
-        let mut links: Vec<(String, u8, i64)> = raw_relations
-            .iter()
-            .filter_map(|relation| {
-                let id = related_work_item_id(&relation.url)?;
-                let (label, rank) = relation_type_label(&relation.rel);
-                Some((label, rank, id))
-            })
-            .take(MAX_PREVIEW_RELATIONS)
-            .collect();
+        let links = prioritized_relation_links(&raw_relations, MAX_PREVIEW_RELATIONS);
         if links.is_empty() {
             return Vec::new();
         }
-        links.sort_by_key(|link| (link.1, link.2));
 
         let ids = links.iter().map(|(_, _, id)| *id).collect::<Vec<_>>();
         let fields = vec![
