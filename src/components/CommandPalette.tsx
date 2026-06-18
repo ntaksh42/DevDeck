@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { readStoredJson, writeStoredJson } from "@/lib/storage";
 
 export type CommandPaletteAction = {
   disabled?: boolean;
@@ -45,18 +46,17 @@ type PaletteRow = {
 const COMMAND_USAGE_STORAGE_KEY = "azdodeck:commandPalette:usage";
 
 function loadCommandUsage(): Record<string, number> {
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(COMMAND_USAGE_STORAGE_KEY) ?? "{}");
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
+  return readStoredJson(
+    COMMAND_USAGE_STORAGE_KEY,
+    (raw) => (raw && typeof raw === "object" ? (raw as Record<string, number>) : undefined),
+    {},
+  );
 }
 
 function recordCommandUsage(id: string) {
   const usage = loadCommandUsage();
   usage[id] = Date.now();
-  window.localStorage.setItem(COMMAND_USAGE_STORAGE_KEY, JSON.stringify(usage));
+  writeStoredJson(COMMAND_USAGE_STORAGE_KEY, usage);
 }
 
 export function CommandPalette({

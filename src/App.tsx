@@ -42,8 +42,7 @@ import {
   THEME_CHANGED_EVENT,
   watchSystemTheme,
 } from "@/lib/theme";
-import { listen } from "@tauri-apps/api/event";
-import { isTauriRuntime } from "@/lib/runtime";
+import { subscribeTauriEvent } from "@/lib/tauriEvents";
 import {
   storedNumber,
   isEditableTarget,
@@ -927,58 +926,38 @@ function AppShell() {
   }, [organizations.length, syncMutation.isPending]);
 
   useEffect(() => {
-    if (!isTauriRuntime()) return;
-    let cleanup: (() => void) | undefined;
-    listen("sync:updated", (event) => {
-      const parsed = syncUpdatedEventSchema.safeParse(event.payload);
+    return subscribeTauriEvent("sync:updated", (payload) => {
+      const parsed = syncUpdatedEventSchema.safeParse(payload);
       invalidateSyncedDataQueries(queryClient, parsed.success ? parsed.data.scopes : ["all"]);
-    })
-      .then((unlisten) => {
-        cleanup = unlisten;
-      })
-      .catch((e) => console.error("sync:updated listen failed", e));
-    return () => cleanup?.();
+    });
   }, [queryClient]);
 
   useEffect(() => {
-    if (!isTauriRuntime()) return;
-    let cleanup: (() => void) | undefined;
-    listen<WorkItemNotificationEvent>("notifications:work-items", (event) => {
-      const settings = appSettingsRef.current;
-      if (!settings) {
-        pendingWorkItemEventsRef.current.push(event.payload);
-        return;
-      }
-      void showWorkItemNotificationEvent(event.payload, settings);
-    })
-      .then((unlisten) => {
-        cleanup = unlisten;
-      })
-      .catch((e) => console.error("notifications:work-items listen failed", e));
-    return () => cleanup?.();
+    return subscribeTauriEvent<WorkItemNotificationEvent>(
+      "notifications:work-items",
+      (payload) => {
+        const settings = appSettingsRef.current;
+        if (!settings) {
+          pendingWorkItemEventsRef.current.push(payload);
+          return;
+        }
+        void showWorkItemNotificationEvent(payload, settings);
+      },
+    );
   }, []);
 
   useEffect(() => {
-    if (!isTauriRuntime()) return;
-    let cleanup: (() => void) | undefined;
-    listen<PullRequestNotificationEvent>(
+    return subscribeTauriEvent<PullRequestNotificationEvent>(
       "notifications:pull-requests",
-      (event) => {
+      (payload) => {
         const settings = appSettingsRef.current;
         if (!settings) {
-          pendingPullRequestEventsRef.current.push(event.payload);
+          pendingPullRequestEventsRef.current.push(payload);
           return;
         }
-        void showPullRequestNotificationEvent(event.payload, settings);
+        void showPullRequestNotificationEvent(payload, settings);
       },
-    )
-      .then((unlisten) => {
-        cleanup = unlisten;
-      })
-      .catch((e) =>
-        console.error("notifications:pull-requests listen failed", e),
-      );
-    return () => cleanup?.();
+    );
   }, []);
 
   useEffect(() => {

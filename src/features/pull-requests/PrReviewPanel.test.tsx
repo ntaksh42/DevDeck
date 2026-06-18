@@ -1,8 +1,13 @@
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReviewPullRequestSummary } from "@/lib/azdoCommands";
 import { PrReviewPanel } from "./PrReviewPanel";
+
+// This project's vitest config has no global setup, so Testing Library's
+// automatic per-test cleanup isn't registered; unmount explicitly so a prior
+// render's panel doesn't leak into the next test's `screen` queries.
+afterEach(cleanup);
 
 const pr: ReviewPullRequestSummary = {
   organizationId: "contoso",
@@ -23,11 +28,11 @@ const pr: ReviewPullRequestSummary = {
   mergeStatus: null,
 };
 
-function renderPanel() {
+function renderPanel(selectedPr: ReviewPullRequestSummary = pr) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <PrReviewPanel selectedPr={pr} />
+      <PrReviewPanel selectedPr={selectedPr} />
     </QueryClientProvider>,
   );
 }
@@ -41,6 +46,40 @@ describe("PrReviewPanel status actions", () => {
         await screen.findByRole("button", { name: "Complete" }, { timeout: 8000 }),
       ).toBeTruthy();
       expect(screen.getByRole("button", { name: "Abandon" })).toBeTruthy();
+    },
+    15000,
+  );
+});
+
+describe("PrReviewPanel Result tab", () => {
+  // PR 101 is one of the demo PRs that resolves a review-result HTML file.
+  const resultPr: ReviewPullRequestSummary = { ...pr, pullRequestId: 101 };
+
+  it(
+    "renders the HTML preview in a same-origin sandboxed iframe so it shows in the desktop WebView2 runtime",
+    async () => {
+      renderPanel(resultPr);
+
+      const resultTab = await screen.findByRole(
+        "tab",
+        { name: "Result" },
+        { timeout: 8000 },
+      );
+      fireEvent.click(resultTab);
+
+      // Wait for the preview query to resolve and render its iframe.
+      const frame = (await screen.findByTitle(
+        "Review result preview for PR101",
+        undefined,
+        { timeout: 8000 },
+      )) as HTMLIFrameElement;
+
+      // `allow-same-origin` is what makes the srcDoc render in WebView2; an
+      // empty sandbox left the frame blank in the desktop app. `allow-scripts`
+      // must stay off so the document still can't run JavaScript.
+      const sandbox = frame.getAttribute("sandbox") ?? "";
+      expect(sandbox.split(/\s+/).filter(Boolean)).toEqual(["allow-same-origin"]);
+      expect(frame.getAttribute("srcdoc")).toContain("Rate limiting middleware review");
     },
     15000,
   );

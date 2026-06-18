@@ -711,9 +711,13 @@ function ResultTab({ selectedPr }: { selectedPr: ReviewPullRequestSummary }) {
           {openError}
         </div>
       ) : null}
+      {/* `allow-same-origin` (without `allow-scripts`, so the document still
+          can't run JS) is required for the WebView2 desktop runtime to render
+          a `srcDoc` document at all; with `sandbox=""` the frame stays blank in
+          the desktop app. Mirrors the work item RichHtmlFrame. */}
       <iframe
         title={`Review result preview for PR${preview.pullRequestId}`}
-        sandbox=""
+        sandbox="allow-same-origin"
         srcDoc={preview.html}
         className="min-h-0 flex-1 bg-card outline-none"
       />

@@ -1,3 +1,5 @@
+import { readStoredJson, writeStoredJson } from "@/lib/storage";
+
 const PREVIEW_FIELDS_STORAGE_KEY = "azdodeck:workItems:previewFields";
 const PREVIEW_CUSTOM_FIELDS_STORAGE_KEY = "azdodeck:workItems:previewCustomFields";
 
@@ -55,43 +57,41 @@ const FIELD_REFERENCE_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+
 const MAX_CUSTOM_PREVIEW_FIELDS = 20;
 
 export function loadPreviewFieldKeys(): PreviewFieldKey[] {
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(PREVIEW_FIELDS_STORAGE_KEY) ?? "[]");
-    if (!Array.isArray(parsed)) return DEFAULT_PREVIEW_FIELD_KEYS;
-    const keys = parsed.filter(
-      (value): value is PreviewFieldKey =>
-        typeof value === "string" && PREVIEW_FIELD_KEY_SET.has(value as PreviewFieldKey),
-    );
-    return keys.length > 0 ? keys : DEFAULT_PREVIEW_FIELD_KEYS;
-  } catch {
-    return DEFAULT_PREVIEW_FIELD_KEYS;
-  }
+  return readStoredJson(
+    PREVIEW_FIELDS_STORAGE_KEY,
+    (raw) => {
+      if (!Array.isArray(raw)) return undefined;
+      const keys = raw.filter(
+        (value): value is PreviewFieldKey =>
+          typeof value === "string" && PREVIEW_FIELD_KEY_SET.has(value as PreviewFieldKey),
+      );
+      return keys.length > 0 ? keys : undefined;
+    },
+    DEFAULT_PREVIEW_FIELD_KEYS,
+  );
 }
 
 export function storePreviewFieldKeys(keys: PreviewFieldKey[]) {
-  window.localStorage.setItem(PREVIEW_FIELDS_STORAGE_KEY, JSON.stringify(keys));
+  writeStoredJson(PREVIEW_FIELDS_STORAGE_KEY, keys);
 }
 
 export function loadCustomPreviewFields(): CustomPreviewField[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(PREVIEW_CUSTOM_FIELDS_STORAGE_KEY) ?? "[]");
-    if (!Array.isArray(parsed)) return [];
-    return dedupeCustomPreviewFields(
-      parsed
-        .map(normalizeCustomPreviewField)
-        .filter((field): field is CustomPreviewField => field !== null),
-    );
-  } catch {
-    return [];
-  }
+  return readStoredJson(
+    PREVIEW_CUSTOM_FIELDS_STORAGE_KEY,
+    (raw) =>
+      Array.isArray(raw)
+        ? dedupeCustomPreviewFields(
+            raw
+              .map(normalizeCustomPreviewField)
+              .filter((field): field is CustomPreviewField => field !== null),
+          )
+        : undefined,
+    [],
+  );
 }
 
 export function storeCustomPreviewFields(fields: CustomPreviewField[]) {
-  window.localStorage.setItem(
-    PREVIEW_CUSTOM_FIELDS_STORAGE_KEY,
-    JSON.stringify(dedupeCustomPreviewFields(fields)),
-  );
+  writeStoredJson(PREVIEW_CUSTOM_FIELDS_STORAGE_KEY, dedupeCustomPreviewFields(fields));
 }
 
 export function isValidFieldReferenceName(value: string): boolean {

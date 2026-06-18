@@ -1,3 +1,5 @@
+import { readStoredJson, writeStoredJson } from "@/lib/storage";
+
 export const FIELD_PRESETS_STORAGE_KEY = "azdodeck:workItems:fieldPresets";
 
 // Presets are applied with the digit keys 1-9, so more would be unreachable.
@@ -16,24 +18,16 @@ export type WorkItemFieldPreset = {
 };
 
 export function loadFieldPresets(): WorkItemFieldPreset[] {
-  try {
-    const parsed = JSON.parse(
-      window.localStorage.getItem(FIELD_PRESETS_STORAGE_KEY) ?? "[]",
-    );
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(isValidPreset)
-      .slice(0, MAX_FIELD_PRESETS);
-  } catch {
-    return [];
-  }
+  return readStoredJson(
+    FIELD_PRESETS_STORAGE_KEY,
+    (raw) =>
+      Array.isArray(raw) ? raw.filter(isValidPreset).slice(0, MAX_FIELD_PRESETS) : undefined,
+    [],
+  );
 }
 
 export function storeFieldPresets(presets: WorkItemFieldPreset[]): void {
-  window.localStorage.setItem(
-    FIELD_PRESETS_STORAGE_KEY,
-    JSON.stringify(presets.slice(0, MAX_FIELD_PRESETS)),
-  );
+  writeStoredJson(FIELD_PRESETS_STORAGE_KEY, presets.slice(0, MAX_FIELD_PRESETS));
 }
 
 function isValidPreset(value: unknown): value is WorkItemFieldPreset {

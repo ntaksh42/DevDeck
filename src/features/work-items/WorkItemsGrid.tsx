@@ -34,6 +34,7 @@ import {
   type SortDirection,
 } from '@/lib/utils';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
+import { readStoredJson, writeStoredJson } from '@/lib/storage';
 import { openExternalUrl } from '@/lib/openExternal';
 import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
@@ -184,19 +185,20 @@ const WI_GRID_KEYS: WiSortKey[] = [
 const WI_GRID_REQUIRED_COLUMNS: WiSortKey[] = ["id", "title"];
 
 function loadVisibleWorkItemColumns(key: string): WiSortKey[] {
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(key) ?? "null");
-    if (!Array.isArray(parsed)) return [...WI_GRID_KEYS];
-    const visible = parsed.filter((value): value is WiSortKey =>
-      WI_GRID_KEYS.includes(value as WiSortKey),
-    );
-    for (const required of WI_GRID_REQUIRED_COLUMNS) {
-      if (!visible.includes(required)) visible.push(required);
-    }
-    return visible.length > 0 ? visible : [...WI_GRID_KEYS];
-  } catch {
-    return [...WI_GRID_KEYS];
-  }
+  return readStoredJson(
+    key,
+    (raw) => {
+      if (!Array.isArray(raw)) return undefined;
+      const visible = raw.filter((value): value is WiSortKey =>
+        WI_GRID_KEYS.includes(value as WiSortKey),
+      );
+      for (const required of WI_GRID_REQUIRED_COLUMNS) {
+        if (!visible.includes(required)) visible.push(required);
+      }
+      return visible.length > 0 ? visible : undefined;
+    },
+    [...WI_GRID_KEYS],
+  );
 }
 
 function defaultWorkItemSort(): WiSortState {
@@ -204,39 +206,43 @@ function defaultWorkItemSort(): WiSortState {
 }
 
 function loadWorkItemSort(key: string, fallback: WiSortState): WiSortState {
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(key) ?? "null");
-    if (
-      !parsed ||
-      !WI_GRID_KEYS.includes(parsed.key) ||
-      (parsed.direction !== "asc" && parsed.direction !== "desc")
-    ) {
-      return fallback;
-    }
-    return { key: parsed.key, direction: parsed.direction };
-  } catch {
-    return fallback;
-  }
+  return readStoredJson(
+    key,
+    (raw) => {
+      const parsed = raw as Partial<WiSortState> | null;
+      if (
+        !parsed ||
+        !WI_GRID_KEYS.includes(parsed.key as WiSortKey) ||
+        (parsed.direction !== "asc" && parsed.direction !== "desc")
+      ) {
+        return undefined;
+      }
+      return { key: parsed.key as WiSortKey, direction: parsed.direction };
+    },
+    fallback,
+  );
 }
 
 function loadWorkItemColumnFilters(
   key: string,
 ): Partial<Record<FilterableColumn, Set<string>>> {
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(key) ?? "{}");
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-    const filters: Partial<Record<FilterableColumn, Set<string>>> = {};
-    for (const column of Object.keys(FILTERABLE_COLUMNS) as FilterableColumn[]) {
-      const values = parsed[column];
-      if (Array.isArray(values)) {
-        const cleaned = values.filter((value): value is string => typeof value === "string");
-        if (cleaned.length > 0) filters[column] = new Set(cleaned);
+  return readStoredJson(
+    key,
+    (raw) => {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+      const parsed = raw as Record<string, unknown>;
+      const filters: Partial<Record<FilterableColumn, Set<string>>> = {};
+      for (const column of Object.keys(FILTERABLE_COLUMNS) as FilterableColumn[]) {
+        const values = parsed[column];
+        if (Array.isArray(values)) {
+          const cleaned = values.filter((value): value is string => typeof value === "string");
+          if (cleaned.length > 0) filters[column] = new Set(cleaned);
+        }
       }
-    }
-    return filters;
-  } catch {
-    return {};
-  }
+      return filters;
+    },
+    {},
+  );
 }
 
 function storeWorkItemColumnFilters(
@@ -248,7 +254,7 @@ function storeWorkItemColumnFilters(
     const values = filters[column];
     if (values && values.size > 0) serialized[column] = [...values];
   }
-  window.localStorage.setItem(key, JSON.stringify(serialized));
+  writeStoredJson(key, serialized);
 }
 
 function activeColumnFilterCount(
