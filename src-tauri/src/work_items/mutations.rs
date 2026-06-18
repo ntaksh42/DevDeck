@@ -1,7 +1,9 @@
 //! Write operations over the work item IPC surface: adding/deleting comments,
 //! patching fields on a single item, and the bulk state/assignee/priority
 //! changes. Each keeps the local cache in sync after a successful write, and the
-//! bulk operations re-check read-only mode between iterations.
+//! bulk operations re-check read-only mode between iterations. When read-only
+//! mode stops a run partway, the remaining items are reported as failures rather
+//! than being silently dropped, so the frontend can notify the user.
 
 use serde_json::Value;
 
@@ -37,8 +39,20 @@ impl WorkItemService {
             .await?;
 
         let mut results = Vec::new();
-        for id in input.work_item_ids {
-            if self.ensure_write_enabled().is_err() {
+        let mut ids = input.work_item_ids.into_iter();
+        for id in ids.by_ref() {
+            if let Err(e) = self.ensure_write_enabled() {
+                let message = e.to_string();
+                results.push(BulkWorkItemResult {
+                    id,
+                    error: Some(message.clone()),
+                });
+                for skipped in ids.by_ref() {
+                    results.push(BulkWorkItemResult {
+                        id: skipped,
+                        error: Some(message.clone()),
+                    });
+                }
                 break;
             }
             match client.update_work_item_state(&project.id, id, &state).await {
@@ -99,8 +113,20 @@ impl WorkItemService {
             .await?;
 
         let mut results = Vec::new();
-        for id in input.work_item_ids {
-            if self.ensure_write_enabled().is_err() {
+        let mut ids = input.work_item_ids.into_iter();
+        for id in ids.by_ref() {
+            if let Err(e) = self.ensure_write_enabled() {
+                let message = e.to_string();
+                results.push(BulkWorkItemResult {
+                    id,
+                    error: Some(message.clone()),
+                });
+                for skipped in ids.by_ref() {
+                    results.push(BulkWorkItemResult {
+                        id: skipped,
+                        error: Some(message.clone()),
+                    });
+                }
                 break;
             }
             match client
@@ -150,8 +176,20 @@ impl WorkItemService {
             .await?;
 
         let mut results = Vec::new();
-        for id in input.work_item_ids {
-            if self.ensure_write_enabled().is_err() {
+        let mut ids = input.work_item_ids.into_iter();
+        for id in ids.by_ref() {
+            if let Err(e) = self.ensure_write_enabled() {
+                let message = e.to_string();
+                results.push(BulkWorkItemResult {
+                    id,
+                    error: Some(message.clone()),
+                });
+                for skipped in ids.by_ref() {
+                    results.push(BulkWorkItemResult {
+                        id: skipped,
+                        error: Some(message.clone()),
+                    });
+                }
                 break;
             }
             match client
