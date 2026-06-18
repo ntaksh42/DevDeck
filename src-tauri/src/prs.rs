@@ -86,8 +86,15 @@ impl PullRequestService {
     ) -> Result<Vec<ReviewPullRequestSummary>> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let cached = self.db.list_review_pull_requests(&organization.id)?;
+        let snoozed: std::collections::HashSet<String> = self
+            .db
+            .list_snoozed_items(&organization.id, crate::snooze::ITEM_TYPE_PULL_REQUEST)?
+            .into_iter()
+            .map(|row| row.item_key)
+            .collect();
         let mut results: Vec<ReviewPullRequestSummary> = cached
             .into_iter()
+            .filter(|pr| !snoozed.contains(&format!("{}:{}", pr.repository_id, pr.pull_request_id)))
             .map(|pr| ReviewPullRequestSummary {
                 organization_id: pr.org_id,
                 project_id: pr.project_id,

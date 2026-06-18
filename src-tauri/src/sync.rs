@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -11,6 +11,7 @@ use crate::commits::sync_commits_for_org;
 use crate::db::{AppDatabase, AppSettings, CachedReviewPr, CachedWorkItem, MY_WORK_ITEMS_LIMIT};
 use crate::prs::sync_prs_for_org;
 use crate::secrets::SecretStore;
+use crate::snooze::SnoozeService;
 use crate::work_items::sync_work_items_for_org;
 
 pub struct SyncRunner {
@@ -207,6 +208,8 @@ impl SyncRunner {
                 return;
             }
         };
+        let snooze = SnoozeService::new(self.db.clone());
+        let now = chrono::Utc::now().to_rfc3339();
         for org in orgs {
             let client = match client_for_organization(&org, &self.secrets) {
                 Ok(c) => c,
@@ -230,12 +233,15 @@ impl SyncRunner {
                     tracing::error!(org = %org.name, error = ?e, "sync: PR sync failed");
                 } else {
                     emit_sync_updated(handle, &org.id, vec![SyncScope::MyReviews]);
+                    let current_reviews = self
+                        .db
+                        .list_review_pull_requests(&org.id)
+                        .unwrap_or_default();
+                    // Collect comment notifications first: the call advances the
+                    // comment-seen markers that snooze revival then reads.
+                    let mut items = Vec::new();
                     if should_collect_pr_notifications {
-                        let current_reviews = self
-                            .db
-                            .list_review_pull_requests(&org.id)
-                            .unwrap_or_default();
-                        let mut items = pr_review_notification_items(
+                        items = pr_review_notification_items(
                             &previous_reviews,
                             &current_reviews,
                             &settings,
@@ -248,6 +254,19 @@ impl SyncRunner {
                                 .await,
                             );
                         }
+                    }
+                    // Revive snoozed PRs past their deadline or with new activity,
+                    // and learn which PRs remain snoozed so their notifications
+                    // can be suppressed.
+                    let snoozed_pr_ids = match snooze.reconcile_pull_requests(&org.id, &now) {
+                        Ok(reconcile) => still_snoozed_pr_ids(&reconcile.still_snoozed),
+                        Err(e) => {
+                            tracing::warn!(org = %org.name, error = ?e, "sync: PR snooze reconcile failed");
+                            HashSet::new()
+                        }
+                    };
+                    if should_collect_pr_notifications {
+                        items.retain(|item| !snoozed_pr_ids.contains(&item.pull_request_id));
                         if !items.is_empty() {
                             let event = PullRequestNotificationEvent {
                                 organization_id: org.id.clone(),
@@ -281,14 +300,30 @@ impl SyncRunner {
                     tracing::error!(org = %org.name, error = ?e, "sync: WI sync failed");
                 } else {
                     emit_sync_updated(handle, &org.id, vec![SyncScope::MyWorkItems]);
-                    if should_collect_work_item_notifications {
-                        match self.db.list_my_work_items(&org.id) {
-                            Ok(current_my_work_items) => {
-                                let items = work_item_notification_items(
+                    match self.db.list_my_work_items(&org.id) {
+                        Ok(current_my_work_items) => {
+                            // Revive snoozed work items past their deadline or with a
+                            // newer ChangedDate; remember which stay snoozed.
+                            let snoozed_ids = match snooze.reconcile_work_items(
+                                &org.id,
+                                &current_my_work_items,
+                                &now,
+                            ) {
+                                Ok(reconcile) => {
+                                    still_snoozed_work_item_ids(&reconcile.still_snoozed)
+                                }
+                                Err(e) => {
+                                    tracing::warn!(org = %org.name, error = ?e, "sync: WI snooze reconcile failed");
+                                    HashSet::new()
+                                }
+                            };
+                            if should_collect_work_item_notifications {
+                                let mut items = work_item_notification_items(
                                     &previous_my_work_items,
                                     &current_my_work_items,
                                     &settings,
                                 );
+                                items.retain(|item| !snoozed_ids.contains(&item.id));
                                 if !items.is_empty() {
                                     let event = WorkItemNotificationEvent {
                                         organization_id: org.id.clone(),
@@ -300,9 +335,9 @@ impl SyncRunner {
                                     }
                                 }
                             }
-                            Err(e) => {
-                                tracing::warn!(org = %org.name, error = ?e, "sync: failed to snapshot work items after sync");
-                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!(org = %org.name, error = ?e, "sync: failed to snapshot work items after sync");
                         }
                     }
                 }
@@ -334,6 +369,18 @@ fn combined_scope(triggers: &[SyncTrigger]) -> SyncScope {
         return SyncScope::All;
     }
     first
+}
+
+/// Maps still-snoozed PR keys (`{repo}:{pr_id}`) to their pull request ids so
+/// notification items, which only carry the id, can be filtered.
+fn still_snoozed_pr_ids(keys: &[String]) -> HashSet<i64> {
+    keys.iter()
+        .filter_map(|key| key.rsplit_once(':').and_then(|(_, id)| id.parse().ok()))
+        .collect()
+}
+
+fn still_snoozed_work_item_ids(keys: &[String]) -> HashSet<i64> {
+    keys.iter().filter_map(|key| key.parse().ok()).collect()
 }
 
 fn emit_sync_updated(handle: &AppHandle, org_id: &str, scopes: Vec<SyncScope>) {

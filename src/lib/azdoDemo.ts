@@ -28,6 +28,7 @@ import type {
   PullRequestSummary,
   ReviewPullRequestSummary,
   ReviewResultPreview,
+  SnoozedItemSummary,
   SetPullRequestThreadStatusInput,
   SubmitPullRequestVoteInput,
   RunWorkItemQueryInput,
@@ -129,6 +130,26 @@ const writeCommands = new Set([
 
 let demoPrThreadSeq = 100;
 const demoPrVotes = new Map<number, number>();
+
+// In-memory snooze store for browser demo mode, keyed by `${itemType}:${itemKey}`
+// with the snooze deadline as the value. Auto-revival is not simulated; demo
+// snoozes simply hide items until manually unsnoozed.
+const demoSnoozes = new Map<string, string>();
+
+function demoSnoozeStoreKey(itemType: string, itemKey: string): string {
+  return `${itemType}:${itemKey}`;
+}
+
+function demoSnoozedKeys(itemType: string): Set<string> {
+  const keys = new Set<string>();
+  for (const stored of demoSnoozes.keys()) {
+    const prefix = `${itemType}:`;
+    if (stored.startsWith(prefix)) {
+      keys.add(stored.slice(prefix.length));
+    }
+  }
+  return keys;
+}
 const demoPrThreads = new Map<number, PrThread[]>();
 
 function demoVoteLabel(vote: number): string {
@@ -523,8 +544,12 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       const input = (args as { input?: SearchPullRequestsInput } | undefined)?.input;
       return demoPullRequests(input);
     }
-    case "list_my_review_pull_requests":
-      return demoReviewPullRequests();
+    case "list_my_review_pull_requests": {
+      const snoozed = demoSnoozedKeys("pull_request");
+      return demoReviewPullRequests().filter(
+        (pr) => !snoozed.has(`${pr.repositoryId}:${pr.pullRequestId}`),
+      );
+    }
     case "get_pull_request_review": {
       const input = (args as { input?: GetPullRequestReviewInput } | undefined)?.input;
       const prId = input?.pullRequestId ?? 0;
@@ -722,8 +747,12 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         },
       } satisfies SearchAllResult;
     }
-    case "list_my_work_items":
-      return demoMyWorkItems();
+    case "list_my_work_items": {
+      const snoozed = demoSnoozedKeys("work_item");
+      return demoMyWorkItems().filter(
+        (item) => !snoozed.has(String(item.id)),
+      );
+    }
     case "list_work_item_projects":
       return demoWorkItemProjects();
     case "run_work_item_query": {
@@ -896,6 +925,33 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     }
     case "list_sync_states":
       return demoSyncStates;
+    case "snooze_item": {
+      const input = (
+        args as
+          | { input?: { itemType: string; itemKey: string; snoozeUntil: string } }
+          | undefined
+      )?.input;
+      if (input) {
+        demoSnoozes.set(
+          demoSnoozeStoreKey(input.itemType, input.itemKey),
+          input.snoozeUntil,
+        );
+      }
+      return null;
+    }
+    case "unsnooze_item": {
+      const input = (
+        args as { input?: { itemType: string; itemKey: string } } | undefined
+      )?.input;
+      if (input) {
+        demoSnoozes.delete(demoSnoozeStoreKey(input.itemType, input.itemKey));
+      }
+      return null;
+    }
+    case "list_snoozed_items": {
+      const input = (args as { input?: { itemType: string } } | undefined)?.input;
+      return demoListSnoozedItems(input?.itemType ?? "");
+    }
     case "get_saved_query": {
       const input = (args as { input?: GetSavedQueryInput } | undefined)?.input;
       const queryId = input?.queryId ?? "";
@@ -1599,6 +1655,36 @@ function escapeDemoHtml(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function demoListSnoozedItems(itemType: string): SnoozedItemSummary[] {
+  const snoozedKeys = demoSnoozedKeys(itemType);
+  if (itemType === "pull_request") {
+    return demoReviewPullRequests()
+      .filter((pr) => snoozedKeys.has(`${pr.repositoryId}:${pr.pullRequestId}`))
+      .map((pr) => ({
+        itemType,
+        itemKey: `${pr.repositoryId}:${pr.pullRequestId}`,
+        snoozeUntil:
+          demoSnoozes.get(
+            demoSnoozeStoreKey(itemType, `${pr.repositoryId}:${pr.pullRequestId}`),
+          ) ?? "",
+        title: pr.title,
+        subtitle: pr.repositoryName,
+        webUrl: pr.webUrl,
+      }));
+  }
+  return demoMyWorkItems()
+    .filter((item) => snoozedKeys.has(String(item.id)))
+    .map((item) => ({
+      itemType,
+      itemKey: String(item.id),
+      snoozeUntil:
+        demoSnoozes.get(demoSnoozeStoreKey(itemType, String(item.id))) ?? "",
+      title: item.title,
+      subtitle: item.state ?? null,
+      webUrl: item.webUrl ?? null,
+    }));
 }
 
 function demoReviewPullRequests(): ReviewPullRequestSummary[] {

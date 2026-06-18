@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, Result};
 
-const SCHEMA_VERSION: i64 = 11;
+const SCHEMA_VERSION: i64 = 12;
 
 /// Max rows kept in the my_work_items snapshot queries; sync notification
 /// diffing must know this cap to avoid treating re-entering rows as new.
@@ -127,6 +127,19 @@ pub struct CachedWorkItem {
     pub assigned_to_unique_name: Option<String>,
     pub changed_date: Option<String>,
     pub web_url: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SnoozedItem {
+    pub item_type: String,
+    pub item_key: String,
+    pub snooze_until: String,
+    /// Activity marker captured when the item was snoozed. For pull requests
+    /// this is the last-seen comment id (decimal string); for work items it is
+    /// the `System.ChangedDate` timestamp. Compared against the live value
+    /// during sync to revive items that saw new activity.
+    pub baseline_activity: Option<String>,
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone)]
@@ -275,6 +288,42 @@ impl AppDatabase {
             pull_request_id,
             last_seen_comment_id,
         )
+    }
+
+    // ── Snoozed items ─────────────────────────────────────────────────────────
+
+    pub fn upsert_snoozed_item(
+        &self,
+        org_id: &str,
+        item_type: &str,
+        item_key: &str,
+        snooze_until: &str,
+        baseline_activity: Option<&str>,
+    ) -> Result<()> {
+        let conn = self.open()?;
+        upsert_snoozed_item(
+            &conn,
+            org_id,
+            item_type,
+            item_key,
+            snooze_until,
+            baseline_activity,
+        )
+    }
+
+    pub fn delete_snoozed_item(&self, org_id: &str, item_type: &str, item_key: &str) -> Result<()> {
+        let conn = self.open()?;
+        conn.execute(
+            "DELETE FROM snoozed_items \
+             WHERE organization_id = ?1 AND item_type = ?2 AND item_key = ?3",
+            params![org_id, item_type, item_key],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_snoozed_items(&self, org_id: &str, item_type: &str) -> Result<Vec<SnoozedItem>> {
+        let conn = self.open()?;
+        list_snoozed_items(&conn, org_id, item_type)
     }
 
     // ── Pull requests cache ───────────────────────────────────────────────────
@@ -1083,6 +1132,23 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             "#,
         )?;
     }
+    if current < 12 {
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS snoozed_items(
+                organization_id   TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                item_type         TEXT NOT NULL,
+                item_key          TEXT NOT NULL,
+                snooze_until      TEXT NOT NULL,
+                baseline_activity TEXT,
+                created_at        TEXT NOT NULL,
+                PRIMARY KEY (organization_id, item_type, item_key)
+            );
+
+            PRAGMA user_version = 12;
+            "#,
+        )?;
+    }
     Ok(())
 }
 
@@ -1341,6 +1407,59 @@ fn set_pr_comment_seen(
         ],
     )?;
     Ok(())
+}
+
+fn upsert_snoozed_item(
+    conn: &Connection,
+    org_id: &str,
+    item_type: &str,
+    item_key: &str,
+    snooze_until: &str,
+    baseline_activity: Option<&str>,
+) -> Result<()> {
+    conn.execute(
+        r#"
+        INSERT INTO snoozed_items(organization_id, item_type, item_key, snooze_until, baseline_activity, created_at)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+        ON CONFLICT(organization_id, item_type, item_key)
+        DO UPDATE SET snooze_until = excluded.snooze_until, baseline_activity = excluded.baseline_activity
+        "#,
+        params![
+            org_id,
+            item_type,
+            item_key,
+            snooze_until,
+            baseline_activity,
+            Utc::now().to_rfc3339()
+        ],
+    )?;
+    Ok(())
+}
+
+fn list_snoozed_items(
+    conn: &Connection,
+    org_id: &str,
+    item_type: &str,
+) -> Result<Vec<SnoozedItem>> {
+    let mut stmt = conn.prepare(
+        "SELECT item_type, item_key, snooze_until, baseline_activity, created_at \
+         FROM snoozed_items WHERE organization_id = ?1 AND item_type = ?2 \
+         ORDER BY snooze_until ASC",
+    )?;
+    let rows = stmt.query_map(params![org_id, item_type], |row| {
+        Ok(SnoozedItem {
+            item_type: row.get(0)?,
+            item_key: row.get(1)?,
+            snooze_until: row.get(2)?,
+            baseline_activity: row.get(3)?,
+            created_at: row.get(4)?,
+        })
+    })?;
+    let mut items = Vec::new();
+    for row in rows {
+        items.push(row?);
+    }
+    Ok(items)
 }
 
 fn get_bool_setting(conn: &Connection, key: &str, default_value: bool) -> Result<bool> {
@@ -2056,6 +2175,52 @@ mod tests {
             get_pr_comment_seen(&conn, "org", "repo", 42).unwrap(),
             Some(150)
         );
+    }
+
+    #[test]
+    fn snoozed_items_roundtrip() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        upsert_organization(&conn, make_org_draft("org")).unwrap();
+
+        assert!(list_snoozed_items(&conn, "org", "pull_request")
+            .unwrap()
+            .is_empty());
+
+        upsert_snoozed_item(
+            &conn,
+            "org",
+            "pull_request",
+            "repo:42",
+            "2026-06-20T09:00:00Z",
+            Some("100"),
+        )
+        .unwrap();
+        upsert_snoozed_item(&conn, "org", "work_item", "7", "2026-06-18T09:00:00Z", None).unwrap();
+
+        let prs = list_snoozed_items(&conn, "org", "pull_request").unwrap();
+        assert_eq!(prs.len(), 1);
+        assert_eq!(prs[0].item_key, "repo:42");
+        assert_eq!(prs[0].baseline_activity.as_deref(), Some("100"));
+
+        // Re-snoozing the same key updates the deadline and baseline in place.
+        upsert_snoozed_item(
+            &conn,
+            "org",
+            "pull_request",
+            "repo:42",
+            "2026-06-25T09:00:00Z",
+            Some("150"),
+        )
+        .unwrap();
+        let prs = list_snoozed_items(&conn, "org", "pull_request").unwrap();
+        assert_eq!(prs.len(), 1);
+        assert_eq!(prs[0].snooze_until, "2026-06-25T09:00:00Z");
+        assert_eq!(prs[0].baseline_activity.as_deref(), Some("150"));
+
+        let work_items = list_snoozed_items(&conn, "org", "work_item").unwrap();
+        assert_eq!(work_items.len(), 1);
+        assert_eq!(work_items[0].baseline_activity, None);
     }
 
     #[test]

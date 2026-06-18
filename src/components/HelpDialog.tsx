@@ -57,6 +57,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Maximize preview</span><kbd className={kbd}>\</kbd></div>
           <div className={row}><span>Show drafts</span><kbd className={kbd}>D</kbd></div>
           <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
+          <div className={row}><span>Snooze selected row</span><kbd className={kbd}>Z</kbd></div>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ PgUp PgDn Home End</kbd></div>
 
           <p className={section}>PR Search / WI Search / Commits</p>
@@ -84,6 +85,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Focus comment</span><kbd className={kbd}>Alt+M / M</kbd></div>
           <div className={row}><span>Post comment (+ apply pending changes)</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
           <div className={row}><span>Return to grid (from input / preview)</span><kbd className={kbd}>Esc / ←</kbd></div>
+          <div className={row}><span>Snooze selected row (My Items)</span><kbd className={kbd}>Z</kbd></div>
 
           <p className={section}>Work Item Views</p>
           <div className={row}><span>Move view card</span><kbd className={kbd}>← → ↑ ↓</kbd></div>

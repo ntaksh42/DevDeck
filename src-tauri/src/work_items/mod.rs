@@ -130,7 +130,17 @@ impl WorkItemService {
     pub fn list_my(&self, input: ListMyWorkItemsInput) -> Result<Vec<WorkItemSummary>> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let cached = self.db.list_my_work_items(&organization.id)?;
-        Ok(cached.into_iter().map(cached_wi_to_summary).collect())
+        let snoozed: std::collections::HashSet<String> = self
+            .db
+            .list_snoozed_items(&organization.id, crate::snooze::ITEM_TYPE_WORK_ITEM)?
+            .into_iter()
+            .map(|row| row.item_key)
+            .collect();
+        Ok(cached
+            .into_iter()
+            .filter(|item| !snoozed.contains(&item.id.to_string()))
+            .map(cached_wi_to_summary)
+            .collect())
     }
 
     pub async fn list_projects(

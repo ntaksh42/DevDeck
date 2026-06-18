@@ -17,12 +17,15 @@ import {
   recordAssigneeInteraction,
   searchWorkItemAssignees,
   getWorkItemPreview,
+  snoozeItem,
   commandErrorMessage,
   type BulkWorkItemResult,
   type WorkItemAssigneeCandidate,
   type WorkItemPreview,
   type WorkItemSummary,
 } from '@/lib/azdoCommands';
+import { SnoozeMenu } from '@/components/SnoozeMenu';
+import { SnoozedItemsPanel } from '@/components/SnoozedItemsPanel';
 import {
   storedNumbers,
   storedNumber,
@@ -465,6 +468,7 @@ export function WorkItemsGrid({
   previewVisible = true,
   storageKeyScope,
   triageScope,
+  snoozeOrganizationId,
 }: {
   results: WorkItemSummary[];
   loading: boolean;
@@ -480,6 +484,9 @@ export function WorkItemsGrid({
   previewVisible?: boolean;
   storageKeyScope?: string;
   triageScope?: string;
+  // When set, enables snoozing work items (Z key + Snoozed view) scoped to this
+  // organization. Only the "My Work Items" view passes it.
+  snoozeOrganizationId?: string;
 }) {
   const columnWidthsStorageKey = storageKeyScope
     ? `${WI_COLUMN_WIDTHS_STORAGE_KEY}:${storageKeyScope}`
@@ -545,6 +552,24 @@ export function WorkItemsGrid({
   const previousResultKeysRef = useRef<string | null>(null);
   const [gridViewport, setGridViewport] = useState({ height: 0, scrollTop: 0 });
   const queryClient = useQueryClient();
+
+  const snoozeEnabled = !!snoozeOrganizationId;
+  const [showSnoozed, setShowSnoozed] = useState(false);
+  const [snoozeAnchorRect, setSnoozeAnchorRect] = useState<DOMRect | null>(null);
+  const snoozeTargetRef = useRef<WorkItemSummary | null>(null);
+  const snoozeMutation = useMutation({
+    mutationFn: snoozeItem,
+    onSuccess: () => {
+      if (snoozeOrganizationId) {
+        void queryClient.invalidateQueries({
+          queryKey: workItemQueryKeys.myItems(snoozeOrganizationId),
+        });
+      }
+      void queryClient.invalidateQueries({
+        queryKey: ["snoozedItems", "work_item"],
+      });
+    },
+  });
 
   useEffect(() => {
     setWiSort(initialSort ?? loadWorkItemSort(sortStorageKey, defaultWorkItemSort()));
@@ -1191,6 +1216,14 @@ export function WorkItemsGrid({
         );
         setTriageVersion((value) => value + 1);
       }
+    } else if ((e.key === "z" || e.key === "Z") && snoozeEnabled) {
+      e.preventDefault();
+      const item = displayed[selectedIndex];
+      if (item) {
+        snoozeTargetRef.current = item;
+        const rowEl = rowRefs.current[selectedIndex];
+        setSnoozeAnchorRect(rowEl?.getBoundingClientRect() ?? null);
+      }
     } else if (e.key === "a" || e.key === "A") {
       e.preventDefault();
       if (checkedItems.length > 0) {
@@ -1352,6 +1385,17 @@ export function WorkItemsGrid({
         style={{ "--work-item-preview-width": `${previewWidth}px` } as CSSProperties}
       >
         <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-card">
+          {showSnoozed && snoozeOrganizationId ? (
+            <SnoozedItemsPanel
+              organizationId={snoozeOrganizationId}
+              itemType="work_item"
+              onUnsnoozed={() =>
+                queryClient.invalidateQueries({
+                  queryKey: workItemQueryKeys.myItems(snoozeOrganizationId),
+                })
+              }
+            />
+          ) : (
           <div ref={gridScrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
             <div className="min-w-[520px]">
               <div
@@ -1472,6 +1516,7 @@ export function WorkItemsGrid({
               )}
             </div>
           </div>
+          )}
 
           <div className="flex items-center justify-between gap-2 border-t border-border px-2 py-1 text-xs text-muted-foreground">
             <span>
@@ -1501,6 +1546,24 @@ export function WorkItemsGrid({
                   }`}
                 >
                   {showDone ? "Back to inbox" : `Done (${archivedKeys.size})`}
+                </button>
+              ) : null}
+              {snoozeEnabled ? (
+                <button
+                  type="button"
+                  aria-pressed={showSnoozed}
+                  title="Toggle snoozed view (Z snoozes the selected row)"
+                  onClick={() => {
+                    setShowSnoozed((value) => !value);
+                    setSelectedIndex(0);
+                  }}
+                  className={`rounded border px-2 py-0.5 text-xs ${
+                    showSnoozed
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-card hover:bg-secondary"
+                  }`}
+                >
+                  {showSnoozed ? "Back to inbox" : "Snoozed"}
                 </button>
               ) : null}
               {hasActiveFilters ? (
@@ -1576,6 +1639,24 @@ export function WorkItemsGrid({
           onToggle={toggleColumnVisibility}
           onReset={resetColumnVisibility}
           onClose={() => setColumnMenuRect(null)}
+        />
+      ) : null}
+      {snoozeAnchorRect && snoozeOrganizationId ? (
+        <SnoozeMenu
+          anchorRect={snoozeAnchorRect}
+          onSnooze={(snoozeUntil) => {
+            const target = snoozeTargetRef.current;
+            if (target) {
+              snoozeMutation.mutate({
+                organizationId: snoozeOrganizationId,
+                itemType: "work_item",
+                itemKey: String(target.id),
+                snoozeUntil,
+              });
+            }
+            setSnoozeAnchorRect(null);
+          }}
+          onClose={() => setSnoozeAnchorRect(null)}
         />
       ) : null}
     </div>
