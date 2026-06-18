@@ -59,6 +59,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
           <div className={row}><span>Snooze selected row</span><kbd className={kbd}>Z</kbd></div>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ PgUp PgDn Home End</kbd></div>
+          <div className={row}><span>Select multiple (check file-overlap conflict risk)</span><kbd className={kbd}>Shift+↑ ↓ · Shift+click</kbd></div>
 
           <p className={section}>PR Search / WI Search / Commits</p>
           <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>
