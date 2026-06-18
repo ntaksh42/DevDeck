@@ -613,7 +613,7 @@ impl AppDatabase {
     pub fn purge_old_commits(&self, org_id: &str, before_date: &str) -> Result<()> {
         let conn = self.open()?;
         conn.execute(
-            "DELETE FROM commits WHERE org_id = ?1 AND author_date < ?2",
+            "DELETE FROM commits WHERE org_id = ?1 AND (author_date IS NULL OR author_date < ?2)",
             rusqlite::params![org_id, before_date],
         )?;
         Ok(())
@@ -3228,6 +3228,47 @@ mod tests {
         db.purge_old_commits("org1", "2025-01-01T00:00:00+00:00")
             .unwrap();
 
+        let remaining = db.search_commits("org1", None, None, None, None).unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].commit_id, "new");
+    }
+
+    #[test]
+    fn purge_old_commits_removes_null_author_date() {
+        let tf = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        let make_commit_dated = |commit_id: &str, date: Option<&str>| CachedCommit {
+            org_id: "org1".to_string(),
+            project_id: "p1".to_string(),
+            project_name: "P1".to_string(),
+            repository_id: "repo1".to_string(),
+            repository_name: "Repo1".to_string(),
+            commit_id: commit_id.to_string(),
+            comment: "msg".to_string(),
+            author_name: None,
+            author_email: None,
+            author_date: date.map(|s| s.to_string()),
+            web_url: None,
+        };
+
+        db.replace_commits_for_repo(
+            "org1",
+            "repo1",
+            &[
+                make_commit_dated("undated", None),
+                make_commit_dated("new", Some("2030-01-01T00:00:00+00:00")),
+            ],
+        )
+        .unwrap();
+
+        db.purge_old_commits("org1", "2025-01-01T00:00:00+00:00")
+            .unwrap();
+
+        // A NULL author_date means the date is unknown; treat it as old and
+        // purge it so such commits do not linger forever.
         let remaining = db.search_commits("org1", None, None, None, None).unwrap();
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].commit_id, "new");
