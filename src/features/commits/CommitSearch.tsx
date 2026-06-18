@@ -956,7 +956,7 @@ function CommitResults({
             >
               <div role="columnheader" className="relative min-w-0 truncate px-1">
                 SHA
-                <ColumnResizeHandle columnIndex={0} widths={columnWidths} setWidths={setColumnWidths} min={COMMIT_COLUMN_MIN_WIDTHS[0]} max={COMMIT_COLUMN_MAX_WIDTHS[0]} />
+                <ColumnResizeHandle columnIndex={0} widths={columnWidths} setWidths={setColumnWidths} min={COMMIT_COLUMN_MIN_WIDTHS[0]} max={COMMIT_COLUMN_MAX_WIDTHS[0]} defaultWidth={DEFAULT_COMMIT_COLUMN_WIDTHS[0]} />
               </div>
               {COMMIT_GRID_KEYS.map((col, i) => (
                 <CommitSortHeaderButton
@@ -972,6 +972,7 @@ function CommitResults({
                         setWidths={setColumnWidths}
                         min={COMMIT_COLUMN_MIN_WIDTHS[i + 1]}
                         max={COMMIT_COLUMN_MAX_WIDTHS[i + 1]}
+                        defaultWidth={DEFAULT_COMMIT_COLUMN_WIDTHS[i + 1]}
                       />
                     ) : undefined
                   }

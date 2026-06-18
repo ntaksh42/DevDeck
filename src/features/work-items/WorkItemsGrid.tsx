@@ -1508,6 +1508,7 @@ export function WorkItemsGrid({
                           setWidths={setColumnWidths}
                           min={WI_COLUMN_MIN_WIDTHS[WI_GRID_KEYS.indexOf(col)]}
                           max={WI_COLUMN_MAX_WIDTHS[WI_GRID_KEYS.indexOf(col)]}
+                          defaultWidth={DEFAULT_WI_COLUMN_WIDTHS[WI_GRID_KEYS.indexOf(col)]}
                         />
                       ) : undefined
                     }
