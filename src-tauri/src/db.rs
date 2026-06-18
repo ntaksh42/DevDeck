@@ -380,7 +380,10 @@ impl AppDatabase {
     }
 
     /// Reflects a freshly cast vote in the cached review row so the grid does
-    /// not show a stale vote until the next background sync.
+    /// not show a stale vote until the next background sync. Returns the number
+    /// of rows updated; `0` means the PR is not in the My Reviews cache (e.g.
+    /// it was opened from search or a direct URL), so the caller can decide
+    /// whether the miss matters instead of treating it as a silent success.
     pub fn update_review_pr_vote(
         &self,
         org_id: &str,
@@ -388,14 +391,14 @@ impl AppDatabase {
         pull_request_id: i64,
         vote: i32,
         vote_label: &str,
-    ) -> Result<()> {
+    ) -> Result<usize> {
         let conn = self.open()?;
-        conn.execute(
+        let updated = conn.execute(
             "UPDATE review_pull_requests SET my_vote = ?4, my_vote_label = ?5 \
              WHERE org_id = ?1 AND repository_id = ?2 AND pull_request_id = ?3",
             params![org_id, repository_id, pull_request_id, vote, vote_label],
         )?;
-        Ok(())
+        Ok(updated)
     }
 
     // ── Work items cache ──────────────────────────────────────────────────────
@@ -2221,6 +2224,67 @@ mod tests {
         let work_items = list_snoozed_items(&conn, "org", "work_item").unwrap();
         assert_eq!(work_items.len(), 1);
         assert_eq!(work_items[0].baseline_activity, None);
+    }
+
+    fn make_review_pr(org_id: &str, repository_id: &str, pull_request_id: i64) -> CachedReviewPr {
+        CachedReviewPr {
+            org_id: org_id.to_string(),
+            project_id: "project".to_string(),
+            project_name: "Project".to_string(),
+            repository_id: repository_id.to_string(),
+            repository_name: "Repo".to_string(),
+            pull_request_id,
+            title: "Title".to_string(),
+            created_by: None,
+            creation_date: "2026-06-19T09:00:00Z".to_string(),
+            target_ref_name: "refs/heads/main".to_string(),
+            web_url: None,
+            my_vote: 0,
+            my_vote_label: "No vote".to_string(),
+            my_is_required: false,
+            is_draft: false,
+            merge_status: None,
+        }
+    }
+
+    #[test]
+    fn update_review_pr_vote_updates_cached_row() {
+        let db_file = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(db_file.path().to_path_buf());
+        db.initialize().unwrap();
+        {
+            let conn = db.open().unwrap();
+            upsert_organization(&conn, make_org_draft("org")).unwrap();
+        }
+        db.replace_review_pull_requests("org", &[make_review_pr("org", "repo", 42)])
+            .unwrap();
+
+        let updated = db
+            .update_review_pr_vote("org", "repo", 42, 10, "Approved")
+            .unwrap();
+        assert_eq!(updated, 1, "matching cached row should be updated");
+
+        let rows = db.list_review_pull_requests("org").unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].my_vote, 10);
+        assert_eq!(rows[0].my_vote_label, "Approved");
+    }
+
+    #[test]
+    fn update_review_pr_vote_reports_zero_when_pr_absent() {
+        let db_file = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(db_file.path().to_path_buf());
+        db.initialize().unwrap();
+        {
+            let conn = db.open().unwrap();
+            upsert_organization(&conn, make_org_draft("org")).unwrap();
+        }
+
+        // PR was opened from search or a direct URL, so no My Reviews row exists.
+        let updated = db
+            .update_review_pr_vote("org", "repo", 999, 10, "Approved")
+            .unwrap();
+        assert_eq!(updated, 0, "missing cached row should report zero updates");
     }
 
     #[test]
