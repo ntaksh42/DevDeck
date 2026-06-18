@@ -756,11 +756,19 @@ async fn decode_json<T: DeserializeOwned>(resp: reqwest::Response) -> Result<T> 
 }
 
 fn parse_retry_after(headers: &HeaderMap) -> Option<Duration> {
-    headers
-        .get("Retry-After")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.parse::<u64>().ok())
-        .map(Duration::from_secs)
+    let value = headers.get("Retry-After")?.to_str().ok()?.trim();
+
+    // RFC 9110: Retry-After is either delta-seconds or an HTTP-date.
+    if let Ok(seconds) = value.parse::<u64>() {
+        return Some(Duration::from_secs(seconds));
+    }
+
+    // HTTP-date form (e.g. "Wed, 21 Oct 2015 07:28:00 GMT"). Wait until that
+    // instant; a past or invalid date falls back to a zero wait so callers use
+    // their own backoff.
+    let target = chrono::DateTime::parse_from_rfc2822(value).ok()?;
+    let delta = target.signed_duration_since(chrono::Utc::now());
+    Some(delta.to_std().unwrap_or(Duration::ZERO))
 }
 
 #[cfg(test)]
@@ -944,6 +952,43 @@ mod tests {
             AdoError::RateLimited(d) => assert_eq!(d, Duration::from_secs(30)),
             other => panic!("expected RateLimited, got {other:?}"),
         }
+    }
+
+    fn retry_after_headers(value: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert("Retry-After", value.parse().unwrap());
+        headers
+    }
+
+    #[test]
+    fn parse_retry_after_delta_seconds() {
+        let headers = retry_after_headers("30");
+        assert_eq!(parse_retry_after(&headers), Some(Duration::from_secs(30)));
+    }
+
+    #[test]
+    fn parse_retry_after_http_date_in_future() {
+        let target = chrono::Utc::now() + chrono::Duration::seconds(120);
+        let headers = retry_after_headers(&target.to_rfc2822());
+        let delay = parse_retry_after(&headers).expect("future HTTP-date yields a delay");
+        // Allow slack for the clock advancing between formatting and parsing.
+        assert!(
+            delay > Duration::from_secs(60) && delay <= Duration::from_secs(120),
+            "expected ~120s, got {delay:?}"
+        );
+    }
+
+    #[test]
+    fn parse_retry_after_http_date_gmt_in_past_is_zero() {
+        // RFC 9110 IMF-fixdate as servers emit it, with a named GMT zone.
+        let headers = retry_after_headers("Wed, 21 Oct 2015 07:28:00 GMT");
+        assert_eq!(parse_retry_after(&headers), Some(Duration::ZERO));
+    }
+
+    #[test]
+    fn parse_retry_after_malformed_value_is_none() {
+        let headers = retry_after_headers("not-a-date");
+        assert_eq!(parse_retry_after(&headers), None);
     }
 
     #[tokio::test]
