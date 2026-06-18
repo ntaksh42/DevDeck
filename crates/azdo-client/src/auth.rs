@@ -2,6 +2,8 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use secrecy::{ExposeSecret, SecretString};
+
 use crate::error::{AdoError, Result};
 
 /// Cloud-neutral Azure DevOps application (resource) ID used when requesting an
@@ -29,12 +31,14 @@ pub trait AdoCredentialProvider: Send + Sync {
 }
 
 pub struct PatProvider {
-    pat: String,
+    pat: SecretString,
 }
 
 impl PatProvider {
     pub fn new(pat: impl Into<String>) -> Self {
-        Self { pat: pat.into() }
+        Self {
+            pat: SecretString::from(pat.into()),
+        }
     }
 }
 
@@ -42,7 +46,7 @@ impl PatProvider {
 impl AdoCredentialProvider for PatProvider {
     async fn auth_header_value(&self) -> Result<String> {
         use base64::{engine::general_purpose::STANDARD, Engine};
-        let encoded = STANDARD.encode(format!(":{}", self.pat));
+        let encoded = STANDARD.encode(format!(":{}", self.pat.expose_secret()));
         Ok(format!("Basic {encoded}"))
     }
 }
@@ -98,16 +102,17 @@ impl AdoCredentialProvider for AzureCliProvider {
         }
 
         let token = token.trim().to_string();
+        let header = format!("Bearer {token}");
         let mut cache = self
             .cache
             .lock()
             .map_err(|_| AdoError::Auth("Azure CLI token cache lock poisoned".to_string()))?;
         *cache = Some(CachedBearerToken {
-            token: token.clone(),
+            token: SecretString::from(token),
             fetched_at: Instant::now(),
         });
 
-        Ok(format!("Bearer {token}"))
+        Ok(header)
     }
 }
 
@@ -119,7 +124,7 @@ impl AzureCliProvider {
             .map_err(|_| AdoError::Auth("Azure CLI token cache lock poisoned".to_string()))?;
         Ok(cache.as_ref().and_then(|cached| {
             if cached.fetched_at.elapsed() < self.token_ttl {
-                Some(cached.token.clone())
+                Some(cached.token.expose_secret().to_string())
             } else {
                 None
             }
@@ -128,7 +133,7 @@ impl AzureCliProvider {
 }
 
 struct CachedBearerToken {
-    token: String,
+    token: SecretString,
     fetched_at: Instant,
 }
 
