@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, Result};
 
-const SCHEMA_VERSION: i64 = 13;
+const SCHEMA_VERSION: i64 = 14;
 
 /// Max rows kept in the my_work_items snapshot queries; sync notification
 /// diffing must know this cap to avoid treating re-entering rows as new.
@@ -167,6 +167,17 @@ pub struct CachedCommit {
     pub author_name: Option<String>,
     pub author_email: Option<String>,
     pub author_date: Option<String>,
+    pub web_url: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CachedCommitPr {
+    pub pull_request_id: i64,
+    pub pr_repository_id: String,
+    pub title: String,
+    pub status: String,
+    pub my_vote: i32,
+    pub my_vote_label: String,
     pub web_url: Option<String>,
 }
 
@@ -629,6 +640,107 @@ impl AppDatabase {
             "DELETE FROM commits WHERE org_id = ?1 AND (author_date IS NULL OR author_date < ?2)",
             rusqlite::params![org_id, before_date],
         )?;
+        Ok(())
+    }
+
+    // ── Commit ↔ PR cache ─────────────────────────────────────────────────────
+
+    /// Returns cached PRs for a commit, or `None` when the commit has never been
+    /// looked up or its cached lookup is older than `fresh_after`. An empty
+    /// `Vec` means "looked up recently, no related PRs" — distinct from `None`.
+    pub fn get_cached_commit_prs(
+        &self,
+        org_id: &str,
+        repository_id: &str,
+        commit_id: &str,
+        fresh_after: &str,
+    ) -> Result<Option<Vec<CachedCommitPr>>> {
+        let conn = self.open()?;
+        let fetched_at: Option<String> = conn
+            .query_row(
+                "SELECT MAX(fetched_at) FROM commit_prs \
+                 WHERE org_id = ?1 AND repository_id = ?2 AND commit_id = ?3",
+                params![org_id, repository_id, commit_id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .flatten();
+        let Some(fetched_at) = fetched_at else {
+            return Ok(None);
+        };
+        if fetched_at.as_str() < fresh_after {
+            return Ok(None);
+        }
+        let mut stmt = conn.prepare(
+            "SELECT pull_request_id, pr_repository_id, title, status, my_vote, my_vote_label, web_url \
+             FROM commit_prs \
+             WHERE org_id = ?1 AND repository_id = ?2 AND commit_id = ?3 AND pull_request_id IS NOT NULL \
+             ORDER BY pull_request_id DESC",
+        )?;
+        let rows = stmt.query_map(params![org_id, repository_id, commit_id], |row| {
+            Ok(CachedCommitPr {
+                pull_request_id: row.get(0)?,
+                pr_repository_id: row.get(1)?,
+                title: row.get(2)?,
+                status: row.get(3)?,
+                my_vote: row.get(4)?,
+                my_vote_label: row.get(5)?,
+                web_url: row.get(6)?,
+            })
+        })?;
+        let mut prs = Vec::new();
+        for row in rows {
+            prs.push(row?);
+        }
+        Ok(Some(prs))
+    }
+
+    /// Replaces the cached PR list for a single commit. An empty slice records a
+    /// marker row (pull_request_id = NULL) so "no related PRs" is cached.
+    pub fn replace_commit_prs(
+        &self,
+        org_id: &str,
+        repository_id: &str,
+        commit_id: &str,
+        prs: &[CachedCommitPr],
+    ) -> Result<()> {
+        let now = Utc::now().to_rfc3339();
+        let conn = self.open()?;
+        let tx = conn.unchecked_transaction()?;
+        tx.execute(
+            "DELETE FROM commit_prs WHERE org_id = ?1 AND repository_id = ?2 AND commit_id = ?3",
+            params![org_id, repository_id, commit_id],
+        )?;
+        if prs.is_empty() {
+            tx.execute(
+                "INSERT INTO commit_prs(org_id, repository_id, commit_id, pull_request_id, fetched_at) \
+                 VALUES (?1, ?2, ?3, NULL, ?4)",
+                params![org_id, repository_id, commit_id, now],
+            )?;
+        } else {
+            let mut stmt = tx.prepare_cached(
+                "INSERT INTO commit_prs(\
+                    org_id, repository_id, commit_id, pull_request_id, pr_repository_id, \
+                    title, status, my_vote, my_vote_label, web_url, fetched_at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            )?;
+            for pr in prs {
+                stmt.execute(params![
+                    org_id,
+                    repository_id,
+                    commit_id,
+                    pr.pull_request_id,
+                    pr.pr_repository_id,
+                    pr.title,
+                    pr.status,
+                    pr.my_vote,
+                    pr.my_vote_label,
+                    pr.web_url,
+                    now
+                ])?;
+            }
+        }
+        tx.commit()?;
         Ok(())
     }
 
@@ -1184,6 +1296,32 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             )?;
         }
         conn.execute_batch("PRAGMA user_version = 13;")?;
+    }
+    if current < 14 {
+        // On-demand cache of the pull requests that contain a given commit.
+        // `fetched_at` records when the lookup ran so it can be refreshed after
+        // a TTL; a commit with zero related PRs still records a marker row with
+        // pull_request_id = NULL so "no PRs" is cached without re-querying.
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS commit_prs(
+                org_id            TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                repository_id     TEXT NOT NULL,
+                commit_id         TEXT NOT NULL,
+                pull_request_id   INTEGER,
+                pr_repository_id  TEXT,
+                title             TEXT,
+                status            TEXT,
+                my_vote           INTEGER NOT NULL DEFAULT 0,
+                my_vote_label     TEXT NOT NULL DEFAULT '',
+                web_url           TEXT,
+                fetched_at        TEXT NOT NULL,
+                PRIMARY KEY (org_id, repository_id, commit_id, pull_request_id)
+            );
+
+            PRAGMA user_version = 14;
+            "#,
+        )?;
     }
     Ok(())
 }
@@ -3499,5 +3637,56 @@ mod tests {
         let remaining = db.search_commits("org1", None, None, None, None).unwrap();
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].commit_id, "new");
+    }
+
+    #[test]
+    fn commit_prs_cache_round_trips_and_respects_freshness() {
+        let db_file = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(db_file.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        let pr = CachedCommitPr {
+            pull_request_id: 7,
+            pr_repository_id: "repo1".to_string(),
+            title: "Land the fix".to_string(),
+            status: "completed".to_string(),
+            my_vote: 10,
+            my_vote_label: "Approved".to_string(),
+            web_url: Some("https://example/pr/7".to_string()),
+        };
+        db.replace_commit_prs("org1", "repo1", "sha1", &[pr])
+            .unwrap();
+
+        // A miss with a future freshness bound forces a refresh (None).
+        let future = "2999-01-01T00:00:00+00:00";
+        assert!(db
+            .get_cached_commit_prs("org1", "repo1", "sha1", future)
+            .unwrap()
+            .is_none());
+
+        // Cached and still fresh: returns the stored row.
+        let past = "2000-01-01T00:00:00+00:00";
+        let cached = db
+            .get_cached_commit_prs("org1", "repo1", "sha1", past)
+            .unwrap()
+            .expect("cached");
+        assert_eq!(cached.len(), 1);
+        assert_eq!(cached[0].pull_request_id, 7);
+        assert_eq!(cached[0].my_vote_label, "Approved");
+
+        // An unknown commit is None, not an empty Vec.
+        assert!(db
+            .get_cached_commit_prs("org1", "repo1", "unknown", past)
+            .unwrap()
+            .is_none());
+
+        // "No related PRs" is cached as an empty Vec, distinct from None.
+        db.replace_commit_prs("org1", "repo1", "sha1", &[]).unwrap();
+        let empty = db
+            .get_cached_commit_prs("org1", "repo1", "sha1", past)
+            .unwrap()
+            .expect("empty marker cached");
+        assert!(empty.is_empty());
     }
 }

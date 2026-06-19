@@ -429,6 +429,27 @@ export async function getCommitFileDiff(input: {
   return prFileDiffSchema.parse(result);
 }
 
+const commitPullRequestSchema = z.object({
+  pullRequestId: z.number(),
+  repositoryId: z.string(),
+  title: z.string(),
+  status: z.string(),
+  myVote: z.number(),
+  myVoteLabel: z.string(),
+  webUrl: z.string().nullable(),
+});
+const commitPullRequestsSchema = z.array(commitPullRequestSchema);
+export type CommitPullRequest = z.infer<typeof commitPullRequestSchema>;
+
+export async function getCommitPullRequests(input: {
+  organizationId?: string;
+  repositoryId: string;
+  commitId: string;
+}): Promise<CommitPullRequest[]> {
+  const result = await invokeCommand("get_commit_pull_requests", { input });
+  return commitPullRequestsSchema.parse(result);
+}
+
 const codeSearchHitSchema = z.object({
   fileName: z.string(),
   path: z.string(),

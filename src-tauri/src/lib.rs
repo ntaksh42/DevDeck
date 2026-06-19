@@ -21,8 +21,9 @@ mod work_items;
 
 use code_search::{CodeSearchResults, CodeSearchService, SearchCodeInput};
 use commits::{
-    CommitChangeSet, CommitFileDiff, CommitRepositoryOption, CommitService, CommitSummary,
-    GetCommitChangesInput, GetCommitFileDiffInput, ListCommitRepositoriesInput, SearchCommitsInput,
+    CommitChangeSet, CommitFileDiff, CommitPullRequest, CommitRepositoryOption, CommitService,
+    CommitSummary, GetCommitChangesInput, GetCommitFileDiffInput, GetCommitPullRequestsInput,
+    ListCommitRepositoriesInput, SearchCommitsInput,
 };
 use db::{AppDatabase, AppSettings, Organization, SyncState};
 use error::{AppError, Result};
@@ -597,6 +598,15 @@ async fn get_commit_file_diff(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn get_commit_pull_requests(
+    input: GetCommitPullRequestsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<CommitPullRequest>> {
+    state.commits.get_commit_pull_requests(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn list_pipeline_projects(
     input: ListPipelineProjectsInput,
     state: State<'_, AppState>,
@@ -805,6 +815,7 @@ pub fn run() {
             search_code,
             get_commit_changes,
             get_commit_file_diff,
+            get_commit_pull_requests,
             list_pipeline_projects,
             list_pipeline_runs,
             list_pipeline_definitions,
