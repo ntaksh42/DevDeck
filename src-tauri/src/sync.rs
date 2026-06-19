@@ -505,6 +505,9 @@ mod tests {
             my_is_required: true,
             is_draft: false,
             merge_status: None,
+            ci_status: None,
+            ci_context: None,
+            ci_check_count: 0,
         }
     }
 

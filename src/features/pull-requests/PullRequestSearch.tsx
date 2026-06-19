@@ -52,6 +52,9 @@ function toReviewSummary(pr: PullRequestSummary): ReviewPullRequestSummary {
     myIsRequired: false,
     isDraft: false,
     mergeStatus: null,
+    ciStatus: null,
+    ciContext: null,
+    ciCheckCount: 0,
   };
 }
 
