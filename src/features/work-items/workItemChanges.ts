@@ -158,6 +158,40 @@ export function stagedChangesFromPresetFields(
   return staged;
 }
 
+// The field set copied when duplicating a work item into a new draft. Mirrors
+// the create form's preset inputs; comments, attachments, and the source id are
+// intentionally excluded so the new item starts clean.
+export type WorkItemDuplicateDraft = {
+  organizationId: string;
+  projectId: string;
+  title: string;
+  workItemType: string | null;
+  priority: string | null;
+  areaPath: string | null;
+  iterationPath: string | null;
+  tags: string[];
+  assignedTo: string | null;
+};
+
+export const DUPLICATE_TITLE_PREFIX = "[Copy] ";
+
+// Builds the preset draft used to open the create form for a duplicate. Reads
+// the source preview only; the returned object shares no references with it, so
+// editing the draft never mutates the original work item.
+export function buildDuplicateDraft(preview: WorkItemPreview): WorkItemDuplicateDraft {
+  return {
+    organizationId: preview.organizationId,
+    projectId: preview.projectId,
+    title: `${DUPLICATE_TITLE_PREFIX}${preview.title}`,
+    workItemType: preview.workItemType,
+    priority: preview.priority,
+    areaPath: preview.areaPath,
+    iterationPath: preview.iterationPath,
+    tags: splitWorkItemTags(preview.tags),
+    assignedTo: preview.assignedTo,
+  };
+}
+
 // Computes the from/to rows shown in the staged-changes summary.
 export function stagedEntriesForPreview(
   preview: WorkItemPreview | null | undefined,
