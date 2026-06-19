@@ -1413,6 +1413,9 @@ function AppShell() {
               organizations={organizations}
               externalSearch={commitSearchRequest}
               onExternalSearchHandled={() => setCommitSearchRequest(null)}
+              onOpenPullRequest={(query, organizationId) =>
+                openSearchTarget("pullRequests", query, organizationId)
+              }
             />
           ) : activeView === "pipelines" ? (
             <PipelinesView organizations={organizations} />
