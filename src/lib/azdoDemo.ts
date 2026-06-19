@@ -55,6 +55,7 @@ import type {
   WorkItemSummary,
   WorkItemUpdateSummary,
 } from "@/lib/azdoCommands";
+import { DEFAULT_REVIEW_STALE_THRESHOLD_DAYS } from "@/lib/azdoCommands";
 import {
   applyPullRequestScenario,
   applyReviewPullRequestScenario,
@@ -91,6 +92,7 @@ let demoSettings: AppSettings = {
   notifyPrReviewRequests: true,
   notifyPrVoteResets: true,
   notifyPrCommentReplies: true,
+  reviewStaleThresholdDays: DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
 };
 const deletedDemoWorkItemComments = new Set<number>();
 let demoSyncStates: SyncState[] = [
@@ -509,6 +511,11 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
           input && "notifyPrCommentReplies" in input
             ? Boolean(input.notifyPrCommentReplies)
             : demoSettings.notifyPrCommentReplies,
+        reviewStaleThresholdDays:
+          input && "reviewStaleThresholdDays" in input
+            ? Number(input.reviewStaleThresholdDays) ||
+              DEFAULT_REVIEW_STALE_THRESHOLD_DAYS
+            : demoSettings.reviewStaleThresholdDays,
       };
       return demoSettings;
     }
@@ -1723,6 +1730,9 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myIsRequired: true,
       isDraft: false,
       mergeStatus: "conflicts",
+      ciStatus: "failed",
+      ciContext: "ci-build",
+      ciCheckCount: 3,
     },
     {
       organizationId: "contoso",
@@ -1741,6 +1751,9 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myIsRequired: true,
       isDraft: false,
       mergeStatus: null,
+      ciStatus: "succeeded",
+      ciContext: "ci-build",
+      ciCheckCount: 2,
     },
     {
       organizationId: "contoso",
@@ -1759,6 +1772,9 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myIsRequired: false,
       isDraft: false,
       mergeStatus: null,
+      ciStatus: "in_progress",
+      ciContext: "ios-build",
+      ciCheckCount: 1,
     },
     {
       organizationId: "contoso",
@@ -1777,6 +1793,9 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myIsRequired: false,
       isDraft: true,
       mergeStatus: null,
+      ciStatus: null,
+      ciContext: null,
+      ciCheckCount: 0,
     },
     {
       organizationId: "contoso",
@@ -1795,6 +1814,9 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myIsRequired: true,
       isDraft: false,
       mergeStatus: null,
+      ciStatus: "failed",
+      ciContext: "terraform-validate",
+      ciCheckCount: 2,
     },
     {
       organizationId: "contoso",
@@ -1813,6 +1835,9 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myIsRequired: false,
       isDraft: false,
       mergeStatus: null,
+      ciStatus: null,
+      ciContext: null,
+      ciCheckCount: 0,
     },
     {
       organizationId: "contoso",
@@ -1831,6 +1856,9 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myIsRequired: false,
       isDraft: false,
       mergeStatus: null,
+      ciStatus: "succeeded",
+      ciContext: "ci-build",
+      ciCheckCount: 4,
     },
   ]));
 }

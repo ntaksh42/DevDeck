@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, Result};
 
-const SCHEMA_VERSION: i64 = 13;
+const SCHEMA_VERSION: i64 = 14;
 
 /// Max rows kept in the my_work_items snapshot queries; sync notification
 /// diffing must know this cap to avoid treating re-entering rows as new.
@@ -44,7 +44,11 @@ pub struct AppSettings {
     pub notify_pr_review_requests: bool,
     pub notify_pr_vote_resets: bool,
     pub notify_pr_comment_replies: bool,
+    pub review_stale_threshold_days: i64,
 }
+
+pub const DEFAULT_REVIEW_STALE_THRESHOLD_DAYS: i64 = 3;
+pub const REVIEW_STALE_THRESHOLD_DAY_OPTIONS: [i64; 4] = [2, 3, 5, 7];
 
 impl Default for AppSettings {
     fn default() -> Self {
@@ -59,6 +63,7 @@ impl Default for AppSettings {
             notify_pr_review_requests: true,
             notify_pr_vote_resets: true,
             notify_pr_comment_replies: true,
+            review_stale_threshold_days: DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
         }
     }
 }
@@ -112,6 +117,14 @@ pub struct CachedReviewPr {
     pub my_is_required: bool,
     pub is_draft: bool,
     pub merge_status: Option<String>,
+    /// Aggregate CI verdict: `succeeded` | `failed` | `in_progress` | `none`.
+    /// `None` means CI was never fetched for this PR (e.g. beyond the sync cap
+    /// or the status fetch failed), which the UI renders the same as `none`.
+    pub ci_status: Option<String>,
+    /// Name of the most relevant status check, shown in the CI tooltip.
+    pub ci_context: Option<String>,
+    /// How many checks the verdict was aggregated from.
+    pub ci_check_count: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -1262,6 +1275,29 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         )?;
     }
     if current < 13 {
+        if !table_column_exists(conn, "review_pull_requests", "ci_status")? {
+            conn.execute_batch(
+                "ALTER TABLE review_pull_requests ADD COLUMN ci_status TEXT;",
+            )?;
+        }
+        if !table_column_exists(conn, "review_pull_requests", "ci_context")? {
+            conn.execute_batch(
+                "ALTER TABLE review_pull_requests ADD COLUMN ci_context TEXT;",
+            )?;
+        }
+        if !table_column_exists(conn, "review_pull_requests", "ci_check_count")? {
+            conn.execute_batch(
+                "ALTER TABLE review_pull_requests ADD COLUMN ci_check_count INTEGER NOT NULL DEFAULT 0;",
+            )?;
+        }
+        if !table_column_exists(conn, "review_pull_requests", "ci_status_updated_at")? {
+            conn.execute_batch(
+                "ALTER TABLE review_pull_requests ADD COLUMN ci_status_updated_at TEXT;",
+            )?;
+        }
+        conn.execute_batch("PRAGMA user_version = 13;")?;
+    }
+    if current < 14 {
         // On-demand cache of the pull requests that contain a given commit.
         // `fetched_at` records when the lookup ran so it can be refreshed after
         // a TTL; a commit with zero related PRs still records a marker row with
@@ -1283,7 +1319,7 @@ pub fn migrate(conn: &Connection) -> Result<()> {
                 PRIMARY KEY (org_id, repository_id, commit_id, pull_request_id)
             );
 
-            PRAGMA user_version = 13;
+            PRAGMA user_version = 14;
             "#,
         )?;
     }
@@ -1421,7 +1457,16 @@ fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
         notify_pr_review_requests: get_bool_setting(conn, "notify_pr_review_requests", true)?,
         notify_pr_vote_resets: get_bool_setting(conn, "notify_pr_vote_resets", true)?,
         notify_pr_comment_replies: get_bool_setting(conn, "notify_pr_comment_replies", true)?,
+        review_stale_threshold_days: get_review_stale_threshold_days(conn)?,
     })
+}
+
+fn get_review_stale_threshold_days(conn: &Connection) -> Result<i64> {
+    let value = get_setting(conn, "review_stale_threshold_days")?
+        .and_then(|raw| raw.trim().parse::<i64>().ok())
+        .filter(|days| REVIEW_STALE_THRESHOLD_DAY_OPTIONS.contains(days))
+        .unwrap_or(DEFAULT_REVIEW_STALE_THRESHOLD_DAYS);
+    Ok(value)
 }
 
 fn update_app_settings(conn: &Connection, settings: AppSettings) -> Result<AppSettings> {
@@ -1474,6 +1519,17 @@ fn update_app_settings(conn: &Connection, settings: AppSettings) -> Result<AppSe
         conn,
         "notify_pr_comment_replies",
         settings.notify_pr_comment_replies,
+    )?;
+    let stale_days =
+        if REVIEW_STALE_THRESHOLD_DAY_OPTIONS.contains(&settings.review_stale_threshold_days) {
+            settings.review_stale_threshold_days
+        } else {
+            DEFAULT_REVIEW_STALE_THRESHOLD_DAYS
+        };
+    set_setting(
+        conn,
+        "review_stale_threshold_days",
+        Some(&stale_days.to_string()),
     )?;
     get_app_settings(conn)
 }
@@ -1699,8 +1755,9 @@ fn upsert_review_pull_requests(conn: &Connection, prs: &[CachedReviewPr]) -> Res
         INSERT INTO review_pull_requests(
             org_id, project_id, project_name, repository_id, repository_name,
             pull_request_id, title, created_by, creation_date, target_ref_name,
-            web_url, my_vote, my_vote_label, my_is_required, is_draft, merge_status
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+            web_url, my_vote, my_vote_label, my_is_required, is_draft, merge_status,
+            ci_status, ci_context, ci_check_count, ci_status_updated_at
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
         ON CONFLICT(org_id, repository_id, pull_request_id) DO UPDATE SET
             project_id = excluded.project_id,
             project_name = excluded.project_name,
@@ -1714,10 +1771,17 @@ fn upsert_review_pull_requests(conn: &Connection, prs: &[CachedReviewPr]) -> Res
             my_vote_label = excluded.my_vote_label,
             my_is_required = excluded.my_is_required,
             is_draft = excluded.is_draft,
-            merge_status = excluded.merge_status
+            merge_status = excluded.merge_status,
+            ci_status = excluded.ci_status,
+            ci_context = excluded.ci_context,
+            ci_check_count = excluded.ci_check_count,
+            ci_status_updated_at = excluded.ci_status_updated_at
         "#,
     )?;
+    let now = chrono::Utc::now().to_rfc3339();
     for pr in prs {
+        // Only stamp a fetch time when CI was actually resolved for this PR.
+        let ci_updated_at = pr.ci_status.as_ref().map(|_| now.as_str());
         stmt.execute(params![
             pr.org_id,
             pr.project_id,
@@ -1734,7 +1798,11 @@ fn upsert_review_pull_requests(conn: &Connection, prs: &[CachedReviewPr]) -> Res
             pr.my_vote_label,
             pr.my_is_required as i32,
             pr.is_draft as i32,
-            pr.merge_status
+            pr.merge_status,
+            pr.ci_status,
+            pr.ci_context,
+            pr.ci_check_count,
+            ci_updated_at
         ])?;
     }
     Ok(())
@@ -1745,7 +1813,8 @@ fn list_review_pull_requests(conn: &Connection, org_id: &str) -> Result<Vec<Cach
         r#"
         SELECT org_id, project_id, project_name, repository_id, repository_name,
                pull_request_id, title, created_by, creation_date, target_ref_name,
-               web_url, my_vote, my_vote_label, my_is_required, is_draft, merge_status
+               web_url, my_vote, my_vote_label, my_is_required, is_draft, merge_status,
+               ci_status, ci_context, ci_check_count
         FROM review_pull_requests
         WHERE org_id = ?1
         ORDER BY creation_date DESC
@@ -2204,6 +2273,9 @@ fn map_cached_review_pr(row: &rusqlite::Row<'_>) -> rusqlite::Result<CachedRevie
         my_is_required: row.get::<_, i32>(13)? != 0,
         is_draft: row.get::<_, i32>(14)? != 0,
         merge_status: row.get(15)?,
+        ci_status: row.get(16)?,
+        ci_context: row.get(17)?,
+        ci_check_count: row.get(18)?,
     })
 }
 
@@ -2410,6 +2482,9 @@ mod tests {
             my_is_required: false,
             is_draft: false,
             merge_status: None,
+            ci_status: None,
+            ci_context: None,
+            ci_check_count: 0,
         }
     }
 
@@ -2592,6 +2667,7 @@ mod tests {
                 notify_pr_review_requests: false,
                 notify_pr_vote_resets: true,
                 notify_pr_comment_replies: false,
+                review_stale_threshold_days: 7,
             },
         )
         .unwrap();
@@ -2599,6 +2675,7 @@ mod tests {
             saved.review_result_folder_path.as_deref(),
             Some("C:/reports")
         );
+        assert_eq!(saved.review_stale_threshold_days, 7);
         assert_eq!(saved.show_window_hotkey.as_deref(), Some("Ctrl+Alt+D"));
         assert!(saved.read_only_validation_mode_enabled);
         assert!(saved.desktop_notifications_enabled);
