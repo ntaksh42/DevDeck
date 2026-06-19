@@ -1276,14 +1276,10 @@ pub fn migrate(conn: &Connection) -> Result<()> {
     }
     if current < 13 {
         if !table_column_exists(conn, "review_pull_requests", "ci_status")? {
-            conn.execute_batch(
-                "ALTER TABLE review_pull_requests ADD COLUMN ci_status TEXT;",
-            )?;
+            conn.execute_batch("ALTER TABLE review_pull_requests ADD COLUMN ci_status TEXT;")?;
         }
         if !table_column_exists(conn, "review_pull_requests", "ci_context")? {
-            conn.execute_batch(
-                "ALTER TABLE review_pull_requests ADD COLUMN ci_context TEXT;",
-            )?;
+            conn.execute_batch("ALTER TABLE review_pull_requests ADD COLUMN ci_context TEXT;")?;
         }
         if !table_column_exists(conn, "review_pull_requests", "ci_check_count")? {
             conn.execute_batch(
