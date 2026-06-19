@@ -29,11 +29,17 @@ import {
   commandErrorMessage,
   getAppSettings,
   listOrganizations,
+  rerunPipelineRun,
   searchAll,
   syncUpdatedEventSchema,
   triggerSync,
   type SyncScope,
 } from "@/lib/azdoCommands";
+import {
+  loadQuickPipelines,
+  type QuickPipeline,
+} from "@/features/pipelines/quickPipelinesStorage";
+import { QUICK_PIPELINES_CHANGED_EVENT } from "@/features/pipelines/quickPipelinesEvents";
 import { openExternalUrl } from "@/lib/openExternal";
 import {
   applyTheme,
@@ -105,6 +111,7 @@ const PullRequestSearch = lazy(() =>
   })),
 );
 import {
+  sendPipelineRunNotification,
   showWorkItemNotificationEvent,
   showPullRequestNotificationEvent,
   type WorkItemNotificationEvent,
@@ -275,6 +282,45 @@ function AppShell() {
     staleTime: 5 * 60_000,
   });
   const organizations = organizationsQuery.data ?? [];
+  const readOnlyMode = appSettingsQuery.data?.readOnlyValidationModeEnabled ?? false;
+  const [quickPipelines, setQuickPipelines] = useState<QuickPipeline[]>(() =>
+    loadQuickPipelines(),
+  );
+
+  // Keep the palette's pipeline actions in sync with edits made in Settings.
+  useEffect(() => {
+    function onChanged() {
+      setQuickPipelines(loadQuickPipelines());
+    }
+    window.addEventListener(QUICK_PIPELINES_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(QUICK_PIPELINES_CHANGED_EVENT, onChanged);
+  }, []);
+
+  async function runQuickPipeline(pipeline: QuickPipeline): Promise<void> {
+    try {
+      const run = await rerunPipelineRun({
+        organizationId: pipeline.organizationId,
+        projectId: pipeline.projectId,
+        definitionId: pipeline.definitionId,
+        sourceBranch: pipeline.sourceBranch,
+      });
+      void sendPipelineRunNotification({
+        ok: true,
+        pipelineName: pipeline.name,
+        detail: run.buildNumber
+          ? `Build ${run.buildNumber} queued.`
+          : "A new run was queued.",
+        webUrl: run.webUrl,
+      });
+    } catch (error) {
+      void sendPipelineRunNotification({
+        ok: false,
+        pipelineName: pipeline.name,
+        detail: commandErrorMessage(error),
+      });
+    }
+  }
+
   const syncMutation = useMutation({
     mutationFn: (input: { scope?: SyncScope }) => triggerSync(input),
     onSuccess: (_data, input) => {
@@ -810,6 +856,18 @@ function AppShell() {
       run: () => setHelpOpen(true),
       shortcut: "?",
     },
+    ...quickPipelines.map<CommandPaletteAction>((pipeline) => ({
+      disabled: readOnlyMode,
+      group: "Pipelines",
+      id: `pipeline.run.${pipeline.id}`,
+      keywords: ["pipeline", "build", "run", "trigger", pipeline.definitionName],
+      label: readOnlyMode
+        ? `Run: ${pipeline.name} (read-only)`
+        : `Run: ${pipeline.name}`,
+      run: () => {
+        void runQuickPipeline(pipeline);
+      },
+    })),
   ];
 
   function handleNavKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
