@@ -35,6 +35,7 @@ import { openExternalUrl } from "@/lib/openExternal";
 import { ColumnResizeHandle, ResizeHandle } from "@/components/ResizeHandle";
 import { ErrorState, LoadingState } from "@/components/StateDisplay";
 import { CommitFilesPanel } from "./CommitFilesPanel";
+import { CommitActivityHeatmap } from "./CommitActivityHeatmap";
 
 const DEFAULT_COMMIT_PREVIEW_WIDTH = 460;
 const MIN_COMMIT_PREVIEW_WIDTH = 320;
@@ -46,6 +47,7 @@ const COMMIT_COLUMN_MIN_WIDTHS = [66, 72, 160, 110, 96];
 const COMMIT_COLUMN_MAX_WIDTHS = [140, 160, 720, 380, 340];
 const COMMIT_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:commitGridColumnWidths:v2";
 const COMMIT_SEARCH_VIEW_STORAGE_KEY = "azdodeck:view:commitSearch:v1";
+const COMMIT_VIEW_MODE_STORAGE_KEY = "azdodeck:view:commitViewMode:v1";
 const COMMIT_SORT_STORAGE_KEY = "azdodeck:view:commitGridSort:v1";
 const COMMIT_GRID_ROW_HEIGHT = 29;
 const COMMIT_GRID_OVERSCAN = 8;
@@ -94,6 +96,14 @@ function storeCommitSearchViewState(state: CommitSearchViewState) {
   window.localStorage.setItem(COMMIT_SEARCH_VIEW_STORAGE_KEY, JSON.stringify(state));
 }
 
+type CommitViewMode = "results" | "activity";
+
+function loadCommitViewMode(): CommitViewMode {
+  return window.localStorage.getItem(COMMIT_VIEW_MODE_STORAGE_KEY) === "activity"
+    ? "activity"
+    : "results";
+}
+
 export function CommitSearch({
   organizations,
   externalSearch,
@@ -117,6 +127,7 @@ export function CommitSearch({
   const [projectId, setProjectId] = useState(initialViewState.projectId);
   const [repositoryId, setRepositoryId] = useState(initialViewState.repositoryId);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<CommitViewMode>(() => loadCommitViewMode());
 
   const mutation = useMutation({
     mutationFn: searchCommits,
@@ -166,6 +177,10 @@ export function CommitSearch({
       toDate,
     });
   }, [author, branch, fromDate, projectId, query, repositoryId, selectedOrganizationId, toDate]);
+
+  useEffect(() => {
+    window.localStorage.setItem(COMMIT_VIEW_MODE_STORAGE_KEY, viewMode);
+  }, [viewMode]);
 
   useEffect(() => {
     if (
@@ -431,22 +446,89 @@ export function CommitSearch({
         </form>
       </div>
 
-      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Info className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
-        Showing locally synced data — refreshed automatically every 5 minutes.
-      </p>
+      <div className="flex items-center justify-between gap-3">
+        <CommitViewToggle value={viewMode} onChange={setViewMode} />
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Info className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+          Showing locally synced data — refreshed automatically every 5 minutes.
+        </p>
+      </div>
 
       {mutation.isError ? (
         <ErrorState message={commandErrorMessage(mutation.error)} />
       ) : null}
 
-      <CommitResults
-        activeExternalFilterCount={activeSearchFilterCount}
-        loading={mutation.isPending}
-        onClearExternalFilters={clearSearchFilters}
-        results={results}
-        searched={mutation.isSuccess}
-      />
+      {viewMode === "activity" ? (
+        <CommitActivityHeatmap
+          organizationId={selectedOrganizationId}
+          author={author}
+          fromDate={fromDate}
+          toDate={toDate}
+          projectId={projectId}
+          repositoryId={repositoryId}
+        />
+      ) : (
+        <CommitResults
+          activeExternalFilterCount={activeSearchFilterCount}
+          loading={mutation.isPending}
+          onClearExternalFilters={clearSearchFilters}
+          results={results}
+          searched={mutation.isSuccess}
+        />
+      )}
+    </div>
+  );
+}
+
+function CommitViewToggle({
+  value,
+  onChange,
+}: {
+  value: CommitViewMode;
+  onChange: (mode: CommitViewMode) => void;
+}) {
+  const tabs: { id: CommitViewMode; label: string }[] = [
+    { id: "results", label: "Results" },
+    { id: "activity", label: "Activity" },
+  ];
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  function handleKeyDown(event: ReactKeyboardEvent, index: number) {
+    let next = index;
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % tabs.length;
+    else if (event.key === "ArrowLeft" || event.key === "ArrowUp")
+      next = (index - 1 + tabs.length) % tabs.length;
+    else return;
+    event.preventDefault();
+    const target = tabs[next];
+    onChange(target.id);
+    tabRefs.current[next]?.focus();
+  }
+
+  return (
+    <div role="tablist" aria-label="Commit view" className="inline-flex rounded-md border border-border bg-card p-0.5">
+      {tabs.map((tab, index) => {
+        const active = value === tab.id;
+        return (
+          <button
+            key={tab.id}
+            ref={(el) => {
+              tabRefs.current[index] = el;
+            }}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            tabIndex={active ? 0 : -1}
+            onClick={() => onChange(tab.id)}
+            onKeyDown={(event) => handleKeyDown(event, index)}
+            className={`rounded px-3 py-1 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ring ${
+              active ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {tab.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

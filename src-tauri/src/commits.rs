@@ -40,6 +40,24 @@ pub struct ListCommitRepositoriesInput {
     pub organization_id: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitActivityInput {
+    pub organization_id: Option<String>,
+    pub author: Option<String>,
+    pub from_date: Option<String>,
+    pub to_date: Option<String>,
+    pub project_id: Option<String>,
+    pub repository_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitActivityDay {
+    pub date: String,
+    pub count: i64,
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CommitRepositoryOption {
@@ -302,6 +320,37 @@ impl CommitService {
                 .then_with(|| a.repository_name.cmp(&b.repository_name))
         });
         Ok(results)
+    }
+
+    pub fn commit_activity(&self, input: CommitActivityInput) -> Result<Vec<CommitActivityDay>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let author = normalize_optional(input.author);
+        let project_filter = normalize_optional(input.project_id);
+        let repository_filter = normalize_optional(input.repository_id);
+        let from_date = normalize_date(input.from_date.as_deref(), false)?;
+        let to_date = normalize_date(input.to_date.as_deref(), true)?;
+        if let (Some(from_date), Some(to_date)) = (&from_date, &to_date) {
+            if from_date > to_date {
+                return Err(AppError::InvalidInput(
+                    "from date must be before or equal to to date".to_string(),
+                ));
+            }
+        }
+        let from_rfc = from_date.as_ref().map(DateTime::to_rfc3339);
+        let to_rfc = to_date.as_ref().map(DateTime::to_rfc3339);
+
+        let rows = self.db.commit_activity(
+            &organization.id,
+            project_filter.as_deref(),
+            repository_filter.as_deref(),
+            author.as_deref(),
+            from_rfc.as_deref(),
+            to_rfc.as_deref(),
+        )?;
+        Ok(rows
+            .into_iter()
+            .map(|(date, count)| CommitActivityDay { date, count })
+            .collect())
     }
 
     pub async fn get_commit_changes(

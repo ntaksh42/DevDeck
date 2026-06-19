@@ -582,6 +582,27 @@ impl AppDatabase {
         list_commit_repositories(&conn, org_id)
     }
 
+    pub fn commit_activity(
+        &self,
+        org_id: &str,
+        project_id: Option<&str>,
+        repository_id: Option<&str>,
+        author: Option<&str>,
+        from_date: Option<&str>,
+        to_date: Option<&str>,
+    ) -> Result<Vec<(String, i64)>> {
+        let conn = self.open()?;
+        commit_activity(
+            &conn,
+            org_id,
+            project_id,
+            repository_id,
+            author,
+            from_date,
+            to_date,
+        )
+    }
+
     pub fn replace_commits_for_repo(
         &self,
         org_id: &str,
@@ -1995,6 +2016,55 @@ fn list_commit_repositories(conn: &Connection, org_id: &str) -> Result<Vec<Cache
             repository_name: row.get(3)?,
         })
     })?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
+/// Aggregates commit counts per calendar day for the activity heatmap. The
+/// author filter matches the name or email as a case-insensitive substring,
+/// mirroring the commit search behaviour. Dates are derived from `author_date`
+/// via SQLite's `date()`; commits without an `author_date` are skipped.
+fn commit_activity(
+    conn: &Connection,
+    org_id: &str,
+    project_id: Option<&str>,
+    repository_id: Option<&str>,
+    author: Option<&str>,
+    from_date: Option<&str>,
+    to_date: Option<&str>,
+) -> Result<Vec<(String, i64)>> {
+    let author_like = author.map(|a| format!("%{}%", a.to_lowercase()));
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT date(author_date) AS day, COUNT(*) AS count
+        FROM commits
+        WHERE org_id = ?1
+          AND author_date IS NOT NULL
+          AND (?2 IS NULL OR project_id = ?2)
+          AND (?3 IS NULL OR repository_id = ?3)
+          AND (?4 IS NULL
+               OR lower(IFNULL(author_name, '')) LIKE ?4
+               OR lower(IFNULL(author_email, '')) LIKE ?4)
+          AND (?5 IS NULL OR author_date >= ?5)
+          AND (?6 IS NULL OR author_date <= ?6)
+        GROUP BY day
+        ORDER BY day
+        "#,
+    )?;
+    let rows = stmt.query_map(
+        params![
+            org_id,
+            project_id,
+            repository_id,
+            author_like,
+            from_date,
+            to_date
+        ],
+        |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+    )?;
     let mut result = Vec::new();
     for row in rows {
         result.push(row?);
@@ -3422,5 +3492,70 @@ mod tests {
         let remaining = db.search_commits("org1", None, None, None, None).unwrap();
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].commit_id, "new");
+    }
+
+    #[test]
+    fn commit_activity_groups_by_day_and_filters_by_author() {
+        let tf = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        let make = |commit_id: &str, date: Option<&str>, name: &str, email: &str| CachedCommit {
+            org_id: "org1".to_string(),
+            project_id: "p1".to_string(),
+            project_name: "P1".to_string(),
+            repository_id: "repo1".to_string(),
+            repository_name: "Repo1".to_string(),
+            commit_id: commit_id.to_string(),
+            comment: "msg".to_string(),
+            author_name: Some(name.to_string()),
+            author_email: Some(email.to_string()),
+            author_date: date.map(|s| s.to_string()),
+            web_url: None,
+        };
+
+        db.replace_commits_for_repo(
+            "org1",
+            "repo1",
+            &[
+                make("a", Some("2026-05-01T08:00:00+00:00"), "Alice", "alice@x.com"),
+                make("b", Some("2026-05-01T20:00:00+00:00"), "Alice", "alice@x.com"),
+                make("c", Some("2026-05-02T08:00:00+00:00"), "Bob", "bob@x.com"),
+                make("d", None, "Alice", "alice@x.com"),
+            ],
+        )
+        .unwrap();
+
+        // All authors: two commits on 05-01, one on 05-02. NULL date is skipped.
+        let all = db
+            .commit_activity("org1", None, None, None, None, None)
+            .unwrap();
+        assert_eq!(
+            all,
+            vec![
+                ("2026-05-01".to_string(), 2),
+                ("2026-05-02".to_string(), 1),
+            ]
+        );
+
+        // Author substring filter (case-insensitive) narrows to Alice's days.
+        let alice = db
+            .commit_activity("org1", None, None, Some("ALICE"), None, None)
+            .unwrap();
+        assert_eq!(alice, vec![("2026-05-01".to_string(), 2)]);
+
+        // Date range filter clamps the window.
+        let ranged = db
+            .commit_activity(
+                "org1",
+                None,
+                None,
+                None,
+                Some("2026-05-02T00:00:00+00:00"),
+                None,
+            )
+            .unwrap();
+        assert_eq!(ranged, vec![("2026-05-02".to_string(), 1)]);
     }
 }
