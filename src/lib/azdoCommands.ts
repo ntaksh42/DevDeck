@@ -21,6 +21,9 @@ const organizationsSchema = z.array(organizationSchema);
 
 export type Organization = z.infer<typeof organizationSchema>;
 
+export const REVIEW_STALE_THRESHOLD_DAY_OPTIONS = [2, 3, 5, 7] as const;
+export const DEFAULT_REVIEW_STALE_THRESHOLD_DAYS = 3;
+
 const appSettingsSchema = z.object({
   reviewResultFolderPath: z.string().nullable(),
   showWindowHotkey: z.string().nullable().default(null),
@@ -32,6 +35,7 @@ const appSettingsSchema = z.object({
   notifyPrReviewRequests: z.boolean().default(true),
   notifyPrVoteResets: z.boolean().default(true),
   notifyPrCommentReplies: z.boolean().default(true),
+  reviewStaleThresholdDays: z.number().int().default(DEFAULT_REVIEW_STALE_THRESHOLD_DAYS),
 });
 
 export type AppSettings = z.infer<typeof appSettingsSchema>;
@@ -499,6 +503,7 @@ export type UpdateAppSettingsInput = {
   notifyPrReviewRequests?: boolean;
   notifyPrVoteResets?: boolean;
   notifyPrCommentReplies?: boolean;
+  reviewStaleThresholdDays?: number;
 };
 
 export type GetReviewResultPreviewInput = {

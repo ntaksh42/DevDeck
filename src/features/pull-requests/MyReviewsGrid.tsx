@@ -22,11 +22,13 @@ import {
   XCircle,
 } from 'lucide-react';
 import {
+  getAppSettings,
   listMyReviewPullRequests,
   commandErrorMessage,
   prLocator,
   snoozeItem,
   submitPullRequestVote,
+  DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
   type Organization,
   type ReviewPullRequestSummary,
 } from '@/lib/azdoCommands';
@@ -252,12 +254,13 @@ const ReviewPrRow = forwardRef<
     selected: boolean;
     columnTemplate: string;
     visibleColumns: SortKey[];
+    staleThresholdDays: number;
     onSelect: () => void;
   }
->(({ pr, selected, columnTemplate, visibleColumns, onSelect }, ref) => {
+>(({ pr, selected, columnTemplate, visibleColumns, staleThresholdDays, onSelect }, ref) => {
   const createdTime = new Date(pr.creationDate).getTime();
   const isStale = Number.isFinite(createdTime)
-    ? Math.floor((Date.now() - createdTime) / 86_400_000) >= 3
+    ? Math.floor((Date.now() - createdTime) / 86_400_000) >= staleThresholdDays
     : false;
   return (
     <div
@@ -594,6 +597,15 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     enabled: !!organizationId,
     staleTime: 5 * 60_000,
   });
+
+  const settingsQuery = useQuery({
+    queryKey: ["appSettings"],
+    queryFn: getAppSettings,
+    staleTime: 5 * 60_000,
+  });
+  const staleThresholdDays =
+    settingsQuery.data?.reviewStaleThresholdDays ??
+    DEFAULT_REVIEW_STALE_THRESHOLD_DAYS;
 
   const queryClient = useQueryClient();
   const voteMutation = useMutation({
@@ -1368,6 +1380,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
                         pr={row.pr}
                         selected={row.prIndex === selectedIndex}
                         visibleColumns={visibleColumns}
+                        staleThresholdDays={staleThresholdDays}
                         onSelect={() => setSelectedIndex(row.prIndex)}
                       />
                     );
