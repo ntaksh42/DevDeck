@@ -19,6 +19,7 @@ pub struct UpdateAppSettingsInput {
     pub notify_pr_review_requests: Option<bool>,
     pub notify_pr_vote_resets: Option<bool>,
     pub notify_pr_comment_replies: Option<bool>,
+    pub wip_limit: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -69,6 +70,7 @@ pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
         notify_pr_review_requests: input.notify_pr_review_requests.unwrap_or(true),
         notify_pr_vote_resets: input.notify_pr_vote_resets.unwrap_or(true),
         notify_pr_comment_replies: input.notify_pr_comment_replies.unwrap_or(true),
+        wip_limit: input.wip_limit.unwrap_or(5).max(0),
     }
 }
 

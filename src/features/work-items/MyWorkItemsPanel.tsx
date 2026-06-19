@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
-import { listMyWorkItems, commandErrorMessage, type Organization } from '@/lib/azdoCommands';
+import { getAppSettings, listMyWorkItems, commandErrorMessage, type Organization } from '@/lib/azdoCommands';
 import { matchesAllSearchTerms, splitSearchTerms } from '@/lib/utils';
 import { ErrorState } from '@/components/StateDisplay';
 import { WorkItemsGrid } from './WorkItemsGrid';
@@ -19,6 +19,13 @@ export function MyWorkItemsPanel({ organizations }: { organizations: Organizatio
     enabled: !!selectedOrganizationId,
     staleTime: 5 * 60_000,
   });
+
+  const settingsQuery = useQuery({
+    queryKey: ["appSettings"],
+    queryFn: getAppSettings,
+    staleTime: 5 * 60_000,
+  });
+  const wipLimit = settingsQuery.data?.wipLimit ?? 5;
 
   const allResults = query.data ?? [];
   const results = useMemo(() => {
@@ -100,6 +107,7 @@ export function MyWorkItemsPanel({ organizations }: { organizations: Organizatio
         autoFocus
         triageScope={`myWorkItems:${selectedOrganizationId}`}
         snoozeOrganizationId={selectedOrganizationId}
+        wipLimit={wipLimit}
       />
     </div>
   );

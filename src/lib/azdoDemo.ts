@@ -90,6 +90,7 @@ let demoSettings: AppSettings = {
   notifyPrReviewRequests: true,
   notifyPrVoteResets: true,
   notifyPrCommentReplies: true,
+  wipLimit: 5,
 };
 const deletedDemoWorkItemComments = new Set<number>();
 let demoSyncStates: SyncState[] = [
@@ -508,6 +509,10 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
           input && "notifyPrCommentReplies" in input
             ? Boolean(input.notifyPrCommentReplies)
             : demoSettings.notifyPrCommentReplies,
+        wipLimit:
+          input && "wipLimit" in input
+            ? Math.max(0, Math.trunc(Number(input.wipLimit) || 0))
+            : demoSettings.wipLimit,
       };
       return demoSettings;
     }

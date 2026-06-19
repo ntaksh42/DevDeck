@@ -51,6 +51,7 @@ export function OrganizationSettings({
       <SyncHealthSettings organizations={organizations} />
       <DataCacheSettings />
       <ValidationModeSettings />
+      <WipLimitSettings />
       <div className="overflow-hidden rounded-md border border-border bg-card">
         <div className="border-b border-border px-3 py-2">
           <h2 className="text-base font-semibold">Organizations</h2>
@@ -364,6 +365,7 @@ function settingsInput(
     notifyPrReviewRequests: settings?.notifyPrReviewRequests ?? true,
     notifyPrVoteResets: settings?.notifyPrVoteResets ?? true,
     notifyPrCommentReplies: settings?.notifyPrCommentReplies ?? true,
+    wipLimit: settings?.wipLimit ?? 5,
     ...input,
   };
 }
@@ -521,6 +523,102 @@ function ValidationModeSettings() {
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
             ) : (
               <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+            )}
+            Save
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function WipLimitSettings() {
+  const queryClient = useQueryClient();
+  const settingsQuery = useQuery({
+    queryKey: ["appSettings"],
+    queryFn: getAppSettings,
+    staleTime: 5 * 60_000,
+  });
+  const [value, setValue] = useState("5");
+
+  useEffect(() => {
+    if (settingsQuery.data) {
+      setValue(String(settingsQuery.data.wipLimit));
+    }
+  }, [settingsQuery.data?.wipLimit]);
+
+  const mutation = useMutation({
+    mutationFn: updateAppSettings,
+    onSuccess: (settings) => {
+      queryClient.setQueryData(["appSettings"], settings);
+    },
+  });
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const parsed = Math.max(0, Math.trunc(Number(value) || 0));
+    mutation.mutate(
+      settingsInput(settingsQuery.data, {
+        wipLimit: parsed,
+      }),
+    );
+  }
+
+  return (
+    <div className="rounded-md border border-border bg-card">
+      <div className="border-b border-border px-3 py-2">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
+            <Activity className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold">WIP limit</h2>
+            <p className="text-sm text-muted-foreground">
+              Warn when active work items exceed this limit. Set to 0 to disable.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <form className="grid gap-3 p-3" onSubmit={onSubmit}>
+        <label className="flex items-center gap-2 text-sm">
+          <span>Recommended WIP limit</span>
+          <input
+            type="number"
+            min={0}
+            step={1}
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            className="h-9 w-24 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+          />
+        </label>
+
+        {settingsQuery.isError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {commandErrorMessage(settingsQuery.error)}
+          </p>
+        ) : null}
+
+        {mutation.isError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {commandErrorMessage(mutation.error)}
+          </p>
+        ) : null}
+
+        {mutation.isSuccess ? (
+          <p className="text-sm text-green-700 dark:text-green-400">WIP limit saved.</p>
+        ) : null}
+
+        <div>
+          <button
+            type="submit"
+            disabled={settingsQuery.isLoading || mutation.isPending}
+            className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {mutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Activity className="h-4 w-4" aria-hidden="true" />
             )}
             Save
           </button>

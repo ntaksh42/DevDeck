@@ -84,6 +84,9 @@ function workItemTriageSnapshot(item: WorkItemSummary): string {
   return item.changedDate ?? "";
 }
 
+// Work item states that do not count toward the active WIP total.
+const WI_INACTIVE_STATES = new Set(["Done", "Closed", "Resolved", "Removed"]);
+
 const wiSortLabels: Record<WiSortKey, string> = {
   id: "#",
   workItemType: "Type",
@@ -491,6 +494,7 @@ export function WorkItemsGrid({
   storageKeyScope,
   triageScope,
   snoozeOrganizationId,
+  wipLimit,
 }: {
   results: WorkItemSummary[];
   loading: boolean;
@@ -509,6 +513,9 @@ export function WorkItemsGrid({
   // When set, enables snoozing work items (Z key + Snoozed view) scoped to this
   // organization. Only the "My Work Items" view passes it.
   snoozeOrganizationId?: string;
+  // When set, shows an active work item count in the status bar and warns when
+  // it exceeds the WIP limit. 0 disables the warning. Only "My Work Items" passes it.
+  wipLimit?: number;
 }) {
   const columnWidthsStorageKey = storageKeyScope
     ? `${WI_COLUMN_WIDTHS_STORAGE_KEY}:${storageKeyScope}`
@@ -1345,6 +1352,14 @@ export function WorkItemsGrid({
     gridColumnTemplate(visibleColumnWidths, wiFlexibleIndex, ["28px"]),
     ...extraColumns.map(() => "120px"),
   ].join(" ");
+  const activeWorkItemCount = useMemo(
+    () =>
+      results.filter((item) => {
+        const state = (item.state ?? "").trim();
+        return !WI_INACTIVE_STATES.has(state);
+      }).length,
+    [results],
+  );
   const columnFilterCount = activeColumnFilterCount(columnFilters);
   const activeFilterCount = Math.max(0, activeExternalFilterCount) + columnFilterCount;
   const hasActiveColumnFilters = columnFilterCount > 0;
@@ -1585,15 +1600,20 @@ export function WorkItemsGrid({
           )}
 
           <div className="flex items-center justify-between gap-2 border-t border-border px-2 py-1 text-xs text-muted-foreground">
-            <span>
-              {loading
-                ? "Loading…"
-                : searched
-                  ? hasActiveColumnFilters
-                    ? `${displayed.length} of ${sorted.length} item${sorted.length === 1 ? "" : "s"}`
-                    : `${displayed.length} item${displayed.length === 1 ? "" : "s"}`
-                  : "Ready"}
-              {dataUpdatedAt ? ` · data ${formatRelativeDate(new Date(dataUpdatedAt).toISOString())}` : ""}
+            <span className="flex items-center gap-2">
+              <span>
+                {loading
+                  ? "Loading…"
+                  : searched
+                    ? hasActiveColumnFilters
+                      ? `${displayed.length} of ${sorted.length} item${sorted.length === 1 ? "" : "s"}`
+                      : `${displayed.length} item${displayed.length === 1 ? "" : "s"}`
+                    : "Ready"}
+                {dataUpdatedAt ? ` · data ${formatRelativeDate(new Date(dataUpdatedAt).toISOString())}` : ""}
+              </span>
+              {wipLimit !== undefined ? (
+                <WipLimitBadge active={activeWorkItemCount} limit={wipLimit} />
+              ) : null}
             </span>
             <span className="flex items-center gap-2">
               {triageScope ? (
@@ -1944,6 +1964,27 @@ function BulkFailurePanel({
         ))}
       </ul>
     </div>
+  );
+}
+
+function WipLimitBadge({ active, limit }: { active: number; limit: number }) {
+  const enabled = limit > 0;
+  const ratio = enabled ? active / limit : 0;
+  const tone = !enabled
+    ? "text-muted-foreground"
+    : ratio >= 1
+      ? "text-destructive"
+      : ratio >= 0.8
+        ? "text-yellow-600"
+        : "text-muted-foreground";
+  const tooltip = enabled
+    ? `推奨 WIP 制限: ${limit} 件。集中するために Active タスクを減らしましょう`
+    : `Active な Work Item の件数 (${active} 件)`;
+
+  return (
+    <span className={tone} title={tooltip}>
+      Active: {active} 件{enabled ? ` / ${limit}` : ""}
+    </span>
   );
 }
 

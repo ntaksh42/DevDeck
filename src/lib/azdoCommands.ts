@@ -32,6 +32,7 @@ const appSettingsSchema = z.object({
   notifyPrReviewRequests: z.boolean().default(true),
   notifyPrVoteResets: z.boolean().default(true),
   notifyPrCommentReplies: z.boolean().default(true),
+  wipLimit: z.number().int().min(0).default(5),
 });
 
 export type AppSettings = z.infer<typeof appSettingsSchema>;
@@ -494,6 +495,7 @@ export type UpdateAppSettingsInput = {
   notifyPrReviewRequests?: boolean;
   notifyPrVoteResets?: boolean;
   notifyPrCommentReplies?: boolean;
+  wipLimit?: number;
 };
 
 export type GetReviewResultPreviewInput = {

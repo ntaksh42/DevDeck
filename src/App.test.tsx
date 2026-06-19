@@ -416,6 +416,7 @@ describe("App", () => {
           notifyPrReviewRequests: true,
           notifyPrVoteResets: true,
           notifyPrCommentReplies: true,
+          wipLimit: 5,
         },
       });
     });
@@ -472,6 +473,7 @@ describe("App", () => {
           notifyPrReviewRequests: true,
           notifyPrVoteResets: true,
           notifyPrCommentReplies: true,
+          wipLimit: 5,
         },
       });
     });
@@ -526,6 +528,7 @@ describe("App", () => {
           notifyPrReviewRequests: true,
           notifyPrVoteResets: true,
           notifyPrCommentReplies: true,
+          wipLimit: 5,
         },
       });
     });
@@ -579,6 +582,7 @@ describe("App", () => {
           notifyPrReviewRequests: true,
           notifyPrVoteResets: true,
           notifyPrCommentReplies: true,
+          wipLimit: 5,
         },
       });
     });

@@ -44,6 +44,7 @@ pub struct AppSettings {
     pub notify_pr_review_requests: bool,
     pub notify_pr_vote_resets: bool,
     pub notify_pr_comment_replies: bool,
+    pub wip_limit: i64,
 }
 
 impl Default for AppSettings {
@@ -59,6 +60,7 @@ impl Default for AppSettings {
             notify_pr_review_requests: true,
             notify_pr_vote_resets: true,
             notify_pr_comment_replies: true,
+            wip_limit: 5,
         }
     }
 }
@@ -1283,6 +1285,7 @@ fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
         notify_pr_review_requests: get_bool_setting(conn, "notify_pr_review_requests", true)?,
         notify_pr_vote_resets: get_bool_setting(conn, "notify_pr_vote_resets", true)?,
         notify_pr_comment_replies: get_bool_setting(conn, "notify_pr_comment_replies", true)?,
+        wip_limit: get_int_setting(conn, "wip_limit", 5)?,
     })
 }
 
@@ -1337,6 +1340,7 @@ fn update_app_settings(conn: &Connection, settings: AppSettings) -> Result<AppSe
         "notify_pr_comment_replies",
         settings.notify_pr_comment_replies,
     )?;
+    set_int_setting(conn, "wip_limit", settings.wip_limit)?;
     get_app_settings(conn)
 }
 
@@ -1476,6 +1480,18 @@ fn get_bool_setting(conn: &Connection, key: &str, default_value: bool) -> Result
 
 fn set_bool_setting(conn: &Connection, key: &str, value: bool) -> Result<()> {
     set_setting(conn, key, Some(if value { "true" } else { "false" }))
+}
+
+fn get_int_setting(conn: &Connection, key: &str, default_value: i64) -> Result<i64> {
+    Ok(get_setting(conn, key)?
+        .as_deref()
+        .and_then(|value| value.trim().parse::<i64>().ok())
+        .map(|value| value.max(0))
+        .unwrap_or(default_value))
+}
+
+fn set_int_setting(conn: &Connection, key: &str, value: i64) -> Result<()> {
+    set_setting(conn, key, Some(&value.max(0).to_string()))
 }
 
 // ── Private helpers — pull requests ──────────────────────────────────────────
@@ -2454,6 +2470,7 @@ mod tests {
                 notify_pr_review_requests: false,
                 notify_pr_vote_resets: true,
                 notify_pr_comment_replies: false,
+                wip_limit: 3,
             },
         )
         .unwrap();
@@ -2470,6 +2487,7 @@ mod tests {
         assert!(!saved.notify_pr_review_requests);
         assert!(saved.notify_pr_vote_resets);
         assert!(!saved.notify_pr_comment_replies);
+        assert_eq!(saved.wip_limit, 3);
 
         let cleared = update_app_settings(
             &conn,
