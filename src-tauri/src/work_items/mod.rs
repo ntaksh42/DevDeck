@@ -14,7 +14,7 @@ use tokio::sync::Mutex;
 
 use crate::auth::client_for_organization;
 use crate::commits::encode_path_segment;
-use crate::db::{AppDatabase, CachedWorkItem, Organization};
+use crate::db::{AppDatabase, CachedSprintInfo, CachedWorkItem, Organization};
 use crate::error::{AppError, Result};
 use crate::projects::ProjectDirectory;
 use crate::secrets::SecretStore;
@@ -67,6 +67,13 @@ const WORK_ITEM_PREVIEW_FIELDS: &[&str] = &[
 const WORK_ITEM_PREVIEW_COMMENT_LIMIT: u32 = 200;
 const WORK_ITEM_IMAGE_MAX_BYTES: usize = 10 * 1024 * 1024;
 const MAX_PREVIEW_RELATIONS: usize = 50;
+
+/// Story points and state for every iteration item, fetched once per refresh.
+const SPRINT_ITEM_FIELDS: &[&str] = &["System.State", "Microsoft.VSTS.Scheduling.StoryPoints"];
+
+/// How long a cached sprint snapshot stays usable before a REST refresh. The
+/// frontend also caches for an hour; this protects app restarts.
+const SPRINT_CACHE_TTL: chrono::Duration = chrono::Duration::hours(1);
 
 const UPDATE_CANDIDATES_TTL: Duration = Duration::from_secs(60);
 const UPDATE_CANDIDATES_CACHE_CAP: usize = 200;
@@ -470,8 +477,149 @@ impl WorkItemService {
         })
     }
 
+    /// Returns the current sprint's progress for the project's default team.
+    ///
+    /// Returns `Ok(None)` whenever the data is unavailable (no default team, no
+    /// active iteration, or any REST failure) so the header can simply hide the
+    /// bar instead of surfacing an error. Successful results are cached in
+    /// `sprint_info` and reused for an hour to avoid the batch fetch.
+    pub async fn sprint_progress(
+        &self,
+        input: GetSprintProgressInput,
+    ) -> Result<Option<SprintProgress>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let project_id = input.project_id.trim().to_string();
+        if project_id.is_empty() {
+            return Ok(None);
+        }
+
+        if let Some(cached) = self.db.get_sprint_info(&organization.id, &project_id)? {
+            if !sprint_cache_is_stale(&cached.fetched_at) {
+                return Ok(Some(cached_sprint_to_progress(cached)));
+            }
+        }
+
+        match self
+            .refresh_sprint_progress(&organization, &project_id)
+            .await
+        {
+            Ok(Some(progress)) => Ok(Some(progress)),
+            // Treat "no team / no sprint" and any fetch error the same way: the
+            // bar is a progressive enhancement and must never break the header.
+            Ok(None) | Err(_) => Ok(None),
+        }
+    }
+
+    async fn refresh_sprint_progress(
+        &self,
+        organization: &Organization,
+        project_id: &str,
+    ) -> Result<Option<SprintProgress>> {
+        let client = client_for_organization(organization, &self.secrets)?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, project_id)
+            .await?;
+
+        let Some(team) = client.get_project_default_team(&project.id).await? else {
+            return Ok(None);
+        };
+        let Some(iteration) = client.get_current_iteration(&project.id, &team.id).await? else {
+            return Ok(None);
+        };
+
+        let ids = client
+            .list_iteration_work_item_ids(&project.id, &team.id, &iteration.id)
+            .await?;
+
+        let mut total_count: i64 = 0;
+        let mut completed_count: i64 = 0;
+        let mut total_points: Option<f64> = None;
+        let mut completed_points: Option<f64> = None;
+        if !ids.is_empty() {
+            let fields = SPRINT_ITEM_FIELDS.iter().map(ToString::to_string).collect();
+            let items = client
+                .get_work_items_batch(&project.id, ids.clone(), fields)
+                .await?;
+            for item in &items {
+                total_count += 1;
+                let done = string_field(item, "System.State")
+                    .map(|state| is_completed_state(&state))
+                    .unwrap_or(false);
+                if done {
+                    completed_count += 1;
+                }
+                if let Some(points) = string_field(item, "Microsoft.VSTS.Scheduling.StoryPoints")
+                    .and_then(|value| value.trim().parse::<f64>().ok())
+                {
+                    *total_points.get_or_insert(0.0) += points;
+                    if done {
+                        *completed_points.get_or_insert(0.0) += points;
+                    }
+                }
+            }
+        }
+
+        let cached = CachedSprintInfo {
+            iteration_id: iteration.id,
+            iteration_name: iteration.name,
+            iteration_path: iteration.path,
+            start_date: iteration
+                .attributes
+                .start_date
+                .map(|date| date.to_rfc3339()),
+            finish_date: iteration
+                .attributes
+                .finish_date
+                .map(|date| date.to_rfc3339()),
+            total_count,
+            completed_count,
+            total_points,
+            completed_points,
+            work_item_ids: serde_json::to_string(&ids).unwrap_or_else(|_| "[]".to_string()),
+            fetched_at: Utc::now().to_rfc3339(),
+        };
+        self.db
+            .upsert_sprint_info(&organization.id, project_id, &cached)?;
+        Ok(Some(cached_sprint_to_progress(cached)))
+    }
+
     fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {
         self.db.resolve_organization(id)
+    }
+}
+
+/// Azure DevOps marks completed work with the `Completed` state category, but
+/// the REST item only carries the display state. Match the common terminal
+/// state names used by the default process templates.
+fn is_completed_state(state: &str) -> bool {
+    matches!(
+        state.trim().to_ascii_lowercase().as_str(),
+        "done" | "closed" | "completed" | "resolved"
+    )
+}
+
+fn sprint_cache_is_stale(fetched_at: &str) -> bool {
+    match DateTime::parse_from_rfc3339(fetched_at) {
+        Ok(parsed) => {
+            Utc::now().signed_duration_since(parsed.with_timezone(&Utc)) > SPRINT_CACHE_TTL
+        }
+        Err(_) => true,
+    }
+}
+
+fn cached_sprint_to_progress(cached: CachedSprintInfo) -> SprintProgress {
+    let work_item_ids = serde_json::from_str::<Vec<i64>>(&cached.work_item_ids).unwrap_or_default();
+    SprintProgress {
+        iteration_name: cached.iteration_name,
+        iteration_path: cached.iteration_path,
+        start_date: cached.start_date,
+        finish_date: cached.finish_date,
+        total_count: cached.total_count,
+        completed_count: cached.completed_count,
+        total_points: cached.total_points,
+        completed_points: cached.completed_points,
+        work_item_ids,
     }
 }
 

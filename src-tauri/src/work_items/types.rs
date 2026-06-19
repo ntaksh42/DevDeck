@@ -161,6 +161,30 @@ pub struct GetSavedQueryInput {
     pub query_id: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetSprintProgressInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+}
+
+/// Current-sprint progress for the project's default team. The frontend hides
+/// the bar when this is `None` (no team, no active sprint, or fetch failed).
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SprintProgress {
+    pub iteration_name: String,
+    pub iteration_path: String,
+    pub start_date: Option<String>,
+    pub finish_date: Option<String>,
+    pub total_count: i64,
+    pub completed_count: i64,
+    pub total_points: Option<f64>,
+    pub completed_points: Option<f64>,
+    /// Work item ids belonging to the iteration, so the UI can scope to it.
+    pub work_item_ids: Vec<i64>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SavedQueryResult {

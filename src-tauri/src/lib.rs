@@ -59,15 +59,15 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tokio::sync::{mpsc, oneshot};
 use work_items::{
     AddWorkItemCommentInput, AssignWorkItemsInput, BulkWorkItemResult, DeleteWorkItemCommentInput,
-    FetchWorkItemImageInput, GetSavedQueryInput, GetWorkItemPreviewInput, ListMyWorkItemsInput,
-    ListWorkItemFieldAllowedValuesInput, ListWorkItemFieldsInput, ListWorkItemProjectsInput,
-    ListWorkItemTypeStatesInput, ListWorkItemUpdatesInput, MentionCandidate,
-    RecordAssigneeInteractionInput, RecordMentionInteractionInput, RunWorkItemQueryInput,
-    SavedQueryResult, SearchWorkItemAssigneesInput, SearchWorkItemMentionsInput,
-    SearchWorkItemsInput, SetWorkItemsPriorityInput, SetWorkItemsStateInput,
-    UpdateWorkItemFieldsInput, WorkItemAssigneeCandidate, WorkItemComment, WorkItemFieldOption,
-    WorkItemImage, WorkItemPreview, WorkItemProjectOption, WorkItemService, WorkItemSummary,
-    WorkItemUpdateSummary,
+    FetchWorkItemImageInput, GetSavedQueryInput, GetSprintProgressInput, GetWorkItemPreviewInput,
+    ListMyWorkItemsInput, ListWorkItemFieldAllowedValuesInput, ListWorkItemFieldsInput,
+    ListWorkItemProjectsInput, ListWorkItemTypeStatesInput, ListWorkItemUpdatesInput,
+    MentionCandidate, RecordAssigneeInteractionInput, RecordMentionInteractionInput,
+    RunWorkItemQueryInput, SavedQueryResult, SearchWorkItemAssigneesInput,
+    SearchWorkItemMentionsInput, SearchWorkItemsInput, SetWorkItemsPriorityInput,
+    SetWorkItemsStateInput, SprintProgress, UpdateWorkItemFieldsInput, WorkItemAssigneeCandidate,
+    WorkItemComment, WorkItemFieldOption, WorkItemImage, WorkItemPreview, WorkItemProjectOption,
+    WorkItemService, WorkItemSummary, WorkItemUpdateSummary,
 };
 
 #[derive(Clone)]
@@ -394,6 +394,15 @@ async fn get_work_item_preview(
     state: State<'_, AppState>,
 ) -> Result<WorkItemPreview> {
     state.work_items.preview(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn get_sprint_progress(
+    input: GetSprintProgressInput,
+    state: State<'_, AppState>,
+) -> Result<Option<SprintProgress>> {
+    state.work_items.sprint_progress(input).await
 }
 
 #[tauri::command]
@@ -784,6 +793,7 @@ pub fn run() {
             run_work_item_query,
             count_work_item_query,
             get_work_item_preview,
+            get_sprint_progress,
             search_work_item_mentions,
             record_mention_interaction,
             record_assignee_interaction,

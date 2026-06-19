@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, Result};
 
-const SCHEMA_VERSION: i64 = 12;
+const SCHEMA_VERSION: i64 = 13;
 
 /// Max rows kept in the my_work_items snapshot queries; sync notification
 /// diffing must know this cap to avoid treating re-entering rows as new.
@@ -127,6 +127,23 @@ pub struct CachedWorkItem {
     pub assigned_to_unique_name: Option<String>,
     pub changed_date: Option<String>,
     pub web_url: Option<String>,
+}
+
+/// Cached current-sprint progress for one project, refreshed lazily.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CachedSprintInfo {
+    pub iteration_id: String,
+    pub iteration_name: String,
+    pub iteration_path: String,
+    pub start_date: Option<String>,
+    pub finish_date: Option<String>,
+    pub total_count: i64,
+    pub completed_count: i64,
+    pub total_points: Option<f64>,
+    pub completed_points: Option<f64>,
+    /// JSON array of work item ids belonging to the iteration.
+    pub work_item_ids: String,
+    pub fetched_at: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -292,6 +309,27 @@ impl AppDatabase {
             pull_request_id,
             last_seen_comment_id,
         )
+    }
+
+    // ── Sprint info ───────────────────────────────────────────────────────────
+
+    pub fn get_sprint_info(
+        &self,
+        org_id: &str,
+        project_id: &str,
+    ) -> Result<Option<CachedSprintInfo>> {
+        let conn = self.open()?;
+        get_sprint_info(&conn, org_id, project_id)
+    }
+
+    pub fn upsert_sprint_info(
+        &self,
+        org_id: &str,
+        project_id: &str,
+        info: &CachedSprintInfo,
+    ) -> Result<()> {
+        let conn = self.open()?;
+        upsert_sprint_info(&conn, org_id, project_id, info)
     }
 
     // ── Snoozed items ─────────────────────────────────────────────────────────
@@ -1149,6 +1187,30 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             "#,
         )?;
     }
+    if current < 13 {
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS sprint_info(
+                org_id           TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                project_id       TEXT NOT NULL,
+                iteration_id     TEXT NOT NULL,
+                iteration_name   TEXT NOT NULL,
+                iteration_path   TEXT NOT NULL,
+                start_date       TEXT,
+                finish_date      TEXT,
+                total_count      INTEGER NOT NULL,
+                completed_count  INTEGER NOT NULL,
+                total_points     REAL,
+                completed_points REAL,
+                work_item_ids    TEXT NOT NULL,
+                fetched_at       TEXT NOT NULL,
+                PRIMARY KEY (org_id, project_id)
+            );
+
+            PRAGMA user_version = 13;
+            "#,
+        )?;
+    }
     Ok(())
 }
 
@@ -1404,6 +1466,86 @@ fn set_pr_comment_seen(
             pull_request_id,
             last_seen_comment_id,
             Utc::now().to_rfc3339()
+        ],
+    )?;
+    Ok(())
+}
+
+fn get_sprint_info(
+    conn: &Connection,
+    org_id: &str,
+    project_id: &str,
+) -> Result<Option<CachedSprintInfo>> {
+    Ok(conn
+        .query_row(
+            r#"
+            SELECT iteration_id, iteration_name, iteration_path, start_date, finish_date,
+                   total_count, completed_count, total_points, completed_points,
+                   work_item_ids, fetched_at
+            FROM sprint_info
+            WHERE org_id = ?1 AND project_id = ?2
+            "#,
+            params![org_id, project_id],
+            |row| {
+                Ok(CachedSprintInfo {
+                    iteration_id: row.get(0)?,
+                    iteration_name: row.get(1)?,
+                    iteration_path: row.get(2)?,
+                    start_date: row.get(3)?,
+                    finish_date: row.get(4)?,
+                    total_count: row.get(5)?,
+                    completed_count: row.get(6)?,
+                    total_points: row.get(7)?,
+                    completed_points: row.get(8)?,
+                    work_item_ids: row.get(9)?,
+                    fetched_at: row.get(10)?,
+                })
+            },
+        )
+        .optional()?)
+}
+
+fn upsert_sprint_info(
+    conn: &Connection,
+    org_id: &str,
+    project_id: &str,
+    info: &CachedSprintInfo,
+) -> Result<()> {
+    conn.execute(
+        r#"
+        INSERT INTO sprint_info(
+            org_id, project_id, iteration_id, iteration_name, iteration_path,
+            start_date, finish_date, total_count, completed_count,
+            total_points, completed_points, work_item_ids, fetched_at
+        )
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+        ON CONFLICT(org_id, project_id) DO UPDATE SET
+            iteration_id = excluded.iteration_id,
+            iteration_name = excluded.iteration_name,
+            iteration_path = excluded.iteration_path,
+            start_date = excluded.start_date,
+            finish_date = excluded.finish_date,
+            total_count = excluded.total_count,
+            completed_count = excluded.completed_count,
+            total_points = excluded.total_points,
+            completed_points = excluded.completed_points,
+            work_item_ids = excluded.work_item_ids,
+            fetched_at = excluded.fetched_at
+        "#,
+        params![
+            org_id,
+            project_id,
+            info.iteration_id,
+            info.iteration_name,
+            info.iteration_path,
+            info.start_date,
+            info.finish_date,
+            info.total_count,
+            info.completed_count,
+            info.total_points,
+            info.completed_points,
+            info.work_item_ids,
+            info.fetched_at,
         ],
     )?;
     Ok(())
