@@ -767,6 +767,11 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         (item) => !snoozed.has(String(item.id)),
       );
     }
+    case "get_sprint_progress": {
+      const input = (args as { input?: { projectId?: string } } | undefined)
+        ?.input;
+      return demoSprintProgress(input?.projectId);
+    }
     case "list_work_item_projects":
       return demoWorkItemProjects();
     case "run_work_item_query": {
@@ -1354,6 +1359,27 @@ function demoMyWorkItems(): WorkItemSummary[] {
       webUrl: "https://dev.azure.com/contoso/Infrastructure/_workitems/edit/51",
     },
   ]));
+}
+
+function demoSprintProgress(projectId?: string) {
+  // Only the Platform demo project carries a current sprint; other projects
+  // return null so the header demonstrates the "hidden when unavailable" path.
+  if (projectId && projectId !== "platform") return null;
+  const finish = new Date();
+  finish.setDate(finish.getDate() + 2); // 2 days left → warning color.
+  const start = new Date(finish);
+  start.setDate(start.getDate() - 12);
+  return {
+    iterationName: "Sprint 42",
+    iterationPath: "Platform\\Sprint 42",
+    startDate: start.toISOString(),
+    finishDate: finish.toISOString(),
+    totalCount: 3,
+    completedCount: 1,
+    totalPoints: 13,
+    completedPoints: 5,
+    workItemIds: [201, 123, 155],
+  };
 }
 
 function demoWorkItemProjects(): WorkItemProjectOption[] {

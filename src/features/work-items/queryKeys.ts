@@ -14,6 +14,8 @@ export const workItemQueryKeys = {
   myItemsRoot: () => ['myWorkItems'] as const,
   projects: (organizationId?: string) => ['wiViewProjects', organizationId] as const,
   searchProjects: (organizationId?: string) => ['wiRepositories', organizationId] as const,
+  sprintProgress: (organizationId?: string, projectId?: string) =>
+    ['sprintProgress', organizationId, projectId] as const,
   savedQuery: (
     organizationId?: string,
     projectId?: string | null,

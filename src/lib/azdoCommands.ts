@@ -224,6 +224,22 @@ const workItemSummariesSchema = z.array(workItemSummarySchema);
 
 export type WorkItemSummary = z.infer<typeof workItemSummarySchema>;
 
+const sprintProgressSchema = z.object({
+  iterationName: z.string(),
+  iterationPath: z.string(),
+  startDate: z.string().nullable(),
+  finishDate: z.string().nullable(),
+  totalCount: z.number(),
+  completedCount: z.number(),
+  totalPoints: z.number().nullable(),
+  completedPoints: z.number().nullable(),
+  workItemIds: z.array(z.number()).default([]),
+});
+
+const sprintProgressResultSchema = sprintProgressSchema.nullable();
+
+export type SprintProgress = z.infer<typeof sprintProgressSchema>;
+
 const workItemProjectOptionSchema = z.object({
   projectId: z.string(),
   projectName: z.string(),
@@ -647,6 +663,11 @@ export type GetWorkItemPreviewInput = {
   customFields?: string[];
 };
 
+export type GetSprintProgressInput = {
+  organizationId?: string;
+  projectId: string;
+};
+
 export type SearchWorkItemMentionsInput = {
   organizationId?: string;
   projectId: string;
@@ -975,6 +996,13 @@ export async function getWorkItemPreview(
 ): Promise<WorkItemPreview> {
   const result = await invokeCommand("get_work_item_preview", { input });
   return workItemPreviewSchema.parse(result);
+}
+
+export async function getSprintProgress(
+  input: GetSprintProgressInput,
+): Promise<SprintProgress | null> {
+  const result = await invokeCommand("get_sprint_progress", { input });
+  return sprintProgressResultSchema.parse(result);
 }
 
 export async function searchWorkItemMentions(

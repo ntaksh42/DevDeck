@@ -4,6 +4,7 @@ pub mod code_search;
 pub mod error;
 pub mod git;
 pub mod identity;
+pub mod iterations;
 pub mod pipelines;
 pub mod pr_review;
 pub mod pr_status;
@@ -18,6 +19,7 @@ pub use git::{
     IdentityRefWithVote, PullRequestStatus, TeamProject,
 };
 pub use identity::{AuthenticatedUser, ConnectionData, Identity, IdentityPickerIdentity};
+pub use iterations::{TeamIteration, TeamIterationAttributes, TeamRef};
 pub use pipelines::{
     Build, BuildDefinitionRef, BuildIdentityRef, BuildListCriteria, BuildLogTail, Timeline,
     TimelineLogRef, TimelineRecord,
