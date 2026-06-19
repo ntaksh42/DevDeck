@@ -82,6 +82,11 @@ const reviewPullRequestSummarySchema = z.object({
   myIsRequired: z.boolean(),
   isDraft: z.boolean(),
   mergeStatus: z.string().nullable().default(null),
+  // Aggregate CI verdict: "succeeded" | "failed" | "in_progress" | "none".
+  // null means CI was never fetched for this PR (treated as unknown/none).
+  ciStatus: z.string().nullable().default(null),
+  ciContext: z.string().nullable().default(null),
+  ciCheckCount: z.number().default(0),
 });
 
 const reviewPullRequestSummariesSchema = z.array(reviewPullRequestSummarySchema);
