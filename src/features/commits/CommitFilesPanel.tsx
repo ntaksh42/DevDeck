@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronsUpDown, Loader2 } from "lucide-react";
+import { ChevronsUpDown, ExternalLink, Loader2 } from "lucide-react";
 import {
   commandErrorMessage,
   getCommitChanges,
@@ -8,6 +8,7 @@ import {
   type CommitChangedFile,
 } from "@/lib/azdoCommands";
 import { buildDiffLines, collapseDiff, type DiffLine } from "@/lib/diffView";
+import { openExternalUrl } from "@/lib/openExternal";
 
 const MAX_RENDERED_DIFF_LINES = 2000;
 
@@ -38,16 +39,26 @@ function fileName(path: string): string {
   return path.replace(/^\/+/, "").split("/").pop() ?? path;
 }
 
+/** Deep-links to a file's diff on the Azure DevOps commit page. The commit web
+ * URL already targets the correct org/project/repo/commit; appending `?path=`
+ * focuses that file, matching how the web UI links into a commit. */
+function fileDiffUrl(commitWebUrl: string, path: string): string {
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  return `${commitWebUrl}?path=${encodeURIComponent(normalized)}`;
+}
+
 export function CommitFilesPanel({
   organizationId,
   projectId,
   repositoryId,
   commitId,
+  commitWebUrl = null,
 }: {
   organizationId: string;
   projectId: string;
   repositoryId: string;
   commitId: string;
+  commitWebUrl?: string | null;
 }) {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
 
@@ -107,22 +118,37 @@ export function CommitFilesPanel({
           const selected = file.path === selectedPath;
           return (
             <li key={file.path}>
-              <button
-                type="button"
-                onClick={() => setSelectedPath(selected ? null : file.path)}
-                className={`flex w-full items-center gap-1.5 px-3 py-1 text-left text-xs ${
+              <div
+                className={`flex items-center pr-1 ${
                   selected ? "bg-secondary" : "hover:bg-muted/50"
                 }`}
-                title={file.path}
               >
-                <span
-                  className={`inline-flex w-4 shrink-0 items-center justify-center rounded border text-[10px] font-semibold ${badge.cls}`}
-                  aria-label={file.changeType}
+                <button
+                  type="button"
+                  onClick={() => setSelectedPath(selected ? null : file.path)}
+                  className="flex min-w-0 flex-1 items-center gap-1.5 px-3 py-1 text-left text-xs"
+                  title={file.path}
                 >
-                  {badge.label}
-                </span>
-                <span className="min-w-0 flex-1 truncate font-mono">{fileName(file.path)}</span>
-              </button>
+                  <span
+                    className={`inline-flex w-4 shrink-0 items-center justify-center rounded border text-[10px] font-semibold ${badge.cls}`}
+                    aria-label={file.changeType}
+                  >
+                    {badge.label}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate font-mono">{fileName(file.path)}</span>
+                </button>
+                {commitWebUrl ? (
+                  <button
+                    type="button"
+                    onClick={() => openExternalUrl(fileDiffUrl(commitWebUrl, file.path))}
+                    title={`Open diff in Azure DevOps: ${file.path}`}
+                    aria-label={`Open diff for ${fileName(file.path)} in Azure DevOps`}
+                    className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                ) : null}
+              </div>
               {selected ? (
                 <div className="border-y border-border">
                   {diffQuery.isLoading ? (

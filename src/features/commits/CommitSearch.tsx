@@ -703,6 +703,7 @@ function CommitPreviewPanel({
               projectId={commit.projectId}
               repositoryId={commit.repositoryId}
               commitId={commit.commitId}
+              commitWebUrl={commit.webUrl}
             />
           </>
         ) : (
