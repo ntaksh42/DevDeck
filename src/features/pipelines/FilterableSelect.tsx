@@ -2,6 +2,7 @@ import {
   type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -34,6 +35,8 @@ export function FilterableSelect({
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const listboxId = useId();
+  const optionId = (index: number) => `${listboxId}-option-${index}`;
 
   const selectedLabel = options.find((option) => option.value === value)?.label ?? "";
 
@@ -115,6 +118,11 @@ export function FilterableSelect({
           type="text"
           role="combobox"
           aria-expanded={open}
+          aria-controls={listboxId}
+          aria-autocomplete="list"
+          aria-activedescendant={
+            open && filtered[activeIndex] ? optionId(activeIndex) : undefined
+          }
           aria-label={ariaLabel}
           disabled={disabled}
           value={open ? query : selectedLabel}
@@ -138,6 +146,7 @@ export function FilterableSelect({
       </div>
       {open ? (
         <ul
+          id={listboxId}
           role="listbox"
           aria-label={ariaLabel}
           className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-border bg-popover py-1 shadow-md"
@@ -148,6 +157,7 @@ export function FilterableSelect({
             filtered.map((option, index) => (
               <li
                 key={option.value}
+                id={optionId(index)}
                 role="option"
                 aria-selected={option.value === value}
                 onMouseEnter={() => setActiveIndex(index)}

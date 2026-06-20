@@ -218,7 +218,20 @@ pub(super) fn summarize_work_item_preview(
             .collect(),
         comments_unavailable: false,
         relations: Vec::new(),
+        pull_requests: Vec::new(),
     }
+}
+
+/// Parses the pull request id from an `ArtifactLink` relation URL. Git PR links
+/// look like `vstfs:///Git/PullRequestId/{projGuid}%2F{repoGuid}%2F{prId}`,
+/// so the PR id is the final segment after URL-decoding the `%2F` separators.
+pub(super) fn pull_request_id_from_artifact(url: &str) -> Option<i64> {
+    let lowered = url.to_ascii_lowercase();
+    if !lowered.contains("/git/pullrequestid/") {
+        return None;
+    }
+    let decoded = url.replace("%2F", "/").replace("%2f", "/");
+    decoded.rsplit('/').next()?.parse::<i64>().ok()
 }
 
 /// Maps an Azure DevOps link relation to (display label, sort rank).
@@ -231,6 +244,26 @@ pub(super) fn relation_type_label(rel: &str) -> (String, u8) {
         "System.LinkTypes.Dependency-Reverse" => ("Predecessor".to_string(), 3),
         other => (other.rsplit('.').next().unwrap_or(other).to_string(), 4),
     }
+}
+
+/// Build the ranked, deduplicated relation links for a preview, applying the
+/// item cap only after sorting so high-priority relations (Parent/Child) are
+/// never dropped by the API's return order.
+pub(super) fn prioritized_relation_links(
+    raw_relations: &[WorkItemRelation],
+    limit: usize,
+) -> Vec<(String, u8, i64)> {
+    let mut links: Vec<(String, u8, i64)> = raw_relations
+        .iter()
+        .filter_map(|relation| {
+            let id = related_work_item_id(&relation.url)?;
+            let (label, rank) = relation_type_label(&relation.rel);
+            Some((label, rank, id))
+        })
+        .collect();
+    links.sort_by_key(|link| (link.1, link.2));
+    links.truncate(limit);
+    links
 }
 
 pub(super) fn related_work_item_id(url: &str) -> Option<i64> {
