@@ -18,6 +18,9 @@ pub struct SearchCodeInput {
     pub repository: Option<String>,
     pub branch: Option<String>,
     pub path: Option<String>,
+    /// Optional id for cooperative cancellation via `cancel_operation`.
+    #[serde(default)]
+    pub operation_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]

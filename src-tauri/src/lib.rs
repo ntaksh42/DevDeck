@@ -3,6 +3,7 @@ use std::str::FromStr;
 use serde::Deserialize;
 
 mod auth;
+mod cancellation;
 mod code_search;
 mod commits;
 mod db;
@@ -19,6 +20,7 @@ mod snooze;
 mod sync;
 mod work_items;
 
+use cancellation::{run_cancellable, CancellationRegistry};
 use code_search::{CodeSearchResults, CodeSearchService, SearchCodeInput};
 use commits::{
     CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
@@ -45,8 +47,8 @@ use pr_review::{
     UpdatePullRequestInput,
 };
 use prs::{
-    ListMyReviewPullRequestsInput, PullRequestService, PullRequestSummary,
-    ReviewPullRequestSummary, SearchPullRequestsInput,
+    GenerateReleaseNotesInput, ListMyReviewPullRequestsInput, PullRequestService,
+    PullRequestSummary, ReleaseNotePr, ReviewPullRequestSummary, SearchPullRequestsInput,
 };
 use search::{SearchAllInput, SearchAllResult};
 use secrets::SecretStore;
@@ -86,6 +88,7 @@ struct AppState {
     code_search: CodeSearchService,
     settings: SettingsService,
     snooze: SnoozeService,
+    cancellation: CancellationRegistry,
     sync_trigger: mpsc::Sender<SyncTrigger>,
 }
 
@@ -239,6 +242,15 @@ async fn list_my_review_pull_requests(
 ) -> Result<Vec<ReviewPullRequestSummary>> {
     let service = state.pull_requests.clone();
     run_blocking(move || service.list_my_reviews(input)).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn generate_release_notes(
+    input: GenerateReleaseNotesInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<ReleaseNotePr>> {
+    state.pull_requests.generate_release_notes(input).await
 }
 
 #[tauri::command]
@@ -600,7 +612,20 @@ async fn search_code(
     input: SearchCodeInput,
     state: State<'_, AppState>,
 ) -> Result<CodeSearchResults> {
-    state.code_search.search(input).await
+    let operation_id = input.operation_id.clone();
+    run_cancellable(
+        &state.cancellation,
+        operation_id,
+        state.code_search.search(input),
+    )
+    .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn cancel_operation(operation_id: String, state: State<'_, AppState>) -> Result<()> {
+    state.cancellation.cancel(&operation_id);
+    Ok(())
 }
 
 #[tauri::command]
@@ -801,6 +826,7 @@ pub fn run() {
                 code_search: CodeSearchService::new(db.clone(), SecretStore),
                 settings: SettingsService::new(db.clone()),
                 snooze: SnoozeService::new(db.clone()),
+                cancellation: CancellationRegistry::new(),
                 sync_trigger: sync_tx,
             });
             tauri::async_runtime::spawn(
@@ -823,6 +849,7 @@ pub fn run() {
             add_azure_cli_organization,
             search_pull_requests,
             list_my_review_pull_requests,
+            generate_release_notes,
             get_pull_request_review,
             list_pull_request_changes,
             get_pull_request_file_diff,
@@ -861,6 +888,7 @@ pub fn run() {
             list_commit_repositories,
             commit_activity,
             search_code,
+            cancel_operation,
             get_commit_changes,
             get_commit_file_diff,
             get_commit_pull_requests,
