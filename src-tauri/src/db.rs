@@ -1497,9 +1497,7 @@ fn get_review_stale_threshold_days(conn: &Connection) -> Result<i64> {
 // rule set, which preserves the legacy per-toggle notification behaviour.
 fn get_notification_rules(conn: &Connection) -> Result<Vec<NotificationRule>> {
     match get_setting(conn, "notification_rules")? {
-        Some(raw) if !raw.trim().is_empty() => {
-            Ok(serde_json::from_str(&raw).unwrap_or_default())
-        }
+        Some(raw) if !raw.trim().is_empty() => Ok(serde_json::from_str(&raw).unwrap_or_default()),
         _ => Ok(Vec::new()),
     }
 }

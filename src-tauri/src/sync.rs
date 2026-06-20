@@ -9,8 +9,7 @@ use tokio::time::{interval_at, Instant, MissedTickBehavior};
 use crate::auth::client_for_organization;
 use crate::commits::sync_commits_for_org;
 use crate::db::{
-    AppDatabase, AppSettings, CachedReviewPr, CachedWorkItem, NotificationRule,
-    MY_WORK_ITEMS_LIMIT,
+    AppDatabase, AppSettings, CachedReviewPr, CachedWorkItem, NotificationRule, MY_WORK_ITEMS_LIMIT,
 };
 use crate::prs::sync_prs_for_org;
 use crate::secrets::SecretStore;
@@ -564,24 +563,49 @@ mod tests {
 
     #[test]
     fn notification_allowed_passes_everything_with_no_rules() {
-        assert!(notification_allowed(&[], "reviewRequested", "Platform", Some("Web")));
+        assert!(notification_allowed(
+            &[],
+            "reviewRequested",
+            "Platform",
+            Some("Web")
+        ));
         assert!(notification_allowed(&[], "assigned", "Platform", None));
     }
 
     #[test]
     fn notification_allowed_requires_a_matching_rule() {
         let rules = vec![rule(&["reviewRequested"], &["Platform"], &[])];
-        assert!(notification_allowed(&rules, "reviewRequested", "Platform", Some("Web")));
+        assert!(notification_allowed(
+            &rules,
+            "reviewRequested",
+            "Platform",
+            Some("Web")
+        ));
         // Wrong kind.
-        assert!(!notification_allowed(&rules, "voteReset", "Platform", Some("Web")));
+        assert!(!notification_allowed(
+            &rules,
+            "voteReset",
+            "Platform",
+            Some("Web")
+        ));
         // Wrong project.
-        assert!(!notification_allowed(&rules, "reviewRequested", "Other", Some("Web")));
+        assert!(!notification_allowed(
+            &rules,
+            "reviewRequested",
+            "Other",
+            Some("Web")
+        ));
     }
 
     #[test]
     fn notification_allowed_empty_field_means_any() {
         let rules = vec![rule(&[], &["Platform"], &[])];
-        assert!(notification_allowed(&rules, "reviewRequested", "Platform", Some("Web")));
+        assert!(notification_allowed(
+            &rules,
+            "reviewRequested",
+            "Platform",
+            Some("Web")
+        ));
         assert!(notification_allowed(&rules, "assigned", "Platform", None));
         assert!(!notification_allowed(&rules, "assigned", "Other", None));
     }
@@ -589,8 +613,18 @@ mod tests {
     #[test]
     fn notification_allowed_repository_filter_is_pr_only() {
         let rules = vec![rule(&[], &[], &["Web"])];
-        assert!(notification_allowed(&rules, "reviewRequested", "Platform", Some("Web")));
-        assert!(!notification_allowed(&rules, "reviewRequested", "Platform", Some("Api")));
+        assert!(notification_allowed(
+            &rules,
+            "reviewRequested",
+            "Platform",
+            Some("Web")
+        ));
+        assert!(!notification_allowed(
+            &rules,
+            "reviewRequested",
+            "Platform",
+            Some("Api")
+        ));
         // Work items have no repository, so a repository rule never matches them.
         assert!(!notification_allowed(&rules, "assigned", "Platform", None));
     }
@@ -601,9 +635,19 @@ mod tests {
             rule(&["reviewRequested"], &[], &[]),
             rule(&["assigned"], &["Platform"], &[]),
         ];
-        assert!(notification_allowed(&rules, "reviewRequested", "Other", Some("Web")));
+        assert!(notification_allowed(
+            &rules,
+            "reviewRequested",
+            "Other",
+            Some("Web")
+        ));
         assert!(notification_allowed(&rules, "assigned", "Platform", None));
-        assert!(!notification_allowed(&rules, "stateChanged", "Platform", None));
+        assert!(!notification_allowed(
+            &rules,
+            "stateChanged",
+            "Platform",
+            None
+        ));
     }
 
     #[test]
