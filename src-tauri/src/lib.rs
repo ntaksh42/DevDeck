@@ -172,8 +172,11 @@ async fn list_snoozed_items(
     run_blocking(move || service.list_snoozed_items(input)).await
 }
 
-fn ensure_write_enabled(state: &State<'_, AppState>) -> Result<()> {
-    if state.settings.get()?.read_only_validation_mode_enabled {
+async fn ensure_write_enabled(state: &State<'_, AppState>) -> Result<()> {
+    let settings = state.settings.clone();
+    let read_only =
+        run_blocking(move || Ok(settings.get()?.read_only_validation_mode_enabled)).await?;
+    if read_only {
         return Err(AppError::InvalidInput(
             "Read-only validation mode is enabled. Disable it in Settings to write to Azure DevOps."
                 .to_string(),
@@ -269,7 +272,7 @@ async fn post_pull_request_comment(
     input: PostPullRequestCommentInput,
     state: State<'_, AppState>,
 ) -> Result<PrThread> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.pr_review.post_comment(input).await
 }
 
@@ -279,7 +282,7 @@ async fn set_pull_request_thread_status(
     input: SetPullRequestThreadStatusInput,
     state: State<'_, AppState>,
 ) -> Result<PrThread> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.pr_review.set_thread_status(input).await
 }
 
@@ -289,7 +292,7 @@ async fn submit_pull_request_vote(
     input: SubmitPullRequestVoteInput,
     state: State<'_, AppState>,
 ) -> Result<PrReviewer> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.pr_review.submit_vote(input).await
 }
 
@@ -299,7 +302,7 @@ async fn update_pull_request(
     input: UpdatePullRequestInput,
     state: State<'_, AppState>,
 ) -> Result<PrStatusResult> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.pr_review.update_pull_request(input).await
 }
 
@@ -318,7 +321,7 @@ async fn edit_pull_request_comment(
     input: EditPullRequestCommentInput,
     state: State<'_, AppState>,
 ) -> Result<PrThread> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.pr_review.edit_comment(input).await
 }
 
@@ -328,7 +331,7 @@ async fn delete_pull_request_comment(
     input: DeletePullRequestCommentInput,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.pr_review.delete_comment(input).await
 }
 
@@ -451,7 +454,7 @@ async fn add_work_item_comment(
     input: AddWorkItemCommentInput,
     state: State<'_, AppState>,
 ) -> Result<WorkItemComment> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.work_items.add_comment(input).await
 }
 
@@ -461,7 +464,7 @@ async fn delete_work_item_comment(
     input: DeleteWorkItemCommentInput,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.work_items.delete_comment(input).await
 }
 
@@ -480,7 +483,7 @@ async fn set_work_items_state(
     input: SetWorkItemsStateInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<BulkWorkItemResult>> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.work_items.set_items_state(input).await
 }
 
@@ -490,7 +493,7 @@ async fn assign_work_items(
     input: AssignWorkItemsInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<BulkWorkItemResult>> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.work_items.assign_items(input).await
 }
 
@@ -500,7 +503,7 @@ async fn set_work_items_priority(
     input: SetWorkItemsPriorityInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<BulkWorkItemResult>> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.work_items.set_items_priority(input).await
 }
 
@@ -510,7 +513,7 @@ async fn update_work_item_fields(
     input: UpdateWorkItemFieldsInput,
     state: State<'_, AppState>,
 ) -> Result<WorkItemPreview> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.work_items.update_fields(input).await
 }
 
@@ -667,7 +670,7 @@ async fn rerun_pipeline_run(
     input: RerunPipelineRunInput,
     state: State<'_, AppState>,
 ) -> Result<PipelineRunSummary> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.pipelines.rerun_run(input).await
 }
 
@@ -677,7 +680,7 @@ async fn cancel_pipeline_run(
     input: CancelPipelineRunInput,
     state: State<'_, AppState>,
 ) -> Result<PipelineRunSummary> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.pipelines.cancel_run(input).await
 }
 
