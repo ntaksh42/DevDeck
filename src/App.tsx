@@ -83,6 +83,7 @@ import {
 } from '@/features/work-items/workItemViewsStorage';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from '@/features/work-items/queryKeys';
 import { MyReviewsGrid } from '@/features/pull-requests/MyReviewsGrid';
+import { MyPullRequestsGrid } from '@/features/pull-requests/MyPullRequestsGrid';
 import {
   loadPullRequestViews,
   type PullRequestView,
@@ -153,6 +154,7 @@ import {
 type View =
   | "pullRequestSearch"
   | "myReviews"
+  | "myPullRequests"
   | "workItems"
   | "myWorkItems"
   | "workItemViews"
@@ -736,6 +738,14 @@ function AppShell() {
       keywords: ["pull request", "review"],
       label: "Go to My Reviews",
       run: () => setView("myReviews"),
+    },
+    {
+      disabled: organizations.length === 0,
+      group: "Navigation",
+      id: "nav.myPullRequests",
+      keywords: ["pull request", "authored", "created by me", "mine"],
+      label: "Go to My Pull Requests",
+      run: () => setView("myPullRequests"),
     },
     {
       disabled: organizations.length === 0,
@@ -1383,6 +1393,12 @@ function AppShell() {
                   setView("myReviews");
                 }}
               />
+              <NavSubItem
+                active={activeView === "myPullRequests"}
+                disabled={organizations.length === 0}
+                label="My Pull Requests"
+                onClick={() => setView("myPullRequests")}
+              />
               {pinnedPrViews.length > 0 ? (
                 <NavSubGroup
                   id="pullRequestViews"
@@ -1526,6 +1542,8 @@ function AppShell() {
                 ? "Pull Requests"
                 : activeView === "myReviews"
                   ? "My Reviews"
+                  : activeView === "myPullRequests"
+                    ? "My Pull Requests"
                   : activeView === "workItems"
                     ? "Work Items"
                     : activeView === "myWorkItems"
@@ -1545,6 +1563,8 @@ function AppShell() {
                 ? "Search Azure DevOps pull requests across projects and repositories"
                 : activeView === "myReviews"
                   ? "Pull requests assigned to you for review"
+                  : activeView === "myPullRequests"
+                    ? "Active pull requests you authored, with reviewer status"
                   : activeView === "workItems"
                     ? "Search Azure DevOps work items across projects"
                     : activeView === "myWorkItems"
@@ -1611,6 +1631,8 @@ function AppShell() {
               onSelectedViewRequestHandled={() => setSelectedPrViewRequestId(null)}
               onViewsChange={setPrNavViews}
             />
+          ) : activeView === "myPullRequests" ? (
+            <MyPullRequestsGrid organizations={organizations} />
           ) : activeView === "workItems" ? (
             <WorkItemSearch
               organizations={organizations}

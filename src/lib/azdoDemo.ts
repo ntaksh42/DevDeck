@@ -30,6 +30,7 @@ import type {
   PullRequestChanges,
   PullRequestReview,
   PullRequestSummary,
+  MyPullRequestSummary,
   ReviewPullRequestSummary,
   ReviewResultPreview,
   SnoozedItemSummary,
@@ -582,6 +583,8 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         (pr) => !snoozed.has(`${pr.repositoryId}:${pr.pullRequestId}`),
       );
     }
+    case "list_my_pull_requests":
+      return demoMyPullRequests();
     case "get_pull_request_review": {
       const input = (args as { input?: GetPullRequestReviewInput } | undefined)?.input;
       const prId = input?.pullRequestId ?? 0;
@@ -1753,6 +1756,90 @@ function demoListSnoozedItems(itemType: string): SnoozedItemSummary[] {
       subtitle: item.state ?? null,
       webUrl: item.webUrl ?? null,
     }));
+}
+
+function demoMyPullRequests(): MyPullRequestSummary[] {
+  const day = 86_400_000;
+  const ago = (n: number) => new Date(Date.now() - n * day).toISOString();
+  const base = {
+    organizationId: "contoso",
+    projectId: "platform",
+    projectName: "Platform",
+  };
+  return [
+    {
+      ...base,
+      repositoryId: "api-gateway",
+      repositoryName: "api-gateway",
+      pullRequestId: 412,
+      title: "Add request coalescing to the gateway cache",
+      creationDate: ago(2),
+      sourceRefName: "feature/coalesce",
+      targetRefName: "main",
+      webUrl: "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/412",
+      isDraft: false,
+      mergeStatus: null,
+      approvals: 1,
+      waiting: 1,
+      rejections: 1,
+      noVote: 0,
+      changesRequested: true,
+    },
+    {
+      ...base,
+      repositoryId: "auth-service",
+      repositoryName: "auth-service",
+      pullRequestId: 408,
+      title: "Rotate signing keys without downtime",
+      creationDate: ago(4),
+      sourceRefName: "feature/key-rotation",
+      targetRefName: "main",
+      webUrl: "https://dev.azure.com/contoso/Platform/_git/auth-service/pullrequest/408",
+      isDraft: false,
+      mergeStatus: null,
+      approvals: 2,
+      waiting: 0,
+      rejections: 0,
+      noVote: 0,
+      changesRequested: false,
+    },
+    {
+      ...base,
+      repositoryId: "billing",
+      repositoryName: "billing",
+      pullRequestId: 401,
+      title: "Tax rounding fix for multi-currency invoices",
+      creationDate: ago(1),
+      sourceRefName: "fix/tax-rounding",
+      targetRefName: "main",
+      webUrl: "https://dev.azure.com/contoso/Platform/_git/billing/pullrequest/401",
+      isDraft: false,
+      mergeStatus: "conflicts",
+      approvals: 0,
+      waiting: 0,
+      rejections: 0,
+      noVote: 2,
+      changesRequested: false,
+    },
+    {
+      ...base,
+      repositoryId: "web-dashboard",
+      repositoryName: "web-dashboard",
+      pullRequestId: 399,
+      title: "Spike: virtualized activity timeline",
+      creationDate: ago(6),
+      sourceRefName: "spike/timeline",
+      targetRefName: "main",
+      webUrl: "https://dev.azure.com/contoso/Platform/_git/web-dashboard/pullrequest/399",
+      isDraft: true,
+      mergeStatus: null,
+      approvals: 0,
+      waiting: 0,
+      rejections: 0,
+      noVote: 0,
+      changesRequested: false,
+    },
+  ];
 }
 
 function demoReviewPullRequests(): ReviewPullRequestSummary[] {

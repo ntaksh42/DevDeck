@@ -204,6 +204,41 @@ impl AdoClient {
         Ok(all)
     }
 
+    pub async fn list_pull_requests_by_creator(
+        &self,
+        project_id: &str,
+        creator_id: &str,
+        page_size: u32,
+    ) -> Result<Vec<GitPullRequest>> {
+        let path = format!("{project_id}/_apis/git/pullrequests");
+        let page_size = page_size.max(1);
+        let top_str = page_size.to_string();
+        let mut all = Vec::new();
+        let mut skip: u32 = 0;
+        loop {
+            let skip_str = skip.to_string();
+            let response: ListResponse<GitPullRequest> = self
+                .get_json(
+                    &path,
+                    &[
+                        ("api-version", "7.1-preview"),
+                        ("searchCriteria.creatorId", creator_id),
+                        ("searchCriteria.status", "active"),
+                        ("$top", &top_str),
+                        ("$skip", &skip_str),
+                    ],
+                )
+                .await?;
+            let page_len = response.value.len() as u32;
+            all.extend(response.value);
+            if page_len < page_size {
+                break;
+            }
+            skip += page_size;
+        }
+        Ok(all)
+    }
+
     pub async fn list_commits(
         &self,
         project_id: &str,
@@ -499,6 +534,50 @@ mod tests {
         let reviewers = prs[0].reviewers.as_ref().unwrap();
         assert_eq!(reviewers[0].vote, 0);
         assert!(reviewers[0].is_required);
+    }
+
+    #[tokio::test]
+    async fn list_pull_requests_by_creator_filters_by_creator_id() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/git/pullrequests"))
+            .and(query_param("api-version", "7.1-preview"))
+            .and(query_param("searchCriteria.creatorId", "user-42"))
+            .and(query_param("searchCriteria.status", "active"))
+            .and(query_param("$top", "200"))
+            .and(query_param("$skip", "0"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 1,
+                "value": [{
+                    "pullRequestId": 8,
+                    "title": "My change",
+                    "status": "active",
+                    "creationDate": "2026-05-21T00:00:00Z",
+                    "createdBy": { "id": "user-42", "displayName": "Me" },
+                    "repository": {
+                        "id": "repo-1",
+                        "name": "dashboard",
+                        "project": { "id": "project-1", "name": "Platform" }
+                    },
+                    "sourceRefName": "refs/heads/feature/x",
+                    "targetRefName": "refs/heads/main",
+                    "isDraft": false,
+                    "reviewers": [
+                        { "id": "rev-1", "displayName": "Reviewer", "vote": -10, "isRequired": true }
+                    ]
+                }]
+            })))
+            .mount(&server)
+            .await;
+
+        let prs = test_client(&server)
+            .await
+            .list_pull_requests_by_creator("project-1", "user-42", 200)
+            .await
+            .unwrap();
+        assert_eq!(prs.len(), 1);
+        assert_eq!(prs[0].pull_request_id, 8);
+        assert_eq!(prs[0].reviewers.as_ref().unwrap()[0].vote, -10);
     }
 
     #[tokio::test]

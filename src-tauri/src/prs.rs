@@ -5,6 +5,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinSet;
 
+use crate::auth::client_for_organization;
 use crate::commits::encode_path_segment;
 use crate::db::{AppDatabase, CachedPr, CachedReviewPr, Organization};
 use crate::error::{AppError, Result};
@@ -19,6 +20,38 @@ const PROJECT_PR_SYNC_TOP: u32 = 500;
 #[serde(rename_all = "camelCase")]
 pub struct ListMyReviewPullRequestsInput {
     pub organization_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListMyPullRequestsInput {
+    pub organization_id: Option<String>,
+}
+
+/// A pull request the authenticated user authored, with reviewer votes
+/// aggregated so the "My Pull Requests" inbox can show who is blocking.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct MyPullRequestSummary {
+    pub organization_id: String,
+    pub project_id: String,
+    pub project_name: String,
+    pub repository_id: String,
+    pub repository_name: String,
+    pub pull_request_id: i64,
+    pub title: String,
+    pub creation_date: String,
+    pub source_ref_name: String,
+    pub target_ref_name: String,
+    pub web_url: Option<String>,
+    pub is_draft: bool,
+    pub merge_status: Option<String>,
+    pub approvals: i64,
+    pub waiting: i64,
+    pub rejections: i64,
+    pub no_vote: i64,
+    /// True when any reviewer voted "rejected" or "waiting for author".
+    pub changes_requested: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -124,6 +157,87 @@ impl PullRequestService {
             .collect();
         results.sort_by(|a, b| b.creation_date.cmp(&a.creation_date));
         Ok(results)
+    }
+
+    /// On-demand: active PRs the user authored, across the organization's
+    /// projects, with reviewer votes aggregated. Not cached (the My Reviews
+    /// sync covers reviewer PRs); the view refetches on open and refresh.
+    pub async fn list_my_pull_requests(
+        &self,
+        input: ListMyPullRequestsInput,
+    ) -> Result<Vec<MyPullRequestSummary>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let Some(user_id) = organization.authenticated_user_id.clone() else {
+            return Ok(Vec::new());
+        };
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let projects = client.list_projects().await?;
+
+        let mut summaries: Vec<MyPullRequestSummary> = Vec::new();
+        for project in projects {
+            let prs = match client
+                .list_pull_requests_by_creator(&project.id, &user_id, 200)
+                .await
+            {
+                Ok(prs) => prs,
+                Err(e) if is_ado_not_found(&e) => continue,
+                Err(e) => return Err(e.into()),
+            };
+            for pr in prs {
+                let Some(repo) = &pr.repository else {
+                    continue;
+                };
+                let repo_name = repo.name.clone();
+                let (proj_id, proj_name) = repo
+                    .project
+                    .as_ref()
+                    .map(|p| (p.id.clone(), p.name.clone()))
+                    .unwrap_or_else(|| (project.id.clone(), project.name.clone()));
+
+                let (mut approvals, mut waiting, mut rejections, mut no_vote) = (0, 0, 0, 0);
+                for reviewer in pr.reviewers.as_deref().unwrap_or(&[]) {
+                    if reviewer.id.as_deref() == Some(user_id.as_str()) {
+                        continue;
+                    }
+                    match reviewer.vote {
+                        10 | 5 => approvals += 1,
+                        -5 => waiting += 1,
+                        -10 => rejections += 1,
+                        _ => no_vote += 1,
+                    }
+                }
+
+                let web_url = format!(
+                    "{}/{}/_git/{}/pullrequest/{}",
+                    organization.base_url,
+                    encode_path_segment(&proj_name),
+                    encode_path_segment(&repo_name),
+                    pr.pull_request_id
+                );
+                summaries.push(MyPullRequestSummary {
+                    organization_id: organization.id.clone(),
+                    project_id: proj_id,
+                    project_name: proj_name,
+                    repository_id: repo.id.clone(),
+                    repository_name: repo_name,
+                    pull_request_id: pr.pull_request_id,
+                    title: pr.title.clone(),
+                    creation_date: pr.creation_date.to_rfc3339(),
+                    source_ref_name: short_ref(&pr.source_ref_name),
+                    target_ref_name: short_ref(&pr.target_ref_name),
+                    web_url: Some(web_url),
+                    is_draft: pr.is_draft.unwrap_or(false),
+                    merge_status: pr.merge_status.clone(),
+                    approvals,
+                    waiting,
+                    rejections,
+                    no_vote,
+                    changes_requested: rejections > 0 || waiting > 0,
+                });
+            }
+        }
+        summaries.sort_by(|a, b| b.creation_date.cmp(&a.creation_date));
+        Ok(summaries)
     }
 
     // Note: cache contains only Active PRs (synced with PullRequestStatus::Active).
