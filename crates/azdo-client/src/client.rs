@@ -125,6 +125,7 @@ impl AdoClient {
         self.send_with_retry(
             "GET",
             url.as_str(),
+            true,
             || self.http.get(request_url.clone()),
             |resp| async move {
                 let content_type = resp
@@ -154,6 +155,7 @@ impl AdoClient {
         self.send_with_retry(
             "GET",
             path,
+            true,
             || self.http.get(url.clone()).query(query),
             |resp| async move { decode_json(resp).await },
         )
@@ -169,6 +171,7 @@ impl AdoClient {
         self.send_with_retry(
             "GET",
             path,
+            true,
             || self.http.get(url.clone()).query(query),
             |resp| async move { Ok(resp.text().await?) },
         )
@@ -178,11 +181,14 @@ impl AdoClient {
     /// Sends a request with the shared retry/backoff, 401, 429 `Retry-After`,
     /// and 5xx handling. `build_request` produces a fresh authenticated-less
     /// builder per attempt (the `Authorization` header is added here), and
-    /// `on_success` extracts the result from a 2xx response.
+    /// `on_success` extracts the result from a 2xx response. `idempotent` must
+    /// be `false` for non-idempotent requests (POST) so an ambiguous 5xx is not
+    /// retried.
     async fn send_with_retry<T, F, S, Fut>(
         &self,
         method: &str,
         target: &str,
+        idempotent: bool,
         build_request: F,
         on_success: S,
     ) -> Result<T>
@@ -206,7 +212,7 @@ impl AdoClient {
                     }
 
                     let retry_after = parse_retry_after(resp.headers());
-                    if self.should_retry_status(status, attempt) {
+                    if self.should_retry_status(status, attempt, idempotent) {
                         let delay = self.retry_delay(attempt, retry_after);
                         tracing::warn!(
                             method,
@@ -229,7 +235,7 @@ impl AdoClient {
                     let body = resp.text().await.unwrap_or_default();
                     return Err(AdoError::api(status.as_u16(), body));
                 }
-                Err(error) if self.should_retry_error(&error, attempt) => {
+                Err(error) if self.should_retry_error(&error, attempt, idempotent) => {
                     let delay = self.retry_policy.backoff_delay(attempt);
                     tracing::warn!(
                         method,
@@ -284,6 +290,7 @@ impl AdoClient {
         self.send_with_retry(
             "POST",
             url.as_str(),
+            false,
             || self.http.post(url.clone()).query(query).json(body),
             |resp| async move { decode_json(resp).await },
         )
@@ -304,6 +311,7 @@ impl AdoClient {
         self.send_with_retry(
             "PUT",
             path,
+            true,
             || self.http.put(url.clone()).query(query).json(body),
             |resp| async move { decode_json(resp).await },
         )
@@ -319,6 +327,7 @@ impl AdoClient {
         self.send_with_retry(
             "DELETE",
             path,
+            true,
             || self.http.delete(url.clone()).query(query),
             |_resp| async move { Ok(()) },
         )
@@ -340,6 +349,7 @@ impl AdoClient {
         self.send_with_retry(
             "PATCH",
             path,
+            true,
             || {
                 self.http
                     .patch(url.clone())
@@ -352,13 +362,34 @@ impl AdoClient {
         .await
     }
 
-    fn should_retry_status(&self, status: StatusCode, attempt: usize) -> bool {
-        attempt < self.retry_policy.attempts()
-            && (status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error())
+    /// Decides whether a non-success status should be retried.
+    ///
+    /// `idempotent` must be `false` for non-idempotent requests (POST). A 5xx
+    /// response to a POST is ambiguous: the server may have already applied the
+    /// effect (e.g. created a PR comment or queued a build) before failing, so
+    /// retrying risks a duplicate. We therefore only retry POST on `429 Too Many
+    /// Requests`, which means the request was rejected before processing.
+    fn should_retry_status(&self, status: StatusCode, attempt: usize, idempotent: bool) -> bool {
+        if attempt >= self.retry_policy.attempts() {
+            return false;
+        }
+        if status == StatusCode::TOO_MANY_REQUESTS {
+            return true;
+        }
+        idempotent && status.is_server_error()
     }
 
-    fn should_retry_error(&self, error: &reqwest::Error, attempt: usize) -> bool {
-        attempt < self.retry_policy.attempts() && (error.is_connect() || error.is_timeout())
+    /// Decides whether a transport error should be retried.
+    ///
+    /// For non-idempotent requests (POST), only connection errors are safe to
+    /// retry: the connection was never established, so the server cannot have
+    /// processed the request. A timeout is ambiguous (the request may have been
+    /// received and applied), so it is not retried for non-idempotent requests.
+    fn should_retry_error(&self, error: &reqwest::Error, attempt: usize, idempotent: bool) -> bool {
+        if attempt >= self.retry_policy.attempts() {
+            return false;
+        }
+        error.is_connect() || (idempotent && error.is_timeout())
     }
 
     fn retry_delay(&self, attempt: usize, retry_after: Option<Duration>) -> Duration {
@@ -477,11 +508,19 @@ async fn decode_json<T: DeserializeOwned>(resp: reqwest::Response) -> Result<T> 
 }
 
 fn parse_retry_after(headers: &HeaderMap) -> Option<Duration> {
-    headers
-        .get("Retry-After")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.parse::<u64>().ok())
-        .map(Duration::from_secs)
+    let value = headers.get("Retry-After")?.to_str().ok()?.trim();
+
+    // RFC 9110: Retry-After is either delta-seconds or an HTTP-date.
+    if let Ok(seconds) = value.parse::<u64>() {
+        return Some(Duration::from_secs(seconds));
+    }
+
+    // HTTP-date form (e.g. "Wed, 21 Oct 2015 07:28:00 GMT"). Wait until that
+    // instant; a past or invalid date falls back to a zero wait so callers use
+    // their own backoff.
+    let target = chrono::DateTime::parse_from_rfc2822(value).ok()?;
+    let delta = target.signed_duration_since(chrono::Utc::now());
+    Some(delta.to_std().unwrap_or(Duration::ZERO))
 }
 
 #[cfg(test)]
@@ -667,6 +706,43 @@ mod tests {
         }
     }
 
+    fn retry_after_headers(value: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert("Retry-After", value.parse().unwrap());
+        headers
+    }
+
+    #[test]
+    fn parse_retry_after_delta_seconds() {
+        let headers = retry_after_headers("30");
+        assert_eq!(parse_retry_after(&headers), Some(Duration::from_secs(30)));
+    }
+
+    #[test]
+    fn parse_retry_after_http_date_in_future() {
+        let target = chrono::Utc::now() + chrono::Duration::seconds(120);
+        let headers = retry_after_headers(&target.to_rfc2822());
+        let delay = parse_retry_after(&headers).expect("future HTTP-date yields a delay");
+        // Allow slack for the clock advancing between formatting and parsing.
+        assert!(
+            delay > Duration::from_secs(60) && delay <= Duration::from_secs(120),
+            "expected ~120s, got {delay:?}"
+        );
+    }
+
+    #[test]
+    fn parse_retry_after_http_date_gmt_in_past_is_zero() {
+        // RFC 9110 IMF-fixdate as servers emit it, with a named GMT zone.
+        let headers = retry_after_headers("Wed, 21 Oct 2015 07:28:00 GMT");
+        assert_eq!(parse_retry_after(&headers), Some(Duration::ZERO));
+    }
+
+    #[test]
+    fn parse_retry_after_malformed_value_is_none() {
+        let headers = retry_after_headers("not-a-date");
+        assert_eq!(parse_retry_after(&headers), None);
+    }
+
     #[tokio::test]
     async fn malformed_json_body_is_parse_error() {
         let server = MockServer::start().await;
@@ -773,5 +849,72 @@ mod tests {
             .unwrap();
 
         assert_eq!(value["workItems"], serde_json::json!([]));
+    }
+
+    #[tokio::test]
+    async fn does_not_retry_post_after_server_error() {
+        // A POST is non-idempotent: the server may have already applied the
+        // effect before returning 5xx, so the client must not retry and risk a
+        // duplicate. The mock asserts it is called exactly once.
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/project-1/_apis/wit/wiql"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("boom"))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let client = retrying_test_client(&server).await;
+        let err = client
+            .post_json::<_, serde_json::Value>(
+                "project-1/_apis/wit/wiql",
+                &[("api-version", "7.1-preview")],
+                &serde_json::json!({ "query": "SELECT [System.Id] FROM WorkItems" }),
+            )
+            .await
+            .unwrap_err();
+
+        match err {
+            AdoError::Api { status, body, .. } => {
+                assert_eq!(status, 500);
+                assert_eq!(body, "boom");
+            }
+            other => panic!("expected Api error, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn retries_put_after_transient_500() {
+        // A PUT is idempotent, so retrying after a transient 5xx is safe and
+        // expected. This guards against the POST fix accidentally disabling
+        // retries for idempotent methods.
+        let server = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/project-1/_apis/resource/1"))
+            .respond_with(ResponseTemplate::new(503).set_body_string("try again"))
+            .up_to_n_times(1)
+            .with_priority(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/project-1/_apis/resource/1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "ok": true
+            })))
+            .with_priority(2)
+            .mount(&server)
+            .await;
+
+        let client = retrying_test_client(&server).await;
+        let value: serde_json::Value = client
+            .put_json(
+                "project-1/_apis/resource/1",
+                &[("api-version", "7.1-preview")],
+                &serde_json::json!({ "value": 1 }),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(value["ok"], serde_json::json!(true));
     }
 }

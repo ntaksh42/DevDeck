@@ -6,6 +6,7 @@ pub mod git;
 pub mod identity;
 pub mod pipelines;
 pub mod pr_review;
+pub mod pr_status;
 pub mod work_items;
 
 pub use auth::{AdoCredentialProvider, AzureCliProvider, PatProvider};
@@ -26,6 +27,7 @@ pub use pr_review::{
     GitItemContent, GitIteration, GitPullRequestDetail, GitThread, GitThreadComment,
     GitThreadContext, NewThreadContext,
 };
+pub use pr_status::{summarize_pr_ci, PrCiState, PrCiSummary, PrStatusCheck, PrStatusContext};
 pub use work_items::{
     WorkItem, WorkItemComment, WorkItemFieldDefinition, WorkItemLink, WorkItemReference,
     WorkItemRelation, WorkItemUpdate,

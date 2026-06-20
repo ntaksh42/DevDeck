@@ -7,7 +7,7 @@ import {
   useState,
 } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Trash2, X, Zap } from 'lucide-react';
+import { Copy, Loader2, Trash2, X, Zap } from 'lucide-react';
 import {
   deleteWorkItemComment,
   listOrganizations,
@@ -46,6 +46,7 @@ import {
   type WorkItemFieldPreset,
 } from './fieldPresetsStorage';
 import {
+  buildDuplicateDraft,
   buildInverseChanges,
   customPreviewFieldValue,
   presetFieldsFromStaged,
@@ -53,6 +54,7 @@ import {
   stagedChangesFromPresetFields,
   stagedEntriesForPreview,
   type StagedChanges,
+  type WorkItemDuplicateDraft,
 } from './workItemChanges';
 
 import {
@@ -75,7 +77,7 @@ import { WorkItemPreviewDetails } from './WorkItemPreviewDetails';
 
 // Re-exported so existing importers (and the unit tests) keep a single entry
 // point; the implementations live in the sibling modules linked below.
-export { presetFieldsFromStaged, splitWorkItemTags, stagedChangesFromPresetFields };
+export { buildDuplicateDraft, presetFieldsFromStaged, splitWorkItemTags, stagedChangesFromPresetFields };
 export { splitMatchSegments } from './PreviewEditors';
 export { workItemStateDotClass, workItemTypeColor } from './WorkItemPreviewDetails';
 export {
@@ -97,6 +99,7 @@ export function WorkItemPreviewPanel({
   openPriorityRequest,
   openStateRequest,
   onCustomPreviewFieldsChange,
+  onDuplicate,
   preview,
   previewError,
   previewLoading,
@@ -110,6 +113,10 @@ export function WorkItemPreviewPanel({
   openPriorityRequest?: number;
   openStateRequest?: number;
   onCustomPreviewFieldsChange: (fields: CustomPreviewField[]) => void;
+  // Opens the create form pre-filled with the current item's fields. Absent
+  // until the work item create UI (B-1) exists; while unset the Duplicate
+  // action and its `D` shortcut stay hidden, per the feature's gating.
+  onDuplicate?: (draft: WorkItemDuplicateDraft) => void;
   preview: WorkItemPreview | null;
   previewError: string | null;
   previewLoading: boolean;
@@ -585,6 +592,13 @@ export function WorkItemPreviewPanel({
     }));
   }
 
+  // Opens the create form seeded from the current item. The draft is built from
+  // the preview alone, so the source work item is never touched.
+  function duplicateSelected() {
+    if (!onDuplicate || !preview) return;
+    onDuplicate(buildDuplicateDraft(preview));
+  }
+
   function focusPanelBody() {
     panelRef.current
       ?.querySelector<HTMLElement>("[data-primary-preview='true']")
@@ -830,6 +844,9 @@ export function WorkItemPreviewPanel({
     } else if (event.key === "f" || event.key === "F") {
       event.preventDefault();
       openNextCustomField();
+    } else if ((event.key === "d" || event.key === "D") && onDuplicate && preview) {
+      event.preventDefault();
+      duplicateSelected();
     } else if (event.key === "m" || event.key === "M") {
       event.preventDefault();
       focusWorkItemCommentInput();
@@ -925,6 +942,19 @@ export function WorkItemPreviewPanel({
               <WorkItemPreviewDetails
                 customPreviewFields={customPreviewFields}
                 statusChip={stagedStatusChip}
+                actionsControl={
+                  onDuplicate ? (
+                    <button
+                      type="button"
+                      aria-label="Duplicate work item"
+                      title="Duplicate into a new item (D)"
+                      onClick={duplicateSelected}
+                      className="inline-flex h-5 w-5 items-center justify-center rounded border border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    >
+                      <Copy className="h-3 w-3" aria-hidden="true" />
+                    </button>
+                  ) : null
+                }
                 presetsControl={
                   <PresetMenu
                     canSave={stagedEntries.length > 0}

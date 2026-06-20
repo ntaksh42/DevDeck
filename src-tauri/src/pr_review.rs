@@ -636,14 +636,26 @@ impl PrReviewService {
         // Keep the cached review row in sync so the grid's vote column updates
         // immediately instead of waiting for the next background sync.
         let label = vote_label(reviewer.vote).to_string();
-        if let Err(error) = self.db.update_review_pr_vote(
+        match self.db.update_review_pr_vote(
             &organization.id,
             &input.pr.repository_id,
             input.pr.pull_request_id,
             reviewer.vote,
             &label,
         ) {
-            tracing::warn!(error = %error, "failed to update cached review vote");
+            Ok(0) => {
+                // The PR is not in the My Reviews cache (opened from search or a
+                // direct URL), so there is no grid row to keep in sync. The
+                // command return value below still reflects the new vote.
+                tracing::debug!(
+                    pull_request_id = input.pr.pull_request_id,
+                    "vote cast on PR absent from My Reviews cache; no cached row updated"
+                );
+            }
+            Ok(_) => {}
+            Err(error) => {
+                tracing::warn!(error = %error, "failed to update cached review vote");
+            }
         }
         Ok(PrReviewer {
             is_me: true,
