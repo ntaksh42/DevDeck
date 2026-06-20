@@ -5,6 +5,7 @@ use serde::Deserialize;
 mod auth;
 mod code_search;
 mod commits;
+mod daily_summary;
 mod db;
 mod error;
 mod orgs;
@@ -758,7 +759,10 @@ pub fn run() {
                 sync_trigger: sync_tx,
             });
             tauri::async_runtime::spawn(
-                SyncRunner::new(db, SecretStore).run(app.handle().clone(), sync_rx),
+                SyncRunner::new(db.clone(), SecretStore).run(app.handle().clone(), sync_rx),
+            );
+            tauri::async_runtime::spawn(
+                daily_summary::DailySummaryScheduler::new(db).run(app.handle().clone()),
             );
             Ok(())
         })

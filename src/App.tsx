@@ -114,8 +114,10 @@ const PullRequestSearch = lazy(() =>
 import {
   showWorkItemNotificationEvent,
   showPullRequestNotificationEvent,
+  showDailySummaryEvent,
   type WorkItemNotificationEvent,
   type PullRequestNotificationEvent,
+  type DailySummaryEvent,
 } from "@/lib/desktopNotifications";
 
 type View =
@@ -993,6 +995,17 @@ function AppShell() {
           return;
         }
         void showPullRequestNotificationEvent(payload, settings);
+      },
+    );
+  }, []);
+
+  useEffect(() => {
+    return subscribeTauriEvent<DailySummaryEvent>(
+      "notifications:daily-summary",
+      (payload) => {
+        const settings = appSettingsRef.current;
+        if (!settings) return;
+        void showDailySummaryEvent(payload, settings, () => setView("myWorkItems"));
       },
     );
   }, []);

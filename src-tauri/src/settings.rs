@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::db::{
-    AppDatabase, AppSettings, DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
-    REVIEW_STALE_THRESHOLD_DAY_OPTIONS,
+    normalize_hhmm, AppDatabase, AppSettings, DEFAULT_DAILY_SUMMARY_TIME,
+    DEFAULT_REVIEW_STALE_THRESHOLD_DAYS, REVIEW_STALE_THRESHOLD_DAY_OPTIONS,
 };
 use crate::error::{AppError, Result};
 
@@ -23,6 +23,9 @@ pub struct UpdateAppSettingsInput {
     pub notify_pr_vote_resets: Option<bool>,
     pub notify_pr_comment_replies: Option<bool>,
     pub review_stale_threshold_days: Option<i64>,
+    pub daily_summary_enabled: Option<bool>,
+    pub daily_summary_time: Option<String>,
+    pub daily_summary_weekdays_only: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -77,6 +80,12 @@ pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
             .review_stale_threshold_days
             .filter(|days| REVIEW_STALE_THRESHOLD_DAY_OPTIONS.contains(days))
             .unwrap_or(DEFAULT_REVIEW_STALE_THRESHOLD_DAYS),
+        daily_summary_enabled: input.daily_summary_enabled.unwrap_or(false),
+        daily_summary_time: input
+            .daily_summary_time
+            .map(|value| normalize_hhmm(&value))
+            .unwrap_or_else(|| DEFAULT_DAILY_SUMMARY_TIME.to_string()),
+        daily_summary_weekdays_only: input.daily_summary_weekdays_only.unwrap_or(false),
     }
 }
 

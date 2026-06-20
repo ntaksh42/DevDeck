@@ -93,6 +93,9 @@ let demoSettings: AppSettings = {
   notifyPrVoteResets: true,
   notifyPrCommentReplies: true,
   reviewStaleThresholdDays: DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
+  dailySummaryEnabled: false,
+  dailySummaryTime: "09:00",
+  dailySummaryWeekdaysOnly: false,
 };
 const deletedDemoWorkItemComments = new Set<number>();
 let demoSyncStates: SyncState[] = [
@@ -516,6 +519,18 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
             ? Number(input.reviewStaleThresholdDays) ||
               DEFAULT_REVIEW_STALE_THRESHOLD_DAYS
             : demoSettings.reviewStaleThresholdDays,
+        dailySummaryEnabled:
+          input && "dailySummaryEnabled" in input
+            ? Boolean(input.dailySummaryEnabled)
+            : demoSettings.dailySummaryEnabled,
+        dailySummaryTime:
+          input && "dailySummaryTime" in input
+            ? input.dailySummaryTime || "09:00"
+            : demoSettings.dailySummaryTime,
+        dailySummaryWeekdaysOnly:
+          input && "dailySummaryWeekdaysOnly" in input
+            ? Boolean(input.dailySummaryWeekdaysOnly)
+            : demoSettings.dailySummaryWeekdaysOnly,
       };
       return demoSettings;
     }

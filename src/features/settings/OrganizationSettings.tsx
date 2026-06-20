@@ -12,6 +12,7 @@ import {
   triggerSync,
   DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
   REVIEW_STALE_THRESHOLD_DAY_OPTIONS,
+  DEFAULT_DAILY_SUMMARY_TIME,
   type AppSettings,
   type Organization,
   type SyncScope,
@@ -61,6 +62,7 @@ export function OrganizationSettings({
       <KeyboardShortcutSettings />
       <ShowWindowHotkeySettings />
       <DesktopNotificationSettings />
+      <DailySummarySettings />
       <ReviewResultFolderSettings />
       <ReviewStaleThresholdSettings />
       <SyncHealthSettings organizations={organizations} />
@@ -381,6 +383,9 @@ function settingsInput(
     notifyPrCommentReplies: settings?.notifyPrCommentReplies ?? true,
     reviewStaleThresholdDays:
       settings?.reviewStaleThresholdDays ?? DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
+    dailySummaryEnabled: settings?.dailySummaryEnabled ?? false,
+    dailySummaryTime: settings?.dailySummaryTime ?? DEFAULT_DAILY_SUMMARY_TIME,
+    dailySummaryWeekdaysOnly: settings?.dailySummaryWeekdaysOnly ?? false,
     ...input,
   };
 }
@@ -907,6 +912,108 @@ export function ReviewStaleThresholdSettings() {
         {mutation.isSuccess ? (
           <p className="text-sm text-green-700 dark:text-green-400">
             Stale review threshold saved.
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+export function DailySummarySettings() {
+  const queryClient = useQueryClient();
+  const settingsQuery = useQuery({
+    queryKey: ["appSettings"],
+    queryFn: getAppSettings,
+    staleTime: 5 * 60_000,
+  });
+  const mutation = useMutation({
+    mutationFn: updateAppSettings,
+    onSuccess: (settings) => {
+      queryClient.setQueryData(["appSettings"], settings);
+    },
+  });
+
+  const enabled = settingsQuery.data?.dailySummaryEnabled ?? false;
+  const time = settingsQuery.data?.dailySummaryTime ?? DEFAULT_DAILY_SUMMARY_TIME;
+  const weekdaysOnly = settingsQuery.data?.dailySummaryWeekdaysOnly ?? false;
+
+  function update(patch: Partial<UpdateAppSettingsInput>) {
+    mutation.mutate(settingsInput(settingsQuery.data, patch));
+  }
+
+  return (
+    <div className="rounded-md border border-border bg-card">
+      <div className="border-b border-border px-3 py-2">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
+            <Sun className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold">Daily summary</h2>
+            <p className="text-sm text-muted-foreground">
+              Send one desktop notification each day with your unvoted required
+              PR and active work item counts. Only delivered while the app is
+              running.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 p-3">
+        <label className="flex items-center justify-between gap-3">
+          <span className="text-sm font-medium">Enable daily summary</span>
+          <input
+            type="checkbox"
+            checked={enabled}
+            disabled={settingsQuery.isLoading || mutation.isPending}
+            onChange={(event) =>
+              update({ dailySummaryEnabled: event.target.checked })
+            }
+            className="h-4 w-4 cursor-pointer rounded border-input"
+          />
+        </label>
+
+        <label className="grid gap-2">
+          <span className="text-sm font-medium">Send time</span>
+          <input
+            type="time"
+            value={time}
+            disabled={!enabled || settingsQuery.isLoading || mutation.isPending}
+            onChange={(event) =>
+              update({ dailySummaryTime: event.target.value || DEFAULT_DAILY_SUMMARY_TIME })
+            }
+            className="h-9 w-40 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+          />
+        </label>
+
+        <label className="flex items-center justify-between gap-3">
+          <span className="text-sm font-medium">Weekdays only (skip Sat / Sun)</span>
+          <input
+            type="checkbox"
+            checked={weekdaysOnly}
+            disabled={!enabled || settingsQuery.isLoading || mutation.isPending}
+            onChange={(event) =>
+              update({ dailySummaryWeekdaysOnly: event.target.checked })
+            }
+            className="h-4 w-4 cursor-pointer rounded border-input"
+          />
+        </label>
+
+        {settingsQuery.isError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {commandErrorMessage(settingsQuery.error)}
+          </p>
+        ) : null}
+
+        {mutation.isError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {commandErrorMessage(mutation.error)}
+          </p>
+        ) : null}
+
+        {mutation.isSuccess ? (
+          <p className="text-sm text-green-700 dark:text-green-400">
+            Daily summary settings saved.
           </p>
         ) : null}
       </div>

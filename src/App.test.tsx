@@ -417,6 +417,9 @@ describe("App", () => {
           notifyPrVoteResets: true,
           notifyPrCommentReplies: true,
           reviewStaleThresholdDays: 3,
+          dailySummaryEnabled: false,
+          dailySummaryTime: "09:00",
+          dailySummaryWeekdaysOnly: false,
         },
       });
     });
@@ -474,6 +477,9 @@ describe("App", () => {
           notifyPrVoteResets: true,
           notifyPrCommentReplies: true,
           reviewStaleThresholdDays: 3,
+          dailySummaryEnabled: false,
+          dailySummaryTime: "09:00",
+          dailySummaryWeekdaysOnly: false,
         },
       });
     });
@@ -529,6 +535,9 @@ describe("App", () => {
           notifyPrVoteResets: true,
           notifyPrCommentReplies: true,
           reviewStaleThresholdDays: 3,
+          dailySummaryEnabled: false,
+          dailySummaryTime: "09:00",
+          dailySummaryWeekdaysOnly: false,
         },
       });
     });
@@ -583,6 +592,9 @@ describe("App", () => {
           notifyPrVoteResets: true,
           notifyPrCommentReplies: true,
           reviewStaleThresholdDays: 3,
+          dailySummaryEnabled: false,
+          dailySummaryTime: "09:00",
+          dailySummaryWeekdaysOnly: false,
         },
       });
     });

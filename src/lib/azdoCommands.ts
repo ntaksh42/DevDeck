@@ -23,6 +23,7 @@ export type Organization = z.infer<typeof organizationSchema>;
 
 export const REVIEW_STALE_THRESHOLD_DAY_OPTIONS = [2, 3, 5, 7] as const;
 export const DEFAULT_REVIEW_STALE_THRESHOLD_DAYS = 3;
+export const DEFAULT_DAILY_SUMMARY_TIME = "09:00";
 
 const appSettingsSchema = z.object({
   reviewResultFolderPath: z.string().nullable(),
@@ -36,9 +37,19 @@ const appSettingsSchema = z.object({
   notifyPrVoteResets: z.boolean().default(true),
   notifyPrCommentReplies: z.boolean().default(true),
   reviewStaleThresholdDays: z.number().int().default(DEFAULT_REVIEW_STALE_THRESHOLD_DAYS),
+  dailySummaryEnabled: z.boolean().default(false),
+  dailySummaryTime: z.string().default(DEFAULT_DAILY_SUMMARY_TIME),
+  dailySummaryWeekdaysOnly: z.boolean().default(false),
 });
 
 export type AppSettings = z.infer<typeof appSettingsSchema>;
+
+export const dailySummaryEventSchema = z.object({
+  requiredPrCount: z.number(),
+  activeWorkItemCount: z.number(),
+});
+
+export type DailySummaryEvent = z.infer<typeof dailySummaryEventSchema>;
 
 const reviewResultPreviewSchema = z.object({
   pullRequestId: z.number(),
@@ -525,6 +536,9 @@ export type UpdateAppSettingsInput = {
   notifyPrVoteResets?: boolean;
   notifyPrCommentReplies?: boolean;
   reviewStaleThresholdDays?: number;
+  dailySummaryEnabled?: boolean;
+  dailySummaryTime?: string;
+  dailySummaryWeekdaysOnly?: boolean;
 };
 
 export type GetReviewResultPreviewInput = {

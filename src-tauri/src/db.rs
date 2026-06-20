@@ -45,10 +45,14 @@ pub struct AppSettings {
     pub notify_pr_vote_resets: bool,
     pub notify_pr_comment_replies: bool,
     pub review_stale_threshold_days: i64,
+    pub daily_summary_enabled: bool,
+    pub daily_summary_time: String,
+    pub daily_summary_weekdays_only: bool,
 }
 
 pub const DEFAULT_REVIEW_STALE_THRESHOLD_DAYS: i64 = 3;
 pub const REVIEW_STALE_THRESHOLD_DAY_OPTIONS: [i64; 4] = [2, 3, 5, 7];
+pub const DEFAULT_DAILY_SUMMARY_TIME: &str = "09:00";
 
 impl Default for AppSettings {
     fn default() -> Self {
@@ -64,6 +68,9 @@ impl Default for AppSettings {
             notify_pr_vote_resets: true,
             notify_pr_comment_replies: true,
             review_stale_threshold_days: DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
+            daily_summary_enabled: false,
+            daily_summary_time: DEFAULT_DAILY_SUMMARY_TIME.to_string(),
+            daily_summary_weekdays_only: false,
         }
     }
 }
@@ -1454,6 +1461,11 @@ fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
         notify_pr_vote_resets: get_bool_setting(conn, "notify_pr_vote_resets", true)?,
         notify_pr_comment_replies: get_bool_setting(conn, "notify_pr_comment_replies", true)?,
         review_stale_threshold_days: get_review_stale_threshold_days(conn)?,
+        daily_summary_enabled: get_bool_setting(conn, "daily_summary_enabled", false)?,
+        daily_summary_time: get_setting(conn, "daily_summary_time")?
+            .map(|value| normalize_hhmm(&value))
+            .unwrap_or_else(|| DEFAULT_DAILY_SUMMARY_TIME.to_string()),
+        daily_summary_weekdays_only: get_bool_setting(conn, "daily_summary_weekdays_only", false)?,
     })
 }
 
@@ -1463,6 +1475,22 @@ fn get_review_stale_threshold_days(conn: &Connection) -> Result<i64> {
         .filter(|days| REVIEW_STALE_THRESHOLD_DAY_OPTIONS.contains(days))
         .unwrap_or(DEFAULT_REVIEW_STALE_THRESHOLD_DAYS);
     Ok(value)
+}
+
+/// Returns a valid `HH:MM` (24-hour, zero-padded) string, falling back to the
+/// default time when the input is malformed. Keeps stored/served times sane so
+/// the scheduler can parse them without surprises.
+pub fn normalize_hhmm(value: &str) -> String {
+    let trimmed = value.trim();
+    let parts: Vec<&str> = trimmed.split(':').collect();
+    if parts.len() == 2 {
+        if let (Ok(hour), Ok(minute)) = (parts[0].parse::<u32>(), parts[1].parse::<u32>()) {
+            if hour < 24 && minute < 60 {
+                return format!("{hour:02}:{minute:02}");
+            }
+        }
+    }
+    DEFAULT_DAILY_SUMMARY_TIME.to_string()
 }
 
 fn update_app_settings(conn: &Connection, settings: AppSettings) -> Result<AppSettings> {
@@ -1526,6 +1554,21 @@ fn update_app_settings(conn: &Connection, settings: AppSettings) -> Result<AppSe
         conn,
         "review_stale_threshold_days",
         Some(&stale_days.to_string()),
+    )?;
+    set_bool_setting(
+        conn,
+        "daily_summary_enabled",
+        settings.daily_summary_enabled,
+    )?;
+    set_setting(
+        conn,
+        "daily_summary_time",
+        Some(&normalize_hhmm(&settings.daily_summary_time)),
+    )?;
+    set_bool_setting(
+        conn,
+        "daily_summary_weekdays_only",
+        settings.daily_summary_weekdays_only,
     )?;
     get_app_settings(conn)
 }
@@ -2664,6 +2707,9 @@ mod tests {
                 notify_pr_vote_resets: true,
                 notify_pr_comment_replies: false,
                 review_stale_threshold_days: 7,
+                daily_summary_enabled: true,
+                daily_summary_time: "8:5".to_string(),
+                daily_summary_weekdays_only: true,
             },
         )
         .unwrap();
@@ -2672,6 +2718,10 @@ mod tests {
             Some("C:/reports")
         );
         assert_eq!(saved.review_stale_threshold_days, 7);
+        assert!(saved.daily_summary_enabled);
+        // Stored time is normalized to zero-padded HH:MM.
+        assert_eq!(saved.daily_summary_time, "08:05");
+        assert!(saved.daily_summary_weekdays_only);
         assert_eq!(saved.show_window_hotkey.as_deref(), Some("Ctrl+Alt+D"));
         assert!(saved.read_only_validation_mode_enabled);
         assert!(saved.desktop_notifications_enabled);

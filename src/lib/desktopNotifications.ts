@@ -44,9 +44,28 @@ type PullRequestNotificationItem = {
   snippet: string | null;
 };
 
+export type DailySummaryEvent = {
+  requiredPrCount: number;
+  activeWorkItemCount: number;
+};
+
 export async function sendTestDesktopNotification(): Promise<DesktopNotificationResult> {
   return sendDesktopNotification("AzDoDeck notifications", {
     body: "Desktop notifications are ready.",
+  });
+}
+
+export async function showDailySummaryEvent(
+  event: DailySummaryEvent,
+  settings: AppSettings,
+  onClick?: () => void,
+): Promise<DesktopNotificationResult> {
+  if (!settings.dailySummaryEnabled) {
+    return "skipped";
+  }
+  return sendDesktopNotification("Good morning! Today's summary", {
+    body: `Required PR reviews: ${event.requiredPrCount} | Active work items: ${event.activeWorkItemCount}`,
+    onClick,
   });
 }
 
