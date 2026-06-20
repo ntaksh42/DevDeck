@@ -917,6 +917,13 @@ export async function listPullRequestChanges(
   return pullRequestChangesSchema.parse(result);
 }
 
+export async function countPullRequestWorkItems(
+  input: PrLocatorInput,
+): Promise<number> {
+  const result = await invokeCommand("count_pull_request_work_items", { input });
+  return z.number().parse(result);
+}
+
 export async function listPullRequestCommits(
   input: ListPullRequestCommitsInput,
 ): Promise<PrCommit[]> {

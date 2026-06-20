@@ -54,6 +54,13 @@ pub struct GitPullRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PullRequestWorkItemRef {
+    pub id: String,
+    pub url: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GitCommitRef {
     pub commit_id: String,
     pub comment: Option<String>,
@@ -202,6 +209,25 @@ impl AdoClient {
             skip += page_size;
         }
         Ok(all)
+    }
+
+    /// Work items linked to a pull request
+    /// (`GET …/repositories/{repo}/pullRequests/{id}/workitems`). Returns the
+    /// resource refs; callers typically only need the count to tell whether a
+    /// PR is linked at all.
+    pub async fn list_pull_request_work_item_refs(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        pull_request_id: i64,
+    ) -> Result<Vec<PullRequestWorkItemRef>> {
+        let path = format!(
+            "{project_id}/_apis/git/repositories/{repository_id}/pullRequests/{pull_request_id}/workitems"
+        );
+        let response: ListResponse<PullRequestWorkItemRef> = self
+            .get_json(&path, &[("api-version", "7.1-preview")])
+            .await?;
+        Ok(response.value)
     }
 
     pub async fn list_commits(
@@ -453,6 +479,33 @@ mod tests {
         assert_eq!(prs.len(), 2);
         assert_eq!(prs[0].repository.as_ref().unwrap().id, "repo-1");
         assert_eq!(prs[1].repository.as_ref().unwrap().id, "repo-2");
+    }
+
+    #[tokio::test]
+    async fn list_pull_request_work_item_refs_returns_links() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/project-1/_apis/git/repositories/repo-1/pullRequests/7/workitems",
+            ))
+            .and(query_param("api-version", "7.1-preview"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 2,
+                "value": [
+                    { "id": "101", "url": "https://example/wit/101" },
+                    { "id": "102", "url": "https://example/wit/102" }
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let refs = test_client(&server)
+            .await
+            .list_pull_request_work_item_refs("project-1", "repo-1", 7)
+            .await
+            .unwrap();
+        assert_eq!(refs.len(), 2);
+        assert_eq!(refs[0].id, "101");
     }
 
     #[tokio::test]

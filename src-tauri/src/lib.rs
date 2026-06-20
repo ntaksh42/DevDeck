@@ -250,6 +250,15 @@ async fn list_pull_request_changes(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn count_pull_request_work_items(
+    input: PrLocator,
+    state: State<'_, AppState>,
+) -> Result<i64> {
+    state.pr_review.count_work_items(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn get_pull_request_file_diff(
     input: GetPullRequestFileDiffInput,
     state: State<'_, AppState>,
@@ -811,6 +820,7 @@ pub fn run() {
             list_my_review_pull_requests,
             get_pull_request_review,
             list_pull_request_changes,
+            count_pull_request_work_items,
             get_pull_request_file_diff,
             list_pull_request_commits,
             post_pull_request_comment,

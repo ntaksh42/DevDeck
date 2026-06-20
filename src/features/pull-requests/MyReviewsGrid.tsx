@@ -32,6 +32,7 @@ import {
   getAppSettings,
   listMyReviewPullRequests,
   listPullRequestChanges,
+  countPullRequestWorkItems,
   commandErrorMessage,
   prLocator,
   snoozeItem,
@@ -204,6 +205,7 @@ function renderPrCell(
   pr: ReviewPullRequestSummary,
   isStale: boolean,
   returned: boolean,
+  unlinked: boolean,
 ): ReactNode {
   switch (key) {
     case "pullRequestId":
@@ -253,6 +255,14 @@ function renderPrCell(
               Conflicts
             </span>
           ) : null}
+          {unlinked ? (
+            <span
+              className="inline-flex shrink-0 items-center rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300"
+              title="No work item linked to this pull request"
+            >
+              No work item
+            </span>
+          ) : null}
         </div>
       );
     case "createdBy":
@@ -292,12 +302,13 @@ const ReviewPrRow = forwardRef<
     selected: boolean;
     inMultiSelection: boolean;
     returned: boolean;
+    unlinked: boolean;
     columnTemplate: string;
     visibleColumns: SortKey[];
     staleThresholdDays: number;
     onSelect: (event: { shiftKey: boolean }) => void;
   }
->(({ pr, selected, inMultiSelection, returned, columnTemplate, visibleColumns, staleThresholdDays, onSelect }, ref) => {
+>(({ pr, selected, inMultiSelection, returned, unlinked, columnTemplate, visibleColumns, staleThresholdDays, onSelect }, ref) => {
   const createdTime = new Date(pr.creationDate).getTime();
   const isStale = Number.isFinite(createdTime)
     ? Math.floor((Date.now() - createdTime) / 86_400_000) >= staleThresholdDays
@@ -329,7 +340,7 @@ const ReviewPrRow = forwardRef<
       style={{ gridTemplateColumns: columnTemplate }}
     >
       {visibleColumns.map((key) => (
-        <Fragment key={key}>{renderPrCell(key, pr, isStale, returned)}</Fragment>
+        <Fragment key={key}>{renderPrCell(key, pr, isStale, returned, unlinked)}</Fragment>
       ))}
     </div>
   );
@@ -1067,6 +1078,30 @@ export function MyReviewsGrid({
   });
 
   const changesLoading = changeQueries.some((q) => q.isLoading);
+
+  // Lazily count each displayed PR's linked work items so the grid can warn
+  // about PRs with no traceability link. Bounded to PRs in expanded sections,
+  // cached, and entirely client-side so it never blocks the sync loop.
+  const displayedPrs = useMemo(
+    () => visibleSortedIndexes.map((index) => sortedPrs[index]).filter(Boolean),
+    [visibleSortedIndexes, sortedPrs],
+  );
+  const workItemCountQueries = useQueries({
+    queries: displayedPrs.map((pr) => ({
+      queryKey: ["prWorkItemCount", pr.organizationId, pr.repositoryId, pr.pullRequestId],
+      queryFn: () => countPullRequestWorkItems(prLocator(pr)),
+      staleTime: 5 * 60_000,
+    })),
+  });
+  const unlinkedKeys = useMemo(() => {
+    const set = new Set<string>();
+    displayedPrs.forEach((pr, index) => {
+      if (workItemCountQueries[index]?.data === 0) set.add(reviewTriageKey(pr));
+    });
+    return set;
+    // queries identity changes each render; key off the resolved data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayedPrs, workItemCountQueries.map((q) => q.dataUpdatedAt).join("|")]);
 
   const overlap = useMemo(() => {
     if (!isMultiSelect) return { overlaps: [], fileCount: 0 };
@@ -1921,6 +1956,7 @@ export function MyReviewsGrid({
                         selected={row.prIndex === selectedIndex}
                         inMultiSelection={selectedKeys.has(reviewTriageKey(row.pr))}
                         returned={returnedKeys.has(reviewTriageKey(row.pr))}
+                        unlinked={unlinkedKeys.has(reviewTriageKey(row.pr))}
                         visibleColumns={visibleColumns}
                         staleThresholdDays={staleThresholdDays}
                         onSelect={({ shiftKey }) => {

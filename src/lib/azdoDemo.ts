@@ -629,6 +629,12 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       };
       return changes;
     }
+    case "count_pull_request_work_items": {
+      const input = (args as { input?: { pullRequestId?: number } } | undefined)?.input;
+      // Odd-numbered demo PRs have no linked work item so the warning badge is
+      // reproducible; even-numbered ones are linked.
+      return (input?.pullRequestId ?? 0) % 2 === 0 ? 2 : 0;
+    }
     case "get_pull_request_file_diff": {
       const input = (args as { input?: GetPullRequestFileDiffInput } | undefined)?.input;
       const filePath = input?.filePath ?? "";

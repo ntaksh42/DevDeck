@@ -244,6 +244,19 @@ impl PrReviewService {
         })
     }
 
+    /// Number of work items linked to a pull request, so the UI can warn about
+    /// PRs with no traceability link.
+    pub async fn count_work_items(&self, pr: PrLocator) -> Result<i64> {
+        let organization = self
+            .db
+            .resolve_organization(pr.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let refs = client
+            .list_pull_request_work_item_refs(&pr.project_id, &pr.repository_id, pr.pull_request_id)
+            .await?;
+        Ok(refs.len() as i64)
+    }
+
     pub async fn list_changes(&self, pr: PrLocator) -> Result<PullRequestChanges> {
         let organization = self
             .db
