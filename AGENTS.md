@@ -204,6 +204,17 @@ statuses", unless the service and cache layer are updated at the same time.
 - When changing user-visible flows, add or update focused frontend tests or
   Playwright coverage when the behavior is risky enough to warrant it.
 
+## Keeping The Spec Current
+
+`docs/spec-overview.md` is the current-state specification of the app
+(architecture, IPC contract, views, auth, sync, data model, settings,
+keyboard, constraints). When a change diverges from what that document
+describes, update `docs/spec-overview.md` as part of the same change so the
+spec and the code never drift apart. Treat the spec update as part of the
+work, not a follow-up: adding or changing a view, command, setting, sync
+scope, schema version, or keyboard shortcut should land together with its
+spec edit.
+
 ## Verification Checklist
 
 Choose checks based on the files touched:
