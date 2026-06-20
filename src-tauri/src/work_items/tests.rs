@@ -1028,3 +1028,33 @@ fn test_keep_entirely_different_candidate() {
     push_unique_mention_candidate(&mut candidates, mc("id-2", "Bob", Some("bob@corp.com")));
     assert_eq!(candidates.len(), 2);
 }
+
+#[test]
+fn prioritized_relation_links_keep_parent_child_over_cap() {
+    // Many low-priority "Related" links come back before the high-priority
+    // Parent/Child links. Truncating before sorting (the old behavior) would
+    // drop Parent/Child; sorting first must keep them.
+    let mut raw: Vec<WorkItemRelation> = (0..60)
+        .map(|i| WorkItemRelation {
+            rel: "System.LinkTypes.Related".to_string(),
+            url: format!(
+                "https://dev.azure.com/contoso/_apis/wit/workItems/{}",
+                1000 + i
+            ),
+        })
+        .collect();
+    raw.push(WorkItemRelation {
+        rel: "System.LinkTypes.Hierarchy-Reverse".to_string(),
+        url: "https://dev.azure.com/contoso/_apis/wit/workItems/7".to_string(),
+    });
+    raw.push(WorkItemRelation {
+        rel: "System.LinkTypes.Hierarchy-Forward".to_string(),
+        url: "https://dev.azure.com/contoso/_apis/wit/workItems/8".to_string(),
+    });
+
+    let links = prioritized_relation_links(&raw, MAX_PREVIEW_RELATIONS);
+
+    assert_eq!(links.len(), MAX_PREVIEW_RELATIONS);
+    assert_eq!(links[0], ("Parent".to_string(), 0, 7));
+    assert_eq!(links[1], ("Child".to_string(), 1, 8));
+}

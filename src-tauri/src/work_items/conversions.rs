@@ -246,6 +246,26 @@ pub(super) fn relation_type_label(rel: &str) -> (String, u8) {
     }
 }
 
+/// Build the ranked, deduplicated relation links for a preview, applying the
+/// item cap only after sorting so high-priority relations (Parent/Child) are
+/// never dropped by the API's return order.
+pub(super) fn prioritized_relation_links(
+    raw_relations: &[WorkItemRelation],
+    limit: usize,
+) -> Vec<(String, u8, i64)> {
+    let mut links: Vec<(String, u8, i64)> = raw_relations
+        .iter()
+        .filter_map(|relation| {
+            let id = related_work_item_id(&relation.url)?;
+            let (label, rank) = relation_type_label(&relation.rel);
+            Some((label, rank, id))
+        })
+        .collect();
+    links.sort_by_key(|link| (link.1, link.2));
+    links.truncate(limit);
+    links
+}
+
 pub(super) fn related_work_item_id(url: &str) -> Option<i64> {
     let lowered = url.to_ascii_lowercase();
     if !lowered.contains("/_apis/wit/workitems/") {
