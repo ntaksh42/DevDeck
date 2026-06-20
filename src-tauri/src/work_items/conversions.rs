@@ -50,6 +50,7 @@ pub(super) fn summarize_work_item(
         assigned_to: identity_field(&work_item, "System.AssignedTo"),
         changed_date: string_field(&work_item, "System.ChangedDate"),
         web_url: work_item_web_url(organization, project_name, work_item.id, &work_item),
+        due_date: string_field(&work_item, "Microsoft.VSTS.Scheduling.DueDate"),
         extra_fields: Vec::new(),
         depth: None,
     }
@@ -475,6 +476,7 @@ pub(super) fn cached_wi_to_summary(wi: CachedWorkItem) -> WorkItemSummary {
         assigned_to: wi.assigned_to,
         changed_date: wi.changed_date,
         web_url: wi.web_url,
+        due_date: wi.due_date,
         extra_fields: Vec::new(),
         depth: None,
     }
@@ -504,5 +506,6 @@ pub(super) fn work_item_to_cached(
         assigned_to_unique_name: identity_unique_name_field(wi, "System.AssignedTo"),
         changed_date: string_field(wi, "System.ChangedDate"),
         web_url: Some(web_url),
+        due_date: string_field(wi, "Microsoft.VSTS.Scheduling.DueDate"),
     }
 }

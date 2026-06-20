@@ -16,6 +16,7 @@ function makeItem(overrides: Partial<WorkItemSummary>): WorkItemSummary {
     assignedTo: null,
     changedDate: null,
     webUrl: null,
+    dueDate: null,
     extraFields: [],
     depth: null,
     ...overrides,

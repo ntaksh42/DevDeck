@@ -11,6 +11,13 @@ import { ErrorState } from '@/components/StateDisplay';
 import { WorkItemsGrid } from './WorkItemsGrid';
 import { WorkItemTemplatesPanel } from './WorkItemTemplatesPanel';
 import { workItemQueryKeys } from './queryKeys';
+import {
+  dueBucketCounts,
+  dueBucketOf,
+  DUE_BUCKET_LABELS,
+  DUE_BUCKET_ORDER,
+  type DueBucket,
+} from './dueGrouping';
 
 const PRIORITY_REFERENCE_NAME = "Microsoft.VSTS.Common.Priority";
 const TAGS_REFERENCE_NAME = "System.Tags";
@@ -42,6 +49,7 @@ function toMatchTarget(item: WorkItemSummary): WorkItemMatchTarget {
 export function MyWorkItemsPanel({ organizations }: { organizations: Organization[] }) {
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
   const [filter, setFilter] = useState("");
+  const [dueBucket, setDueBucket] = useState<DueBucket | null>(null);
 
   const selectedOrganizationId = organizationId || organizations[0]?.id || "";
 
@@ -53,11 +61,20 @@ export function MyWorkItemsPanel({ organizations }: { organizations: Organizatio
   });
 
   const allResults = query.data ?? [];
-  const results = useMemo(() => {
+  // Text/smart-search filtered set, used both for the due-bucket counts and as
+  // the base the bucket filter narrows further.
+  const textFiltered = useMemo(() => {
     const parsed = parseSearchQuery(filter);
     if (parsed.filters.length === 0 && parsed.text.length === 0) return allResults;
     return allResults.filter((item) => matchesWorkItemQuery(toMatchTarget(item), parsed));
   }, [allResults, filter]);
+
+  const bucketCounts = useMemo(() => dueBucketCounts(textFiltered), [textFiltered]);
+
+  const results = useMemo(() => {
+    if (!dueBucket) return textFiltered;
+    return textFiltered.filter((item) => dueBucketOf(item.dueDate) === dueBucket);
+  }, [textFiltered, dueBucket]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -91,16 +108,50 @@ export function MyWorkItemsPanel({ organizations }: { organizations: Organizatio
 
         <WorkItemTemplatesPanel />
       </div>
+
+      {/* Due-date grouping: click a bucket to focus it; Overdue is highlighted. */}
+      <div className="flex shrink-0 flex-wrap items-center gap-1.5" role="group" aria-label="Group by due date">
+        <span className="text-xs font-medium text-muted-foreground">Due</span>
+        {DUE_BUCKET_ORDER.map((bucket) => {
+          const active = dueBucket === bucket;
+          const overdue = bucket === "overdue";
+          const tone = active
+            ? overdue
+              ? "border-red-500 bg-red-100 text-red-800 dark:border-red-700 dark:bg-red-950 dark:text-red-200"
+              : "border-primary bg-secondary text-foreground"
+            : overdue && bucketCounts[bucket] > 0
+              ? "border-red-300 text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950"
+              : "border-border text-muted-foreground hover:bg-secondary";
+          return (
+            <button
+              key={bucket}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setDueBucket((current) => (current === bucket ? null : bucket))}
+              className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${tone}`}
+            >
+              <span>{DUE_BUCKET_LABELS[bucket]}</span>
+              <span className="rounded bg-background/70 px-1 font-semibold tabular-nums">
+                {bucketCounts[bucket]}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {query.isError ? (
         <ErrorState message={commandErrorMessage(query.error)} />
       ) : null}
 
       <WorkItemsGrid
-        activeExternalFilterCount={filter.trim() ? 1 : 0}
+        activeExternalFilterCount={(filter.trim() ? 1 : 0) + (dueBucket ? 1 : 0)}
         dataUpdatedAt={query.dataUpdatedAt}
         isFetching={query.isFetching && query.data !== undefined}
         loading={query.isFetching && query.data === undefined}
-        onClearExternalFilters={() => setFilter("")}
+        onClearExternalFilters={() => {
+          setFilter("");
+          setDueBucket(null);
+        }}
         results={results}
         searched={query.isSuccess || query.isFetching}
         autoFocus

@@ -62,6 +62,7 @@ const WORK_ITEM_PREVIEW_FIELDS: &[&str] = &[
     "Microsoft.VSTS.Common.Severity",
     "Microsoft.VSTS.Scheduling.StoryPoints",
     "Microsoft.VSTS.Scheduling.RemainingWork",
+    "Microsoft.VSTS.Scheduling.DueDate",
 ];
 
 const WORK_ITEM_PREVIEW_COMMENT_LIMIT: u32 = 200;

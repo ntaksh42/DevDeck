@@ -1187,13 +1187,28 @@ function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[]
 }
 
 function withEmptyExtraFields(
-  items: Omit<WorkItemSummary, "extraFields" | "depth">[],
+  items: (Omit<WorkItemSummary, "extraFields" | "depth" | "dueDate"> & {
+    dueDate?: string | null;
+  })[],
 ): WorkItemSummary[] {
-  return items.map((item) => ({ ...item, extraFields: [], depth: null }));
+  return items.map((item) => ({
+    dueDate: null,
+    ...item,
+    extraFields: [],
+    depth: null,
+  }));
+}
+
+// Due date relative to "now" so the My Work Items due grouping demo lands the
+// same buckets regardless of when the browser preview is opened.
+function demoDueInDays(days: number): string {
+  return new Date(Date.now() + days * 86_400_000).toISOString();
 }
 
 function demoWorkItems(input?: SearchWorkItemsInput): WorkItemSummary[] {
-  const all: Omit<WorkItemSummary, "extraFields" | "depth">[] = [
+  const all: (Omit<WorkItemSummary, "extraFields" | "depth" | "dueDate"> & {
+    dueDate?: string | null;
+  })[] = [
     {
       organizationId: "contoso",
       projectId: "platform",
@@ -1336,6 +1351,7 @@ function demoMyWorkItems(): WorkItemSummary[] {
       assignedTo: "Demo User",
       changedDate: "2026-05-27T08:00:00Z",
       webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/201",
+      dueDate: demoDueInDays(-2),
     },
     {
       organizationId: "contoso",
@@ -1348,6 +1364,7 @@ function demoMyWorkItems(): WorkItemSummary[] {
       assignedTo: "Demo User",
       changedDate: "2026-05-26T10:00:00Z",
       webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/123",
+      dueDate: demoDueInDays(0),
     },
     {
       organizationId: "contoso",
@@ -1360,6 +1377,7 @@ function demoMyWorkItems(): WorkItemSummary[] {
       assignedTo: "Demo User",
       changedDate: "2026-05-25T14:30:00Z",
       webUrl: "https://dev.azure.com/contoso/Mobile/_workitems/edit/187",
+      dueDate: demoDueInDays(3),
     },
     {
       organizationId: "contoso",

@@ -963,6 +963,7 @@ mod tests {
             web_url: Some(format!(
                 "https://dev.azure.com/org/project/_workitems/edit/{id}"
             )),
+            due_date: None,
         }
     }
 }

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, Result};
 
-const SCHEMA_VERSION: i64 = 15;
+const SCHEMA_VERSION: i64 = 16;
 
 /// Max rows kept in the my_work_items snapshot queries; sync notification
 /// diffing must know this cap to avoid treating re-entering rows as new.
@@ -171,6 +171,10 @@ pub struct CachedWorkItem {
     pub assigned_to_unique_name: Option<String>,
     pub changed_date: Option<String>,
     pub web_url: Option<String>,
+    /// Scheduling due date (Microsoft.VSTS.Scheduling.DueDate). Only populated
+    /// for the My Work Items snapshot; the general work_items cache leaves it
+    /// `None`.
+    pub due_date: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1405,6 +1409,15 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             "#,
         )?;
     }
+    if current < 16 {
+        // Due date for the My Work Items snapshot so the panel can group by
+        // Overdue / Due today / This week. Only the my_work_items snapshot needs
+        // it; the general work_items cache leaves it unset.
+        if !table_column_exists(conn, "my_work_items", "due_date")? {
+            conn.execute_batch("ALTER TABLE my_work_items ADD COLUMN due_date TEXT;")?;
+        }
+        conn.execute_batch("PRAGMA user_version = 16;")?;
+    }
     Ok(())
 }
 
@@ -2194,8 +2207,8 @@ fn upsert_my_work_items(conn: &Connection, items: &[CachedWorkItem]) -> Result<(
         INSERT OR REPLACE INTO my_work_items(
             org_id, project_id, project_name, id, title,
             work_item_type, state, assigned_to, changed_date, web_url,
-            assigned_to_unique_name
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            assigned_to_unique_name, due_date
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
         "#,
     )?;
     for item in items {
@@ -2210,7 +2223,8 @@ fn upsert_my_work_items(conn: &Connection, items: &[CachedWorkItem]) -> Result<(
             item.assigned_to,
             item.changed_date,
             item.web_url,
-            item.assigned_to_unique_name
+            item.assigned_to_unique_name,
+            item.due_date
         ])?;
     }
     Ok(())
@@ -2221,17 +2235,18 @@ fn list_my_work_items(conn: &Connection, org_id: &str) -> Result<Vec<CachedWorkI
         r#"
         SELECT org_id, project_id, project_name, id, title,
                work_item_type, state, assigned_to, changed_date, web_url,
-               assigned_to_unique_name
+               assigned_to_unique_name, due_date
         FROM my_work_items
         WHERE org_id = ?1
         ORDER BY changed_date DESC
         LIMIT ?2
         "#,
     )?;
-    let rows = stmt.query_map(
-        params![org_id, MY_WORK_ITEMS_LIMIT as i64],
-        map_cached_work_item,
-    )?;
+    let rows = stmt.query_map(params![org_id, MY_WORK_ITEMS_LIMIT as i64], |row| {
+        let mut item = map_cached_work_item(row)?;
+        item.due_date = row.get(11)?;
+        Ok(item)
+    })?;
     let mut result = Vec::new();
     for row in rows {
         result.push(row?);
@@ -2507,6 +2522,9 @@ fn map_cached_work_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<CachedWorkI
         changed_date: row.get(8)?,
         web_url: row.get(9)?,
         assigned_to_unique_name: row.get(10)?,
+        // work_items queries do not select due_date; only the my_work_items
+        // snapshot carries it (see list_my_work_items).
+        due_date: None,
     })
 }
 
@@ -3052,6 +3070,7 @@ mod tests {
             assigned_to_unique_name: None,
             changed_date: Some(changed.to_string()),
             web_url: None,
+            due_date: None,
         }
     }
 
@@ -3451,6 +3470,7 @@ mod tests {
             assigned_to_unique_name: Some("me@example.com".to_string()),
             changed_date: None,
             web_url: None,
+            due_date: None,
         };
         db.replace_work_items(
             "org1",
@@ -3476,6 +3496,40 @@ mod tests {
     }
 
     #[test]
+    fn my_work_items_round_trip_due_date() {
+        let tf = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        let item = CachedWorkItem {
+            org_id: "org1".to_string(),
+            project_id: "p1".to_string(),
+            project_name: "P1".to_string(),
+            id: 9,
+            title: "has a due date".to_string(),
+            work_item_type: Some("Task".to_string()),
+            state: Some("Active".to_string()),
+            assigned_to: Some("Me".to_string()),
+            assigned_to_unique_name: Some("me@example.com".to_string()),
+            changed_date: Some("2026-06-10T00:00:00Z".to_string()),
+            web_url: None,
+            due_date: Some("2026-06-20T00:00:00Z".to_string()),
+        };
+        db.replace_work_items(
+            "org1",
+            &["p1"],
+            std::slice::from_ref(&item),
+            std::slice::from_ref(&item),
+        )
+        .unwrap();
+
+        let rows = db.list_my_work_items("org1").unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].due_date.as_deref(), Some("2026-06-20T00:00:00Z"));
+    }
+
+    #[test]
     fn update_my_work_item_keeps_row_when_still_mine() {
         let tf = NamedTempFile::new().unwrap();
         let db = AppDatabase::new(tf.path().to_path_buf());
@@ -3494,6 +3548,7 @@ mod tests {
             assigned_to_unique_name: Some("me@example.com".to_string()),
             changed_date: None,
             web_url: None,
+            due_date: None,
         };
         db.replace_work_items(
             "org1",
@@ -3534,6 +3589,7 @@ mod tests {
             assigned_to_unique_name: Some("me@example.com".to_string()),
             changed_date: Some(format!("2024-01-0{id}T00:00:00Z")),
             web_url: None,
+            due_date: None,
         };
 
         let seed = [mine(1, "Active"), mine(2, "Active")];
@@ -3600,6 +3656,7 @@ mod tests {
             assigned_to_unique_name: None,
             changed_date: None,
             web_url: None,
+            due_date: None,
         };
 
         // Seed both tables (distinct IDs per table: work=1, my=10)
@@ -3650,6 +3707,7 @@ mod tests {
             assigned_to_unique_name: None,
             changed_date: None,
             web_url: None,
+            due_date: None,
         };
 
         // Seed p1 and p2

@@ -21,6 +21,7 @@ function workItem(id: number, title: string): WorkItemSummary {
     assignedTo: "Test User",
     changedDate: null,
     webUrl: `https://dev.azure.com/contoso/_workitems/edit/${id}`,
+    dueDate: null,
     extraFields: [],
     depth: null,
   };
