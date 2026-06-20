@@ -264,6 +264,18 @@ function demoPrFilesFor(pullRequestId: number): PrChangedFile[] {
   if (pullRequestId % 2 === 1) {
     files.push({ path: "/src/app/config.ts", changeType: "edit", originalPath: null });
   }
+  // Spread the review risk markers across PRs so all three are reproducible in
+  // the browser demo: a sensitive area (with its test, so only "Sensitive"
+  // shows) and a large change set.
+  if (pullRequestId % 3 === 0) {
+    files.push({ path: "/src/auth/session.ts", changeType: "edit", originalPath: null });
+    files.push({ path: "/src/auth/session.test.ts", changeType: "edit", originalPath: null });
+  }
+  if (pullRequestId % 5 === 0) {
+    for (let i = 0; i < 22; i += 1) {
+      files.push({ path: `/src/modules/module-${i}.ts`, changeType: "edit", originalPath: null });
+    }
+  }
   return files;
 }
 

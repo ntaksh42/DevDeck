@@ -8,6 +8,7 @@ import {
   getAppSettings,
   getPullRequestReview,
   getReviewResultPreview,
+  listPullRequestChanges,
   listPullRequestCommits,
   postPullRequestComment,
   prLocator,
@@ -33,6 +34,12 @@ const PrFilesTab = lazy(() =>
 );
 import { PrThreadCard } from "./PrThreadCard";
 import { VOTE_BADGE_CLASSES, VOTE_DOT_CLASSES, voteTone } from "./voteVisual";
+import {
+  computeRiskFlags,
+  hasAnyRisk,
+  summarizeChanges,
+  LARGE_REVIEW_FILE_COUNT,
+} from "./prRisk";
 
 function usePrMentionSearch(organizationId: string) {
   return useCallback(
@@ -84,6 +91,24 @@ export function PrReviewPanel({
     enabled: !!selectedPr && (tab === "review" || tab === "files"),
     staleTime: 60_000,
   });
+
+  // Changed-files summary for the risk markers. Shares the ["prChanges", …]
+  // cache key with the Files tab, so opening that tab reuses this fetch and
+  // vice versa. Enabled for any selected PR so the markers show on every tab.
+  const changesQuery = useQuery({
+    queryKey: [
+      "prChanges",
+      selectedPr?.organizationId,
+      selectedPr?.repositoryId,
+      selectedPr?.pullRequestId,
+    ],
+    queryFn: () => listPullRequestChanges(prLocator(selectedPr as ReviewPullRequestSummary)),
+    enabled: !!selectedPr,
+    staleTime: 60_000,
+  });
+  const changedFiles = changesQuery.data?.files ?? null;
+  const changeSummary = changedFiles ? summarizeChanges(changedFiles) : null;
+  const riskFlags = changedFiles ? computeRiskFlags(changedFiles) : null;
 
   const settingsQuery = useQuery({
     queryKey: ["appSettings"],
@@ -159,6 +184,53 @@ export function PrReviewPanel({
           </button>
         ) : null}
       </div>
+
+      {/* Pre-review size & risk markers, visible on every tab. */}
+      {selectedPr && changeSummary && riskFlags ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-border px-3 py-1 text-[11px]">
+          <button
+            type="button"
+            onClick={() => setTab("files")}
+            className="rounded text-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            title="Open the Files changed tab"
+          >
+            <span className="font-medium text-foreground">{changeSummary.total}</span>{" "}
+            file{changeSummary.total === 1 ? "" : "s"}
+            {changeSummary.total > 0 ? (
+              <span className="text-muted-foreground/80">
+                {" "}
+                (+{changeSummary.added} ~{changeSummary.modified} −{changeSummary.deleted}
+                {changeSummary.renamed > 0 ? ` R${changeSummary.renamed}` : ""})
+              </span>
+            ) : null}
+          </button>
+          {hasAnyRisk(riskFlags) ? <span aria-hidden="true" className="text-border">|</span> : null}
+          {riskFlags.large ? (
+            <span
+              className="inline-flex items-center rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5 font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300"
+              title={`Large review: ${changeSummary.total} files changed (${LARGE_REVIEW_FILE_COUNT}+ flagged as large)`}
+            >
+              Large
+            </span>
+          ) : null}
+          {riskFlags.noTests ? (
+            <span
+              className="inline-flex items-center rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5 font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300"
+              title="Code changed but no test files were touched in this pull request"
+            >
+              No tests
+            </span>
+          ) : null}
+          {riskFlags.sensitive ? (
+            <span
+              className="inline-flex items-center rounded border border-red-300 bg-red-100 px-1.5 py-0.5 font-medium text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+              title={`Touches security-sensitive paths:\n${riskFlags.sensitiveFiles.join("\n")}`}
+            >
+              Sensitive
+            </span>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-2 py-1.5">
         <div className="flex items-center gap-0.5 rounded-md border border-border bg-muted p-0.5" role="tablist" aria-label="PR review tabs">
