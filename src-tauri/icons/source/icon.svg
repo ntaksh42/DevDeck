@@ -1,15 +1,21 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#6D4AFF"/>
-      <stop offset="1" stop-color="#4B21C9"/>
+    <linearGradient id="bars" x1="180" y1="512" x2="844" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2B7FE6"/>
+      <stop offset="0.5" stop-color="#2BB3EC"/>
+      <stop offset="1" stop-color="#34DCF2"/>
     </linearGradient>
   </defs>
 
   <!-- rounded app background -->
-  <rect x="0" y="0" width="1024" height="1024" rx="228" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1024" height="1024" rx="228" fill="#141826"/>
 
-  <!-- bold block "D" monogram -->
-  <path d="M300 256 H560 a256 256 0 0 1 0 512 H300 a44 44 0 0 1 -44 -44 V300 a44 44 0 0 1 44 -44 Z" fill="#FFFFFF"/>
-  <path d="M412 384 H560 a128 128 0 0 1 0 256 H412 Z" fill="url(#bg)"/>
+  <!-- ascending bar chart -->
+  <rect x="196" y="600" width="116" height="240" rx="44" fill="url(#bars)"/>
+  <rect x="372" y="424" width="116" height="416" rx="44" fill="url(#bars)"/>
+  <rect x="548" y="288" width="116" height="552" rx="44" fill="url(#bars)"/>
+  <rect x="724" y="128" width="116" height="712" rx="44" fill="url(#bars)"/>
+
+  <!-- baseline -->
+  <rect x="196" y="864" width="644" height="20" rx="10" fill="#39405A"/>
 </svg>
