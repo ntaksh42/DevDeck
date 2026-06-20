@@ -259,6 +259,21 @@ pub struct WorkItemPreview {
     /// comments" from "comments could not be loaded".
     pub comments_unavailable: bool,
     pub relations: Vec<WorkItemRelationSummary>,
+    /// Pull requests linked to this work item via `ArtifactLink` relations.
+    pub pull_requests: Vec<WorkItemPullRequestLink>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemPullRequestLink {
+    pub pull_request_id: i64,
+    /// Present when the PR is locally synced (My Reviews); otherwise the PR is
+    /// shown with only its id and a web link.
+    pub repository_id: Option<String>,
+    pub title: Option<String>,
+    pub status: Option<String>,
+    pub my_vote_label: Option<String>,
+    pub web_url: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]

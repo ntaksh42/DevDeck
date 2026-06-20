@@ -21,8 +21,10 @@ mod work_items;
 
 use code_search::{CodeSearchResults, CodeSearchService, SearchCodeInput};
 use commits::{
-    CommitChangeSet, CommitFileDiff, CommitRepositoryOption, CommitService, CommitSummary,
-    GetCommitChangesInput, GetCommitFileDiffInput, ListCommitRepositoriesInput, SearchCommitsInput,
+    CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
+    CommitRepositoryOption, CommitService, CommitSummary, GetCommitChangesInput,
+    GetCommitFileDiffInput, GetCommitPullRequestsInput, ListCommitRepositoriesInput,
+    SearchCommitsInput,
 };
 use db::{AppDatabase, AppSettings, Organization, SyncState};
 use error::{AppError, Result};
@@ -170,8 +172,11 @@ async fn list_snoozed_items(
     run_blocking(move || service.list_snoozed_items(input)).await
 }
 
-fn ensure_write_enabled(state: &State<'_, AppState>) -> Result<()> {
-    if state.settings.get()?.read_only_validation_mode_enabled {
+async fn ensure_write_enabled(state: &State<'_, AppState>) -> Result<()> {
+    let settings = state.settings.clone();
+    let read_only =
+        run_blocking(move || Ok(settings.get()?.read_only_validation_mode_enabled)).await?;
+    if read_only {
         return Err(AppError::InvalidInput(
             "Read-only validation mode is enabled. Disable it in Settings to write to Azure DevOps."
                 .to_string(),
@@ -267,7 +272,7 @@ async fn post_pull_request_comment(
     input: PostPullRequestCommentInput,
     state: State<'_, AppState>,
 ) -> Result<PrThread> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.pr_review.post_comment(input).await
 }
 
@@ -277,7 +282,7 @@ async fn set_pull_request_thread_status(
     input: SetPullRequestThreadStatusInput,
     state: State<'_, AppState>,
 ) -> Result<PrThread> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.pr_review.set_thread_status(input).await
 }
 
@@ -287,7 +292,7 @@ async fn submit_pull_request_vote(
     input: SubmitPullRequestVoteInput,
     state: State<'_, AppState>,
 ) -> Result<PrReviewer> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.pr_review.submit_vote(input).await
 }
 
@@ -297,7 +302,7 @@ async fn update_pull_request(
     input: UpdatePullRequestInput,
     state: State<'_, AppState>,
 ) -> Result<PrStatusResult> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.pr_review.update_pull_request(input).await
 }
 
@@ -316,7 +321,7 @@ async fn edit_pull_request_comment(
     input: EditPullRequestCommentInput,
     state: State<'_, AppState>,
 ) -> Result<PrThread> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.pr_review.edit_comment(input).await
 }
 
@@ -326,7 +331,7 @@ async fn delete_pull_request_comment(
     input: DeletePullRequestCommentInput,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.pr_review.delete_comment(input).await
 }
 
@@ -449,7 +454,7 @@ async fn add_work_item_comment(
     input: AddWorkItemCommentInput,
     state: State<'_, AppState>,
 ) -> Result<WorkItemComment> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.work_items.add_comment(input).await
 }
 
@@ -459,7 +464,7 @@ async fn delete_work_item_comment(
     input: DeleteWorkItemCommentInput,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.work_items.delete_comment(input).await
 }
 
@@ -478,7 +483,7 @@ async fn set_work_items_state(
     input: SetWorkItemsStateInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<BulkWorkItemResult>> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.work_items.set_items_state(input).await
 }
 
@@ -488,7 +493,7 @@ async fn assign_work_items(
     input: AssignWorkItemsInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<BulkWorkItemResult>> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.work_items.assign_items(input).await
 }
 
@@ -498,7 +503,7 @@ async fn set_work_items_priority(
     input: SetWorkItemsPriorityInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<BulkWorkItemResult>> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.work_items.set_items_priority(input).await
 }
 
@@ -508,7 +513,7 @@ async fn update_work_item_fields(
     input: UpdateWorkItemFieldsInput,
     state: State<'_, AppState>,
 ) -> Result<WorkItemPreview> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.work_items.update_fields(input).await
 }
 
@@ -570,6 +575,16 @@ async fn list_commit_repositories(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn commit_activity(
+    input: CommitActivityInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<CommitActivityDay>> {
+    let service = state.commits.clone();
+    run_blocking(move || service.commit_activity(input)).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn search_code(
     input: SearchCodeInput,
     state: State<'_, AppState>,
@@ -593,6 +608,15 @@ async fn get_commit_file_diff(
     state: State<'_, AppState>,
 ) -> Result<CommitFileDiff> {
     state.commits.get_commit_file_diff(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn get_commit_pull_requests(
+    input: GetCommitPullRequestsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<CommitPullRequest>> {
+    state.commits.get_commit_pull_requests(input).await
 }
 
 #[tauri::command]
@@ -646,7 +670,7 @@ async fn rerun_pipeline_run(
     input: RerunPipelineRunInput,
     state: State<'_, AppState>,
 ) -> Result<PipelineRunSummary> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.pipelines.rerun_run(input).await
 }
 
@@ -656,7 +680,7 @@ async fn cancel_pipeline_run(
     input: CancelPipelineRunInput,
     state: State<'_, AppState>,
 ) -> Result<PipelineRunSummary> {
-    ensure_write_enabled(&state)?;
+    ensure_write_enabled(&state).await?;
     state.pipelines.cancel_run(input).await
 }
 
@@ -715,6 +739,13 @@ fn show_main_window(app: &AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Without this, a panic during startup leaves only a blank window and no
+    // trace of why. Print it to stderr (visible under `tauri dev` / a console
+    // build) before the default hook aborts.
+    std::panic::set_hook(Box::new(|info| {
+        eprintln!("AzDoDeck panic: {info}");
+    }));
+
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
@@ -728,11 +759,23 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
-            let app_data_dir = app.path().app_data_dir()?;
+            // Surface setup failures (e.g. a failed DB migration) to stderr;
+            // otherwise the window stays blank with no clue why state was never
+            // managed and every command fails.
+            let app_data_dir = app.path().app_data_dir().inspect_err(|e| {
+                eprintln!("AzDoDeck setup failed (app_data_dir): {e}");
+            })?;
             let db = AppDatabase::new(app_data_dir.join("azdodeck.sqlite3"));
-            db.initialize()?;
-            let settings = db.get_app_settings()?;
-            configure_show_window_hotkey(app.handle(), settings.show_window_hotkey.as_deref())?;
+            db.initialize().inspect_err(|e| {
+                eprintln!("AzDoDeck setup failed (db.initialize): {e}");
+            })?;
+            let settings = db.get_app_settings().inspect_err(|e| {
+                eprintln!("AzDoDeck setup failed (get_app_settings): {e}");
+            })?;
+            configure_show_window_hotkey(app.handle(), settings.show_window_hotkey.as_deref())
+                .inspect_err(|e| {
+                    eprintln!("AzDoDeck setup failed (configure_show_window_hotkey): {e}");
+                })?;
             let (sync_tx, sync_rx) = SyncRunner::channel();
             app.manage(AppState {
                 db: db.clone(),
@@ -802,9 +845,11 @@ pub fn run() {
             set_work_items_priority,
             search_commits,
             list_commit_repositories,
+            commit_activity,
             search_code,
             get_commit_changes,
             get_commit_file_diff,
+            get_commit_pull_requests,
             list_pipeline_projects,
             list_pipeline_runs,
             list_pipeline_definitions,

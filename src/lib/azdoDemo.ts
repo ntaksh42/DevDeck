@@ -4,6 +4,9 @@ import type {
   AddWorkItemCommentInput,
   AppSettings,
   AssignWorkItemsInput,
+  CommitActivityDay,
+  CommitActivityInput,
+  CommitPullRequest,
   CommitRepositoryOption,
   CommitSummary,
   DeleteWorkItemCommentInput,
@@ -13,6 +16,7 @@ import type {
   GetPullRequestReviewInput,
   GetReviewResultPreviewInput,
   GetSavedQueryInput,
+  ListPullRequestChangesInput,
   GetWorkItemPreviewInput,
   ListWorkItemTypeStatesInput,
   ListWorkItemFieldsInput,
@@ -55,6 +59,10 @@ import type {
   WorkItemUpdateSummary,
 } from "@/lib/azdoCommands";
 import {
+  DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
+  DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
+} from "@/lib/reviewSettings";
+import {
   applyPullRequestScenario,
   applyReviewPullRequestScenario,
   applyWorkItemPreviewScenario,
@@ -90,6 +98,9 @@ let demoSettings: AppSettings = {
   notifyPrReviewRequests: true,
   notifyPrVoteResets: true,
   notifyPrCommentReplies: true,
+  reviewStaleThresholdDays: DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
+  workItemStaleThresholdDays: DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
+  notificationRules: [],
 };
 const deletedDemoWorkItemComments = new Set<number>();
 let demoSyncStates: SyncState[] = [
@@ -242,12 +253,19 @@ function demoThreadsFor(pullRequestId: number): PrThread[] {
   return threads;
 }
 
-const demoPrFiles: PrChangedFile[] = [
-  { path: "/src/app/dashboard.ts", changeType: "edit", originalPath: null },
-  { path: "/src/app/useDashboardData.ts", changeType: "add", originalPath: null },
-  { path: "/docs/assets/screenshot.png", changeType: "add", originalPath: null },
-  { path: "/src/app/legacyDashboard.ts", changeType: "delete", originalPath: null },
-];
+// Per-PR changed files so the multi-select conflict-overlap warning has
+// something to detect in browser/demo mode. PRs share `/src/app/dashboard.ts`
+// to produce a visible overlap; odd PR ids also share a config file.
+function demoPrFilesFor(pullRequestId: number): PrChangedFile[] {
+  const files: PrChangedFile[] = [
+    { path: "/src/app/dashboard.ts", changeType: "edit", originalPath: null },
+    { path: `/src/app/feature-${pullRequestId}.ts`, changeType: "add", originalPath: null },
+  ];
+  if (pullRequestId % 2 === 1) {
+    files.push({ path: "/src/app/config.ts", changeType: "edit", originalPath: null });
+  }
+  return files;
+}
 
 const DEMO_DIFF_BASE = `import { fetchData } from "./api";
 import { Logger } from "./logger";
@@ -508,6 +526,20 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
           input && "notifyPrCommentReplies" in input
             ? Boolean(input.notifyPrCommentReplies)
             : demoSettings.notifyPrCommentReplies,
+        reviewStaleThresholdDays:
+          input && "reviewStaleThresholdDays" in input
+            ? Number(input.reviewStaleThresholdDays) ||
+              DEFAULT_REVIEW_STALE_THRESHOLD_DAYS
+            : demoSettings.reviewStaleThresholdDays,
+        workItemStaleThresholdDays:
+          input && "workItemStaleThresholdDays" in input
+            ? Number(input.workItemStaleThresholdDays) ||
+              DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS
+            : demoSettings.workItemStaleThresholdDays,
+        notificationRules:
+          input && "notificationRules" in input
+            ? (input.notificationRules ?? [])
+            : demoSettings.notificationRules,
       };
       return demoSettings;
     }
@@ -559,7 +591,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         pullRequestId: prId,
         title: summary?.title ?? `Demo pull request #${prId}`,
         description:
-          "## Summary\nImproves the dashboard loading flow.\n\n- configurable refresh interval\n- removes the legacy loader",
+          "## Summary\nImproves the dashboard loading flow. Implements AB#123 and partially addresses AB#187.\n\n- configurable refresh interval\n- removes the legacy loader",
         // Backend strips refs/heads/ in get_review; mirror that here.
         sourceRefName: "feature/dashboard-loading",
         targetRefName: summary?.targetRefName ?? "main",
@@ -589,10 +621,11 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     case "list_pull_request_commits":
       return demoPrCommits;
     case "list_pull_request_changes": {
+      const input = (args as { input?: ListPullRequestChangesInput } | undefined)?.input;
       const changes: PullRequestChanges = {
         baseCommitId: "demo-base",
         targetCommitId: "demo-target",
-        files: demoPrFiles,
+        files: demoPrFilesFor(input?.pullRequestId ?? 0),
       };
       return changes;
     }
@@ -846,6 +879,10 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         ?.input;
       return demoCommits(input);
     }
+    case "commit_activity": {
+      const input = (args as { input?: CommitActivityInput } | undefined)?.input;
+      return demoCommitActivity(input);
+    }
     case "list_commit_repositories":
       return demoCommitRepositories();
     case "get_commit_changes": {
@@ -869,12 +906,18 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         targetUnavailableReason: null,
       };
     }
+    case "get_commit_pull_requests": {
+      const input = (args as { input?: { commitId?: string } } | undefined)?.input;
+      return demoCommitPullRequests(input?.commitId);
+    }
     case "search_code": {
       const input = (args as { input?: { query?: string } } | undefined)?.input;
       const query = input?.query?.trim() ?? "";
       if (!query) return { count: 0, results: [], notice: null };
       return {
-        count: 2,
+        // The Search API reports total matches, which can exceed the returned
+        // results (the backend caps results at 50). Mirror that here.
+        count: 137,
         notice: null,
         results: [
           {
@@ -973,6 +1016,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     case "delete_organization":
     case "record_mention_interaction":
     case "record_assignee_interaction":
+      return null;
     case "trigger_sync":
       demoSyncStates = demoSyncStates.map((state) => ({
         ...state,
@@ -1487,6 +1531,24 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
         webUrl: `https://dev.azure.com/contoso/${encodeURIComponent(summary.projectName)}/_workitems/edit/77`,
       },
     ],
+    pullRequests: [
+      {
+        pullRequestId: 101,
+        repositoryId: "api-gateway",
+        title: "Add rate limiter to API gateway",
+        status: "Active",
+        myVoteLabel: "No Vote",
+        webUrl: "https://dev.azure.com/contoso/demo-project/_git/api-gateway/pullrequest/101",
+      },
+      {
+        pullRequestId: 9001,
+        repositoryId: null,
+        title: null,
+        status: null,
+        myVoteLabel: null,
+        webUrl: null,
+      },
+    ],
   });
 }
 
@@ -1718,6 +1780,9 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myIsRequired: true,
       isDraft: false,
       mergeStatus: "conflicts",
+      ciStatus: "failed",
+      ciContext: "ci-build",
+      ciCheckCount: 3,
     },
     {
       organizationId: "contoso",
@@ -1736,6 +1801,9 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myIsRequired: true,
       isDraft: false,
       mergeStatus: null,
+      ciStatus: "succeeded",
+      ciContext: "ci-build",
+      ciCheckCount: 2,
     },
     {
       organizationId: "contoso",
@@ -1754,6 +1822,9 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myIsRequired: false,
       isDraft: false,
       mergeStatus: null,
+      ciStatus: "in_progress",
+      ciContext: "ios-build",
+      ciCheckCount: 1,
     },
     {
       organizationId: "contoso",
@@ -1772,6 +1843,9 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myIsRequired: false,
       isDraft: true,
       mergeStatus: null,
+      ciStatus: null,
+      ciContext: null,
+      ciCheckCount: 0,
     },
     {
       organizationId: "contoso",
@@ -1790,6 +1864,9 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myIsRequired: true,
       isDraft: false,
       mergeStatus: null,
+      ciStatus: "failed",
+      ciContext: "terraform-validate",
+      ciCheckCount: 2,
     },
     {
       organizationId: "contoso",
@@ -1808,6 +1885,9 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myIsRequired: false,
       isDraft: false,
       mergeStatus: null,
+      ciStatus: null,
+      ciContext: null,
+      ciCheckCount: 0,
     },
     {
       organizationId: "contoso",
@@ -1826,6 +1906,9 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myIsRequired: false,
       isDraft: false,
       mergeStatus: null,
+      ciStatus: "succeeded",
+      ciContext: "ci-build",
+      ciCheckCount: 4,
     },
   ]));
 }
@@ -1867,6 +1950,48 @@ function demoCommitRepositories(): CommitRepositoryOption[] {
       repositoryName: "terraform-aws",
     },
   ];
+}
+
+// Demo commit → PR relationships. Only a couple of commits map to PRs so the
+// "no related PRs" path stays exercised for the rest.
+function demoCommitPullRequests(commitId?: string): CommitPullRequest[] {
+  const map: Record<string, CommitPullRequest[]> = {
+    abcdef1234567890abcdef1234567890abcdef12: [
+      {
+        pullRequestId: 4242,
+        repositoryId: "azdo-dashboard",
+        title: "Add commit search dashboard",
+        status: "completed",
+        myVote: 10,
+        myVoteLabel: "Approved",
+        webUrl:
+          "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/pullrequest/4242",
+      },
+    ],
+    cafe5678901234567890abcdef1234567890cafe: [
+      {
+        pullRequestId: 4310,
+        repositoryId: "api-gateway",
+        title: "Fix Retry-After header parsing",
+        status: "active",
+        myVote: 0,
+        myVoteLabel: "No Vote",
+        webUrl:
+          "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/4310",
+      },
+      {
+        pullRequestId: 4288,
+        repositoryId: "api-gateway",
+        title: "Rate limiting hardening",
+        status: "abandoned",
+        myVote: -5,
+        myVoteLabel: "Waiting for Author",
+        webUrl:
+          "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/4288",
+      },
+    ],
+  };
+  return commitId ? map[commitId] ?? [] : [];
 }
 
 function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
@@ -2033,4 +2158,35 @@ function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
     }
     return true;
   });
+}
+
+function demoCommitActivity(input?: CommitActivityInput): CommitActivityDay[] {
+  // Synthesize a deterministic, GitHub-style cadence over the requested window
+  // (defaulting to the last 90 days) so the browser demo shows a populated
+  // heatmap. Filters narrow the volume to mimic per-author / per-repo activity.
+  const end = input?.toDate ? new Date(`${input.toDate}T00:00:00Z`) : new Date();
+  const start = input?.fromDate
+    ? new Date(`${input.fromDate}T00:00:00Z`)
+    : new Date(end.getTime() - 89 * 86_400_000);
+  if (start > end) return [];
+
+  const narrowed = (input?.author?.trim() ? 1 : 0) + (input?.repositoryId ? 1 : 0);
+  const scale = narrowed >= 2 ? 0.3 : narrowed === 1 ? 0.55 : 1;
+
+  const days: CommitActivityDay[] = [];
+  const cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()));
+  const endDay = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()));
+  while (cursor <= endDay) {
+    const date = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, "0")}-${String(cursor.getUTCDate()).padStart(2, "0")}`;
+    const dow = cursor.getUTCDay();
+    // Deterministic pseudo-random based on the date string.
+    let seed = 0;
+    for (const ch of date) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+    const base = seed % 7; // 0..6
+    const weekendDamping = dow === 0 || dow === 6 ? 0.25 : 1;
+    const count = Math.round(base * weekendDamping * scale);
+    if (count > 0) days.push({ date, count });
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return days;
 }

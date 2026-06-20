@@ -117,6 +117,48 @@ describe("PipelineSubscriptionsBoard primary grid marker", () => {
     expect(selectedRow).not.toBeNull();
   });
 
+  it("polls collapsed pipelines at the idle interval even with an in-progress run", async () => {
+    vi.useFakeTimers();
+    try {
+      // CI (def 1) stays collapsed and has a run in progress; without the idle
+      // throttle it would poll on the fast active interval (15s).
+      listPipelineRuns.mockImplementation(async (input: { definitionId: number }) =>
+        input.definitionId === 1
+          ? [run({ buildId: 101, definitionId: 1, definitionName: "CI", status: "inProgress" })]
+          : [run({ buildId: 202, definitionId: 2, definitionName: "Nightly" })],
+      );
+
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      render(
+        <QueryClientProvider client={client}>
+          <PipelineSubscriptionsBoard
+            organizationId="contoso"
+            subscriptions={subscriptions}
+            selectedBuildId={null}
+            onSelectRun={() => {}}
+            onRemove={() => {}}
+          />
+        </QueryClientProvider>,
+      );
+
+      // Let the initial fetches resolve (one per subscription).
+      await vi.advanceTimersByTimeAsync(0);
+      const ciCallsAfterInitial = listPipelineRuns.mock.calls.filter(
+        ([input]) => input.definitionId === 1,
+      ).length;
+
+      // Advance past the active interval (15s) but short of idle (60s). A
+      // collapsed pipeline must not refetch yet, even with an in-progress run.
+      await vi.advanceTimersByTimeAsync(20_000);
+      const ciCallsAfterActiveWindow = listPipelineRuns.mock.calls.filter(
+        ([input]) => input.definitionId === 1,
+      ).length;
+      expect(ciCallsAfterActiveWindow).toBe(ciCallsAfterInitial);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("falls back to the first expanded grid when the selection is elsewhere", async () => {
     renderBoard(999);
 

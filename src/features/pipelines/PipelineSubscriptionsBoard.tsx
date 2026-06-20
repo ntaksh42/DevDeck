@@ -57,30 +57,37 @@ export function PipelineSubscriptionsBoard({
     });
   }, [subscriptions]);
 
-  // One runs query per subscription. Kept active even while collapsed so the
-  // header badge keeps reflecting the latest run.
+  // One runs query per subscription. Collapsed pipelines keep polling so the
+  // header badge stays current, but only at the idle interval; the fast active
+  // interval is reserved for expanded (visible) pipelines with a live run, so
+  // watching many pipelines does not flood the API with short-interval polls.
   const queries = useQueries({
-    queries: orgSubscriptions.map((sub) => ({
-      queryKey: [
-        "pipelineSubscriptionHistory",
-        organizationId,
-        sub.projectId,
-        sub.definitionId,
-      ],
-      queryFn: () =>
-        listPipelineRuns({
+    queries: orgSubscriptions.map((sub) => {
+      const key = subscriptionKey(sub.organizationId, sub.projectId, sub.definitionId);
+      const isOpen = expanded.has(key);
+      return {
+        queryKey: [
+          "pipelineSubscriptionHistory",
           organizationId,
-          projectId: sub.projectId,
-          definitionId: sub.definitionId,
-        }),
-      enabled: !!organizationId,
-      refetchInterval: (query: { state: { data?: PipelineRunSummary[] } }) => {
-        const data = query.state.data;
-        return data?.some((run) => isInProgressStatus(run.status))
-          ? ACTIVE_REFRESH_INTERVAL_MS
-          : IDLE_REFRESH_INTERVAL_MS;
-      },
-    })),
+          sub.projectId,
+          sub.definitionId,
+        ],
+        queryFn: () =>
+          listPipelineRuns({
+            organizationId,
+            projectId: sub.projectId,
+            definitionId: sub.definitionId,
+          }),
+        enabled: !!organizationId,
+        refetchInterval: (query: { state: { data?: PipelineRunSummary[] } }) => {
+          if (!isOpen) return IDLE_REFRESH_INTERVAL_MS;
+          const data = query.state.data;
+          return data?.some((run) => isInProgressStatus(run.status))
+            ? ACTIVE_REFRESH_INTERVAL_MS
+            : IDLE_REFRESH_INTERVAL_MS;
+        },
+      };
+    }),
   });
 
   if (orgSubscriptions.length === 0) {

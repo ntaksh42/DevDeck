@@ -78,6 +78,15 @@ pub struct WorkItemWithRelations {
 pub struct WorkItemRelation {
     pub rel: String,
     pub url: String,
+    #[serde(default)]
+    pub attributes: Option<WorkItemRelationAttributes>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemRelationAttributes {
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -247,7 +256,8 @@ impl AdoClient {
         // misuse rather than silently returning no links.
         if response.work_item_relations.is_empty() && !response.work_items.is_empty() {
             return Err(AdoError::WiqlQueryShape(
-                "query returned flat WorkItems; use query_work_item_ids for FROM WorkItems queries".to_string(),
+                "query returned flat WorkItems; use query_work_item_ids for FROM WorkItems queries"
+                    .to_string(),
             ));
         }
         Ok(response
