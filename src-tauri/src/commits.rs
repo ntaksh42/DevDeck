@@ -6,11 +6,14 @@ use serde::{Deserialize, Serialize};
 use tokio::task::JoinSet;
 
 use crate::auth::client_for_organization;
-use crate::db::{AppDatabase, CachedCommit, Organization};
+use crate::db::{AppDatabase, CachedCommit, CachedCommitPr, Organization};
 use crate::error::{AppError, Result};
+use crate::prs::vote_label;
 use crate::secrets::SecretStore;
 
 const COMMIT_SYNC_CONCURRENCY: usize = 4;
+/// How long a commit's related-PR lookup stays cached before being refreshed.
+const COMMIT_PR_CACHE_TTL_MINUTES: i64 = 30;
 const MAX_DIFF_CONTENT_BYTES: usize = 256 * 1024;
 /// Sync window in days. Must cover the largest date preset offered by the
 /// commit search UI (`src/features/commits/CommitSearch.tsx`, 90d) so that
@@ -130,6 +133,26 @@ pub struct CommitFileDiff {
     pub target_content: Option<String>,
     pub base_unavailable_reason: Option<String>,
     pub target_unavailable_reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetCommitPullRequestsInput {
+    pub organization_id: Option<String>,
+    pub repository_id: String,
+    pub commit_id: String,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitPullRequest {
+    pub pull_request_id: i64,
+    pub repository_id: String,
+    pub title: String,
+    pub status: String,
+    pub my_vote: i32,
+    pub my_vote_label: String,
+    pub web_url: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -443,8 +466,100 @@ impl CommitService {
         })
     }
 
+    /// Returns the pull requests that contain a commit, served from an
+    /// on-demand cache. Returns an empty list (not an error) when the commit is
+    /// not part of any pull request.
+    pub async fn get_commit_pull_requests(
+        &self,
+        input: GetCommitPullRequestsInput,
+    ) -> Result<Vec<CommitPullRequest>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let fresh_after =
+            (Utc::now() - chrono::Duration::minutes(COMMIT_PR_CACHE_TTL_MINUTES)).to_rfc3339();
+
+        if let Some(cached) = self.db.get_cached_commit_prs(
+            &organization.id,
+            &input.repository_id,
+            &input.commit_id,
+            &fresh_after,
+        )? {
+            return Ok(cached
+                .into_iter()
+                .map(cached_commit_pr_to_summary)
+                .collect());
+        }
+
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let prs = client
+            .list_commit_pull_requests(&input.repository_id, &input.commit_id)
+            .await?;
+
+        let me = organization.authenticated_user_id.as_deref();
+        let cached: Vec<CachedCommitPr> = prs
+            .into_iter()
+            .filter_map(|pr| {
+                let repo = pr.repository.as_ref()?;
+                let project_name = repo
+                    .project
+                    .as_ref()
+                    .map(|p| p.name.as_str())
+                    .unwrap_or(repo.name.as_str());
+                let web_url = format!(
+                    "{}/{}/_git/{}/pullrequest/{}",
+                    organization.base_url.trim_end_matches('/'),
+                    encode_path_segment(project_name),
+                    encode_path_segment(&repo.name),
+                    pr.pull_request_id
+                );
+                let my_vote = me
+                    .and_then(|me| {
+                        pr.reviewers
+                            .as_deref()
+                            .unwrap_or(&[])
+                            .iter()
+                            .find(|r| r.id.as_deref() == Some(me))
+                            .map(|r| r.vote)
+                    })
+                    .unwrap_or(0);
+                Some(CachedCommitPr {
+                    pull_request_id: pr.pull_request_id,
+                    pr_repository_id: repo.id.clone(),
+                    title: pr.title,
+                    status: pr.status,
+                    my_vote,
+                    my_vote_label: vote_label(my_vote).to_string(),
+                    web_url: Some(web_url),
+                })
+            })
+            .collect();
+
+        self.db.replace_commit_prs(
+            &organization.id,
+            &input.repository_id,
+            &input.commit_id,
+            &cached,
+        )?;
+
+        Ok(cached
+            .into_iter()
+            .map(cached_commit_pr_to_summary)
+            .collect())
+    }
+
     fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {
         self.db.resolve_organization(id)
+    }
+}
+
+fn cached_commit_pr_to_summary(pr: CachedCommitPr) -> CommitPullRequest {
+    CommitPullRequest {
+        pull_request_id: pr.pull_request_id,
+        repository_id: pr.pr_repository_id,
+        title: pr.title,
+        status: pr.status,
+        my_vote: pr.my_vote,
+        my_vote_label: pr.my_vote_label,
+        web_url: pr.web_url,
     }
 }
 

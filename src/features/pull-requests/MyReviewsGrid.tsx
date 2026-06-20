@@ -9,13 +9,32 @@ import {
   useState,
 } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, ChevronUp, Filter, Search, X } from 'lucide-react';
 import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  CircleDashed,
+  Download,
+  Filter,
+  Loader,
+  Pin,
+  PinOff,
+  Plus,
+  Search,
+  Trash2,
+  Upload,
+  X,
+  XCircle,
+} from 'lucide-react';
+import {
+  getAppSettings,
   listMyReviewPullRequests,
   commandErrorMessage,
   prLocator,
   snoozeItem,
   submitPullRequestVote,
+  DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
   type Organization,
   type ReviewPullRequestSummary,
 } from '@/lib/azdoCommands';
@@ -41,16 +60,24 @@ import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { LoadingState, ErrorState } from '@/components/StateDisplay';
 import { PrReviewPanel } from './PrReviewPanel';
 import { VOTE_BADGE_CLASSES, voteTone } from './voteVisual';
+import {
+  createPullRequestViewsExport,
+  loadPullRequestViews,
+  newPullRequestViewId,
+  parsePullRequestViewsImport,
+  savePullRequestViews,
+  type PullRequestView,
+} from './prViewsStorage';
 
 const DEFAULT_REVIEW_PREVIEW_WIDTH = 420;
 const MIN_REVIEW_PREVIEW_WIDTH = 280;
 // Effectively unbounded: the pane is still capped by the window width.
 const MAX_REVIEW_PREVIEW_WIDTH = 8192;
 const REVIEW_PREVIEW_WIDTH_STORAGE_KEY = 'azdodeck:layout:reviewPreviewWidth';
-const DEFAULT_PR_GRID_COLUMN_WIDTHS = [52, 110, 180, 82, 56, 76, 68, 78];
-const PR_GRID_COLUMN_MIN_WIDTHS = [48, 96, 150, 72, 50, 68, 62, 70];
-const PR_GRID_COLUMN_MAX_WIDTHS = [120, 520, 960, 240, 120, 240, 180, 240];
-const PR_GRID_COLUMN_WIDTHS_STORAGE_KEY = 'azdodeck:layout:myReviewsGridColumnWidths:v2';
+const DEFAULT_PR_GRID_COLUMN_WIDTHS = [52, 36, 110, 180, 82, 56, 76, 68, 78];
+const PR_GRID_COLUMN_MIN_WIDTHS = [48, 32, 96, 150, 72, 50, 68, 62, 70];
+const PR_GRID_COLUMN_MAX_WIDTHS = [120, 60, 520, 960, 240, 120, 240, 180, 240];
+const PR_GRID_COLUMN_WIDTHS_STORAGE_KEY = 'azdodeck:layout:myReviewsGridColumnWidths:v3';
 const PR_GRID_VIEW_STORAGE_KEY = "azdodeck:view:myReviewsGrid:v1";
 const PR_GRID_ROW_HEIGHT = 29;
 const PR_GRID_OVERSCAN = 8;
@@ -116,6 +143,45 @@ function RequiredBadge({ required }: { required: boolean }) {
   ) : (
     <span className="inline-flex items-center rounded border border-border bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
       Optional
+    </span>
+  );
+}
+
+// Compact CI verdict cell. Icon-only to keep the column minimal; the full
+// pipeline/status detail lives in the native tooltip. An unknown/none verdict
+// renders a muted dash so a missing CI fetch never reads as a failure.
+function CiBadge({ pr }: { pr: ReviewPullRequestSummary }) {
+  const status = pr.ciStatus ?? "none";
+  const contextLabel = pr.ciContext ? pr.ciContext : "—";
+  const statusLabel =
+    status === "succeeded"
+      ? "Succeeded"
+      : status === "failed"
+        ? "Failed"
+        : status === "in_progress"
+          ? "In progress"
+          : "Not run";
+  const tooltip = `Pipeline: ${contextLabel} | Status: ${statusLabel} | ${pr.ciCheckCount} check${pr.ciCheckCount === 1 ? "" : "s"}`;
+
+  let icon: ReactNode;
+  if (status === "succeeded") {
+    icon = <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400" aria-hidden="true" />;
+  } else if (status === "failed") {
+    icon = <XCircle className="h-3.5 w-3.5 text-red-600 dark:text-red-400" aria-hidden="true" />;
+  } else if (status === "in_progress") {
+    icon = <Loader className="h-3.5 w-3.5 animate-spin text-amber-500 dark:text-amber-400" aria-hidden="true" />;
+  } else {
+    icon = <CircleDashed className="h-3.5 w-3.5 text-muted-foreground/50" aria-hidden="true" />;
+  }
+
+  return (
+    <span
+      className="flex items-center justify-center"
+      title={tooltip}
+      aria-label={`CI ${statusLabel}`}
+      role="img"
+    >
+      {icon}
     </span>
   );
 }
@@ -190,6 +256,8 @@ function renderPrCell(key: SortKey, pr: ReviewPullRequestSummary, isStale: boole
       return <RequiredBadge required={pr.myIsRequired} />;
     case "myVote":
       return <VoteBadge vote={pr.myVote} label={pr.myVoteLabel} />;
+    case "ciStatus":
+      return <CiBadge pr={pr} />;
   }
 }
 
@@ -200,12 +268,13 @@ const ReviewPrRow = forwardRef<
     selected: boolean;
     columnTemplate: string;
     visibleColumns: SortKey[];
+    staleThresholdDays: number;
     onSelect: () => void;
   }
->(({ pr, selected, columnTemplate, visibleColumns, onSelect }, ref) => {
+>(({ pr, selected, columnTemplate, visibleColumns, staleThresholdDays, onSelect }, ref) => {
   const createdTime = new Date(pr.creationDate).getTime();
   const isStale = Number.isFinite(createdTime)
-    ? Math.floor((Date.now() - createdTime) / 86_400_000) >= 3
+    ? Math.floor((Date.now() - createdTime) / 86_400_000) >= staleThresholdDays
     : false;
   return (
     <div
@@ -242,6 +311,7 @@ ReviewPrRow.displayName = "ReviewPrRow";
 
 type SortKey =
   | "pullRequestId"
+  | "ciStatus"
   | "repositoryName"
   | "title"
   | "createdBy"
@@ -256,6 +326,7 @@ type SortState = {
 
 const sortLabels: Record<SortKey, string> = {
   pullRequestId: "PR#",
+  ciStatus: "CI",
   repositoryName: "Repository",
   title: "Title",
   createdBy: "Author",
@@ -268,6 +339,7 @@ const sortLabels: Record<SortKey, string> = {
 // Column order matches the width arrays; PR# and Title can never be hidden.
 const PR_GRID_KEYS: SortKey[] = [
   "pullRequestId",
+  "ciStatus",
   "repositoryName",
   "title",
   "createdBy",
@@ -294,6 +366,21 @@ function compareStrings(a: string | null | undefined, b: string | null | undefin
   return (a ?? "").localeCompare(b ?? "", undefined, { sensitivity: "base" });
 }
 
+// Ordering for the CI column: ascending sort surfaces failures first so a
+// reviewer can spot merge blockers, then in-progress, success, and unknown.
+function ciSortRank(status: string | null): number {
+  switch (status) {
+    case "failed":
+      return 0;
+    case "in_progress":
+      return 1;
+    case "succeeded":
+      return 2;
+    default:
+      return 3;
+  }
+}
+
 function compareReviewPrs(
   a: ReviewPullRequestSummary,
   b: ReviewPullRequestSummary,
@@ -302,6 +389,8 @@ function compareReviewPrs(
   switch (key) {
     case "pullRequestId":
       return a.pullRequestId - b.pullRequestId;
+    case "ciStatus":
+      return ciSortRank(a.ciStatus) - ciSortRank(b.ciStatus);
     case "repositoryName":
       return compareStrings(a.repositoryName, b.repositoryName);
     case "title":
@@ -508,7 +597,24 @@ function activeColumnFilterCount(
   ).length;
 }
 
-export function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
+type MyReviewsGridProps = {
+  organizations: Organization[];
+  selectedViewRequestId?: string | null;
+  onSelectedViewRequestHandled?: () => void;
+  onViewsChange?: (views: PullRequestView[]) => void;
+};
+
+function prViewExportFileName(): string {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  return `azdodeck-pull-request-views-${stamp}.json`;
+}
+
+export function MyReviewsGrid({
+  organizations,
+  selectedViewRequestId,
+  onSelectedViewRequestHandled,
+  onViewsChange,
+}: MyReviewsGridProps) {
   const initialViewState = useMemo(() => loadMyReviewsGridViewState(), []);
   const [organizationId, setOrganizationId] = useState(() =>
     organizations.some((organization) => organization.id === initialViewState.organizationId)
@@ -522,6 +628,15 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     enabled: !!organizationId,
     staleTime: 5 * 60_000,
   });
+
+  const settingsQuery = useQuery({
+    queryKey: ["appSettings"],
+    queryFn: getAppSettings,
+    staleTime: 5 * 60_000,
+  });
+  const staleThresholdDays =
+    settingsQuery.data?.reviewStaleThresholdDays ??
+    DEFAULT_REVIEW_STALE_THRESHOLD_DAYS;
 
   const queryClient = useQueryClient();
   const voteMutation = useMutation({
@@ -580,6 +695,11 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
   );
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const [maximized, setMaximized] = useState(false);
+  const [savedViews, setSavedViews] = useState<PullRequestView[]>(() => loadPullRequestViews());
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
+  const [viewMessage, setViewMessage] = useState<string | null>(null);
+  const viewButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const importViewsInputRef = useRef<HTMLInputElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const filterInputRef = useRef<HTMLInputElement | null>(null);
   const gridScrollRef = useRef<HTMLDivElement | null>(null);
@@ -608,6 +728,128 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
       visibleColumns,
     });
   }, [collapsedSections, columnFilters, organizationId, showDrafts, sort, textFilter, visibleColumns]);
+
+  useEffect(() => {
+    savePullRequestViews(savedViews);
+    onViewsChange?.(savedViews);
+  }, [onViewsChange, savedViews]);
+
+  // Capture the current grid filter/sort state as a saved view payload.
+  function currentViewState(): Omit<PullRequestView, "id" | "name" | "pinned"> {
+    const filters: PullRequestView["columnFilters"] = {};
+    for (const col of Object.keys(columnFilters) as FilterableColumn[]) {
+      const values = columnFilters[col];
+      if (values && values.size > 0) filters[col] = [...values];
+    }
+    return {
+      organizationId,
+      textFilter,
+      columnFilters: filters,
+      showDrafts,
+      sortKey: sort.key,
+      sortDirection: sort.direction,
+    };
+  }
+
+  function applyView(view: PullRequestView) {
+    if (
+      view.organizationId &&
+      organizations.some((organization) => organization.id === view.organizationId)
+    ) {
+      setOrganizationId(view.organizationId);
+    }
+    setTextFilter(view.textFilter);
+    const restored: Partial<Record<FilterableColumn, Set<string>>> = {};
+    for (const col of Object.keys(view.columnFilters) as FilterableColumn[]) {
+      const values = view.columnFilters[col];
+      if (values && values.length > 0) restored[col] = new Set(values);
+    }
+    setColumnFilters(restored);
+    setShowDrafts(view.showDrafts);
+    setSort({ key: view.sortKey, direction: view.sortDirection });
+    setActiveViewId(view.id);
+    setSelectedIndex(0);
+  }
+
+  function saveCurrentAsView() {
+    const name = window.prompt("Save current filters as view named:")?.trim();
+    if (!name) return;
+    const view: PullRequestView = {
+      id: newPullRequestViewId(),
+      name,
+      pinned: false,
+      ...currentViewState(),
+    };
+    setSavedViews((current) => [...current, view]);
+    setActiveViewId(view.id);
+    setViewMessage(`Saved view "${name}".`);
+  }
+
+  function updateActiveView() {
+    if (!activeViewId) return;
+    setSavedViews((current) =>
+      current.map((view) =>
+        view.id === activeViewId ? { ...view, ...currentViewState() } : view,
+      ),
+    );
+    setViewMessage("Updated view with current filters.");
+  }
+
+  function deleteActiveView() {
+    if (!activeViewId) return;
+    setSavedViews((current) => current.filter((view) => view.id !== activeViewId));
+    setActiveViewId(null);
+    setViewMessage("Deleted view.");
+  }
+
+  function toggleActiveViewPinned() {
+    if (!activeViewId) return;
+    setSavedViews((current) =>
+      current.map((view) =>
+        view.id === activeViewId ? { ...view, pinned: !view.pinned } : view,
+      ),
+    );
+  }
+
+  function exportViews() {
+    if (savedViews.length === 0) return;
+    const text = JSON.stringify(createPullRequestViewsExport(savedViews), null, 2);
+    const blob = new Blob([text], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = prViewExportFileName();
+    link.click();
+    URL.revokeObjectURL(url);
+    setViewMessage(`Exported ${savedViews.length} view${savedViews.length === 1 ? "" : "s"}.`);
+  }
+
+  async function importViews(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) return;
+    try {
+      const imported = parsePullRequestViewsImport(await file.text()).map((view) => ({
+        ...view,
+        id: newPullRequestViewId(),
+      }));
+      setSavedViews((current) => [...current, ...imported]);
+      setViewMessage(`Imported ${imported.length} view${imported.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      setViewMessage(error instanceof Error ? error.message : "Failed to import views.");
+    }
+  }
+
+  function selectViewAt(index: number) {
+    if (savedViews.length === 0) return;
+    const clamped = Math.max(0, Math.min(index, savedViews.length - 1));
+    const view = savedViews[clamped];
+    if (!view) return;
+    applyView(view);
+    window.setTimeout(() => viewButtonRefs.current[clamped]?.focus(), 0);
+  }
+
+  const activeView = savedViews.find((view) => view.id === activeViewId) ?? null;
 
   const allPrs = query.data ?? [];
 
@@ -736,6 +978,16 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
   useEffect(() => {
     containerRef.current?.focus();
   }, []);
+
+  // Apply a view requested from the navigation sidebar.
+  useEffect(() => {
+    if (!selectedViewRequestId) return;
+    const requested = savedViews.find((view) => view.id === selectedViewRequestId);
+    if (requested) applyView(requested);
+    onSelectedViewRequestHandled?.();
+    // applyView is stable enough for this one-shot request; deps kept minimal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedViewRequestId, savedViews]);
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -1180,6 +1432,150 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
 
       </div>
 
+      {/* Saved views bar */}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5">
+        <span className="text-xs font-medium text-muted-foreground">Views</span>
+        {savedViews.length > 0 ? (
+          <div
+            role="listbox"
+            aria-label="Saved pull request views"
+            className="flex flex-wrap items-center gap-1"
+            onKeyDown={(event) => {
+              if (event.target instanceof HTMLElement && event.target.closest("input,select,textarea")) {
+                return;
+              }
+              const activeIndex = savedViews.findIndex((view) => view.id === activeViewId);
+              if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+                event.preventDefault();
+                event.stopPropagation();
+                selectViewAt((activeIndex < 0 ? -1 : activeIndex) + 1);
+              } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+                event.preventDefault();
+                event.stopPropagation();
+                selectViewAt((activeIndex < 0 ? savedViews.length : activeIndex) - 1);
+              } else if (event.key === "Home") {
+                event.preventDefault();
+                event.stopPropagation();
+                selectViewAt(0);
+              } else if (event.key === "End") {
+                event.preventDefault();
+                event.stopPropagation();
+                selectViewAt(savedViews.length - 1);
+              } else if (event.key === "Delete" && activeViewId) {
+                event.preventDefault();
+                event.stopPropagation();
+                deleteActiveView();
+              }
+            }}
+          >
+            {savedViews.map((view, index) => {
+              const active = view.id === activeViewId;
+              return (
+                <button
+                  key={view.id}
+                  ref={(element) => {
+                    viewButtonRefs.current[index] = element;
+                  }}
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  onClick={() => applyView(view)}
+                  className={`inline-flex h-7 items-center gap-1 rounded-md border px-2 text-xs font-medium outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
+                    active
+                      ? "border-primary bg-secondary text-foreground"
+                      : "border-border bg-card text-muted-foreground hover:bg-secondary"
+                  }`}
+                  title={`Apply view "${view.name}"`}
+                >
+                  {view.pinned ? <Pin className="h-3 w-3 text-primary" aria-hidden="true" /> : null}
+                  <span className="max-w-[160px] truncate">{view.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground/70">
+            Save the current filters as a reusable view.
+          </span>
+        )}
+        <span className="ml-auto flex items-center gap-1">
+          {activeView ? (
+            <>
+              <button
+                type="button"
+                onClick={updateActiveView}
+                title={`Update "${activeView.name}" with current filters`}
+                className="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 text-xs font-medium hover:bg-secondary"
+              >
+                Update
+              </button>
+              <button
+                type="button"
+                onClick={toggleActiveViewPinned}
+                title={activeView.pinned ? "Unpin from sidebar" : "Pin to sidebar"}
+                aria-label={activeView.pinned ? "Unpin view" : "Pin view"}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-secondary"
+              >
+                {activeView.pinned ? (
+                  <PinOff className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  <Pin className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={deleteActiveView}
+                title={`Delete "${activeView.name}"`}
+                aria-label="Delete view"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-destructive hover:bg-destructive/10"
+              >
+                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </>
+          ) : null}
+          <button
+            type="button"
+            onClick={saveCurrentAsView}
+            title="Save current filters as a new view"
+            className="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 text-xs font-medium hover:bg-secondary"
+          >
+            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+            Save
+          </button>
+          <button
+            type="button"
+            disabled={savedViews.length === 0}
+            onClick={exportViews}
+            title="Export views as JSON"
+            aria-label="Export views"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Download className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={() => importViewsInputRef.current?.click()}
+            title="Import views from JSON"
+            aria-label="Import views"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-secondary"
+          >
+            <Upload className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+          <input
+            ref={importViewsInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(event) => void importViews(event)}
+          />
+        </span>
+        {viewMessage ? (
+          <p role="status" className="w-full text-xs text-muted-foreground">
+            {viewMessage}
+          </p>
+        ) : null}
+      </div>
+
       <div
         className={
           maximized
@@ -1296,6 +1692,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
                         pr={row.pr}
                         selected={row.prIndex === selectedIndex}
                         visibleColumns={visibleColumns}
+                        staleThresholdDays={staleThresholdDays}
                         onSelect={() => setSelectedIndex(row.prIndex)}
                       />
                     );
