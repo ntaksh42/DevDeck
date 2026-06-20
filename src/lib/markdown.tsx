@@ -3,9 +3,34 @@ import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { openExternalUrl } from "@/lib/openExternal";
 
+// Image sources are restricted to schemes that cannot exfiltrate beyond a plain
+// image fetch. https/data match the project's existing rich-text handling, and
+// blob covers locally hydrated attachment images.
+const SAFE_IMAGE_SCHEME = /^(https?:|data:|blob:)/i;
+
+// Harden the sanitized output: external links must not leak the opener or
+// referrer (tabnabbing), and images must not act as trackers via referrer or
+// unsafe schemes. DOMPurify already drops javascript: URLs; this also strips
+// any other unexpected image scheme so only safe fetches remain.
+DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+  if (node.tagName === "A" && node.getAttribute("target") === "_blank") {
+    node.setAttribute("rel", "noopener noreferrer");
+  }
+  if (node.tagName === "IMG") {
+    const src = node.getAttribute("src");
+    if (src && !SAFE_IMAGE_SCHEME.test(src.trim())) {
+      node.removeAttribute("src");
+    }
+    node.setAttribute("referrerpolicy", "no-referrer");
+  }
+});
+
 export function renderMarkdownHtml(text: string): string {
   const html = marked.parse(text, { async: false, gfm: true, breaks: true });
-  return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
+  return DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true },
+    ADD_ATTR: ["target"],
+  });
 }
 
 const MARKDOWN_CLASSES = [

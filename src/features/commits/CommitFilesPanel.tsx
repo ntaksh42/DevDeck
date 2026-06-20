@@ -9,6 +9,7 @@ import {
 } from "@/lib/azdoCommands";
 import { buildDiffLines, collapseDiff, type DiffLine } from "@/lib/diffView";
 import { openExternalUrl } from "@/lib/openExternal";
+import { DiffLineText } from "@/components/DiffLineText";
 
 const MAX_RENDERED_DIFF_LINES = 2000;
 
@@ -261,7 +262,7 @@ function CommitDiffView({
           </span>
           <span className="whitespace-pre-wrap break-all pl-1">
             {marker}
-            {line.text}
+            <DiffLineText segments={line.segments} text={line.text} kind={line.kind} />
           </span>
         </div>,
       );

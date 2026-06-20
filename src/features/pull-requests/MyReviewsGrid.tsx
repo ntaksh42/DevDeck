@@ -8,17 +8,39 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, ChevronUp, Filter, Search, X } from 'lucide-react';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  CircleDashed,
+  Download,
+  Filter,
+  Loader,
+  Pin,
+  PinOff,
+  Plus,
+  Search,
+  Trash2,
+  Upload,
+  X,
+  XCircle,
+} from 'lucide-react';
+import {
+  getAppSettings,
   listMyReviewPullRequests,
+  listPullRequestChanges,
   commandErrorMessage,
   prLocator,
   snoozeItem,
   submitPullRequestVote,
+  DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
   type Organization,
   type ReviewPullRequestSummary,
 } from '@/lib/azdoCommands';
+import { detectFileOverlaps } from '@/lib/prOverlap';
 import { SnoozeMenu } from '@/components/SnoozeMenu';
 import { SnoozedItemsPanel } from '@/components/SnoozedItemsPanel';
 import {
@@ -35,22 +57,32 @@ import {
   type SortDirection,
 } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
+import { recordRecentPullRequest } from '@/lib/recentItems';
 import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { LoadingState, ErrorState } from '@/components/StateDisplay';
+import { ActiveFilters } from '@/components/ActiveFilters';
 import { PrReviewPanel } from './PrReviewPanel';
 import { VOTE_BADGE_CLASSES, voteTone } from './voteVisual';
+import {
+  createPullRequestViewsExport,
+  loadPullRequestViews,
+  newPullRequestViewId,
+  parsePullRequestViewsImport,
+  savePullRequestViews,
+  type PullRequestView,
+} from './prViewsStorage';
 
 const DEFAULT_REVIEW_PREVIEW_WIDTH = 420;
 const MIN_REVIEW_PREVIEW_WIDTH = 280;
 // Effectively unbounded: the pane is still capped by the window width.
 const MAX_REVIEW_PREVIEW_WIDTH = 8192;
 const REVIEW_PREVIEW_WIDTH_STORAGE_KEY = 'azdodeck:layout:reviewPreviewWidth';
-const DEFAULT_PR_GRID_COLUMN_WIDTHS = [52, 110, 180, 82, 56, 76, 68, 78];
-const PR_GRID_COLUMN_MIN_WIDTHS = [48, 96, 150, 72, 50, 68, 62, 70];
-const PR_GRID_COLUMN_MAX_WIDTHS = [120, 520, 960, 240, 120, 240, 180, 240];
-const PR_GRID_COLUMN_WIDTHS_STORAGE_KEY = 'azdodeck:layout:myReviewsGridColumnWidths:v2';
+const DEFAULT_PR_GRID_COLUMN_WIDTHS = [52, 36, 110, 180, 82, 56, 76, 68, 78];
+const PR_GRID_COLUMN_MIN_WIDTHS = [48, 32, 96, 150, 72, 50, 68, 62, 70];
+const PR_GRID_COLUMN_MAX_WIDTHS = [120, 60, 520, 960, 240, 120, 240, 180, 240];
+const PR_GRID_COLUMN_WIDTHS_STORAGE_KEY = 'azdodeck:layout:myReviewsGridColumnWidths:v3';
 const PR_GRID_VIEW_STORAGE_KEY = "azdodeck:view:myReviewsGrid:v1";
 const PR_GRID_ROW_HEIGHT = 29;
 const PR_GRID_OVERSCAN = 8;
@@ -116,6 +148,45 @@ function RequiredBadge({ required }: { required: boolean }) {
   ) : (
     <span className="inline-flex items-center rounded border border-border bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
       Optional
+    </span>
+  );
+}
+
+// Compact CI verdict cell. Icon-only to keep the column minimal; the full
+// pipeline/status detail lives in the native tooltip. An unknown/none verdict
+// renders a muted dash so a missing CI fetch never reads as a failure.
+function CiBadge({ pr }: { pr: ReviewPullRequestSummary }) {
+  const status = pr.ciStatus ?? "none";
+  const contextLabel = pr.ciContext ? pr.ciContext : "—";
+  const statusLabel =
+    status === "succeeded"
+      ? "Succeeded"
+      : status === "failed"
+        ? "Failed"
+        : status === "in_progress"
+          ? "In progress"
+          : "Not run";
+  const tooltip = `Pipeline: ${contextLabel} | Status: ${statusLabel} | ${pr.ciCheckCount} check${pr.ciCheckCount === 1 ? "" : "s"}`;
+
+  let icon: ReactNode;
+  if (status === "succeeded") {
+    icon = <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400" aria-hidden="true" />;
+  } else if (status === "failed") {
+    icon = <XCircle className="h-3.5 w-3.5 text-red-600 dark:text-red-400" aria-hidden="true" />;
+  } else if (status === "in_progress") {
+    icon = <Loader className="h-3.5 w-3.5 animate-spin text-amber-500 dark:text-amber-400" aria-hidden="true" />;
+  } else {
+    icon = <CircleDashed className="h-3.5 w-3.5 text-muted-foreground/50" aria-hidden="true" />;
+  }
+
+  return (
+    <span
+      className="flex items-center justify-center"
+      title={tooltip}
+      aria-label={`CI ${statusLabel}`}
+      role="img"
+    >
+      {icon}
     </span>
   );
 }
@@ -190,6 +261,8 @@ function renderPrCell(key: SortKey, pr: ReviewPullRequestSummary, isStale: boole
       return <RequiredBadge required={pr.myIsRequired} />;
     case "myVote":
       return <VoteBadge vote={pr.myVote} label={pr.myVoteLabel} />;
+    case "ciStatus":
+      return <CiBadge pr={pr} />;
   }
 }
 
@@ -198,22 +271,24 @@ const ReviewPrRow = forwardRef<
   {
     pr: ReviewPullRequestSummary;
     selected: boolean;
+    inMultiSelection: boolean;
     columnTemplate: string;
     visibleColumns: SortKey[];
-    onSelect: () => void;
+    staleThresholdDays: number;
+    onSelect: (event: { shiftKey: boolean }) => void;
   }
->(({ pr, selected, columnTemplate, visibleColumns, onSelect }, ref) => {
+>(({ pr, selected, inMultiSelection, columnTemplate, visibleColumns, staleThresholdDays, onSelect }, ref) => {
   const createdTime = new Date(pr.creationDate).getTime();
   const isStale = Number.isFinite(createdTime)
-    ? Math.floor((Date.now() - createdTime) / 86_400_000) >= 3
+    ? Math.floor((Date.now() - createdTime) / 86_400_000) >= staleThresholdDays
     : false;
   return (
     <div
       ref={ref}
       tabIndex={selected ? 0 : -1}
       role="row"
-      aria-selected={selected}
-      onClick={onSelect}
+      aria-selected={selected || inMultiSelection}
+      onClick={(e) => onSelect({ shiftKey: e.shiftKey })}
       onKeyDown={(e) => {
         if ((e.target as HTMLElement).closest("button")) {
           return;
@@ -228,6 +303,7 @@ const ReviewPrRow = forwardRef<
         focus:ring-2 focus:ring-inset focus:ring-ring
         ${selected && isStale ? "bg-orange-100 dark:bg-orange-900/30"
           : selected ? "bg-secondary"
+          : inMultiSelection ? "bg-primary/10"
           : isStale ? "bg-orange-50 dark:bg-orange-950/20 hover:bg-orange-100/70"
           : "hover:bg-muted/50"}`}
       style={{ gridTemplateColumns: columnTemplate }}
@@ -242,6 +318,7 @@ ReviewPrRow.displayName = "ReviewPrRow";
 
 type SortKey =
   | "pullRequestId"
+  | "ciStatus"
   | "repositoryName"
   | "title"
   | "createdBy"
@@ -256,6 +333,7 @@ type SortState = {
 
 const sortLabels: Record<SortKey, string> = {
   pullRequestId: "PR#",
+  ciStatus: "CI",
   repositoryName: "Repository",
   title: "Title",
   createdBy: "Author",
@@ -268,6 +346,7 @@ const sortLabels: Record<SortKey, string> = {
 // Column order matches the width arrays; PR# and Title can never be hidden.
 const PR_GRID_KEYS: SortKey[] = [
   "pullRequestId",
+  "ciStatus",
   "repositoryName",
   "title",
   "createdBy",
@@ -294,6 +373,21 @@ function compareStrings(a: string | null | undefined, b: string | null | undefin
   return (a ?? "").localeCompare(b ?? "", undefined, { sensitivity: "base" });
 }
 
+// Ordering for the CI column: ascending sort surfaces failures first so a
+// reviewer can spot merge blockers, then in-progress, success, and unknown.
+function ciSortRank(status: string | null): number {
+  switch (status) {
+    case "failed":
+      return 0;
+    case "in_progress":
+      return 1;
+    case "succeeded":
+      return 2;
+    default:
+      return 3;
+  }
+}
+
 function compareReviewPrs(
   a: ReviewPullRequestSummary,
   b: ReviewPullRequestSummary,
@@ -302,6 +396,8 @@ function compareReviewPrs(
   switch (key) {
     case "pullRequestId":
       return a.pullRequestId - b.pullRequestId;
+    case "ciStatus":
+      return ciSortRank(a.ciStatus) - ciSortRank(b.ciStatus);
     case "repositoryName":
       return compareStrings(a.repositoryName, b.repositoryName);
     case "title":
@@ -508,7 +604,35 @@ function activeColumnFilterCount(
   ).length;
 }
 
-export function MyReviewsGrid({ organizations }: { organizations: Organization[] }) {
+export type MyReviewsSelectRequest = {
+  pullRequestId: number;
+  repositoryId: string | null;
+  organizationId?: string;
+  requestId: number;
+};
+
+type MyReviewsGridProps = {
+  organizations: Organization[];
+  selectRequest?: MyReviewsSelectRequest | null;
+  onSelectRequestHandled?: () => void;
+  selectedViewRequestId?: string | null;
+  onSelectedViewRequestHandled?: () => void;
+  onViewsChange?: (views: PullRequestView[]) => void;
+};
+
+function prViewExportFileName(): string {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  return `azdodeck-pull-request-views-${stamp}.json`;
+}
+
+export function MyReviewsGrid({
+  organizations,
+  selectRequest,
+  onSelectRequestHandled,
+  selectedViewRequestId,
+  onSelectedViewRequestHandled,
+  onViewsChange,
+}: MyReviewsGridProps) {
   const initialViewState = useMemo(() => loadMyReviewsGridViewState(), []);
   const [organizationId, setOrganizationId] = useState(() =>
     organizations.some((organization) => organization.id === initialViewState.organizationId)
@@ -523,11 +647,20 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
     staleTime: 5 * 60_000,
   });
 
+  const settingsQuery = useQuery({
+    queryKey: ["appSettings"],
+    queryFn: getAppSettings,
+    staleTime: 5 * 60_000,
+  });
+  const staleThresholdDays =
+    settingsQuery.data?.reviewStaleThresholdDays ??
+    DEFAULT_REVIEW_STALE_THRESHOLD_DAYS;
+
   const queryClient = useQueryClient();
   const voteMutation = useMutation({
     mutationFn: submitPullRequestVote,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["myReviews"] });
+      void queryClient.invalidateQueries({ queryKey: ["myReviews", organizationId] });
     },
   });
 
@@ -552,6 +685,12 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
   );
   const [showDrafts, setShowDrafts] = useState(initialViewState.showDrafts);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  // Multi-selection for conflict-risk overlap checks. Keys are PR triage keys
+  // (`repositoryId:pullRequestId`); the anchor is where a Shift-extend started.
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
+  const [overlapPopupOpen, setOverlapPopupOpen] = useState(false);
+  const overlapButtonRef = useRef<HTMLButtonElement | null>(null);
   const [sort, setSort] = useState<SortState>(initialViewState.sort);
   const [columnFilters, setColumnFilters] = useState<Partial<Record<FilterableColumn, Set<string>>>>(
     initialViewState.columnFilters,
@@ -580,11 +719,19 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
   );
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const [maximized, setMaximized] = useState(false);
+  const [savedViews, setSavedViews] = useState<PullRequestView[]>(() => loadPullRequestViews());
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
+  const [viewMessage, setViewMessage] = useState<string | null>(null);
+  const viewButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const importViewsInputRef = useRef<HTMLInputElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const filterInputRef = useRef<HTMLInputElement | null>(null);
   const gridScrollRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
   const gridHadFocusRef = useRef(false);
+  // A cross-link select request that is waiting for the target PR to appear in
+  // the sorted/visible rows (e.g. after switching org or loading data).
+  const pendingSelectRef = useRef<MyReviewsSelectRequest | null>(null);
   const [gridViewport, setGridViewport] = useState({ height: 0, scrollTop: 0 });
 
   useEffect(() => {
@@ -608,6 +755,128 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
       visibleColumns,
     });
   }, [collapsedSections, columnFilters, organizationId, showDrafts, sort, textFilter, visibleColumns]);
+
+  useEffect(() => {
+    savePullRequestViews(savedViews);
+    onViewsChange?.(savedViews);
+  }, [onViewsChange, savedViews]);
+
+  // Capture the current grid filter/sort state as a saved view payload.
+  function currentViewState(): Omit<PullRequestView, "id" | "name" | "pinned"> {
+    const filters: PullRequestView["columnFilters"] = {};
+    for (const col of Object.keys(columnFilters) as FilterableColumn[]) {
+      const values = columnFilters[col];
+      if (values && values.size > 0) filters[col] = [...values];
+    }
+    return {
+      organizationId,
+      textFilter,
+      columnFilters: filters,
+      showDrafts,
+      sortKey: sort.key,
+      sortDirection: sort.direction,
+    };
+  }
+
+  function applyView(view: PullRequestView) {
+    if (
+      view.organizationId &&
+      organizations.some((organization) => organization.id === view.organizationId)
+    ) {
+      setOrganizationId(view.organizationId);
+    }
+    setTextFilter(view.textFilter);
+    const restored: Partial<Record<FilterableColumn, Set<string>>> = {};
+    for (const col of Object.keys(view.columnFilters) as FilterableColumn[]) {
+      const values = view.columnFilters[col];
+      if (values && values.length > 0) restored[col] = new Set(values);
+    }
+    setColumnFilters(restored);
+    setShowDrafts(view.showDrafts);
+    setSort({ key: view.sortKey, direction: view.sortDirection });
+    setActiveViewId(view.id);
+    setSelectedIndex(0);
+  }
+
+  function saveCurrentAsView() {
+    const name = window.prompt("Save current filters as view named:")?.trim();
+    if (!name) return;
+    const view: PullRequestView = {
+      id: newPullRequestViewId(),
+      name,
+      pinned: false,
+      ...currentViewState(),
+    };
+    setSavedViews((current) => [...current, view]);
+    setActiveViewId(view.id);
+    setViewMessage(`Saved view "${name}".`);
+  }
+
+  function updateActiveView() {
+    if (!activeViewId) return;
+    setSavedViews((current) =>
+      current.map((view) =>
+        view.id === activeViewId ? { ...view, ...currentViewState() } : view,
+      ),
+    );
+    setViewMessage("Updated view with current filters.");
+  }
+
+  function deleteActiveView() {
+    if (!activeViewId) return;
+    setSavedViews((current) => current.filter((view) => view.id !== activeViewId));
+    setActiveViewId(null);
+    setViewMessage("Deleted view.");
+  }
+
+  function toggleActiveViewPinned() {
+    if (!activeViewId) return;
+    setSavedViews((current) =>
+      current.map((view) =>
+        view.id === activeViewId ? { ...view, pinned: !view.pinned } : view,
+      ),
+    );
+  }
+
+  function exportViews() {
+    if (savedViews.length === 0) return;
+    const text = JSON.stringify(createPullRequestViewsExport(savedViews), null, 2);
+    const blob = new Blob([text], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = prViewExportFileName();
+    link.click();
+    URL.revokeObjectURL(url);
+    setViewMessage(`Exported ${savedViews.length} view${savedViews.length === 1 ? "" : "s"}.`);
+  }
+
+  async function importViews(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) return;
+    try {
+      const imported = parsePullRequestViewsImport(await file.text()).map((view) => ({
+        ...view,
+        id: newPullRequestViewId(),
+      }));
+      setSavedViews((current) => [...current, ...imported]);
+      setViewMessage(`Imported ${imported.length} view${imported.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      setViewMessage(error instanceof Error ? error.message : "Failed to import views.");
+    }
+  }
+
+  function selectViewAt(index: number) {
+    if (savedViews.length === 0) return;
+    const clamped = Math.max(0, Math.min(index, savedViews.length - 1));
+    const view = savedViews[clamped];
+    if (!view) return;
+    applyView(view);
+    window.setTimeout(() => viewButtonRefs.current[clamped]?.focus(), 0);
+  }
+
+  const activeView = savedViews.find((view) => view.id === activeViewId) ?? null;
 
   const allPrs = query.data ?? [];
 
@@ -733,9 +1002,107 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
   const isFiltered = activeFilterCount > 0;
   const selectedPr = sortedPrs[selectedIndex] ?? null;
 
+  // PRs in the active multi-selection, restored from keys so the set survives
+  // re-sorts and background syncs. Falls back to the single focused row.
+  const selectedPrs = useMemo(() => {
+    if (selectedKeys.size === 0) return selectedPr ? [selectedPr] : [];
+    return sortedPrs.filter((pr) => selectedKeys.has(reviewTriageKey(pr)));
+  }, [selectedKeys, sortedPrs, selectedPr]);
+
+  const isMultiSelect = selectedPrs.length >= 2;
+
+  // Fetch changed files for each selected PR. Single selection still fetches so
+  // the status bar can show that PR's file count; only multi-select runs the
+  // overlap check. Results are cached per PR and shared with the review panel.
+  const changeQueries = useQueries({
+    queries: selectedPrs.map((pr) => ({
+      queryKey: ["pullRequestChanges", pr.organizationId, pr.repositoryId, pr.pullRequestId],
+      queryFn: () => listPullRequestChanges(prLocator(pr)),
+      staleTime: 5 * 60_000,
+    })),
+  });
+
+  const changesLoading = changeQueries.some((q) => q.isLoading);
+
+  const overlap = useMemo(() => {
+    if (!isMultiSelect) return { overlaps: [], fileCount: 0 };
+    const prFileSets = selectedPrs.map((pr, i) => ({
+      key: reviewTriageKey(pr),
+      files: (changeQueries[i]?.data?.files ?? []).map((file) => file.path),
+    }));
+    return detectFileOverlaps(prFileSets);
+    // changeQueries identity changes each render; key off the resolved data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMultiSelect, selectedPrs, changeQueries.map((q) => q.dataUpdatedAt).join("|")]);
+
+  // Single-select file count for the status bar (no conflict check).
+  const singleFileCount =
+    !isMultiSelect && changeQueries[0]?.data ? changeQueries[0].data.files.length : null;
+
+  const prKeyToLabel = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const pr of selectedPrs) {
+      map.set(reviewTriageKey(pr), `#${pr.pullRequestId}`);
+    }
+    return map;
+  }, [selectedPrs]);
+
   useEffect(() => {
     containerRef.current?.focus();
   }, []);
+
+  // A cross-link asked us to reveal a specific PR. Switch org if needed, drop
+  // filters/collapsed sections that might hide it, and remember it as pending so
+  // the resolution effect below can select it once it lands in the sorted rows.
+  useEffect(() => {
+    if (!selectRequest) return;
+    pendingSelectRef.current = selectRequest;
+    if (selectRequest.organizationId && selectRequest.organizationId !== organizationId) {
+      setOrganizationId(selectRequest.organizationId);
+    }
+    setTextFilter("");
+    setColumnFilters({});
+    setShowDrafts(true);
+    setShowDone(false);
+    setShowSnoozed(false);
+    setCollapsedSections(new Set());
+    onSelectRequestHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectRequest?.requestId]);
+
+  // Land a pending cross-link selection once its target PR is present in the
+  // visible rows. Cleared when found, or left to retry as data loads.
+  useEffect(() => {
+    const pending = pendingSelectRef.current;
+    if (!pending) return;
+    const targetIndex = sortedPrs.findIndex(
+      (pr) =>
+        pr.pullRequestId === pending.pullRequestId &&
+        (!pending.repositoryId || pr.repositoryId === pending.repositoryId),
+    );
+    if (targetIndex < 0) return;
+    pendingSelectRef.current = null;
+    setSelectedIndex(targetIndex);
+    window.setTimeout(() => {
+      scrollPrIntoView(targetIndex);
+      focusRow(targetIndex);
+    }, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortedPrs]);
+
+  // Apply a view requested from the navigation sidebar.
+  useEffect(() => {
+    if (!selectedViewRequestId) return;
+    const requested = savedViews.find((view) => view.id === selectedViewRequestId);
+    if (requested) applyView(requested);
+    onSelectedViewRequestHandled?.();
+    // applyView is stable enough for this one-shot request; deps kept minimal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedViewRequestId, savedViews]);
+
+  useEffect(() => {
+    if (selectedPr) recordRecentPullRequest(selectedPr);
+  }, [selectedPr]);
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -823,6 +1190,38 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
   function moveSelectionBy(delta: number) {
     const position = visibleSortedIndexes.indexOf(selectedIndex);
     selectVisiblePosition((position < 0 ? 0 : position) + delta);
+  }
+
+  // Replace the multi-selection with the inclusive range of visible rows
+  // between the anchor PR and the given target index. Used by Shift+click and
+  // Shift+Arrow to build the conflict-overlap set.
+  function extendSelectionToIndex(targetIndex: number, explicitAnchorKey?: string) {
+    const anchorKey =
+      explicitAnchorKey ??
+      selectionAnchor ??
+      reviewTriageKey(sortedPrs[selectedIndex] ?? sortedPrs[targetIndex]);
+    const anchorPosition = visibleSortedIndexes.findIndex(
+      (index) => reviewTriageKey(sortedPrs[index]) === anchorKey,
+    );
+    const targetPosition = visibleSortedIndexes.indexOf(targetIndex);
+    if (anchorPosition < 0 || targetPosition < 0) return;
+    const [from, to] =
+      anchorPosition <= targetPosition
+        ? [anchorPosition, targetPosition]
+        : [targetPosition, anchorPosition];
+    const keys = new Set<string>();
+    for (let position = from; position <= to; position += 1) {
+      const pr = sortedPrs[visibleSortedIndexes[position]];
+      if (pr) keys.add(reviewTriageKey(pr));
+    }
+    setSelectionAnchor(anchorKey);
+    setSelectedKeys(keys);
+  }
+
+  function clearMultiSelection() {
+    if (selectedKeys.size > 0) setSelectedKeys(new Set());
+    setSelectionAnchor(null);
+    setOverlapPopupOpen(false);
   }
 
   function toggleSection(section: ReviewSection) {
@@ -1024,23 +1423,47 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
       return;
     }
     if (visibleSortedIndexes.length === 0) return;
+    // Shift+Arrow extends the multi-selection for the conflict-overlap check.
+    if (e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      e.preventDefault();
+      const position = visibleSortedIndexes.indexOf(selectedIndex);
+      const base = position < 0 ? 0 : position;
+      const nextPosition = Math.max(
+        0,
+        Math.min(base + (e.key === "ArrowDown" ? 1 : -1), visibleSortedIndexes.length - 1),
+      );
+      const targetIndex = visibleSortedIndexes[nextPosition];
+      const anchorKey =
+        selectionAnchor ?? reviewTriageKey(sortedPrs[selectedIndex] ?? sortedPrs[targetIndex]);
+      setSelectedIndex(targetIndex);
+      scrollPrIntoView(targetIndex);
+      window.setTimeout(() => focusRow(targetIndex), 0);
+      extendSelectionToIndex(targetIndex, anchorKey);
+      return;
+    }
     if (e.key === "ArrowDown" || e.key === "j" || e.key === "J") {
       e.preventDefault();
+      clearMultiSelection();
       moveSelectionBy(1);
     } else if (e.key === "ArrowUp" || e.key === "k" || e.key === "K") {
       e.preventDefault();
+      clearMultiSelection();
       moveSelectionBy(-1);
     } else if (e.key === "Home") {
       e.preventDefault();
+      clearMultiSelection();
       selectVisiblePosition(0);
     } else if (e.key === "End") {
       e.preventDefault();
+      clearMultiSelection();
       selectVisiblePosition(visibleSortedIndexes.length - 1);
     } else if (e.key === "PageDown") {
       e.preventDefault();
+      clearMultiSelection();
       moveSelectionBy(10);
     } else if (e.key === "PageUp") {
       e.preventDefault();
+      clearMultiSelection();
       moveSelectionBy(-10);
     } else if (e.key === "Enter" || e.key === "ArrowRight") {
       // Enter / → step into the preview; ← / Esc step back (handled there).
@@ -1129,7 +1552,7 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
         {organizations.length > 1 && (
           <select
             value={organizationId}
-            onChange={(e) => { setOrganizationId(e.target.value); setSelectedIndex(0); }}
+            onChange={(e) => { setOrganizationId(e.target.value); setSelectedIndex(0); clearMultiSelection(); }}
             className="h-8 rounded-md border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
             aria-label="Organization"
           >
@@ -1178,6 +1601,150 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
           Show Drafts
         </label>
 
+      </div>
+
+      {/* Saved views bar */}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5">
+        <span className="text-xs font-medium text-muted-foreground">Views</span>
+        {savedViews.length > 0 ? (
+          <div
+            role="listbox"
+            aria-label="Saved pull request views"
+            className="flex flex-wrap items-center gap-1"
+            onKeyDown={(event) => {
+              if (event.target instanceof HTMLElement && event.target.closest("input,select,textarea")) {
+                return;
+              }
+              const activeIndex = savedViews.findIndex((view) => view.id === activeViewId);
+              if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+                event.preventDefault();
+                event.stopPropagation();
+                selectViewAt((activeIndex < 0 ? -1 : activeIndex) + 1);
+              } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+                event.preventDefault();
+                event.stopPropagation();
+                selectViewAt((activeIndex < 0 ? savedViews.length : activeIndex) - 1);
+              } else if (event.key === "Home") {
+                event.preventDefault();
+                event.stopPropagation();
+                selectViewAt(0);
+              } else if (event.key === "End") {
+                event.preventDefault();
+                event.stopPropagation();
+                selectViewAt(savedViews.length - 1);
+              } else if (event.key === "Delete" && activeViewId) {
+                event.preventDefault();
+                event.stopPropagation();
+                deleteActiveView();
+              }
+            }}
+          >
+            {savedViews.map((view, index) => {
+              const active = view.id === activeViewId;
+              return (
+                <button
+                  key={view.id}
+                  ref={(element) => {
+                    viewButtonRefs.current[index] = element;
+                  }}
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  onClick={() => applyView(view)}
+                  className={`inline-flex h-7 items-center gap-1 rounded-md border px-2 text-xs font-medium outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
+                    active
+                      ? "border-primary bg-secondary text-foreground"
+                      : "border-border bg-card text-muted-foreground hover:bg-secondary"
+                  }`}
+                  title={`Apply view "${view.name}"`}
+                >
+                  {view.pinned ? <Pin className="h-3 w-3 text-primary" aria-hidden="true" /> : null}
+                  <span className="max-w-[160px] truncate">{view.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground/70">
+            Save the current filters as a reusable view.
+          </span>
+        )}
+        <span className="ml-auto flex items-center gap-1">
+          {activeView ? (
+            <>
+              <button
+                type="button"
+                onClick={updateActiveView}
+                title={`Update "${activeView.name}" with current filters`}
+                className="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 text-xs font-medium hover:bg-secondary"
+              >
+                Update
+              </button>
+              <button
+                type="button"
+                onClick={toggleActiveViewPinned}
+                title={activeView.pinned ? "Unpin from sidebar" : "Pin to sidebar"}
+                aria-label={activeView.pinned ? "Unpin view" : "Pin view"}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-secondary"
+              >
+                {activeView.pinned ? (
+                  <PinOff className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  <Pin className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={deleteActiveView}
+                title={`Delete "${activeView.name}"`}
+                aria-label="Delete view"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-destructive hover:bg-destructive/10"
+              >
+                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </>
+          ) : null}
+          <button
+            type="button"
+            onClick={saveCurrentAsView}
+            title="Save current filters as a new view"
+            className="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 text-xs font-medium hover:bg-secondary"
+          >
+            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+            Save
+          </button>
+          <button
+            type="button"
+            disabled={savedViews.length === 0}
+            onClick={exportViews}
+            title="Export views as JSON"
+            aria-label="Export views"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Download className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={() => importViewsInputRef.current?.click()}
+            title="Import views from JSON"
+            aria-label="Import views"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-secondary"
+          >
+            <Upload className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+          <input
+            ref={importViewsInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(event) => void importViews(event)}
+          />
+        </span>
+        {viewMessage ? (
+          <p role="status" className="w-full text-xs text-muted-foreground">
+            {viewMessage}
+          </p>
+        ) : null}
       </div>
 
       <div
@@ -1295,8 +1862,21 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
                         columnTemplate={COLS}
                         pr={row.pr}
                         selected={row.prIndex === selectedIndex}
+                        inMultiSelection={selectedKeys.has(reviewTriageKey(row.pr))}
                         visibleColumns={visibleColumns}
-                        onSelect={() => setSelectedIndex(row.prIndex)}
+                        staleThresholdDays={staleThresholdDays}
+                        onSelect={({ shiftKey }) => {
+                          if (shiftKey) {
+                            const anchorKey =
+                              selectionAnchor ??
+                              reviewTriageKey(sortedPrs[selectedIndex] ?? row.pr);
+                            setSelectedIndex(row.prIndex);
+                            extendSelectionToIndex(row.prIndex, anchorKey);
+                          } else {
+                            clearMultiSelection();
+                            setSelectedIndex(row.prIndex);
+                          }
+                        }}
                       />
                     );
                   })}
@@ -1311,9 +1891,36 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
 
           {/* Status bar */}
           <div className="flex items-center justify-between border-t border-border px-2 py-1 text-xs text-muted-foreground">
-            <span>
-              {visiblePrs.length} total,{" "}
-              <span className="font-medium text-foreground">{noVoteCount}</span> not voted
+            <span className="flex items-center gap-3">
+              <span>
+                {visiblePrs.length} total,{" "}
+                <span className="font-medium text-foreground">{noVoteCount}</span> not voted
+              </span>
+              {isMultiSelect ? (
+                changesLoading ? (
+                  <span>Checking {selectedPrs.length} PRs for overlapping files…</span>
+                ) : overlap.fileCount > 0 ? (
+                  <button
+                    ref={overlapButtonRef}
+                    type="button"
+                    onClick={() => setOverlapPopupOpen((open) => !open)}
+                    aria-expanded={overlapPopupOpen}
+                    className="inline-flex items-center gap-1 rounded border border-amber-300 bg-amber-100 px-2 py-0.5 font-medium text-amber-800 hover:bg-amber-200 focus:outline-none focus:ring-2 focus:ring-ring dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300 dark:hover:bg-amber-900"
+                    title="These selected PRs change the same files — merging them may conflict"
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                    Conflict risk: {overlap.fileCount} file{overlap.fileCount === 1 ? "" : "s"} overlap
+                  </button>
+                ) : (
+                  <span className="text-foreground">
+                    {selectedPrs.length} PRs selected, no overlapping files
+                  </span>
+                )
+              ) : singleFileCount != null ? (
+                <span>
+                  {singleFileCount} changed file{singleFileCount === 1 ? "" : "s"}
+                </span>
+              ) : null}
             </span>
             <span className="flex items-center gap-2">
               <button
@@ -1345,19 +1952,11 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
               >
                 {showSnoozed ? "Back to inbox" : "Snoozed"}
               </button>
-              {isFiltered ? (
-                <>
-                  <span>{activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"} active</span>
-                  <span>{sortedPrs.length} shown</span>
-                  <button
-                    type="button"
-                    onClick={clearAllFilters}
-                    className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary"
-                  >
-                    Clear filters
-                  </button>
-                </>
-              ) : null}
+              <ActiveFilters
+                count={activeFilterCount}
+                shownCount={sortedPrs.length}
+                onClear={clearAllFilters}
+              />
               <button
                 type="button"
                 onClick={(event) => setColumnMenuRect(event.currentTarget.getBoundingClientRect())}
@@ -1430,6 +2029,92 @@ export function MyReviewsGrid({ organizations }: { organizations: Organization[]
           onClose={() => setSnoozeAnchorRect(null)}
         />
       ) : null}
+      {overlapPopupOpen && overlap.fileCount > 0 ? (
+        <OverlapPopup
+          anchorEl={overlapButtonRef.current}
+          overlaps={overlap.overlaps}
+          prKeyToLabel={prKeyToLabel}
+          onClose={() => {
+            setOverlapPopupOpen(false);
+            overlapButtonRef.current?.focus();
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function OverlapPopup({
+  anchorEl,
+  overlaps,
+  prKeyToLabel,
+  onClose,
+}: {
+  anchorEl: HTMLButtonElement | null;
+  overlaps: { path: string; prKeys: string[] }[];
+  prKeyToLabel: Map<string, string>;
+  onClose: () => void;
+}) {
+  const popupRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    popupRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    function onMouseDown(e: MouseEvent) {
+      if (popupRef.current?.contains(e.target as Node)) return;
+      if (anchorEl?.contains(e.target as Node)) return;
+      onClose();
+    }
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [anchorEl, onClose]);
+
+  const anchorRect = anchorEl?.getBoundingClientRect();
+  const left = anchorRect ? Math.max(8, Math.min(anchorRect.left, window.innerWidth - 360)) : 8;
+  const top = anchorRect ? Math.max(8, anchorRect.top - 8) : 8;
+
+  return (
+    <div
+      ref={popupRef}
+      role="dialog"
+      aria-label="Overlapping changed files"
+      tabIndex={-1}
+      className="fixed z-50 w-[352px] -translate-y-full rounded-md border border-border bg-popover shadow-lg outline-none"
+      style={{ left, top }}
+      onKeyDown={(e) => {
+        // Contain navigation keys so the underlying grid does not also react.
+        e.stopPropagation();
+        if (e.key === "Escape") {
+          e.preventDefault();
+          onClose();
+        }
+      }}
+    >
+      <div className="flex items-center justify-between border-b border-border px-3 py-2 text-xs font-semibold text-foreground">
+        <span>Overlapping files ({overlaps.length})</span>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="rounded text-muted-foreground hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <ul className="max-h-72 overflow-auto p-2 text-xs">
+        {overlaps.map((overlap) => (
+          <li key={overlap.path} className="border-b border-border/60 px-1 py-1.5 last:border-b-0">
+            <div className="break-all font-mono text-foreground" title={overlap.path}>
+              {overlap.path}
+            </div>
+            <div className="mt-0.5 text-muted-foreground">
+              {overlap.prKeys.map((key) => prKeyToLabel.get(key) ?? key).join(", ")}
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

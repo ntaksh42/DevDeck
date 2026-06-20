@@ -32,9 +32,11 @@ import {
   formatRelativeDate,
 } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
+import { recordRecentPullRequest } from '@/lib/recentItems';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { ErrorState, LoadingState } from '@/components/StateDisplay';
+import { ActiveFilters } from '@/components/ActiveFilters';
 import { PrReviewPanel } from './PrReviewPanel';
 
 const DEFAULT_PR_SEARCH_PREVIEW_WIDTH = 460;
@@ -52,6 +54,9 @@ function toReviewSummary(pr: PullRequestSummary): ReviewPullRequestSummary {
     myIsRequired: false,
     isDraft: false,
     mergeStatus: null,
+    ciStatus: null,
+    ciContext: null,
+    ciCheckCount: 0,
   };
 }
 
@@ -63,6 +68,12 @@ const PR_SEARCH_QUERY_STORAGE_KEY = 'azdodeck:view:prSearchQuery';
 const PR_SEARCH_ROW_HEIGHT = 29;
 const PR_SEARCH_OVERSCAN = 8;
 type PrSearchFilterableColumn = "status" | "repository" | "createdBy" | "branch";
+
+// The local cache only holds Active PRs (see prs.rs search()). Surfacing other
+// statuses as choices would silently return zero rows and imply unsupported
+// backend coverage, so the status selector intentionally offers Active only and
+// the form explains the limitation.
+const PR_SEARCH_STATUS: NonNullable<SearchPullRequestsInput["status"]> = "active";
 
 const PR_SEARCH_FILTERABLE_COLUMNS: Record<PrSearchFilterableColumn, (pr: PullRequestSummary) => string> = {
   status: (pr) => pr.status,
@@ -85,7 +96,6 @@ export function PullRequestSearch({
   const [query, setQuery] = useState(
     () => window.localStorage.getItem(PR_SEARCH_QUERY_STORAGE_KEY) ?? "",
   );
-  const [status, setStatus] = useState<SearchPullRequestsInput["status"]>("active");
   const [projectId, setProjectId] = useState("");
   const [repositoryId, setRepositoryId] = useState("");
 
@@ -126,13 +136,12 @@ export function PullRequestSearch({
     const targetOrganizationId = externalSearch.organizationId ?? organizationId;
     setOrganizationId(targetOrganizationId);
     setQuery(externalSearch.query);
-    setStatus("active");
     setProjectId("");
     setRepositoryId("");
     mutation.mutate({
       organizationId: targetOrganizationId,
       query: externalSearch.query,
-      status: "active",
+      status: PR_SEARCH_STATUS,
       projectId: undefined,
       repositoryId: undefined,
     });
@@ -145,7 +154,7 @@ export function PullRequestSearch({
     mutation.mutate({
       organizationId,
       query,
-      status,
+      status: PR_SEARCH_STATUS,
       projectId: projectId || undefined,
       repositoryId: repositoryId || undefined,
     });
@@ -159,7 +168,7 @@ export function PullRequestSearch({
       mutation.mutate({
         organizationId,
         query: "",
-        status,
+        status: PR_SEARCH_STATUS,
         projectId: undefined,
         repositoryId: undefined,
       });
@@ -184,7 +193,7 @@ export function PullRequestSearch({
               </select>
             </label>
           )}
-          <div className="grid gap-3 lg:grid-cols-[1fr_160px_200px_auto]">
+          <div className="grid gap-3 lg:grid-cols-[1fr_140px_160px_200px_auto]">
             <label className="grid gap-2">
               <span className="text-sm font-medium">Search</span>
               <div className="flex h-9 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
@@ -197,6 +206,19 @@ export function PullRequestSearch({
                   className="min-w-0 flex-1 bg-transparent text-sm outline-none"
                 />
               </div>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Status</span>
+              <select
+                value={PR_SEARCH_STATUS}
+                disabled
+                title="Only active pull requests are synced locally. Completed and abandoned PRs are not available yet."
+                aria-describedby="pr-search-status-note"
+                className="h-9 cursor-not-allowed rounded-md border border-input bg-background px-3 text-sm capitalize outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+              >
+                <option value={PR_SEARCH_STATUS}>Active</option>
+              </select>
             </label>
 
             <label className="grid gap-2">
@@ -244,6 +266,10 @@ export function PullRequestSearch({
               </button>
             </div>
           </div>
+          <p id="pr-search-status-note" className="text-xs text-muted-foreground">
+            Only active pull requests are synced locally. Completed and abandoned
+            pull requests are not available here yet.
+          </p>
         </form>
       </div>
 
@@ -499,7 +525,6 @@ function PullRequestResults({
   const columnFilterCount = activeColumnFilterCount(columnFilters);
   const hasActiveColumnFilters = columnFilterCount > 0;
   const activeFilterCount = Math.max(0, activeExternalFilterCount) + columnFilterCount;
-  const hasActiveFilters = activeFilterCount > 0;
 
   useEffect(() => {
     setSelectedIndex((index) => Math.min(index, Math.max(filteredResults.length - 1, 0)));
@@ -664,9 +689,12 @@ function PullRequestResults({
   const virtualBottomPadding =
     Math.max(0, filteredResults.length - lastVirtualRow) * PR_SEARCH_ROW_HEIGHT;
 
-  const selectedPr = filteredResults[selectedIndex]
-    ? toReviewSummary(filteredResults[selectedIndex])
-    : null;
+  const selectedResult = filteredResults[selectedIndex] ?? null;
+  const selectedPr = selectedResult ? toReviewSummary(selectedResult) : null;
+
+  useEffect(() => {
+    if (selectedResult) recordRecentPullRequest(selectedResult);
+  }, [selectedResult]);
 
   return (
     <div
@@ -686,18 +714,7 @@ function PullRequestResults({
         <h2 className="text-base font-semibold">Results</h2>
         <span className="flex items-center gap-2 text-sm text-muted-foreground">
           {countLabel}
-          {hasActiveFilters ? (
-            <>
-              <span>{activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"} active</span>
-              <button
-                type="button"
-                onClick={clearAllFilters}
-                className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary"
-              >
-                Clear filters
-              </button>
-            </>
-          ) : null}
+          <ActiveFilters count={activeFilterCount} onClear={clearAllFilters} />
           <button
             type="button"
             onClick={(event) => setColumnMenuRect(event.currentTarget.getBoundingClientRect())}

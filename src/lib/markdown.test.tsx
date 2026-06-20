@@ -20,6 +20,35 @@ describe("renderMarkdownHtml", () => {
     const html = renderMarkdownHtml("[docs](https://example.com/docs)");
     expect(html).toContain('href="https://example.com/docs"');
   });
+
+  it("adds rel=noopener noreferrer to target=_blank links", () => {
+    const html = renderMarkdownHtml('<a href="https://example.com" target="_blank">x</a>');
+    expect(html).toContain('target="_blank"');
+    expect(html).toContain('rel="noopener noreferrer"');
+  });
+
+  it("does not add rel to links without target=_blank", () => {
+    const html = renderMarkdownHtml("[docs](https://example.com/docs)");
+    expect(html).not.toContain("rel=");
+  });
+
+  it("adds referrerpolicy=no-referrer to images", () => {
+    const html = renderMarkdownHtml('![alt](https://example.com/a.png)');
+    expect(html).toContain('src="https://example.com/a.png"');
+    expect(html).toContain('referrerpolicy="no-referrer"');
+  });
+
+  it("keeps data: image sources", () => {
+    const html = renderMarkdownHtml('<img src="data:image/png;base64,AAAA">');
+    expect(html).toContain('src="data:image/png;base64,AAAA"');
+  });
+
+  it("drops images with unsafe schemes while keeping referrerpolicy", () => {
+    const html = renderMarkdownHtml('<img src="javascript:alert(1)"> <img src="ftp://example.com/a.png">');
+    expect(html).not.toContain("javascript:");
+    expect(html).not.toContain("ftp://");
+    expect(html).toContain('referrerpolicy="no-referrer"');
+  });
 });
 
 describe("MarkdownView", () => {
