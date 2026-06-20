@@ -70,11 +70,14 @@ pub struct AppSettings {
     pub notify_pr_vote_resets: bool,
     pub notify_pr_comment_replies: bool,
     pub review_stale_threshold_days: i64,
+    pub work_item_stale_threshold_days: i64,
     pub notification_rules: Vec<NotificationRule>,
 }
 
 pub const DEFAULT_REVIEW_STALE_THRESHOLD_DAYS: i64 = 3;
 pub const REVIEW_STALE_THRESHOLD_DAY_OPTIONS: [i64; 4] = [2, 3, 5, 7];
+pub const DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS: i64 = 7;
+pub const WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS: [i64; 3] = [7, 14, 30];
 
 impl Default for AppSettings {
     fn default() -> Self {
@@ -90,6 +93,7 @@ impl Default for AppSettings {
             notify_pr_vote_resets: true,
             notify_pr_comment_replies: true,
             review_stale_threshold_days: DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
+            work_item_stale_threshold_days: DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
             notification_rules: Vec::new(),
         }
     }
@@ -1481,6 +1485,7 @@ fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
         notify_pr_vote_resets: get_bool_setting(conn, "notify_pr_vote_resets", true)?,
         notify_pr_comment_replies: get_bool_setting(conn, "notify_pr_comment_replies", true)?,
         review_stale_threshold_days: get_review_stale_threshold_days(conn)?,
+        work_item_stale_threshold_days: get_work_item_stale_threshold_days(conn)?,
         notification_rules: get_notification_rules(conn)?,
     })
 }
@@ -1490,6 +1495,14 @@ fn get_review_stale_threshold_days(conn: &Connection) -> Result<i64> {
         .and_then(|raw| raw.trim().parse::<i64>().ok())
         .filter(|days| REVIEW_STALE_THRESHOLD_DAY_OPTIONS.contains(days))
         .unwrap_or(DEFAULT_REVIEW_STALE_THRESHOLD_DAYS);
+    Ok(value)
+}
+
+fn get_work_item_stale_threshold_days(conn: &Connection) -> Result<i64> {
+    let value = get_setting(conn, "work_item_stale_threshold_days")?
+        .and_then(|raw| raw.trim().parse::<i64>().ok())
+        .filter(|days| WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS.contains(days))
+        .unwrap_or(DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS);
     Ok(value)
 }
 
@@ -1563,6 +1576,18 @@ fn update_app_settings(conn: &Connection, settings: AppSettings) -> Result<AppSe
         conn,
         "review_stale_threshold_days",
         Some(&stale_days.to_string()),
+    )?;
+    let work_item_stale_days = if WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS
+        .contains(&settings.work_item_stale_threshold_days)
+    {
+        settings.work_item_stale_threshold_days
+    } else {
+        DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS
+    };
+    set_setting(
+        conn,
+        "work_item_stale_threshold_days",
+        Some(&work_item_stale_days.to_string()),
     )?;
     let rules_json =
         serde_json::to_string(&settings.notification_rules).unwrap_or_else(|_| "[]".to_string());
@@ -2704,6 +2729,7 @@ mod tests {
                 notify_pr_vote_resets: true,
                 notify_pr_comment_replies: false,
                 review_stale_threshold_days: 7,
+                work_item_stale_threshold_days: 14,
                 notification_rules: vec![NotificationRule {
                     types: vec!["reviewRequested".to_string()],
                     projects: vec!["Platform".to_string()],
@@ -2717,6 +2743,7 @@ mod tests {
             Some("C:/reports")
         );
         assert_eq!(saved.review_stale_threshold_days, 7);
+        assert_eq!(saved.work_item_stale_threshold_days, 14);
         assert_eq!(saved.notification_rules.len(), 1);
         assert_eq!(saved.notification_rules[0].types, vec!["reviewRequested"]);
         assert_eq!(saved.notification_rules[0].projects, vec!["Platform"]);

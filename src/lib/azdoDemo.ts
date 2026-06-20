@@ -55,7 +55,8 @@ import type {
   WorkItemSummary,
   WorkItemUpdateSummary,
 } from "@/lib/azdoCommands";
-import { DEFAULT_REVIEW_STALE_THRESHOLD_DAYS } from "@/lib/azdoCommands";
+import { DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS } from "@/lib/azdoCommands";
+import { DEFAULT_REVIEW_STALE_THRESHOLD_DAYS } from "@/lib/reviewSettings";
 import {
   applyPullRequestScenario,
   applyReviewPullRequestScenario,
@@ -93,6 +94,7 @@ let demoSettings: AppSettings = {
   notifyPrVoteResets: true,
   notifyPrCommentReplies: true,
   reviewStaleThresholdDays: DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
+  workItemStaleThresholdDays: DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
   notificationRules: [],
 };
 const deletedDemoWorkItemComments = new Set<number>();
@@ -517,6 +519,11 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
             ? Number(input.reviewStaleThresholdDays) ||
               DEFAULT_REVIEW_STALE_THRESHOLD_DAYS
             : demoSettings.reviewStaleThresholdDays,
+        workItemStaleThresholdDays:
+          input && "workItemStaleThresholdDays" in input
+            ? Number(input.workItemStaleThresholdDays) ||
+              DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS
+            : demoSettings.workItemStaleThresholdDays,
         notificationRules:
           input && "notificationRules" in input
             ? (input.notificationRules ?? [])

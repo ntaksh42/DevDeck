@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::db::{
     AppDatabase, AppSettings, NotificationRule, DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
-    REVIEW_STALE_THRESHOLD_DAY_OPTIONS,
+    DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS, REVIEW_STALE_THRESHOLD_DAY_OPTIONS,
+    WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS,
 };
 use crate::error::{AppError, Result};
 
@@ -23,6 +24,7 @@ pub struct UpdateAppSettingsInput {
     pub notify_pr_vote_resets: Option<bool>,
     pub notify_pr_comment_replies: Option<bool>,
     pub review_stale_threshold_days: Option<i64>,
+    pub work_item_stale_threshold_days: Option<i64>,
     pub notification_rules: Option<Vec<NotificationRule>>,
 }
 
@@ -78,6 +80,10 @@ pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
             .review_stale_threshold_days
             .filter(|days| REVIEW_STALE_THRESHOLD_DAY_OPTIONS.contains(days))
             .unwrap_or(DEFAULT_REVIEW_STALE_THRESHOLD_DAYS),
+        work_item_stale_threshold_days: input
+            .work_item_stale_threshold_days
+            .filter(|days| WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS.contains(days))
+            .unwrap_or(DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS),
         notification_rules: input
             .notification_rules
             .unwrap_or_default()

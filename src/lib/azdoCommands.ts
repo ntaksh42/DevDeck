@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod";
 import { isTauriRuntime } from "@/lib/runtime";
 import { demoInvoke } from "@/lib/azdoDemo";
+import { DEFAULT_REVIEW_STALE_THRESHOLD_DAYS } from "@/lib/reviewSettings";
 
 const organizationSchema = z.object({
   id: z.string(),
@@ -21,8 +22,12 @@ const organizationsSchema = z.array(organizationSchema);
 
 export type Organization = z.infer<typeof organizationSchema>;
 
-export const REVIEW_STALE_THRESHOLD_DAY_OPTIONS = [2, 3, 5, 7] as const;
-export const DEFAULT_REVIEW_STALE_THRESHOLD_DAYS = 3;
+export {
+  REVIEW_STALE_THRESHOLD_DAY_OPTIONS,
+  DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
+} from "@/lib/reviewSettings";
+export const WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS = [7, 14, 30] as const;
+export const DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS = 7;
 
 // Notification kinds a rule can match. Values mirror the camelCase enum keys the
 // backend uses (PrNotificationKind / WorkItemNotificationKind).
@@ -54,6 +59,10 @@ const appSettingsSchema = z.object({
   notifyPrVoteResets: z.boolean().default(true),
   notifyPrCommentReplies: z.boolean().default(true),
   reviewStaleThresholdDays: z.number().int().default(DEFAULT_REVIEW_STALE_THRESHOLD_DAYS),
+  workItemStaleThresholdDays: z
+    .number()
+    .int()
+    .default(DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS),
   notificationRules: z.array(notificationRuleSchema).default([]),
 });
 
@@ -544,6 +553,7 @@ export type UpdateAppSettingsInput = {
   notifyPrVoteResets?: boolean;
   notifyPrCommentReplies?: boolean;
   reviewStaleThresholdDays?: number;
+  workItemStaleThresholdDays?: number;
   notificationRules?: NotificationRule[];
 };
 
