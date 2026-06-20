@@ -3,6 +3,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   lazy,
   Suspense,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -114,10 +115,19 @@ const PullRequestSearch = lazy(() =>
 import {
   showWorkItemNotificationEvent,
   showPullRequestNotificationEvent,
+  showSyncFailedNotificationEvent,
   type WorkItemNotificationEvent,
   type PullRequestNotificationEvent,
+  type SyncFailedEvent,
 } from "@/lib/desktopNotifications";
 import { SyncStatusIndicator } from "@/features/sync/SyncStatusIndicator";
+import {
+  emptyViewHistory,
+  goBack as historyGoBack,
+  goForward as historyGoForward,
+  pushView,
+  type ViewHistory,
+} from "@/features/navigation/viewHistory";
 
 type View =
   | "pullRequestSearch"
@@ -274,6 +284,13 @@ function useKeybindings(): KeybindingMap {
 
 function AppShell() {
   const [view, setView] = useState<View>("myReviews");
+  // Browser-like Alt+Left / Alt+Right history of visited views.
+  const [viewHistory, setViewHistory] = useState<ViewHistory<View>>(() =>
+    emptyViewHistory<View>(),
+  );
+  const viewHistoryRef = useRef(viewHistory);
+  viewHistoryRef.current = viewHistory;
+  const navigatingHistoryRef = useRef(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [navExpanded, setNavExpanded] = useState<Record<NavSectionId, boolean>>({
@@ -295,6 +312,7 @@ function AppShell() {
   // replayed once settings are available so the first events are not dropped.
   const pendingWorkItemEventsRef = useRef<WorkItemNotificationEvent[]>([]);
   const pendingPullRequestEventsRef = useRef<PullRequestNotificationEvent[]>([]);
+  const pendingSyncFailedEventsRef = useRef<SyncFailedEvent[]>([]);
   const startupHotSyncStartedRef = useRef(false);
   const lastHotSyncRequestedAtRef = useRef(0);
   const navTypeaheadRef = useRef<{ value: string; timer: number | null }>({
@@ -323,6 +341,28 @@ function AppShell() {
   });
 
   const activeView = organizations.length === 0 ? "settings" : view;
+
+  // Record each visited view so Alt+Left / Alt+Right can replay them. Skip the
+  // push when the change was itself triggered by a history navigation.
+  useEffect(() => {
+    if (navigatingHistoryRef.current) {
+      navigatingHistoryRef.current = false;
+      return;
+    }
+    setViewHistory((history) => pushView(history, activeView));
+  }, [activeView]);
+
+  const navigateHistory = useCallback((direction: "back" | "forward") => {
+    const result =
+      direction === "back"
+        ? historyGoBack(viewHistoryRef.current)
+        : historyGoForward(viewHistoryRef.current);
+    if (!result) return;
+    navigatingHistoryRef.current = true;
+    viewHistoryRef.current = result.history;
+    setViewHistory(result.history);
+    setView(result.view);
+  }, []);
 
   const [paletteSearchText, setPaletteSearchText] = useState("");
   const [debouncedPaletteSearchText, setDebouncedPaletteSearchText] = useState("");
@@ -930,13 +970,18 @@ function AppShell() {
     // Replay events that arrived before settings were ready.
     const workItemEvents = pendingWorkItemEventsRef.current;
     const pullRequestEvents = pendingPullRequestEventsRef.current;
+    const syncFailedEvents = pendingSyncFailedEventsRef.current;
     pendingWorkItemEventsRef.current = [];
     pendingPullRequestEventsRef.current = [];
+    pendingSyncFailedEventsRef.current = [];
     for (const event of workItemEvents) {
       void showWorkItemNotificationEvent(event, settings);
     }
     for (const event of pullRequestEvents) {
       void showPullRequestNotificationEvent(event, settings);
+    }
+    for (const event of syncFailedEvents) {
+      void showSyncFailedNotificationEvent(event, settings);
     }
   }, [appSettingsQuery.data]);
 
@@ -995,6 +1040,20 @@ function AppShell() {
           return;
         }
         void showPullRequestNotificationEvent(payload, settings);
+      },
+    );
+  }, []);
+
+  useEffect(() => {
+    return subscribeTauriEvent<SyncFailedEvent>(
+      "notifications:sync-failed",
+      (payload) => {
+        const settings = appSettingsRef.current;
+        if (!settings) {
+          pendingSyncFailedEventsRef.current.push(payload);
+          return;
+        }
+        void showSyncFailedNotificationEvent(payload, settings);
       },
     );
   }, []);
@@ -1076,6 +1135,20 @@ function AppShell() {
       activeView === "workItemViews";
 
     function onGlobalKeyDown(event: KeyboardEvent) {
+      // Alt+Left / Alt+Right: browser-like back/forward through visited views.
+      if (
+        event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.shiftKey &&
+        (event.key === "ArrowLeft" || event.key === "ArrowRight") &&
+        !isEditableTarget(event.target)
+      ) {
+        event.preventDefault();
+        navigateHistory(event.key === "ArrowLeft" ? "back" : "forward");
+        return;
+      }
+
       if (!event.defaultPrevented && matchesCombo(keybindings.commandPalette, event)) {
         event.preventDefault();
         setCommandPaletteOpen(true);
@@ -1176,7 +1249,7 @@ function AppShell() {
 
     window.addEventListener("keydown", onGlobalKeyDown);
     return () => window.removeEventListener("keydown", onGlobalKeyDown);
-  }, [activeView, organizations.length, syncMutation.isPending, syncMutation.mutate, keybindings]);
+  }, [activeView, organizations.length, syncMutation.isPending, syncMutation.mutate, keybindings, navigateHistory]);
 
   return (
     <div className="h-screen overflow-hidden bg-background text-foreground">

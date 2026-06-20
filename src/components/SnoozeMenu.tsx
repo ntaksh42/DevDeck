@@ -48,11 +48,28 @@ export function SnoozeMenu({
     return () => document.removeEventListener("mousedown", onMouseDown);
   }, [onClose]);
 
+  // While the menu is open, no keystroke should reach the grid behind it. This
+  // capture-phase listener runs before the grid's bubble-phase onKeyDown, so
+  // stopping propagation here keeps arrows, Enter, and the grid's single-letter
+  // shortcuts from moving the row selection even when focus has slipped out of
+  // the menu (e.g. onto <body> in the frame right after Z opens it, before the
+  // first preset takes focus). Keys typed inside the menu — notably the custom
+  // datetime field — are left alone for the menu's own React handler.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
+        e.preventDefault();
         e.stopPropagation();
         onClose();
+        return;
+      }
+      if (menuRef.current?.contains(e.target as Node)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === "ArrowDown") {
+        moveFocus(1);
+      } else if (e.key === "ArrowUp") {
+        moveFocus(-1);
       }
     }
     document.addEventListener("keydown", onKeyDown, true);

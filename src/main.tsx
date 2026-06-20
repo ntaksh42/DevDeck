@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
+import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 // Self-hosted variable font (bundled by Vite) so the desktop app renders the
 // brand typeface offline without a webfont CDN.
 import "@fontsource-variable/hanken-grotesk";
@@ -26,8 +27,10 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
+    <AppErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    </AppErrorBoundary>
   </React.StrictMode>,
 );

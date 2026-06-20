@@ -50,6 +50,9 @@ impl AdoCredentialProvider for PatProvider {
 pub struct AzureCliProvider {
     token_source: Arc<dyn AzureCliTokenSource>,
     cache: Mutex<Option<CachedBearerToken>>,
+    /// Serializes token acquisition so concurrent cache misses do not each spawn
+    /// their own `az` process. Holders re-check the cache after acquiring it.
+    fetch_lock: tokio::sync::Mutex<()>,
     token_ttl: Duration,
 }
 
@@ -59,6 +62,7 @@ impl AzureCliProvider {
         Self {
             token_source: Arc::new(AzCommandTokenSource { resource }),
             cache: Mutex::new(None),
+            fetch_lock: tokio::sync::Mutex::new(()),
             token_ttl: Duration::from_secs(300),
         }
     }
@@ -68,6 +72,7 @@ impl AzureCliProvider {
         Self {
             token_source,
             cache: Mutex::new(None),
+            fetch_lock: tokio::sync::Mutex::new(()),
             token_ttl,
         }
     }
@@ -82,6 +87,15 @@ impl Default for AzureCliProvider {
 #[async_trait::async_trait]
 impl AdoCredentialProvider for AzureCliProvider {
     async fn auth_header_value(&self) -> Result<String> {
+        if let Some(token) = self.cached_token()? {
+            return Ok(format!("Bearer {token}"));
+        }
+
+        // Serialize acquisition: only one task fetches at a time, so concurrent
+        // cache misses do not each spawn their own `az` process.
+        let _fetch_guard = self.fetch_lock.lock().await;
+
+        // Another task may have populated the cache while we waited for the lock.
         if let Some(token) = self.cached_token()? {
             return Ok(format!("Bearer {token}"));
         }
@@ -249,6 +263,58 @@ mod tests {
         provider.auth_header_value().await.unwrap();
         provider.auth_header_value().await.unwrap();
 
+        assert_eq!(source.calls(), 1);
+    }
+
+    /// Token source that sleeps before returning so concurrent callers overlap
+    /// inside the acquisition path, exercising the single-flight gate.
+    struct SlowTokenSource {
+        token: String,
+        calls: AtomicUsize,
+    }
+
+    impl SlowTokenSource {
+        fn new(token: &str) -> Self {
+            Self {
+                token: token.to_string(),
+                calls: AtomicUsize::new(0),
+            }
+        }
+
+        fn calls(&self) -> usize {
+            self.calls.load(Ordering::SeqCst)
+        }
+    }
+
+    impl AzureCliTokenSource for SlowTokenSource {
+        fn access_token(&self) -> Result<String> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            std::thread::sleep(Duration::from_millis(50));
+            Ok(self.token.clone())
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn azure_cli_provider_serializes_concurrent_fetches() {
+        let source = Arc::new(SlowTokenSource::new("shared-token"));
+        let provider = Arc::new(AzureCliProvider::with_token_source(
+            source.clone(),
+            Duration::from_secs(300),
+        ));
+
+        let handles: Vec<_> = (0..8)
+            .map(|_| {
+                let provider = Arc::clone(&provider);
+                tokio::spawn(async move { provider.auth_header_value().await })
+            })
+            .collect();
+
+        for handle in handles {
+            assert_eq!(handle.await.unwrap().unwrap(), "Bearer shared-token");
+        }
+
+        // Despite eight concurrent callers, the gate plus cache re-check should
+        // limit the external process to a single invocation.
         assert_eq!(source.calls(), 1);
     }
 }
