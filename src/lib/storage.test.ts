@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readStoredJson, writeStoredJson, writeStoredString } from "./storage";
+import { readStoredJson, storageKey, writeStoredJson, writeStoredString } from "./storage";
 
 const KEY = "test:storage";
 
@@ -36,6 +36,20 @@ describe("readStoredJson", () => {
       [],
     );
     expect(result).toEqual([1, 2, 3]);
+  });
+});
+
+describe("storageKey", () => {
+  it("appends a uniform :vN suffix", () => {
+    expect(storageKey("azdodeck:layout:wiSearchGridColumnWidths", 2)).toBe(
+      "azdodeck:layout:wiSearchGridColumnWidths:v2",
+    );
+  });
+
+  it("uses :v1 for the first version", () => {
+    expect(storageKey("azdodeck:view:wiSearchGridSort", 1)).toBe(
+      "azdodeck:view:wiSearchGridSort:v1",
+    );
   });
 });
 

@@ -30,10 +30,9 @@ import {
   collapseDiff,
   type CollapsedItem,
   type DiffLine,
-  type DiffLineKind,
-  type InlineSegment,
   type SideBySideCell,
 } from "@/lib/diffView";
+import { DiffLineText } from "@/components/DiffLineText";
 import { openExternalUrl } from "@/lib/openExternal";
 import { isEditableTarget } from "@/lib/utils";
 import { LoadingState, ErrorState, PreviewEmptyState } from "@/components/StateDisplay";
@@ -1030,32 +1029,6 @@ function rowBackground(kind: SideBySideCell["kind"] | DiffLine["kind"]): string 
 }
 
 /** Renders line text, highlighting the changed words of a partial edit. */
-function LineText({
-  segments,
-  text,
-  kind,
-}: {
-  segments?: InlineSegment[];
-  text: string;
-  kind: DiffLineKind;
-}) {
-  if (!segments) return <>{text}</>;
-  const highlight = kind === "add" ? "rounded-sm bg-green-200/80 dark:bg-green-700/50" : "rounded-sm bg-red-200/80 dark:bg-red-700/50";
-  return (
-    <>
-      {segments.map((segment, index) =>
-        segment.highlight ? (
-          <span key={index} className={highlight}>
-            {segment.text}
-          </span>
-        ) : (
-          <span key={index}>{segment.text}</span>
-        ),
-      )}
-    </>
-  );
-}
-
 function CommentLineButton({
   side,
   line,
@@ -1102,7 +1075,7 @@ const DiffRow = memo(function DiffRow({
       </span>
       <span className="whitespace-pre pl-1">
         {marker}
-        <LineText segments={line.segments} text={line.text} kind={line.kind} />
+        <DiffLineText segments={line.segments} text={line.text} kind={line.kind} />
       </span>
     </div>
   );
@@ -1128,7 +1101,7 @@ const SplitCell = memo(function SplitCell({
       </span>
       {/* Wrap long lines so split view no longer needs a switch to unified. */}
       <span className="whitespace-pre-wrap break-all pl-1">
-        <LineText segments={cell.segments} text={cell.text} kind={cell.kind} />
+        <DiffLineText segments={cell.segments} text={cell.text} kind={cell.kind} />
       </span>
     </div>
   );

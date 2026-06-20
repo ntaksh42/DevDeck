@@ -26,6 +26,9 @@ const pr: ReviewPullRequestSummary = {
   myIsRequired: false,
   isDraft: false,
   mergeStatus: null,
+  ciStatus: null,
+  ciContext: null,
+  ciCheckCount: 0,
 };
 
 function renderPanel(selectedPr: ReviewPullRequestSummary = pr) {

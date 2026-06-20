@@ -14,6 +14,14 @@ export type DiffLine = {
   segments?: InlineSegment[];
 };
 
+/**
+ * Collapses CRLF and lone CR line endings to LF so a base/target mismatch in
+ * newline style does not make `diffLines` treat every line as changed.
+ */
+function normalizeNewlines(value: string): string {
+  return value.replace(/\r\n?/g, "\n");
+}
+
 function splitLines(value: string): string[] {
   if (value === "") return [];
   const lines = value.split("\n");
@@ -70,7 +78,9 @@ export type SideBySideRow = {
  * (GitHub-style), context lines occupy both sides. Paired rows additionally get
  * word-level `segments` when only part of the line changed.
  */
-export function buildSideBySideRows(base: string, target: string): SideBySideRow[] {
+export function buildSideBySideRows(rawBase: string, rawTarget: string): SideBySideRow[] {
+  const base = normalizeNewlines(rawBase);
+  const target = normalizeNewlines(rawTarget);
   const rows: SideBySideRow[] = [];
   let baseLine = 1;
   let targetLine = 1;
@@ -115,8 +125,8 @@ export function buildSideBySideRows(base: string, target: string): SideBySideRow
   return rows;
 }
 
-export function buildDiffLines(base: string, target: string): DiffLine[] {
-  const parts = diffLines(base, target);
+export function buildDiffLines(rawBase: string, rawTarget: string): DiffLine[] {
+  const parts = diffLines(normalizeNewlines(rawBase), normalizeNewlines(rawTarget));
   const result: DiffLine[] = [];
   let baseLine = 1;
   let targetLine = 1;

@@ -8,6 +8,19 @@
  */
 
 /**
+ * Builds a versioned localStorage key with a uniform `name:vN` convention so
+ * callers don't hand-spell the suffix inconsistently.
+ *
+ * Bump `version` when a stored value's shape changes incompatibly so old data is
+ * ignored (and falls back) instead of being silently misread. Keys that have
+ * never needed versioning stay bare string literals; only keys that already
+ * carry an explicit version should route through here.
+ */
+export function storageKey(name: string, version: number): string {
+  return `${name}:v${version}`;
+}
+
+/**
  * Reads and parses a JSON value from localStorage. Returns `fallback` when the
  * key is absent, the stored text is not valid JSON, storage is unavailable
  * (e.g. SSR or a privacy-locked browser), or `parse` rejects the parsed value

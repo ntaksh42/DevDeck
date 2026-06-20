@@ -84,6 +84,12 @@ test.describe("browser preview", () => {
     await main.getByRole("button", { name: "Search" }).click();
     await expect(main.getByText("Add commit search dashboard")).toBeVisible();
 
+    // The "/" grid shortcut must return focus to the commit search field.
+    const commitGrid = main.getByRole("grid", { name: "Commit search results" });
+    await commitGrid.getByRole("row").filter({ hasText: "Add commit search dashboard" }).click();
+    await page.keyboard.press("/");
+    await expect(main.getByRole("textbox", { name: "Filter" })).toBeFocused();
+
     await page.getByRole("button", { name: "Settings" }).click();
     await expect(main.getByRole("heading", { name: "Organizations" })).toBeVisible();
     await expect(main.getByRole("heading", { name: "Review result previews" })).toBeVisible();

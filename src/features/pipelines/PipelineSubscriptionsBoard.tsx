@@ -19,6 +19,7 @@ const IDLE_REFRESH_INTERVAL_MS = 60_000;
 type RunSelection = {
   organizationId: string;
   projectId: string;
+  definitionId: number;
   buildId: number;
 };
 
@@ -56,30 +57,37 @@ export function PipelineSubscriptionsBoard({
     });
   }, [subscriptions]);
 
-  // One runs query per subscription. Kept active even while collapsed so the
-  // header badge keeps reflecting the latest run.
+  // One runs query per subscription. Collapsed pipelines keep polling so the
+  // header badge stays current, but only at the idle interval; the fast active
+  // interval is reserved for expanded (visible) pipelines with a live run, so
+  // watching many pipelines does not flood the API with short-interval polls.
   const queries = useQueries({
-    queries: orgSubscriptions.map((sub) => ({
-      queryKey: [
-        "pipelineSubscriptionHistory",
-        organizationId,
-        sub.projectId,
-        sub.definitionId,
-      ],
-      queryFn: () =>
-        listPipelineRuns({
+    queries: orgSubscriptions.map((sub) => {
+      const key = subscriptionKey(sub.organizationId, sub.projectId, sub.definitionId);
+      const isOpen = expanded.has(key);
+      return {
+        queryKey: [
+          "pipelineSubscriptionHistory",
           organizationId,
-          projectId: sub.projectId,
-          definitionId: sub.definitionId,
-        }),
-      enabled: !!organizationId,
-      refetchInterval: (query: { state: { data?: PipelineRunSummary[] } }) => {
-        const data = query.state.data;
-        return data?.some((run) => isInProgressStatus(run.status))
-          ? ACTIVE_REFRESH_INTERVAL_MS
-          : IDLE_REFRESH_INTERVAL_MS;
-      },
-    })),
+          sub.projectId,
+          sub.definitionId,
+        ],
+        queryFn: () =>
+          listPipelineRuns({
+            organizationId,
+            projectId: sub.projectId,
+            definitionId: sub.definitionId,
+          }),
+        enabled: !!organizationId,
+        refetchInterval: (query: { state: { data?: PipelineRunSummary[] } }) => {
+          if (!isOpen) return IDLE_REFRESH_INTERVAL_MS;
+          const data = query.state.data;
+          return data?.some((run) => isInProgressStatus(run.status))
+            ? ACTIVE_REFRESH_INTERVAL_MS
+            : IDLE_REFRESH_INTERVAL_MS;
+        },
+      };
+    }),
   });
 
   if (orgSubscriptions.length === 0) {
@@ -104,7 +112,11 @@ export function PipelineSubscriptionsBoard({
   }
 
   // Arrow / j-k navigation across the run rows of one expanded pipeline.
-  function handleRunKeyDown(event: ReactKeyboardEvent, rows: PipelineRunSummary[]) {
+  function handleRunKeyDown(
+    event: ReactKeyboardEvent,
+    rows: PipelineRunSummary[],
+    definitionId: number,
+  ) {
     // Ignore the Open button and any modified chords.
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     const target = event.target as HTMLElement;
@@ -131,6 +143,7 @@ export function PipelineSubscriptionsBoard({
       onSelectRun({
         organizationId: run.organizationId,
         projectId: run.projectId,
+        definitionId,
         buildId: run.buildId,
       });
       return;
@@ -143,12 +156,26 @@ export function PipelineSubscriptionsBoard({
     rowEls[nextIndex]?.focus();
   }
 
-  // focusPrimaryGrid() targets a single [data-primary-grid] element, so only
-  // the first expanded pipeline's run grid carries the marker.
-  const primaryGridKey =
-    orgSubscriptions
-      .map((sub) => subscriptionKey(sub.organizationId, sub.projectId, sub.definitionId))
-      .find((key) => expanded.has(key)) ?? null;
+  // focusPrimaryGrid() targets a single [data-primary-grid] element, so the
+  // marker must sit on the grid holding the selected run; otherwise returning
+  // from the detail panel strands focus on a different pipeline. Prefer the
+  // expanded grid that contains the selection, falling back to the first
+  // expanded grid when nothing is selected there.
+  const primaryGridKey = useMemo(() => {
+    const expandedSubs = orgSubscriptions
+      .map((sub, index) => ({
+        key: subscriptionKey(sub.organizationId, sub.projectId, sub.definitionId),
+        runs: queries[index]?.data ?? [],
+      }))
+      .filter(({ key }) => expanded.has(key));
+    if (selectedBuildId != null) {
+      const withSelection = expandedSubs.find(({ runs }) =>
+        runs.some((run) => run.buildId === selectedBuildId),
+      );
+      if (withSelection) return withSelection.key;
+    }
+    return expandedSubs[0]?.key ?? null;
+  }, [orgSubscriptions, queries, expanded, selectedBuildId]);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-card">
@@ -238,7 +265,7 @@ export function PipelineSubscriptionsBoard({
                     aria-label={`${sub.definitionName} runs`}
                     data-primary-grid={key === primaryGridKey ? "true" : undefined}
                     className="overflow-x-auto bg-muted/20 pl-6 outline-none"
-                    onKeyDown={(event) => handleRunKeyDown(event, runs)}
+                    onKeyDown={(event) => handleRunKeyDown(event, runs, sub.definitionId)}
                   >
                     <div className="min-w-[660px]">
                       {runs.map((run, runIndex) => {
@@ -254,6 +281,7 @@ export function PipelineSubscriptionsBoard({
                               onSelectRun({
                                 organizationId: run.organizationId,
                                 projectId: run.projectId,
+                                definitionId: sub.definitionId,
                                 buildId: run.buildId,
                               })
                             }

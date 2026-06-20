@@ -2,7 +2,28 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use secrecy::{ExposeSecret, SecretString};
+
 use crate::error::{AdoError, Result};
+
+/// Cloud-neutral Azure DevOps application (resource) ID used when requesting an
+/// Azure CLI access token. This GUID is the same across the public and national
+/// clouds (Azure US Government, Azure China, ...).
+const DEFAULT_AZURE_DEVOPS_RESOURCE: &str = "499b84ac-1321-427f-aa17-267ca6975798";
+
+/// Environment variable that overrides the resource passed to
+/// `az account get-access-token --resource`. National-cloud users who need a
+/// different audience can set this; when unset the cloud-neutral default is used.
+const AZURE_CLI_RESOURCE_ENV: &str = "AZDO_CLI_RESOURCE";
+
+/// Resolve the resource ID for the Azure CLI token request. An explicit, non-empty
+/// `AZDO_CLI_RESOURCE` override wins; otherwise the cloud-neutral default applies.
+fn resolve_cli_resource(override_value: Option<&str>) -> String {
+    match override_value.map(str::trim) {
+        Some(value) if !value.is_empty() => value.to_string(),
+        _ => DEFAULT_AZURE_DEVOPS_RESOURCE.to_string(),
+    }
+}
 
 #[async_trait::async_trait]
 pub trait AdoCredentialProvider: Send + Sync {
@@ -10,12 +31,14 @@ pub trait AdoCredentialProvider: Send + Sync {
 }
 
 pub struct PatProvider {
-    pat: String,
+    pat: SecretString,
 }
 
 impl PatProvider {
     pub fn new(pat: impl Into<String>) -> Self {
-        Self { pat: pat.into() }
+        Self {
+            pat: SecretString::from(pat.into()),
+        }
     }
 }
 
@@ -23,7 +46,7 @@ impl PatProvider {
 impl AdoCredentialProvider for PatProvider {
     async fn auth_header_value(&self) -> Result<String> {
         use base64::{engine::general_purpose::STANDARD, Engine};
-        let encoded = STANDARD.encode(format!(":{}", self.pat));
+        let encoded = STANDARD.encode(format!(":{}", self.pat.expose_secret()));
         Ok(format!("Basic {encoded}"))
     }
 }
@@ -31,14 +54,19 @@ impl AdoCredentialProvider for PatProvider {
 pub struct AzureCliProvider {
     token_source: Arc<dyn AzureCliTokenSource>,
     cache: Mutex<Option<CachedBearerToken>>,
+    /// Serializes token acquisition so concurrent cache misses do not each spawn
+    /// their own `az` process. Holders re-check the cache after acquiring it.
+    fetch_lock: tokio::sync::Mutex<()>,
     token_ttl: Duration,
 }
 
 impl AzureCliProvider {
     pub fn new() -> Self {
+        let resource = resolve_cli_resource(std::env::var(AZURE_CLI_RESOURCE_ENV).ok().as_deref());
         Self {
-            token_source: Arc::new(AzCommandTokenSource),
+            token_source: Arc::new(AzCommandTokenSource { resource }),
             cache: Mutex::new(None),
+            fetch_lock: tokio::sync::Mutex::new(()),
             token_ttl: Duration::from_secs(300),
         }
     }
@@ -48,6 +76,7 @@ impl AzureCliProvider {
         Self {
             token_source,
             cache: Mutex::new(None),
+            fetch_lock: tokio::sync::Mutex::new(()),
             token_ttl,
         }
     }
@@ -66,6 +95,15 @@ impl AdoCredentialProvider for AzureCliProvider {
             return Ok(format!("Bearer {token}"));
         }
 
+        // Serialize acquisition: only one task fetches at a time, so concurrent
+        // cache misses do not each spawn their own `az` process.
+        let _fetch_guard = self.fetch_lock.lock().await;
+
+        // Another task may have populated the cache while we waited for the lock.
+        if let Some(token) = self.cached_token()? {
+            return Ok(format!("Bearer {token}"));
+        }
+
         // `az` shells out synchronously; run it off the async worker thread.
         let token_source = Arc::clone(&self.token_source);
         let token = tokio::task::spawn_blocking(move || token_source.access_token())
@@ -78,16 +116,17 @@ impl AdoCredentialProvider for AzureCliProvider {
         }
 
         let token = token.trim().to_string();
+        let header = format!("Bearer {token}");
         let mut cache = self
             .cache
             .lock()
             .map_err(|_| AdoError::Auth("Azure CLI token cache lock poisoned".to_string()))?;
         *cache = Some(CachedBearerToken {
-            token: token.clone(),
+            token: SecretString::from(token),
             fetched_at: Instant::now(),
         });
 
-        Ok(format!("Bearer {token}"))
+        Ok(header)
     }
 }
 
@@ -99,7 +138,7 @@ impl AzureCliProvider {
             .map_err(|_| AdoError::Auth("Azure CLI token cache lock poisoned".to_string()))?;
         Ok(cache.as_ref().and_then(|cached| {
             if cached.fetched_at.elapsed() < self.token_ttl {
-                Some(cached.token.clone())
+                Some(cached.token.expose_secret().to_string())
             } else {
                 None
             }
@@ -108,7 +147,7 @@ impl AzureCliProvider {
 }
 
 struct CachedBearerToken {
-    token: String,
+    token: SecretString,
     fetched_at: Instant,
 }
 
@@ -116,7 +155,9 @@ trait AzureCliTokenSource: Send + Sync {
     fn access_token(&self) -> Result<String>;
 }
 
-struct AzCommandTokenSource;
+struct AzCommandTokenSource {
+    resource: String,
+}
 
 impl AzureCliTokenSource for AzCommandTokenSource {
     fn access_token(&self) -> Result<String> {
@@ -125,7 +166,7 @@ impl AzureCliTokenSource for AzCommandTokenSource {
                 "account",
                 "get-access-token",
                 "--resource",
-                "499b84ac-1321-427f-aa17-267ca6975798",
+                &self.resource,
                 "--query",
                 "accessToken",
                 "--output",
@@ -184,6 +225,27 @@ mod tests {
         }
     }
 
+    #[test]
+    fn resolve_cli_resource_defaults_to_cloud_neutral_id() {
+        assert_eq!(resolve_cli_resource(None), DEFAULT_AZURE_DEVOPS_RESOURCE);
+    }
+
+    #[test]
+    fn resolve_cli_resource_ignores_blank_override() {
+        assert_eq!(
+            resolve_cli_resource(Some("   ")),
+            DEFAULT_AZURE_DEVOPS_RESOURCE
+        );
+    }
+
+    #[test]
+    fn resolve_cli_resource_uses_trimmed_override() {
+        assert_eq!(
+            resolve_cli_resource(Some("  https://datawarehouse.usgovcloudapi.net  ")),
+            "https://datawarehouse.usgovcloudapi.net"
+        );
+    }
+
     #[tokio::test]
     async fn azure_cli_provider_returns_bearer_token() {
         let source = Arc::new(StaticTokenSource::new("test-token"));
@@ -206,6 +268,58 @@ mod tests {
         provider.auth_header_value().await.unwrap();
         provider.auth_header_value().await.unwrap();
 
+        assert_eq!(source.calls(), 1);
+    }
+
+    /// Token source that sleeps before returning so concurrent callers overlap
+    /// inside the acquisition path, exercising the single-flight gate.
+    struct SlowTokenSource {
+        token: String,
+        calls: AtomicUsize,
+    }
+
+    impl SlowTokenSource {
+        fn new(token: &str) -> Self {
+            Self {
+                token: token.to_string(),
+                calls: AtomicUsize::new(0),
+            }
+        }
+
+        fn calls(&self) -> usize {
+            self.calls.load(Ordering::SeqCst)
+        }
+    }
+
+    impl AzureCliTokenSource for SlowTokenSource {
+        fn access_token(&self) -> Result<String> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            std::thread::sleep(Duration::from_millis(50));
+            Ok(self.token.clone())
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn azure_cli_provider_serializes_concurrent_fetches() {
+        let source = Arc::new(SlowTokenSource::new("shared-token"));
+        let provider = Arc::new(AzureCliProvider::with_token_source(
+            source.clone(),
+            Duration::from_secs(300),
+        ));
+
+        let handles: Vec<_> = (0..8)
+            .map(|_| {
+                let provider = Arc::clone(&provider);
+                tokio::spawn(async move { provider.auth_header_value().await })
+            })
+            .collect();
+
+        for handle in handles {
+            assert_eq!(handle.await.unwrap().unwrap(), "Bearer shared-token");
+        }
+
+        // Despite eight concurrent callers, the gate plus cache re-check should
+        // limit the external process to a single invocation.
         assert_eq!(source.calls(), 1);
     }
 }

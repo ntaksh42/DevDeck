@@ -8,7 +8,9 @@ use tokio::time::{interval_at, Instant, MissedTickBehavior};
 
 use crate::auth::client_for_organization;
 use crate::commits::sync_commits_for_org;
-use crate::db::{AppDatabase, AppSettings, CachedReviewPr, CachedWorkItem, MY_WORK_ITEMS_LIMIT};
+use crate::db::{
+    AppDatabase, AppSettings, CachedReviewPr, CachedWorkItem, NotificationRule, MY_WORK_ITEMS_LIMIT,
+};
 use crate::prs::sync_prs_for_org;
 use crate::secrets::SecretStore;
 use crate::snooze::SnoozeService;
@@ -41,6 +43,60 @@ pub struct SyncUpdatedEvent {
     pub scopes: Vec<SyncScope>,
 }
 
+/// Emitted when automatic sync has failed `consecutive_failures` passes in a
+/// row, so the frontend can surface an explicit "sync is failing" notification
+/// instead of leaving the user to infer it from a stale last-synced time.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncFailedEvent {
+    pub consecutive_failures: u32,
+    pub retry_in_secs: u64,
+    pub last_error: Option<String>,
+}
+
+/// Base automatic sync interval; also the backoff floor.
+const BASE_INTERVAL_SECS: u64 = 300;
+/// Backoff ceiling so a long outage still retries roughly every 30 minutes.
+const MAX_BACKOFF_SECS: u64 = 1800;
+/// Notify the user once this many consecutive automatic passes have failed.
+const FAILURE_NOTIFY_THRESHOLD: u32 = 3;
+
+/// Reports whether an automatic sync pass made any progress. A pass counts as
+/// failed only when every org sync attempt errored and none succeeded, so a
+/// single flaky org does not trip the backoff/notification path.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct SyncPassOutcome {
+    succeeded: bool,
+    failed: bool,
+}
+
+impl SyncPassOutcome {
+    fn record_success(&mut self) {
+        self.succeeded = true;
+    }
+
+    fn record_failure(&mut self) {
+        self.failed = true;
+    }
+
+    /// A pass is a failure only when it errored without any success. A pass
+    /// that attempted nothing (no orgs / scope skipped) is not a failure.
+    fn is_failure(&self) -> bool {
+        self.failed && !self.succeeded
+    }
+}
+
+/// Exponential backoff: 5min, 10min, 20min, … capped at `MAX_BACKOFF_SECS`.
+fn backoff_secs(consecutive_failures: u32) -> u64 {
+    if consecutive_failures == 0 {
+        return BASE_INTERVAL_SECS;
+    }
+    let shift = consecutive_failures.saturating_sub(1).min(8);
+    BASE_INTERVAL_SECS
+        .saturating_mul(1u64 << shift)
+        .min(MAX_BACKOFF_SECS)
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 struct WorkItemNotificationEvent {
@@ -62,7 +118,7 @@ struct WorkItemNotificationItem {
     web_url: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 enum WorkItemNotificationKind {
     Assigned,
@@ -96,6 +152,65 @@ pub enum PrNotificationKind {
     ReviewRequested,
     VoteReset,
     CommentReply,
+}
+
+impl PrNotificationKind {
+    // Stable key used to match against NotificationRule.types (matches the
+    // camelCase serde representation the frontend stores).
+    fn rule_key(self) -> &'static str {
+        match self {
+            PrNotificationKind::ReviewRequested => "reviewRequested",
+            PrNotificationKind::VoteReset => "voteReset",
+            PrNotificationKind::CommentReply => "commentReply",
+        }
+    }
+}
+
+impl WorkItemNotificationKind {
+    fn rule_key(self) -> &'static str {
+        match self {
+            WorkItemNotificationKind::Assigned => "assigned",
+            WorkItemNotificationKind::StateChanged => "stateChanged",
+        }
+    }
+}
+
+/// Decides whether a collected notification survives the user's routing rules.
+/// With no rules configured the legacy per-toggle behaviour is preserved (all
+/// collected items pass). Otherwise an item must match at least one rule.
+fn notification_allowed(
+    rules: &[NotificationRule],
+    kind: &str,
+    project: &str,
+    repository: Option<&str>,
+) -> bool {
+    rules.is_empty()
+        || rules
+            .iter()
+            .any(|rule| notification_rule_matches(rule, kind, project, repository))
+}
+
+fn notification_rule_matches(
+    rule: &NotificationRule,
+    kind: &str,
+    project: &str,
+    repository: Option<&str>,
+) -> bool {
+    if !rule.types.is_empty() && !rule.types.iter().any(|t| t == kind) {
+        return false;
+    }
+    if !rule.projects.is_empty() && !rule.projects.iter().any(|p| p == project) {
+        return false;
+    }
+    if !rule.repositories.is_empty() {
+        match repository {
+            Some(repo) if rule.repositories.iter().any(|r| r == repo) => {}
+            // A repository condition is pull-request specific: a work item (no
+            // repository) can never satisfy it.
+            _ => return false,
+        }
+    }
+    true
 }
 
 fn pr_review_item(pr: &CachedReviewPr, kind: PrNotificationKind) -> PrNotificationItem {
@@ -153,9 +268,15 @@ impl SyncRunner {
     }
 
     pub async fn run(self, handle: AppHandle, mut trigger_rx: mpsc::Receiver<SyncTrigger>) {
-        let mut interval = interval_at(Instant::now(), Duration::from_secs(300));
+        let mut interval = interval_at(Instant::now(), Duration::from_secs(BASE_INTERVAL_SECS));
         // A sync pass can outlast the interval; don't burst-fire missed ticks.
         interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        // Consecutive automatic-pass failures. Manual triggers run immediately
+        // regardless, but their outcome still feeds the backoff so the timer
+        // recovers as soon as connectivity returns.
+        let mut consecutive_failures: u32 = 0;
+        // Suppress repeat notifications within a single failure streak.
+        let mut failure_notified = false;
         loop {
             let mut waiters = Vec::new();
             tokio::select! {
@@ -168,7 +289,40 @@ impl SyncRunner {
                 }
             }
             let scope = combined_scope(&waiters);
-            self.sync_once(&handle, scope).await;
+            let outcome = self.sync_once(&handle, scope).await;
+            if outcome.is_failure() {
+                consecutive_failures = consecutive_failures.saturating_add(1);
+                let retry_in = backoff_secs(consecutive_failures);
+                // Reset the periodic timer so the next automatic tick honors the
+                // backed-off delay instead of firing again in BASE_INTERVAL.
+                interval = interval_at(
+                    Instant::now() + Duration::from_secs(retry_in),
+                    Duration::from_secs(retry_in),
+                );
+                interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+                if consecutive_failures >= FAILURE_NOTIFY_THRESHOLD && !failure_notified {
+                    failure_notified = true;
+                    let event = SyncFailedEvent {
+                        consecutive_failures,
+                        retry_in_secs: retry_in,
+                        last_error: self.latest_sync_error(),
+                    };
+                    if let Err(e) = handle.emit("notifications:sync-failed", event) {
+                        tracing::warn!(error = ?e, "sync: failed to emit sync-failed event");
+                    }
+                }
+            } else if outcome.succeeded {
+                // Recovered: drop back to the base cadence and re-arm notifications.
+                if consecutive_failures > 0 {
+                    consecutive_failures = 0;
+                    failure_notified = false;
+                    interval = interval_at(
+                        Instant::now() + Duration::from_secs(BASE_INTERVAL_SECS),
+                        Duration::from_secs(BASE_INTERVAL_SECS),
+                    );
+                    interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+                }
+            }
             if matches!(scope, SyncScope::All) {
                 if let Err(e) = handle.emit(
                     "sync:updated",
@@ -186,7 +340,20 @@ impl SyncRunner {
         }
     }
 
-    async fn sync_once(&self, handle: &AppHandle, scope: SyncScope) {
+    /// Reads the most recent persisted sync error across scopes so the failure
+    /// notification can carry a human-readable reason.
+    fn latest_sync_error(&self) -> Option<String> {
+        self.db
+            .list_sync_states()
+            .ok()?
+            .into_iter()
+            .filter(|state| state.error_count > 0)
+            .filter_map(|state| state.last_error)
+            .next()
+    }
+
+    async fn sync_once(&self, handle: &AppHandle, scope: SyncScope) -> SyncPassOutcome {
+        let mut outcome = SyncPassOutcome::default();
         let settings = match self.db.get_app_settings() {
             Ok(settings) => settings,
             Err(e) => {
@@ -205,7 +372,8 @@ impl SyncRunner {
             Ok(orgs) => orgs,
             Err(e) => {
                 tracing::error!(error = ?e, "sync: failed to load organizations");
-                return;
+                outcome.record_failure();
+                return outcome;
             }
         };
         let snooze = SnoozeService::new(self.db.clone());
@@ -215,6 +383,7 @@ impl SyncRunner {
                 Ok(c) => c,
                 Err(e) => {
                     tracing::error!(org = %org.name, error = ?e, "sync: failed to create client");
+                    outcome.record_failure();
                     continue;
                 }
             };
@@ -231,7 +400,9 @@ impl SyncRunner {
                 };
                 if let Err(e) = sync_prs_for_org(&self.db, &client, &org).await {
                     tracing::error!(org = %org.name, error = ?e, "sync: PR sync failed");
+                    outcome.record_failure();
                 } else {
+                    outcome.record_success();
                     emit_sync_updated(handle, &org.id, vec![SyncScope::MyReviews]);
                     let current_reviews = self
                         .db
@@ -267,6 +438,14 @@ impl SyncRunner {
                     };
                     if should_collect_pr_notifications {
                         items.retain(|item| !snoozed_pr_ids.contains(&item.pull_request_id));
+                        items.retain(|item| {
+                            notification_allowed(
+                                &settings.notification_rules,
+                                item.kind.rule_key(),
+                                &item.project_name,
+                                Some(&item.repository_name),
+                            )
+                        });
                         if !items.is_empty() {
                             let event = PullRequestNotificationEvent {
                                 organization_id: org.id.clone(),
@@ -298,7 +477,9 @@ impl SyncRunner {
             ) {
                 if let Err(e) = sync_work_items_for_org(&self.db, &client, &org).await {
                     tracing::error!(org = %org.name, error = ?e, "sync: WI sync failed");
+                    outcome.record_failure();
                 } else {
+                    outcome.record_success();
                     emit_sync_updated(handle, &org.id, vec![SyncScope::MyWorkItems]);
                     match self.db.list_my_work_items(&org.id) {
                         Ok(current_my_work_items) => {
@@ -324,6 +505,14 @@ impl SyncRunner {
                                     &settings,
                                 );
                                 items.retain(|item| !snoozed_ids.contains(&item.id));
+                                items.retain(|item| {
+                                    notification_allowed(
+                                        &settings.notification_rules,
+                                        item.kind.rule_key(),
+                                        &item.project_name,
+                                        None,
+                                    )
+                                });
                                 if !items.is_empty() {
                                     let event = WorkItemNotificationEvent {
                                         organization_id: org.id.clone(),
@@ -345,11 +534,14 @@ impl SyncRunner {
             if matches!(scope, SyncScope::All | SyncScope::Commits) {
                 if let Err(e) = sync_commits_for_org(&self.db, &client, &org).await {
                     tracing::error!(org = %org.name, error = ?e, "sync: commit sync failed");
+                    outcome.record_failure();
                 } else {
+                    outcome.record_success();
                     emit_sync_updated(handle, &org.id, vec![SyncScope::Commits]);
                 }
             }
         }
+        outcome
     }
 }
 
@@ -476,6 +668,132 @@ fn work_item_notification_item(
 mod tests {
     use super::*;
 
+    fn rule(types: &[&str], projects: &[&str], repositories: &[&str]) -> NotificationRule {
+        NotificationRule {
+            types: types.iter().map(|s| s.to_string()).collect(),
+            projects: projects.iter().map(|s| s.to_string()).collect(),
+            repositories: repositories.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn notification_allowed_passes_everything_with_no_rules() {
+        assert!(notification_allowed(
+            &[],
+            "reviewRequested",
+            "Platform",
+            Some("Web")
+        ));
+        assert!(notification_allowed(&[], "assigned", "Platform", None));
+    }
+
+    #[test]
+    fn notification_allowed_requires_a_matching_rule() {
+        let rules = vec![rule(&["reviewRequested"], &["Platform"], &[])];
+        assert!(notification_allowed(
+            &rules,
+            "reviewRequested",
+            "Platform",
+            Some("Web")
+        ));
+        // Wrong kind.
+        assert!(!notification_allowed(
+            &rules,
+            "voteReset",
+            "Platform",
+            Some("Web")
+        ));
+        // Wrong project.
+        assert!(!notification_allowed(
+            &rules,
+            "reviewRequested",
+            "Other",
+            Some("Web")
+        ));
+    }
+
+    #[test]
+    fn notification_allowed_empty_field_means_any() {
+        let rules = vec![rule(&[], &["Platform"], &[])];
+        assert!(notification_allowed(
+            &rules,
+            "reviewRequested",
+            "Platform",
+            Some("Web")
+        ));
+        assert!(notification_allowed(&rules, "assigned", "Platform", None));
+        assert!(!notification_allowed(&rules, "assigned", "Other", None));
+    }
+
+    #[test]
+    fn notification_allowed_repository_filter_is_pr_only() {
+        let rules = vec![rule(&[], &[], &["Web"])];
+        assert!(notification_allowed(
+            &rules,
+            "reviewRequested",
+            "Platform",
+            Some("Web")
+        ));
+        assert!(!notification_allowed(
+            &rules,
+            "reviewRequested",
+            "Platform",
+            Some("Api")
+        ));
+        // Work items have no repository, so a repository rule never matches them.
+        assert!(!notification_allowed(&rules, "assigned", "Platform", None));
+    }
+
+    #[test]
+    fn notification_allowed_matches_any_of_several_rules() {
+        let rules = vec![
+            rule(&["reviewRequested"], &[], &[]),
+            rule(&["assigned"], &["Platform"], &[]),
+        ];
+        assert!(notification_allowed(
+            &rules,
+            "reviewRequested",
+            "Other",
+            Some("Web")
+        ));
+        assert!(notification_allowed(&rules, "assigned", "Platform", None));
+        assert!(!notification_allowed(
+            &rules,
+            "stateChanged",
+            "Platform",
+            None
+        ));
+    }
+
+    #[test]
+    fn backoff_grows_exponentially_and_caps() {
+        assert_eq!(backoff_secs(0), BASE_INTERVAL_SECS);
+        assert_eq!(backoff_secs(1), 300);
+        assert_eq!(backoff_secs(2), 600);
+        assert_eq!(backoff_secs(3), 1200);
+        // 4th failure would be 2400s, clamped to the 1800s ceiling.
+        assert_eq!(backoff_secs(4), MAX_BACKOFF_SECS);
+        assert_eq!(backoff_secs(50), MAX_BACKOFF_SECS);
+    }
+
+    #[test]
+    fn pass_is_failure_only_when_no_success() {
+        let mut all_failed = SyncPassOutcome::default();
+        all_failed.record_failure();
+        assert!(all_failed.is_failure());
+
+        let mut mixed = SyncPassOutcome::default();
+        mixed.record_failure();
+        mixed.record_success();
+        assert!(
+            !mixed.is_failure(),
+            "a partial success should not trip backoff"
+        );
+
+        // A pass that attempted nothing is not a failure.
+        assert!(!SyncPassOutcome::default().is_failure());
+    }
+
     #[test]
     fn work_item_notification_items_skips_assignment_on_first_snapshot() {
         let settings = AppSettings {
@@ -505,6 +823,9 @@ mod tests {
             my_is_required: true,
             is_draft: false,
             merge_status: None,
+            ci_status: None,
+            ci_context: None,
+            ci_check_count: 0,
         }
     }
 

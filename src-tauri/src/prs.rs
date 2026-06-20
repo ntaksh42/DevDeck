@@ -1,4 +1,6 @@
-use azdo_client::{AdoClient, AdoError, GitThread, PullRequestStatus, TeamProject};
+use azdo_client::{
+    summarize_pr_ci, AdoClient, AdoError, GitThread, PullRequestStatus, TeamProject,
+};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinSet;
@@ -38,6 +40,9 @@ pub struct ReviewPullRequestSummary {
     pub my_is_required: bool,
     pub is_draft: bool,
     pub merge_status: Option<String>,
+    pub ci_status: Option<String>,
+    pub ci_context: Option<String>,
+    pub ci_check_count: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -112,6 +117,9 @@ impl PullRequestService {
                 my_is_required: pr.my_is_required,
                 is_draft: pr.is_draft,
                 merge_status: pr.merge_status,
+                ci_status: pr.ci_status,
+                ci_context: pr.ci_context,
+                ci_check_count: pr.ci_check_count,
             })
             .collect();
         results.sort_by(|a, b| b.creation_date.cmp(&a.creation_date));
@@ -381,6 +389,7 @@ async fn do_sync_prs(
         }
 
         if review_failed_projects.is_empty() {
+            enrich_review_ci_status(client, &mut cached_reviews).await;
             db.replace_review_pull_requests(&org.id, &cached_reviews)?;
         } else {
             // A partial review list would silently drop PRs from the failed
@@ -408,6 +417,85 @@ async fn do_sync_prs(
         Some(warning_parts.join(" "))
     };
     Ok(SyncPrsResult { warning })
+}
+
+// CI status is fetched per-PR, so it is capped to keep sync cost bounded on
+// large review lists. The most recently created PRs are the ones a reviewer
+// acts on first, so they get the live CI verdict; older ones render as unknown.
+const CI_STATUS_SCAN_LIMIT: usize = 50;
+const CI_FETCH_CONCURRENCY: usize = 6;
+
+// (status, context_name, check_count) for one PR; `None` when the fetch failed.
+type CiFetchResult = (usize, Option<(String, Option<String>, i64)>);
+
+/// Fills in the CI verdict for the most recent review PRs by querying each PR's
+/// status checks. A failed fetch leaves the PR's CI fields unset (rendered as
+/// "unknown"), never failing the sync.
+async fn enrich_review_ci_status(client: &AdoClient, reviews: &mut [CachedReviewPr]) {
+    // Pick the newest PRs by creation date; creation_date is an RFC3339 string
+    // so lexicographic comparison matches chronological order.
+    let mut indices: Vec<usize> = (0..reviews.len()).collect();
+    indices.sort_by(|&a, &b| reviews[b].creation_date.cmp(&reviews[a].creation_date));
+    indices.truncate(CI_STATUS_SCAN_LIMIT);
+
+    let mut results: std::collections::HashMap<usize, (String, Option<String>, i64)> =
+        std::collections::HashMap::new();
+    let mut tasks: JoinSet<CiFetchResult> = JoinSet::new();
+
+    for &index in &indices {
+        let pr = &reviews[index];
+        let client = client.clone();
+        let project_id = pr.project_id.clone();
+        let repository_id = pr.repository_id.clone();
+        let pull_request_id = pr.pull_request_id;
+        while tasks.len() >= CI_FETCH_CONCURRENCY {
+            if let Some((idx, Some(value))) = join_ci_task(&mut tasks).await {
+                results.insert(idx, value);
+            }
+        }
+        tasks.spawn(async move {
+            let outcome = client
+                .list_pull_request_statuses(&project_id, &repository_id, pull_request_id)
+                .await;
+            let value = match outcome {
+                Ok(checks) => {
+                    let summary = summarize_pr_ci(&checks);
+                    Some((
+                        summary.state.as_str().to_string(),
+                        summary.context_name,
+                        summary.check_count as i64,
+                    ))
+                }
+                Err(e) => {
+                    tracing::warn!(pr = pull_request_id, error = %e, "failed to fetch PR CI status");
+                    None
+                }
+            };
+            (index, value)
+        });
+    }
+    while !tasks.is_empty() {
+        if let Some((idx, Some(value))) = join_ci_task(&mut tasks).await {
+            results.insert(idx, value);
+        }
+    }
+
+    for (index, (status, context, count)) in results {
+        reviews[index].ci_status = Some(status);
+        reviews[index].ci_context = context;
+        reviews[index].ci_check_count = count;
+    }
+}
+
+async fn join_ci_task(tasks: &mut JoinSet<CiFetchResult>) -> Option<CiFetchResult> {
+    match tasks.join_next().await {
+        Some(Ok(result)) => Some(result),
+        Some(Err(e)) => {
+            tracing::warn!(error = %e, "PR CI status task failed");
+            None
+        }
+        None => None,
+    }
 }
 
 fn collect_review_fetch(
@@ -609,6 +697,9 @@ async fn fetch_review_prs_for_project(
             my_is_required,
             is_draft: pr.is_draft.unwrap_or(false),
             merge_status: pr.merge_status.clone(),
+            ci_status: None,
+            ci_context: None,
+            ci_check_count: 0,
         });
     }
     (project_name, Ok(cached_reviews))
@@ -1033,14 +1124,14 @@ mod tests {
 
     #[test]
     fn is_ado_not_found_only_matches_404_api_errors() {
-        assert!(is_ado_not_found(&AdoError::Api {
-            status: 404,
-            body: "not found".to_string(),
-        }));
-        assert!(!is_ado_not_found(&AdoError::Api {
-            status: 500,
-            body: "server error".to_string(),
-        }));
+        assert!(is_ado_not_found(&AdoError::api(
+            404,
+            "not found".to_string()
+        )));
+        assert!(!is_ado_not_found(&AdoError::api(
+            500,
+            "server error".to_string()
+        )));
         assert!(!is_ado_not_found(&AdoError::Unauthorized));
     }
 }

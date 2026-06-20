@@ -1,5 +1,6 @@
 import {
   isPermissionGranted,
+  onAction,
   requestPermission,
   sendNotification,
 } from "@tauri-apps/plugin-notification";
@@ -43,9 +44,55 @@ type PullRequestNotificationItem = {
   snippet: string | null;
 };
 
+export type SyncFailedEvent = {
+  consecutiveFailures: number;
+  retryInSecs: number;
+  lastError: string | null;
+};
+
+export async function showSyncFailedNotificationEvent(
+  event: SyncFailedEvent,
+  settings: AppSettings,
+): Promise<DesktopNotificationResult> {
+  if (!settings.desktopNotificationsEnabled) {
+    return "skipped";
+  }
+  const retryMinutes = Math.max(1, Math.round(event.retryInSecs / 60));
+  const reason =
+    settings.notificationContentPreviewEnabled && event.lastError
+      ? `\n${truncate(event.lastError, 120)}`
+      : "";
+  return sendDesktopNotification("Sync is failing", {
+    body:
+      `AzDoDeck could not sync after ${event.consecutiveFailures} attempts. ` +
+      `Retrying in about ${retryMinutes} min.${reason}`,
+  });
+}
+
 export async function sendTestDesktopNotification(): Promise<DesktopNotificationResult> {
   return sendDesktopNotification("AzDoDeck notifications", {
     body: "Desktop notifications are ready.",
+  });
+}
+
+// Surfaces the outcome of a manually triggered pipeline run. `webUrl` opens the
+// build results page when the toast is clicked.
+export async function sendPipelineRunNotification(input: {
+  ok: boolean;
+  pipelineName: string;
+  detail: string;
+  webUrl?: string | null;
+}): Promise<DesktopNotificationResult> {
+  const title = input.ok
+    ? `Pipeline queued: ${input.pipelineName}`
+    : `Pipeline failed to start: ${input.pipelineName}`;
+  return sendDesktopNotification(title, {
+    body: input.detail,
+    onClick: input.webUrl
+      ? () => {
+          void openExternalUrl(input.webUrl!);
+        }
+      : undefined,
   });
 }
 
@@ -60,6 +107,7 @@ export async function showWorkItemNotificationEvent(
   const contentPreviewEnabled = settings.notificationContentPreviewEnabled;
   const items = event.items.slice(0, 20);
   if (items.length > 3) {
+    const jumpUrl = items.find((item) => item.webUrl)?.webUrl ?? null;
     return sendDesktopNotification(`${items.length} work item updates`, {
       body: contentPreviewEnabled
         ? `${event.organizationName}: ${items
@@ -67,6 +115,11 @@ export async function showWorkItemNotificationEvent(
             .map((item) => `#${item.id} ${item.title}`)
             .join(", ")}`
         : "Open AzDoDeck to review the latest work item updates.",
+      onClick: jumpUrl
+        ? () => {
+            void openExternalUrl(jumpUrl);
+          }
+        : undefined,
     });
   }
 
@@ -99,6 +152,7 @@ export async function showPullRequestNotificationEvent(
   const contentPreviewEnabled = settings.notificationContentPreviewEnabled;
   const items = event.items.slice(0, 20);
   if (items.length > 3) {
+    const jumpUrl = items.find((item) => item.webUrl)?.webUrl ?? null;
     return sendDesktopNotification(`${items.length} pull request updates`, {
       body: contentPreviewEnabled
         ? `${event.organizationName}: ${items
@@ -106,6 +160,11 @@ export async function showPullRequestNotificationEvent(
             .map((item) => `!${item.pullRequestId} ${item.title}`)
             .join(", ")}`
         : "Open AzDoDeck to review the latest pull request updates.",
+      onClick: jumpUrl
+        ? () => {
+            void openExternalUrl(jumpUrl);
+          }
+        : undefined,
     });
   }
 
@@ -169,6 +228,38 @@ async function sendDesktopNotification(
   return "sent";
 }
 
+// The Tauri notification plugin does not invoke a JS callback directly; instead
+// it emits an `actionPerformed` event (via `onAction`) when the user clicks a
+// toast, identifying the notification by its numeric id. We assign each
+// notification a unique id, remember its click handler, and dispatch the stored
+// handler when the matching event arrives.
+const MAX_PENDING_TAURI_HANDLERS = 100;
+const tauriNotificationHandlers = new Map<number, () => void>();
+let nextTauriNotificationId = 1;
+let tauriActionListenerPromise: Promise<unknown> | null = null;
+
+function ensureTauriActionListener(): void {
+  if (tauriActionListenerPromise) {
+    return;
+  }
+  tauriActionListenerPromise = onAction((notification) => {
+    const id = notification.id;
+    if (typeof id !== "number") {
+      return;
+    }
+    const handler = tauriNotificationHandlers.get(id);
+    if (handler) {
+      tauriNotificationHandlers.delete(id);
+      handler();
+    }
+  }).catch(() => {
+    // If the listener fails to register, clear the promise so a later
+    // notification can retry. Returning (not rethrowing) avoids an unhandled
+    // rejection, since nothing awaits this promise.
+    tauriActionListenerPromise = null;
+  });
+}
+
 async function sendTauriDesktopNotification(
   title: string,
   options: { body: string; onClick?: () => void },
@@ -182,7 +273,23 @@ async function sendTauriDesktopNotification(
     return "denied";
   }
 
+  let id: number | undefined;
+  if (options.onClick) {
+    ensureTauriActionListener();
+    id = nextTauriNotificationId++;
+    // Toasts that are dismissed without a click never fire `actionPerformed`,
+    // so bound the map to avoid leaking handlers over a long-lived session.
+    if (tauriNotificationHandlers.size >= MAX_PENDING_TAURI_HANDLERS) {
+      const oldest = tauriNotificationHandlers.keys().next().value;
+      if (oldest !== undefined) {
+        tauriNotificationHandlers.delete(oldest);
+      }
+    }
+    tauriNotificationHandlers.set(id, options.onClick);
+  }
+
   sendNotification({
+    id,
     title,
     body: options.body,
   });
