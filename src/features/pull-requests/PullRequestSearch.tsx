@@ -32,6 +32,7 @@ import {
   formatRelativeDate,
 } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
+import { recordRecentPullRequest } from '@/lib/recentItems';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { ErrorState, LoadingState } from '@/components/StateDisplay';
@@ -688,9 +689,12 @@ function PullRequestResults({
   const virtualBottomPadding =
     Math.max(0, filteredResults.length - lastVirtualRow) * PR_SEARCH_ROW_HEIGHT;
 
-  const selectedPr = filteredResults[selectedIndex]
-    ? toReviewSummary(filteredResults[selectedIndex])
-    : null;
+  const selectedResult = filteredResults[selectedIndex] ?? null;
+  const selectedPr = selectedResult ? toReviewSummary(selectedResult) : null;
+
+  useEffect(() => {
+    if (selectedResult) recordRecentPullRequest(selectedResult);
+  }, [selectedResult]);
 
   return (
     <div
