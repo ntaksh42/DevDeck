@@ -193,7 +193,7 @@ function demoThreadsFor(pullRequestId: number): PrThread[] {
         {
           id: 1,
           parentCommentId: 0,
-          content: "Could you add a test for the empty case?",
+          content: "Could you add a test for the empty case? @<user-1>",
           author: "Riley Reviewer",
           publishedDate: "2026-05-22T09:00:00Z",
           isSystem: false,

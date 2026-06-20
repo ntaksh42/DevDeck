@@ -19,6 +19,7 @@ import {
   Download,
   Filter,
   Loader,
+  MessageSquare,
   Pin,
   PinOff,
   Plus,
@@ -30,6 +31,7 @@ import {
 } from 'lucide-react';
 import {
   getAppSettings,
+  getPullRequestReview,
   listMyReviewPullRequests,
   listPullRequestChanges,
   commandErrorMessage,
@@ -40,6 +42,7 @@ import {
   type Organization,
   type ReviewPullRequestSummary,
 } from '@/lib/azdoCommands';
+import { summarizeThreads, type ThreadSummary } from './reviewThreadSummary';
 import { detectFileOverlaps } from '@/lib/prOverlap';
 import { SnoozeMenu } from '@/components/SnoozeMenu';
 import { SnoozedItemsPanel } from '@/components/SnoozedItemsPanel';
@@ -204,6 +207,7 @@ function renderPrCell(
   pr: ReviewPullRequestSummary,
   isStale: boolean,
   returned: boolean,
+  threads: ThreadSummary | undefined,
 ): ReactNode {
   switch (key) {
     case "pullRequestId":
@@ -253,6 +257,23 @@ function renderPrCell(
               Conflicts
             </span>
           ) : null}
+          {threads && threads.unresolved > 0 ? (
+            <span
+              className="inline-flex shrink-0 items-center gap-0.5 rounded border border-border bg-muted px-1 py-0.5 text-[10px] font-medium text-muted-foreground"
+              title={`${threads.unresolved} unresolved thread${threads.unresolved === 1 ? "" : "s"}${threads.lastCommenter ? ` · last: ${threads.lastCommenter}` : ""}`}
+            >
+              <MessageSquare className="h-3 w-3" aria-hidden="true" />
+              {threads.unresolved}
+            </span>
+          ) : null}
+          {threads?.mentionsMe ? (
+            <span
+              className="inline-flex shrink-0 items-center rounded border border-blue-300 bg-blue-100 px-1 py-0.5 text-[10px] font-medium text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300"
+              title="A comment mentions you"
+            >
+              @you
+            </span>
+          ) : null}
         </div>
       );
     case "createdBy":
@@ -292,12 +313,13 @@ const ReviewPrRow = forwardRef<
     selected: boolean;
     inMultiSelection: boolean;
     returned: boolean;
+    threads: ThreadSummary | undefined;
     columnTemplate: string;
     visibleColumns: SortKey[];
     staleThresholdDays: number;
     onSelect: (event: { shiftKey: boolean }) => void;
   }
->(({ pr, selected, inMultiSelection, returned, columnTemplate, visibleColumns, staleThresholdDays, onSelect }, ref) => {
+>(({ pr, selected, inMultiSelection, returned, threads, columnTemplate, visibleColumns, staleThresholdDays, onSelect }, ref) => {
   const createdTime = new Date(pr.creationDate).getTime();
   const isStale = Number.isFinite(createdTime)
     ? Math.floor((Date.now() - createdTime) / 86_400_000) >= staleThresholdDays
@@ -329,7 +351,7 @@ const ReviewPrRow = forwardRef<
       style={{ gridTemplateColumns: columnTemplate }}
     >
       {visibleColumns.map((key) => (
-        <Fragment key={key}>{renderPrCell(key, pr, isStale, returned)}</Fragment>
+        <Fragment key={key}>{renderPrCell(key, pr, isStale, returned, threads)}</Fragment>
       ))}
     </div>
   );
@@ -1067,6 +1089,35 @@ export function MyReviewsGrid({
   });
 
   const changesLoading = changeQueries.some((q) => q.isLoading);
+
+  // Lazily fetch each displayed PR's review (threads) so the grid can show its
+  // unresolved-thread count and a mention marker without opening it. Bounded to
+  // PRs in expanded sections, cached (and shared with the preview's review
+  // query), and entirely client-side so it never blocks the sync loop.
+  const myUserId =
+    organizations.find((organization) => organization.id === organizationId)
+      ?.authenticatedUserId ?? null;
+  const displayedPrs = useMemo(
+    () => visibleSortedIndexes.map((index) => sortedPrs[index]).filter(Boolean),
+    [visibleSortedIndexes, sortedPrs],
+  );
+  const threadQueries = useQueries({
+    queries: displayedPrs.map((pr) => ({
+      queryKey: ["prReview", pr.organizationId, pr.repositoryId, pr.pullRequestId],
+      queryFn: () => getPullRequestReview(prLocator(pr)),
+      staleTime: 5 * 60_000,
+    })),
+  });
+  const threadSummaries = useMemo(() => {
+    const map = new Map<string, ThreadSummary>();
+    displayedPrs.forEach((pr, index) => {
+      const data = threadQueries[index]?.data;
+      if (data) map.set(reviewTriageKey(pr), summarizeThreads(data, myUserId));
+    });
+    return map;
+    // threadQueries identity changes each render; key off the resolved data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayedPrs, threadQueries.map((q) => q.dataUpdatedAt).join("|"), myUserId]);
 
   const overlap = useMemo(() => {
     if (!isMultiSelect) return { overlaps: [], fileCount: 0 };
@@ -1921,6 +1972,7 @@ export function MyReviewsGrid({
                         selected={row.prIndex === selectedIndex}
                         inMultiSelection={selectedKeys.has(reviewTriageKey(row.pr))}
                         returned={returnedKeys.has(reviewTriageKey(row.pr))}
+                        threads={threadSummaries.get(reviewTriageKey(row.pr))}
                         visibleColumns={visibleColumns}
                         staleThresholdDays={staleThresholdDays}
                         onSelect={({ shiftKey }) => {
