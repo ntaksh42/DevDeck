@@ -10,12 +10,14 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, Info, Loader2, Maximize2, Minimize2, Search } from "lucide-react";
+import { ChevronDown, ChevronUp, GitPullRequest, Info, Loader2, Maximize2, Minimize2, Search } from "lucide-react";
 import {
   searchCommits,
   listCommitRepositories,
+  getCommitPullRequests,
   commandErrorMessage,
   type CommitSummary,
+  type CommitPullRequest,
   type CommitRepositoryOption,
   type Organization,
 } from "@/lib/azdoCommands";
@@ -41,14 +43,35 @@ const MIN_COMMIT_PREVIEW_WIDTH = 320;
 const MAX_COMMIT_PREVIEW_WIDTH = 8192;
 const COMMIT_PREVIEW_WIDTH_STORAGE_KEY = "azdodeck:layout:commitPreviewWidth";
 
-const DEFAULT_COMMIT_COLUMN_WIDTHS = [72, 80, 220, 140, 120];
-const COMMIT_COLUMN_MIN_WIDTHS = [66, 72, 160, 110, 96];
-const COMMIT_COLUMN_MAX_WIDTHS = [140, 160, 720, 380, 340];
-const COMMIT_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:commitGridColumnWidths:v2";
+const DEFAULT_COMMIT_COLUMN_WIDTHS = [72, 80, 220, 140, 120, 44];
+const COMMIT_COLUMN_MIN_WIDTHS = [66, 72, 160, 110, 96, 40];
+const COMMIT_COLUMN_MAX_WIDTHS = [140, 160, 720, 380, 340, 72];
+const COMMIT_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:commitGridColumnWidths:v3";
 const COMMIT_SEARCH_VIEW_STORAGE_KEY = "azdodeck:view:commitSearch:v1";
 const COMMIT_SORT_STORAGE_KEY = "azdodeck:view:commitGridSort:v1";
 const COMMIT_GRID_ROW_HEIGHT = 29;
 const COMMIT_GRID_OVERSCAN = 8;
+
+function commitPrQueryKey(commit: CommitSummary) {
+  return ["commitPullRequests", commit.organizationId, commit.repositoryId, commit.commitId] as const;
+}
+
+const PR_STATUS_LABELS: Record<string, string> = {
+  active: "Active",
+  completed: "Completed",
+  abandoned: "Abandoned",
+};
+
+function prStatusBadgeClass(status: string): string {
+  switch (status.toLowerCase()) {
+    case "completed":
+      return "border-green-200 bg-green-100 text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-300";
+    case "abandoned":
+      return "border-red-200 bg-red-100 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300";
+    default:
+      return "border-blue-200 bg-blue-100 text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300";
+  }
+}
 
 type CommitSearchViewState = {
   author: string;
@@ -98,10 +121,12 @@ export function CommitSearch({
   organizations,
   externalSearch,
   onExternalSearchHandled,
+  onOpenPullRequest,
 }: {
   organizations: Organization[];
   externalSearch?: { query: string; requestId: number; organizationId?: string } | null;
   onExternalSearchHandled?: () => void;
+  onOpenPullRequest?: (query: string, organizationId?: string) => void;
 }) {
   const initialViewState = useMemo(() => loadCommitSearchViewState(), []);
   const [organizationId, setOrganizationId] = useState(() =>
@@ -444,6 +469,7 @@ export function CommitSearch({
         activeExternalFilterCount={activeSearchFilterCount}
         loading={mutation.isPending}
         onClearExternalFilters={clearSearchFilters}
+        onOpenPullRequest={onOpenPullRequest}
         results={results}
         searched={mutation.isSuccess}
       />
@@ -560,6 +586,14 @@ const CommitGridRow = forwardRef<
     onSelect: () => void;
   }
 >(({ commit, selected, columnTemplate, onSelect }, ref) => {
+  // Reflects the related-PR lookup that the preview triggers on selection;
+  // reads cached query data only, so the grid never fans out N requests.
+  const prQuery = useQuery({
+    queryKey: commitPrQueryKey(commit),
+    queryFn: () => getCommitPullRequests(commit),
+    enabled: false,
+  });
+  const prCount = prQuery.data?.length ?? 0;
   const message = commit.comment.split(/\r?\n/, 1)[0] || "(no comment)";
   return (
     <div
@@ -604,19 +638,113 @@ const CommitGridRow = forwardRef<
       <span className="truncate text-xs text-muted-foreground" title={commit.authorName ?? undefined}>
         {commit.authorName ?? "—"}
       </span>
+      <span className="flex items-center justify-center" aria-hidden={prCount === 0}>
+        {prCount > 0 ? (
+          <span
+            className="inline-flex items-center gap-0.5 text-primary"
+            title={`In ${prCount} pull request${prCount === 1 ? "" : "s"}`}
+            aria-label={`In ${prCount} pull request${prCount === 1 ? "" : "s"}`}
+          >
+            <GitPullRequest className="h-3.5 w-3.5" aria-hidden="true" />
+            <span className="text-[11px] tabular-nums">{prCount}</span>
+          </span>
+        ) : null}
+      </span>
     </div>
   );
 });
 CommitGridRow.displayName = "CommitGridRow";
 
+// Lists the PRs that contain the selected commit. This is the query that
+// actually fetches; the grid indicator reads the same cache passively. Renders
+// nothing when the commit is in no PRs (per the issue's "hide if none" rule).
+function CommitRelatedPrsPanel({
+  commit,
+  onOpenPullRequest,
+}: {
+  commit: CommitSummary;
+  onOpenPullRequest?: (query: string, organizationId?: string) => void;
+}) {
+  const prsQuery = useQuery({
+    queryKey: commitPrQueryKey(commit),
+    queryFn: () => getCommitPullRequests(commit),
+    staleTime: 5 * 60_000,
+  });
+
+  if (prsQuery.isLoading) {
+    return (
+      <div className="flex items-center gap-2 border-t border-border px-3 py-2 text-xs text-muted-foreground">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Loading related pull
+        requests…
+      </div>
+    );
+  }
+  if (prsQuery.isError) {
+    return (
+      <p className="border-t border-border px-3 py-2 text-xs text-destructive">
+        {commandErrorMessage(prsQuery.error)}
+      </p>
+    );
+  }
+  const prs = prsQuery.data ?? [];
+  if (prs.length === 0) return null;
+
+  function openPr(pr: CommitPullRequest) {
+    onOpenPullRequest?.(String(pr.pullRequestId), commit.organizationId);
+  }
+
+  return (
+    <div className="border-t border-border">
+      <div className="border-b border-border bg-muted px-3 py-1 text-[11px] font-medium text-muted-foreground">
+        {prs.length} related pull request{prs.length === 1 ? "" : "s"}
+      </div>
+      <ul>
+        {prs.map((pr) => (
+          <li key={pr.pullRequestId}>
+            <button
+              type="button"
+              onClick={() => openPr(pr)}
+              onKeyDown={(event) => {
+                // Keep Enter/Space on the button; don't let the preview's
+                // Esc/Arrow handler hijack activation.
+                if (event.key === "Enter" || event.key === " ") {
+                  event.stopPropagation();
+                }
+              }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-muted/50 focus:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              title={`Open !${pr.pullRequestId} in Pull Request search`}
+            >
+              <GitPullRequest className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+              <span className="shrink-0 font-mono text-muted-foreground">!{pr.pullRequestId}</span>
+              <span className="min-w-0 flex-1 truncate font-medium text-foreground">{pr.title}</span>
+              <span
+                className={`shrink-0 rounded border px-1 py-px text-[10px] font-semibold ${prStatusBadgeClass(pr.status)}`}
+              >
+                {PR_STATUS_LABELS[pr.status.toLowerCase()] ?? pr.status}
+              </span>
+              {pr.myVote !== 0 ? (
+                <span className="shrink-0 text-[10px] text-muted-foreground" title="Your vote">
+                  {pr.myVoteLabel}
+                </span>
+              ) : null}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function CommitPreviewPanel({
   commit,
   maximized,
   onToggleMaximize,
+  onOpenPullRequest,
 }: {
   commit: CommitSummary | null;
   maximized: boolean;
   onToggleMaximize: () => void;
+  onOpenPullRequest?: (query: string, organizationId?: string) => void;
 }) {
   // Esc / ← step back to the grid (mirrors the grid's Enter / → into here).
   function handleKeyDown(event: ReactKeyboardEvent) {
@@ -697,6 +825,7 @@ function CommitPreviewPanel({
                 <dd className="break-all font-mono text-foreground">{commit.commitId}</dd>
               </dl>
             </div>
+            <CommitRelatedPrsPanel commit={commit} onOpenPullRequest={onOpenPullRequest} />
             <CommitFilesPanel
               key={`${commit.organizationId}:${commit.repositoryId}:${commit.commitId}`}
               organizationId={commit.organizationId}
@@ -719,12 +848,14 @@ function CommitResults({
   activeExternalFilterCount = 0,
   loading,
   onClearExternalFilters,
+  onOpenPullRequest,
   results,
   searched,
 }: {
   activeExternalFilterCount?: number;
   loading: boolean;
   onClearExternalFilters?: () => void;
+  onOpenPullRequest?: (query: string, organizationId?: string) => void;
   results: CommitSummary[];
   searched: boolean;
 }) {
@@ -948,7 +1079,7 @@ function CommitResults({
           onKeyDown={handleKeyDown}
         >
           <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-          <div className="min-w-[680px]">
+          <div className="min-w-[724px]">
             <div
               role="row"
               className="grid items-center gap-2 border-b border-border bg-muted px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
@@ -978,6 +1109,13 @@ function CommitResults({
                   }
                 />
               ))}
+              <div
+                role="columnheader"
+                className="min-w-0 truncate px-1 text-center"
+                title="Pull requests containing this commit"
+              >
+                PR
+              </div>
             </div>
             {loading ? (
               <LoadingState />
@@ -1021,6 +1159,7 @@ function CommitResults({
         commit={selectedCommit}
         maximized={maximized}
         onToggleMaximize={() => setMaximized((value) => !value)}
+        onOpenPullRequest={onOpenPullRequest}
       />
 
       {copyToast && (
