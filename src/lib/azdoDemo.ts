@@ -989,8 +989,15 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       return demoPipelineProjects();
     case "list_pipeline_definitions":
       return demoPipelineDefinitions();
-    case "list_pipeline_runs":
-      return demoPipelineRuns();
+    case "list_pipeline_runs": {
+      const definitionId = (
+        args as { input?: { definitionId?: number } } | undefined
+      )?.input?.definitionId;
+      const runs = demoPipelineRuns();
+      return definitionId == null
+        ? runs
+        : runs.filter((r) => r.definitionId === definitionId);
+    }
     case "get_pipeline_run": {
       const input = (args as { input?: { buildId?: number } } | undefined)?.input;
       return demoPipelineRunDetail(input?.buildId ?? 1001);
