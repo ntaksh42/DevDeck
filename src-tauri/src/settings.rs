@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::db::{
-    AppDatabase, AppSettings, DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
+    AppDatabase, AppSettings, NotificationRule, DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
     DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS, REVIEW_STALE_THRESHOLD_DAY_OPTIONS,
     WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS,
 };
@@ -25,6 +25,7 @@ pub struct UpdateAppSettingsInput {
     pub notify_pr_comment_replies: Option<bool>,
     pub review_stale_threshold_days: Option<i64>,
     pub work_item_stale_threshold_days: Option<i64>,
+    pub notification_rules: Option<Vec<NotificationRule>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -83,6 +84,30 @@ pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
             .work_item_stale_threshold_days
             .filter(|days| WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS.contains(days))
             .unwrap_or(DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS),
+        notification_rules: input
+            .notification_rules
+            .unwrap_or_default()
+            .into_iter()
+            .map(normalize_notification_rule)
+            .filter(|rule| !rule.is_empty())
+            .collect(),
+    }
+}
+
+// Trim and drop blank entries so a half-filled rule row from the UI does not
+// match every notification by accident.
+fn normalize_notification_rule(rule: NotificationRule) -> NotificationRule {
+    fn clean(values: Vec<String>) -> Vec<String> {
+        values
+            .into_iter()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .collect()
+    }
+    NotificationRule {
+        types: clean(rule.types),
+        projects: clean(rule.projects),
+        repositories: clean(rule.repositories),
     }
 }
 

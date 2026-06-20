@@ -29,6 +29,24 @@ export {
 export const WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS = [7, 14, 30] as const;
 export const DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS = 7;
 
+// Notification kinds a rule can match. Values mirror the camelCase enum keys the
+// backend uses (PrNotificationKind / WorkItemNotificationKind).
+export const NOTIFICATION_RULE_TYPES = [
+  { value: "reviewRequested", label: "PR review requested" },
+  { value: "voteReset", label: "PR vote reset" },
+  { value: "commentReply", label: "PR comment reply" },
+  { value: "assigned", label: "Work item assigned" },
+  { value: "stateChanged", label: "Work item state changed" },
+] as const;
+
+const notificationRuleSchema = z.object({
+  types: z.array(z.string()).default([]),
+  projects: z.array(z.string()).default([]),
+  repositories: z.array(z.string()).default([]),
+});
+
+export type NotificationRule = z.infer<typeof notificationRuleSchema>;
+
 const appSettingsSchema = z.object({
   reviewResultFolderPath: z.string().nullable(),
   showWindowHotkey: z.string().nullable().default(null),
@@ -45,6 +63,7 @@ const appSettingsSchema = z.object({
     .number()
     .int()
     .default(DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS),
+  notificationRules: z.array(notificationRuleSchema).default([]),
 });
 
 export type AppSettings = z.infer<typeof appSettingsSchema>;
@@ -535,6 +554,7 @@ export type UpdateAppSettingsInput = {
   notifyPrCommentReplies?: boolean;
   reviewStaleThresholdDays?: number;
   workItemStaleThresholdDays?: number;
+  notificationRules?: NotificationRule[];
 };
 
 export type GetReviewResultPreviewInput = {

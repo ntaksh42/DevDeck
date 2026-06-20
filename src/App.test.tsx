@@ -418,6 +418,7 @@ describe("App", () => {
           notifyPrCommentReplies: true,
           reviewStaleThresholdDays: 3,
           workItemStaleThresholdDays: 7,
+          notificationRules: [],
         },
       });
     });
@@ -476,6 +477,7 @@ describe("App", () => {
           notifyPrCommentReplies: true,
           reviewStaleThresholdDays: 3,
           workItemStaleThresholdDays: 7,
+          notificationRules: [],
         },
       });
     });
@@ -532,6 +534,7 @@ describe("App", () => {
           notifyPrCommentReplies: true,
           reviewStaleThresholdDays: 3,
           workItemStaleThresholdDays: 7,
+          notificationRules: [],
         },
       });
     });
@@ -587,6 +590,7 @@ describe("App", () => {
           notifyPrCommentReplies: true,
           reviewStaleThresholdDays: 3,
           workItemStaleThresholdDays: 7,
+          notificationRules: [],
         },
       });
     });

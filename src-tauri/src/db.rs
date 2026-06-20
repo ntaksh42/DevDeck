@@ -31,6 +31,31 @@ pub struct Organization {
     pub updated_at: String,
 }
 
+/// A single notification-routing rule. An empty list in a field means "any":
+/// e.g. empty `types` matches every notification kind. A notification is
+/// delivered when there are no rules at all, or when it matches at least one
+/// rule. `repositories` only applies to pull-request notifications; a rule with
+/// a non-empty `repositories` never matches a work-item notification.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationRule {
+    #[serde(default)]
+    pub types: Vec<String>,
+    #[serde(default)]
+    pub projects: Vec<String>,
+    #[serde(default)]
+    pub repositories: Vec<String>,
+}
+
+impl NotificationRule {
+    /// A rule with no conditions at all would match every notification; treat it
+    /// as a blank row so it can be dropped rather than silently disabling all
+    /// other rules.
+    pub fn is_empty(&self) -> bool {
+        self.types.is_empty() && self.projects.is_empty() && self.repositories.is_empty()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
@@ -46,6 +71,7 @@ pub struct AppSettings {
     pub notify_pr_comment_replies: bool,
     pub review_stale_threshold_days: i64,
     pub work_item_stale_threshold_days: i64,
+    pub notification_rules: Vec<NotificationRule>,
 }
 
 pub const DEFAULT_REVIEW_STALE_THRESHOLD_DAYS: i64 = 3;
@@ -68,6 +94,7 @@ impl Default for AppSettings {
             notify_pr_comment_replies: true,
             review_stale_threshold_days: DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
             work_item_stale_threshold_days: DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
+            notification_rules: Vec::new(),
         }
     }
 }
@@ -1459,6 +1486,7 @@ fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
         notify_pr_comment_replies: get_bool_setting(conn, "notify_pr_comment_replies", true)?,
         review_stale_threshold_days: get_review_stale_threshold_days(conn)?,
         work_item_stale_threshold_days: get_work_item_stale_threshold_days(conn)?,
+        notification_rules: get_notification_rules(conn)?,
     })
 }
 
@@ -1476,6 +1504,15 @@ fn get_work_item_stale_threshold_days(conn: &Connection) -> Result<i64> {
         .filter(|days| WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS.contains(days))
         .unwrap_or(DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS);
     Ok(value)
+}
+
+// Stored as a JSON array string. Corrupt or absent JSON falls back to an empty
+// rule set, which preserves the legacy per-toggle notification behaviour.
+fn get_notification_rules(conn: &Connection) -> Result<Vec<NotificationRule>> {
+    match get_setting(conn, "notification_rules")? {
+        Some(raw) if !raw.trim().is_empty() => Ok(serde_json::from_str(&raw).unwrap_or_default()),
+        _ => Ok(Vec::new()),
+    }
 }
 
 fn update_app_settings(conn: &Connection, settings: AppSettings) -> Result<AppSettings> {
@@ -1552,6 +1589,9 @@ fn update_app_settings(conn: &Connection, settings: AppSettings) -> Result<AppSe
         "work_item_stale_threshold_days",
         Some(&work_item_stale_days.to_string()),
     )?;
+    let rules_json =
+        serde_json::to_string(&settings.notification_rules).unwrap_or_else(|_| "[]".to_string());
+    set_setting(conn, "notification_rules", Some(&rules_json))?;
     get_app_settings(conn)
 }
 
@@ -2690,6 +2730,11 @@ mod tests {
                 notify_pr_comment_replies: false,
                 review_stale_threshold_days: 7,
                 work_item_stale_threshold_days: 14,
+                notification_rules: vec![NotificationRule {
+                    types: vec!["reviewRequested".to_string()],
+                    projects: vec!["Platform".to_string()],
+                    repositories: Vec::new(),
+                }],
             },
         )
         .unwrap();
@@ -2699,6 +2744,9 @@ mod tests {
         );
         assert_eq!(saved.review_stale_threshold_days, 7);
         assert_eq!(saved.work_item_stale_threshold_days, 14);
+        assert_eq!(saved.notification_rules.len(), 1);
+        assert_eq!(saved.notification_rules[0].types, vec!["reviewRequested"]);
+        assert_eq!(saved.notification_rules[0].projects, vec!["Platform"]);
         assert_eq!(saved.show_window_hotkey.as_deref(), Some("Ctrl+Alt+D"));
         assert!(saved.read_only_validation_mode_enabled);
         assert!(saved.desktop_notifications_enabled);

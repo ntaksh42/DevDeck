@@ -8,7 +8,9 @@ use tokio::time::{interval_at, Instant, MissedTickBehavior};
 
 use crate::auth::client_for_organization;
 use crate::commits::sync_commits_for_org;
-use crate::db::{AppDatabase, AppSettings, CachedReviewPr, CachedWorkItem, MY_WORK_ITEMS_LIMIT};
+use crate::db::{
+    AppDatabase, AppSettings, CachedReviewPr, CachedWorkItem, NotificationRule, MY_WORK_ITEMS_LIMIT,
+};
 use crate::prs::sync_prs_for_org;
 use crate::secrets::SecretStore;
 use crate::snooze::SnoozeService;
@@ -116,7 +118,7 @@ struct WorkItemNotificationItem {
     web_url: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 enum WorkItemNotificationKind {
     Assigned,
@@ -150,6 +152,65 @@ pub enum PrNotificationKind {
     ReviewRequested,
     VoteReset,
     CommentReply,
+}
+
+impl PrNotificationKind {
+    // Stable key used to match against NotificationRule.types (matches the
+    // camelCase serde representation the frontend stores).
+    fn rule_key(self) -> &'static str {
+        match self {
+            PrNotificationKind::ReviewRequested => "reviewRequested",
+            PrNotificationKind::VoteReset => "voteReset",
+            PrNotificationKind::CommentReply => "commentReply",
+        }
+    }
+}
+
+impl WorkItemNotificationKind {
+    fn rule_key(self) -> &'static str {
+        match self {
+            WorkItemNotificationKind::Assigned => "assigned",
+            WorkItemNotificationKind::StateChanged => "stateChanged",
+        }
+    }
+}
+
+/// Decides whether a collected notification survives the user's routing rules.
+/// With no rules configured the legacy per-toggle behaviour is preserved (all
+/// collected items pass). Otherwise an item must match at least one rule.
+fn notification_allowed(
+    rules: &[NotificationRule],
+    kind: &str,
+    project: &str,
+    repository: Option<&str>,
+) -> bool {
+    rules.is_empty()
+        || rules
+            .iter()
+            .any(|rule| notification_rule_matches(rule, kind, project, repository))
+}
+
+fn notification_rule_matches(
+    rule: &NotificationRule,
+    kind: &str,
+    project: &str,
+    repository: Option<&str>,
+) -> bool {
+    if !rule.types.is_empty() && !rule.types.iter().any(|t| t == kind) {
+        return false;
+    }
+    if !rule.projects.is_empty() && !rule.projects.iter().any(|p| p == project) {
+        return false;
+    }
+    if !rule.repositories.is_empty() {
+        match repository {
+            Some(repo) if rule.repositories.iter().any(|r| r == repo) => {}
+            // A repository condition is pull-request specific: a work item (no
+            // repository) can never satisfy it.
+            _ => return false,
+        }
+    }
+    true
 }
 
 fn pr_review_item(pr: &CachedReviewPr, kind: PrNotificationKind) -> PrNotificationItem {
@@ -377,6 +438,14 @@ impl SyncRunner {
                     };
                     if should_collect_pr_notifications {
                         items.retain(|item| !snoozed_pr_ids.contains(&item.pull_request_id));
+                        items.retain(|item| {
+                            notification_allowed(
+                                &settings.notification_rules,
+                                item.kind.rule_key(),
+                                &item.project_name,
+                                Some(&item.repository_name),
+                            )
+                        });
                         if !items.is_empty() {
                             let event = PullRequestNotificationEvent {
                                 organization_id: org.id.clone(),
@@ -436,6 +505,14 @@ impl SyncRunner {
                                     &settings,
                                 );
                                 items.retain(|item| !snoozed_ids.contains(&item.id));
+                                items.retain(|item| {
+                                    notification_allowed(
+                                        &settings.notification_rules,
+                                        item.kind.rule_key(),
+                                        &item.project_name,
+                                        None,
+                                    )
+                                });
                                 if !items.is_empty() {
                                     let event = WorkItemNotificationEvent {
                                         organization_id: org.id.clone(),
@@ -590,6 +667,103 @@ fn work_item_notification_item(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn rule(types: &[&str], projects: &[&str], repositories: &[&str]) -> NotificationRule {
+        NotificationRule {
+            types: types.iter().map(|s| s.to_string()).collect(),
+            projects: projects.iter().map(|s| s.to_string()).collect(),
+            repositories: repositories.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn notification_allowed_passes_everything_with_no_rules() {
+        assert!(notification_allowed(
+            &[],
+            "reviewRequested",
+            "Platform",
+            Some("Web")
+        ));
+        assert!(notification_allowed(&[], "assigned", "Platform", None));
+    }
+
+    #[test]
+    fn notification_allowed_requires_a_matching_rule() {
+        let rules = vec![rule(&["reviewRequested"], &["Platform"], &[])];
+        assert!(notification_allowed(
+            &rules,
+            "reviewRequested",
+            "Platform",
+            Some("Web")
+        ));
+        // Wrong kind.
+        assert!(!notification_allowed(
+            &rules,
+            "voteReset",
+            "Platform",
+            Some("Web")
+        ));
+        // Wrong project.
+        assert!(!notification_allowed(
+            &rules,
+            "reviewRequested",
+            "Other",
+            Some("Web")
+        ));
+    }
+
+    #[test]
+    fn notification_allowed_empty_field_means_any() {
+        let rules = vec![rule(&[], &["Platform"], &[])];
+        assert!(notification_allowed(
+            &rules,
+            "reviewRequested",
+            "Platform",
+            Some("Web")
+        ));
+        assert!(notification_allowed(&rules, "assigned", "Platform", None));
+        assert!(!notification_allowed(&rules, "assigned", "Other", None));
+    }
+
+    #[test]
+    fn notification_allowed_repository_filter_is_pr_only() {
+        let rules = vec![rule(&[], &[], &["Web"])];
+        assert!(notification_allowed(
+            &rules,
+            "reviewRequested",
+            "Platform",
+            Some("Web")
+        ));
+        assert!(!notification_allowed(
+            &rules,
+            "reviewRequested",
+            "Platform",
+            Some("Api")
+        ));
+        // Work items have no repository, so a repository rule never matches them.
+        assert!(!notification_allowed(&rules, "assigned", "Platform", None));
+    }
+
+    #[test]
+    fn notification_allowed_matches_any_of_several_rules() {
+        let rules = vec![
+            rule(&["reviewRequested"], &[], &[]),
+            rule(&["assigned"], &["Platform"], &[]),
+        ];
+        assert!(notification_allowed(
+            &rules,
+            "reviewRequested",
+            "Other",
+            Some("Web")
+        ));
+        assert!(notification_allowed(&rules, "assigned", "Platform", None));
+        assert!(!notification_allowed(
+            &rules,
+            "stateChanged",
+            "Platform",
+            None
+        ));
+    }
 
     #[test]
     fn backoff_grows_exponentially_and_caps() {
