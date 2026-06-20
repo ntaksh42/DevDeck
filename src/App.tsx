@@ -163,12 +163,11 @@ type View =
   | "workItemViews"
   | "commits"
   | "releaseNotes"
-  | "myCommits"
   | "pipelines"
   | "codeSearch"
   | "settings";
 
-type NavSectionId = "pullRequests" | "workItems" | "commits";
+type NavSectionId = "pullRequests" | "workItems";
 
 const DEFAULT_SIDEBAR_WIDTH = 232;
 const SIDEBAR_WIDTH_STORAGE_KEY = "azdodeck:layout:sidebarWidth";
@@ -284,7 +283,6 @@ function AppShell() {
   const [navExpanded, setNavExpanded] = useState<Record<NavSectionId, boolean>>({
     pullRequests: true,
     workItems: true,
-    commits: true,
   });
   const [pinnedViewsExpanded, setPinnedViewsExpanded] = useState(true);
   const [workItemNavViews, setWorkItemNavViews] = useState<WorkItemQueryView[]>(() =>
@@ -725,7 +723,7 @@ function AppShell() {
   }
 
   function currentViewSyncScope(): SyncScope {
-    if (activeView === "commits" || activeView === "myCommits") return "commits";
+    if (activeView === "commits") return "commits";
     if (
       activeView === "workItems" ||
       activeView === "myWorkItems" ||
@@ -803,17 +801,9 @@ function AppShell() {
       disabled: organizations.length === 0,
       group: "Navigation",
       id: "nav.commits",
-      keywords: ["commit", "search", "all"],
-      label: "Go to All Commits",
+      keywords: ["commit", "search"],
+      label: "Go to Commits",
       run: () => setView("commits"),
-    },
-    {
-      disabled: organizations.length === 0,
-      group: "Navigation",
-      id: "nav.myCommits",
-      keywords: ["commit", "mine", "authored", "my activity"],
-      label: "Go to My Commits",
-      run: () => setView("myCommits"),
     },
     {
       disabled: organizations.length === 0,
@@ -1513,27 +1503,13 @@ function AppShell() {
                 onClick={() => setView("workItems")}
               />
             </NavSection>
-            <NavSection
-              id="commits"
+            <NavButton
+              active={activeView === "commits"}
+              disabled={organizations.length === 0}
               icon={<GitCommitHorizontal className="h-4 w-4" aria-hidden="true" />}
               label="Commits"
-              disabled={organizations.length === 0}
-              expanded={navExpanded.commits}
-              onExpandedChange={(expanded) => setNavSectionExpanded("commits", expanded)}
-            >
-              <NavSubItem
-                active={activeView === "commits"}
-                disabled={organizations.length === 0}
-                label="All Commits"
-                onClick={() => setView("commits")}
-              />
-              <NavSubItem
-                active={activeView === "myCommits"}
-                disabled={organizations.length === 0}
-                label="My Commits"
-                onClick={() => setView("myCommits")}
-              />
-            </NavSection>
+              onClick={() => setView("commits")}
+            />
             <NavButton
               active={activeView === "releaseNotes"}
               disabled={organizations.length === 0}
@@ -1606,8 +1582,6 @@ function AppShell() {
                           ? "Commits"
                           : activeView === "releaseNotes"
                             ? "Release Notes"
-                          : activeView === "myCommits"
-                            ? "My Commits"
                           : activeView === "pipelines"
                             ? "Pipelines"
                             : activeView === "codeSearch"
@@ -1629,8 +1603,6 @@ function AppShell() {
                           ? "Search Azure DevOps commits across repositories"
                           : activeView === "releaseNotes"
                             ? "Generate Markdown release notes from completed pull requests"
-                          : activeView === "myCommits"
-                            ? "Your recent commits across repositories"
                           : activeView === "pipelines"
                             ? "Azure DevOps build runs by project"
                             : activeView === "codeSearch"
@@ -1716,14 +1688,6 @@ function AppShell() {
             />
           ) : activeView === "releaseNotes" ? (
             <ReleaseNotesView organizations={organizations} />
-          ) : activeView === "myCommits" ? (
-            <CommitSearch
-              organizations={organizations}
-              myCommitsMode
-              onOpenPullRequest={(query, organizationId) =>
-                openSearchTarget("pullRequests", query, organizationId)
-              }
-            />
           ) : activeView === "pipelines" ? (
             <PipelinesView organizations={organizations} />
           ) : activeView === "codeSearch" ? (
