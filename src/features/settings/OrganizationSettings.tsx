@@ -1,11 +1,13 @@
-import { type ChangeEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, useEffect, useState } from 'react';
+import { type ChangeEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Bell, Building2, Clock, Eye, EyeOff, FileText, Keyboard, Loader2, Monitor, Moon, Palette, Plus, RefreshCw, Send, ShieldCheck, Sun, Trash2 } from 'lucide-react';
+import { Activity, Bell, Building2, Clock, Eye, EyeOff, FileText, Keyboard, Loader2, Monitor, Moon, Palette, Play, Plus, RefreshCw, Send, ShieldCheck, Sun, Trash2 } from 'lucide-react';
 import {
   addAzureCliOrganization,
   addPatOrganization,
   deleteOrganization,
   getAppSettings,
+  listPipelineDefinitions,
+  listPipelineProjects,
   listSyncStates,
   updateAppSettings,
   commandErrorMessage,
@@ -14,12 +16,24 @@ import {
   REVIEW_STALE_THRESHOLD_DAY_OPTIONS,
   DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
   WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS,
+  NOTIFICATION_RULE_TYPES,
   type AppSettings,
+  type NotificationRule,
   type Organization,
   type SyncScope,
   type SyncState,
   type UpdateAppSettingsInput,
 } from '@/lib/azdoCommands';
+import { FilterableSelect, type SelectOption } from "@/features/pipelines/FilterableSelect";
+import {
+  DEFAULT_QUICK_PIPELINE_BRANCH,
+  addQuickPipeline,
+  loadQuickPipelines,
+  removeQuickPipeline,
+  saveQuickPipelines,
+  type QuickPipeline,
+} from "@/features/pipelines/quickPipelinesStorage";
+import { emitQuickPipelinesChanged } from "@/features/pipelines/quickPipelinesEvents";
 import { sendTestDesktopNotification } from "@/lib/desktopNotifications";
 import {
   LAYOUT_STORAGE_PREFIX,
@@ -67,7 +81,9 @@ export function OrganizationSettings({
       <KeyboardShortcutSettings />
       <ShowWindowHotkeySettings />
       <DesktopNotificationSettings />
+      <NotificationRulesSettings />
       <ReviewResultFolderSettings />
+      <QuickPipelinesSettings organizations={organizations} />
       <ReviewStaleThresholdSettings />
       <WorkItemStaleThresholdSettings />
       <SyncHealthSettings organizations={organizations} />
@@ -122,6 +138,225 @@ export function OrganizationSettings({
       </div>
     </div>
   );
+}
+
+function QuickPipelinesSettings({ organizations }: { organizations: Organization[] }) {
+  const [pipelines, setPipelines] = useState<QuickPipeline[]>(() => loadQuickPipelines());
+  const [organizationId, setOrganizationId] = useState("");
+  const [projectId, setProjectId] = useState("");
+  const [definitionId, setDefinitionId] = useState("");
+  const [name, setName] = useState("");
+  const [branch, setBranch] = useState(DEFAULT_QUICK_PIPELINE_BRANCH);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  // Default the org picker to the first organization once they load.
+  useEffect(() => {
+    if (!organizationId && organizations.length > 0) {
+      setOrganizationId(organizations[0].id);
+    }
+  }, [organizations, organizationId]);
+
+  const projectsQuery = useQuery({
+    queryKey: ["pipelineProjects", organizationId],
+    queryFn: () => listPipelineProjects({ organizationId }),
+    enabled: !!organizationId,
+    staleTime: 5 * 60_000,
+  });
+
+  const definitionsQuery = useQuery({
+    queryKey: ["pipelineDefinitions", organizationId, projectId],
+    queryFn: () => listPipelineDefinitions({ organizationId, projectId }),
+    enabled: !!organizationId && !!projectId,
+    staleTime: 5 * 60_000,
+  });
+
+  const projectOptions = useMemo<SelectOption[]>(
+    () => (projectsQuery.data ?? []).map((p) => ({ value: p.id, label: p.name })),
+    [projectsQuery.data],
+  );
+  const definitionOptions = useMemo<SelectOption[]>(
+    () => (definitionsQuery.data ?? []).map((d) => ({ value: String(d.id), label: d.name })),
+    [definitionsQuery.data],
+  );
+
+  function persist(next: QuickPipeline[]) {
+    setPipelines(next);
+    saveQuickPipelines(next);
+    emitQuickPipelinesChanged();
+  }
+
+  function onAdd(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFormError(null);
+    const project = projectsQuery.data?.find((p) => p.id === projectId);
+    const definition = definitionsQuery.data?.find((d) => String(d.id) === definitionId);
+    if (!organizationId || !project || !definition) {
+      setFormError("Select an organization, project, and pipeline.");
+      return;
+    }
+    if (!branch.trim()) {
+      setFormError("A source branch is required.");
+      return;
+    }
+    const next = addQuickPipeline(pipelines, {
+      name: name.trim() || definition.name,
+      organizationId,
+      projectId: project.id,
+      projectName: project.name,
+      definitionId: definition.id,
+      definitionName: definition.name,
+      sourceBranch: branch.trim(),
+    });
+    persist(next);
+    setName("");
+    setBranch(DEFAULT_QUICK_PIPELINE_BRANCH);
+    setDefinitionId("");
+  }
+
+  function onRemove(id: string) {
+    persist(removeQuickPipeline(pipelines, id));
+  }
+
+  const orgName = (id: string) => organizations.find((org) => org.id === id)?.name ?? id;
+
+  return (
+    <div className="rounded-md border border-border bg-card">
+      <div className="border-b border-border px-3 py-2">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
+            <Play className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold">Quick Pipelines</h2>
+            <p className="text-sm text-muted-foreground">
+              Register pipelines to run them from the command palette (Ctrl+K).
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <form className="grid gap-3 p-3" onSubmit={onAdd}>
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="grid gap-1.5">
+            <span className="text-sm font-medium">Organization</span>
+            <FilterableSelect
+              ariaLabel="Quick pipeline organization"
+              value={organizationId}
+              options={organizations.map((org) => ({ value: org.id, label: org.name }))}
+              onChange={(value) => {
+                setOrganizationId(value);
+                setProjectId("");
+                setDefinitionId("");
+              }}
+              placeholder="Select organization"
+            />
+          </label>
+          <label className="grid gap-1.5">
+            <span className="text-sm font-medium">Project</span>
+            <FilterableSelect
+              ariaLabel="Quick pipeline project"
+              value={projectId}
+              options={projectOptions}
+              disabled={!organizationId || projectsQuery.isLoading}
+              onChange={(value) => {
+                setProjectId(value);
+                setDefinitionId("");
+              }}
+              placeholder={projectsQuery.isLoading ? "Loading projects…" : "Select project"}
+            />
+          </label>
+          <label className="grid gap-1.5">
+            <span className="text-sm font-medium">Pipeline</span>
+            <FilterableSelect
+              ariaLabel="Quick pipeline definition"
+              value={definitionId}
+              options={definitionOptions}
+              disabled={!projectId || definitionsQuery.isLoading}
+              onChange={setDefinitionId}
+              placeholder={definitionsQuery.isLoading ? "Loading pipelines…" : "Select pipeline"}
+            />
+          </label>
+          <label className="grid gap-1.5">
+            <span className="text-sm font-medium">Source branch</span>
+            <input
+              value={branch}
+              onChange={(event) => setBranch(event.target.value)}
+              placeholder={DEFAULT_QUICK_PIPELINE_BRANCH}
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+          </label>
+          <label className="grid gap-1.5 md:col-span-2">
+            <span className="text-sm font-medium">Display name</span>
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Defaults to the pipeline name"
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+          </label>
+        </div>
+
+        {projectsQuery.isError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {commandErrorMessage(projectsQuery.error)}
+          </p>
+        ) : null}
+        {definitionsQuery.isError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {commandErrorMessage(definitionsQuery.error)}
+          </p>
+        ) : null}
+        {formError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {formError}
+          </p>
+        ) : null}
+
+        <div>
+          <button
+            type="submit"
+            disabled={!definitionId}
+            className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Add pipeline
+          </button>
+        </div>
+      </form>
+
+      {pipelines.length > 0 ? (
+        <div className="divide-y divide-border border-t border-border">
+          {pipelines.map((pipeline) => (
+            <div
+              key={pipeline.id}
+              className="grid items-center gap-3 px-3 py-2 md:grid-cols-[1fr_auto]"
+            >
+              <div className="min-w-0">
+                <p className="truncate font-medium">{pipeline.name}</p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {orgName(pipeline.organizationId)} / {pipeline.projectName} /{" "}
+                  {pipeline.definitionName} · {shortQuickBranch(pipeline.sourceBranch)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onRemove(pipeline.id)}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                aria-label={`Remove ${pipeline.name}`}
+                title={`Remove ${pipeline.name}`}
+              >
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function shortQuickBranch(branch: string): string {
+  return branch.replace(/^refs\/heads\//, "");
 }
 
 function SyncHealthSettings({ organizations }: { organizations: Organization[] }) {
@@ -393,6 +628,7 @@ function settingsInput(
     workItemStaleThresholdDays:
       settings?.workItemStaleThresholdDays ??
       DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
+    notificationRules: settings?.notificationRules ?? [],
     ...input,
   };
 }
@@ -926,6 +1162,214 @@ export function ReviewStaleThresholdSettings() {
   );
 }
 
+// Comma-separated text <-> string[] for the project / repository filters. Empty
+// segments are kept while editing; the backend trims and drops blanks on save.
+function rulesListToText(values: string[]): string {
+  return values.join(", ");
+}
+function rulesTextToList(text: string): string[] {
+  return text.split(",").map((value) => value.trim());
+}
+
+export function NotificationRulesSettings() {
+  const queryClient = useQueryClient();
+  const settingsQuery = useQuery({
+    queryKey: ["appSettings"],
+    queryFn: getAppSettings,
+    staleTime: 5 * 60_000,
+  });
+  const mutation = useMutation({
+    mutationFn: updateAppSettings,
+    onSuccess: (settings) => {
+      queryClient.setQueryData(["appSettings"], settings);
+    },
+  });
+
+  const savedRules = settingsQuery.data?.notificationRules;
+  const [draft, setDraft] = useState<NotificationRule[]>([]);
+
+  // Keep the editable draft in step with the server copy whenever it loads or
+  // changes elsewhere.
+  useEffect(() => {
+    if (savedRules) setDraft(savedRules);
+  }, [savedRules]);
+
+  function toggleType(index: number, value: string) {
+    setDraft((rules) =>
+      rules.map((rule, i) =>
+        i === index
+          ? {
+              ...rule,
+              types: rule.types.includes(value)
+                ? rule.types.filter((type) => type !== value)
+                : [...rule.types, value],
+            }
+          : rule,
+      ),
+    );
+  }
+
+  function setListField(
+    index: number,
+    field: "projects" | "repositories",
+    text: string,
+  ) {
+    setDraft((rules) =>
+      rules.map((rule, i) =>
+        i === index ? { ...rule, [field]: rulesTextToList(text) } : rule,
+      ),
+    );
+  }
+
+  function addRule() {
+    setDraft((rules) => [...rules, { types: [], projects: [], repositories: [] }]);
+  }
+
+  function removeRule(index: number) {
+    setDraft((rules) => rules.filter((_, i) => i !== index));
+  }
+
+  function save() {
+    mutation.mutate(settingsInput(settingsQuery.data, { notificationRules: draft }));
+  }
+
+  const dirty = JSON.stringify(draft) !== JSON.stringify(savedRules ?? []);
+
+  return (
+    <div className="rounded-md border border-border bg-card">
+      <div className="border-b border-border px-3 py-2">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
+            <Bell className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold">Notification rules</h2>
+            <p className="text-sm text-muted-foreground">
+              Only deliver desktop notifications that match a rule. With no rules,
+              the per-type toggles above apply. Repository filters apply to pull
+              requests only.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 p-3">
+        {draft.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No rules — every enabled notification is delivered.
+          </p>
+        ) : (
+          draft.map((rule, index) => (
+            <div
+              key={index}
+              className="grid gap-2 rounded-md border border-border p-3"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Rule {index + 1}</span>
+                <button
+                  type="button"
+                  onClick={() => removeRule(index)}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus:outline-none focus:ring-2 focus:ring-ring"
+                  aria-label={`Remove rule ${index + 1}`}
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+
+              <fieldset className="grid gap-1">
+                <legend className="text-xs font-medium text-muted-foreground">
+                  Notification types (any if none selected)
+                </legend>
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  {NOTIFICATION_RULE_TYPES.map((type) => (
+                    <label
+                      key={type.value}
+                      className="flex cursor-pointer items-center gap-1.5 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={rule.types.includes(type.value)}
+                        onChange={() => toggleType(index, type.value)}
+                        className="h-3.5 w-3.5 cursor-pointer rounded border-input"
+                      />
+                      {type.label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
+              <label className="grid gap-1">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Projects (comma separated; any if blank)
+                </span>
+                <input
+                  value={rulesListToText(rule.projects)}
+                  onChange={(event) =>
+                    setListField(index, "projects", event.target.value)
+                  }
+                  placeholder="Platform, Mobile"
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+              </label>
+
+              <label className="grid gap-1">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Repositories (comma separated; pull requests only)
+                </span>
+                <input
+                  value={rulesListToText(rule.repositories)}
+                  onChange={(event) =>
+                    setListField(index, "repositories", event.target.value)
+                  }
+                  placeholder="web-app, api"
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+              </label>
+            </div>
+          ))
+        )}
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={addRule}
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Add rule
+          </button>
+          <button
+            type="button"
+            onClick={save}
+            disabled={!dirty || mutation.isPending}
+            className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Save rules
+          </button>
+        </div>
+
+        {settingsQuery.isError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {commandErrorMessage(settingsQuery.error)}
+          </p>
+        ) : null}
+
+        {mutation.isError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {commandErrorMessage(mutation.error)}
+          </p>
+        ) : null}
+
+        {mutation.isSuccess && !dirty ? (
+          <p className="text-sm text-green-700 dark:text-green-400">
+            Notification rules saved.
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function WorkItemStaleThresholdSettings() {
   const queryClient = useQueryClient();
   const settingsQuery = useQuery({
@@ -1409,6 +1853,8 @@ export function SetupPanel({ compact = false }: { compact?: boolean }) {
               value={pat}
               onChange={(event) => setPat(event.target.value)}
               type={showPat ? "text" : "password"}
+              autoComplete="off"
+              spellCheck={false}
               className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none"
             />
             <button

@@ -78,6 +78,15 @@ pub struct WorkItemWithRelations {
 pub struct WorkItemRelation {
     pub rel: String,
     pub url: String,
+    #[serde(default)]
+    pub attributes: Option<WorkItemRelationAttributes>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemRelationAttributes {
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

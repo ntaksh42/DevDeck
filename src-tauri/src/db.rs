@@ -31,6 +31,31 @@ pub struct Organization {
     pub updated_at: String,
 }
 
+/// A single notification-routing rule. An empty list in a field means "any":
+/// e.g. empty `types` matches every notification kind. A notification is
+/// delivered when there are no rules at all, or when it matches at least one
+/// rule. `repositories` only applies to pull-request notifications; a rule with
+/// a non-empty `repositories` never matches a work-item notification.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationRule {
+    #[serde(default)]
+    pub types: Vec<String>,
+    #[serde(default)]
+    pub projects: Vec<String>,
+    #[serde(default)]
+    pub repositories: Vec<String>,
+}
+
+impl NotificationRule {
+    /// A rule with no conditions at all would match every notification; treat it
+    /// as a blank row so it can be dropped rather than silently disabling all
+    /// other rules.
+    pub fn is_empty(&self) -> bool {
+        self.types.is_empty() && self.projects.is_empty() && self.repositories.is_empty()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
@@ -46,6 +71,7 @@ pub struct AppSettings {
     pub notify_pr_comment_replies: bool,
     pub review_stale_threshold_days: i64,
     pub work_item_stale_threshold_days: i64,
+    pub notification_rules: Vec<NotificationRule>,
 }
 
 pub const DEFAULT_REVIEW_STALE_THRESHOLD_DAYS: i64 = 3;
@@ -68,6 +94,7 @@ impl Default for AppSettings {
             notify_pr_comment_replies: true,
             review_stale_threshold_days: DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
             work_item_stale_threshold_days: DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
+            notification_rules: Vec::new(),
         }
     }
 }
@@ -485,38 +512,28 @@ impl AppDatabase {
         item: &CachedWorkItem,
         my_unique_name: Option<&str>,
     ) -> Result<()> {
-        let still_mine = match (my_unique_name, item.assigned_to_unique_name.as_deref()) {
-            (Some(me), Some(assignee)) => me.eq_ignore_ascii_case(assignee),
-            // Unknown identity or unassigned: fall back to update-only to avoid
-            // dropping a row we cannot confidently say left the snapshot.
-            (None, _) => true,
-            (Some(_), None) => false,
-        };
-
         let conn = self.open()?;
-        if !still_mine {
-            conn.execute(
-                "DELETE FROM my_work_items WHERE org_id=?1 AND id=?2",
-                rusqlite::params![item.org_id, item.id],
-            )?;
+        update_my_work_item_if_present(&conn, item, my_unique_name)
+    }
+
+    /// Reflects a batch of single-item edits (the successful subset of a bulk
+    /// state/assignee/priority operation) into the local cache in a single
+    /// connection and transaction, instead of reopening SQLite once per item.
+    pub fn apply_work_item_updates(
+        &self,
+        items: &[CachedWorkItem],
+        my_unique_name: Option<&str>,
+    ) -> Result<()> {
+        if items.is_empty() {
             return Ok(());
         }
-        conn.execute(
-            "UPDATE my_work_items SET title=?3, work_item_type=?4, state=?5, \
-             assigned_to=?6, assigned_to_unique_name=?7, changed_date=?8, web_url=?9 \
-             WHERE org_id=?1 AND id=?2",
-            rusqlite::params![
-                item.org_id,
-                item.id,
-                item.title,
-                item.work_item_type,
-                item.state,
-                item.assigned_to,
-                item.assigned_to_unique_name,
-                item.changed_date,
-                item.web_url
-            ],
-        )?;
+        let conn = self.open()?;
+        let tx = conn.unchecked_transaction()?;
+        upsert_work_items(&tx, items)?;
+        for item in items {
+            update_my_work_item_if_present(&tx, item, my_unique_name)?;
+        }
+        tx.commit()?;
         Ok(())
     }
 
@@ -608,6 +625,27 @@ impl AppDatabase {
     pub fn list_commit_repositories(&self, org_id: &str) -> Result<Vec<CachedRepository>> {
         let conn = self.open()?;
         list_commit_repositories(&conn, org_id)
+    }
+
+    pub fn commit_activity(
+        &self,
+        org_id: &str,
+        project_id: Option<&str>,
+        repository_id: Option<&str>,
+        author: Option<&str>,
+        from_date: Option<&str>,
+        to_date: Option<&str>,
+    ) -> Result<Vec<(String, i64)>> {
+        let conn = self.open()?;
+        commit_activity(
+            &conn,
+            org_id,
+            project_id,
+            repository_id,
+            author,
+            from_date,
+            to_date,
+        )
     }
 
     pub fn replace_commits_for_repo(
@@ -1459,6 +1497,7 @@ fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
         notify_pr_comment_replies: get_bool_setting(conn, "notify_pr_comment_replies", true)?,
         review_stale_threshold_days: get_review_stale_threshold_days(conn)?,
         work_item_stale_threshold_days: get_work_item_stale_threshold_days(conn)?,
+        notification_rules: get_notification_rules(conn)?,
     })
 }
 
@@ -1476,6 +1515,15 @@ fn get_work_item_stale_threshold_days(conn: &Connection) -> Result<i64> {
         .filter(|days| WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS.contains(days))
         .unwrap_or(DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS);
     Ok(value)
+}
+
+// Stored as a JSON array string. Corrupt or absent JSON falls back to an empty
+// rule set, which preserves the legacy per-toggle notification behaviour.
+fn get_notification_rules(conn: &Connection) -> Result<Vec<NotificationRule>> {
+    match get_setting(conn, "notification_rules")? {
+        Some(raw) if !raw.trim().is_empty() => Ok(serde_json::from_str(&raw).unwrap_or_default()),
+        _ => Ok(Vec::new()),
+    }
 }
 
 fn update_app_settings(conn: &Connection, settings: AppSettings) -> Result<AppSettings> {
@@ -1552,6 +1600,9 @@ fn update_app_settings(conn: &Connection, settings: AppSettings) -> Result<AppSe
         "work_item_stale_threshold_days",
         Some(&work_item_stale_days.to_string()),
     )?;
+    let rules_json =
+        serde_json::to_string(&settings.notification_rules).unwrap_or_else(|_| "[]".to_string());
+    set_setting(conn, "notification_rules", Some(&rules_json))?;
     get_app_settings(conn)
 }
 
@@ -1894,6 +1945,51 @@ fn upsert_work_items(conn: &Connection, items: &[CachedWorkItem]) -> Result<()> 
     Ok(())
 }
 
+/// Keeps the my_work_items snapshot consistent after a single-item edit.
+///
+/// When `my_unique_name` is known and the item is no longer assigned to that
+/// user, the row is removed so a reassignment drops out of My Work Items
+/// immediately instead of lingering until the next full sync. Otherwise the
+/// existing row (if any) is updated in place.
+fn update_my_work_item_if_present(
+    conn: &Connection,
+    item: &CachedWorkItem,
+    my_unique_name: Option<&str>,
+) -> Result<()> {
+    let still_mine = match (my_unique_name, item.assigned_to_unique_name.as_deref()) {
+        (Some(me), Some(assignee)) => me.eq_ignore_ascii_case(assignee),
+        // Unknown identity or unassigned: fall back to update-only to avoid
+        // dropping a row we cannot confidently say left the snapshot.
+        (None, _) => true,
+        (Some(_), None) => false,
+    };
+
+    if !still_mine {
+        conn.execute(
+            "DELETE FROM my_work_items WHERE org_id=?1 AND id=?2",
+            rusqlite::params![item.org_id, item.id],
+        )?;
+        return Ok(());
+    }
+    conn.execute(
+        "UPDATE my_work_items SET title=?3, work_item_type=?4, state=?5, \
+         assigned_to=?6, assigned_to_unique_name=?7, changed_date=?8, web_url=?9 \
+         WHERE org_id=?1 AND id=?2",
+        rusqlite::params![
+            item.org_id,
+            item.id,
+            item.title,
+            item.work_item_type,
+            item.state,
+            item.assigned_to,
+            item.assigned_to_unique_name,
+            item.changed_date,
+            item.web_url
+        ],
+    )?;
+    Ok(())
+}
+
 fn search_work_items(
     conn: &Connection,
     org_id: &str,
@@ -1979,6 +2075,10 @@ fn search_work_items_fts(
             result.push(item);
         }
     }
+    // The id-prefix and text matches are each ordered by changed_date DESC, but
+    // concatenating them breaks that order. Re-sort so the combined result stays
+    // date-descending, matching the ordering the search palette expects.
+    result.sort_by(|a, b| b.changed_date.cmp(&a.changed_date));
     Ok(result)
 }
 
@@ -2223,6 +2323,55 @@ fn list_commit_repositories(conn: &Connection, org_id: &str) -> Result<Vec<Cache
             repository_name: row.get(3)?,
         })
     })?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
+/// Aggregates commit counts per calendar day for the activity heatmap. The
+/// author filter matches the name or email as a case-insensitive substring,
+/// mirroring the commit search behaviour. Dates are derived from `author_date`
+/// via SQLite's `date()`; commits without an `author_date` are skipped.
+fn commit_activity(
+    conn: &Connection,
+    org_id: &str,
+    project_id: Option<&str>,
+    repository_id: Option<&str>,
+    author: Option<&str>,
+    from_date: Option<&str>,
+    to_date: Option<&str>,
+) -> Result<Vec<(String, i64)>> {
+    let author_like = author.map(|a| format!("%{}%", a.to_lowercase()));
+    let mut stmt = conn.prepare(
+        r#"
+        SELECT date(author_date) AS day, COUNT(*) AS count
+        FROM commits
+        WHERE org_id = ?1
+          AND author_date IS NOT NULL
+          AND (?2 IS NULL OR project_id = ?2)
+          AND (?3 IS NULL OR repository_id = ?3)
+          AND (?4 IS NULL
+               OR lower(IFNULL(author_name, '')) LIKE ?4
+               OR lower(IFNULL(author_email, '')) LIKE ?4)
+          AND (?5 IS NULL OR author_date >= ?5)
+          AND (?6 IS NULL OR author_date <= ?6)
+        GROUP BY day
+        ORDER BY day
+        "#,
+    )?;
+    let rows = stmt.query_map(
+        params![
+            org_id,
+            project_id,
+            repository_id,
+            author_like,
+            from_date,
+            to_date
+        ],
+        |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
+    )?;
     let mut result = Vec::new();
     for row in rows {
         result.push(row?);
@@ -2690,6 +2839,11 @@ mod tests {
                 notify_pr_comment_replies: false,
                 review_stale_threshold_days: 7,
                 work_item_stale_threshold_days: 14,
+                notification_rules: vec![NotificationRule {
+                    types: vec!["reviewRequested".to_string()],
+                    projects: vec!["Platform".to_string()],
+                    repositories: Vec::new(),
+                }],
             },
         )
         .unwrap();
@@ -2699,6 +2853,9 @@ mod tests {
         );
         assert_eq!(saved.review_stale_threshold_days, 7);
         assert_eq!(saved.work_item_stale_threshold_days, 14);
+        assert_eq!(saved.notification_rules.len(), 1);
+        assert_eq!(saved.notification_rules[0].types, vec!["reviewRequested"]);
+        assert_eq!(saved.notification_rules[0].projects, vec!["Platform"]);
         assert_eq!(saved.show_window_hotkey.as_deref(), Some("Ctrl+Alt+D"));
         assert!(saved.read_only_validation_mode_enabled);
         assert!(saved.desktop_notifications_enabled);
@@ -2779,6 +2936,35 @@ mod tests {
         assert!(ids.contains(&421));
         assert!(ids.contains(&9));
         assert_eq!(ids.len(), 3);
+    }
+
+    #[test]
+    fn search_work_items_fts_orders_mixed_matches_by_changed_date_desc() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        upsert_organization(&conn, make_org_draft("org1")).unwrap();
+
+        // A numeric query produces both id-prefix matches and FTS text matches.
+        // They must be merged into a single changed_date DESC ordering.
+        for (id, title, changed) in [
+            (42_i64, "id prefix match", "2024-01-01T00:00:00Z"),
+            (421_i64, "another id prefix", "2024-05-01T00:00:00Z"),
+            (9_i64, "release 42 text match", "2024-03-01T00:00:00Z"),
+        ] {
+            conn.execute(
+                "INSERT OR REPLACE INTO work_items(org_id, project_id, project_name, id, title, changed_date) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params!["org1", "p1", "Project One", id, title, changed],
+            )
+            .unwrap();
+        }
+
+        let results = search_work_items_fts(&conn, "org1", "42").unwrap();
+        let changed: Vec<Option<String>> =
+            results.iter().map(|item| item.changed_date.clone()).collect();
+        let mut sorted = changed.clone();
+        sorted.sort_by(|a, b| b.cmp(a));
+        assert_eq!(changed, sorted);
+        assert_eq!(results[0].id, 421);
     }
 
     fn make_cached_wi(id: i64, title: &str, changed: &str) -> CachedWorkItem {
@@ -3258,6 +3444,72 @@ mod tests {
     }
 
     #[test]
+    fn apply_work_item_updates_batches_upsert_and_my_items() {
+        let tf = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        let mine = |id: i64, state: &str| CachedWorkItem {
+            org_id: "org1".to_string(),
+            project_id: "p1".to_string(),
+            project_name: "P1".to_string(),
+            id,
+            title: format!("item {id}"),
+            work_item_type: None,
+            state: Some(state.to_string()),
+            assigned_to: Some("Me".to_string()),
+            assigned_to_unique_name: Some("me@example.com".to_string()),
+            changed_date: Some(format!("2024-01-0{id}T00:00:00Z")),
+            web_url: None,
+        };
+
+        let seed = [mine(1, "Active"), mine(2, "Active")];
+        db.replace_work_items("org1", &["p1"], &seed, &seed)
+            .unwrap();
+        assert_eq!(db.list_my_work_items("org1").unwrap().len(), 2);
+
+        // Item 1 stays mine but changes state; item 2 is reassigned away.
+        let item1 = CachedWorkItem {
+            state: Some("Closed".to_string()),
+            changed_date: Some("2024-02-01T00:00:00Z".to_string()),
+            ..mine(1, "Active")
+        };
+        let item2 = CachedWorkItem {
+            assigned_to: Some("Other".to_string()),
+            assigned_to_unique_name: Some("other@example.com".to_string()),
+            changed_date: Some("2024-02-02T00:00:00Z".to_string()),
+            ..mine(2, "Active")
+        };
+        db.apply_work_item_updates(&[item1, item2], Some("me@example.com"))
+            .unwrap();
+
+        // work_items reflects both edits.
+        let all = db
+            .search_work_items("org1", None, None, None, None)
+            .unwrap();
+        let state_of = |id: i64| {
+            all.iter()
+                .find(|w| w.id == id)
+                .and_then(|w| w.state.clone())
+        };
+        assert_eq!(state_of(1).as_deref(), Some("Closed"));
+        assert_eq!(
+            all.iter()
+                .find(|w| w.id == 2)
+                .and_then(|w| w.assigned_to.clone())
+                .as_deref(),
+            Some("Other")
+        );
+
+        // my_work_items: item 1 updated in place, item 2 dropped.
+        let mine_rows = db.list_my_work_items("org1").unwrap();
+        assert_eq!(mine_rows.len(), 1);
+        assert_eq!(mine_rows[0].id, 1);
+        assert_eq!(mine_rows[0].state.as_deref(), Some("Closed"));
+    }
+
+    #[test]
     fn replace_work_items_clears_and_repopulates_both_tables() {
         let tf = NamedTempFile::new().unwrap();
         let db = AppDatabase::new(tf.path().to_path_buf());
@@ -3660,6 +3912,71 @@ mod tests {
         let remaining = db.search_commits("org1", None, None, None, None).unwrap();
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].commit_id, "new");
+    }
+
+    #[test]
+    fn commit_activity_groups_by_day_and_filters_by_author() {
+        let tf = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        let make = |commit_id: &str, date: Option<&str>, name: &str, email: &str| CachedCommit {
+            org_id: "org1".to_string(),
+            project_id: "p1".to_string(),
+            project_name: "P1".to_string(),
+            repository_id: "repo1".to_string(),
+            repository_name: "Repo1".to_string(),
+            commit_id: commit_id.to_string(),
+            comment: "msg".to_string(),
+            author_name: Some(name.to_string()),
+            author_email: Some(email.to_string()),
+            author_date: date.map(|s| s.to_string()),
+            web_url: None,
+        };
+
+        db.replace_commits_for_repo(
+            "org1",
+            "repo1",
+            &[
+                make("a", Some("2026-05-01T08:00:00+00:00"), "Alice", "alice@x.com"),
+                make("b", Some("2026-05-01T20:00:00+00:00"), "Alice", "alice@x.com"),
+                make("c", Some("2026-05-02T08:00:00+00:00"), "Bob", "bob@x.com"),
+                make("d", None, "Alice", "alice@x.com"),
+            ],
+        )
+        .unwrap();
+
+        // All authors: two commits on 05-01, one on 05-02. NULL date is skipped.
+        let all = db
+            .commit_activity("org1", None, None, None, None, None)
+            .unwrap();
+        assert_eq!(
+            all,
+            vec![
+                ("2026-05-01".to_string(), 2),
+                ("2026-05-02".to_string(), 1),
+            ]
+        );
+
+        // Author substring filter (case-insensitive) narrows to Alice's days.
+        let alice = db
+            .commit_activity("org1", None, None, Some("ALICE"), None, None)
+            .unwrap();
+        assert_eq!(alice, vec![("2026-05-01".to_string(), 2)]);
+
+        // Date range filter clamps the window.
+        let ranged = db
+            .commit_activity(
+                "org1",
+                None,
+                None,
+                None,
+                Some("2026-05-02T00:00:00+00:00"),
+                None,
+            )
+            .unwrap();
+        assert_eq!(ranged, vec![("2026-05-02".to_string(), 1)]);
     }
 
     #[test]
