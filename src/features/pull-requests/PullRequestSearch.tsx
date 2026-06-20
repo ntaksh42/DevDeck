@@ -778,6 +778,7 @@ function PullRequestResults({
                       setWidths={setColumnWidths}
                       min={PR_SEARCH_COLUMN_MIN_WIDTHS[fullIndex]}
                       max={PR_SEARCH_COLUMN_MAX_WIDTHS[fullIndex]}
+                      defaultWidth={DEFAULT_PR_SEARCH_COLUMN_WIDTHS[fullIndex]}
                     />
                   )}
                 </div>

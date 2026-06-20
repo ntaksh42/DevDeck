@@ -36,6 +36,10 @@ import {
 import { emitQuickPipelinesChanged } from "@/features/pipelines/quickPipelinesEvents";
 import { sendTestDesktopNotification } from "@/lib/desktopNotifications";
 import {
+  LAYOUT_STORAGE_PREFIX,
+  clearLayoutStorage,
+} from "@/lib/layoutReset";
+import {
   KEYBINDINGS,
   comboFromEvent,
   defaultKeybindingMap,
@@ -530,7 +534,7 @@ function DataCacheSettings() {
     key.startsWith("azdodeck:"),
   );
   const layoutStorageEntries = azdodeckStorageEntries.filter((key) =>
-    key.startsWith("azdodeck:layout:"),
+    key.startsWith(LAYOUT_STORAGE_PREFIX),
   );
   const localStorageBytes = azdodeckStorageEntries.reduce((total, key) => {
     const value = window.localStorage.getItem(key) ?? "";
@@ -547,10 +551,11 @@ function DataCacheSettings() {
   }
 
   function resetLayoutCache() {
-    for (const key of layoutStorageEntries) {
-      window.localStorage.removeItem(key);
-    }
+    clearLayoutStorage();
     refreshStats();
+    // Widths live in component state across the app; reload so every sidebar,
+    // preview, and grid re-initializes from its default width.
+    window.location.reload();
   }
 
   return (
@@ -585,9 +590,10 @@ function DataCacheSettings() {
             type="button"
             onClick={resetLayoutCache}
             disabled={layoutStorageEntries.length === 0}
+            title="Restore sidebar, preview, and grid column widths to their defaults. Saved Work Item Views and credentials are kept."
             className="inline-flex h-8 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Reset layout cache
+            Reset layout widths
           </button>
         </div>
       </div>

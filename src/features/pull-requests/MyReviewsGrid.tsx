@@ -1797,6 +1797,7 @@ export function MyReviewsGrid({
                             setWidths={setColumnWidths}
                             min={PR_GRID_COLUMN_MIN_WIDTHS[fullIndex]}
                             max={PR_GRID_COLUMN_MAX_WIDTHS[fullIndex]}
+                            defaultWidth={DEFAULT_PR_GRID_COLUMN_WIDTHS[fullIndex]}
                           />
                         )
                       }

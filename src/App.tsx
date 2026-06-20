@@ -70,6 +70,7 @@ import { ResizeHandle } from "@/components/ResizeHandle";
 import { LoadingState, ErrorState } from "@/components/StateDisplay";
 import { NavButton, NavSection, NavSubGroup, NavSubItem } from "@/components/Nav";
 import { HelpDialog } from "@/components/HelpDialog";
+import { resetLayoutWidths } from "@/lib/layoutReset";
 import {
   CommandPalette,
   type CommandPaletteAction,
@@ -932,6 +933,13 @@ function AppShell() {
       label: "Show keyboard shortcuts",
       run: () => setHelpOpen(true),
       shortcut: "?",
+    },
+    {
+      group: "General",
+      id: "general.resetLayoutWidths",
+      keywords: ["layout", "width", "sidebar", "preview", "column", "reset", "default"],
+      label: "Reset layout widths",
+      run: resetLayoutWidths,
     },
     ...quickPipelines.map<CommandPaletteAction>((pipeline) => ({
       disabled: readOnlyMode,

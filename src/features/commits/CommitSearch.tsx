@@ -1273,6 +1273,7 @@ function CommitResults({
                     setWidths={setColumnWidths}
                     min={COMMIT_COLUMN_MIN_WIDTHS[fullIndex]}
                     max={COMMIT_COLUMN_MAX_WIDTHS[fullIndex]}
+                    defaultWidth={DEFAULT_COMMIT_COLUMN_WIDTHS[fullIndex]}
                   />
                 );
                 if (col === "sha") {
