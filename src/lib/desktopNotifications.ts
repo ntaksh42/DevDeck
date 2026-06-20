@@ -75,6 +75,27 @@ export async function sendTestDesktopNotification(): Promise<DesktopNotification
   });
 }
 
+// Surfaces the outcome of a manually triggered pipeline run. `webUrl` opens the
+// build results page when the toast is clicked.
+export async function sendPipelineRunNotification(input: {
+  ok: boolean;
+  pipelineName: string;
+  detail: string;
+  webUrl?: string | null;
+}): Promise<DesktopNotificationResult> {
+  const title = input.ok
+    ? `Pipeline queued: ${input.pipelineName}`
+    : `Pipeline failed to start: ${input.pipelineName}`;
+  return sendDesktopNotification(title, {
+    body: input.detail,
+    onClick: input.webUrl
+      ? () => {
+          void openExternalUrl(input.webUrl!);
+        }
+      : undefined,
+  });
+}
+
 export async function showWorkItemNotificationEvent(
   event: WorkItemNotificationEvent,
   settings: AppSettings,
