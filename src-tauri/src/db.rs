@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, Result};
 
-const SCHEMA_VERSION: i64 = 14;
+const SCHEMA_VERSION: i64 = 15;
 
 /// Max rows kept in the my_work_items snapshot queries; sync notification
 /// diffing must know this cap to avoid treating re-entering rows as new.
@@ -1361,6 +1361,50 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             "#,
         )?;
     }
+    if current < 15 {
+        // Rebuild the work item FTS index so unique names (e.g. email
+        // addresses) are full-text searchable, not just display names.
+        conn.execute_batch(
+            r#"
+            DROP TRIGGER IF EXISTS work_items_fts_au;
+            DROP TRIGGER IF EXISTS work_items_fts_ad;
+            DROP TRIGGER IF EXISTS work_items_fts_ai;
+            DROP TABLE IF EXISTS work_items_fts;
+
+            CREATE VIRTUAL TABLE work_items_fts USING fts5(
+                org_id UNINDEXED,
+                item_id UNINDEXED,
+                title,
+                work_item_type,
+                assigned_to,
+                assigned_to_unique_name
+            );
+
+            CREATE TRIGGER work_items_fts_ai
+                AFTER INSERT ON work_items BEGIN
+                    INSERT INTO work_items_fts(rowid, org_id, item_id, title, work_item_type, assigned_to, assigned_to_unique_name)
+                    VALUES (new.rowid, new.org_id, new.id, new.title, new.work_item_type, new.assigned_to, new.assigned_to_unique_name);
+                END;
+
+            CREATE TRIGGER work_items_fts_ad
+                AFTER DELETE ON work_items BEGIN
+                    DELETE FROM work_items_fts WHERE rowid = old.rowid;
+                END;
+
+            CREATE TRIGGER work_items_fts_au
+                AFTER UPDATE ON work_items BEGIN
+                    DELETE FROM work_items_fts WHERE rowid = old.rowid;
+                    INSERT INTO work_items_fts(rowid, org_id, item_id, title, work_item_type, assigned_to, assigned_to_unique_name)
+                    VALUES (new.rowid, new.org_id, new.id, new.title, new.work_item_type, new.assigned_to, new.assigned_to_unique_name);
+                END;
+
+            INSERT INTO work_items_fts(rowid, org_id, item_id, title, work_item_type, assigned_to, assigned_to_unique_name)
+                SELECT rowid, org_id, id, title, work_item_type, assigned_to, assigned_to_unique_name FROM work_items;
+
+            PRAGMA user_version = 15;
+            "#,
+        )?;
+    }
     Ok(())
 }
 
@@ -2123,7 +2167,8 @@ fn search_work_items_like(
         WHERE org_id = ?1
           AND (title LIKE ?2 ESCAPE '\'
                OR work_item_type LIKE ?2 ESCAPE '\'
-               OR assigned_to LIKE ?2 ESCAPE '\')
+               OR assigned_to LIKE ?2 ESCAPE '\'
+               OR assigned_to_unique_name LIKE ?2 ESCAPE '\')
         ORDER BY changed_date DESC
         LIMIT 200
         "#,
@@ -2909,6 +2954,33 @@ mod tests {
         let results = search_work_items_fts(&conn, "org1", "timeout").unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].title, "fix the login timeout bug");
+    }
+
+    #[test]
+    fn search_work_items_fts_matches_assigned_to_unique_name() {
+        let conn = Connection::open_in_memory().unwrap();
+        migrate(&conn).unwrap();
+        upsert_organization(&conn, make_org_draft("org1")).unwrap();
+
+        conn.execute(
+            "INSERT OR REPLACE INTO work_items(org_id, project_id, project_name, id, title, assigned_to, assigned_to_unique_name) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                "org1",
+                "p1",
+                "Project One",
+                7_i64,
+                "improve search",
+                "Jane Doe",
+                "jane.doe@example.com"
+            ],
+        )
+        .unwrap();
+
+        // Full-text match on the unique name (email) token.
+        let results = search_work_items_fts(&conn, "org1", "jane.doe@example.com").unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, 7);
     }
 
     #[test]

@@ -1041,15 +1041,18 @@ fn prioritized_relation_links_keep_parent_child_over_cap() {
                 "https://dev.azure.com/contoso/_apis/wit/workItems/{}",
                 1000 + i
             ),
+            attributes: None,
         })
         .collect();
     raw.push(WorkItemRelation {
         rel: "System.LinkTypes.Hierarchy-Reverse".to_string(),
         url: "https://dev.azure.com/contoso/_apis/wit/workItems/7".to_string(),
+        attributes: None,
     });
     raw.push(WorkItemRelation {
         rel: "System.LinkTypes.Hierarchy-Forward".to_string(),
         url: "https://dev.azure.com/contoso/_apis/wit/workItems/8".to_string(),
+        attributes: None,
     });
 
     let links = prioritized_relation_links(&raw, MAX_PREVIEW_RELATIONS);
