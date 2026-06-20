@@ -93,6 +93,7 @@ let demoSettings: AppSettings = {
   notifyPrVoteResets: true,
   notifyPrCommentReplies: true,
   reviewStaleThresholdDays: DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
+  notificationRules: [],
 };
 const deletedDemoWorkItemComments = new Set<number>();
 let demoSyncStates: SyncState[] = [
@@ -516,6 +517,10 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
             ? Number(input.reviewStaleThresholdDays) ||
               DEFAULT_REVIEW_STALE_THRESHOLD_DAYS
             : demoSettings.reviewStaleThresholdDays,
+        notificationRules:
+          input && "notificationRules" in input
+            ? (input.notificationRules ?? [])
+            : demoSettings.notificationRules,
       };
       return demoSettings;
     }
