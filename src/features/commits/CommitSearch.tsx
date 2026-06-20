@@ -38,6 +38,7 @@ import { openExternalUrl } from "@/lib/openExternal";
 import { ColumnResizeHandle, ResizeHandle } from "@/components/ResizeHandle";
 import { ColumnVisibilityMenu } from "@/components/ColumnVisibilityMenu";
 import { ErrorState, LoadingState } from "@/components/StateDisplay";
+import { ActiveFilters } from "@/components/ActiveFilters";
 import { CommitFilesPanel } from "./CommitFilesPanel";
 import { CommitActivityHeatmap } from "./CommitActivityHeatmap";
 
@@ -1190,7 +1191,6 @@ function CommitResults({
     return `${results.length} commit${results.length === 1 ? "" : "s"}`;
   }, [loading, results.length, searched]);
   const activeFilterCount = Math.max(0, activeExternalFilterCount);
-  const hasActiveFilters = activeFilterCount > 0;
 
   const firstVirtualRow = Math.max(
     0,
@@ -1228,18 +1228,7 @@ function CommitResults({
         <h2 className="text-base font-semibold">Results</h2>
         <span className="flex items-center gap-2 text-sm text-muted-foreground">
           {countLabel}
-          {hasActiveFilters ? (
-            <>
-              <span>{activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"} active</span>
-              <button
-                type="button"
-                onClick={onClearExternalFilters}
-                className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary"
-              >
-                Clear filters
-              </button>
-            </>
-          ) : null}
+          <ActiveFilters count={activeFilterCount} onClear={onClearExternalFilters ?? (() => {})} />
           <button
             type="button"
             onClick={(event) => setColumnMenuRect(event.currentTarget.getBoundingClientRect())}
