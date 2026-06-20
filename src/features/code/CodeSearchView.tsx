@@ -1,11 +1,14 @@
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { FileCode, Info, Loader2, Search } from "lucide-react";
+import { FileCode, Info, Loader2, Search, X } from "lucide-react";
 import {
+  cancelOperation,
   commandErrorMessage,
   listCommitRepositories,
+  newOperationId,
   searchCode,
   type CodeSearchHit,
+  type CodeSearchResults,
   type Organization,
 } from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
@@ -25,8 +28,23 @@ export function CodeSearchView({ organizations }: { organizations: Organization[
   const [path, setPath] = useState("");
 
   const selectedOrganizationId = organizationId || organizations[0]?.id || "";
-  const mutation = useMutation({ mutationFn: searchCode });
-  const results = mutation.data?.results ?? [];
+  // The last completed result set is kept separate from the in-flight mutation
+  // so a cancelled search leaves the previous results on screen.
+  const [lastData, setLastData] = useState<CodeSearchResults | null>(null);
+  const operationIdRef = useRef<string | null>(null);
+  const cancelledRef = useRef(false);
+  const mutation = useMutation({
+    mutationFn: searchCode,
+    onSuccess: (data) => setLastData(data),
+  });
+  const results = lastData?.results ?? [];
+
+  function cancelSearch() {
+    const id = operationIdRef.current;
+    if (!id) return;
+    cancelledRef.current = true;
+    void cancelOperation(id);
+  }
 
   // Reuse the synced repository list (also used by Commit search) to populate
   // the project/repository pickers.
@@ -68,6 +86,9 @@ export function CodeSearchView({ organizations }: { organizations: Organization[
     if (!query.trim()) return;
     const repo = repositoryOptions.find((option) => option.repositoryId === repositoryId);
     const project = projectOptions.find((option) => option.projectId === projectId);
+    const operationId = newOperationId();
+    operationIdRef.current = operationId;
+    cancelledRef.current = false;
     mutation.mutate({
       organizationId: selectedOrganizationId,
       query: query.trim(),
@@ -76,6 +97,7 @@ export function CodeSearchView({ organizations }: { organizations: Organization[
       repository: repo?.repositoryName ?? undefined,
       branch: branch.trim() || undefined,
       path: path.trim() || undefined,
+      operationId,
     });
   }
 
@@ -119,7 +141,7 @@ export function CodeSearchView({ organizations }: { organizations: Organization[
               </label>
             ) : null}
 
-            <div className="flex items-end">
+            <div className="flex items-end gap-2">
               <button
                 type="submit"
                 disabled={mutation.isPending || !selectedOrganizationId || !query.trim()}
@@ -132,6 +154,16 @@ export function CodeSearchView({ organizations }: { organizations: Organization[
                 )}
                 Search
               </button>
+              {mutation.isPending ? (
+                <button
+                  type="button"
+                  onClick={cancelSearch}
+                  className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium hover:bg-secondary"
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                  Cancel
+                </button>
+              ) : null}
             </div>
           </div>
 
@@ -201,7 +233,9 @@ export function CodeSearchView({ organizations }: { organizations: Organization[
         </form>
       </div>
 
-      {mutation.isError ? <ErrorState message={commandErrorMessage(mutation.error)} /> : null}
+      {mutation.isError && !cancelledRef.current ? (
+        <ErrorState message={commandErrorMessage(mutation.error)} />
+      ) : null}
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card">
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
@@ -209,22 +243,22 @@ export function CodeSearchView({ organizations }: { organizations: Organization[
           <span className="text-sm text-muted-foreground">
             {mutation.isPending
               ? "Searching"
-              : mutation.isSuccess
-                ? mutation.data.count > results.length
-                  ? `Showing ${results.length} of ${mutation.data.count} matches`
-                  : `${mutation.data.count} match${mutation.data.count === 1 ? "" : "es"}`
+              : lastData
+                ? lastData.count > results.length
+                  ? `Showing ${results.length} of ${lastData.count} matches`
+                  : `${lastData.count} match${lastData.count === 1 ? "" : "es"}`
                 : "Ready"}
           </span>
         </div>
 
-        {mutation.data?.notice ? (
+        {lastData?.notice ? (
           <p className="flex items-start gap-1.5 border-b border-border bg-yellow-50 px-3 py-2 text-xs text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-300">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            {mutation.data.notice}
+            {lastData.notice}
           </p>
         ) : null}
 
-        {!mutation.isSuccess && !mutation.isPending ? (
+        {!lastData && !mutation.isPending ? (
           <div className="px-3 py-6 text-center text-sm text-muted-foreground">
             Search code across the organization's repositories.
           </div>

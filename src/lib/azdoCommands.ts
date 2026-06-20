@@ -546,9 +546,21 @@ export async function searchCode(input: {
   repository?: string;
   branch?: string;
   path?: string;
+  operationId?: string;
 }): Promise<CodeSearchResults> {
   const result = await invokeCommand("search_code", { input });
   return codeSearchResultsSchema.parse(result);
+}
+
+// Signals a cancellable command (e.g. code search) to stop, by the id passed as
+// its operationId. Best-effort — the command returns promptly once cancelled.
+export async function cancelOperation(operationId: string): Promise<void> {
+  await invokeCommand("cancel_operation", { operationId });
+}
+
+// Generates a unique id for a cancellable operation.
+export function newOperationId(): string {
+  return `op-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 const syncScopeSchema = z.enum(["all", "hot", "myReviews", "myWorkItems", "commits"]);

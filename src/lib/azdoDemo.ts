@@ -943,6 +943,9 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       const input = (args as { input?: { commitId?: string } } | undefined)?.input;
       return demoCommitPullRequests(input?.commitId);
     }
+    case "cancel_operation":
+      // Demo searches resolve instantly, so there is nothing to cancel.
+      return null;
     case "search_code": {
       const input = (args as { input?: { query?: string } } | undefined)?.input;
       const query = input?.query?.trim() ?? "";
