@@ -16,6 +16,7 @@ import type {
   GetPullRequestReviewInput,
   GetReviewResultPreviewInput,
   GetSavedQueryInput,
+  ListPullRequestChangesInput,
   GetWorkItemPreviewInput,
   ListWorkItemTypeStatesInput,
   ListWorkItemFieldsInput,
@@ -252,12 +253,19 @@ function demoThreadsFor(pullRequestId: number): PrThread[] {
   return threads;
 }
 
-const demoPrFiles: PrChangedFile[] = [
-  { path: "/src/app/dashboard.ts", changeType: "edit", originalPath: null },
-  { path: "/src/app/useDashboardData.ts", changeType: "add", originalPath: null },
-  { path: "/docs/assets/screenshot.png", changeType: "add", originalPath: null },
-  { path: "/src/app/legacyDashboard.ts", changeType: "delete", originalPath: null },
-];
+// Per-PR changed files so the multi-select conflict-overlap warning has
+// something to detect in browser/demo mode. PRs share `/src/app/dashboard.ts`
+// to produce a visible overlap; odd PR ids also share a config file.
+function demoPrFilesFor(pullRequestId: number): PrChangedFile[] {
+  const files: PrChangedFile[] = [
+    { path: "/src/app/dashboard.ts", changeType: "edit", originalPath: null },
+    { path: `/src/app/feature-${pullRequestId}.ts`, changeType: "add", originalPath: null },
+  ];
+  if (pullRequestId % 2 === 1) {
+    files.push({ path: "/src/app/config.ts", changeType: "edit", originalPath: null });
+  }
+  return files;
+}
 
 const DEMO_DIFF_BASE = `import { fetchData } from "./api";
 import { Logger } from "./logger";
@@ -613,10 +621,11 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     case "list_pull_request_commits":
       return demoPrCommits;
     case "list_pull_request_changes": {
+      const input = (args as { input?: ListPullRequestChangesInput } | undefined)?.input;
       const changes: PullRequestChanges = {
         baseCommitId: "demo-base",
         targetCommitId: "demo-target",
-        files: demoPrFiles,
+        files: demoPrFilesFor(input?.pullRequestId ?? 0),
       };
       return changes;
     }
