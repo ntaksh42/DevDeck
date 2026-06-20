@@ -1319,6 +1319,25 @@ function AppShell() {
       if (matchesCombo(keybindings.openSettings, event)) {
         event.preventDefault();
         setView("settings");
+        return;
+      }
+
+      // Suppress WebView/browser default shortcuts the app does not bind so
+      // they cannot leak through as native behavior (Ctrl+P print dialog,
+      // Ctrl+G find-next). Reached only after every app keybinding above has
+      // had a chance to claim the event, so user-customized bindings still win.
+      // Editable targets keep their normal text-editing path untouched.
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        !event.shiftKey &&
+        (event.key === "p" ||
+          event.key === "P" ||
+          event.key === "g" ||
+          event.key === "G") &&
+        !isEditableTarget(event.target)
+      ) {
+        event.preventDefault();
       }
     }
 

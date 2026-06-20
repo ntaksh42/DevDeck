@@ -2434,4 +2434,41 @@ describe("App", () => {
       expect(searchCalls.length).toBeGreaterThanOrEqual(2);
     });
   });
+
+  it("suppresses unbound WebView shortcuts (Ctrl+P / Ctrl+G) outside inputs", async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_commit_repositories") {
+        return Promise.resolve([]);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+    await screen.findByRole("main");
+
+    // fireEvent returns false when the handler called preventDefault, i.e. the
+    // browser/WebView default (print dialog, find-next) was suppressed.
+    expect(fireEvent.keyDown(document.body, { key: "p", ctrlKey: true })).toBe(
+      false,
+    );
+    expect(fireEvent.keyDown(document.body, { key: "g", ctrlKey: true })).toBe(
+      false,
+    );
+    // Meta (Cmd) variant is suppressed too.
+    expect(fireEvent.keyDown(document.body, { key: "p", metaKey: true })).toBe(
+      false,
+    );
+
+    // Inside an editable target the keys keep their normal, un-suppressed path.
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    expect(fireEvent.keyDown(input, { key: "p", ctrlKey: true })).toBe(true);
+    input.remove();
+  });
 });

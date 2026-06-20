@@ -162,6 +162,9 @@ crates/azdo-client/                            — Tauri 非依存の独立 ADO 
 | `G` → 第 2 キー | ビュー切替 (下表) |
 | `Ctrl+F` / `/` | フィルタにフォーカス |
 
+アプリに割り当てていない WebView 既定ショートカット (`Ctrl+P` 印刷、`Ctrl+G`
+find-next) は、入力欄以外では抑止し、ネイティブ動作が素通りしないようにする。
+
 ### Go-To チェーン (`G` リーダー + 第 2 キー)
 
 `R` My Reviews / `P` PR Search / `W` My Work Items / `I` Work Item Search /
