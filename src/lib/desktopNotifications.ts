@@ -44,6 +44,31 @@ type PullRequestNotificationItem = {
   snippet: string | null;
 };
 
+export type SyncFailedEvent = {
+  consecutiveFailures: number;
+  retryInSecs: number;
+  lastError: string | null;
+};
+
+export async function showSyncFailedNotificationEvent(
+  event: SyncFailedEvent,
+  settings: AppSettings,
+): Promise<DesktopNotificationResult> {
+  if (!settings.desktopNotificationsEnabled) {
+    return "skipped";
+  }
+  const retryMinutes = Math.max(1, Math.round(event.retryInSecs / 60));
+  const reason =
+    settings.notificationContentPreviewEnabled && event.lastError
+      ? `\n${truncate(event.lastError, 120)}`
+      : "";
+  return sendDesktopNotification("Sync is failing", {
+    body:
+      `AzDoDeck could not sync after ${event.consecutiveFailures} attempts. ` +
+      `Retrying in about ${retryMinutes} min.${reason}`,
+  });
+}
+
 export async function sendTestDesktopNotification(): Promise<DesktopNotificationResult> {
   return sendDesktopNotification("AzDoDeck notifications", {
     body: "Desktop notifications are ready.",
