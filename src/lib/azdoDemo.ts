@@ -4,6 +4,7 @@ import type {
   AddWorkItemCommentInput,
   AppSettings,
   AssignWorkItemsInput,
+  CommitPullRequest,
   CommitRepositoryOption,
   CommitSummary,
   DeleteWorkItemCommentInput,
@@ -55,6 +56,8 @@ import type {
   WorkItemSummary,
   WorkItemUpdateSummary,
 } from "@/lib/azdoCommands";
+import { DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS } from "@/lib/azdoCommands";
+import { DEFAULT_REVIEW_STALE_THRESHOLD_DAYS } from "@/lib/reviewSettings";
 import {
   applyPullRequestScenario,
   applyReviewPullRequestScenario,
@@ -91,6 +94,8 @@ let demoSettings: AppSettings = {
   notifyPrReviewRequests: true,
   notifyPrVoteResets: true,
   notifyPrCommentReplies: true,
+  reviewStaleThresholdDays: DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
+  workItemStaleThresholdDays: DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
 };
 const deletedDemoWorkItemComments = new Set<number>();
 let demoSyncStates: SyncState[] = [
@@ -516,6 +521,16 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
           input && "notifyPrCommentReplies" in input
             ? Boolean(input.notifyPrCommentReplies)
             : demoSettings.notifyPrCommentReplies,
+        reviewStaleThresholdDays:
+          input && "reviewStaleThresholdDays" in input
+            ? Number(input.reviewStaleThresholdDays) ||
+              DEFAULT_REVIEW_STALE_THRESHOLD_DAYS
+            : demoSettings.reviewStaleThresholdDays,
+        workItemStaleThresholdDays:
+          input && "workItemStaleThresholdDays" in input
+            ? Number(input.workItemStaleThresholdDays) ||
+              DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS
+            : demoSettings.workItemStaleThresholdDays,
       };
       return demoSettings;
     }
@@ -877,6 +892,10 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         baseUnavailableReason: null,
         targetUnavailableReason: null,
       };
+    }
+    case "get_commit_pull_requests": {
+      const input = (args as { input?: { commitId?: string } } | undefined)?.input;
+      return demoCommitPullRequests(input?.commitId);
     }
     case "search_code": {
       const input = (args as { input?: { query?: string } } | undefined)?.input;
@@ -1727,6 +1746,9 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myIsRequired: true,
       isDraft: false,
       mergeStatus: "conflicts",
+      ciStatus: "failed",
+      ciContext: "ci-build",
+      ciCheckCount: 3,
     },
     {
       organizationId: "contoso",
@@ -1745,6 +1767,9 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myIsRequired: true,
       isDraft: false,
       mergeStatus: null,
+      ciStatus: "succeeded",
+      ciContext: "ci-build",
+      ciCheckCount: 2,
     },
     {
       organizationId: "contoso",
@@ -1763,6 +1788,9 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myIsRequired: false,
       isDraft: false,
       mergeStatus: null,
+      ciStatus: "in_progress",
+      ciContext: "ios-build",
+      ciCheckCount: 1,
     },
     {
       organizationId: "contoso",
@@ -1781,6 +1809,9 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myIsRequired: false,
       isDraft: true,
       mergeStatus: null,
+      ciStatus: null,
+      ciContext: null,
+      ciCheckCount: 0,
     },
     {
       organizationId: "contoso",
@@ -1799,6 +1830,9 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myIsRequired: true,
       isDraft: false,
       mergeStatus: null,
+      ciStatus: "failed",
+      ciContext: "terraform-validate",
+      ciCheckCount: 2,
     },
     {
       organizationId: "contoso",
@@ -1817,6 +1851,9 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myIsRequired: false,
       isDraft: false,
       mergeStatus: null,
+      ciStatus: null,
+      ciContext: null,
+      ciCheckCount: 0,
     },
     {
       organizationId: "contoso",
@@ -1835,6 +1872,9 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       myIsRequired: false,
       isDraft: false,
       mergeStatus: null,
+      ciStatus: "succeeded",
+      ciContext: "ci-build",
+      ciCheckCount: 4,
     },
   ]));
 }
@@ -1876,6 +1916,48 @@ function demoCommitRepositories(): CommitRepositoryOption[] {
       repositoryName: "terraform-aws",
     },
   ];
+}
+
+// Demo commit → PR relationships. Only a couple of commits map to PRs so the
+// "no related PRs" path stays exercised for the rest.
+function demoCommitPullRequests(commitId?: string): CommitPullRequest[] {
+  const map: Record<string, CommitPullRequest[]> = {
+    abcdef1234567890abcdef1234567890abcdef12: [
+      {
+        pullRequestId: 4242,
+        repositoryId: "azdo-dashboard",
+        title: "Add commit search dashboard",
+        status: "completed",
+        myVote: 10,
+        myVoteLabel: "Approved",
+        webUrl:
+          "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/pullrequest/4242",
+      },
+    ],
+    cafe5678901234567890abcdef1234567890cafe: [
+      {
+        pullRequestId: 4310,
+        repositoryId: "api-gateway",
+        title: "Fix Retry-After header parsing",
+        status: "active",
+        myVote: 0,
+        myVoteLabel: "No Vote",
+        webUrl:
+          "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/4310",
+      },
+      {
+        pullRequestId: 4288,
+        repositoryId: "api-gateway",
+        title: "Rate limiting hardening",
+        status: "abandoned",
+        myVote: -5,
+        myVoteLabel: "Waiting for Author",
+        webUrl:
+          "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/4288",
+      },
+    ],
+  };
+  return commitId ? map[commitId] ?? [] : [];
 }
 
 function demoCommits(input?: SearchCommitsInput): CommitSummary[] {

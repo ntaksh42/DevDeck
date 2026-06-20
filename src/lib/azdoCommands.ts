@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod";
 import { isTauriRuntime } from "@/lib/runtime";
 import { demoInvoke } from "@/lib/azdoDemo";
+import { DEFAULT_REVIEW_STALE_THRESHOLD_DAYS } from "@/lib/reviewSettings";
 
 const organizationSchema = z.object({
   id: z.string(),
@@ -21,6 +22,13 @@ const organizationsSchema = z.array(organizationSchema);
 
 export type Organization = z.infer<typeof organizationSchema>;
 
+export {
+  REVIEW_STALE_THRESHOLD_DAY_OPTIONS,
+  DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
+} from "@/lib/reviewSettings";
+export const WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS = [7, 14, 30] as const;
+export const DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS = 7;
+
 const appSettingsSchema = z.object({
   reviewResultFolderPath: z.string().nullable(),
   showWindowHotkey: z.string().nullable().default(null),
@@ -32,6 +40,11 @@ const appSettingsSchema = z.object({
   notifyPrReviewRequests: z.boolean().default(true),
   notifyPrVoteResets: z.boolean().default(true),
   notifyPrCommentReplies: z.boolean().default(true),
+  reviewStaleThresholdDays: z.number().int().default(DEFAULT_REVIEW_STALE_THRESHOLD_DAYS),
+  workItemStaleThresholdDays: z
+    .number()
+    .int()
+    .default(DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS),
 });
 
 export type AppSettings = z.infer<typeof appSettingsSchema>;
@@ -82,6 +95,11 @@ const reviewPullRequestSummarySchema = z.object({
   myIsRequired: z.boolean(),
   isDraft: z.boolean(),
   mergeStatus: z.string().nullable().default(null),
+  // Aggregate CI verdict: "succeeded" | "failed" | "in_progress" | "none".
+  // null means CI was never fetched for this PR (treated as unknown/none).
+  ciStatus: z.string().nullable().default(null),
+  ciContext: z.string().nullable().default(null),
+  ciCheckCount: z.number().default(0),
 });
 
 const reviewPullRequestSummariesSchema = z.array(reviewPullRequestSummarySchema);
@@ -420,6 +438,27 @@ export async function getCommitFileDiff(input: {
   return prFileDiffSchema.parse(result);
 }
 
+const commitPullRequestSchema = z.object({
+  pullRequestId: z.number(),
+  repositoryId: z.string(),
+  title: z.string(),
+  status: z.string(),
+  myVote: z.number(),
+  myVoteLabel: z.string(),
+  webUrl: z.string().nullable(),
+});
+const commitPullRequestsSchema = z.array(commitPullRequestSchema);
+export type CommitPullRequest = z.infer<typeof commitPullRequestSchema>;
+
+export async function getCommitPullRequests(input: {
+  organizationId?: string;
+  repositoryId: string;
+  commitId: string;
+}): Promise<CommitPullRequest[]> {
+  const result = await invokeCommand("get_commit_pull_requests", { input });
+  return commitPullRequestsSchema.parse(result);
+}
+
 const codeSearchHitSchema = z.object({
   fileName: z.string(),
   path: z.string(),
@@ -494,6 +533,8 @@ export type UpdateAppSettingsInput = {
   notifyPrReviewRequests?: boolean;
   notifyPrVoteResets?: boolean;
   notifyPrCommentReplies?: boolean;
+  reviewStaleThresholdDays?: number;
+  workItemStaleThresholdDays?: number;
 };
 
 export type GetReviewResultPreviewInput = {
