@@ -1757,7 +1757,7 @@ describe("App", () => {
             repositoryId: "api",
             repositoryName: "api",
             pullRequestId: 102,
-            title: "Waiting on author",
+            title: "Pending author reply",
             createdBy: "Bob",
             creationDate: "2026-05-23T00:00:00Z",
             targetRefName: "main",
@@ -1803,16 +1803,16 @@ describe("App", () => {
     expect(main.getByText("Needs review")).toBeTruthy();
     expect(main.getByRole("button", { name: /Waiting for author/ })).toBeTruthy();
     expect(main.getByRole("button", { name: /Rejected by you/ })).toBeTruthy();
-    expect(main.queryByText("Waiting on author")).toBeNull();
+    expect(main.queryByText("Pending author reply")).toBeNull();
     expect(main.queryByText("Rejected legacy path")).toBeNull();
 
     // Expanding a section reveals its rows.
     fireEvent.click(main.getByRole("button", { name: /Waiting for author/ }));
-    expect(await main.findByText("Waiting on author")).toBeTruthy();
+    expect(await main.findByText("Pending author reply")).toBeTruthy();
     expect(main.getByText("Conflicts")).toBeTruthy();
 
     // Select that row; the Result tab and Ctrl+Enter then act on it.
-    fireEvent.click(main.getByText("Waiting on author"));
+    fireEvent.click(main.getByText("Pending author reply"));
 
     fireEvent.click(main.getByRole("tab", { name: "Result" }));
     expect(await main.findByText("review-PR102.html")).toBeTruthy();

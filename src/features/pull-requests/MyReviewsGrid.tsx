@@ -116,6 +116,63 @@ function reviewSectionOf(pr: ReviewPullRequestSummary): ReviewSection {
   return "needsReview";
 }
 
+// Review-bottleneck lenses: "what is the next action on this PR?". A PR can
+// satisfy more than one lens (e.g. CI still running on a PR I have approved),
+// so counts may overlap — the chips summarize next actions, not a partition.
+export type BottleneckBucket = "waitingMe" | "waitingAuthor" | "waitingCi" | "readyToMerge";
+
+const BOTTLENECK_ORDER: BottleneckBucket[] = [
+  "waitingMe",
+  "waitingAuthor",
+  "waitingCi",
+  "readyToMerge",
+];
+
+const BOTTLENECK_LABELS: Record<BottleneckBucket, string> = {
+  waitingMe: "Waiting on me",
+  waitingAuthor: "Waiting on author",
+  waitingCi: "Waiting on CI",
+  readyToMerge: "Ready to merge",
+};
+
+// Tone classes for the summary chips; the active chip swaps to a filled look.
+const BOTTLENECK_CHIP_CLASSES: Record<BottleneckBucket, { idle: string; active: string }> = {
+  waitingMe: {
+    idle: "border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-900 dark:text-blue-300 dark:hover:bg-blue-950",
+    active: "border-blue-500 bg-blue-100 text-blue-800 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-200",
+  },
+  waitingAuthor: {
+    idle: "border-amber-200 text-amber-700 hover:bg-amber-50 dark:border-amber-900 dark:text-amber-300 dark:hover:bg-amber-950",
+    active: "border-amber-500 bg-amber-100 text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200",
+  },
+  waitingCi: {
+    idle: "border-violet-200 text-violet-700 hover:bg-violet-50 dark:border-violet-900 dark:text-violet-300 dark:hover:bg-violet-950",
+    active: "border-violet-500 bg-violet-100 text-violet-800 dark:border-violet-700 dark:bg-violet-950 dark:text-violet-200",
+  },
+  readyToMerge: {
+    idle: "border-green-200 text-green-700 hover:bg-green-50 dark:border-green-900 dark:text-green-300 dark:hover:bg-green-950",
+    active: "border-green-500 bg-green-100 text-green-800 dark:border-green-700 dark:bg-green-950 dark:text-green-200",
+  },
+};
+
+// Which next-action lenses a PR falls under. Drafts are not actionable yet, so
+// they belong to no bucket even when shown in the grid.
+export function bottleneckBucketsOf(pr: ReviewPullRequestSummary): Set<BottleneckBucket> {
+  const buckets = new Set<BottleneckBucket>();
+  if (pr.isDraft) return buckets;
+  if (pr.myVote === 0) buckets.add("waitingMe");
+  if (pr.myVote === -5 || pr.myVote === -10) buckets.add("waitingAuthor");
+  if (pr.ciStatus === "in_progress") buckets.add("waitingCi");
+  if (
+    (pr.myVote === 10 || pr.myVote === 5) &&
+    pr.ciStatus === "succeeded" &&
+    pr.mergeStatus !== "conflicts"
+  ) {
+    buckets.add("readyToMerge");
+  }
+  return buckets;
+}
+
 type ReviewRow =
   | { kind: "header"; key: ReviewSection; label: string; count: number }
   | { kind: "pr"; pr: ReviewPullRequestSummary; prIndex: number };
@@ -695,6 +752,7 @@ export function MyReviewsGrid({
   const [columnFilters, setColumnFilters] = useState<Partial<Record<FilterableColumn, Set<string>>>>(
     initialViewState.columnFilters,
   );
+  const [bottleneckFilter, setBottleneckFilter] = useState<BottleneckBucket | null>(null);
   const [openFilterCol, setOpenFilterCol] = useState<FilterableColumn | null>(null);
   const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
   const [visibleColumns, setVisibleColumns] = useState<SortKey[]>(
@@ -921,11 +979,12 @@ export function MyReviewsGrid({
   }, [baseFiltered]);
 
   const filtered = useMemo(() => {
-    const hasFilters = (Object.values(columnFilters) as (Set<string> | undefined)[]).some(
+    const hasColumnFilters = (Object.values(columnFilters) as (Set<string> | undefined)[]).some(
       (values) => values && values.size > 0,
     );
-    if (!hasFilters) return baseFiltered;
+    if (!hasColumnFilters && !bottleneckFilter) return baseFiltered;
     return baseFiltered.filter((pr) => {
+      if (bottleneckFilter && !bottleneckBucketsOf(pr).has(bottleneckFilter)) return false;
       for (const col of Object.keys(columnFilters) as FilterableColumn[]) {
         const activeValues = columnFilters[col];
         if (!activeValues || activeValues.size === 0) continue;
@@ -933,7 +992,25 @@ export function MyReviewsGrid({
       }
       return true;
     });
-  }, [baseFiltered, columnFilters]);
+  }, [baseFiltered, columnFilters, bottleneckFilter]);
+
+  // Counts for the bottleneck summary chips. Computed over the inbox population
+  // (drafts/done honored) but independent of text/column/bucket filters so the
+  // chips stay a stable "what needs action" overview.
+  const bottleneckCounts = useMemo(() => {
+    const counts: Record<BottleneckBucket, number> = {
+      waitingMe: 0,
+      waitingAuthor: 0,
+      waitingCi: 0,
+      readyToMerge: 0,
+    };
+    for (const pr of allPrs) {
+      if (archivedKeys.has(reviewTriageKey(pr)) !== showDone) continue;
+      if (!showDrafts && pr.isDraft) continue;
+      for (const bucket of bottleneckBucketsOf(pr)) counts[bucket] += 1;
+    }
+    return counts;
+  }, [allPrs, archivedKeys, showDone, showDrafts]);
 
   const sortedPrs = useMemo(() => {
     return filtered
@@ -998,7 +1075,8 @@ export function MyReviewsGrid({
   const visiblePrs = allPrs.filter((pr) => showDrafts || !pr.isDraft);
   const noVoteCount = visiblePrs.filter((pr) => pr.myVote === 0).length;
   const columnFilterCount = activeColumnFilterCount(columnFilters);
-  const activeFilterCount = (textFilter.trim() ? 1 : 0) + columnFilterCount;
+  const activeFilterCount =
+    (textFilter.trim() ? 1 : 0) + columnFilterCount + (bottleneckFilter ? 1 : 0);
   const isFiltered = activeFilterCount > 0;
   const selectedPr = sortedPrs[selectedIndex] ?? null;
 
@@ -1293,8 +1371,15 @@ export function MyReviewsGrid({
   function clearAllFilters() {
     setTextFilter("");
     setColumnFilters({});
+    setBottleneckFilter(null);
     setOpenFilterCol(null);
     setFilterAnchorRect(null);
+    setSelectedIndex(0);
+  }
+
+  // Toggle a bottleneck chip: a second click on the active chip clears it.
+  function toggleBottleneckFilter(bucket: BottleneckBucket) {
+    setBottleneckFilter((current) => (current === bucket ? null : bucket));
     setSelectedIndex(0);
   }
 
@@ -1601,6 +1686,35 @@ export function MyReviewsGrid({
           Show Drafts
         </label>
 
+      </div>
+
+      {/* Review bottleneck summary: next-action counts, click to filter. */}
+      <div
+        className="flex shrink-0 flex-wrap items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5"
+        aria-label="Review bottleneck summary"
+      >
+        <span className="text-xs font-medium text-muted-foreground">Next action</span>
+        {BOTTLENECK_ORDER.map((bucket) => {
+          const active = bottleneckFilter === bucket;
+          const tone = BOTTLENECK_CHIP_CLASSES[bucket];
+          return (
+            <button
+              key={bucket}
+              type="button"
+              aria-pressed={active}
+              onClick={() => toggleBottleneckFilter(bucket)}
+              title={`${active ? "Clear filter" : "Filter"}: ${BOTTLENECK_LABELS[bucket]}`}
+              className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs font-medium outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
+                active ? tone.active : tone.idle
+              }`}
+            >
+              <span>{BOTTLENECK_LABELS[bucket]}</span>
+              <span className="rounded bg-background/70 px-1 font-semibold tabular-nums">
+                {bottleneckCounts[bucket]}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Saved views bar */}

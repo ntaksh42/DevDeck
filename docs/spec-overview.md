@@ -62,7 +62,7 @@ crates/azdo-client/                            — Tauri 非依存の独立 ADO 
 
 | ビュー | 用途 |
 |---|---|
-| **My Reviews** | 自分がレビュアーの PR。投票状態・マージコンフリクト/CI バッジ・stale 強調・ローカルの done/archive トリアージ・ローカルのレビュー結果プレビュー。 |
+| **My Reviews** | 自分がレビュアーの PR。投票状態・マージコンフリクト/CI バッジ・stale 強調・ローカルの done/archive トリアージ・ローカルのレビュー結果プレビュー。上部に「次の行動」サマリーチップ (Waiting on me / Waiting on author / Waiting on CI / Ready to merge) を表示し、クリックで該当条件に絞り込む。 |
 | **Pull Request Search** | プロジェクト/リポジトリ/ステータスで PR を検索。ソート可能グリッド、列リサイズ、`C` で URL コピー。 |
 | **My Work Items** | 自分に割当中の作業項目 (最大 200 件キャッシュ)。状態・種別・割当先・更新日時。 |
 | **Work Item Views** | 保存済み WIQL クエリ。件数表示、ナビへのピン留め、並べ替え、ビュー別ソート/列。 |
