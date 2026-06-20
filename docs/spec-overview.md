@@ -71,7 +71,7 @@ crates/azdo-client/                            — Tauri 非依存の独立 ADO 
 | **My Commits** | author = 自分のコミットを検索操作なしに自動ロード (Commits ビューを `myCommitsMode` で流用、組織の認証ユーザー名で seed・90 日窓・組織切替で再取得)。Commits と同じグリッド/プレビュー/関連 PR ルックアップ。 |
 | **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。 |
 | **Code Search** | リポジトリ横断のコード検索。ファイル/パス/ブランチとリンク。 |
-| **Settings** | 組織設定 (PAT / Azure CLI)、通知設定、フォルダパス、グローバルホットキー、キーバインド上書き。 |
+| **Settings** | 組織設定 (PAT / Azure CLI)、通知設定、フォルダパス、グローバルホットキー、キーバインド上書き。Software update パネル (opt-in: 手動で更新確認→適用、失敗時は安全にスキップ。`tauri-plugin-updater`、ブラウザでは無効)。 |
 
 ### 横断機能
 
