@@ -256,7 +256,8 @@ impl AdoClient {
         // misuse rather than silently returning no links.
         if response.work_item_relations.is_empty() && !response.work_items.is_empty() {
             return Err(AdoError::WiqlQueryShape(
-                "query returned flat WorkItems; use query_work_item_ids for FROM WorkItems queries".to_string(),
+                "query returned flat WorkItems; use query_work_item_ids for FROM WorkItems queries"
+                    .to_string(),
             ));
         }
         Ok(response
