@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronUp, Filter, Loader2, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp, Filter, Loader2, X } from 'lucide-react';
 import {
   setWorkItemsState,
   assignWorkItems,
@@ -17,8 +17,10 @@ import {
   recordAssigneeInteraction,
   searchWorkItemAssignees,
   getWorkItemPreview,
+  getAppSettings,
   snoozeItem,
   commandErrorMessage,
+  DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
   type BulkWorkItemResult,
   type WorkItemAssigneeCandidate,
   type WorkItemPreview,
@@ -38,10 +40,12 @@ import {
 } from '@/lib/utils';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { readStoredJson, writeStoredJson } from '@/lib/storage';
+import { recordRecentWorkItem } from '@/lib/recentItems';
 import { openExternalUrl } from '@/lib/openExternal';
 import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { LoadingState } from '@/components/StateDisplay';
+import { ActiveFilters } from '@/components/ActiveFilters';
 import { WorkItemPreviewPanel } from './WorkItemPreviewPanel';
 import { invalidateWorkItemMutationCaches, workItemQueryKeys } from './queryKeys';
 import {
@@ -49,6 +53,7 @@ import {
   storeCustomPreviewFields,
   type CustomPreviewField,
 } from './previewFieldsStorage';
+import { isWorkItemStale, workItemStaleDays } from './workItemStale';
 const DEFAULT_WI_COLUMN_WIDTHS = [46, 64, 60, 180, 82, 84, 68];
 const WI_COLUMN_MIN_WIDTHS = [44, 58, 56, 150, 70, 74, 60];
 const WI_COLUMN_MAX_WIDTHS = [120, 200, 180, 720, 300, 260, 160];
@@ -63,7 +68,6 @@ const MAX_WORK_ITEM_PREVIEW_WIDTH = 8192;
 const WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY = "azdodeck:layout:workItemPreviewWidth";
 const WI_GRID_ROW_HEIGHT = 29;
 const WI_GRID_OVERSCAN = 8;
-const RECENT_WORK_ITEMS_STORAGE_KEY = "azdodeck:workItems:recent";
 type WiSortKey =
   | "id"
   | "workItemType"
@@ -374,32 +378,6 @@ function isFilterableColumn(col: WiSortKey): col is FilterableColumn {
   return col in FILTERABLE_COLUMNS;
 }
 
-function recordRecentWorkItem(item: WorkItemSummary) {
-  try {
-    const current = JSON.parse(
-      window.localStorage.getItem(RECENT_WORK_ITEMS_STORAGE_KEY) ?? "[]",
-    );
-    const list = Array.isArray(current) ? current : [];
-    const key = `${item.organizationId}:${item.projectId}:${item.id}`;
-    const next = [
-      {
-        key,
-        id: item.id,
-        organizationId: item.organizationId,
-        projectId: item.projectId,
-        projectName: item.projectName,
-        title: item.title,
-        viewedAt: new Date().toISOString(),
-        webUrl: item.webUrl,
-      },
-      ...list.filter((entry) => entry?.key !== key),
-    ].slice(0, 20);
-    window.localStorage.setItem(RECENT_WORK_ITEMS_STORAGE_KEY, JSON.stringify(next));
-  } catch {
-    // Recent items are a convenience only.
-  }
-}
-
 const WorkItemGridRow = forwardRef<
   HTMLDivElement,
   {
@@ -409,10 +387,14 @@ const WorkItemGridRow = forwardRef<
     columnTemplate: string;
     visibleColumns: WiSortKey[];
     extraColumns: string[];
+    staleThresholdDays: number;
     onSelect: () => void;
     onCheckedChange: (checked: boolean, shiftKey: boolean) => void;
   }
->(({ item, selected, checked, columnTemplate, visibleColumns, extraColumns, onSelect, onCheckedChange }, ref) => (
+>(({ item, selected, checked, columnTemplate, visibleColumns, extraColumns, staleThresholdDays, onSelect, onCheckedChange }, ref) => {
+  const staleDays = workItemStaleDays(item, Date.now());
+  const isStale = staleDays !== null && staleDays >= staleThresholdDays;
+  return (
   <div
     ref={ref}
     tabIndex={selected ? 0 : -1}
@@ -431,7 +413,15 @@ const WorkItemGridRow = forwardRef<
       }
     }}
     className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
-      checked ? "bg-primary/5" : selected ? "bg-secondary" : "hover:bg-muted/50"
+      checked
+        ? "bg-primary/5"
+        : selected && isStale
+          ? "bg-orange-100 dark:bg-orange-900/30"
+          : selected
+            ? "bg-secondary"
+            : isStale
+              ? "bg-orange-50 dark:bg-orange-950/20 hover:bg-orange-100/70"
+              : "hover:bg-muted/50"
     }`}
     style={{ gridTemplateColumns: columnTemplate }}
   >
@@ -448,19 +438,37 @@ const WorkItemGridRow = forwardRef<
         className="h-3.5 w-3.5 cursor-pointer rounded border-input"
       />
     </div>
-    {visibleColumns.map((column) => (
-      <div
-        key={column}
-        className="min-w-0 truncate"
-        style={
-          column === "title" && item.depth
-            ? { paddingLeft: Math.min(item.depth, 8) * 14 }
-            : undefined
-        }
-      >
-        {workItemCellValue(item, column)}
-      </div>
-    ))}
+    {visibleColumns.map((column) => {
+      const isTitle = column === "title";
+      return (
+        <div
+          key={column}
+          className={isTitle ? "flex min-w-0 items-center gap-1" : "min-w-0 truncate"}
+          style={
+            isTitle && item.depth
+              ? { paddingLeft: Math.min(item.depth, 8) * 14 }
+              : undefined
+          }
+        >
+          {isTitle && isStale ? (
+            <AlertTriangle
+              role="img"
+              className="h-3.5 w-3.5 shrink-0 text-orange-600 dark:text-orange-400"
+              aria-label={`${staleDays} 日間更新なし`}
+            >
+              <title>{staleDays} 日間更新なし</title>
+            </AlertTriangle>
+          ) : null}
+          {isTitle ? (
+            <span className="min-w-0 flex-1 truncate">
+              {workItemCellValue(item, column)}
+            </span>
+          ) : (
+            workItemCellValue(item, column)
+          )}
+        </div>
+      );
+    })}
     {extraColumns.map((referenceName) => {
       const value = extraFieldValue(item, referenceName);
       return (
@@ -472,7 +480,8 @@ const WorkItemGridRow = forwardRef<
       );
     })}
   </div>
-));
+  );
+});
 WorkItemGridRow.displayName = "WorkItemGridRow";
 
 export function WorkItemsGrid({
@@ -569,6 +578,7 @@ export function WorkItemsGrid({
   );
   const [openFilterCol, setOpenFilterCol] = useState<FilterableColumn | null>(null);
   const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
+  const [staleOnly, setStaleOnly] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const gridScrollRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -687,12 +697,29 @@ export function WorkItemsGrid({
     return map;
   }, [effectiveResults]);
 
+  // Stale highlighting threshold (days). Mirrors the My Reviews stale setting.
+  const settingsQuery = useQuery({
+    queryKey: ["appSettings"],
+    queryFn: getAppSettings,
+    staleTime: 5 * 60_000,
+  });
+  const staleThresholdDays =
+    settingsQuery.data?.workItemStaleThresholdDays ??
+    DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS;
+  const staleCount = useMemo(() => {
+    const now = Date.now();
+    return sorted.filter((item) => isWorkItemStale(item, staleThresholdDays, now))
+      .length;
+  }, [sorted, staleThresholdDays]);
+
   const displayed = useMemo(() => {
     const hasFilters = (Object.keys(columnFilters) as FilterableColumn[]).some(
       col => columnFilters[col] !== undefined,
     );
-    if (!hasFilters) return sorted;
+    if (!hasFilters && !staleOnly) return sorted;
+    const now = Date.now();
     return sorted.filter(item => {
+      if (staleOnly && !isWorkItemStale(item, staleThresholdDays, now)) return false;
       for (const col of Object.keys(columnFilters) as FilterableColumn[]) {
         const activeValues = columnFilters[col];
         if (!activeValues) continue;
@@ -700,7 +727,7 @@ export function WorkItemsGrid({
       }
       return true;
     });
-  }, [sorted, columnFilters]);
+  }, [sorted, columnFilters, staleOnly, staleThresholdDays]);
 
   const selectedItem = displayed[selectedIndex] ?? null;
   const customPreviewFieldRefs = useMemo(
@@ -739,6 +766,14 @@ export function WorkItemsGrid({
     const types = new Set(checkedItems.map((item) => item.workItemType).filter(Boolean));
     return types.size === 1 ? ([...types][0] ?? null) : null;
   }, [checkedItems]);
+  const typeBreakdown = useMemo(
+    () => summarizeBy(checkedItems.map((item) => item.workItemType)),
+    [checkedItems],
+  );
+  const stateBreakdown = useMemo(
+    () => summarizeBy(checkedItems.map((item) => item.state)),
+    [checkedItems],
+  );
   const firstCheckedItem = checkedItems[0] ?? null;
 
   useEffect(() => {
@@ -1350,7 +1385,6 @@ export function WorkItemsGrid({
   const columnFilterCount = activeColumnFilterCount(columnFilters);
   const activeFilterCount = Math.max(0, activeExternalFilterCount) + columnFilterCount;
   const hasActiveColumnFilters = columnFilterCount > 0;
-  const hasActiveFilters = activeFilterCount > 0;
   const showBlockingLoading = loading && sorted.length === 0;
   const firstVirtualRow = Math.max(
     0,
@@ -1398,6 +1432,8 @@ export function WorkItemsGrid({
       {checkedItems.length > 0 ? (
         <BulkActionBar
           count={checkedItems.length}
+          typeBreakdown={typeBreakdown}
+          stateBreakdown={stateBreakdown}
           onClear={() => { setCheckedIds(new Set()); setLastCheckedIndex(null); }}
           stateOpen={bulkStateOpen}
           onStateOpenChange={(open) => {
@@ -1510,6 +1546,7 @@ export function WorkItemsGrid({
                           setWidths={setColumnWidths}
                           min={WI_COLUMN_MIN_WIDTHS[WI_GRID_KEYS.indexOf(col)]}
                           max={WI_COLUMN_MAX_WIDTHS[WI_GRID_KEYS.indexOf(col)]}
+                          defaultWidth={DEFAULT_WI_COLUMN_WIDTHS[WI_GRID_KEYS.indexOf(col)]}
                         />
                       ) : undefined
                     }
@@ -1572,6 +1609,7 @@ export function WorkItemsGrid({
                         columnTemplate={wiColTemplate}
                         visibleColumns={visibleColumns}
                         extraColumns={extraColumns}
+                        staleThresholdDays={staleThresholdDays}
                         onSelect={() => setSelectedIndex(i)}
                         onCheckedChange={(checked, shiftKey) => handleCheckboxChange(i, checked, shiftKey)}
                       />
@@ -1640,17 +1678,25 @@ export function WorkItemsGrid({
                   {showSnoozed ? "Back to inbox" : "Snoozed"}
                 </button>
               ) : null}
-              {hasActiveFilters ? (
-                <>
-                  <span>{activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"} active</span>
-                  <button
-                    type="button"
-                    onClick={clearAllFilters}
-                    className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary"
-                  >
-                    Clear filters
-                  </button>
-                </>
+              <ActiveFilters count={activeFilterCount} onClear={clearAllFilters} />
+              {staleOnly || staleCount > 0 ? (
+                <button
+                  type="button"
+                  aria-pressed={staleOnly}
+                  title={`Show only stale items (no change in ${staleThresholdDays}+ days)`}
+                  onClick={() => {
+                    setStaleOnly((value) => !value);
+                    setSelectedIndex(0);
+                  }}
+                  className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs ${
+                    staleOnly
+                      ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-300"
+                      : "border-border bg-card hover:bg-secondary"
+                  }`}
+                >
+                  <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                  Stale ({staleCount})
+                </button>
               ) : null}
               <button
                 type="button"
@@ -1923,6 +1969,57 @@ function ColumnVisibilityDropdown({
   );
 }
 
+/**
+ * Counts non-empty values and returns them ordered by frequency (ties broken
+ * by label) so the bulk bar can show the most common type/state first.
+ */
+export function summarizeBy(values: (string | null | undefined)[]): { label: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    const label = value?.trim();
+    if (!label) continue;
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+}
+
+/** Renders up to `max` breakdown chips, folding the rest into a `+N` chip. */
+function BulkBreakdown({
+  entries,
+  max = 3,
+}: {
+  entries: { label: string; count: number }[];
+  max?: number;
+}) {
+  if (entries.length === 0) return null;
+  const shown = entries.slice(0, max);
+  const hidden = entries.slice(max);
+  const hiddenCount = hidden.reduce((sum, e) => sum + e.count, 0);
+  const hiddenTitle = hidden.map((e) => `${e.count} ${e.label}`).join(", ");
+  return (
+    <span className="flex flex-wrap items-center gap-1">
+      {shown.map((entry) => (
+        <span
+          key={entry.label}
+          className="inline-flex items-center rounded-full bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-secondary-foreground"
+        >
+          {entry.count} {entry.label}
+        </span>
+      ))}
+      {hidden.length > 0 ? (
+        <span
+          title={hiddenTitle}
+          className="inline-flex items-center rounded-full bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground"
+        >
+          +{hiddenCount}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 function BulkFailurePanel({
   failures,
   onDismiss,
@@ -1957,6 +2054,8 @@ function BulkFailurePanel({
 
 function BulkActionBar({
   count,
+  typeBreakdown,
+  stateBreakdown,
   onClear,
   stateOpen,
   onStateOpenChange,
@@ -1978,6 +2077,8 @@ function BulkActionBar({
   onPrioritySelect,
 }: {
   count: number;
+  typeBreakdown: { label: string; count: number }[];
+  stateBreakdown: { label: string; count: number }[];
   onClear: () => void;
   stateOpen: boolean;
   onStateOpenChange: (open: boolean) => void;
@@ -2008,6 +2109,17 @@ function BulkActionBar({
       <span className="text-xs font-medium text-foreground">
         {count} item{count === 1 ? "" : "s"} selected
       </span>
+      {typeBreakdown.length > 0 ? (
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <BulkBreakdown entries={typeBreakdown} />
+        </span>
+      ) : null}
+      {stateBreakdown.length > 0 ? (
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span className="text-muted-foreground/60" aria-hidden="true">·</span>
+          <BulkBreakdown entries={stateBreakdown} />
+        </span>
+      ) : null}
       <div className="flex items-center gap-1.5">
         {/* State picker */}
         <div className="relative">
