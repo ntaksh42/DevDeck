@@ -74,6 +74,10 @@ import {
 } from '@/features/work-items/workItemViewsStorage';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from '@/features/work-items/queryKeys';
 import { MyReviewsGrid } from '@/features/pull-requests/MyReviewsGrid';
+import {
+  loadPullRequestViews,
+  type PullRequestView,
+} from '@/features/pull-requests/prViewsStorage';
 
 // Only the default view (My Reviews) loads eagerly; the other views are
 // code-split so app startup does not pay for panels that may never open.
@@ -120,6 +124,7 @@ import {
   type PullRequestNotificationEvent,
   type SyncFailedEvent,
 } from "@/lib/desktopNotifications";
+import { SyncStatusIndicator } from "@/features/sync/SyncStatusIndicator";
 import {
   NAVIGATE_WORK_ITEM_EVENT,
   NAVIGATE_PULL_REQUEST_EVENT,
@@ -309,6 +314,9 @@ function AppShell() {
   );
   const [activeWorkItemViewId, setActiveWorkItemViewId] = useState<string | null>(null);
   const [selectedWorkItemViewRequestId, setSelectedWorkItemViewRequestId] = useState<string | null>(null);
+  const [pinnedPrViewsExpanded, setPinnedPrViewsExpanded] = useState(true);
+  const [prNavViews, setPrNavViews] = useState<PullRequestView[]>(() => loadPullRequestViews());
+  const [selectedPrViewRequestId, setSelectedPrViewRequestId] = useState<string | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(() =>
     storedNumber(SIDEBAR_WIDTH_STORAGE_KEY, DEFAULT_SIDEBAR_WIDTH, 160, 420),
   );
@@ -342,6 +350,7 @@ function AppShell() {
     mutationFn: (input: { scope?: SyncScope }) => triggerSync(input),
     onSuccess: (_data, input) => {
       invalidateSyncedDataQueries(queryClient, invalidationScopesForSyncScope(input.scope ?? "all"));
+      void queryClient.invalidateQueries({ queryKey: ["syncStates"] });
     },
   });
 
@@ -626,6 +635,7 @@ function AppShell() {
   const activePinnedWorkItemView = pinnedWorkItemViews.find(
     (item) => item.id === activeWorkItemViewId,
   );
+  const pinnedPrViews = prNavViews.filter((item) => item.pinned);
 
   function getNavItems(): HTMLButtonElement[] {
     const nav = navRef.current;
@@ -978,8 +988,11 @@ function AppShell() {
     }
     if (event.key === "ArrowRight" && current.dataset.navSubgroup === "true") {
       event.preventDefault();
-      if (!pinnedViewsExpanded) {
-        setPinnedViewsExpanded(true);
+      const isPrViews = current.dataset.subgroupId === "pullRequestViews";
+      const expanded = isPrViews ? pinnedPrViewsExpanded : pinnedViewsExpanded;
+      if (!expanded) {
+        if (isPrViews) setPinnedPrViewsExpanded(true);
+        else setPinnedViewsExpanded(true);
       } else {
         focusNavItem(current, 1);
       }
@@ -987,8 +1000,11 @@ function AppShell() {
     }
     if (event.key === "ArrowLeft" && current.dataset.navSubgroup === "true") {
       event.preventDefault();
-      if (pinnedViewsExpanded) {
-        setPinnedViewsExpanded(false);
+      const isPrViews = current.dataset.subgroupId === "pullRequestViews";
+      const expanded = isPrViews ? pinnedPrViewsExpanded : pinnedViewsExpanded;
+      if (expanded) {
+        if (isPrViews) setPinnedPrViewsExpanded(false);
+        else setPinnedViewsExpanded(false);
       }
       return;
     }
@@ -1323,8 +1339,36 @@ function AppShell() {
                 active={activeView === "myReviews"}
                 disabled={organizations.length === 0}
                 label="My Reviews"
-                onClick={() => setView("myReviews")}
+                onClick={() => {
+                  setSelectedPrViewRequestId(null);
+                  setView("myReviews");
+                }}
               />
+              {pinnedPrViews.length > 0 ? (
+                <NavSubGroup
+                  id="pullRequestViews"
+                  active={false}
+                  disabled={organizations.length === 0}
+                  label="Views"
+                  expandable={pinnedPrViews.length > 0}
+                  expanded={pinnedPrViewsExpanded}
+                  onToggle={() => setPinnedPrViewsExpanded((value) => !value)}
+                  onClick={() => setPinnedPrViewsExpanded((value) => !value)}
+                >
+                  {pinnedPrViews.map((item) => (
+                    <NavSubItem
+                      key={item.id}
+                      active={false}
+                      disabled={organizations.length === 0}
+                      label={item.name}
+                      onClick={() => {
+                        setSelectedPrViewRequestId(item.id);
+                        setView("myReviews");
+                      }}
+                    />
+                  ))}
+                </NavSubGroup>
+              ) : null}
               <NavSubItem
                 active={activeView === "pullRequestSearch"}
                 disabled={organizations.length === 0}
@@ -1478,7 +1522,11 @@ function AppShell() {
             </p>
           </div>
           {organizations.length > 0 && (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <SyncStatusIndicator
+                onSync={() => syncMutation.mutate({ scope: "all" })}
+                syncing={syncMutation.isPending}
+              />
               <button
                 type="button"
                 disabled={syncMutation.isPending}
@@ -1520,6 +1568,9 @@ function AppShell() {
               organizations={organizations}
               selectRequest={myReviewsSelectRequest}
               onSelectRequestHandled={() => setMyReviewsSelectRequest(null)}
+              selectedViewRequestId={selectedPrViewRequestId}
+              onSelectedViewRequestHandled={() => setSelectedPrViewRequestId(null)}
+              onViewsChange={setPrNavViews}
             />
           ) : activeView === "workItems" ? (
             <WorkItemSearch
