@@ -26,6 +26,17 @@ describe("buildDiffLines", () => {
     const lines = buildDiffLines("x\n", "");
     expect(lines).toEqual([{ kind: "del", baseLine: 1, targetLine: null, text: "x" }]);
   });
+
+  it("treats a pure CRLF/LF newline mismatch as unchanged", () => {
+    const base = "a\r\nb\r\nc\r\n";
+    const target = "a\nb\nc\n";
+    const lines = buildDiffLines(base, target);
+    expect(lines).toEqual([
+      { kind: "context", baseLine: 1, targetLine: 1, text: "a" },
+      { kind: "context", baseLine: 2, targetLine: 2, text: "b" },
+      { kind: "context", baseLine: 3, targetLine: 3, text: "c" },
+    ]);
+  });
 });
 
 describe("buildSideBySideRows", () => {
@@ -66,6 +77,20 @@ describe("buildSideBySideRows", () => {
         right: { line: 1, text: "a", kind: "context" },
       },
       { left: { line: 2, text: "x", kind: "del" }, right: null },
+    ]);
+  });
+
+  it("does not mark rows changed on a pure CRLF/LF newline mismatch", () => {
+    const rows = buildSideBySideRows("a\r\nb\r\n", "a\nb\n");
+    expect(rows).toEqual([
+      {
+        left: { line: 1, text: "a", kind: "context" },
+        right: { line: 1, text: "a", kind: "context" },
+      },
+      {
+        left: { line: 2, text: "b", kind: "context" },
+        right: { line: 2, text: "b", kind: "context" },
+      },
     ]);
   });
 });
