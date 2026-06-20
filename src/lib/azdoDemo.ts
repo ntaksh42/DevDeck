@@ -55,10 +55,8 @@ import type {
   WorkItemSummary,
   WorkItemUpdateSummary,
 } from "@/lib/azdoCommands";
-import {
-  DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
-  DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
-} from "@/lib/azdoCommands";
+import { DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS } from "@/lib/azdoCommands";
+import { DEFAULT_REVIEW_STALE_THRESHOLD_DAYS } from "@/lib/reviewSettings";
 import {
   applyPullRequestScenario,
   applyReviewPullRequestScenario,
