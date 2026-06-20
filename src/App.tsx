@@ -157,6 +157,7 @@ type View =
   | "myWorkItems"
   | "workItemViews"
   | "commits"
+  | "myCommits"
   | "pipelines"
   | "codeSearch"
   | "settings";
@@ -695,7 +696,7 @@ function AppShell() {
   }
 
   function currentViewSyncScope(): SyncScope {
-    if (activeView === "commits") return "commits";
+    if (activeView === "commits" || activeView === "myCommits") return "commits";
     if (
       activeView === "workItems" ||
       activeView === "myWorkItems" ||
@@ -776,6 +777,14 @@ function AppShell() {
       keywords: ["commit", "search"],
       label: "Go to Commits",
       run: () => setView("commits"),
+    },
+    {
+      disabled: organizations.length === 0,
+      group: "Navigation",
+      id: "nav.myCommits",
+      keywords: ["commit", "mine", "authored", "my activity"],
+      label: "Go to My Commits",
+      run: () => setView("myCommits"),
     },
     {
       disabled: organizations.length === 0,
@@ -1472,6 +1481,13 @@ function AppShell() {
               onClick={() => setView("commits")}
             />
             <NavButton
+              active={activeView === "myCommits"}
+              disabled={organizations.length === 0}
+              icon={<GitCommitHorizontal className="h-4 w-4" aria-hidden="true" />}
+              label="My Commits"
+              onClick={() => setView("myCommits")}
+            />
+            <NavButton
               active={activeView === "pipelines"}
               disabled={organizations.length === 0}
               icon={<GitBranch className="h-4 w-4" aria-hidden="true" />}
@@ -1534,6 +1550,8 @@ function AppShell() {
                         ? "Work Item Views"
                         : activeView === "commits"
                           ? "Commits"
+                          : activeView === "myCommits"
+                            ? "My Commits"
                           : activeView === "pipelines"
                             ? "Pipelines"
                             : activeView === "codeSearch"
@@ -1553,6 +1571,8 @@ function AppShell() {
                         ? "Saved WIQL views with counts, grid results, and preview"
                         : activeView === "commits"
                           ? "Search Azure DevOps commits across repositories"
+                          : activeView === "myCommits"
+                            ? "Your recent commits across repositories"
                           : activeView === "pipelines"
                             ? "Azure DevOps build runs by project"
                             : activeView === "codeSearch"
@@ -1632,6 +1652,14 @@ function AppShell() {
               organizations={organizations}
               externalSearch={commitSearchRequest}
               onExternalSearchHandled={() => setCommitSearchRequest(null)}
+              onOpenPullRequest={(query, organizationId) =>
+                openSearchTarget("pullRequests", query, organizationId)
+              }
+            />
+          ) : activeView === "myCommits" ? (
+            <CommitSearch
+              organizations={organizations}
+              myCommitsMode
               onOpenPullRequest={(query, organizationId) =>
                 openSearchTarget("pullRequests", query, organizationId)
               }
