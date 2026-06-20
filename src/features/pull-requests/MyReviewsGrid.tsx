@@ -1035,7 +1035,10 @@ export function MyReviewsGrid({
   }, [sortedPrs, collapsedSections]);
 
   const resultKeysSignature = useMemo(
-    () => sortedPrs.map((pr) => `${pr.organizationId}-${pr.pullRequestId}`).join("|"),
+    () =>
+      sortedPrs
+        .map((pr) => `${pr.organizationId}-${pr.repositoryId}-${pr.pullRequestId}`)
+        .join("|"),
     [sortedPrs],
   );
 
@@ -1914,7 +1917,7 @@ export function MyReviewsGrid({
                     }
                     return (
                       <ReviewPrRow
-                        key={`${row.pr.organizationId}-${row.pr.pullRequestId}`}
+                        key={`${row.pr.organizationId}-${row.pr.repositoryId}-${row.pr.pullRequestId}`}
                         ref={(el) => { rowRefs.current[row.prIndex] = el; }}
                         columnTemplate={COLS}
                         pr={row.pr}

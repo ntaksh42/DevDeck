@@ -829,6 +829,7 @@ pub(crate) async fn collect_pr_comment_notifications(
             items.push(PrNotificationItem {
                 kind: PrNotificationKind::CommentReply,
                 pull_request_id: pr.pull_request_id,
+                repository_id: pr.repository_id.clone(),
                 title: pr.title.clone(),
                 repository_name: pr.repository_name.clone(),
                 project_name: pr.project_name.clone(),
