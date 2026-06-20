@@ -20,6 +20,7 @@ import {
   BookOpen,
   Code,
   GitBranch,
+  FileText,
   GitCommitHorizontal,
   GitPullRequest,
   ListChecks,
@@ -29,6 +30,8 @@ import {
 import {
   commandErrorMessage,
   getAppSettings,
+  listMyReviewPullRequests,
+  listMyWorkItems,
   listOrganizations,
   rerunPipelineRun,
   searchAll,
@@ -79,11 +82,13 @@ import {
 } from "@/components/CommandPalette";
 import {
   loadWorkItemQueryViews,
+  viewCountBaseline,
   type WorkItemQueryView,
 } from '@/features/work-items/workItemViewsStorage';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from '@/features/work-items/queryKeys';
 import { MyReviewsGrid } from '@/features/pull-requests/MyReviewsGrid';
 import { MyPullRequestsGrid } from '@/features/pull-requests/MyPullRequestsGrid';
+import { ReleaseNotesView } from '@/features/pull-requests/ReleaseNotesView';
 import {
   loadPullRequestViews,
   type PullRequestView,
@@ -159,6 +164,7 @@ type View =
   | "myWorkItems"
   | "workItemViews"
   | "commits"
+  | "releaseNotes"
   | "myCommits"
   | "pipelines"
   | "codeSearch"
@@ -320,6 +326,28 @@ function AppShell() {
   });
   const organizations = organizationsQuery.data ?? [];
   const readOnlyMode = appSettingsQuery.data?.readOnlyValidationModeEnabled ?? false;
+
+  // Sidebar count badges. Queried for the first organization (the default the
+  // views open to) and kept fresh by the same sync:updated invalidation the
+  // grids use, so the cache is shared rather than double-fetched.
+  const badgeOrganizationId = organizations[0]?.id ?? "";
+  const myReviewsCountQuery = useQuery({
+    queryKey: ["myReviews", badgeOrganizationId],
+    queryFn: () => listMyReviewPullRequests({ organizationId: badgeOrganizationId }),
+    enabled: !!badgeOrganizationId,
+    staleTime: 5 * 60_000,
+  });
+  const myWorkItemsCountQuery = useQuery({
+    queryKey: ["myWorkItems", badgeOrganizationId],
+    queryFn: () => listMyWorkItems({ organizationId: badgeOrganizationId }),
+    enabled: !!badgeOrganizationId,
+    staleTime: 5 * 60_000,
+  });
+  // My Reviews badge counts PRs still awaiting my vote (the actionable inbox).
+  const myReviewsBadge = myReviewsCountQuery.data
+    ? myReviewsCountQuery.data.filter((pr) => pr.myVote === 0 && !pr.isDraft).length
+    : null;
+  const myWorkItemsBadge = myWorkItemsCountQuery.data?.length ?? null;
   const [quickPipelines, setQuickPipelines] = useState<QuickPipeline[]>(() =>
     loadQuickPipelines(),
   );
@@ -787,6 +815,14 @@ function AppShell() {
       keywords: ["commit", "search"],
       label: "Go to Commits",
       run: () => setView("commits"),
+    },
+    {
+      disabled: organizations.length === 0,
+      group: "Navigation",
+      id: "nav.releaseNotes",
+      keywords: ["release", "notes", "changelog", "markdown"],
+      label: "Go to Release Notes",
+      run: () => setView("releaseNotes"),
     },
     {
       disabled: organizations.length === 0,
@@ -1397,6 +1433,7 @@ function AppShell() {
                 active={activeView === "myReviews"}
                 disabled={organizations.length === 0}
                 label="My Reviews"
+                badge={myReviewsBadge}
                 onClick={() => {
                   setSelectedPrViewRequestId(null);
                   setView("myReviews");
@@ -1452,6 +1489,7 @@ function AppShell() {
                 active={activeView === "myWorkItems"}
                 disabled={organizations.length === 0}
                 label="My Items"
+                badge={myWorkItemsBadge}
                 onClick={() => setView("myWorkItems")}
               />
               <NavSubGroup
@@ -1474,6 +1512,7 @@ function AppShell() {
                     active={activeView === "workItemViews" && activeWorkItemViewId === item.id}
                     disabled={organizations.length === 0}
                     label={item.name}
+                    badge={viewCountBaseline(item.id)}
                     onClick={() => {
                       setActiveWorkItemViewId(item.id);
                       setSelectedWorkItemViewRequestId(item.id);
@@ -1495,6 +1534,13 @@ function AppShell() {
               icon={<GitCommitHorizontal className="h-4 w-4" aria-hidden="true" />}
               label="Commits"
               onClick={() => setView("commits")}
+            />
+            <NavButton
+              active={activeView === "releaseNotes"}
+              disabled={organizations.length === 0}
+              icon={<FileText className="h-4 w-4" aria-hidden="true" />}
+              label="Release Notes"
+              onClick={() => setView("releaseNotes")}
             />
             <NavButton
               active={activeView === "myCommits"}
@@ -1568,6 +1614,8 @@ function AppShell() {
                         ? "Work Item Views"
                         : activeView === "commits"
                           ? "Commits"
+                          : activeView === "releaseNotes"
+                            ? "Release Notes"
                           : activeView === "myCommits"
                             ? "My Commits"
                           : activeView === "pipelines"
@@ -1591,6 +1639,8 @@ function AppShell() {
                         ? "Saved WIQL views with counts, grid results, and preview"
                         : activeView === "commits"
                           ? "Search Azure DevOps commits across repositories"
+                          : activeView === "releaseNotes"
+                            ? "Generate Markdown release notes from completed pull requests"
                           : activeView === "myCommits"
                             ? "Your recent commits across repositories"
                           : activeView === "pipelines"
@@ -1678,6 +1728,8 @@ function AppShell() {
                 openSearchTarget("pullRequests", query, organizationId)
               }
             />
+          ) : activeView === "releaseNotes" ? (
+            <ReleaseNotesView organizations={organizations} />
           ) : activeView === "myCommits" ? (
             <CommitSearch
               organizations={organizations}

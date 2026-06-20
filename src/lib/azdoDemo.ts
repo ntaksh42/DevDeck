@@ -585,6 +585,39 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     }
     case "list_my_pull_requests":
       return demoMyPullRequests();
+    case "generate_release_notes": {
+      const day = 86_400_000;
+      const ago = (n: number) => new Date(Date.now() - n * day).toISOString();
+      return [
+        {
+          pullRequestId: 380,
+          title: "Cache invalidation on settings change",
+          createdBy: "Demo User",
+          closedDate: ago(2),
+          repositoryName: "api-gateway",
+          targetRefName: "main",
+          webUrl: "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/380",
+        },
+        {
+          pullRequestId: 376,
+          title: "Add structured logging to the sync loop",
+          createdBy: "Alice Johnson",
+          closedDate: ago(3),
+          repositoryName: "api-gateway",
+          targetRefName: "main",
+          webUrl: "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/376",
+        },
+        {
+          pullRequestId: 371,
+          title: "Fix crash on empty work item list",
+          createdBy: "Demo User",
+          closedDate: ago(5),
+          repositoryName: "web-dashboard",
+          targetRefName: "main",
+          webUrl: "https://dev.azure.com/contoso/Platform/_git/web-dashboard/pullrequest/371",
+        },
+      ];
+    }
     case "get_pull_request_review": {
       const input = (args as { input?: GetPullRequestReviewInput } | undefined)?.input;
       const prId = input?.pullRequestId ?? 0;
@@ -913,6 +946,9 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       const input = (args as { input?: { commitId?: string } } | undefined)?.input;
       return demoCommitPullRequests(input?.commitId);
     }
+    case "cancel_operation":
+      // Demo searches resolve instantly, so there is nothing to cancel.
+      return null;
     case "search_code": {
       const input = (args as { input?: { query?: string } } | undefined)?.input;
       const query = input?.query?.trim() ?? "";

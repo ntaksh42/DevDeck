@@ -1,7 +1,7 @@
 use azdo_client::{
     summarize_pr_ci, AdoClient, AdoError, GitThread, PullRequestStatus, TeamProject,
 };
-use chrono::Utc;
+use chrono::{DateTime, NaiveDate, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinSet;
 
@@ -52,6 +52,40 @@ pub struct MyPullRequestSummary {
     pub no_vote: i64,
     /// True when any reviewer voted "rejected" or "waiting for author".
     pub changes_requested: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateReleaseNotesInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    /// Inclusive `YYYY-MM-DD` bounds on the PR completion (merge) date. Either
+    /// may be omitted to leave that side unbounded.
+    pub from_date: Option<String>,
+    pub to_date: Option<String>,
+}
+
+/// A completed pull request included in generated release notes.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ReleaseNotePr {
+    pub pull_request_id: i64,
+    pub title: String,
+    pub created_by: Option<String>,
+    pub closed_date: String,
+    pub repository_name: String,
+    pub target_ref_name: String,
+    pub web_url: Option<String>,
+}
+
+fn parse_day_start(value: &str) -> Option<DateTime<Utc>> {
+    let date = NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d").ok()?;
+    Some(Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0)?))
+}
+
+fn parse_day_end(value: &str) -> Option<DateTime<Utc>> {
+    let date = NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d").ok()?;
+    Some(Utc.from_utc_datetime(&date.and_hms_opt(23, 59, 59)?))
 }
 
 #[derive(Debug, Serialize)]
@@ -238,6 +272,64 @@ impl PullRequestService {
         }
         summaries.sort_by(|a, b| b.creation_date.cmp(&a.creation_date));
         Ok(summaries)
+    }
+
+    /// On-demand: completed (merged) PRs in a project whose merge date falls in
+    /// the given range, newest first, for generating release notes. Not cached
+    /// (the sync only covers active PRs).
+    pub async fn generate_release_notes(
+        &self,
+        input: GenerateReleaseNotesInput,
+    ) -> Result<Vec<ReleaseNotePr>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let project_id = input.project_id.trim();
+        if project_id.is_empty() {
+            return Err(AppError::InvalidInput("a project is required".to_string()));
+        }
+        let from = input.from_date.as_deref().and_then(parse_day_start);
+        let to = input.to_date.as_deref().and_then(parse_day_end);
+
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let prs = client
+            .list_project_pull_requests(project_id, PullRequestStatus::Completed, 1000)
+            .await?;
+
+        let mut notes: Vec<ReleaseNotePr> = prs
+            .into_iter()
+            .filter_map(|pr| {
+                let closed = pr.closed_date?;
+                if from.is_some_and(|f| closed < f) || to.is_some_and(|t| closed > t) {
+                    return None;
+                }
+                let repo = pr.repository.as_ref()?;
+                let repo_name = repo.name.clone();
+                let proj_name = repo
+                    .project
+                    .as_ref()
+                    .map(|p| p.name.clone())
+                    .unwrap_or_default();
+                let web_url = format!(
+                    "{}/{}/_git/{}/pullrequest/{}",
+                    organization.base_url,
+                    encode_path_segment(&proj_name),
+                    encode_path_segment(&repo_name),
+                    pr.pull_request_id
+                );
+                Some(ReleaseNotePr {
+                    pull_request_id: pr.pull_request_id,
+                    title: pr.title,
+                    created_by: pr
+                        .created_by
+                        .and_then(|user| user.display_name.or(user.unique_name)),
+                    closed_date: closed.to_rfc3339(),
+                    repository_name: repo_name,
+                    target_ref_name: short_ref(&pr.target_ref_name),
+                    web_url: Some(web_url),
+                })
+            })
+            .collect();
+        notes.sort_by(|a, b| b.closed_date.cmp(&a.closed_date));
+        Ok(notes)
     }
 
     // Note: cache contains only Active PRs (synced with PullRequestStatus::Active).
@@ -943,6 +1035,7 @@ pub(crate) async fn collect_pr_comment_notifications(
             items.push(PrNotificationItem {
                 kind: PrNotificationKind::CommentReply,
                 pull_request_id: pr.pull_request_id,
+                repository_id: pr.repository_id.clone(),
                 title: pr.title.clone(),
                 repository_name: pr.repository_name.clone(),
                 project_name: pr.project_name.clone(),

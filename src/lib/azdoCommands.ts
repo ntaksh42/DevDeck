@@ -153,6 +153,27 @@ const myPullRequestSummariesSchema = z.array(myPullRequestSummarySchema);
 
 export type MyPullRequestSummary = z.infer<typeof myPullRequestSummarySchema>;
 
+const releaseNotePrSchema = z.object({
+  pullRequestId: z.number(),
+  title: z.string(),
+  createdBy: z.string().nullable(),
+  closedDate: z.string(),
+  repositoryName: z.string(),
+  targetRefName: z.string(),
+  webUrl: z.string().nullable(),
+});
+
+const releaseNotePrsSchema = z.array(releaseNotePrSchema);
+
+export type ReleaseNotePr = z.infer<typeof releaseNotePrSchema>;
+
+export type GenerateReleaseNotesInput = {
+  organizationId?: string;
+  projectId: string;
+  fromDate?: string;
+  toDate?: string;
+};
+
 export type SnoozeItemType = "pull_request" | "work_item";
 
 const snoozedItemSummarySchema = z.object({
@@ -550,9 +571,21 @@ export async function searchCode(input: {
   repository?: string;
   branch?: string;
   path?: string;
+  operationId?: string;
 }): Promise<CodeSearchResults> {
   const result = await invokeCommand("search_code", { input });
   return codeSearchResultsSchema.parse(result);
+}
+
+// Signals a cancellable command (e.g. code search) to stop, by the id passed as
+// its operationId. Best-effort — the command returns promptly once cancelled.
+export async function cancelOperation(operationId: string): Promise<void> {
+  await invokeCommand("cancel_operation", { operationId });
+}
+
+// Generates a unique id for a cancellable operation.
+export function newOperationId(): string {
+  return `op-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 const syncScopeSchema = z.enum(["all", "hot", "myReviews", "myWorkItems", "commits"]);
@@ -933,6 +966,13 @@ export async function listMyPullRequests(input: {
 }): Promise<MyPullRequestSummary[]> {
   const result = await invokeCommand("list_my_pull_requests", { input });
   return myPullRequestSummariesSchema.parse(result);
+}
+
+export async function generateReleaseNotes(
+  input: GenerateReleaseNotesInput,
+): Promise<ReleaseNotePr[]> {
+  const result = await invokeCommand("generate_release_notes", { input });
+  return releaseNotePrsSchema.parse(result);
 }
 
 export async function getPullRequestReview(

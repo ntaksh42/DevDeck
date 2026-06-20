@@ -32,6 +32,7 @@ Rust バックエンド (src-tauri/src/)
     ├── auth.rs                                — PAT / Azure CLI 認証プロバイダ
     ├── db.rs                                  — SQLite キャッシュ (rusqlite, スキーマ移行)
     ├── secrets.rs                             — keyring (Windows 資格情報マネージャ)
+    ├── cancellation.rs                        — 実行中コマンドの協調キャンセル
     └── error.rs                               — AppError (IPC 向けエラー型)
          ↓
 crates/azdo-client/                            — Tauri 非依存の独立 ADO REST クライアント
@@ -60,18 +61,22 @@ crates/azdo-client/                            — Tauri 非依存の独立 ADO 
 
 ## 3. 機能 / ビュー一覧
 
+サイドバーのナビには件数バッジを表示する: My Reviews (未投票=要レビューの件数)、
+My Items (割当件数)、ピン留めした Work Item View (最後に取得した件数)。0/未取得時は非表示。
+
 | ビュー | 用途 |
 |---|---|
-| **My Reviews** | 自分がレビュアーの PR。投票状態・マージコンフリクト/CI バッジ・stale 強調・ローカルの done/archive トリアージ・ローカルのレビュー結果プレビュー。自分のレビュー後に author の push で投票がリセットされた PR を「Returned」バッジで強調（投票スナップショットの差分でローカル検出、開く/再投票で解除）。 |
+| **My Reviews** | 自分がレビュアーの PR。投票状態・マージコンフリクト/CI バッジ・stale 強調・ローカルの done/archive トリアージ・ローカルのレビュー結果プレビュー。自分のレビュー後に author の push で投票がリセットされた PR を「Returned」バッジで強調（投票スナップショットの差分でローカル検出、開く/再投票で解除）。ソート可能な「Review age」列 (作成からの経過日数、stale 閾値超過で強調)。 |
 | **My Pull Requests** | 自分が author の active PR をプロジェクト横断で一覧 (オンデマンド取得、非キャッシュ)。レビュアー投票集約 (承認/待ち/却下数)・コンフリクト表示。`Changes requested` / `Approved` / `Awaiting review` / `Drafts` にセクション分け。キーボード操作 (↑↓/J/K/Enter で開く/`C` コピー)。 |
 | **Pull Request Search** | プロジェクト/リポジトリ/ステータスで PR を検索。ソート可能グリッド、列リサイズ、`C` で URL コピー。 |
 | **My Work Items** | 自分に割当中の作業項目 (最大 200 件キャッシュ)。状態・種別・割当先・更新日時。最後に開いてから変更された項目に未読マーカー (ChangedDate の差分でローカル検出、開くと消える)。 |
 | **Work Item Views** | 保存済み WIQL クエリ。件数表示、ナビへのピン留め、並べ替え、ビュー別ソート/列。 |
 | **Work Item Search** | キーワード + プロジェクト/状態/種別での作業項目検索。全文検索 (FTS)。 |
 | **Commits** | キーワード/プロジェクト/リポジトリ/作者/ブランチ/期間でコミット検索。7d/30d/90d プリセット。関連 PR の遅延ルックアップ。 |
+| **Release Notes** | プロジェクト + 期間からマージ済み (completed) PR を集約し、リポジトリ別にグルーピングした Markdown リリースノートを生成 (`generate_release_notes`、オンデマンド・非キャッシュ)。クリップボードコピー対応。 |
 | **My Commits** | author = 自分のコミットを検索操作なしに自動ロード (Commits ビューを `myCommitsMode` で流用、組織の認証ユーザー名で seed・90 日窓・組織切替で再取得)。Commits と同じグリッド/プレビュー/関連 PR ルックアップ。 |
 | **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。 |
-| **Code Search** | リポジトリ横断のコード検索。ファイル/パス/ブランチとリンク。 |
+| **Code Search** | リポジトリ横断のコード検索。ファイル/パス/ブランチとリンク。進行中の検索を Cancel でき (`operationId` + `cancel_operation`、`CancellationRegistry` が `tokio::select!` で実行中 future を drop)、キャンセル後も直近の結果が残る。 |
 | **Settings** | 組織設定 (PAT / Azure CLI)、通知設定、フォルダパス、グローバルホットキー、キーバインド上書き。Software update パネル (opt-in: 手動で更新確認→適用、失敗時は安全にスキップ。`tauri-plugin-updater`、ブラウザでは無効)。 |
 
 ### 横断機能
