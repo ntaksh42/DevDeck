@@ -47,5 +47,13 @@
         "languages": ["English"]
       }
     }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/ntaksh42/azdo-dashboard/releases/latest/download/latest.json"
+      ],
+      "pubkey": "REPLACE_WITH_TAURI_SIGNING_PUBLIC_KEY"
+    }
   }
 }
