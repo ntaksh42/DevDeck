@@ -1,6 +1,9 @@
 import { clamp, type SortDirection } from "@/lib/utils";
 import { isValidFieldReferenceName } from "./previewFieldsStorage";
 
+// Bare keys (no migration to date). On an incompatible shape change, bump with
+// `storageKey(name, version)` from "@/lib/storage" instead of a hand-spelled
+// `:vN` suffix.
 const WI_QUERY_VIEWS_STORAGE_KEY = "azdodeck:workItemQueryViews";
 const WI_QUERY_VIEWS_EXPORT_SCHEMA = "azdodeck.workItemViews";
 export const WI_VIEW_COUNT_BASELINES_STORAGE_KEY = "azdodeck:workItems:viewCountBaselines";
@@ -227,6 +230,21 @@ export function recordViewCount(viewId: string, count: number, knownViewIds: str
 
 export function resetViewCountSessionForTests(): void {
   sessionCountBaselines = null;
+}
+
+export type WorkItemViewLayout = "list" | "board";
+
+const WI_VIEW_LAYOUT_STORAGE_PREFIX = "azdodeck:workItemViewLayout:";
+
+export function loadWorkItemViewLayout(viewId: string): WorkItemViewLayout {
+  if (typeof window === "undefined") return "list";
+  const value = window.localStorage.getItem(WI_VIEW_LAYOUT_STORAGE_PREFIX + viewId);
+  return value === "board" ? "board" : "list";
+}
+
+export function saveWorkItemViewLayout(viewId: string, layout: WorkItemViewLayout): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(WI_VIEW_LAYOUT_STORAGE_PREFIX + viewId, layout);
 }
 
 export function createWorkItemQueryViewsExport(views: WorkItemQueryView[]): WorkItemQueryViewsExport {

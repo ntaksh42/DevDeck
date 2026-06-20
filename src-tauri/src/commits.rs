@@ -6,12 +6,22 @@ use serde::{Deserialize, Serialize};
 use tokio::task::JoinSet;
 
 use crate::auth::client_for_organization;
-use crate::db::{AppDatabase, CachedCommit, Organization};
+use crate::db::{AppDatabase, CachedCommit, CachedCommitPr, Organization};
 use crate::error::{AppError, Result};
+use crate::prs::vote_label;
 use crate::secrets::SecretStore;
 
 const COMMIT_SYNC_CONCURRENCY: usize = 4;
+/// How long a commit's related-PR lookup stays cached before being refreshed.
+const COMMIT_PR_CACHE_TTL_MINUTES: i64 = 30;
 const MAX_DIFF_CONTENT_BYTES: usize = 256 * 1024;
+/// Sync window in days. Must cover the largest date preset offered by the
+/// commit search UI (`src/features/commits/CommitSearch.tsx`, 90d) so that
+/// preset does not silently return near-empty results.
+const COMMIT_SYNC_WINDOW_DAYS: i64 = 90;
+/// Page size for the paginated commit sync. The REST API caps `$top`, so the
+/// sync walks pages with `$skip` until a short page signals the end.
+const COMMIT_SYNC_PAGE_SIZE: u32 = 100;
 type CommitSyncTaskResult = Result<Option<(String, Vec<CachedCommit>)>>;
 
 #[derive(Debug, Deserialize)]
@@ -31,6 +41,24 @@ pub struct SearchCommitsInput {
 #[serde(rename_all = "camelCase")]
 pub struct ListCommitRepositoriesInput {
     pub organization_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitActivityInput {
+    pub organization_id: Option<String>,
+    pub author: Option<String>,
+    pub from_date: Option<String>,
+    pub to_date: Option<String>,
+    pub project_id: Option<String>,
+    pub repository_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitActivityDay {
+    pub date: String,
+    pub count: i64,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -107,6 +135,26 @@ pub struct CommitFileDiff {
     pub target_unavailable_reason: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetCommitPullRequestsInput {
+    pub organization_id: Option<String>,
+    pub repository_id: String,
+    pub commit_id: String,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitPullRequest {
+    pub pull_request_id: i64,
+    pub repository_id: String,
+    pub title: String,
+    pub status: String,
+    pub my_vote: i32,
+    pub my_vote_label: String,
+    pub web_url: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct CommitService {
     db: AppDatabase,
@@ -157,11 +205,12 @@ impl CommitService {
             )
             .await?
         } else if query.is_empty() {
-            // SQL 側で日付・リポジトリ絞り込み済み
+            // SQL 側で日付・リポジトリ・author を絞り込む。author を SQL に渡さず
+            // メモリ内で絞ると、LIMIT 500 の外にある一致コミットを取りこぼすため。
             self.db.search_commits(
                 &organization.id,
                 repository_filter.as_deref(),
-                None,
+                author.as_deref(),
                 from_rfc.as_deref(),
                 to_rfc.as_deref(),
             )?
@@ -252,6 +301,7 @@ impl CommitService {
                     from_date: from_date.map(str::to_string),
                     to_date: to_date.map(str::to_string),
                     top: Some(100),
+                    skip: None,
                 },
             )
             .await?;
@@ -293,6 +343,37 @@ impl CommitService {
                 .then_with(|| a.repository_name.cmp(&b.repository_name))
         });
         Ok(results)
+    }
+
+    pub fn commit_activity(&self, input: CommitActivityInput) -> Result<Vec<CommitActivityDay>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let author = normalize_optional(input.author);
+        let project_filter = normalize_optional(input.project_id);
+        let repository_filter = normalize_optional(input.repository_id);
+        let from_date = normalize_date(input.from_date.as_deref(), false)?;
+        let to_date = normalize_date(input.to_date.as_deref(), true)?;
+        if let (Some(from_date), Some(to_date)) = (&from_date, &to_date) {
+            if from_date > to_date {
+                return Err(AppError::InvalidInput(
+                    "from date must be before or equal to to date".to_string(),
+                ));
+            }
+        }
+        let from_rfc = from_date.as_ref().map(DateTime::to_rfc3339);
+        let to_rfc = to_date.as_ref().map(DateTime::to_rfc3339);
+
+        let rows = self.db.commit_activity(
+            &organization.id,
+            project_filter.as_deref(),
+            repository_filter.as_deref(),
+            author.as_deref(),
+            from_rfc.as_deref(),
+            to_rfc.as_deref(),
+        )?;
+        Ok(rows
+            .into_iter()
+            .map(|(date, count)| CommitActivityDay { date, count })
+            .collect())
     }
 
     pub async fn get_commit_changes(
@@ -385,8 +466,100 @@ impl CommitService {
         })
     }
 
+    /// Returns the pull requests that contain a commit, served from an
+    /// on-demand cache. Returns an empty list (not an error) when the commit is
+    /// not part of any pull request.
+    pub async fn get_commit_pull_requests(
+        &self,
+        input: GetCommitPullRequestsInput,
+    ) -> Result<Vec<CommitPullRequest>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let fresh_after =
+            (Utc::now() - chrono::Duration::minutes(COMMIT_PR_CACHE_TTL_MINUTES)).to_rfc3339();
+
+        if let Some(cached) = self.db.get_cached_commit_prs(
+            &organization.id,
+            &input.repository_id,
+            &input.commit_id,
+            &fresh_after,
+        )? {
+            return Ok(cached
+                .into_iter()
+                .map(cached_commit_pr_to_summary)
+                .collect());
+        }
+
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let prs = client
+            .list_commit_pull_requests(&input.repository_id, &input.commit_id)
+            .await?;
+
+        let me = organization.authenticated_user_id.as_deref();
+        let cached: Vec<CachedCommitPr> = prs
+            .into_iter()
+            .filter_map(|pr| {
+                let repo = pr.repository.as_ref()?;
+                let project_name = repo
+                    .project
+                    .as_ref()
+                    .map(|p| p.name.as_str())
+                    .unwrap_or(repo.name.as_str());
+                let web_url = format!(
+                    "{}/{}/_git/{}/pullrequest/{}",
+                    organization.base_url.trim_end_matches('/'),
+                    encode_path_segment(project_name),
+                    encode_path_segment(&repo.name),
+                    pr.pull_request_id
+                );
+                let my_vote = me
+                    .and_then(|me| {
+                        pr.reviewers
+                            .as_deref()
+                            .unwrap_or(&[])
+                            .iter()
+                            .find(|r| r.id.as_deref() == Some(me))
+                            .map(|r| r.vote)
+                    })
+                    .unwrap_or(0);
+                Some(CachedCommitPr {
+                    pull_request_id: pr.pull_request_id,
+                    pr_repository_id: repo.id.clone(),
+                    title: pr.title,
+                    status: pr.status,
+                    my_vote,
+                    my_vote_label: vote_label(my_vote).to_string(),
+                    web_url: Some(web_url),
+                })
+            })
+            .collect();
+
+        self.db.replace_commit_prs(
+            &organization.id,
+            &input.repository_id,
+            &input.commit_id,
+            &cached,
+        )?;
+
+        Ok(cached
+            .into_iter()
+            .map(cached_commit_pr_to_summary)
+            .collect())
+    }
+
     fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {
         self.db.resolve_organization(id)
+    }
+}
+
+fn cached_commit_pr_to_summary(pr: CachedCommitPr) -> CommitPullRequest {
+    CommitPullRequest {
+        pull_request_id: pr.pull_request_id,
+        repository_id: pr.pr_repository_id,
+        title: pr.title,
+        status: pr.status,
+        my_vote: pr.my_vote,
+        my_vote_label: pr.my_vote_label,
+        web_url: pr.web_url,
     }
 }
 
@@ -582,7 +755,7 @@ pub async fn sync_commits_for_org(
 }
 
 async fn do_sync_commits(db: &AppDatabase, client: &AdoClient, org: &Organization) -> Result<()> {
-    let from_date = (Utc::now() - chrono::Duration::days(30)).to_rfc3339();
+    let from_date = (Utc::now() - chrono::Duration::days(COMMIT_SYNC_WINDOW_DAYS)).to_rfc3339();
     let projects = client.list_projects().await?;
     let mut tasks = JoinSet::new();
     for project in &projects {
@@ -639,35 +812,38 @@ async fn fetch_commits_for_repo(
     from_date: String,
 ) -> Result<Option<(String, Vec<CachedCommit>)>> {
     let repository_id = repository.id.clone();
-    let commits = match client
-        .list_commits(
-            &project.id,
-            &repository.id,
-            CommitSearchCriteria {
-                author: None,
-                branch: None,
-                from_date: Some(from_date),
-                to_date: None,
-                top: Some(100),
-            },
-        )
-        .await
-    {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::warn!(
-                org = %org.name,
-                project = %project.name,
-                repository = %repository.name,
-                error = %e,
-                "failed to list commits, skipping repository"
-            );
-            return Ok(None);
-        }
-    };
-    let cached: Vec<CachedCommit> = commits
-        .into_iter()
-        .map(|c| {
+    let mut cached: Vec<CachedCommit> = Vec::new();
+    let mut skip = 0u32;
+    loop {
+        let page = match client
+            .list_commits(
+                &project.id,
+                &repository.id,
+                CommitSearchCriteria {
+                    author: None,
+                    branch: None,
+                    from_date: Some(from_date.clone()),
+                    to_date: None,
+                    top: Some(COMMIT_SYNC_PAGE_SIZE),
+                    skip: Some(skip),
+                },
+            )
+            .await
+        {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!(
+                    org = %org.name,
+                    project = %project.name,
+                    repository = %repository.name,
+                    error = %e,
+                    "failed to list commits, skipping repository"
+                );
+                return Ok(None);
+            }
+        };
+        let page_len = page.len() as u32;
+        cached.extend(page.into_iter().map(|c| {
             commit_to_cached(
                 &org,
                 &project.id,
@@ -676,8 +852,13 @@ async fn fetch_commits_for_repo(
                 &repository.name,
                 c,
             )
-        })
-        .collect();
+        }));
+        // A short page (fewer than requested) means the API has no more rows.
+        if page_len < COMMIT_SYNC_PAGE_SIZE {
+            break;
+        }
+        skip += page_len;
+    }
     Ok(Some((repository_id, cached)))
 }
 

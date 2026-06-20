@@ -85,4 +85,30 @@ describe("FilterableSelect", () => {
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onChange).toHaveBeenCalledWith("2");
   });
+
+  it("wires the combobox to the listbox for screen readers", () => {
+    const { input } = setup();
+    expect(input.getAttribute("aria-autocomplete")).toBe("list");
+    expect(input.getAttribute("aria-expanded")).toBe("false");
+    // Collapsed: no active option is announced.
+    expect(input.getAttribute("aria-activedescendant")).toBeNull();
+
+    fireEvent.mouseDown(input);
+    const listbox = screen.getByRole("listbox");
+    expect(input.getAttribute("aria-expanded")).toBe("true");
+    expect(input.getAttribute("aria-controls")).toBe(listbox.id);
+    expect(listbox.id).toBeTruthy();
+  });
+
+  it("tracks the active option via aria-activedescendant as it moves", () => {
+    const { input } = setup();
+    fireEvent.mouseDown(input);
+    const optionEls = screen.getAllByRole("option");
+    // Opens highlighting the first option.
+    expect(input.getAttribute("aria-activedescendant")).toBe(optionEls[0].id);
+    expect(optionEls[0].id).toBeTruthy();
+
+    fireEvent.keyDown(input, { key: "ArrowDown" }); // CI -> Nightly
+    expect(input.getAttribute("aria-activedescendant")).toBe(optionEls[1].id);
+  });
 });

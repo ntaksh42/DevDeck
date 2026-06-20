@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::client::AdoClient;
-use crate::error::Result;
+use crate::error::{AdoError, Result};
 
 /// Azure DevOps rejects a workitemsbatch request carrying more than 200 ids.
 const WORK_ITEMS_BATCH_LIMIT: usize = 200;
@@ -78,6 +78,15 @@ pub struct WorkItemWithRelations {
 pub struct WorkItemRelation {
     pub rel: String,
     pub url: String,
+    #[serde(default)]
+    pub attributes: Option<WorkItemRelationAttributes>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemRelationAttributes {
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -203,6 +212,14 @@ impl AdoClient {
                 },
             )
             .await?;
+        // A `FROM WorkItemLinks` query parses into an empty `work_items` with a
+        // populated `work_item_relations`. Returning an empty id list there
+        // hides the misuse, so surface it instead of silently yielding nothing.
+        if response.work_items.is_empty() && !response.work_item_relations.is_empty() {
+            return Err(AdoError::WiqlQueryShape(
+                "query returned WorkItemLinks relations; use query_work_item_links for FROM WorkItemLinks queries".to_string(),
+            ));
+        }
         Ok(response
             .work_items
             .into_iter()
@@ -234,6 +251,15 @@ impl AdoClient {
                 },
             )
             .await?;
+        // A flat `FROM WorkItems` query parses into an empty
+        // `work_item_relations` with a populated `work_items`. Surface that
+        // misuse rather than silently returning no links.
+        if response.work_item_relations.is_empty() && !response.work_items.is_empty() {
+            return Err(AdoError::WiqlQueryShape(
+                "query returned flat WorkItems; use query_work_item_ids for FROM WorkItems queries"
+                    .to_string(),
+            ));
+        }
         Ok(response
             .work_item_relations
             .into_iter()
@@ -574,6 +600,51 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(ids, vec![10]);
+    }
+
+    #[tokio::test]
+    async fn query_work_item_ids_errors_on_link_query_response() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/project-1/_apis/wit/wiql"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "workItemRelations": [
+                    { "target": { "id": 1 } },
+                    { "source": { "id": 1 }, "target": { "id": 2 } }
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let error = test_client(&server)
+            .await
+            .query_work_item_ids(
+                "project-1",
+                "SELECT [System.Id] FROM WorkItemLinks MODE (Recursive)",
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(error, AdoError::WiqlQueryShape(_)));
+    }
+
+    #[tokio::test]
+    async fn query_work_item_links_errors_on_flat_query_response() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/project-1/_apis/wit/wiql"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "workItems": [{ "id": 10 }, { "id": 11 }]
+            })))
+            .mount(&server)
+            .await;
+
+        let error = test_client(&server)
+            .await
+            .query_work_item_links("project-1", "SELECT [System.Id] FROM WorkItems", None)
+            .await
+            .unwrap_err();
+        assert!(matches!(error, AdoError::WiqlQueryShape(_)));
     }
 
     #[tokio::test]

@@ -76,22 +76,37 @@ export function CommandPalette({
 
   const filteredActions = useMemo(() => {
     const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    return actions
-      .filter((action) => {
-        if (action.disabled) return false;
-        if (terms.length === 0) return true;
-        const haystack = [
-          action.group,
-          action.label,
-          action.shortcut,
-          ...(action.keywords ?? []),
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        return terms.every((term) => haystack.includes(term));
+    const matched = actions.filter((action) => {
+      if (action.disabled) return false;
+      if (terms.length === 0) return true;
+      const haystack = [
+        action.group,
+        action.label,
+        action.shortcut,
+        ...(action.keywords ?? []),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return terms.every((term) => haystack.includes(term));
+    });
+    const groupOrder = new Map<string, number>();
+    for (const action of matched) {
+      if (!groupOrder.has(action.group)) {
+        groupOrder.set(action.group, groupOrder.size);
+      }
+    }
+    return matched
+      .map((action, index) => ({ action, index }))
+      .sort((left, right) => {
+        const groupDelta =
+          (groupOrder.get(left.action.group) ?? 0) - (groupOrder.get(right.action.group) ?? 0);
+        if (groupDelta !== 0) return groupDelta;
+        const usageDelta = (usage[right.action.id] ?? 0) - (usage[left.action.id] ?? 0);
+        if (usageDelta !== 0) return usageDelta;
+        return left.index - right.index;
       })
-      .sort((left, right) => (usage[right.id] ?? 0) - (usage[left.id] ?? 0));
+      .map((entry) => entry.action);
   }, [actions, query, usage]);
 
   const rows = useMemo<PaletteRow[]>(() => {
