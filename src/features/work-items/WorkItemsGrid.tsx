@@ -764,6 +764,14 @@ export function WorkItemsGrid({
     const types = new Set(checkedItems.map((item) => item.workItemType).filter(Boolean));
     return types.size === 1 ? ([...types][0] ?? null) : null;
   }, [checkedItems]);
+  const typeBreakdown = useMemo(
+    () => summarizeBy(checkedItems.map((item) => item.workItemType)),
+    [checkedItems],
+  );
+  const stateBreakdown = useMemo(
+    () => summarizeBy(checkedItems.map((item) => item.state)),
+    [checkedItems],
+  );
   const firstCheckedItem = checkedItems[0] ?? null;
 
   useEffect(() => {
@@ -1422,6 +1430,8 @@ export function WorkItemsGrid({
       {checkedItems.length > 0 ? (
         <BulkActionBar
           count={checkedItems.length}
+          typeBreakdown={typeBreakdown}
+          stateBreakdown={stateBreakdown}
           onClear={() => { setCheckedIds(new Set()); setLastCheckedIndex(null); }}
           stateOpen={bulkStateOpen}
           onStateOpenChange={(open) => {
@@ -1950,6 +1960,57 @@ function ColumnVisibilityDropdown({
   );
 }
 
+/**
+ * Counts non-empty values and returns them ordered by frequency (ties broken
+ * by label) so the bulk bar can show the most common type/state first.
+ */
+export function summarizeBy(values: (string | null | undefined)[]): { label: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    const label = value?.trim();
+    if (!label) continue;
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+}
+
+/** Renders up to `max` breakdown chips, folding the rest into a `+N` chip. */
+function BulkBreakdown({
+  entries,
+  max = 3,
+}: {
+  entries: { label: string; count: number }[];
+  max?: number;
+}) {
+  if (entries.length === 0) return null;
+  const shown = entries.slice(0, max);
+  const hidden = entries.slice(max);
+  const hiddenCount = hidden.reduce((sum, e) => sum + e.count, 0);
+  const hiddenTitle = hidden.map((e) => `${e.count} ${e.label}`).join(", ");
+  return (
+    <span className="flex flex-wrap items-center gap-1">
+      {shown.map((entry) => (
+        <span
+          key={entry.label}
+          className="inline-flex items-center rounded-full bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-secondary-foreground"
+        >
+          {entry.count} {entry.label}
+        </span>
+      ))}
+      {hidden.length > 0 ? (
+        <span
+          title={hiddenTitle}
+          className="inline-flex items-center rounded-full bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground"
+        >
+          +{hiddenCount}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 function BulkFailurePanel({
   failures,
   onDismiss,
@@ -1984,6 +2045,8 @@ function BulkFailurePanel({
 
 function BulkActionBar({
   count,
+  typeBreakdown,
+  stateBreakdown,
   onClear,
   stateOpen,
   onStateOpenChange,
@@ -2005,6 +2068,8 @@ function BulkActionBar({
   onPrioritySelect,
 }: {
   count: number;
+  typeBreakdown: { label: string; count: number }[];
+  stateBreakdown: { label: string; count: number }[];
   onClear: () => void;
   stateOpen: boolean;
   onStateOpenChange: (open: boolean) => void;
@@ -2035,6 +2100,17 @@ function BulkActionBar({
       <span className="text-xs font-medium text-foreground">
         {count} item{count === 1 ? "" : "s"} selected
       </span>
+      {typeBreakdown.length > 0 ? (
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <BulkBreakdown entries={typeBreakdown} />
+        </span>
+      ) : null}
+      {stateBreakdown.length > 0 ? (
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span className="text-muted-foreground/60" aria-hidden="true">·</span>
+          <BulkBreakdown entries={stateBreakdown} />
+        </span>
+      ) : null}
       <div className="flex items-center gap-1.5">
         {/* State picker */}
         <div className="relative">
