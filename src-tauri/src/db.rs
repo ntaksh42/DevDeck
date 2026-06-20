@@ -45,10 +45,13 @@ pub struct AppSettings {
     pub notify_pr_vote_resets: bool,
     pub notify_pr_comment_replies: bool,
     pub review_stale_threshold_days: i64,
+    pub work_item_stale_threshold_days: i64,
 }
 
 pub const DEFAULT_REVIEW_STALE_THRESHOLD_DAYS: i64 = 3;
 pub const REVIEW_STALE_THRESHOLD_DAY_OPTIONS: [i64; 4] = [2, 3, 5, 7];
+pub const DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS: i64 = 7;
+pub const WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS: [i64; 3] = [7, 14, 30];
 
 impl Default for AppSettings {
     fn default() -> Self {
@@ -64,6 +67,7 @@ impl Default for AppSettings {
             notify_pr_vote_resets: true,
             notify_pr_comment_replies: true,
             review_stale_threshold_days: DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
+            work_item_stale_threshold_days: DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
         }
     }
 }
@@ -1454,6 +1458,7 @@ fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
         notify_pr_vote_resets: get_bool_setting(conn, "notify_pr_vote_resets", true)?,
         notify_pr_comment_replies: get_bool_setting(conn, "notify_pr_comment_replies", true)?,
         review_stale_threshold_days: get_review_stale_threshold_days(conn)?,
+        work_item_stale_threshold_days: get_work_item_stale_threshold_days(conn)?,
     })
 }
 
@@ -1462,6 +1467,14 @@ fn get_review_stale_threshold_days(conn: &Connection) -> Result<i64> {
         .and_then(|raw| raw.trim().parse::<i64>().ok())
         .filter(|days| REVIEW_STALE_THRESHOLD_DAY_OPTIONS.contains(days))
         .unwrap_or(DEFAULT_REVIEW_STALE_THRESHOLD_DAYS);
+    Ok(value)
+}
+
+fn get_work_item_stale_threshold_days(conn: &Connection) -> Result<i64> {
+    let value = get_setting(conn, "work_item_stale_threshold_days")?
+        .and_then(|raw| raw.trim().parse::<i64>().ok())
+        .filter(|days| WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS.contains(days))
+        .unwrap_or(DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS);
     Ok(value)
 }
 
@@ -1526,6 +1539,18 @@ fn update_app_settings(conn: &Connection, settings: AppSettings) -> Result<AppSe
         conn,
         "review_stale_threshold_days",
         Some(&stale_days.to_string()),
+    )?;
+    let work_item_stale_days = if WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS
+        .contains(&settings.work_item_stale_threshold_days)
+    {
+        settings.work_item_stale_threshold_days
+    } else {
+        DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS
+    };
+    set_setting(
+        conn,
+        "work_item_stale_threshold_days",
+        Some(&work_item_stale_days.to_string()),
     )?;
     get_app_settings(conn)
 }
@@ -2664,6 +2689,7 @@ mod tests {
                 notify_pr_vote_resets: true,
                 notify_pr_comment_replies: false,
                 review_stale_threshold_days: 7,
+                work_item_stale_threshold_days: 14,
             },
         )
         .unwrap();
@@ -2672,6 +2698,7 @@ mod tests {
             Some("C:/reports")
         );
         assert_eq!(saved.review_stale_threshold_days, 7);
+        assert_eq!(saved.work_item_stale_threshold_days, 14);
         assert_eq!(saved.show_window_hotkey.as_deref(), Some("Ctrl+Alt+D"));
         assert!(saved.read_only_validation_mode_enabled);
         assert!(saved.desktop_notifications_enabled);
