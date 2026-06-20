@@ -88,6 +88,7 @@ pub struct GitCommitRefId {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GitIterationChanges {
+    #[serde(default)]
     pub change_entries: Vec<GitChangeEntry>,
     /// Continuation cursor when the change set spans multiple pages.
     pub next_skip: Option<i64>,
@@ -809,6 +810,25 @@ mod tests {
             changes[0].item.as_ref().unwrap().path.as_deref(),
             Some("/src/app.ts")
         );
+    }
+
+    #[tokio::test]
+    async fn get_pull_request_iteration_changes_handles_missing_change_entries() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/project-1/_apis/git/repositories/repo-1/pullRequests/42/iterations/3/changes",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+            .mount(&server)
+            .await;
+
+        let changes = test_client(&server)
+            .await
+            .get_pull_request_iteration_changes("project-1", "repo-1", 42, 3)
+            .await
+            .unwrap();
+        assert!(changes.is_empty());
     }
 
     #[tokio::test]
