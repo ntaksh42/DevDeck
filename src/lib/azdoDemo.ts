@@ -4,6 +4,8 @@ import type {
   AddWorkItemCommentInput,
   AppSettings,
   AssignWorkItemsInput,
+  CommitActivityDay,
+  CommitActivityInput,
   CommitPullRequest,
   CommitRepositoryOption,
   CommitSummary,
@@ -865,6 +867,10 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       const input = (args as { input?: SearchCommitsInput } | undefined)
         ?.input;
       return demoCommits(input);
+    }
+    case "commit_activity": {
+      const input = (args as { input?: CommitActivityInput } | undefined)?.input;
+      return demoCommitActivity(input);
     }
     case "list_commit_repositories":
       return demoCommitRepositories();
@@ -2120,4 +2126,35 @@ function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
     }
     return true;
   });
+}
+
+function demoCommitActivity(input?: CommitActivityInput): CommitActivityDay[] {
+  // Synthesize a deterministic, GitHub-style cadence over the requested window
+  // (defaulting to the last 90 days) so the browser demo shows a populated
+  // heatmap. Filters narrow the volume to mimic per-author / per-repo activity.
+  const end = input?.toDate ? new Date(`${input.toDate}T00:00:00Z`) : new Date();
+  const start = input?.fromDate
+    ? new Date(`${input.fromDate}T00:00:00Z`)
+    : new Date(end.getTime() - 89 * 86_400_000);
+  if (start > end) return [];
+
+  const narrowed = (input?.author?.trim() ? 1 : 0) + (input?.repositoryId ? 1 : 0);
+  const scale = narrowed >= 2 ? 0.3 : narrowed === 1 ? 0.55 : 1;
+
+  const days: CommitActivityDay[] = [];
+  const cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()));
+  const endDay = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()));
+  while (cursor <= endDay) {
+    const date = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, "0")}-${String(cursor.getUTCDate()).padStart(2, "0")}`;
+    const dow = cursor.getUTCDay();
+    // Deterministic pseudo-random based on the date string.
+    let seed = 0;
+    for (const ch of date) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+    const base = seed % 7; // 0..6
+    const weekendDamping = dow === 0 || dow === 6 ? 0.25 : 1;
+    const count = Math.round(base * weekendDamping * scale);
+    if (count > 0) days.push({ date, count });
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return days;
 }

@@ -418,6 +418,15 @@ const commitRepositoryOptionsSchema = z.array(commitRepositoryOptionSchema);
 
 export type CommitRepositoryOption = z.infer<typeof commitRepositoryOptionSchema>;
 
+const commitActivityDaySchema = z.object({
+  date: z.string(),
+  count: z.number(),
+});
+
+const commitActivityDaysSchema = z.array(commitActivityDaySchema);
+
+export type CommitActivityDay = z.infer<typeof commitActivityDaySchema>;
+
 const commitChangedFileSchema = z.object({
   path: z.string(),
   changeType: z.string(),
@@ -806,6 +815,15 @@ export type GetSavedQueryInput = {
 
 export type ListCommitRepositoriesInput = {
   organizationId?: string;
+};
+
+export type CommitActivityInput = {
+  organizationId?: string;
+  author?: string;
+  fromDate?: string;
+  toDate?: string;
+  projectId?: string;
+  repositoryId?: string;
 };
 
 export type TriggerSyncInput = {
@@ -1269,6 +1287,13 @@ export async function listCommitRepositories(
 ): Promise<CommitRepositoryOption[]> {
   const result = await invokeCommand("list_commit_repositories", { input });
   return commitRepositoryOptionsSchema.parse(result);
+}
+
+export async function commitActivity(
+  input: CommitActivityInput,
+): Promise<CommitActivityDay[]> {
+  const result = await invokeCommand("commit_activity", { input });
+  return commitActivityDaysSchema.parse(result);
 }
 
 export async function listSyncStates(): Promise<SyncState[]> {

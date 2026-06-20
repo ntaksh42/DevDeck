@@ -21,9 +21,10 @@ mod work_items;
 
 use code_search::{CodeSearchResults, CodeSearchService, SearchCodeInput};
 use commits::{
-    CommitChangeSet, CommitFileDiff, CommitPullRequest, CommitRepositoryOption, CommitService,
-    CommitSummary, GetCommitChangesInput, GetCommitFileDiffInput, GetCommitPullRequestsInput,
-    ListCommitRepositoriesInput, SearchCommitsInput,
+    CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
+    CommitRepositoryOption, CommitService, CommitSummary, GetCommitChangesInput,
+    GetCommitFileDiffInput, GetCommitPullRequestsInput, ListCommitRepositoriesInput,
+    SearchCommitsInput,
 };
 use db::{AppDatabase, AppSettings, Organization, SyncState};
 use error::{AppError, Result};
@@ -571,6 +572,16 @@ async fn list_commit_repositories(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn commit_activity(
+    input: CommitActivityInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<CommitActivityDay>> {
+    let service = state.commits.clone();
+    run_blocking(move || service.commit_activity(input)).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn search_code(
     input: SearchCodeInput,
     state: State<'_, AppState>,
@@ -831,6 +842,7 @@ pub fn run() {
             set_work_items_priority,
             search_commits,
             list_commit_repositories,
+            commit_activity,
             search_code,
             get_commit_changes,
             get_commit_file_diff,
