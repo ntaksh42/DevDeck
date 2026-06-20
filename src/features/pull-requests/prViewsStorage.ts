@@ -22,6 +22,7 @@ const PR_VIEW_SORT_KEYS = [
   "title",
   "createdBy",
   "creationDate",
+  "reviewAge",
   "targetRefName",
   "myIsRequired",
   "myVote",
