@@ -27,6 +27,7 @@ import {
   Settings,
 } from "lucide-react";
 import {
+  commandErrorCode,
   commandErrorMessage,
   getAppSettings,
   listOrganizations,
@@ -138,6 +139,7 @@ import { SyncStatusIndicator } from "@/features/sync/SyncStatusIndicator";
 import {
   NAVIGATE_WORK_ITEM_EVENT,
   NAVIGATE_PULL_REQUEST_EVENT,
+  OPEN_SETTINGS_EVENT,
   type NavigateWorkItemDetail,
   type NavigatePullRequestDetail,
 } from "@/lib/crossLinks";
@@ -427,11 +429,16 @@ function AppShell() {
       });
       setView("myReviews");
     }
+    function onOpenSettings() {
+      setView("settings");
+    }
     window.addEventListener(NAVIGATE_WORK_ITEM_EVENT, onNavigateWorkItem);
     window.addEventListener(NAVIGATE_PULL_REQUEST_EVENT, onNavigatePullRequest);
+    window.addEventListener(OPEN_SETTINGS_EVENT, onOpenSettings);
     return () => {
       window.removeEventListener(NAVIGATE_WORK_ITEM_EVENT, onNavigateWorkItem);
       window.removeEventListener(NAVIGATE_PULL_REQUEST_EVENT, onNavigatePullRequest);
+      window.removeEventListener(OPEN_SETTINGS_EVENT, onOpenSettings);
     };
   }, []);
 
@@ -1595,7 +1602,10 @@ function AppShell() {
           {organizationsQuery.isLoading ? (
             <LoadingState />
           ) : organizationsQuery.isError ? (
-            <ErrorState message={commandErrorMessage(organizationsQuery.error)} />
+            <ErrorState
+              message={commandErrorMessage(organizationsQuery.error)}
+              code={commandErrorCode(organizationsQuery.error)}
+            />
           ) : activeView === "pullRequestSearch" ? (
             <PullRequestSearch
               organizations={organizations}

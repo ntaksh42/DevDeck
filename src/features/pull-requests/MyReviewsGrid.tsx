@@ -32,6 +32,7 @@ import {
   getAppSettings,
   listMyReviewPullRequests,
   listPullRequestChanges,
+  commandErrorCode,
   commandErrorMessage,
   prLocator,
   snoozeItem,
@@ -1809,7 +1810,10 @@ export function MyReviewsGrid({
               {query.isLoading ? (
                 <LoadingState />
               ) : query.isError ? (
-                <ErrorState message={commandErrorMessage(query.error)} />
+                <ErrorState
+                  message={commandErrorMessage(query.error)}
+                  code={commandErrorCode(query.error)}
+                />
               ) : sortedPrs.length === 0 ? (
                 <div className="flex min-h-24 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
                   <span>

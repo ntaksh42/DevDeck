@@ -56,6 +56,12 @@ crates/azdo-client/                            — Tauri 非依存の独立 ADO 
 3. `src/lib/azdoCommands.ts` のラッパ + Zod スキーマ + ブラウザデモ分岐。
 4. 呼び出し元の React フィーチャ/コンポーネント。
 
+コマンド失敗時の `CommandError` は人間向け `message` に加え、UI が分岐できる
+機械可読な `code` を任意で持つ。401 は `AppError::Unauthorized`
+(`code: "unauthorized"`) として区別され、フロントの `commandErrorCode()` /
+`isUnauthorizedError()` で検知して `ErrorState` が再認証 (Settings へジャンプ)
+導線を表示する。
+
 ---
 
 ## 3. 機能 / ビュー一覧

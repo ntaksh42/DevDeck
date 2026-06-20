@@ -10,6 +10,11 @@ pub enum AppError {
     InvalidInput(String),
     #[error("secret storage error: {0}")]
     Secret(String),
+    /// Azure DevOps rejected the request as unauthenticated (HTTP 401). Kept
+    /// distinct from the generic `AzureDevOps` string so the frontend can offer
+    /// a re-authentication path instead of showing an opaque error.
+    #[error("Azure DevOps authentication failed. Re-authenticate this organization in Settings.")]
+    Unauthorized,
     #[error("Azure DevOps error: {0}")]
     AzureDevOps(String),
     #[error(transparent)]
@@ -18,10 +23,23 @@ pub enum AppError {
     Sql(#[from] rusqlite::Error),
 }
 
+impl AppError {
+    /// Machine-readable error kind serialized to the frontend alongside the
+    /// human message. Only set for errors the UI branches on programmatically.
+    fn code(&self) -> Option<&'static str> {
+        match self {
+            Self::Unauthorized => Some("unauthorized"),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandError {
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
 }
 
 impl serde::Serialize for AppError {
@@ -31,6 +49,7 @@ impl serde::Serialize for AppError {
     {
         CommandError {
             message: self.to_string(),
+            code: self.code().map(ToString::to_string),
         }
         .serialize(serializer)
     }
@@ -38,7 +57,10 @@ impl serde::Serialize for AppError {
 
 impl From<azdo_client::AdoError> for AppError {
     fn from(value: azdo_client::AdoError) -> Self {
-        Self::AzureDevOps(format_ado_error(value))
+        match value {
+            azdo_client::AdoError::Unauthorized => Self::Unauthorized,
+            other => Self::AzureDevOps(format_ado_error(other)),
+        }
     }
 }
 
@@ -109,5 +131,28 @@ mod tests {
             error.to_string(),
             "Azure DevOps error: API request failed with status 400: Legacy shaped error."
         );
+    }
+
+    #[test]
+    fn app_error_from_ado_unauthorized_maps_to_unauthorized_kind() {
+        let error = AppError::from(azdo_client::AdoError::Unauthorized);
+        assert!(matches!(error, AppError::Unauthorized));
+        assert_eq!(error.code(), Some("unauthorized"));
+    }
+
+    #[test]
+    fn unauthorized_serializes_machine_readable_code() {
+        let json = serde_json::to_value(AppError::Unauthorized).unwrap();
+        assert_eq!(json["code"], "unauthorized");
+        assert_eq!(
+            json["message"],
+            "Azure DevOps authentication failed. Re-authenticate this organization in Settings."
+        );
+    }
+
+    #[test]
+    fn non_unauthorized_errors_omit_the_code_field() {
+        let json = serde_json::to_value(AppError::Database("boom".into())).unwrap();
+        assert!(json.get("code").is_none());
     }
 }

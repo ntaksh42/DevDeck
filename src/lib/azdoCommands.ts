@@ -1370,3 +1370,24 @@ export function commandErrorMessage(error: unknown): string {
   }
   return "Unexpected error";
 }
+
+// Machine-readable error kind set by the backend's CommandError (e.g.
+// "unauthorized"). Returns null when the error carries no code, letting the UI
+// branch on specific failures without parsing the human-readable message.
+export function commandErrorCode(error: unknown): string | null {
+  if (
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    typeof (error as { code: unknown }).code === "string"
+  ) {
+    return (error as { code: string }).code;
+  }
+  return null;
+}
+
+// True when a command failed because Azure DevOps rejected the credentials
+// (HTTP 401), so the caller can surface a re-authentication path.
+export function isUnauthorizedError(error: unknown): boolean {
+  return commandErrorCode(error) === "unauthorized";
+}

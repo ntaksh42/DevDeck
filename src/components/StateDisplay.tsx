@@ -1,5 +1,6 @@
 import { type ReactNode } from "react";
 import { Loader2, AlertTriangle, WifiOff } from "lucide-react";
+import { requestOpenSettings } from "@/lib/crossLinks";
 
 export function PreviewEmptyState({ message }: { message: string }) {
   return (
@@ -34,8 +35,16 @@ function classifyError(message: string): ErrorKind {
   return "default";
 }
 
-export function ErrorState({ message }: { message: string }) {
-  const kind = classifyError(message);
+export function ErrorState({
+  message,
+  code,
+}: {
+  message: string;
+  // Machine-readable error kind from the backend (e.g. "unauthorized"). When
+  // present it takes precedence over the brittle message-string heuristic.
+  code?: string | null;
+}) {
+  const kind: ErrorKind = code === "unauthorized" ? "auth" : classifyError(message);
 
   const variants: Record<ErrorKind, { containerCls: string; textCls: string; icon: ReactNode; hint: string }> = {
     auth: {
@@ -72,6 +81,15 @@ export function ErrorState({ message }: { message: string }) {
       <div>
         <p className={`text-sm font-medium ${textCls}`}>{message}</p>
         {hint && <p className={`mt-1 text-xs ${textCls} opacity-80`}>{hint}</p>}
+        {kind === "auth" && (
+          <button
+            type="button"
+            onClick={() => requestOpenSettings()}
+            className={`mt-2 inline-flex items-center rounded border border-amber-300 bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 hover:bg-amber-200 focus:outline-none focus:ring-2 focus:ring-ring dark:border-amber-800 dark:bg-amber-900/60 dark:text-amber-200 dark:hover:bg-amber-900`}
+          >
+            Re-authenticate in Settings
+          </button>
+        )}
       </div>
     </div>
   );

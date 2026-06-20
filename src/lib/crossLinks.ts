@@ -4,6 +4,9 @@
 
 export const NAVIGATE_WORK_ITEM_EVENT = "azdodeck:navigate:work-item";
 export const NAVIGATE_PULL_REQUEST_EVENT = "azdodeck:navigate:pull-request";
+// Lets deeply-nested error surfaces ask the shell to open Settings, e.g. the
+// re-authentication path shown when a command fails with HTTP 401.
+export const OPEN_SETTINGS_EVENT = "azdodeck:navigate:settings";
 
 export type NavigateWorkItemDetail = {
   organizationId?: string;
@@ -38,4 +41,8 @@ export function navigateToWorkItem(detail: NavigateWorkItemDetail): void {
 
 export function navigateToPullRequest(detail: NavigatePullRequestDetail): void {
   window.dispatchEvent(new CustomEvent(NAVIGATE_PULL_REQUEST_EVENT, { detail }));
+}
+
+export function requestOpenSettings(): void {
+  window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_EVENT));
 }

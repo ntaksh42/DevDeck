@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
-import { listMyWorkItems, commandErrorMessage, type Organization, type WorkItemSummary } from '@/lib/azdoCommands';
+import { listMyWorkItems, commandErrorCode, commandErrorMessage, type Organization, type WorkItemSummary } from '@/lib/azdoCommands';
 import {
   matchesWorkItemQuery,
   parseSearchQuery,
@@ -92,7 +92,10 @@ export function MyWorkItemsPanel({ organizations }: { organizations: Organizatio
         <WorkItemTemplatesPanel />
       </div>
       {query.isError ? (
-        <ErrorState message={commandErrorMessage(query.error)} />
+        <ErrorState
+          message={commandErrorMessage(query.error)}
+          code={commandErrorCode(query.error)}
+        />
       ) : null}
 
       <WorkItemsGrid

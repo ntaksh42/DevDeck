@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { commandErrorMessage } from "./azdoCommands";
+import {
+  commandErrorCode,
+  commandErrorMessage,
+  isUnauthorizedError,
+} from "./azdoCommands";
 
 describe("commandErrorMessage", () => {
   it("returns string errors verbatim", () => {
@@ -31,5 +35,27 @@ describe("commandErrorMessage", () => {
 
   it("falls back for unknown error shapes", () => {
     expect(commandErrorMessage(42)).toBe("Unexpected error");
+  });
+});
+
+describe("commandErrorCode / isUnauthorizedError", () => {
+  it("reads the machine-readable code from CommandError-shaped objects", () => {
+    expect(commandErrorCode({ message: "auth failed", code: "unauthorized" })).toBe(
+      "unauthorized",
+    );
+    expect(isUnauthorizedError({ message: "auth failed", code: "unauthorized" })).toBe(
+      true,
+    );
+  });
+
+  it("returns null and false when no code is present", () => {
+    expect(commandErrorCode({ message: "boom" })).toBeNull();
+    expect(isUnauthorizedError({ message: "boom" })).toBe(false);
+    expect(commandErrorCode("boom")).toBeNull();
+    expect(isUnauthorizedError(42)).toBe(false);
+  });
+
+  it("does not treat other codes as unauthorized", () => {
+    expect(isUnauthorizedError({ message: "x", code: "rate_limited" })).toBe(false);
   });
 });
