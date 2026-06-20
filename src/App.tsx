@@ -168,7 +168,7 @@ type View =
   | "codeSearch"
   | "settings";
 
-type NavSectionId = "pullRequests" | "workItems";
+type NavSectionId = "pullRequests" | "workItems" | "commits";
 
 const DEFAULT_SIDEBAR_WIDTH = 232;
 const SIDEBAR_WIDTH_STORAGE_KEY = "azdodeck:layout:sidebarWidth";
@@ -284,6 +284,7 @@ function AppShell() {
   const [navExpanded, setNavExpanded] = useState<Record<NavSectionId, boolean>>({
     pullRequests: true,
     workItems: true,
+    commits: true,
   });
   const [pinnedViewsExpanded, setPinnedViewsExpanded] = useState(true);
   const [workItemNavViews, setWorkItemNavViews] = useState<WorkItemQueryView[]>(() =>
@@ -802,17 +803,9 @@ function AppShell() {
       disabled: organizations.length === 0,
       group: "Navigation",
       id: "nav.commits",
-      keywords: ["commit", "search"],
-      label: "Go to Commits",
+      keywords: ["commit", "search", "all"],
+      label: "Go to All Commits",
       run: () => setView("commits"),
-    },
-    {
-      disabled: organizations.length === 0,
-      group: "Navigation",
-      id: "nav.releaseNotes",
-      keywords: ["release", "notes", "changelog", "markdown"],
-      label: "Go to Release Notes",
-      run: () => setView("releaseNotes"),
     },
     {
       disabled: organizations.length === 0,
@@ -821,6 +814,14 @@ function AppShell() {
       keywords: ["commit", "mine", "authored", "my activity"],
       label: "Go to My Commits",
       run: () => setView("myCommits"),
+    },
+    {
+      disabled: organizations.length === 0,
+      group: "Navigation",
+      id: "nav.releaseNotes",
+      keywords: ["release", "notes", "changelog", "markdown"],
+      label: "Go to Release Notes",
+      run: () => setView("releaseNotes"),
     },
     {
       disabled: organizations.length === 0,
@@ -1512,26 +1513,33 @@ function AppShell() {
                 onClick={() => setView("workItems")}
               />
             </NavSection>
-            <NavButton
-              active={activeView === "commits"}
-              disabled={organizations.length === 0}
+            <NavSection
+              id="commits"
               icon={<GitCommitHorizontal className="h-4 w-4" aria-hidden="true" />}
               label="Commits"
-              onClick={() => setView("commits")}
-            />
+              disabled={organizations.length === 0}
+              expanded={navExpanded.commits}
+              onExpandedChange={(expanded) => setNavSectionExpanded("commits", expanded)}
+            >
+              <NavSubItem
+                active={activeView === "commits"}
+                disabled={organizations.length === 0}
+                label="All Commits"
+                onClick={() => setView("commits")}
+              />
+              <NavSubItem
+                active={activeView === "myCommits"}
+                disabled={organizations.length === 0}
+                label="My Commits"
+                onClick={() => setView("myCommits")}
+              />
+            </NavSection>
             <NavButton
               active={activeView === "releaseNotes"}
               disabled={organizations.length === 0}
               icon={<FileText className="h-4 w-4" aria-hidden="true" />}
               label="Release Notes"
               onClick={() => setView("releaseNotes")}
-            />
-            <NavButton
-              active={activeView === "myCommits"}
-              disabled={organizations.length === 0}
-              icon={<GitCommitHorizontal className="h-4 w-4" aria-hidden="true" />}
-              label="My Commits"
-              onClick={() => setView("myCommits")}
             />
             <NavButton
               active={activeView === "pipelines"}
