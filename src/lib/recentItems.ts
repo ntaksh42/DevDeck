@@ -21,6 +21,8 @@ export type RecentWorkItem = {
   projectName: string;
   title: string;
   viewedAt: string;
+  /** Monotonic insertion order; breaks ties when viewedAt collides. */
+  seq?: number;
   webUrl: string | null;
 };
 
@@ -32,6 +34,8 @@ export type RecentPullRequest = {
   repositoryName: string;
   title: string;
   viewedAt: string;
+  /** Monotonic insertion order; breaks ties when viewedAt collides. */
+  seq?: number;
   webUrl: string | null;
 };
 
@@ -46,6 +50,7 @@ export type RecentPaletteEntry = {
   organizationId: string;
   webUrl: string | null;
   viewedAt: string;
+  seq?: number;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -88,6 +93,17 @@ function loadRecentPullRequests(): RecentPullRequest[] {
   );
 }
 
+/**
+ * Returns the next monotonic sequence value across both recent stores. viewedAt
+ * has only millisecond resolution, so items opened in the same tick would tie;
+ * the sequence preserves their real insertion order.
+ */
+function nextSequence(): number {
+  const maxSeq = (entries: { seq?: number }[]): number =>
+    entries.reduce((max, entry) => Math.max(max, entry.seq ?? 0), 0);
+  return Math.max(maxSeq(loadRecentWorkItems()), maxSeq(loadRecentPullRequests())) + 1;
+}
+
 /** Records a work item as recently opened. Most-recent first, capped and deduped. */
 export function recordRecentWorkItem(item: WorkItemSummary): void {
   const key = `${item.organizationId}:${item.projectId}:${item.id}`;
@@ -100,6 +116,7 @@ export function recordRecentWorkItem(item: WorkItemSummary): void {
       projectName: item.projectName,
       title: item.title,
       viewedAt: new Date().toISOString(),
+      seq: nextSequence(),
       webUrl: item.webUrl,
     },
     ...loadRecentWorkItems().filter((entry) => entry.key !== key),
@@ -121,6 +138,7 @@ export function recordRecentPullRequest(
       repositoryName: pr.repositoryName,
       title: pr.title,
       viewedAt: new Date().toISOString(),
+      seq: nextSequence(),
       webUrl: pr.webUrl,
     },
     ...loadRecentPullRequests().filter((entry) => entry.key !== key),
@@ -145,6 +163,7 @@ export function loadRecentPaletteEntries(showOrg: boolean): RecentPaletteEntry[]
     organizationId: item.organizationId,
     webUrl: item.webUrl,
     viewedAt: item.viewedAt,
+    seq: item.seq,
   }));
   const pullRequests: RecentPaletteEntry[] = loadRecentPullRequests().map((pr) => ({
     kind: "pullRequests",
@@ -157,8 +176,12 @@ export function loadRecentPaletteEntries(showOrg: boolean): RecentPaletteEntry[]
     organizationId: pr.organizationId,
     webUrl: pr.webUrl,
     viewedAt: pr.viewedAt,
+    seq: pr.seq,
   }));
-  return [...workItems, ...pullRequests].sort((left, right) =>
-    right.viewedAt.localeCompare(left.viewedAt),
-  );
+  return [...workItems, ...pullRequests].sort((left, right) => {
+    const seqLeft = left.seq ?? -1;
+    const seqRight = right.seq ?? -1;
+    if (seqLeft !== seqRight) return seqRight - seqLeft;
+    return right.viewedAt.localeCompare(left.viewedAt);
+  });
 }

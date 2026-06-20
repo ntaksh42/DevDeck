@@ -3049,8 +3049,10 @@ mod tests {
         }
 
         let results = search_work_items_fts(&conn, "org1", "42").unwrap();
-        let changed: Vec<Option<String>> =
-            results.iter().map(|item| item.changed_date.clone()).collect();
+        let changed: Vec<Option<String>> = results
+            .iter()
+            .map(|item| item.changed_date.clone())
+            .collect();
         let mut sorted = changed.clone();
         sorted.sort_by(|a, b| b.cmp(a));
         assert_eq!(changed, sorted);
@@ -4069,8 +4071,18 @@ mod tests {
             "org1",
             "repo1",
             &[
-                make("a", Some("2026-05-01T08:00:00+00:00"), "Alice", "alice@x.com"),
-                make("b", Some("2026-05-01T20:00:00+00:00"), "Alice", "alice@x.com"),
+                make(
+                    "a",
+                    Some("2026-05-01T08:00:00+00:00"),
+                    "Alice",
+                    "alice@x.com",
+                ),
+                make(
+                    "b",
+                    Some("2026-05-01T20:00:00+00:00"),
+                    "Alice",
+                    "alice@x.com",
+                ),
                 make("c", Some("2026-05-02T08:00:00+00:00"), "Bob", "bob@x.com"),
                 make("d", None, "Alice", "alice@x.com"),
             ],
@@ -4083,10 +4095,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             all,
-            vec![
-                ("2026-05-01".to_string(), 2),
-                ("2026-05-02".to_string(), 1),
-            ]
+            vec![("2026-05-01".to_string(), 2), ("2026-05-02".to_string(), 1),]
         );
 
         // Author substring filter (case-insensitive) narrows to Alice's days.
