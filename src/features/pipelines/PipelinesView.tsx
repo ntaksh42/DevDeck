@@ -15,6 +15,7 @@ import {
   addSubscription,
   isSubscribed,
   loadPipelineSubscriptions,
+  MAX_SUBSCRIPTIONS,
   type PipelineSubscription,
   removeSubscription,
   savePipelineSubscriptions,
@@ -40,6 +41,7 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
   const [subscriptions, setSubscriptions] = useState<PipelineSubscription[]>(() =>
     loadPipelineSubscriptions(),
   );
+  const [watchToast, setWatchToast] = useState<string | null>(null);
   const [previewWidth, setPreviewWidth] = useState(() =>
     storedNumber(
       PIPELINE_PREVIEW_WIDTH_STORAGE_KEY,
@@ -123,15 +125,19 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
       );
       return;
     }
-    persistSubscriptions(
-      addSubscription(subscriptions, {
-        organizationId: selectedOrganizationId,
-        projectId,
-        projectName: selectedProject.name,
-        definitionId,
-        definitionName: selectedDefinition.name,
-      }),
-    );
+    const result = addSubscription(subscriptions, {
+      organizationId: selectedOrganizationId,
+      projectId,
+      projectName: selectedProject.name,
+      definitionId,
+      definitionName: selectedDefinition.name,
+    });
+    if (result.status === "limit") {
+      setWatchToast(`Watch limit reached (${MAX_SUBSCRIPTIONS}). Remove one to add another.`);
+      window.setTimeout(() => setWatchToast(null), 3000);
+      return;
+    }
+    persistSubscriptions(result.subscriptions);
   }
 
   const selectClasses =
@@ -263,6 +269,15 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
           buildId={detailTarget?.buildId ?? null}
         />
       </div>
+
+      {watchToast && (
+        <div
+          role="status"
+          className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1 text-xs text-background shadow-lg"
+        >
+          {watchToast}
+        </div>
+      )}
     </div>
   );
 }

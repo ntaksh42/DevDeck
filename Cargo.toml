@@ -18,3 +18,13 @@ url = "2"
 thiserror = "1"
 anyhow = "1"
 tracing = "0.1"
+
+# Release profile tuned for desktop startup: a smaller, fully optimized binary
+# loads and launches faster. Workspace-level so it applies to the whole build
+# (profile settings in member crates are ignored in a workspace).
+[profile.release]
+opt-level = "s"   # optimize for size; the app is I/O bound, so smaller wins
+lto = true        # cross-crate inlining + dead-code elimination
+codegen-units = 1 # maximize optimization at the cost of compile time
+panic = "abort"   # drop unwinding tables (the startup panic hook still runs)
+strip = true      # remove debug symbols from the shipped binary

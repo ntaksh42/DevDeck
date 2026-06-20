@@ -2,6 +2,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod";
 import { isTauriRuntime } from "@/lib/runtime";
 import { demoInvoke } from "@/lib/azdoDemo";
+import {
+  DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
+  DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
+} from "@/lib/reviewSettings";
 
 const organizationSchema = z.object({
   id: z.string(),
@@ -21,6 +25,31 @@ const organizationsSchema = z.array(organizationSchema);
 
 export type Organization = z.infer<typeof organizationSchema>;
 
+export {
+  REVIEW_STALE_THRESHOLD_DAY_OPTIONS,
+  DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
+  WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS,
+  DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
+} from "@/lib/reviewSettings";
+
+// Notification kinds a rule can match. Values mirror the camelCase enum keys the
+// backend uses (PrNotificationKind / WorkItemNotificationKind).
+export const NOTIFICATION_RULE_TYPES = [
+  { value: "reviewRequested", label: "PR review requested" },
+  { value: "voteReset", label: "PR vote reset" },
+  { value: "commentReply", label: "PR comment reply" },
+  { value: "assigned", label: "Work item assigned" },
+  { value: "stateChanged", label: "Work item state changed" },
+] as const;
+
+const notificationRuleSchema = z.object({
+  types: z.array(z.string()).default([]),
+  projects: z.array(z.string()).default([]),
+  repositories: z.array(z.string()).default([]),
+});
+
+export type NotificationRule = z.infer<typeof notificationRuleSchema>;
+
 const appSettingsSchema = z.object({
   reviewResultFolderPath: z.string().nullable(),
   showWindowHotkey: z.string().nullable().default(null),
@@ -32,6 +61,12 @@ const appSettingsSchema = z.object({
   notifyPrReviewRequests: z.boolean().default(true),
   notifyPrVoteResets: z.boolean().default(true),
   notifyPrCommentReplies: z.boolean().default(true),
+  reviewStaleThresholdDays: z.number().int().default(DEFAULT_REVIEW_STALE_THRESHOLD_DAYS),
+  workItemStaleThresholdDays: z
+    .number()
+    .int()
+    .default(DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS),
+  notificationRules: z.array(notificationRuleSchema).default([]),
 });
 
 export type AppSettings = z.infer<typeof appSettingsSchema>;
@@ -82,6 +117,11 @@ const reviewPullRequestSummarySchema = z.object({
   myIsRequired: z.boolean(),
   isDraft: z.boolean(),
   mergeStatus: z.string().nullable().default(null),
+  // Aggregate CI verdict: "succeeded" | "failed" | "in_progress" | "none".
+  // null means CI was never fetched for this PR (treated as unknown/none).
+  ciStatus: z.string().nullable().default(null),
+  ciContext: z.string().nullable().default(null),
+  ciCheckCount: z.number().default(0),
 });
 
 const reviewPullRequestSummariesSchema = z.array(reviewPullRequestSummarySchema);
@@ -261,6 +301,17 @@ const workItemRelationSchema = z.object({
   webUrl: z.string().nullable(),
 });
 
+const workItemPullRequestLinkSchema = z.object({
+  pullRequestId: z.number(),
+  repositoryId: z.string().nullable(),
+  title: z.string().nullable(),
+  status: z.string().nullable(),
+  myVoteLabel: z.string().nullable(),
+  webUrl: z.string().nullable(),
+});
+
+export type WorkItemPullRequestLink = z.infer<typeof workItemPullRequestLinkSchema>;
+
 const workItemPreviewSchema = z.object({
   organizationId: z.string(),
   projectId: z.string(),
@@ -288,6 +339,7 @@ const workItemPreviewSchema = z.object({
   comments: z.array(workItemCommentSchema).default([]),
   commentsUnavailable: z.boolean().default(false),
   relations: z.array(workItemRelationSchema).default([]),
+  pullRequests: z.array(workItemPullRequestLinkSchema).default([]),
 });
 
 export type WorkItemPreview = z.infer<typeof workItemPreviewSchema>;
@@ -381,6 +433,15 @@ const commitRepositoryOptionsSchema = z.array(commitRepositoryOptionSchema);
 
 export type CommitRepositoryOption = z.infer<typeof commitRepositoryOptionSchema>;
 
+const commitActivityDaySchema = z.object({
+  date: z.string(),
+  count: z.number(),
+});
+
+const commitActivityDaysSchema = z.array(commitActivityDaySchema);
+
+export type CommitActivityDay = z.infer<typeof commitActivityDaySchema>;
+
 const commitChangedFileSchema = z.object({
   path: z.string(),
   changeType: z.string(),
@@ -418,6 +479,27 @@ export async function getCommitFileDiff(input: {
 }): Promise<CommitFileDiff> {
   const result = await invokeCommand("get_commit_file_diff", { input });
   return prFileDiffSchema.parse(result);
+}
+
+const commitPullRequestSchema = z.object({
+  pullRequestId: z.number(),
+  repositoryId: z.string(),
+  title: z.string(),
+  status: z.string(),
+  myVote: z.number(),
+  myVoteLabel: z.string(),
+  webUrl: z.string().nullable(),
+});
+const commitPullRequestsSchema = z.array(commitPullRequestSchema);
+export type CommitPullRequest = z.infer<typeof commitPullRequestSchema>;
+
+export async function getCommitPullRequests(input: {
+  organizationId?: string;
+  repositoryId: string;
+  commitId: string;
+}): Promise<CommitPullRequest[]> {
+  const result = await invokeCommand("get_commit_pull_requests", { input });
+  return commitPullRequestsSchema.parse(result);
 }
 
 const codeSearchHitSchema = z.object({
@@ -494,6 +576,9 @@ export type UpdateAppSettingsInput = {
   notifyPrReviewRequests?: boolean;
   notifyPrVoteResets?: boolean;
   notifyPrCommentReplies?: boolean;
+  reviewStaleThresholdDays?: number;
+  workItemStaleThresholdDays?: number;
+  notificationRules?: NotificationRule[];
 };
 
 export type GetReviewResultPreviewInput = {
@@ -745,6 +830,15 @@ export type GetSavedQueryInput = {
 
 export type ListCommitRepositoriesInput = {
   organizationId?: string;
+};
+
+export type CommitActivityInput = {
+  organizationId?: string;
+  author?: string;
+  fromDate?: string;
+  toDate?: string;
+  projectId?: string;
+  repositoryId?: string;
 };
 
 export type TriggerSyncInput = {
@@ -1210,6 +1304,13 @@ export async function listCommitRepositories(
   return commitRepositoryOptionsSchema.parse(result);
 }
 
+export async function commitActivity(
+  input: CommitActivityInput,
+): Promise<CommitActivityDay[]> {
+  const result = await invokeCommand("commit_activity", { input });
+  return commitActivityDaysSchema.parse(result);
+}
+
 export async function listSyncStates(): Promise<SyncState[]> {
   const result = await invokeCommand("list_sync_states");
   return syncStatesSchema.parse(result);
@@ -1255,6 +1356,9 @@ async function invokeCommand(command: string, args?: unknown): Promise<unknown> 
 export function commandErrorMessage(error: unknown): string {
   if (typeof error === "string") {
     return error;
+  }
+  if (error instanceof z.ZodError) {
+    return "Received an unexpected response format from the server.";
   }
   if (
     error &&

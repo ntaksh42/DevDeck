@@ -10,12 +10,20 @@ Rust services and the Azure DevOps REST API.
 
 Key areas:
 
-- `src/` contains the React app, feature components, shared UI, and the typed
-  command layer.
+- `src/` contains the React app. Feature areas live under `src/features/`
+  (`pull-requests`, `work-items`, `commits`, `code`, `pipelines`, `settings`),
+  shared UI under `src/components/`, and cross-cutting helpers under `src/lib/`.
 - `src/lib/azdoCommands.ts` is the frontend boundary for all backend commands.
-  It validates command results with Zod and provides browser-only demo data.
+  It validates command results with Zod and provides browser-only demo data
+  (backed by `src/lib/azdoDemo.ts`).
 - `src-tauri/src/` contains the Tauri application, IPC commands, domain
-  services, auth, SQLite access, and error conversion.
+  services, auth, SQLite access, and error conversion. Domain services are one
+  module per area: `prs.rs`, `commits.rs`, `orgs.rs`, `projects.rs`,
+  `settings.rs`, `search.rs` (cross-kind command-palette search), `sync.rs`
+  (background cache refresh), `pipelines.rs`, `code_search.rs`, `pr_review.rs`
+  (PR threads/diffs), and `snooze.rs`. Work items are large enough to be their
+  own module directory: `src-tauri/src/work_items/` (`sync`, `mutations`,
+  `candidates`, `conversions`, `types`).
 - `crates/azdo-client/` is a standalone Azure DevOps REST client crate. Keep it
   free of Tauri-specific dependencies.
 - `tests/` contains Playwright coverage for the browser preview.
@@ -36,6 +44,7 @@ $env:PATH += ";$env:USERPROFILE\.cargo\bin"
 | Type-check TypeScript | `pnpm tsc --noEmit` |
 | Run TypeScript tests once | `pnpm test -- --run` |
 | Run one TypeScript test file | `pnpm test -- --run src/path/to/file.test.ts` |
+| Run Playwright browser tests | `pnpm test:e2e` |
 | Build browser app | `pnpm build` |
 | Check Rust formatting | `cargo fmt --all --check` |
 | Lint Rust strictly | `cargo clippy --workspace --all-targets -- -D warnings` |
@@ -68,7 +77,9 @@ Treat IPC as a four-part contract:
 1. Add or update the `#[tauri::command]` function in `src-tauri/src/lib.rs`, and
    register it in `generate_handler![]`.
 2. Put domain logic in the matching service module under `src-tauri/src/`
-   (`prs.rs`, `work_items.rs`, `commits.rs`, `orgs.rs`, or `settings.rs`).
+   (`prs.rs`, `work_items/`, `commits.rs`, `orgs.rs`, `projects.rs`,
+   `pipelines.rs`, `code_search.rs`, `pr_review.rs`, `snooze.rs`, `search.rs`,
+   or `settings.rs`).
 3. Update `src/lib/azdoCommands.ts` with the command wrapper, Zod schema, and
    browser demo branch.
 4. Call the wrapper from the relevant React feature/component.
@@ -113,12 +124,27 @@ XService {
 
 `settings.rs` only needs the database. `AppDatabase` is a cloneable path wrapper that opens SQLite connections per call
 via `rusqlite`. Schema migrations live in `src-tauri/src/db.rs:migrate()` and
-use `PRAGMA user_version`; the current schema version is `11`.
+use `PRAGMA user_version`; the current schema version is the `SCHEMA_VERSION`
+constant at the top of `db.rs` (currently `15`). `migrate()` applies each
+`if current < N` step in order and must stay repeatable; add a new numbered
+step rather than editing an existing one.
 
 `AppError` in `src-tauri/src/error.rs` is the IPC-facing error type. It
 serializes to JSON containing a `message`, and the frontend should read that via
 `commandErrorMessage()` in `azdoCommands.ts`. `AppError` converts from
 `AdoError`, `keyring::Error`, `rusqlite::Error`, and `std::io::Error`.
+
+## Background Sync
+
+`sync.rs` runs a Tokio loop (`SyncRunner`) that periodically refreshes active
+PRs, review PRs, work items, and commits into the SQLite cache, then emits
+Tauri events the frontend subscribes to: `sync:updated` after each cache write,
+plus `notifications:pull-requests` / `notifications:work-items` for desktop
+notifications. Read-only feature screens (My Reviews, My Work Items) render from
+the cache and react to `sync:updated`; they do not call the REST API directly.
+Use the `subscribeTauriEvent` helper in `src/lib/tauriEvents.ts` to subscribe and
+invalidate the relevant TanStack Query keys. Search/edit screens still issue
+on-demand commands that hit the API.
 
 The `azdo-client` crate should remain a reusable REST client. Route HTTP calls
 through `AdoClient::get_json` and `post_json` so retry behavior, 401 handling,
@@ -203,6 +229,17 @@ statuses", unless the service and cache layer are updated at the same time.
   `wiremock`.
 - When changing user-visible flows, add or update focused frontend tests or
   Playwright coverage when the behavior is risky enough to warrant it.
+
+## Keeping The Spec Current
+
+`docs/spec-overview.md` is the current-state specification of the app
+(architecture, IPC contract, views, auth, sync, data model, settings,
+keyboard, constraints). When a change diverges from what that document
+describes, update `docs/spec-overview.md` as part of the same change so the
+spec and the code never drift apart. Treat the spec update as part of the
+work, not a follow-up: adding or changing a view, command, setting, sync
+scope, schema version, or keyboard shortcut should land together with its
+spec edit.
 
 ## Verification Checklist
 
