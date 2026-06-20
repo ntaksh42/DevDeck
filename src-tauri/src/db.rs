@@ -69,9 +69,51 @@ pub struct AppSettings {
     pub notify_pr_review_requests: bool,
     pub notify_pr_vote_resets: bool,
     pub notify_pr_comment_replies: bool,
+    /// When enabled, desktop notifications are suppressed during the local-time
+    /// window [quiet_hours_start, quiet_hours_end). The in-app cache still
+    /// refreshes, so badges and views stay current.
+    pub quiet_hours_enabled: bool,
+    /// Local wall-clock window bounds as "HH:MM". A window whose start is later
+    /// than its end (e.g. 22:00–08:00) wraps across midnight.
+    pub quiet_hours_start: String,
+    pub quiet_hours_end: String,
     pub review_stale_threshold_days: i64,
     pub work_item_stale_threshold_days: i64,
     pub notification_rules: Vec<NotificationRule>,
+}
+
+pub const DEFAULT_QUIET_HOURS_START: &str = "22:00";
+pub const DEFAULT_QUIET_HOURS_END: &str = "08:00";
+
+/// Whether the given local time falls inside the configured quiet-hours window.
+/// Returns false when disabled, when either bound is unparseable, or when the
+/// bounds are equal (an empty window) so a misconfiguration never mutes forever.
+pub fn is_within_quiet_hours(settings: &AppSettings, now: chrono::NaiveTime) -> bool {
+    if !settings.quiet_hours_enabled {
+        return false;
+    }
+    let (Some(start), Some(end)) = (
+        parse_hh_mm(&settings.quiet_hours_start),
+        parse_hh_mm(&settings.quiet_hours_end),
+    ) else {
+        return false;
+    };
+    if start == end {
+        return false;
+    }
+    if start < end {
+        now >= start && now < end
+    } else {
+        // Overnight window wraps past midnight.
+        now >= start || now < end
+    }
+}
+
+fn parse_hh_mm(value: &str) -> Option<chrono::NaiveTime> {
+    let (h, m) = value.trim().split_once(':')?;
+    let hour: u32 = h.parse().ok()?;
+    let minute: u32 = m.parse().ok()?;
+    chrono::NaiveTime::from_hms_opt(hour, minute, 0)
 }
 
 pub const DEFAULT_REVIEW_STALE_THRESHOLD_DAYS: i64 = 3;
@@ -92,6 +134,9 @@ impl Default for AppSettings {
             notify_pr_review_requests: true,
             notify_pr_vote_resets: true,
             notify_pr_comment_replies: true,
+            quiet_hours_enabled: false,
+            quiet_hours_start: DEFAULT_QUIET_HOURS_START.to_string(),
+            quiet_hours_end: DEFAULT_QUIET_HOURS_END.to_string(),
             review_stale_threshold_days: DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
             work_item_stale_threshold_days: DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
             notification_rules: Vec::new(),
@@ -1539,6 +1584,13 @@ fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
         notify_pr_review_requests: get_bool_setting(conn, "notify_pr_review_requests", true)?,
         notify_pr_vote_resets: get_bool_setting(conn, "notify_pr_vote_resets", true)?,
         notify_pr_comment_replies: get_bool_setting(conn, "notify_pr_comment_replies", true)?,
+        quiet_hours_enabled: get_bool_setting(conn, "quiet_hours_enabled", false)?,
+        quiet_hours_start: get_setting(conn, "quiet_hours_start")?
+            .filter(|raw| parse_hh_mm(raw).is_some())
+            .unwrap_or_else(|| DEFAULT_QUIET_HOURS_START.to_string()),
+        quiet_hours_end: get_setting(conn, "quiet_hours_end")?
+            .filter(|raw| parse_hh_mm(raw).is_some())
+            .unwrap_or_else(|| DEFAULT_QUIET_HOURS_END.to_string()),
         review_stale_threshold_days: get_review_stale_threshold_days(conn)?,
         work_item_stale_threshold_days: get_work_item_stale_threshold_days(conn)?,
         notification_rules: get_notification_rules(conn)?,
@@ -1621,6 +1673,9 @@ fn update_app_settings(conn: &Connection, settings: AppSettings) -> Result<AppSe
         "notify_pr_comment_replies",
         settings.notify_pr_comment_replies,
     )?;
+    set_bool_setting(conn, "quiet_hours_enabled", settings.quiet_hours_enabled)?;
+    set_setting(conn, "quiet_hours_start", Some(&settings.quiet_hours_start))?;
+    set_setting(conn, "quiet_hours_end", Some(&settings.quiet_hours_end))?;
     let stale_days =
         if REVIEW_STALE_THRESHOLD_DAY_OPTIONS.contains(&settings.review_stale_threshold_days) {
             settings.review_stale_threshold_days
@@ -2882,6 +2937,9 @@ mod tests {
                 notify_pr_review_requests: false,
                 notify_pr_vote_resets: true,
                 notify_pr_comment_replies: false,
+                quiet_hours_enabled: true,
+                quiet_hours_start: "23:30".to_string(),
+                quiet_hours_end: "06:15".to_string(),
                 review_stale_threshold_days: 7,
                 work_item_stale_threshold_days: 14,
                 notification_rules: vec![NotificationRule {
@@ -2910,6 +2968,9 @@ mod tests {
         assert!(!saved.notify_pr_review_requests);
         assert!(saved.notify_pr_vote_resets);
         assert!(!saved.notify_pr_comment_replies);
+        assert!(saved.quiet_hours_enabled);
+        assert_eq!(saved.quiet_hours_start, "23:30");
+        assert_eq!(saved.quiet_hours_end, "06:15");
 
         let cleared = update_app_settings(
             &conn,
@@ -2921,6 +2982,51 @@ mod tests {
         )
         .unwrap();
         assert_eq!(cleared, AppSettings::default());
+    }
+
+    #[test]
+    fn quiet_hours_window_membership() {
+        fn at(h: u32, m: u32) -> chrono::NaiveTime {
+            chrono::NaiveTime::from_hms_opt(h, m, 0).unwrap()
+        }
+        fn settings(enabled: bool, start: &str, end: &str) -> AppSettings {
+            AppSettings {
+                quiet_hours_enabled: enabled,
+                quiet_hours_start: start.to_string(),
+                quiet_hours_end: end.to_string(),
+                ..AppSettings::default()
+            }
+        }
+
+        // Disabled never suppresses.
+        assert!(!is_within_quiet_hours(
+            &settings(false, "22:00", "08:00"),
+            at(23, 0)
+        ));
+
+        // Overnight window (22:00–08:00) wraps past midnight.
+        let overnight = settings(true, "22:00", "08:00");
+        assert!(is_within_quiet_hours(&overnight, at(23, 30)));
+        assert!(is_within_quiet_hours(&overnight, at(2, 0)));
+        assert!(is_within_quiet_hours(&overnight, at(22, 0))); // inclusive start
+        assert!(!is_within_quiet_hours(&overnight, at(8, 0))); // exclusive end
+        assert!(!is_within_quiet_hours(&overnight, at(12, 0)));
+
+        // Same-day window (09:00–17:00).
+        let daytime = settings(true, "09:00", "17:00");
+        assert!(is_within_quiet_hours(&daytime, at(12, 0)));
+        assert!(!is_within_quiet_hours(&daytime, at(8, 59)));
+        assert!(!is_within_quiet_hours(&daytime, at(17, 0)));
+
+        // Equal bounds are an empty window, and bad values never suppress.
+        assert!(!is_within_quiet_hours(
+            &settings(true, "10:00", "10:00"),
+            at(10, 0)
+        ));
+        assert!(!is_within_quiet_hours(
+            &settings(true, "nope", "08:00"),
+            at(2, 0)
+        ));
     }
 
     #[test]
@@ -3031,8 +3137,10 @@ mod tests {
         }
 
         let results = search_work_items_fts(&conn, "org1", "42").unwrap();
-        let changed: Vec<Option<String>> =
-            results.iter().map(|item| item.changed_date.clone()).collect();
+        let changed: Vec<Option<String>> = results
+            .iter()
+            .map(|item| item.changed_date.clone())
+            .collect();
         let mut sorted = changed.clone();
         sorted.sort_by(|a, b| b.cmp(a));
         assert_eq!(changed, sorted);
@@ -4011,8 +4119,18 @@ mod tests {
             "org1",
             "repo1",
             &[
-                make("a", Some("2026-05-01T08:00:00+00:00"), "Alice", "alice@x.com"),
-                make("b", Some("2026-05-01T20:00:00+00:00"), "Alice", "alice@x.com"),
+                make(
+                    "a",
+                    Some("2026-05-01T08:00:00+00:00"),
+                    "Alice",
+                    "alice@x.com",
+                ),
+                make(
+                    "b",
+                    Some("2026-05-01T20:00:00+00:00"),
+                    "Alice",
+                    "alice@x.com",
+                ),
                 make("c", Some("2026-05-02T08:00:00+00:00"), "Bob", "bob@x.com"),
                 make("d", None, "Alice", "alice@x.com"),
             ],
@@ -4025,10 +4143,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             all,
-            vec![
-                ("2026-05-01".to_string(), 2),
-                ("2026-05-02".to_string(), 1),
-            ]
+            vec![("2026-05-01".to_string(), 2), ("2026-05-02".to_string(), 1),]
         );
 
         // Author substring filter (case-insensitive) narrows to Alice's days.

@@ -98,6 +98,9 @@ let demoSettings: AppSettings = {
   notifyPrReviewRequests: true,
   notifyPrVoteResets: true,
   notifyPrCommentReplies: true,
+  quietHoursEnabled: false,
+  quietHoursStart: "22:00",
+  quietHoursEnd: "08:00",
   reviewStaleThresholdDays: DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
   workItemStaleThresholdDays: DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
   notificationRules: [],
@@ -526,6 +529,18 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
           input && "notifyPrCommentReplies" in input
             ? Boolean(input.notifyPrCommentReplies)
             : demoSettings.notifyPrCommentReplies,
+        quietHoursEnabled:
+          input && "quietHoursEnabled" in input
+            ? Boolean(input.quietHoursEnabled)
+            : demoSettings.quietHoursEnabled,
+        quietHoursStart:
+          input && "quietHoursStart" in input
+            ? input.quietHoursStart?.trim() || demoSettings.quietHoursStart
+            : demoSettings.quietHoursStart,
+        quietHoursEnd:
+          input && "quietHoursEnd" in input
+            ? input.quietHoursEnd?.trim() || demoSettings.quietHoursEnd
+            : demoSettings.quietHoursEnd,
         reviewStaleThresholdDays:
           input && "reviewStaleThresholdDays" in input
             ? Number(input.reviewStaleThresholdDays) ||

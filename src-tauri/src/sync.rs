@@ -361,9 +361,15 @@ impl SyncRunner {
                 AppSettings::default()
             }
         };
+        // Quiet hours suppress desktop notifications only; the cache still
+        // refreshes below so in-app badges and views stay current.
+        let in_quiet_hours =
+            crate::db::is_within_quiet_hours(&settings, chrono::Local::now().time());
         let should_collect_work_item_notifications = settings.desktop_notifications_enabled
+            && !in_quiet_hours
             && (settings.notify_work_item_assignments || settings.notify_work_item_state_changes);
         let should_collect_pr_notifications = settings.desktop_notifications_enabled
+            && !in_quiet_hours
             && (settings.notify_pr_review_requests
                 || settings.notify_pr_vote_resets
                 || settings.notify_pr_comment_replies);

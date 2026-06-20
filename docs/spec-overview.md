@@ -116,6 +116,7 @@ crates/azdo-client/                            — Tauri 非依存の独立 ADO 
   通知イベントは PR / 作業項目向けに別途 emit。
 - デスクトップ通知: 設定が有効な場合のみ。初回スナップショットでは過去分を通知しない。
   スヌーズ対象は通知から除外。コメント返信は `pr_comment_seen` で追跡。
+  Quiet hours 中はデスクトップ通知の収集自体をスキップ (キャッシュ更新と `sync:updated` は継続)。
 
 ### REST クライアントの信頼性 (`azdo-client`)
 
@@ -145,6 +146,7 @@ crates/azdo-client/                            — Tauri 非依存の独立 ADO 
 | `notify_pr_review_requests` | PR レビュー依頼を通知。 |
 | `notify_pr_vote_resets` | 自分の PR 投票リセットを通知。 |
 | `notify_pr_comment_replies` | 自分の PR コメントへの返信を通知。 |
+| `quiet_hours_enabled` / `quiet_hours_start` / `quiet_hours_end` | Quiet hours。有効時、ローカル時刻 `[start, end)` の間はデスクトップ通知を抑止 (アプリ内バッジ・キャッシュは更新を継続)。`start > end` (例 22:00–08:00) は日跨ぎ。既定 22:00–08:00、無効。 |
 | `review_stale_threshold_days` | レビュー PR を stale 扱いする日数 (候補 2/3/5/7、既定 3)。 |
 
 ---
