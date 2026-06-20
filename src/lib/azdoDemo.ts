@@ -915,7 +915,9 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       const query = input?.query?.trim() ?? "";
       if (!query) return { count: 0, results: [], notice: null };
       return {
-        count: 2,
+        // The Search API reports total matches, which can exceed the returned
+        // results (the backend caps results at 50). Mirror that here.
+        count: 137,
         notice: null,
         results: [
           {
