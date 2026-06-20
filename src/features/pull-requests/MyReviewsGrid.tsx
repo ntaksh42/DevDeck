@@ -58,11 +58,28 @@ import {
 } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
 import { recordRecentPullRequest } from '@/lib/recentItems';
+import { isTauriRuntime } from '@/lib/runtime';
+import {
+  acknowledgeReturn,
+  reconcileReturns,
+  seedDemoReturn,
+} from './reviewReturnTracking';
 import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { LoadingState, ErrorState } from '@/components/StateDisplay';
 import { ActiveFilters } from '@/components/ActiveFilters';
+import { RowShortcutHints, type RowShortcut } from '@/components/RowShortcutHints';
+
+// Key shortcuts available for the selected review row (see handleKeyDown).
+const REVIEW_ROW_SHORTCUTS: RowShortcut[] = [
+  { keys: "A", label: "Approve" },
+  { keys: "X", label: "Reject" },
+  { keys: "E", label: "Done" },
+  { keys: "Z", label: "Snooze" },
+  { keys: "C", label: "Copy" },
+  { keys: "↵", label: "Preview" },
+];
 import { PrReviewPanel } from './PrReviewPanel';
 import { VOTE_BADGE_CLASSES, voteTone } from './voteVisual';
 import {
@@ -250,7 +267,12 @@ function CiBadge({ pr }: { pr: ReviewPullRequestSummary }) {
 
 // Renders a single grid cell for the given column key. Cells stay direct grid
 // items (wrapped only in a keyed Fragment) so the column template lines up.
-function renderPrCell(key: SortKey, pr: ReviewPullRequestSummary, isStale: boolean): ReactNode {
+function renderPrCell(
+  key: SortKey,
+  pr: ReviewPullRequestSummary,
+  isStale: boolean,
+  returned: boolean,
+): ReactNode {
   switch (key) {
     case "pullRequestId":
       return (
@@ -275,6 +297,14 @@ function renderPrCell(key: SortKey, pr: ReviewPullRequestSummary, isStale: boole
     case "title":
       return (
         <div className="flex min-w-0 items-center gap-1.5">
+          {returned ? (
+            <span
+              className="inline-flex shrink-0 items-center rounded border border-purple-300 bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-800 dark:border-purple-800 dark:bg-purple-950 dark:text-purple-300"
+              title="The author pushed new changes after your review — returned to you"
+            >
+              Returned
+            </span>
+          ) : null}
           {pr.isDraft && (
             <span className="inline-flex shrink-0 items-center rounded border border-input bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
               Draft
@@ -329,12 +359,13 @@ const ReviewPrRow = forwardRef<
     pr: ReviewPullRequestSummary;
     selected: boolean;
     inMultiSelection: boolean;
+    returned: boolean;
     columnTemplate: string;
     visibleColumns: SortKey[];
     staleThresholdDays: number;
     onSelect: (event: { shiftKey: boolean }) => void;
   }
->(({ pr, selected, inMultiSelection, columnTemplate, visibleColumns, staleThresholdDays, onSelect }, ref) => {
+>(({ pr, selected, inMultiSelection, returned, columnTemplate, visibleColumns, staleThresholdDays, onSelect }, ref) => {
   const createdTime = new Date(pr.creationDate).getTime();
   const isStale = Number.isFinite(createdTime)
     ? Math.floor((Date.now() - createdTime) / 86_400_000) >= staleThresholdDays
@@ -366,7 +397,7 @@ const ReviewPrRow = forwardRef<
       style={{ gridTemplateColumns: columnTemplate }}
     >
       {visibleColumns.map((key) => (
-        <Fragment key={key}>{renderPrCell(key, pr, isStale)}</Fragment>
+        <Fragment key={key}>{renderPrCell(key, pr, isStale, returned)}</Fragment>
       ))}
     </div>
   );
@@ -938,6 +969,30 @@ export function MyReviewsGrid({
 
   const allPrs = query.data ?? [];
 
+  // "Returned to me": PRs whose vote was reset (author pushed) after I reviewed.
+  // Tracked locally by diffing successive vote snapshots.
+  const [returnedKeys, setReturnedKeys] = useState<Set<string>>(new Set());
+  const demoSeededRef = useRef(false);
+  const voteSignature = useMemo(
+    () => allPrs.map((pr) => `${reviewTriageKey(pr)}:${pr.myVote}`).join("|"),
+    [allPrs],
+  );
+  useEffect(() => {
+    // Seed one demo PR as returned so the feature is reproducible in the
+    // browser preview without a live vote-reset.
+    if (!demoSeededRef.current && !isTauriRuntime()) {
+      demoSeededRef.current = true;
+      const candidate = allPrs.find((pr) => pr.myVote === 0 && !pr.isDraft);
+      if (candidate) seedDemoReturn(reviewTriageKey(candidate));
+    }
+    setReturnedKeys(
+      reconcileReturns(
+        allPrs.map((pr) => ({ key: reviewTriageKey(pr), myVote: pr.myVote })),
+      ),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voteSignature]);
+
   // Local "done" triage: archived PRs leave the inbox until they change.
   const [showDone, setShowDone] = useState(false);
   const [triageVersion, setTriageVersion] = useState(0);
@@ -1179,7 +1234,19 @@ export function MyReviewsGrid({
   }, [selectedViewRequestId, savedViews]);
 
   useEffect(() => {
-    if (selectedPr) recordRecentPullRequest(selectedPr);
+    if (!selectedPr) return;
+    recordRecentPullRequest(selectedPr);
+    // Opening a returned PR acknowledges it, clearing the highlight.
+    const key = reviewTriageKey(selectedPr);
+    if (returnedKeys.has(key)) {
+      acknowledgeReturn(key);
+      setReturnedKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPr]);
 
   useEffect(() => {
@@ -1978,6 +2045,7 @@ export function MyReviewsGrid({
                         pr={row.pr}
                         selected={row.prIndex === selectedIndex}
                         inMultiSelection={selectedKeys.has(reviewTriageKey(row.pr))}
+                        returned={returnedKeys.has(reviewTriageKey(row.pr))}
                         visibleColumns={visibleColumns}
                         staleThresholdDays={staleThresholdDays}
                         onSelect={({ shiftKey }) => {
@@ -2010,7 +2078,19 @@ export function MyReviewsGrid({
               <span>
                 {visiblePrs.length} total,{" "}
                 <span className="font-medium text-foreground">{noVoteCount}</span> not voted
+                {returnedKeys.size > 0 ? (
+                  <>
+                    {", "}
+                    <span className="font-medium text-purple-700 dark:text-purple-300">
+                      {returnedKeys.size}
+                    </span>{" "}
+                    returned
+                  </>
+                ) : null}
               </span>
+              {selectedPr && !isMultiSelect ? (
+                <RowShortcutHints hints={REVIEW_ROW_SHORTCUTS} />
+              ) : null}
               {isMultiSelect ? (
                 changesLoading ? (
                   <span>Checking {selectedPrs.length} PRs for overlapping files…</span>

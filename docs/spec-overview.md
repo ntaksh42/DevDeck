@@ -62,15 +62,16 @@ crates/azdo-client/                            — Tauri 非依存の独立 ADO 
 
 | ビュー | 用途 |
 |---|---|
-| **My Reviews** | 自分がレビュアーの PR。投票状態・マージコンフリクト/CI バッジ・stale 強調・ローカルの done/archive トリアージ・ローカルのレビュー結果プレビュー。上部に「次の行動」サマリーチップ (Waiting on me / Waiting on author / Waiting on CI / Ready to merge) を表示し、クリックで該当条件に絞り込む。 |
+| **My Reviews** | 自分がレビュアーの PR。投票状態・マージコンフリクト/CI バッジ・stale 強調・ローカルの done/archive トリアージ・ローカルのレビュー結果プレビュー。自分のレビュー後に author の push で投票がリセットされた PR を「Returned」バッジで強調（投票スナップショットの差分でローカル検出、開く/再投票で解除）。上部に「次の行動」サマリーチップ (Waiting on me / Waiting on author / Waiting on CI / Ready to merge) を表示し、クリックで該当条件に絞り込む。 |
 | **Pull Request Search** | プロジェクト/リポジトリ/ステータスで PR を検索。ソート可能グリッド、列リサイズ、`C` で URL コピー。 |
-| **My Work Items** | 自分に割当中の作業項目 (最大 200 件キャッシュ)。状態・種別・割当先・更新日時。 |
+| **My Work Items** | 自分に割当中の作業項目 (最大 200 件キャッシュ)。状態・種別・割当先・更新日時。最後に開いてから変更された項目に未読マーカー (ChangedDate の差分でローカル検出、開くと消える)。 |
 | **Work Item Views** | 保存済み WIQL クエリ。件数表示、ナビへのピン留め、並べ替え、ビュー別ソート/列。 |
 | **Work Item Search** | キーワード + プロジェクト/状態/種別での作業項目検索。全文検索 (FTS)。 |
 | **Commits** | キーワード/プロジェクト/リポジトリ/作者/ブランチ/期間でコミット検索。7d/30d/90d プリセット。関連 PR の遅延ルックアップ。 |
+| **My Commits** | author = 自分のコミットを検索操作なしに自動ロード (Commits ビューを `myCommitsMode` で流用、組織の認証ユーザー名で seed・90 日窓・組織切替で再取得)。Commits と同じグリッド/プレビュー/関連 PR ルックアップ。 |
 | **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。 |
 | **Code Search** | リポジトリ横断のコード検索。ファイル/パス/ブランチとリンク。 |
-| **Settings** | 組織設定 (PAT / Azure CLI)、通知設定、フォルダパス、グローバルホットキー、キーバインド上書き。 |
+| **Settings** | 組織設定 (PAT / Azure CLI)、通知設定、フォルダパス、グローバルホットキー、キーバインド上書き。Software update パネル (opt-in: 手動で更新確認→適用、失敗時は安全にスキップ。`tauri-plugin-updater`、ブラウザでは無効)。 |
 
 ### 横断機能
 
@@ -162,6 +163,9 @@ crates/azdo-client/                            — Tauri 非依存の独立 ADO 
 | `G` → 第 2 キー | ビュー切替 (下表) |
 | `Ctrl+F` / `/` | フィルタにフォーカス |
 
+アプリに割り当てていない WebView 既定ショートカット (`Ctrl+P` 印刷、`Ctrl+G`
+find-next) は、入力欄以外では抑止し、ネイティブ動作が素通りしないようにする。
+
 ### Go-To チェーン (`G` リーダー + 第 2 キー)
 
 `R` My Reviews / `P` PR Search / `W` My Work Items / `I` Work Item Search /
@@ -172,6 +176,8 @@ crates/azdo-client/                            — Tauri 非依存の独立 ADO 
 `↑ ↓ / J K / Home / End / PageUp / PageDown` で移動、`Enter` でプレビュー/オープン、
 `Ctrl+Enter` でブラウザを開く、`C` で URL コピー。作業項目グリッドでは
 `S` 状態 / `A` 割当 / `P` 優先度 / `F` フィールド循環、`Ctrl+S` で適用、`M` でコメント。
+行を1件選択中は、ステータスバーに主要な行ショートカットのコンパクトな凡例を表示する
+(My Reviews / 作業項目グリッド)。
 
 ポップオーバー/メニュー/ダイアログは、最初の妥当なコントロールにフォーカスして開き、
 矢印/Enter/Space/Escape で完結し、閉じる際は呼び出し元へフォーカスを返す。

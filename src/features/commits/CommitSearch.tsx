@@ -176,11 +176,15 @@ export function CommitSearch({
   externalSearch,
   onExternalSearchHandled,
   onOpenPullRequest,
+  myCommitsMode = false,
 }: {
   organizations: Organization[];
   externalSearch?: { query: string; requestId: number; organizationId?: string } | null;
   onExternalSearchHandled?: () => void;
   onOpenPullRequest?: (query: string, organizationId?: string) => void;
+  // "My Commits" mode: seed the author to the current user and auto-run on
+  // mount / org switch, so commits appear without a manual search.
+  myCommitsMode?: boolean;
 }) {
   const initialViewState = useMemo(() => loadCommitSearchViewState(), []);
   const [organizationId, setOrganizationId] = useState(() =>
@@ -235,6 +239,9 @@ export function CommitSearch({
   }, [organizationId, organizations]);
 
   useEffect(() => {
+    // My Commits keeps its own seeded state; don't clobber the Commits view's
+    // persisted filters.
+    if (myCommitsMode) return;
     storeCommitSearchViewState({
       author,
       branch,
@@ -245,7 +252,46 @@ export function CommitSearch({
       repositoryId,
       toDate,
     });
-  }, [author, branch, fromDate, projectId, query, repositoryId, selectedOrganizationId, toDate]);
+  }, [myCommitsMode, author, branch, fromDate, projectId, query, repositoryId, selectedOrganizationId, toDate]);
+
+  // My Commits: seed the author to the current user for the selected org and
+  // auto-run a 90-day search, once per org.
+  const currentUserName = myCommitsMode
+    ? organizations.find((organization) => organization.id === selectedOrganizationId)
+        ?.authenticatedUserDisplayName ?? null
+    : null;
+  const lastAutoOrgRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!myCommitsMode || !currentUserName || !selectedOrganizationId) return;
+    if (lastAutoOrgRef.current === selectedOrganizationId) return;
+    lastAutoOrgRef.current = selectedOrganizationId;
+    const fmt = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - 90);
+    const fromStr = fmt(from);
+    const toStr = fmt(to);
+    setQuery("");
+    setAuthor(currentUserName);
+    setBranch("");
+    setProjectId("");
+    setRepositoryId("");
+    setFromDate(fromStr);
+    setToDate(toStr);
+    setValidationError(null);
+    mutation.mutate({
+      organizationId: selectedOrganizationId,
+      query: "",
+      author: currentUserName,
+      branch: "",
+      fromDate: fromStr,
+      toDate: toStr,
+      projectId: "",
+      repositoryId: "",
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myCommitsMode, currentUserName, selectedOrganizationId]);
 
   useEffect(() => {
     window.localStorage.setItem(COMMIT_VIEW_MODE_STORAGE_KEY, viewMode);

@@ -1,3 +1,5 @@
+import { writeStoredString } from "./storage";
+
 export type ThemePreference = "light" | "dark" | "system";
 
 const STORAGE_KEY = "azdodeck:theme";
@@ -13,7 +15,7 @@ export function loadThemePreference(): ThemePreference {
 }
 
 export function storeThemePreference(pref: ThemePreference): void {
-  window.localStorage.setItem(STORAGE_KEY, pref);
+  writeStoredString(STORAGE_KEY, pref);
 }
 
 function prefersDark(): boolean {
