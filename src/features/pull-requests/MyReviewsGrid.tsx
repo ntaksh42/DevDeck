@@ -660,7 +660,7 @@ export function MyReviewsGrid({
   const voteMutation = useMutation({
     mutationFn: submitPullRequestVote,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["myReviews"] });
+      void queryClient.invalidateQueries({ queryKey: ["myReviews", organizationId] });
     },
   });
 
