@@ -42,6 +42,7 @@ import {
 } from "@/features/pipelines/quickPipelinesStorage";
 import { QUICK_PIPELINES_CHANGED_EVENT } from "@/features/pipelines/quickPipelinesEvents";
 import { openExternalUrl } from "@/lib/openExternal";
+import { writeStoredString } from "@/lib/storage";
 import { loadRecentPaletteEntries } from "@/lib/recentItems";
 import {
   applyTheme,
@@ -1128,7 +1129,7 @@ function AppShell() {
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(sidebarWidth)));
+    writeStoredString(SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(sidebarWidth)));
   }, [sidebarWidth]);
 
   // Follow the OS color scheme while the preference is "system". The watcher is

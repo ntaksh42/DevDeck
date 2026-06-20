@@ -3,6 +3,8 @@
 // when the row changes upstream the entry no longer matches and the row
 // returns to the inbox automatically.
 
+import { writeStoredJson } from "./storage";
+
 type TriageEntry = { snapshot: string; archivedAt: string };
 type TriageStore = Record<string, TriageEntry>;
 
@@ -32,7 +34,7 @@ function loadTriageStore(scope: string): TriageStore {
 }
 
 function storeTriageStore(scope: string, store: TriageStore): void {
-  window.localStorage.setItem(`${STORAGE_PREFIX}${scope}`, JSON.stringify(store));
+  writeStoredJson(`${STORAGE_PREFIX}${scope}`, store);
 }
 
 export function toggleTriageArchived(scope: string, key: string, snapshot: string): void {
