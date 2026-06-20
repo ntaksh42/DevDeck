@@ -28,6 +28,9 @@ function pr(overrides: Partial<ReviewPullRequestSummary>): ReviewPullRequestSumm
     myIsRequired: true,
     isDraft: false,
     mergeStatus: null,
+    ciStatus: null,
+    ciContext: null,
+    ciCheckCount: 0,
     ...overrides,
   };
 }
