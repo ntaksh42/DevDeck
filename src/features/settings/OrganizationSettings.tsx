@@ -1847,6 +1847,8 @@ export function SetupPanel({ compact = false }: { compact?: boolean }) {
               value={pat}
               onChange={(event) => setPat(event.target.value)}
               type={showPat ? "text" : "password"}
+              autoComplete="off"
+              spellCheck={false}
               className="min-w-0 flex-1 bg-transparent px-3 text-sm outline-none"
             />
             <button
