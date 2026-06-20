@@ -2,7 +2,7 @@ import { isTauriRuntime } from "@/lib/runtime";
 
 const PIPELINE_SUBSCRIPTIONS_STORAGE_KEY = "azdodeck:pipelineSubscriptions";
 
-const MAX_SUBSCRIPTIONS = 100;
+export const MAX_SUBSCRIPTIONS = 100;
 
 const DEMO_SUBSCRIPTIONS: PipelineSubscription[] = [
   {
@@ -111,13 +111,25 @@ export function isSubscribed(
   return subscriptions.some((sub) => keyOf(sub) === key);
 }
 
+export type AddSubscriptionResult = {
+  // "exists": the candidate was already watched; "limit": the watch list is
+  // full so the candidate was not added. Both leave `subscriptions` unchanged.
+  status: "added" | "exists" | "limit";
+  subscriptions: PipelineSubscription[];
+};
+
 export function addSubscription(
   subscriptions: PipelineSubscription[],
   candidate: PipelineSubscription,
-): PipelineSubscription[] {
+): AddSubscriptionResult {
   const key = keyOf(candidate);
-  if (subscriptions.some((sub) => keyOf(sub) === key)) return subscriptions;
-  return [...subscriptions, candidate].slice(0, MAX_SUBSCRIPTIONS);
+  if (subscriptions.some((sub) => keyOf(sub) === key)) {
+    return { status: "exists", subscriptions };
+  }
+  if (subscriptions.length >= MAX_SUBSCRIPTIONS) {
+    return { status: "limit", subscriptions };
+  }
+  return { status: "added", subscriptions: [...subscriptions, candidate] };
 }
 
 export function removeSubscription(

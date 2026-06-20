@@ -58,16 +58,28 @@ export function ColumnResizeHandle({
   setWidths,
   min,
   max,
+  defaultWidth,
 }: {
   columnIndex: number;
   widths: number[];
   setWidths: Dispatch<SetStateAction<number[]>>;
   min: number;
   max: number;
+  /** Width restored on double-click. Reset is disabled when omitted. */
+  defaultWidth?: number;
 }) {
   return (
     <div
+      title="Drag to resize · double-click to reset this column to its default width"
       className="absolute right-0 top-0 bottom-0 z-10 w-1.5 cursor-col-resize hover:bg-primary/20 active:bg-primary/40"
+      onDoubleClick={() => {
+        if (defaultWidth === undefined) return;
+        setWidths((prev) => {
+          const next = [...prev];
+          next[columnIndex] = clamp(defaultWidth, min, max);
+          return next;
+        });
+      }}
       onPointerDown={(e) => {
         e.preventDefault();
         const startX = e.clientX;
@@ -117,6 +129,7 @@ export function ResizeHandle({
     <div
       role="separator"
       aria-label={ariaLabel}
+      title="Drag to resize · double-click or Escape to reset to the default width"
       aria-orientation="vertical"
       aria-valuemin={min}
       aria-valuemax={max}

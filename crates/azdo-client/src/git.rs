@@ -248,6 +248,23 @@ impl AdoClient {
         Ok(response.value)
     }
 
+    /// Lists the pull requests that contain the given commit.
+    ///
+    /// Repository-scoped (no project segment), matching
+    /// `GET /_apis/git/repositories/{repoId}/commits/{commitId}/pullRequests`.
+    pub async fn list_commit_pull_requests(
+        &self,
+        repository_id: &str,
+        commit_id: &str,
+    ) -> Result<Vec<GitPullRequest>> {
+        let path =
+            format!("_apis/git/repositories/{repository_id}/commits/{commit_id}/pullRequests");
+        let response: ListResponse<GitPullRequest> = self
+            .get_json(&path, &[("api-version", "7.1-preview")])
+            .await?;
+        Ok(response.value)
+    }
+
     pub async fn get_commit(
         &self,
         project_id: &str,
@@ -572,6 +589,43 @@ mod tests {
             commit.parents.as_deref(),
             Some(["parent1".to_string(), "parent0".to_string()].as_slice())
         );
+    }
+
+    #[tokio::test]
+    async fn list_commit_pull_requests_maps_response() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/_apis/git/repositories/repo-1/commits/abc123/pullRequests",
+            ))
+            .and(query_param("api-version", "7.1-preview"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 1,
+                "value": [{
+                    "pullRequestId": 99,
+                    "title": "Land the fix",
+                    "status": "completed",
+                    "creationDate": "2026-05-24T00:00:00Z",
+                    "repository": {
+                        "id": "repo-1",
+                        "name": "dashboard",
+                        "project": { "id": "project-1", "name": "Platform" }
+                    },
+                    "sourceRefName": "refs/heads/fix",
+                    "targetRefName": "refs/heads/main"
+                }]
+            })))
+            .mount(&server)
+            .await;
+
+        let prs = test_client(&server)
+            .await
+            .list_commit_pull_requests("repo-1", "abc123")
+            .await
+            .unwrap();
+        assert_eq!(prs.len(), 1);
+        assert_eq!(prs[0].pull_request_id, 99);
+        assert_eq!(prs[0].status, "completed");
     }
 
     #[tokio::test]

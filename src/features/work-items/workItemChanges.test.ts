@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { WorkItemPreview } from "@/lib/azdoCommands";
 import {
+  DUPLICATE_TITLE_PREFIX,
+  buildDuplicateDraft,
   buildInverseChanges,
   customPreviewFieldValue,
   stagedEntriesForPreview,
@@ -35,9 +37,48 @@ function makePreview(overrides: Partial<WorkItemPreview> = {}): WorkItemPreview 
     comments: [],
     commentsUnavailable: false,
     relations: [],
+    pullRequests: [],
     ...overrides,
   };
 }
+
+describe("buildDuplicateDraft", () => {
+  it("copies the duplicated fields and prefixes the title", () => {
+    const preview = makePreview({
+      title: "Fix login",
+      workItemType: "Task",
+      priority: "1",
+      areaPath: "Platform\\Auth",
+      iterationPath: "Platform\\Sprint 5",
+      tags: "auth; security",
+      assignedTo: "Jane Doe",
+    });
+    expect(buildDuplicateDraft(preview)).toEqual({
+      organizationId: "contoso",
+      projectId: "project-1",
+      title: `${DUPLICATE_TITLE_PREFIX}Fix login`,
+      workItemType: "Task",
+      priority: "1",
+      areaPath: "Platform\\Auth",
+      iterationPath: "Platform\\Sprint 5",
+      tags: ["auth", "security"],
+      assignedTo: "Jane Doe",
+    });
+  });
+
+  it("does not mutate the source preview", () => {
+    const preview = makePreview({ title: "Original", tags: "alpha" });
+    const snapshot = structuredClone(preview);
+    buildDuplicateDraft(preview);
+    expect(preview).toEqual(snapshot);
+  });
+
+  it("carries null fields through and normalizes empty tags", () => {
+    const draft = buildDuplicateDraft(makePreview({ tags: "  ", areaPath: null }));
+    expect(draft.tags).toEqual([]);
+    expect(draft.areaPath).toBeNull();
+  });
+});
 
 describe("customPreviewFieldValue", () => {
   it("matches the reference name case-insensitively", () => {

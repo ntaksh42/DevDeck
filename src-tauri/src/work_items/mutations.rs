@@ -1,11 +1,14 @@
 //! Write operations over the work item IPC surface: adding/deleting comments,
 //! patching fields on a single item, and the bulk state/assignee/priority
 //! changes. Each keeps the local cache in sync after a successful write, and the
-//! bulk operations re-check read-only mode between iterations.
+//! bulk operations re-check read-only mode between iterations. When read-only
+//! mode stops a run partway, the remaining items are reported as failures rather
+//! than being silently dropped, so the frontend can notify the user.
 
 use serde_json::Value;
 
 use crate::auth::client_for_organization;
+use crate::db::{CachedWorkItem, Organization};
 use crate::error::{AppError, Result};
 use crate::settings::SettingsService;
 
@@ -37,23 +40,31 @@ impl WorkItemService {
             .await?;
 
         let mut results = Vec::new();
-        for id in input.work_item_ids {
-            if self.ensure_write_enabled().is_err() {
+        let mut updated = Vec::new();
+        let mut ids = input.work_item_ids.into_iter();
+        for id in ids.by_ref() {
+            if let Err(e) = self.ensure_write_enabled() {
+                let message = e.to_string();
+                results.push(BulkWorkItemResult {
+                    id,
+                    error: Some(message.clone()),
+                });
+                for skipped in ids.by_ref() {
+                    results.push(BulkWorkItemResult {
+                        id: skipped,
+                        error: Some(message.clone()),
+                    });
+                }
                 break;
             }
             match client.update_work_item_state(&project.id, id, &state).await {
                 Ok(wi) => {
-                    let cached =
-                        work_item_to_cached(&organization, &project.id, &project.name, &wi);
-                    if let Err(e) = self.db.upsert_work_items(std::slice::from_ref(&cached)) {
-                        tracing::warn!(error = %e, "failed to update work item cache after set_items_state");
-                    }
-                    if let Err(e) = self.db.update_my_work_item_if_present(
-                        &cached,
-                        organization.authenticated_user_unique_name.as_deref(),
-                    ) {
-                        tracing::warn!(error = %e, "failed to update my_work_items cache after set_items_state");
-                    }
+                    updated.push(work_item_to_cached(
+                        &organization,
+                        &project.id,
+                        &project.name,
+                        &wi,
+                    ));
                     results.push(BulkWorkItemResult { id, error: None });
                 }
                 Err(e) => results.push(BulkWorkItemResult {
@@ -62,7 +73,25 @@ impl WorkItemService {
                 }),
             }
         }
+        self.apply_bulk_cache_updates(&updated, &organization, "set_items_state");
         Ok(results)
+    }
+
+    /// Reflects the successful subset of a bulk operation into the local cache
+    /// in one connection/transaction so large batches do not pay the per-item
+    /// connection and implicit-transaction overhead.
+    fn apply_bulk_cache_updates(
+        &self,
+        items: &[CachedWorkItem],
+        organization: &Organization,
+        context: &str,
+    ) {
+        if let Err(e) = self.db.apply_work_item_updates(
+            items,
+            organization.authenticated_user_unique_name.as_deref(),
+        ) {
+            tracing::warn!(error = %e, context, "failed to update work item cache after bulk update");
+        }
     }
 
     /// Re-checks read-only mode between bulk iterations so toggling it mid-run
@@ -99,8 +128,21 @@ impl WorkItemService {
             .await?;
 
         let mut results = Vec::new();
-        for id in input.work_item_ids {
-            if self.ensure_write_enabled().is_err() {
+        let mut updated = Vec::new();
+        let mut ids = input.work_item_ids.into_iter();
+        for id in ids.by_ref() {
+            if let Err(e) = self.ensure_write_enabled() {
+                let message = e.to_string();
+                results.push(BulkWorkItemResult {
+                    id,
+                    error: Some(message.clone()),
+                });
+                for skipped in ids.by_ref() {
+                    results.push(BulkWorkItemResult {
+                        id: skipped,
+                        error: Some(message.clone()),
+                    });
+                }
                 break;
             }
             match client
@@ -108,17 +150,12 @@ impl WorkItemService {
                 .await
             {
                 Ok(wi) => {
-                    let cached =
-                        work_item_to_cached(&organization, &project.id, &project.name, &wi);
-                    if let Err(e) = self.db.upsert_work_items(std::slice::from_ref(&cached)) {
-                        tracing::warn!(error = %e, "failed to update work item cache after assign_items");
-                    }
-                    if let Err(e) = self.db.update_my_work_item_if_present(
-                        &cached,
-                        organization.authenticated_user_unique_name.as_deref(),
-                    ) {
-                        tracing::warn!(error = %e, "failed to update my_work_items cache after assign_items");
-                    }
+                    updated.push(work_item_to_cached(
+                        &organization,
+                        &project.id,
+                        &project.name,
+                        &wi,
+                    ));
                     results.push(BulkWorkItemResult { id, error: None });
                 }
                 Err(e) => results.push(BulkWorkItemResult {
@@ -127,6 +164,7 @@ impl WorkItemService {
                 }),
             }
         }
+        self.apply_bulk_cache_updates(&updated, &organization, "assign_items");
         Ok(results)
     }
 
@@ -150,8 +188,21 @@ impl WorkItemService {
             .await?;
 
         let mut results = Vec::new();
-        for id in input.work_item_ids {
-            if self.ensure_write_enabled().is_err() {
+        let mut updated = Vec::new();
+        let mut ids = input.work_item_ids.into_iter();
+        for id in ids.by_ref() {
+            if let Err(e) = self.ensure_write_enabled() {
+                let message = e.to_string();
+                results.push(BulkWorkItemResult {
+                    id,
+                    error: Some(message.clone()),
+                });
+                for skipped in ids.by_ref() {
+                    results.push(BulkWorkItemResult {
+                        id: skipped,
+                        error: Some(message.clone()),
+                    });
+                }
                 break;
             }
             match client
@@ -159,17 +210,12 @@ impl WorkItemService {
                 .await
             {
                 Ok(wi) => {
-                    let cached =
-                        work_item_to_cached(&organization, &project.id, &project.name, &wi);
-                    if let Err(e) = self.db.upsert_work_items(std::slice::from_ref(&cached)) {
-                        tracing::warn!(error = %e, "failed to update work item cache after set_items_priority");
-                    }
-                    if let Err(e) = self.db.update_my_work_item_if_present(
-                        &cached,
-                        organization.authenticated_user_unique_name.as_deref(),
-                    ) {
-                        tracing::warn!(error = %e, "failed to update my_work_items cache after set_items_priority");
-                    }
+                    updated.push(work_item_to_cached(
+                        &organization,
+                        &project.id,
+                        &project.name,
+                        &wi,
+                    ));
                     results.push(BulkWorkItemResult { id, error: None });
                 }
                 Err(e) => results.push(BulkWorkItemResult {
@@ -178,6 +224,7 @@ impl WorkItemService {
                 }),
             }
         }
+        self.apply_bulk_cache_updates(&updated, &organization, "set_items_priority");
         Ok(results)
     }
 

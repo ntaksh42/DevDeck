@@ -18,7 +18,10 @@ vi.mock("@/lib/openExternal", () => ({
   openExternalUrl: (url: string) => openExternalUrl(url),
 }));
 
-import { showWorkItemNotificationEvent } from "./desktopNotifications";
+import {
+  showSyncFailedNotificationEvent,
+  showWorkItemNotificationEvent,
+} from "./desktopNotifications";
 import type { AppSettings } from "@/lib/azdoCommands";
 
 const settings = {
@@ -78,6 +81,35 @@ describe("sendTauriDesktopNotification click wiring", () => {
     );
   });
 
+  it("opens the first item url when an aggregated summary notification is clicked", async () => {
+    const items = Array.from({ length: 5 }, (_, index) => ({
+      kind: "assigned" as const,
+      id: index + 1,
+      title: `Item ${index + 1}`,
+      projectName: "Proj",
+      state: null,
+      previousState: null,
+      assignedTo: null,
+      webUrl: `https://dev.azure.com/org/_workitems/edit/${index + 1}`,
+    }));
+
+    const result = await showWorkItemNotificationEvent(
+      { organizationId: "org", organizationName: "Org", items },
+      settings,
+    );
+
+    expect(result).toBe("sent");
+    // A single summary notification is sent for 4+ updates.
+    expect(sendNotification).toHaveBeenCalledTimes(1);
+    const sent = sendNotification.mock.calls[0][0] as { id?: number };
+    expect(typeof sent.id).toBe("number");
+
+    actionCb?.({ id: sent.id });
+    expect(openExternalUrl).toHaveBeenCalledWith(
+      "https://dev.azure.com/org/_workitems/edit/1",
+    );
+  });
+
   it("ignores action events for unknown notification ids", async () => {
     await showWorkItemNotificationEvent(
       {
@@ -101,5 +133,50 @@ describe("sendTauriDesktopNotification click wiring", () => {
 
     actionCb?.({ id: 999999 });
     expect(openExternalUrl).not.toHaveBeenCalled();
+  });
+});
+
+describe("showSyncFailedNotificationEvent", () => {
+  beforeEach(() => {
+    isPermissionGranted.mockReset().mockResolvedValue(true);
+    requestPermission.mockReset();
+    sendNotification.mockReset();
+    isTauriRuntime.mockReset().mockReturnValue(true);
+    onAction.mockReset().mockResolvedValue({});
+  });
+
+  it("sends a failure notification with retry guidance and reason", async () => {
+    const result = await showSyncFailedNotificationEvent(
+      { consecutiveFailures: 3, retryInSecs: 1200, lastError: "503 unavailable" },
+      settings,
+    );
+
+    expect(result).toBe("sent");
+    const sent = sendNotification.mock.calls[0][0] as { title: string; body: string };
+    expect(sent.title).toBe("Sync is failing");
+    expect(sent.body).toContain("3 attempts");
+    expect(sent.body).toContain("20 min");
+    expect(sent.body).toContain("503 unavailable");
+  });
+
+  it("omits the error reason when content preview is disabled", async () => {
+    const result = await showSyncFailedNotificationEvent(
+      { consecutiveFailures: 3, retryInSecs: 600, lastError: "secret detail" },
+      { ...settings, notificationContentPreviewEnabled: false } as AppSettings,
+    );
+
+    expect(result).toBe("sent");
+    const sent = sendNotification.mock.calls[0][0] as { body: string };
+    expect(sent.body).not.toContain("secret detail");
+  });
+
+  it("skips when desktop notifications are disabled", async () => {
+    const result = await showSyncFailedNotificationEvent(
+      { consecutiveFailures: 5, retryInSecs: 1800, lastError: null },
+      { ...settings, desktopNotificationsEnabled: false } as AppSettings,
+    );
+
+    expect(result).toBe("skipped");
+    expect(sendNotification).not.toHaveBeenCalled();
   });
 });

@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronUp, Filter, Loader2, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp, Filter, Loader2, X } from 'lucide-react';
 import {
   setWorkItemsState,
   assignWorkItems,
@@ -17,8 +17,10 @@ import {
   recordAssigneeInteraction,
   searchWorkItemAssignees,
   getWorkItemPreview,
+  getAppSettings,
   snoozeItem,
   commandErrorMessage,
+  DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
   type BulkWorkItemResult,
   type WorkItemAssigneeCandidate,
   type WorkItemPreview,
@@ -38,10 +40,12 @@ import {
 } from '@/lib/utils';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { readStoredJson, writeStoredJson } from '@/lib/storage';
+import { recordRecentWorkItem } from '@/lib/recentItems';
 import { openExternalUrl } from '@/lib/openExternal';
 import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { LoadingState } from '@/components/StateDisplay';
+import { ActiveFilters } from '@/components/ActiveFilters';
 import { WorkItemPreviewPanel } from './WorkItemPreviewPanel';
 import { invalidateWorkItemMutationCaches, workItemQueryKeys } from './queryKeys';
 import {
@@ -49,6 +53,7 @@ import {
   storeCustomPreviewFields,
   type CustomPreviewField,
 } from './previewFieldsStorage';
+import { isWorkItemStale, workItemStaleDays } from './workItemStale';
 const DEFAULT_WI_COLUMN_WIDTHS = [46, 64, 60, 180, 82, 84, 68];
 const WI_COLUMN_MIN_WIDTHS = [44, 58, 56, 150, 70, 74, 60];
 const WI_COLUMN_MAX_WIDTHS = [120, 200, 180, 720, 300, 260, 160];
@@ -63,7 +68,6 @@ const MAX_WORK_ITEM_PREVIEW_WIDTH = 8192;
 const WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY = "azdodeck:layout:workItemPreviewWidth";
 const WI_GRID_ROW_HEIGHT = 29;
 const WI_GRID_OVERSCAN = 8;
-const RECENT_WORK_ITEMS_STORAGE_KEY = "azdodeck:workItems:recent";
 type WiSortKey =
   | "id"
   | "workItemType"
@@ -239,7 +243,9 @@ function loadWorkItemColumnFilters(
         const values = parsed[column];
         if (Array.isArray(values)) {
           const cleaned = values.filter((value): value is string => typeof value === "string");
-          if (cleaned.length > 0) filters[column] = new Set(cleaned);
+          // An empty array is a meaningful "none selected" state, distinct from
+          // an absent key which means "show all", so preserve it.
+          filters[column] = new Set(cleaned);
         }
       }
       return filters;
@@ -255,7 +261,9 @@ function storeWorkItemColumnFilters(
   const serialized: Partial<Record<FilterableColumn, string[]>> = {};
   for (const column of Object.keys(FILTERABLE_COLUMNS) as FilterableColumn[]) {
     const values = filters[column];
-    if (values && values.size > 0) serialized[column] = [...values];
+    // Persist a present set even when empty ("none selected"); only an absent
+    // key means "show all".
+    if (values) serialized[column] = [...values];
   }
   writeStoredJson(key, serialized);
 }
@@ -264,7 +272,7 @@ function activeColumnFilterCount(
   filters: Partial<Record<FilterableColumn, Set<string>>>,
 ): number {
   return (Object.values(filters) as (Set<string> | undefined)[]).filter(
-    (values) => values && values.size > 0,
+    (values) => values !== undefined,
   ).length;
 }
 
@@ -370,32 +378,6 @@ function isFilterableColumn(col: WiSortKey): col is FilterableColumn {
   return col in FILTERABLE_COLUMNS;
 }
 
-function recordRecentWorkItem(item: WorkItemSummary) {
-  try {
-    const current = JSON.parse(
-      window.localStorage.getItem(RECENT_WORK_ITEMS_STORAGE_KEY) ?? "[]",
-    );
-    const list = Array.isArray(current) ? current : [];
-    const key = `${item.organizationId}:${item.projectId}:${item.id}`;
-    const next = [
-      {
-        key,
-        id: item.id,
-        organizationId: item.organizationId,
-        projectId: item.projectId,
-        projectName: item.projectName,
-        title: item.title,
-        viewedAt: new Date().toISOString(),
-        webUrl: item.webUrl,
-      },
-      ...list.filter((entry) => entry?.key !== key),
-    ].slice(0, 20);
-    window.localStorage.setItem(RECENT_WORK_ITEMS_STORAGE_KEY, JSON.stringify(next));
-  } catch {
-    // Recent items are a convenience only.
-  }
-}
-
 const WorkItemGridRow = forwardRef<
   HTMLDivElement,
   {
@@ -405,10 +387,14 @@ const WorkItemGridRow = forwardRef<
     columnTemplate: string;
     visibleColumns: WiSortKey[];
     extraColumns: string[];
+    staleThresholdDays: number;
     onSelect: () => void;
     onCheckedChange: (checked: boolean, shiftKey: boolean) => void;
   }
->(({ item, selected, checked, columnTemplate, visibleColumns, extraColumns, onSelect, onCheckedChange }, ref) => (
+>(({ item, selected, checked, columnTemplate, visibleColumns, extraColumns, staleThresholdDays, onSelect, onCheckedChange }, ref) => {
+  const staleDays = workItemStaleDays(item, Date.now());
+  const isStale = staleDays !== null && staleDays >= staleThresholdDays;
+  return (
   <div
     ref={ref}
     tabIndex={selected ? 0 : -1}
@@ -427,7 +413,15 @@ const WorkItemGridRow = forwardRef<
       }
     }}
     className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
-      checked ? "bg-primary/5" : selected ? "bg-secondary" : "hover:bg-muted/50"
+      checked
+        ? "bg-primary/5"
+        : selected && isStale
+          ? "bg-orange-100 dark:bg-orange-900/30"
+          : selected
+            ? "bg-secondary"
+            : isStale
+              ? "bg-orange-50 dark:bg-orange-950/20 hover:bg-orange-100/70"
+              : "hover:bg-muted/50"
     }`}
     style={{ gridTemplateColumns: columnTemplate }}
   >
@@ -444,19 +438,37 @@ const WorkItemGridRow = forwardRef<
         className="h-3.5 w-3.5 cursor-pointer rounded border-input"
       />
     </div>
-    {visibleColumns.map((column) => (
-      <div
-        key={column}
-        className="min-w-0 truncate"
-        style={
-          column === "title" && item.depth
-            ? { paddingLeft: Math.min(item.depth, 8) * 14 }
-            : undefined
-        }
-      >
-        {workItemCellValue(item, column)}
-      </div>
-    ))}
+    {visibleColumns.map((column) => {
+      const isTitle = column === "title";
+      return (
+        <div
+          key={column}
+          className={isTitle ? "flex min-w-0 items-center gap-1" : "min-w-0 truncate"}
+          style={
+            isTitle && item.depth
+              ? { paddingLeft: Math.min(item.depth, 8) * 14 }
+              : undefined
+          }
+        >
+          {isTitle && isStale ? (
+            <AlertTriangle
+              role="img"
+              className="h-3.5 w-3.5 shrink-0 text-orange-600 dark:text-orange-400"
+              aria-label={`${staleDays} 日間更新なし`}
+            >
+              <title>{staleDays} 日間更新なし</title>
+            </AlertTriangle>
+          ) : null}
+          {isTitle ? (
+            <span className="min-w-0 flex-1 truncate">
+              {workItemCellValue(item, column)}
+            </span>
+          ) : (
+            workItemCellValue(item, column)
+          )}
+        </div>
+      );
+    })}
     {extraColumns.map((referenceName) => {
       const value = extraFieldValue(item, referenceName);
       return (
@@ -468,7 +480,8 @@ const WorkItemGridRow = forwardRef<
       );
     })}
   </div>
-));
+  );
+});
 WorkItemGridRow.displayName = "WorkItemGridRow";
 
 export function WorkItemsGrid({
@@ -478,6 +491,7 @@ export function WorkItemsGrid({
   autoFocus = false,
   emptyMessage,
   dataUpdatedAt,
+  isFetching = false,
   activeExternalFilterCount = 0,
   extraColumns = [],
   initialSort,
@@ -494,6 +508,7 @@ export function WorkItemsGrid({
   autoFocus?: boolean;
   emptyMessage?: string;
   dataUpdatedAt?: number;
+  isFetching?: boolean;
   activeExternalFilterCount?: number;
   extraColumns?: string[];
   initialSort?: WiSortState;
@@ -563,6 +578,7 @@ export function WorkItemsGrid({
   );
   const [openFilterCol, setOpenFilterCol] = useState<FilterableColumn | null>(null);
   const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
+  const [staleOnly, setStaleOnly] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const gridScrollRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -681,18 +697,37 @@ export function WorkItemsGrid({
     return map;
   }, [effectiveResults]);
 
+  // Stale highlighting threshold (days). Mirrors the My Reviews stale setting.
+  const settingsQuery = useQuery({
+    queryKey: ["appSettings"],
+    queryFn: getAppSettings,
+    staleTime: 5 * 60_000,
+  });
+  const staleThresholdDays =
+    settingsQuery.data?.workItemStaleThresholdDays ??
+    DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS;
+  const staleCount = useMemo(() => {
+    const now = Date.now();
+    return sorted.filter((item) => isWorkItemStale(item, staleThresholdDays, now))
+      .length;
+  }, [sorted, staleThresholdDays]);
+
   const displayed = useMemo(() => {
-    const hasFilters = (Object.values(columnFilters) as (Set<string> | undefined)[]).some(v => v && v.size > 0);
-    if (!hasFilters) return sorted;
+    const hasFilters = (Object.keys(columnFilters) as FilterableColumn[]).some(
+      col => columnFilters[col] !== undefined,
+    );
+    if (!hasFilters && !staleOnly) return sorted;
+    const now = Date.now();
     return sorted.filter(item => {
+      if (staleOnly && !isWorkItemStale(item, staleThresholdDays, now)) return false;
       for (const col of Object.keys(columnFilters) as FilterableColumn[]) {
         const activeValues = columnFilters[col];
-        if (!activeValues || activeValues.size === 0) continue;
+        if (!activeValues) continue;
         if (!activeValues.has(FILTERABLE_COLUMNS[col](item))) return false;
       }
       return true;
     });
-  }, [sorted, columnFilters]);
+  }, [sorted, columnFilters, staleOnly, staleThresholdDays]);
 
   const selectedItem = displayed[selectedIndex] ?? null;
   const customPreviewFieldRefs = useMemo(
@@ -731,6 +766,14 @@ export function WorkItemsGrid({
     const types = new Set(checkedItems.map((item) => item.workItemType).filter(Boolean));
     return types.size === 1 ? ([...types][0] ?? null) : null;
   }, [checkedItems]);
+  const typeBreakdown = useMemo(
+    () => summarizeBy(checkedItems.map((item) => item.workItemType)),
+    [checkedItems],
+  );
+  const stateBreakdown = useMemo(
+    () => summarizeBy(checkedItems.map((item) => item.state)),
+    [checkedItems],
+  );
   const firstCheckedItem = checkedItems[0] ?? null;
 
   useEffect(() => {
@@ -898,6 +941,11 @@ export function WorkItemsGrid({
         groups.get(key)!.push(item);
       }
       const allResults: BulkWorkItemResult[] = [];
+      // BulkWorkItemResult carries only the work item id, which collides across
+      // organizations/projects. Track succeeded items by their fully-qualified
+      // summary key so optimistic overrides and history land on the right items.
+      const succeededKeys = new Set<string>();
+      const succeededOrgIds = new Set<string>();
       for (const [, items] of groups) {
         const r = await assignWorkItems({
           organizationId: items[0].organizationId,
@@ -906,18 +954,18 @@ export function WorkItemsGrid({
           assignedTo: candidate.assignValue,
         });
         allResults.push(...r);
+        const failedIds = new Set(r.filter((result) => result.error).map((result) => result.id));
+        for (const item of items) {
+          if (failedIds.has(item.id)) continue;
+          succeededKeys.add(workItemSummaryKey(item));
+          succeededOrgIds.add(item.organizationId);
+        }
       }
-      return allResults;
+      return { results: allResults, succeededKeys, succeededOrgIds };
     },
-    onSuccess: (results, candidate) => {
-      const succeededIds = new Set(results.filter((result) => !result.error).map((result) => result.id));
-      if (succeededIds.size > 0 && candidate.uniqueName) {
-        const organizationIds = new Set(
-          checkedItems
-            .filter((item) => succeededIds.has(item.id))
-            .map((item) => item.organizationId),
-        );
-        for (const organizationId of organizationIds) {
+    onSuccess: ({ results, succeededKeys, succeededOrgIds }, candidate) => {
+      if (succeededKeys.size > 0 && candidate.uniqueName) {
+        for (const organizationId of succeededOrgIds) {
           void recordAssigneeInteraction({
             organizationId,
             userId: candidate.id,
@@ -928,12 +976,12 @@ export function WorkItemsGrid({
           });
         }
       }
-      if (succeededIds.size > 0) {
+      if (succeededKeys.size > 0) {
         setItemOverrides((current) => {
           const next = new Map(current);
           for (const item of checkedItems) {
-            if (!succeededIds.has(item.id)) continue;
             const key = workItemSummaryKey(item);
+            if (!succeededKeys.has(key)) continue;
             next.set(key, {
               ...(next.get(key) ?? {}),
               assignedTo: candidate.displayName,
@@ -1124,18 +1172,15 @@ export function WorkItemsGrid({
     const allValues = columnUniqueValues[col] ?? [];
     setColumnFilters(prev => {
       const current = prev[col];
-      if (!current || current.size === 0) {
+      // No active filter (absent key) means every value is checked, so the
+      // first toggle deselects just the clicked value.
+      if (!current) {
         const next = new Set(allValues.filter(v => v !== value));
-        if (next.size === 0) return prev;
         return { ...prev, [col]: next };
       }
       const next = new Set(current);
       if (next.has(value)) {
         next.delete(value);
-        if (next.size === 0) {
-          const { [col]: _, ...rest } = prev;
-          return rest;
-        }
       } else {
         next.add(value);
         if (next.size === allValues.length) {
@@ -1147,11 +1192,18 @@ export function WorkItemsGrid({
     });
   }
 
+  // Removes the column filter entirely, which means "show all" / (All).
   function clearColumnFilter(col: FilterableColumn) {
     setColumnFilters(prev => {
       const { [col]: _, ...rest } = prev;
       return rest;
     });
+  }
+
+  // Unchecks every value for the column, leaving an explicit empty selection so
+  // the user can then pick exactly the values they want.
+  function uncheckAllColumnFilter(col: FilterableColumn) {
+    setColumnFilters(prev => ({ ...prev, [col]: new Set<string>() }));
   }
 
   function clearAllFilters() {
@@ -1333,7 +1385,6 @@ export function WorkItemsGrid({
   const columnFilterCount = activeColumnFilterCount(columnFilters);
   const activeFilterCount = Math.max(0, activeExternalFilterCount) + columnFilterCount;
   const hasActiveColumnFilters = columnFilterCount > 0;
-  const hasActiveFilters = activeFilterCount > 0;
   const showBlockingLoading = loading && sorted.length === 0;
   const firstVirtualRow = Math.max(
     0,
@@ -1381,6 +1432,8 @@ export function WorkItemsGrid({
       {checkedItems.length > 0 ? (
         <BulkActionBar
           count={checkedItems.length}
+          typeBreakdown={typeBreakdown}
+          stateBreakdown={stateBreakdown}
           onClear={() => { setCheckedIds(new Set()); setLastCheckedIndex(null); }}
           stateOpen={bulkStateOpen}
           onStateOpenChange={(open) => {
@@ -1483,7 +1536,7 @@ export function WorkItemsGrid({
                     column={col}
                     sort={sort}
                     onSort={applyWiSort}
-                    filterActive={isFilterableColumn(col) && !!(columnFilters[col]?.size)}
+                    filterActive={isFilterableColumn(col) && columnFilters[col] !== undefined}
                     onFilterOpen={isFilterableColumn(col) ? (el) => openFilter(col, el) : undefined}
                     resizeHandle={
                       i < visibleColumns.length - 1 ? (
@@ -1493,6 +1546,7 @@ export function WorkItemsGrid({
                           setWidths={setColumnWidths}
                           min={WI_COLUMN_MIN_WIDTHS[WI_GRID_KEYS.indexOf(col)]}
                           max={WI_COLUMN_MAX_WIDTHS[WI_GRID_KEYS.indexOf(col)]}
+                          defaultWidth={DEFAULT_WI_COLUMN_WIDTHS[WI_GRID_KEYS.indexOf(col)]}
                         />
                       ) : undefined
                     }
@@ -1555,6 +1609,7 @@ export function WorkItemsGrid({
                         columnTemplate={wiColTemplate}
                         visibleColumns={visibleColumns}
                         extraColumns={extraColumns}
+                        staleThresholdDays={staleThresholdDays}
                         onSelect={() => setSelectedIndex(i)}
                         onCheckedChange={(checked, shiftKey) => handleCheckboxChange(i, checked, shiftKey)}
                       />
@@ -1578,7 +1633,13 @@ export function WorkItemsGrid({
                     ? `${displayed.length} of ${sorted.length} item${sorted.length === 1 ? "" : "s"}`
                     : `${displayed.length} item${displayed.length === 1 ? "" : "s"}`
                   : "Ready"}
-              {dataUpdatedAt ? ` · data ${formatRelativeDate(new Date(dataUpdatedAt).toISOString())}` : ""}
+              {dataUpdatedAt ? (
+                <span title={new Date(dataUpdatedAt).toLocaleString()}>
+                  {" · "}
+                  Updated {formatRelativeDate(new Date(dataUpdatedAt).toISOString())}
+                </span>
+              ) : null}
+              {isFetching ? <span>{" · "}Refreshing…</span> : null}
             </span>
             <span className="flex items-center gap-2">
               {triageScope ? (
@@ -1617,17 +1678,25 @@ export function WorkItemsGrid({
                   {showSnoozed ? "Back to inbox" : "Snoozed"}
                 </button>
               ) : null}
-              {hasActiveFilters ? (
-                <>
-                  <span>{activeFilterCount} filter{activeFilterCount === 1 ? "" : "s"} active</span>
-                  <button
-                    type="button"
-                    onClick={clearAllFilters}
-                    className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary"
-                  >
-                    Clear filters
-                  </button>
-                </>
+              <ActiveFilters count={activeFilterCount} onClear={clearAllFilters} />
+              {staleOnly || staleCount > 0 ? (
+                <button
+                  type="button"
+                  aria-pressed={staleOnly}
+                  title={`Show only stale items (no change in ${staleThresholdDays}+ days)`}
+                  onClick={() => {
+                    setStaleOnly((value) => !value);
+                    setSelectedIndex(0);
+                  }}
+                  className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs ${
+                    staleOnly
+                      ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-300"
+                      : "border-border bg-card hover:bg-secondary"
+                  }`}
+                >
+                  <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                  Stale ({staleCount})
+                </button>
               ) : null}
               <button
                 type="button"
@@ -1680,6 +1749,7 @@ export function WorkItemsGrid({
           activeValues={columnFilters[openFilterCol]}
           onToggle={(value) => toggleFilter(openFilterCol, value)}
           onClearAll={() => clearColumnFilter(openFilterCol)}
+          onUncheckAll={() => uncheckAllColumnFilter(openFilterCol)}
           onClose={() => { setOpenFilterCol(null); setFilterAnchorRect(null); }}
         />
       ) : null}
@@ -1720,6 +1790,7 @@ function ColumnFilterDropdown({
   activeValues,
   onToggle,
   onClearAll,
+  onUncheckAll,
   onClose,
 }: {
   anchorRect: DOMRect;
@@ -1727,6 +1798,7 @@ function ColumnFilterDropdown({
   activeValues: Set<string> | undefined;
   onToggle: (value: string) => void;
   onClearAll: () => void;
+  onUncheckAll: () => void;
   onClose: () => void;
 }) {
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -1748,7 +1820,8 @@ function ColumnFilterDropdown({
     return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [onClose]);
 
-  const isAllChecked = !activeValues || activeValues.size === 0;
+  const isAllChecked = activeValues === undefined;
+  const anyChecked = isAllChecked || (activeValues?.size ?? 0) > 0;
   const filteredValues = search.trim()
     ? allValues.filter(v => v.toLowerCase().includes(search.trim().toLowerCase()))
     : allValues;
@@ -1771,15 +1844,23 @@ function ColumnFilterDropdown({
           className="w-full rounded border border-input bg-background px-2 py-0.5 text-xs outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
-      <div className="border-b border-border p-1">
+      <div className="flex items-center gap-1 border-b border-border p-1">
         <button
           type="button"
           onClick={onClearAll}
-          className={`w-full rounded px-2 py-0.5 text-left text-xs hover:bg-secondary ${
+          className={`flex-1 rounded px-2 py-0.5 text-left text-xs hover:bg-secondary ${
             isAllChecked ? "font-medium text-foreground" : "text-muted-foreground"
           }`}
         >
           (All)
+        </button>
+        <button
+          type="button"
+          onClick={onUncheckAll}
+          disabled={!anyChecked}
+          className="rounded px-2 py-0.5 text-xs text-muted-foreground hover:bg-secondary disabled:cursor-default disabled:opacity-40"
+        >
+          Uncheck all
         </button>
       </div>
       <div className="max-h-44 overflow-auto p-1">
@@ -1888,6 +1969,57 @@ function ColumnVisibilityDropdown({
   );
 }
 
+/**
+ * Counts non-empty values and returns them ordered by frequency (ties broken
+ * by label) so the bulk bar can show the most common type/state first.
+ */
+export function summarizeBy(values: (string | null | undefined)[]): { label: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    const label = value?.trim();
+    if (!label) continue;
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+}
+
+/** Renders up to `max` breakdown chips, folding the rest into a `+N` chip. */
+function BulkBreakdown({
+  entries,
+  max = 3,
+}: {
+  entries: { label: string; count: number }[];
+  max?: number;
+}) {
+  if (entries.length === 0) return null;
+  const shown = entries.slice(0, max);
+  const hidden = entries.slice(max);
+  const hiddenCount = hidden.reduce((sum, e) => sum + e.count, 0);
+  const hiddenTitle = hidden.map((e) => `${e.count} ${e.label}`).join(", ");
+  return (
+    <span className="flex flex-wrap items-center gap-1">
+      {shown.map((entry) => (
+        <span
+          key={entry.label}
+          className="inline-flex items-center rounded-full bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-secondary-foreground"
+        >
+          {entry.count} {entry.label}
+        </span>
+      ))}
+      {hidden.length > 0 ? (
+        <span
+          title={hiddenTitle}
+          className="inline-flex items-center rounded-full bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground"
+        >
+          +{hiddenCount}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 function BulkFailurePanel({
   failures,
   onDismiss,
@@ -1922,6 +2054,8 @@ function BulkFailurePanel({
 
 function BulkActionBar({
   count,
+  typeBreakdown,
+  stateBreakdown,
   onClear,
   stateOpen,
   onStateOpenChange,
@@ -1943,6 +2077,8 @@ function BulkActionBar({
   onPrioritySelect,
 }: {
   count: number;
+  typeBreakdown: { label: string; count: number }[];
+  stateBreakdown: { label: string; count: number }[];
   onClear: () => void;
   stateOpen: boolean;
   onStateOpenChange: (open: boolean) => void;
@@ -1973,6 +2109,17 @@ function BulkActionBar({
       <span className="text-xs font-medium text-foreground">
         {count} item{count === 1 ? "" : "s"} selected
       </span>
+      {typeBreakdown.length > 0 ? (
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <BulkBreakdown entries={typeBreakdown} />
+        </span>
+      ) : null}
+      {stateBreakdown.length > 0 ? (
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span className="text-muted-foreground/60" aria-hidden="true">·</span>
+          <BulkBreakdown entries={stateBreakdown} />
+        </span>
+      ) : null}
       <div className="flex items-center gap-1.5">
         {/* State picker */}
         <div className="relative">
