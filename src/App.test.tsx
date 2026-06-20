@@ -1608,7 +1608,7 @@ describe("App", () => {
     const main = within(await screen.findByRole("main"));
 
     await screen.findByText("No pull requests assigned to you.");
-    fireEvent.click(screen.getByRole("button", { name: "Commits" }));
+    fireEvent.click(screen.getByRole("button", { name: "All Commits" }));
     fireEvent.change(
       await main.findByPlaceholderText("message, author, repository, SHA"),
       {
@@ -1678,7 +1678,7 @@ describe("App", () => {
     const main = within(await screen.findByRole("main"));
 
     await screen.findByText("No pull requests assigned to you.");
-    fireEvent.click(screen.getByRole("button", { name: "Commits" }));
+    fireEvent.click(screen.getByRole("button", { name: "All Commits" }));
     fireEvent.change(await main.findByLabelText("From"), {
       target: { value: "2026-05-25" },
     });
@@ -1938,7 +1938,7 @@ describe("App", () => {
     fireEvent.click(nav.getAllByRole("button", { name: "Search" })[1]);
     expect(await main.findByRole("heading", { name: "Work Items" })).toBeTruthy();
 
-    fireEvent.click(nav.getByRole("button", { name: "Commits" }));
+    fireEvent.click(nav.getByRole("button", { name: "All Commits" }));
     expect(await main.findByRole("heading", { name: "Commits" })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: ",", altKey: true });
@@ -1963,7 +1963,7 @@ describe("App", () => {
     const nav = within(screen.getByRole("navigation", { name: "Primary navigation" }));
     fireEvent.click(nav.getByRole("button", { name: "Views" }));
     expect(await main.findByRole("heading", { name: "Work Item Views" })).toBeTruthy();
-    fireEvent.click(nav.getByRole("button", { name: "Commits" }));
+    fireEvent.click(nav.getByRole("button", { name: "All Commits" }));
     expect(await main.findByRole("heading", { name: "Commits" })).toBeTruthy();
 
     // Back: Commits -> Work Item Views -> My Reviews.
