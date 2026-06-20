@@ -1225,7 +1225,12 @@ function AppShell() {
       }
 
       if (!event.defaultPrevented && matchesCombo(keybindings.focusFilter, event)) {
-        if (focusFilterInput()) event.preventDefault();
+        // Always claim the focus-filter combo so the browser's native find bar
+        // never opens. Focusing the filter input is best-effort; views without
+        // a filter simply swallow the shortcut instead of behaving
+        // inconsistently.
+        event.preventDefault();
+        focusFilterInput();
         return;
       }
 
