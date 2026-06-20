@@ -229,6 +229,21 @@ export function resetViewCountSessionForTests(): void {
   sessionCountBaselines = null;
 }
 
+export type WorkItemViewLayout = "list" | "board";
+
+const WI_VIEW_LAYOUT_STORAGE_PREFIX = "azdodeck:workItemViewLayout:";
+
+export function loadWorkItemViewLayout(viewId: string): WorkItemViewLayout {
+  if (typeof window === "undefined") return "list";
+  const value = window.localStorage.getItem(WI_VIEW_LAYOUT_STORAGE_PREFIX + viewId);
+  return value === "board" ? "board" : "list";
+}
+
+export function saveWorkItemViewLayout(viewId: string, layout: WorkItemViewLayout): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(WI_VIEW_LAYOUT_STORAGE_PREFIX + viewId, layout);
+}
+
 export function createWorkItemQueryViewsExport(views: WorkItemQueryView[]): WorkItemQueryViewsExport {
   return {
     schema: WI_QUERY_VIEWS_EXPORT_SCHEMA,
