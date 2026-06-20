@@ -18,6 +18,7 @@ url = "2"
 thiserror = "1"
 anyhow = "1"
 tracing = "0.1"
+secrecy = "0.10"
 
 # Release profile tuned for desktop startup: a smaller, fully optimized binary
 # loads and launches faster. Workspace-level so it applies to the whole build
