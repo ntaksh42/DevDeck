@@ -22,7 +22,10 @@ export default defineConfig(async () => ({
   server: {
     port: 1420,
     strictPort: true,
-    host: host || false,
+    // Bind IPv4 loopback explicitly. With `false`, Node resolves `localhost`
+    // to IPv6 `[::1]` on some Windows setups, but the Tauri WebView2 reaches
+    // `http://localhost:1420` via IPv4 `127.0.0.1`, so the window stays blank.
+    host: host || "127.0.0.1",
     hmr: host
       ? {
           protocol: "ws",
