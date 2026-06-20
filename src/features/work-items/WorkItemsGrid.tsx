@@ -41,6 +41,24 @@ import {
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { readStoredJson, writeStoredJson, storageKey } from '@/lib/storage';
 import { recordRecentWorkItem } from '@/lib/recentItems';
+import { RowShortcutHints, type RowShortcut } from '@/components/RowShortcutHints';
+
+// Key shortcuts available for the selected work item row (see handleKeyDown).
+const WORK_ITEM_ROW_SHORTCUTS: RowShortcut[] = [
+  { keys: "S", label: "State" },
+  { keys: "A", label: "Assign" },
+  { keys: "P", label: "Priority" },
+  { keys: "M", label: "Comment" },
+  { keys: "E", label: "Done" },
+  { keys: "↵", label: "Preview" },
+];
+import { isTauriRuntime } from '@/lib/runtime';
+import {
+  markWorkItemRead,
+  reconcileUnread,
+  seedDemoUnread,
+  workItemUnreadKey,
+} from './workItemUnreadTracking';
 import { openExternalUrl } from '@/lib/openExternal';
 import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
@@ -384,6 +402,7 @@ const WorkItemGridRow = forwardRef<
     item: WorkItemSummary;
     selected: boolean;
     checked: boolean;
+    unread: boolean;
     columnTemplate: string;
     visibleColumns: WiSortKey[];
     extraColumns: string[];
@@ -391,7 +410,7 @@ const WorkItemGridRow = forwardRef<
     onSelect: () => void;
     onCheckedChange: (checked: boolean, shiftKey: boolean) => void;
   }
->(({ item, selected, checked, columnTemplate, visibleColumns, extraColumns, staleThresholdDays, onSelect, onCheckedChange }, ref) => {
+>(({ item, selected, checked, unread, columnTemplate, visibleColumns, extraColumns, staleThresholdDays, onSelect, onCheckedChange }, ref) => {
   const staleDays = workItemStaleDays(item, Date.now());
   const isStale = staleDays !== null && staleDays >= staleThresholdDays;
   return (
@@ -450,6 +469,14 @@ const WorkItemGridRow = forwardRef<
               : undefined
           }
         >
+          {isTitle && unread ? (
+            <span
+              role="img"
+              aria-label="Unread activity"
+              title="Changed since you last opened it"
+              className="h-2 w-2 shrink-0 rounded-full bg-blue-500 dark:bg-blue-400"
+            />
+          ) : null}
           {isTitle && isStale ? (
             <AlertTriangle
               role="img"
@@ -776,9 +803,52 @@ export function WorkItemsGrid({
   );
   const firstCheckedItem = checkedItems[0] ?? null;
 
+  // Unread markers: work items changed since the user last opened them.
+  const [unreadKeys, setUnreadKeys] = useState<Set<string>>(new Set());
+  const unreadDemoSeededRef = useRef(false);
+  const activitySignature = useMemo(
+    () =>
+      results
+        .map((item) => `${workItemUnreadKey(item.organizationId, item.id)}:${item.changedDate ?? ""}`)
+        .join("|"),
+    [results],
+  );
+  useEffect(() => {
+    if (!unreadDemoSeededRef.current && !isTauriRuntime()) {
+      unreadDemoSeededRef.current = true;
+      const candidate = results.find((item) => item.changedDate);
+      if (candidate) {
+        seedDemoUnread(
+          workItemUnreadKey(candidate.organizationId, candidate.id),
+          "2000-01-01T00:00:00Z",
+        );
+      }
+    }
+    setUnreadKeys(
+      reconcileUnread(
+        results.map((item) => ({
+          key: workItemUnreadKey(item.organizationId, item.id),
+          changedDate: item.changedDate,
+        })),
+      ),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activitySignature]);
+
   useEffect(() => {
     if (!selectedItem) return;
     recordRecentWorkItem(selectedItem);
+    // Opening an item marks it read.
+    const key = workItemUnreadKey(selectedItem.organizationId, selectedItem.id);
+    if (unreadKeys.has(key)) {
+      markWorkItemRead(key, selectedItem.changedDate);
+      setUnreadKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedItem]);
 
   useEffect(() => {
@@ -1606,6 +1676,7 @@ export function WorkItemsGrid({
                         item={item}
                         selected={i === selectedIndex}
                         checked={checkedIds.has(`${item.organizationId}:${item.projectId}:${item.id}`)}
+                        unread={unreadKeys.has(workItemUnreadKey(item.organizationId, item.id))}
                         columnTemplate={wiColTemplate}
                         visibleColumns={visibleColumns}
                         extraColumns={extraColumns}
@@ -1625,21 +1696,26 @@ export function WorkItemsGrid({
           )}
 
           <div className="flex items-center justify-between gap-2 border-t border-border px-2 py-1 text-xs text-muted-foreground">
-            <span>
-              {loading
-                ? "Loading…"
-                : searched
-                  ? hasActiveColumnFilters
-                    ? `${displayed.length} of ${sorted.length} item${sorted.length === 1 ? "" : "s"}`
-                    : `${displayed.length} item${displayed.length === 1 ? "" : "s"}`
-                  : "Ready"}
-              {dataUpdatedAt ? (
-                <span title={new Date(dataUpdatedAt).toLocaleString()}>
-                  {" · "}
-                  Updated {formatRelativeDate(new Date(dataUpdatedAt).toISOString())}
-                </span>
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="shrink-0">
+                {loading
+                  ? "Loading…"
+                  : searched
+                    ? hasActiveColumnFilters
+                      ? `${displayed.length} of ${sorted.length} item${sorted.length === 1 ? "" : "s"}`
+                      : `${displayed.length} item${displayed.length === 1 ? "" : "s"}`
+                    : "Ready"}
+                {dataUpdatedAt ? (
+                  <span title={new Date(dataUpdatedAt).toLocaleString()}>
+                    {" · "}
+                    Updated {formatRelativeDate(new Date(dataUpdatedAt).toISOString())}
+                  </span>
+                ) : null}
+                {isFetching ? <span>{" · "}Refreshing…</span> : null}
+              </span>
+              {selectedItem && checkedItems.length === 0 ? (
+                <RowShortcutHints hints={WORK_ITEM_ROW_SHORTCUTS} />
               ) : null}
-              {isFetching ? <span>{" · "}Refreshing…</span> : null}
             </span>
             <span className="flex items-center gap-2">
               {triageScope ? (

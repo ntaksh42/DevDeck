@@ -69,6 +69,17 @@ import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { LoadingState, ErrorState } from '@/components/StateDisplay';
 import { ActiveFilters } from '@/components/ActiveFilters';
+import { RowShortcutHints, type RowShortcut } from '@/components/RowShortcutHints';
+
+// Key shortcuts available for the selected review row (see handleKeyDown).
+const REVIEW_ROW_SHORTCUTS: RowShortcut[] = [
+  { keys: "A", label: "Approve" },
+  { keys: "X", label: "Reject" },
+  { keys: "E", label: "Done" },
+  { keys: "Z", label: "Snooze" },
+  { keys: "C", label: "Copy" },
+  { keys: "↵", label: "Preview" },
+];
 import { PrReviewPanel } from './PrReviewPanel';
 import { VOTE_BADGE_CLASSES, voteTone } from './voteVisual';
 import {
@@ -1963,6 +1974,9 @@ export function MyReviewsGrid({
                   </>
                 ) : null}
               </span>
+              {selectedPr && !isMultiSelect ? (
+                <RowShortcutHints hints={REVIEW_ROW_SHORTCUTS} />
+              ) : null}
               {isMultiSelect ? (
                 changesLoading ? (
                   <span>Checking {selectedPrs.length} PRs for overlapping files…</span>
