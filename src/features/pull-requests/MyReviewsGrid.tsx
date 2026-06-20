@@ -96,10 +96,10 @@ const MIN_REVIEW_PREVIEW_WIDTH = 280;
 // Effectively unbounded: the pane is still capped by the window width.
 const MAX_REVIEW_PREVIEW_WIDTH = 8192;
 const REVIEW_PREVIEW_WIDTH_STORAGE_KEY = 'azdodeck:layout:reviewPreviewWidth';
-const DEFAULT_PR_GRID_COLUMN_WIDTHS = [52, 36, 110, 180, 82, 56, 76, 68, 78];
-const PR_GRID_COLUMN_MIN_WIDTHS = [48, 32, 96, 150, 72, 50, 68, 62, 70];
-const PR_GRID_COLUMN_MAX_WIDTHS = [120, 60, 520, 960, 240, 120, 240, 180, 240];
-const PR_GRID_COLUMN_WIDTHS_STORAGE_KEY = 'azdodeck:layout:myReviewsGridColumnWidths:v3';
+const DEFAULT_PR_GRID_COLUMN_WIDTHS = [52, 36, 110, 180, 82, 56, 64, 76, 68, 78];
+const PR_GRID_COLUMN_MIN_WIDTHS = [48, 32, 96, 150, 72, 50, 52, 68, 62, 70];
+const PR_GRID_COLUMN_MAX_WIDTHS = [120, 60, 520, 960, 240, 120, 120, 240, 180, 240];
+const PR_GRID_COLUMN_WIDTHS_STORAGE_KEY = 'azdodeck:layout:myReviewsGridColumnWidths:v4';
 const PR_GRID_VIEW_STORAGE_KEY = "azdodeck:view:myReviewsGrid:v1";
 const PR_GRID_ROW_HEIGHT = 29;
 const PR_GRID_OVERSCAN = 8;
@@ -210,6 +210,17 @@ function CiBadge({ pr }: { pr: ReviewPullRequestSummary }) {
 
 // Renders a single grid cell for the given column key. Cells stay direct grid
 // items (wrapped only in a keyed Fragment) so the column template lines up.
+// Whole days a PR has been open (review age), or null when the creation date
+// is unparseable. Negative ages (clock skew) clamp to 0.
+export function reviewAgeDays(
+  creationDate: string,
+  now: number = Date.now(),
+): number | null {
+  const created = new Date(creationDate).getTime();
+  if (!Number.isFinite(created)) return null;
+  return Math.max(0, Math.floor((now - created) / 86_400_000));
+}
+
 function renderPrCell(
   key: SortKey,
   pr: ReviewPullRequestSummary,
@@ -281,6 +292,21 @@ function renderPrCell(
           {formatRelativeDate(pr.creationDate)}
         </span>
       );
+    case "reviewAge": {
+      const days = reviewAgeDays(pr.creationDate);
+      return (
+        <span
+          className={`text-xs tabular-nums ${isStale ? "font-medium text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`}
+          title={
+            days === null
+              ? "Review age unavailable"
+              : `Open for ${days} day${days === 1 ? "" : "s"} (since ${formatDate(pr.creationDate)})`
+          }
+        >
+          {days === null ? "—" : `${days}d`}
+        </span>
+      );
+    }
     case "targetRefName":
       return (
         <span className="truncate text-xs text-muted-foreground" title={pr.targetRefName}>
@@ -354,6 +380,7 @@ type SortKey =
   | "title"
   | "createdBy"
   | "creationDate"
+  | "reviewAge"
   | "targetRefName"
   | "myIsRequired"
   | "myVote";
@@ -369,6 +396,7 @@ const sortLabels: Record<SortKey, string> = {
   title: "Title",
   createdBy: "Author",
   creationDate: "Created",
+  reviewAge: "Review age",
   targetRefName: "Target",
   myIsRequired: "Role",
   myVote: "My Vote",
@@ -382,6 +410,7 @@ const PR_GRID_KEYS: SortKey[] = [
   "title",
   "createdBy",
   "creationDate",
+  "reviewAge",
   "targetRefName",
   "myIsRequired",
   "myVote",
@@ -397,7 +426,9 @@ function loadVisibleColumns(value: unknown): SortKey[] {
 }
 
 function defaultSortDirection(key: SortKey): SortDirection {
-  return key === "creationDate" ? "desc" : "asc";
+  // Created (newest first) and Review age (oldest/longest-waiting first) both
+  // default to descending.
+  return key === "creationDate" || key === "reviewAge" ? "desc" : "asc";
 }
 
 function compareStrings(a: string | null | undefined, b: string | null | undefined): number {
@@ -443,6 +474,18 @@ function compareReviewPrs(
         if (Number.isFinite(left)) return -1;
         if (Number.isFinite(right)) return 1;
         return compareStrings(a.creationDate, b.creationDate);
+      }
+    case "reviewAge":
+      {
+        // Sort by age ascending (youngest first); descending surfaces the
+        // longest-waiting reviews. Age = now - creation, so this is the
+        // creation-time comparison reversed.
+        const left = new Date(a.creationDate).getTime();
+        const right = new Date(b.creationDate).getTime();
+        if (Number.isFinite(left) && Number.isFinite(right)) return right - left;
+        if (Number.isFinite(left)) return -1;
+        if (Number.isFinite(right)) return 1;
+        return compareStrings(b.creationDate, a.creationDate);
       }
     case "targetRefName":
       return compareStrings(a.targetRefName, b.targetRefName);
