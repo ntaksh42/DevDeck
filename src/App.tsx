@@ -117,6 +117,7 @@ import {
   type WorkItemNotificationEvent,
   type PullRequestNotificationEvent,
 } from "@/lib/desktopNotifications";
+import { SyncStatusIndicator } from "@/features/sync/SyncStatusIndicator";
 
 type View =
   | "pullRequestSearch"
@@ -317,6 +318,7 @@ function AppShell() {
     mutationFn: (input: { scope?: SyncScope }) => triggerSync(input),
     onSuccess: (_data, input) => {
       invalidateSyncedDataQueries(queryClient, invalidationScopesForSyncScope(input.scope ?? "all"));
+      void queryClient.invalidateQueries({ queryKey: ["syncStates"] });
     },
   });
 
@@ -1364,7 +1366,11 @@ function AppShell() {
             </p>
           </div>
           {organizations.length > 0 && (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <SyncStatusIndicator
+                onSync={() => syncMutation.mutate({ scope: "all" })}
+                syncing={syncMutation.isPending}
+              />
               <button
                 type="button"
                 disabled={syncMutation.isPending}
