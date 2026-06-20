@@ -1,9 +1,10 @@
 import { type ChangeEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Activity, Bell, Building2, Clock, Eye, EyeOff, FileText, Keyboard, Loader2, Monitor, Moon, Palette, Play, Plus, RefreshCw, Send, ShieldCheck, Sun, Trash2 } from 'lucide-react';
 import {
   addAzureCliOrganization,
   addPatOrganization,
+  checkOrganizationCredential,
   deleteOrganization,
   getAppSettings,
   listPipelineDefinitions,
@@ -86,6 +87,7 @@ export function OrganizationSettings({
       <QuickPipelinesSettings organizations={organizations} />
       <ReviewStaleThresholdSettings />
       <WorkItemStaleThresholdSettings />
+      <CredentialHealthSettings organizations={organizations} />
       <SyncHealthSettings organizations={organizations} />
       <DataCacheSettings />
       <ValidationModeSettings />
@@ -136,6 +138,109 @@ export function OrganizationSettings({
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function CredentialHealthSettings({ organizations }: { organizations: Organization[] }) {
+  const queryClient = useQueryClient();
+  const results = useQueries({
+    queries: organizations.map((organization) => ({
+      queryKey: ["credentialHealth", organization.id],
+      queryFn: () => checkOrganizationCredential(organization.id),
+      staleTime: 5 * 60_000,
+      retry: false,
+    })),
+  });
+
+  function recheckAll() {
+    for (const organization of organizations) {
+      void queryClient.invalidateQueries({
+        queryKey: ["credentialHealth", organization.id],
+      });
+    }
+  }
+
+  return (
+    <div className="overflow-hidden rounded-md border border-border bg-card">
+      <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
+            <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold">Credential health</h2>
+            <p className="text-sm text-muted-foreground">
+              Connection status per organization. Secret values are never shown.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={recheckAll}
+          disabled={results.some((result) => result.isFetching)}
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-xs font-medium hover:bg-secondary disabled:opacity-50"
+        >
+          <RefreshCw
+            className={`h-3.5 w-3.5 ${results.some((result) => result.isFetching) ? "animate-spin" : ""}`}
+            aria-hidden="true"
+          />
+          Re-check
+        </button>
+      </div>
+      {organizations.length === 0 ? (
+        <p className="px-5 py-3 text-sm text-muted-foreground">
+          Add an organization to check its credential.
+        </p>
+      ) : (
+        <div className="divide-y divide-border">
+          {organizations.map((organization, index) => {
+            const result = results[index];
+            const health = result?.data;
+            let tone = "text-muted-foreground";
+            let label = "Checking…";
+            let detail: string | null = null;
+            if (result?.isError) {
+              tone = "text-amber-600 dark:text-amber-400";
+              label = "Check failed";
+              detail = commandErrorMessage(result.error);
+            } else if (health) {
+              if (health.status === "ok") {
+                tone = "text-green-700 dark:text-green-400";
+                label = "Connected";
+              } else if (health.status === "unauthorized") {
+                tone = "text-destructive";
+                label = "Re-authenticate";
+                detail = health.message;
+              } else {
+                tone = "text-amber-600 dark:text-amber-400";
+                label = "Unreachable";
+                detail = health.message;
+              }
+            }
+            return (
+              <div key={organization.id} className="grid items-center gap-4 px-3 py-2 md:grid-cols-[1fr_auto_auto]">
+                <div>
+                  <p className="font-medium">{organization.name}</p>
+                  {detail ? (
+                    <p className="text-sm text-muted-foreground">{detail}</p>
+                  ) : null}
+                </div>
+                <div className="text-left text-sm md:text-right">
+                  <p className="text-muted-foreground">Auth</p>
+                  <p className="font-medium">{formatAuthProvider(organization.authProvider)}</p>
+                </div>
+                <div className="text-left text-sm md:text-right">
+                  <p className="text-muted-foreground">Status</p>
+                  <p className={`font-medium ${tone}`}>
+                    {result?.isFetching ? "Checking…" : label}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

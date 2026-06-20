@@ -28,7 +28,9 @@ use commits::{
 };
 use db::{AppDatabase, AppSettings, Organization, SyncState};
 use error::{AppError, Result};
-use orgs::{AddAzureCliOrganizationInput, AddPatOrganizationInput, OrganizationService};
+use orgs::{
+    AddAzureCliOrganizationInput, AddPatOrganizationInput, CredentialHealth, OrganizationService,
+};
 use pipelines::{
     CancelPipelineRunInput, GetPipelineRunInput, GetPipelineRunLogTailInput,
     ListPipelineDefinitionsInput, ListPipelineProjectsInput, ListPipelineRunsInput,
@@ -199,6 +201,15 @@ async fn add_pat_organization(
     state: State<'_, AppState>,
 ) -> Result<Organization> {
     state.organizations.add_pat_organization(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn check_organization_credential(
+    organization_id: String,
+    state: State<'_, AppState>,
+) -> Result<CredentialHealth> {
+    state.organizations.check_credential(&organization_id).await
 }
 
 #[tauri::command]
@@ -806,6 +817,7 @@ pub fn run() {
             list_snoozed_items,
             delete_organization,
             add_pat_organization,
+            check_organization_credential,
             add_azure_cli_organization,
             search_pull_requests,
             list_my_review_pull_requests,

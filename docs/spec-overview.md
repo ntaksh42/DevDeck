@@ -70,7 +70,7 @@ crates/azdo-client/                            — Tauri 非依存の独立 ADO 
 | **Commits** | キーワード/プロジェクト/リポジトリ/作者/ブランチ/期間でコミット検索。7d/30d/90d プリセット。関連 PR の遅延ルックアップ。 |
 | **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。 |
 | **Code Search** | リポジトリ横断のコード検索。ファイル/パス/ブランチとリンク。 |
-| **Settings** | 組織設定 (PAT / Azure CLI)、通知設定、フォルダパス、グローバルホットキー、キーバインド上書き。 |
+| **Settings** | 組織設定 (PAT / Azure CLI)、通知設定、フォルダパス、グローバルホットキー、キーバインド上書き。組織ごとの認証情報ヘルス (`check_organization_credential` で接続を probe し Connected / Re-authenticate / Unreachable を表示、シークレットは非表示)。 |
 
 ### 横断機能
 

@@ -150,7 +150,8 @@ describe("App", () => {
 
     expect(await screen.findByText("Organizations")).toBeTruthy();
     expect(screen.getByText("https://dev.azure.com/contoso")).toBeTruthy();
-    expect(screen.getByText("PAT")).toBeTruthy();
+    // "PAT" appears in both the Organizations list and the Credential health panel.
+    expect(screen.getAllByText("PAT").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Test User").length).toBeGreaterThan(0);
     expect(await screen.findByDisplayValue("C:\\reports")).toBeTruthy();
   });

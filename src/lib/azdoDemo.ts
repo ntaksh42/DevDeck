@@ -480,6 +480,17 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
   switch (command) {
     case "list_organizations":
       return [demoOrganization];
+    case "check_organization_credential": {
+      const organizationId =
+        (args as { organizationId?: string } | undefined)?.organizationId ??
+        demoOrganization.id;
+      return {
+        organizationId,
+        authProvider: demoOrganization.authProvider,
+        status: "ok",
+        message: null,
+      };
+    }
     case "get_app_settings":
       return demoSettings;
     case "update_app_settings": {

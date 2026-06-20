@@ -850,6 +850,24 @@ export async function listOrganizations(): Promise<Organization[]> {
   return organizationsSchema.parse(result);
 }
 
+const credentialHealthSchema = z.object({
+  organizationId: z.string(),
+  authProvider: z.string(),
+  status: z.enum(["ok", "unauthorized", "error"]),
+  message: z.string().nullable().default(null),
+});
+
+export type CredentialHealth = z.infer<typeof credentialHealthSchema>;
+
+export async function checkOrganizationCredential(
+  organizationId: string,
+): Promise<CredentialHealth> {
+  const result = await invokeCommand("check_organization_credential", {
+    organizationId,
+  });
+  return credentialHealthSchema.parse(result);
+}
+
 export async function getAppSettings(): Promise<AppSettings> {
   const result = await invokeCommand("get_app_settings");
   return appSettingsSchema.parse(result);

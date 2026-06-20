@@ -1,11 +1,24 @@
 use std::sync::Arc;
 
-use azdo_client::{AdoClient, AzureCliProvider, PatProvider};
-use serde::Deserialize;
+use azdo_client::{AdoClient, AdoError, AzureCliProvider, PatProvider};
+use serde::{Deserialize, Serialize};
 
+use crate::auth::client_for_organization;
 use crate::db::{AppDatabase, Organization, OrganizationDraft};
 use crate::error::{AppError, Result};
 use crate::secrets::SecretStore;
+
+/// Health of an organization's stored credential, probed without ever
+/// surfacing the secret itself.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CredentialHealth {
+    pub organization_id: String,
+    pub auth_provider: String,
+    /// "ok" | "unauthorized" | "error".
+    pub status: String,
+    pub message: Option<String>,
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,6 +46,45 @@ impl OrganizationService {
 
     pub fn list(&self) -> Result<Vec<Organization>> {
         self.db.list_organizations()
+    }
+
+    /// Probes an organization's credential with a lightweight authenticated
+    /// call (connection data), reporting ok / unauthorized / error. The secret
+    /// is never read out or included in the message.
+    pub async fn check_credential(&self, organization_id: &str) -> Result<CredentialHealth> {
+        let organization = self.db.resolve_organization(Some(organization_id))?;
+        let auth_provider = organization.auth_provider.clone();
+
+        let (status, message) = match client_for_organization(&organization, &self.secrets) {
+            Ok(client) => match client.connection_data().await {
+                Ok(_) => ("ok", None),
+                Err(AdoError::Unauthorized) => (
+                    "unauthorized",
+                    Some(
+                        "Authentication failed. Re-authenticate this organization in Settings."
+                            .to_string(),
+                    ),
+                ),
+                Err(_) => (
+                    "error",
+                    Some(
+                        "Could not reach Azure DevOps. Check the connection and try again."
+                            .to_string(),
+                    ),
+                ),
+            },
+            Err(_) => (
+                "error",
+                Some("Stored credential is unavailable. Re-add this organization.".to_string()),
+            ),
+        };
+
+        Ok(CredentialHealth {
+            organization_id: organization.id,
+            auth_provider,
+            status: status.to_string(),
+            message,
+        })
     }
 
     pub async fn add_pat_organization(
