@@ -1357,6 +1357,9 @@ export function commandErrorMessage(error: unknown): string {
   if (typeof error === "string") {
     return error;
   }
+  if (error instanceof z.ZodError) {
+    return "Received an unexpected response format from the server.";
+  }
   if (
     error &&
     typeof error === "object" &&
