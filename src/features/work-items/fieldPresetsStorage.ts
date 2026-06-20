@@ -1,5 +1,8 @@
 import { readStoredJson, writeStoredJson } from "@/lib/storage";
 
+// Bare key (no migration to date). On an incompatible shape change, bump with
+// `storageKey(name, version)` from "@/lib/storage" instead of a hand-spelled
+// `:vN` suffix.
 export const FIELD_PRESETS_STORAGE_KEY = "azdodeck:workItems:fieldPresets";
 
 // Presets are applied with the digit keys 1-9, so more would be unreachable.

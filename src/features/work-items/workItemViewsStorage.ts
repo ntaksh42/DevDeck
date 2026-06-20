@@ -1,6 +1,9 @@
 import { clamp, type SortDirection } from "@/lib/utils";
 import { isValidFieldReferenceName } from "./previewFieldsStorage";
 
+// Bare keys (no migration to date). On an incompatible shape change, bump with
+// `storageKey(name, version)` from "@/lib/storage" instead of a hand-spelled
+// `:vN` suffix.
 const WI_QUERY_VIEWS_STORAGE_KEY = "azdodeck:workItemQueryViews";
 const WI_QUERY_VIEWS_EXPORT_SCHEMA = "azdodeck.workItemViews";
 export const WI_VIEW_COUNT_BASELINES_STORAGE_KEY = "azdodeck:workItems:viewCountBaselines";

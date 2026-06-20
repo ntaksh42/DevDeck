@@ -39,7 +39,7 @@ import {
   type SortDirection,
 } from '@/lib/utils';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
-import { readStoredJson, writeStoredJson } from '@/lib/storage';
+import { readStoredJson, writeStoredJson, storageKey } from '@/lib/storage';
 import { recordRecentWorkItem } from '@/lib/recentItems';
 import { openExternalUrl } from '@/lib/openExternal';
 import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
@@ -57,10 +57,10 @@ import { isWorkItemStale, workItemStaleDays } from './workItemStale';
 const DEFAULT_WI_COLUMN_WIDTHS = [46, 64, 60, 180, 82, 84, 68];
 const WI_COLUMN_MIN_WIDTHS = [44, 58, 56, 150, 70, 74, 60];
 const WI_COLUMN_MAX_WIDTHS = [120, 200, 180, 720, 300, 260, 160];
-const WI_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:wiSearchGridColumnWidths:v2";
-const WI_VISIBLE_COLUMNS_STORAGE_KEY = "azdodeck:layout:wiSearchGridVisibleColumns:v1";
-const WI_SORT_STORAGE_KEY = "azdodeck:view:wiSearchGridSort:v1";
-const WI_COLUMN_FILTERS_STORAGE_KEY = "azdodeck:view:wiSearchGridColumnFilters:v1";
+const WI_COLUMN_WIDTHS_STORAGE_KEY = storageKey("azdodeck:layout:wiSearchGridColumnWidths", 2);
+const WI_VISIBLE_COLUMNS_STORAGE_KEY = storageKey("azdodeck:layout:wiSearchGridVisibleColumns", 1);
+const WI_SORT_STORAGE_KEY = storageKey("azdodeck:view:wiSearchGridSort", 1);
+const WI_COLUMN_FILTERS_STORAGE_KEY = storageKey("azdodeck:view:wiSearchGridColumnFilters", 1);
 const DEFAULT_WORK_ITEM_PREVIEW_WIDTH = 440;
 // Effectively unbounded: the pane is still capped by the window because the
 // preview grid column is minmax(300px, var(--work-item-preview-width)).
