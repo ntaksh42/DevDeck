@@ -491,6 +491,7 @@ export function WorkItemsGrid({
   autoFocus = false,
   emptyMessage,
   dataUpdatedAt,
+  isFetching = false,
   activeExternalFilterCount = 0,
   extraColumns = [],
   initialSort,
@@ -507,6 +508,7 @@ export function WorkItemsGrid({
   autoFocus?: boolean;
   emptyMessage?: string;
   dataUpdatedAt?: number;
+  isFetching?: boolean;
   activeExternalFilterCount?: number;
   extraColumns?: string[];
   initialSort?: WiSortState;
@@ -1631,7 +1633,13 @@ export function WorkItemsGrid({
                     ? `${displayed.length} of ${sorted.length} item${sorted.length === 1 ? "" : "s"}`
                     : `${displayed.length} item${displayed.length === 1 ? "" : "s"}`
                   : "Ready"}
-              {dataUpdatedAt ? ` · data ${formatRelativeDate(new Date(dataUpdatedAt).toISOString())}` : ""}
+              {dataUpdatedAt ? (
+                <span title={new Date(dataUpdatedAt).toLocaleString()}>
+                  {" · "}
+                  Updated {formatRelativeDate(new Date(dataUpdatedAt).toISOString())}
+                </span>
+              ) : null}
+              {isFetching ? <span>{" · "}Refreshing…</span> : null}
             </span>
             <span className="flex items-center gap-2">
               {triageScope ? (
