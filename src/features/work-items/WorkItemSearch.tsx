@@ -8,6 +8,8 @@ import {
   type Organization,
 } from "@/lib/azdoCommands";
 import { ErrorState } from "@/components/StateDisplay";
+import { SavedSearchBar, useApplySearchPreset } from "@/components/SavedSearchBar";
+import type { WorkItemSearchPayload } from "@/lib/searchPresets";
 import { WorkItemsGrid } from "./WorkItemsGrid";
 import { workItemQueryKeys } from "./queryKeys";
 
@@ -66,6 +68,36 @@ export function WorkItemSearch({
       projectId: projectId || undefined,
     });
   }
+
+  const currentPayload: WorkItemSearchPayload = {
+    organizationId,
+    query,
+    state,
+    workItemType,
+    projectId,
+  };
+
+  // Apply a saved search: restore the criteria, then run it.
+  function applySavedSearch(payload: WorkItemSearchPayload) {
+    const targetOrganizationId =
+      payload.organizationId && organizations.some((o) => o.id === payload.organizationId)
+        ? payload.organizationId
+        : organizationId;
+    setOrganizationId(targetOrganizationId);
+    setQuery(payload.query);
+    setState(payload.state);
+    setWorkItemType(payload.workItemType);
+    setProjectId(payload.projectId);
+    mutation.mutate({
+      organizationId: targetOrganizationId,
+      query: payload.query,
+      state: payload.state,
+      workItemType: payload.workItemType,
+      projectId: payload.projectId || undefined,
+    });
+  }
+
+  useApplySearchPreset<WorkItemSearchPayload>("workItem", applySavedSearch);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -144,6 +176,8 @@ export function WorkItemSearch({
           Search
         </button>
       </form>
+
+      <SavedSearchBar kind="workItem" currentPayload={currentPayload} onApply={applySavedSearch} />
 
       <p className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
         <Info className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />

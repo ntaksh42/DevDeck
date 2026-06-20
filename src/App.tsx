@@ -141,6 +141,13 @@ import {
   type NavigateWorkItemDetail,
   type NavigatePullRequestDetail,
 } from "@/lib/crossLinks";
+import {
+  SEARCH_PRESETS_CHANGED_EVENT,
+  SEARCH_PRESET_KIND_LABELS,
+  loadSearchPresets,
+  requestApplySearchPreset,
+  type SearchPresetKind,
+} from "@/lib/searchPresets";
 import type { MyReviewsSelectRequest } from "@/features/pull-requests/MyReviewsGrid";
 import {
   emptyViewHistory,
@@ -162,6 +169,13 @@ type View =
   | "settings";
 
 type NavSectionId = "pullRequests" | "workItems";
+
+// Which view each saved-search kind opens when launched from the palette.
+const SAVED_SEARCH_VIEW: Record<SearchPresetKind, View> = {
+  pr: "pullRequestSearch",
+  commit: "commits",
+  workItem: "workItems",
+};
 
 const DEFAULT_SIDEBAR_WIDTH = 232;
 const SIDEBAR_WIDTH_STORAGE_KEY = "azdodeck:layout:sidebarWidth";
@@ -274,6 +288,24 @@ function AppShell() {
   const navigatingHistoryRef = useRef(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  // Saved searches for the command palette, refreshed when any search view
+  // writes them so newly saved searches appear without a reload.
+  const [savedSearches, setSavedSearches] = useState(() => ({
+    pr: loadSearchPresets("pr"),
+    commit: loadSearchPresets("commit"),
+    workItem: loadSearchPresets("workItem"),
+  }));
+  useEffect(() => {
+    function refresh() {
+      setSavedSearches({
+        pr: loadSearchPresets("pr"),
+        commit: loadSearchPresets("commit"),
+        workItem: loadSearchPresets("workItem"),
+      });
+    }
+    window.addEventListener(SEARCH_PRESETS_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(SEARCH_PRESETS_CHANGED_EVENT, refresh);
+  }, []);
   const [navExpanded, setNavExpanded] = useState<Record<NavSectionId, boolean>>({
     pullRequests: true,
     workItems: true,
@@ -954,6 +986,18 @@ function AppShell() {
         void runQuickPipeline(pipeline);
       },
     })),
+    ...(["pr", "commit", "workItem"] as SearchPresetKind[]).flatMap((kind) =>
+      savedSearches[kind].map((preset) => ({
+        group: "Saved searches",
+        id: `savedSearch.${kind}.${preset.id}`,
+        keywords: ["saved", "search", SEARCH_PRESET_KIND_LABELS[kind]],
+        label: `${preset.name} — ${SEARCH_PRESET_KIND_LABELS[kind]}`,
+        run: () => {
+          requestApplySearchPreset(kind, preset.payload);
+          setView(SAVED_SEARCH_VIEW[kind]);
+        },
+      })),
+    ),
   ];
 
   function handleNavKeyDown(event: ReactKeyboardEvent<HTMLElement>) {

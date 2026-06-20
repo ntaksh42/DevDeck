@@ -39,6 +39,8 @@ import { ColumnResizeHandle, ResizeHandle } from "@/components/ResizeHandle";
 import { ColumnVisibilityMenu } from "@/components/ColumnVisibilityMenu";
 import { ErrorState, LoadingState } from "@/components/StateDisplay";
 import { ActiveFilters } from "@/components/ActiveFilters";
+import { SavedSearchBar, useApplySearchPreset } from "@/components/SavedSearchBar";
+import type { CommitSearchPayload } from "@/lib/searchPresets";
 import { CommitFilesPanel } from "./CommitFilesPanel";
 import { CommitActivityHeatmap } from "./CommitActivityHeatmap";
 
@@ -334,6 +336,45 @@ export function CommitSearch({
     }
   }
 
+  const currentPayload: CommitSearchPayload = {
+    organizationId: selectedOrganizationId,
+    query,
+    author,
+    branch,
+    fromDate,
+    toDate,
+    projectId,
+    repositoryId,
+  };
+
+  function applySavedSearch(payload: CommitSearchPayload) {
+    const targetOrganizationId =
+      payload.organizationId && organizations.some((o) => o.id === payload.organizationId)
+        ? payload.organizationId
+        : selectedOrganizationId;
+    if (payload.organizationId) setOrganizationId(targetOrganizationId);
+    setQuery(payload.query);
+    setAuthor(payload.author);
+    setBranch(payload.branch);
+    setFromDate(payload.fromDate);
+    setToDate(payload.toDate);
+    setProjectId(payload.projectId);
+    setRepositoryId(payload.repositoryId);
+    setValidationError(null);
+    mutation.mutate({
+      organizationId: targetOrganizationId,
+      query: payload.query,
+      author: payload.author,
+      branch: payload.branch,
+      fromDate: payload.fromDate,
+      toDate: payload.toDate,
+      projectId: payload.projectId,
+      repositoryId: payload.repositoryId,
+    });
+  }
+
+  useApplySearchPreset<CommitSearchPayload>("commit", applySavedSearch);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="shrink-0 rounded-md border border-border bg-card">
@@ -514,6 +555,8 @@ export function CommitSearch({
           ) : null}
         </form>
       </div>
+
+      <SavedSearchBar kind="commit" currentPayload={currentPayload} onApply={applySavedSearch} />
 
       <div className="flex items-center justify-between gap-3">
         <CommitViewToggle value={viewMode} onChange={setViewMode} />

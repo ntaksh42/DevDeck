@@ -37,6 +37,8 @@ import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { ErrorState, LoadingState } from '@/components/StateDisplay';
 import { ActiveFilters } from '@/components/ActiveFilters';
+import { SavedSearchBar, useApplySearchPreset } from '@/components/SavedSearchBar';
+import type { PrSearchPayload } from '@/lib/searchPresets';
 import { PrReviewPanel } from './PrReviewPanel';
 
 const DEFAULT_PR_SEARCH_PREVIEW_WIDTH = 460;
@@ -175,6 +177,33 @@ export function PullRequestSearch({
     }
   }
 
+  const currentPayload: PrSearchPayload = {
+    organizationId,
+    query,
+    projectId,
+    repositoryId,
+  };
+
+  function applySavedSearch(payload: PrSearchPayload) {
+    const targetOrganizationId =
+      payload.organizationId && organizations.some((o) => o.id === payload.organizationId)
+        ? payload.organizationId
+        : organizationId;
+    setOrganizationId(targetOrganizationId);
+    setQuery(payload.query);
+    setProjectId(payload.projectId);
+    setRepositoryId(payload.repositoryId);
+    mutation.mutate({
+      organizationId: targetOrganizationId,
+      query: payload.query,
+      status: PR_SEARCH_STATUS,
+      projectId: payload.projectId || undefined,
+      repositoryId: payload.repositoryId || undefined,
+    });
+  }
+
+  useApplySearchPreset<PrSearchPayload>("pr", applySavedSearch);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="shrink-0 rounded-md border border-border bg-card">
@@ -272,6 +301,8 @@ export function PullRequestSearch({
           </p>
         </form>
       </div>
+
+      <SavedSearchBar kind="pr" currentPayload={currentPayload} onApply={applySavedSearch} />
 
       {mutation.isError && <ErrorState message={commandErrorMessage(mutation.error)} />}
 
