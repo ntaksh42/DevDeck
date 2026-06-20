@@ -21,6 +21,36 @@ use super::{
     WorkItemService, UPDATE_CANDIDATES_CACHE_CAP, UPDATE_CANDIDATES_TTL,
 };
 
+/// Search the identity picker and map each result, falling back to the
+/// identities API (mapped through `fallback`) when the picker call fails.
+///
+/// `search_mentions` and `search_assignees` share this exact control flow;
+/// only the per-identity mappers differ.
+async fn search_identity_picker_with_fallback<T, P, F>(
+    client: &AdoClient,
+    query: &str,
+    limit: usize,
+    picker: P,
+    fallback: F,
+) -> Result<Vec<T>>
+where
+    P: FnMut(IdentityPickerIdentity) -> Option<T>,
+    F: FnMut(Identity) -> Option<T>,
+{
+    match client.search_identity_picker(query, limit).await {
+        Ok(identities) => Ok(identities.into_iter().filter_map(picker).collect()),
+        Err(error) => {
+            tracing::warn!(%error, "identity picker search failed; falling back to identities API");
+            Ok(client
+                .search_identities(query, limit)
+                .await?
+                .into_iter()
+                .filter_map(fallback)
+                .collect())
+        }
+    }
+}
+
 pub(crate) fn summarize_mention_candidate(identity: Identity) -> Option<MentionCandidate> {
     if !is_user_like_identity(&identity) {
         return None;
@@ -584,21 +614,14 @@ impl WorkItemService {
         }
 
         if !query.is_empty() {
-            let picker_candidates = match client.search_identity_picker(query, 40).await {
-                Ok(identities) => identities
-                    .into_iter()
-                    .filter_map(mention_candidate_from_identity_picker)
-                    .collect::<Vec<_>>(),
-                Err(error) => {
-                    tracing::warn!(%error, "identity picker search failed; falling back to identities API");
-                    client
-                        .search_identities(query, 40)
-                        .await?
-                        .into_iter()
-                        .filter_map(summarize_mention_candidate)
-                        .collect()
-                }
-            };
+            let picker_candidates = search_identity_picker_with_fallback(
+                &client,
+                query,
+                40,
+                mention_candidate_from_identity_picker,
+                summarize_mention_candidate,
+            )
+            .await?;
             for candidate in picker_candidates {
                 push_unique_mention_candidate(&mut candidates, candidate);
             }
@@ -665,22 +688,16 @@ impl WorkItemService {
         }
 
         if !query.is_empty() {
-            let picker_candidates = match client.search_identity_picker(query, 40).await {
-                Ok(identities) => identities
-                    .into_iter()
-                    .filter_map(assignee_candidate_from_identity_picker)
-                    .collect::<Vec<_>>(),
-                Err(error) => {
-                    tracing::warn!(%error, "identity picker search failed; falling back to identities API");
-                    client
-                        .search_identities(query, 40)
-                        .await?
-                        .into_iter()
-                        .filter_map(summarize_mention_candidate)
-                        .map(assignee_candidate_from_mention)
-                        .collect()
-                }
-            };
+            let picker_candidates = search_identity_picker_with_fallback(
+                &client,
+                query,
+                40,
+                assignee_candidate_from_identity_picker,
+                |identity| {
+                    summarize_mention_candidate(identity).map(assignee_candidate_from_mention)
+                },
+            )
+            .await?;
             for candidate in picker_candidates {
                 push_unique_assignee_candidate(&mut candidates, candidate);
             }
