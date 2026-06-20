@@ -32,6 +32,7 @@ Rust バックエンド (src-tauri/src/)
     ├── auth.rs                                — PAT / Azure CLI 認証プロバイダ
     ├── db.rs                                  — SQLite キャッシュ (rusqlite, スキーマ移行)
     ├── secrets.rs                             — keyring (Windows 資格情報マネージャ)
+    ├── cancellation.rs                        — 実行中コマンドの協調キャンセル
     └── error.rs                               — AppError (IPC 向けエラー型)
          ↓
 crates/azdo-client/                            — Tauri 非依存の独立 ADO REST クライアント
@@ -70,7 +71,7 @@ crates/azdo-client/                            — Tauri 非依存の独立 ADO 
 | **Commits** | キーワード/プロジェクト/リポジトリ/作者/ブランチ/期間でコミット検索。7d/30d/90d プリセット。関連 PR の遅延ルックアップ。 |
 | **My Commits** | author = 自分のコミットを検索操作なしに自動ロード (Commits ビューを `myCommitsMode` で流用、組織の認証ユーザー名で seed・90 日窓・組織切替で再取得)。Commits と同じグリッド/プレビュー/関連 PR ルックアップ。 |
 | **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。 |
-| **Code Search** | リポジトリ横断のコード検索。ファイル/パス/ブランチとリンク。 |
+| **Code Search** | リポジトリ横断のコード検索。ファイル/パス/ブランチとリンク。進行中の検索を Cancel でき (`operationId` + `cancel_operation`、`CancellationRegistry` が `tokio::select!` で実行中 future を drop)、キャンセル後も直近の結果が残る。 |
 | **Settings** | 組織設定 (PAT / Azure CLI)、通知設定、フォルダパス、グローバルホットキー、キーバインド上書き。 |
 
 ### 横断機能
