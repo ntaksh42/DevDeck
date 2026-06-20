@@ -20,6 +20,7 @@ import {
   BookOpen,
   Code,
   GitBranch,
+  FileText,
   GitCommitHorizontal,
   GitPullRequest,
   ListChecks,
@@ -86,6 +87,7 @@ import {
 } from '@/features/work-items/workItemViewsStorage';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from '@/features/work-items/queryKeys';
 import { MyReviewsGrid } from '@/features/pull-requests/MyReviewsGrid';
+import { ReleaseNotesView } from '@/features/pull-requests/ReleaseNotesView';
 import {
   loadPullRequestViews,
   type PullRequestView,
@@ -160,6 +162,7 @@ type View =
   | "myWorkItems"
   | "workItemViews"
   | "commits"
+  | "releaseNotes"
   | "myCommits"
   | "pipelines"
   | "codeSearch"
@@ -802,6 +805,14 @@ function AppShell() {
       keywords: ["commit", "search"],
       label: "Go to Commits",
       run: () => setView("commits"),
+    },
+    {
+      disabled: organizations.length === 0,
+      group: "Navigation",
+      id: "nav.releaseNotes",
+      keywords: ["release", "notes", "changelog", "markdown"],
+      label: "Go to Release Notes",
+      run: () => setView("releaseNotes"),
     },
     {
       disabled: organizations.length === 0,
@@ -1509,6 +1520,13 @@ function AppShell() {
               onClick={() => setView("commits")}
             />
             <NavButton
+              active={activeView === "releaseNotes"}
+              disabled={organizations.length === 0}
+              icon={<FileText className="h-4 w-4" aria-hidden="true" />}
+              label="Release Notes"
+              onClick={() => setView("releaseNotes")}
+            />
+            <NavButton
               active={activeView === "myCommits"}
               disabled={organizations.length === 0}
               icon={<GitCommitHorizontal className="h-4 w-4" aria-hidden="true" />}
@@ -1578,6 +1596,8 @@ function AppShell() {
                         ? "Work Item Views"
                         : activeView === "commits"
                           ? "Commits"
+                          : activeView === "releaseNotes"
+                            ? "Release Notes"
                           : activeView === "myCommits"
                             ? "My Commits"
                           : activeView === "pipelines"
@@ -1599,6 +1619,8 @@ function AppShell() {
                         ? "Saved WIQL views with counts, grid results, and preview"
                         : activeView === "commits"
                           ? "Search Azure DevOps commits across repositories"
+                          : activeView === "releaseNotes"
+                            ? "Generate Markdown release notes from completed pull requests"
                           : activeView === "myCommits"
                             ? "Your recent commits across repositories"
                           : activeView === "pipelines"
@@ -1684,6 +1706,8 @@ function AppShell() {
                 openSearchTarget("pullRequests", query, organizationId)
               }
             />
+          ) : activeView === "releaseNotes" ? (
+            <ReleaseNotesView organizations={organizations} />
           ) : activeView === "myCommits" ? (
             <CommitSearch
               organizations={organizations}

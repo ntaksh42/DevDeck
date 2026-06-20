@@ -40,6 +40,10 @@ pub struct GitPullRequest {
     pub title: String,
     pub status: String,
     pub creation_date: DateTime<Utc>,
+    /// Set when the PR is completed/abandoned; used to filter release notes by
+    /// the date a PR actually merged.
+    #[serde(default)]
+    pub closed_date: Option<DateTime<Utc>>,
     pub created_by: Option<IdentityRef>,
     pub repository: Option<GitRepository>,
     pub source_ref_name: String,
