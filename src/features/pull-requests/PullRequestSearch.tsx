@@ -67,6 +67,12 @@ const PR_SEARCH_ROW_HEIGHT = 29;
 const PR_SEARCH_OVERSCAN = 8;
 type PrSearchFilterableColumn = "status" | "repository" | "createdBy" | "branch";
 
+// The local cache only holds Active PRs (see prs.rs search()). Surfacing other
+// statuses as choices would silently return zero rows and imply unsupported
+// backend coverage, so the status selector intentionally offers Active only and
+// the form explains the limitation.
+const PR_SEARCH_STATUS: NonNullable<SearchPullRequestsInput["status"]> = "active";
+
 const PR_SEARCH_FILTERABLE_COLUMNS: Record<PrSearchFilterableColumn, (pr: PullRequestSummary) => string> = {
   status: (pr) => pr.status,
   repository: (pr) => `${pr.projectName} / ${pr.repositoryName}`,
@@ -88,7 +94,6 @@ export function PullRequestSearch({
   const [query, setQuery] = useState(
     () => window.localStorage.getItem(PR_SEARCH_QUERY_STORAGE_KEY) ?? "",
   );
-  const [status, setStatus] = useState<SearchPullRequestsInput["status"]>("active");
   const [projectId, setProjectId] = useState("");
   const [repositoryId, setRepositoryId] = useState("");
 
@@ -129,13 +134,12 @@ export function PullRequestSearch({
     const targetOrganizationId = externalSearch.organizationId ?? organizationId;
     setOrganizationId(targetOrganizationId);
     setQuery(externalSearch.query);
-    setStatus("active");
     setProjectId("");
     setRepositoryId("");
     mutation.mutate({
       organizationId: targetOrganizationId,
       query: externalSearch.query,
-      status: "active",
+      status: PR_SEARCH_STATUS,
       projectId: undefined,
       repositoryId: undefined,
     });
@@ -148,7 +152,7 @@ export function PullRequestSearch({
     mutation.mutate({
       organizationId,
       query,
-      status,
+      status: PR_SEARCH_STATUS,
       projectId: projectId || undefined,
       repositoryId: repositoryId || undefined,
     });
@@ -162,7 +166,7 @@ export function PullRequestSearch({
       mutation.mutate({
         organizationId,
         query: "",
-        status,
+        status: PR_SEARCH_STATUS,
         projectId: undefined,
         repositoryId: undefined,
       });
@@ -187,7 +191,7 @@ export function PullRequestSearch({
               </select>
             </label>
           )}
-          <div className="grid gap-3 lg:grid-cols-[1fr_160px_200px_auto]">
+          <div className="grid gap-3 lg:grid-cols-[1fr_140px_160px_200px_auto]">
             <label className="grid gap-2">
               <span className="text-sm font-medium">Search</span>
               <div className="flex h-9 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
@@ -200,6 +204,19 @@ export function PullRequestSearch({
                   className="min-w-0 flex-1 bg-transparent text-sm outline-none"
                 />
               </div>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Status</span>
+              <select
+                value={PR_SEARCH_STATUS}
+                disabled
+                title="Only active pull requests are synced locally. Completed and abandoned PRs are not available yet."
+                aria-describedby="pr-search-status-note"
+                className="h-9 cursor-not-allowed rounded-md border border-input bg-background px-3 text-sm capitalize outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+              >
+                <option value={PR_SEARCH_STATUS}>Active</option>
+              </select>
             </label>
 
             <label className="grid gap-2">
@@ -247,6 +264,10 @@ export function PullRequestSearch({
               </button>
             </div>
           </div>
+          <p id="pr-search-status-note" className="text-xs text-muted-foreground">
+            Only active pull requests are synced locally. Completed and abandoned
+            pull requests are not available here yet.
+          </p>
         </form>
       </div>
 
