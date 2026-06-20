@@ -5,6 +5,7 @@ import { listMyWorkItems, commandErrorMessage, type Organization } from '@/lib/a
 import { matchesAllSearchTerms, splitSearchTerms } from '@/lib/utils';
 import { ErrorState } from '@/components/StateDisplay';
 import { WorkItemsGrid } from './WorkItemsGrid';
+import { WorkItemTemplatesPanel } from './WorkItemTemplatesPanel';
 import { workItemQueryKeys } from './queryKeys';
 
 export function MyWorkItemsPanel({ organizations }: { organizations: Organization[] }) {
@@ -85,6 +86,7 @@ export function MyWorkItemsPanel({ organizations }: { organizations: Organizatio
           </select>
         ) : null}
 
+        <WorkItemTemplatesPanel />
       </div>
       {query.isError ? (
         <ErrorState message={commandErrorMessage(query.error)} />
