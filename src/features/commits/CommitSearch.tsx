@@ -2,6 +2,7 @@ import {
   type CSSProperties,
   type FormEvent,
   type ReactNode,
+  Fragment,
   forwardRef,
   useEffect,
   useMemo,
@@ -35,6 +36,7 @@ import {
 } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
 import { ColumnResizeHandle, ResizeHandle } from "@/components/ResizeHandle";
+import { ColumnVisibilityMenu } from "@/components/ColumnVisibilityMenu";
 import { ErrorState, LoadingState } from "@/components/StateDisplay";
 import { ActiveFilters } from "@/components/ActiveFilters";
 import { CommitFilesPanel } from "./CommitFilesPanel";
@@ -50,8 +52,49 @@ const COMMIT_COLUMN_MAX_WIDTHS = [140, 160, 720, 380, 340, 72];
 const COMMIT_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:commitGridColumnWidths:v3";
 const COMMIT_SEARCH_VIEW_STORAGE_KEY = "azdodeck:view:commitSearch:v1";
 const COMMIT_SORT_STORAGE_KEY = "azdodeck:view:commitGridSort:v1";
+const COMMIT_VISIBLE_COLUMNS_STORAGE_KEY = "azdodeck:layout:commitVisibleColumns:v1";
 const COMMIT_GRID_ROW_HEIGHT = 29;
 const COMMIT_GRID_OVERSCAN = 8;
+
+// Column order mirrors the width arrays above: sha, date, comment, repository,
+// author, pr. SHA and the message stay required so the grid is never blank.
+type CommitColumnKey = "sha" | "date" | "comment" | "repository" | "author" | "pr";
+const COMMIT_COLUMN_KEYS: CommitColumnKey[] = [
+  "sha",
+  "date",
+  "comment",
+  "repository",
+  "author",
+  "pr",
+];
+const COMMIT_COLUMN_LABELS: Record<CommitColumnKey, string> = {
+  sha: "SHA",
+  date: "Date",
+  comment: "Message",
+  repository: "Repository",
+  author: "Author",
+  pr: "PR",
+};
+const COMMIT_REQUIRED_COLUMNS: CommitColumnKey[] = ["sha", "comment"];
+
+function loadCommitVisibleColumns(): CommitColumnKey[] {
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(COMMIT_VISIBLE_COLUMNS_STORAGE_KEY) ?? "null",
+    );
+    if (!Array.isArray(parsed)) return [...COMMIT_COLUMN_KEYS];
+    const set = new Set(
+      parsed.filter((v): v is CommitColumnKey =>
+        COMMIT_COLUMN_KEYS.includes(v as CommitColumnKey),
+      ),
+    );
+    for (const required of COMMIT_REQUIRED_COLUMNS) set.add(required);
+    const ordered = COMMIT_COLUMN_KEYS.filter((key) => set.has(key));
+    return ordered.length > 0 ? ordered : [...COMMIT_COLUMN_KEYS];
+  } catch {
+    return [...COMMIT_COLUMN_KEYS];
+  }
+}
 
 function commitPrQueryKey(commit: CommitSummary) {
   return ["commitPullRequests", commit.organizationId, commit.repositoryId, commit.commitId] as const;
@@ -578,15 +621,77 @@ function CommitSortHeaderButton({
   );
 }
 
+// Cells stay direct grid items (keyed Fragment) so the column template lines up.
+function renderCommitCell(key: CommitColumnKey, commit: CommitSummary, prCount: number): ReactNode {
+  switch (key) {
+    case "sha":
+      return (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); if (commit.webUrl) openExternalUrl(commit.webUrl); }}
+          className="truncate text-left font-mono text-xs text-primary hover:underline"
+          title={commit.commitId}
+        >
+          {commit.shortCommitId}
+        </button>
+      );
+    case "date":
+      return (
+        <span
+          className="text-xs text-muted-foreground"
+          title={commit.authorDate ? formatDate(commit.authorDate) : undefined}
+        >
+          {commit.authorDate ? formatRelativeDate(commit.authorDate) : "—"}
+        </span>
+      );
+    case "comment": {
+      const message = commit.comment.split(/\r?\n/, 1)[0] || "(no comment)";
+      return (
+        <span className="truncate font-medium text-foreground" title={commit.comment}>
+          {message}
+        </span>
+      );
+    }
+    case "repository":
+      return (
+        <span className="truncate text-xs text-muted-foreground" title={`${commit.projectName} / ${commit.repositoryName}`}>
+          {commit.projectName} / {commit.repositoryName}
+        </span>
+      );
+    case "author":
+      return (
+        <span className="truncate text-xs text-muted-foreground" title={commit.authorName ?? undefined}>
+          {commit.authorName ?? "—"}
+        </span>
+      );
+    case "pr":
+      return (
+        <span className="flex items-center justify-center" aria-hidden={prCount === 0}>
+          {prCount > 0 ? (
+            <span
+              className="inline-flex items-center gap-0.5 text-primary"
+              title={`In ${prCount} pull request${prCount === 1 ? "" : "s"}`}
+              aria-label={`In ${prCount} pull request${prCount === 1 ? "" : "s"}`}
+            >
+              <GitPullRequest className="h-3.5 w-3.5" aria-hidden="true" />
+              <span className="text-[11px] tabular-nums">{prCount}</span>
+            </span>
+          ) : null}
+        </span>
+      );
+  }
+}
+
 const CommitGridRow = forwardRef<
   HTMLDivElement,
   {
     commit: CommitSummary;
     selected: boolean;
     columnTemplate: string;
+    visibleColumns: CommitColumnKey[];
     onSelect: () => void;
   }
->(({ commit, selected, columnTemplate, onSelect }, ref) => {
+>(({ commit, selected, columnTemplate, visibleColumns, onSelect }, ref) => {
   // Reflects the related-PR lookup that the preview triggers on selection;
   // reads cached query data only, so the grid never fans out N requests.
   const prQuery = useQuery({
@@ -595,7 +700,6 @@ const CommitGridRow = forwardRef<
     enabled: false,
   });
   const prCount = prQuery.data?.length ?? 0;
-  const message = commit.comment.split(/\r?\n/, 1)[0] || "(no comment)";
   return (
     <div
       ref={ref}
@@ -616,41 +720,9 @@ const CommitGridRow = forwardRef<
       }`}
       style={{ gridTemplateColumns: columnTemplate }}
     >
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); if (commit.webUrl) openExternalUrl(commit.webUrl); }}
-        className="truncate text-left font-mono text-xs text-primary hover:underline"
-        title={commit.commitId}
-      >
-        {commit.shortCommitId}
-      </button>
-      <span
-        className="text-xs text-muted-foreground"
-        title={commit.authorDate ? formatDate(commit.authorDate) : undefined}
-      >
-        {commit.authorDate ? formatRelativeDate(commit.authorDate) : "—"}
-      </span>
-      <span className="truncate font-medium text-foreground" title={commit.comment}>
-        {message}
-      </span>
-      <span className="truncate text-xs text-muted-foreground" title={`${commit.projectName} / ${commit.repositoryName}`}>
-        {commit.projectName} / {commit.repositoryName}
-      </span>
-      <span className="truncate text-xs text-muted-foreground" title={commit.authorName ?? undefined}>
-        {commit.authorName ?? "—"}
-      </span>
-      <span className="flex items-center justify-center" aria-hidden={prCount === 0}>
-        {prCount > 0 ? (
-          <span
-            className="inline-flex items-center gap-0.5 text-primary"
-            title={`In ${prCount} pull request${prCount === 1 ? "" : "s"}`}
-            aria-label={`In ${prCount} pull request${prCount === 1 ? "" : "s"}`}
-          >
-            <GitPullRequest className="h-3.5 w-3.5" aria-hidden="true" />
-            <span className="text-[11px] tabular-nums">{prCount}</span>
-          </span>
-        ) : null}
-      </span>
+      {visibleColumns.map((key) => (
+        <Fragment key={key}>{renderCommitCell(key, commit, prCount)}</Fragment>
+      ))}
     </div>
   );
 });
@@ -865,6 +937,10 @@ function CommitResults({
   const [columnWidths, setColumnWidths] = useState(() =>
     storedNumbers(COMMIT_COLUMN_WIDTHS_STORAGE_KEY, DEFAULT_COMMIT_COLUMN_WIDTHS, COMMIT_COLUMN_MIN_WIDTHS, COMMIT_COLUMN_MAX_WIDTHS),
   );
+  const [visibleColumns, setVisibleColumns] = useState<CommitColumnKey[]>(
+    loadCommitVisibleColumns,
+  );
+  const [columnMenuRect, setColumnMenuRect] = useState<DOMRect | null>(null);
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const [maximized, setMaximized] = useState(false);
   const [previewWidth, setPreviewWidth] = useState(() =>
@@ -913,7 +989,30 @@ function CommitResults({
     localStorage.setItem(COMMIT_SORT_STORAGE_KEY, JSON.stringify(sort));
   }, [sort]);
 
-  const commitColTemplate = gridColumnTemplate(columnWidths, 2);
+  useEffect(() => {
+    localStorage.setItem(COMMIT_VISIBLE_COLUMNS_STORAGE_KEY, JSON.stringify(visibleColumns));
+  }, [visibleColumns]);
+
+  function toggleColumnVisibility(column: CommitColumnKey) {
+    if (COMMIT_REQUIRED_COLUMNS.includes(column)) return;
+    setVisibleColumns((current) =>
+      current.includes(column)
+        ? current.filter((value) => value !== column)
+        : COMMIT_COLUMN_KEYS.filter((value) => value === column || current.includes(value)),
+    );
+  }
+
+  function resetColumnVisibility() {
+    setVisibleColumns([...COMMIT_COLUMN_KEYS]);
+  }
+
+  // Width array is indexed by the full column order; pick out the visible ones
+  // and keep the message column as the flexible one.
+  const visibleColumnWidths = visibleColumns.map(
+    (column) => columnWidths[COMMIT_COLUMN_KEYS.indexOf(column)],
+  );
+  const messageFlexIndex = Math.max(0, visibleColumns.indexOf("comment"));
+  const commitColTemplate = gridColumnTemplate(visibleColumnWidths, messageFlexIndex);
 
   const sorted = useMemo(() => {
     const dir = sort.direction === "asc" ? 1 : -1;
@@ -1048,6 +1147,13 @@ function CommitResults({
         <span className="flex items-center gap-2 text-sm text-muted-foreground">
           {countLabel}
           <ActiveFilters count={activeFilterCount} onClear={onClearExternalFilters ?? (() => {})} />
+          <button
+            type="button"
+            onClick={(event) => setColumnMenuRect(event.currentTarget.getBoundingClientRect())}
+            className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary"
+          >
+            Columns
+          </button>
         </span>
       </div>
       {!searched && !loading ? (
@@ -1074,34 +1180,49 @@ function CommitResults({
               className="grid items-center gap-2 border-b border-border bg-muted px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
               style={{ gridTemplateColumns: commitColTemplate }}
             >
-              <div role="columnheader" className="relative min-w-0 truncate px-1">
-                SHA
-                <ColumnResizeHandle columnIndex={0} widths={columnWidths} setWidths={setColumnWidths} min={COMMIT_COLUMN_MIN_WIDTHS[0]} max={COMMIT_COLUMN_MAX_WIDTHS[0]} />
-              </div>
-              {COMMIT_GRID_KEYS.map((col, i) => (
-                <CommitSortHeaderButton
-                  key={col}
-                  column={col}
-                  sort={sort}
-                  onSort={applySort}
-                  resizeHandle={
-                    <ColumnResizeHandle
-                      columnIndex={i + 1}
-                      widths={columnWidths}
-                      setWidths={setColumnWidths}
-                      min={COMMIT_COLUMN_MIN_WIDTHS[i + 1]}
-                      max={COMMIT_COLUMN_MAX_WIDTHS[i + 1]}
-                    />
-                  }
-                />
-              ))}
-              <div
-                role="columnheader"
-                className="min-w-0 truncate px-1 text-center"
-                title="Pull requests containing this commit"
-              >
-                PR
-              </div>
+              {visibleColumns.map((col, i) => {
+                const fullIndex = COMMIT_COLUMN_KEYS.indexOf(col);
+                const isLast = i === visibleColumns.length - 1;
+                const resizeHandle = isLast ? undefined : (
+                  <ColumnResizeHandle
+                    columnIndex={fullIndex}
+                    widths={columnWidths}
+                    setWidths={setColumnWidths}
+                    min={COMMIT_COLUMN_MIN_WIDTHS[fullIndex]}
+                    max={COMMIT_COLUMN_MAX_WIDTHS[fullIndex]}
+                  />
+                );
+                if (col === "sha") {
+                  return (
+                    <div key={col} role="columnheader" className="relative min-w-0 truncate px-1">
+                      SHA
+                      {resizeHandle}
+                    </div>
+                  );
+                }
+                if (col === "pr") {
+                  return (
+                    <div
+                      key={col}
+                      role="columnheader"
+                      className="relative min-w-0 truncate px-1 text-center"
+                      title="Pull requests containing this commit"
+                    >
+                      PR
+                      {resizeHandle}
+                    </div>
+                  );
+                }
+                return (
+                  <CommitSortHeaderButton
+                    key={col}
+                    column={col}
+                    sort={sort}
+                    onSort={applySort}
+                    resizeHandle={resizeHandle}
+                  />
+                );
+              })}
             </div>
             {loading ? (
               <LoadingState />
@@ -1117,6 +1238,7 @@ function CommitResults({
                       commit={commit}
                       selected={index === selectedIndex}
                       columnTemplate={commitColTemplate}
+                      visibleColumns={visibleColumns}
                       onSelect={() => setSelectedIndex(index)}
                     />
                   );
@@ -1153,6 +1275,17 @@ function CommitResults({
           {copyToast}
         </div>
       )}
+      {columnMenuRect ? (
+        <ColumnVisibilityMenu
+          anchorRect={columnMenuRect}
+          columns={COMMIT_COLUMN_KEYS.map((key) => ({ key, label: COMMIT_COLUMN_LABELS[key] }))}
+          visibleColumns={visibleColumns}
+          requiredColumns={COMMIT_REQUIRED_COLUMNS}
+          onToggle={toggleColumnVisibility}
+          onReset={resetColumnVisibility}
+          onClose={() => setColumnMenuRect(null)}
+        />
+      ) : null}
     </div>
   );
 }
