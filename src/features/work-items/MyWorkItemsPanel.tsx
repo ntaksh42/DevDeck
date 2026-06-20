@@ -1,12 +1,43 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
-import { listMyWorkItems, commandErrorMessage, type Organization } from '@/lib/azdoCommands';
-import { matchesAllSearchTerms, splitSearchTerms } from '@/lib/utils';
+import { listMyWorkItems, commandErrorMessage, type Organization, type WorkItemSummary } from '@/lib/azdoCommands';
+import {
+  matchesWorkItemQuery,
+  parseSearchQuery,
+  type WorkItemMatchTarget,
+} from '@/lib/searchQuery';
 import { ErrorState } from '@/components/StateDisplay';
 import { WorkItemsGrid } from './WorkItemsGrid';
 import { WorkItemTemplatesPanel } from './WorkItemTemplatesPanel';
 import { workItemQueryKeys } from './queryKeys';
+
+const PRIORITY_REFERENCE_NAME = "Microsoft.VSTS.Common.Priority";
+const TAGS_REFERENCE_NAME = "System.Tags";
+
+function extraFieldValue(item: WorkItemSummary, referenceName: string): string | null {
+  return (
+    item.extraFields.find(
+      (field) => field.referenceName.toLowerCase() === referenceName.toLowerCase(),
+    )?.value ?? null
+  );
+}
+
+function toMatchTarget(item: WorkItemSummary): WorkItemMatchTarget {
+  const priorityRaw = extraFieldValue(item, PRIORITY_REFERENCE_NAME);
+  const priority = priorityRaw !== null && priorityRaw.trim() !== "" ? Number(priorityRaw) : NaN;
+  const tagsRaw = extraFieldValue(item, TAGS_REFERENCE_NAME);
+  return {
+    id: item.id,
+    title: item.title,
+    workItemType: item.workItemType,
+    state: item.state,
+    assignedTo: item.assignedTo,
+    projectName: item.projectName,
+    priority: Number.isFinite(priority) ? priority : null,
+    tags: tagsRaw ? tagsRaw.split(";").map((tag) => tag.trim()).filter(Boolean) : [],
+  };
+}
 
 export function MyWorkItemsPanel({ organizations }: { organizations: Organization[] }) {
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
@@ -23,38 +54,9 @@ export function MyWorkItemsPanel({ organizations }: { organizations: Organizatio
 
   const allResults = query.data ?? [];
   const results = useMemo(() => {
-    const terms = splitSearchTerms(filter);
-    if (terms.length === 0) return allResults;
-    return allResults.filter((item) => {
-      const freeTerms: string[] = [];
-      for (const term of terms) {
-        const [key, ...rest] = term.split(":");
-        const value = rest.join(":");
-        if (!value || !["state", "type", "project", "assignee", "tag"].includes(key)) {
-          freeTerms.push(term);
-          continue;
-        }
-        const target =
-          key === "state"
-            ? item.state
-            : key === "type"
-              ? item.workItemType
-              : key === "project"
-                ? item.projectName
-                : key === "assignee"
-                  ? item.assignedTo
-                  : "";
-        if (!String(target ?? "").toLowerCase().includes(value)) return false;
-      }
-      return matchesAllSearchTerms(freeTerms, [
-        item.id,
-        item.title,
-        item.workItemType,
-        item.state,
-        item.projectName,
-        item.assignedTo,
-      ]);
-    });
+    const parsed = parseSearchQuery(filter);
+    if (parsed.filters.length === 0 && parsed.text.length === 0) return allResults;
+    return allResults.filter((item) => matchesWorkItemQuery(toMatchTarget(item), parsed));
   }, [allResults, filter]);
 
   return (
@@ -65,8 +67,9 @@ export function MyWorkItemsPanel({ organizations }: { organizations: Organizatio
           <input
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
-            placeholder="Filter work items…"
+            placeholder="Filter… try #1234, p:1, @user, s:active, t:bug"
             aria-label="Filter"
+            title="Smart search: #1234 jumps to an id, p:1–4 priority, @user assignee, s:active state, t:bug type. Unknown prefixes are searched as text."
             className="min-w-0 flex-1 bg-transparent text-sm outline-none"
           />
         </div>
