@@ -1,9 +1,25 @@
 import { Keyboard, X } from "lucide-react";
+import { resolveKeybindings, type KeybindingId } from "@/lib/keybindings";
 
 export function HelpDialog({ onClose }: { onClose: () => void }) {
   const section = "text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 mt-4 first:mt-0";
   const row = "flex items-center justify-between gap-8 py-0.5";
   const kbd = "rounded bg-muted px-1.5 py-0.5 text-xs font-mono";
+
+  // Effective combos for the rebindable app-level shortcuts. Grid-local rows
+  // below stay static because those keys are not customizable yet.
+  const keys = resolveKeybindings();
+  const combo = (id: KeybindingId) => keys[id];
+  const gotoKeys = [
+    combo("gotoMyReviews"),
+    combo("gotoPullRequestSearch"),
+    combo("gotoMyWorkItems"),
+    combo("gotoTriage"),
+    combo("gotoWorkItemSearch"),
+    combo("gotoWorkItemViews"),
+    combo("gotoCommits"),
+    combo("gotoSettings"),
+  ].join("/");
 
   return (
     <div
@@ -34,19 +50,20 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
 
         <div className="text-sm">
           <p className={section}>Navigation</p>
-          <div className={row}><span>Settings</span><kbd className={kbd}>Alt+,</kbd></div>
-          <div className={row}><span>Focus left navigation</span><kbd className={kbd}>Alt+N</kbd></div>
+          <div className={row}><span>Settings</span><kbd className={kbd}>{combo("openSettings")}</kbd></div>
+          <div className={row}><span>Focus left navigation</span><kbd className={kbd}>{combo("focusNavigation")}</kbd></div>
           <div className={row}><span>Move in left navigation</span><kbd className={kbd}>↑ ↓ Home End</kbd></div>
           <div className={row}><span>Expand / collapse section</span><kbd className={kbd}>← →</kbd></div>
           <div className={row}><span>Open focused navigation item</span><kbd className={kbd}>Enter</kbd></div>
           <div className={row}><span>Typeahead in navigation</span><kbd className={kbd}>A–Z</kbd></div>
-          <div className={row}><span>Sync now</span><kbd className={kbd}>Alt+S</kbd></div>
-          <div className={row}><span>Refresh current view</span><kbd className={kbd}>Ctrl+R</kbd></div>
-          <div className={row}><span>Command palette</span><kbd className={kbd}>Ctrl+K</kbd></div>
-          <div className={row}><span>Focus grid</span><kbd className={kbd}>Alt+G</kbd></div>
-          <div className={row}><span>Focus preview</span><kbd className={kbd}>Alt+P</kbd></div>
+          <div className={row}><span>Back / forward through views</span><kbd className={kbd}>Alt+← / Alt+→</kbd></div>
+          <div className={row}><span>Sync now</span><kbd className={kbd}>{combo("syncNow")}</kbd></div>
+          <div className={row}><span>Refresh current view</span><kbd className={kbd}>{combo("refreshCurrentView")}</kbd></div>
+          <div className={row}><span>Command palette</span><kbd className={kbd}>{combo("commandPalette")}</kbd></div>
+          <div className={row}><span>Focus grid</span><kbd className={kbd}>{combo("focusGrid")}</kbd></div>
+          <div className={row}><span>Focus preview</span><kbd className={kbd}>{combo("focusPreview")}</kbd></div>
           <div className={row}><span>Grid → preview / back to grid</span><kbd className={kbd}>Enter / → · Esc / ←</kbd></div>
-          <div className={row}><span>Focus views panel</span><kbd className={kbd}>Alt+V</kbd></div>
+          <div className={row}><span>Focus views panel</span><kbd className={kbd}>{combo("focusViewsPanel")}</kbd></div>
 
           <p className={section}>My Reviews</p>
           <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>
@@ -82,7 +99,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Apply pending property changes</span><kbd className={kbd}>Ctrl+S</kbd></div>
           <div className={row}><span>Discard pending property changes</span><kbd className={kbd}>Esc</kbd></div>
           <div className={row}><span>Undo last apply (10s window)</span><kbd className={kbd}>U</kbd></div>
-          <div className={row}><span>Focus comment</span><kbd className={kbd}>Alt+M / M</kbd></div>
+          <div className={row}><span>Focus comment</span><kbd className={kbd}>{combo("focusComment")} / M</kbd></div>
           <div className={row}><span>Post comment (+ apply pending changes)</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
           <div className={row}><span>Return to grid (from input / preview)</span><kbd className={kbd}>Esc / ←</kbd></div>
           <div className={row}><span>Snooze selected row (My Items)</span><kbd className={kbd}>Z</kbd></div>
@@ -94,8 +111,9 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Save (in dialog)</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
 
           <p className={section}>General</p>
-          <div className={row}><span>Go to view</span><kbd className={kbd}>G then R/P/W/T/I/V/C/S</kbd></div>
-          <div className={row}><span>Show this help</span><kbd className={kbd}>F1 / ?</kbd></div>
+          <div className={row}><span>Go to view</span><kbd className={kbd}>{combo("gotoLeader")} then {gotoKeys}</kbd></div>
+          <div className={row}><span>Apply pending work item changes</span><kbd className={kbd}>{combo("applyStaged")}</kbd></div>
+          <div className={row}><span>Show this help</span><kbd className={kbd}>F1 / {combo("help")}</kbd></div>
           <div className={row}><span>Close dialog</span><kbd className={kbd}>Esc</kbd></div>
         </div>
       </div>
