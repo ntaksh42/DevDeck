@@ -21,8 +21,9 @@ mod work_items;
 
 use code_search::{CodeSearchResults, CodeSearchService, SearchCodeInput};
 use commits::{
-    CommitChangeSet, CommitFileDiff, CommitRepositoryOption, CommitService, CommitSummary,
-    GetCommitChangesInput, GetCommitFileDiffInput, ListCommitRepositoriesInput, SearchCommitsInput,
+    CommitChangeSet, CommitFileDiff, CommitPullRequest, CommitRepositoryOption, CommitService,
+    CommitSummary, GetCommitChangesInput, GetCommitFileDiffInput, GetCommitPullRequestsInput,
+    ListCommitRepositoriesInput, SearchCommitsInput,
 };
 use db::{AppDatabase, AppSettings, Organization, SyncState};
 use error::{AppError, Result};
@@ -597,6 +598,15 @@ async fn get_commit_file_diff(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn get_commit_pull_requests(
+    input: GetCommitPullRequestsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<CommitPullRequest>> {
+    state.commits.get_commit_pull_requests(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn list_pipeline_projects(
     input: ListPipelineProjectsInput,
     state: State<'_, AppState>,
@@ -715,6 +725,13 @@ fn show_main_window(app: &AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Without this, a panic during startup leaves only a blank window and no
+    // trace of why. Print it to stderr (visible under `tauri dev` / a console
+    // build) before the default hook aborts.
+    std::panic::set_hook(Box::new(|info| {
+        eprintln!("AzDoDeck panic: {info}");
+    }));
+
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
@@ -728,11 +745,23 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
-            let app_data_dir = app.path().app_data_dir()?;
+            // Surface setup failures (e.g. a failed DB migration) to stderr;
+            // otherwise the window stays blank with no clue why state was never
+            // managed and every command fails.
+            let app_data_dir = app.path().app_data_dir().inspect_err(|e| {
+                eprintln!("AzDoDeck setup failed (app_data_dir): {e}");
+            })?;
             let db = AppDatabase::new(app_data_dir.join("azdodeck.sqlite3"));
-            db.initialize()?;
-            let settings = db.get_app_settings()?;
-            configure_show_window_hotkey(app.handle(), settings.show_window_hotkey.as_deref())?;
+            db.initialize().inspect_err(|e| {
+                eprintln!("AzDoDeck setup failed (db.initialize): {e}");
+            })?;
+            let settings = db.get_app_settings().inspect_err(|e| {
+                eprintln!("AzDoDeck setup failed (get_app_settings): {e}");
+            })?;
+            configure_show_window_hotkey(app.handle(), settings.show_window_hotkey.as_deref())
+                .inspect_err(|e| {
+                    eprintln!("AzDoDeck setup failed (configure_show_window_hotkey): {e}");
+                })?;
             let (sync_tx, sync_rx) = SyncRunner::channel();
             app.manage(AppState {
                 db: db.clone(),
@@ -805,6 +834,7 @@ pub fn run() {
             search_code,
             get_commit_changes,
             get_commit_file_diff,
+            get_commit_pull_requests,
             list_pipeline_projects,
             list_pipeline_runs,
             list_pipeline_definitions,

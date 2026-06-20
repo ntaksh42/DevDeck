@@ -17,6 +17,7 @@ export type PrViewFilterableColumn = (typeof PR_VIEW_FILTERABLE_COLUMNS)[number]
 // Sort keys the review grid offers. Kept in sync with MyReviewsGrid's SortKey.
 const PR_VIEW_SORT_KEYS = [
   "pullRequestId",
+  "ciStatus",
   "repositoryName",
   "title",
   "createdBy",

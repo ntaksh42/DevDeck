@@ -9,13 +9,32 @@ import {
   useState,
 } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, ChevronUp, Download, Filter, Pin, PinOff, Plus, Search, Trash2, Upload, X } from 'lucide-react';
 import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  CircleDashed,
+  Download,
+  Filter,
+  Loader,
+  Pin,
+  PinOff,
+  Plus,
+  Search,
+  Trash2,
+  Upload,
+  X,
+  XCircle,
+} from 'lucide-react';
+import {
+  getAppSettings,
   listMyReviewPullRequests,
   commandErrorMessage,
   prLocator,
   snoozeItem,
   submitPullRequestVote,
+  DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
   type Organization,
   type ReviewPullRequestSummary,
 } from '@/lib/azdoCommands';
@@ -55,10 +74,10 @@ const MIN_REVIEW_PREVIEW_WIDTH = 280;
 // Effectively unbounded: the pane is still capped by the window width.
 const MAX_REVIEW_PREVIEW_WIDTH = 8192;
 const REVIEW_PREVIEW_WIDTH_STORAGE_KEY = 'azdodeck:layout:reviewPreviewWidth';
-const DEFAULT_PR_GRID_COLUMN_WIDTHS = [52, 110, 180, 82, 56, 76, 68, 78];
-const PR_GRID_COLUMN_MIN_WIDTHS = [48, 96, 150, 72, 50, 68, 62, 70];
-const PR_GRID_COLUMN_MAX_WIDTHS = [120, 520, 960, 240, 120, 240, 180, 240];
-const PR_GRID_COLUMN_WIDTHS_STORAGE_KEY = 'azdodeck:layout:myReviewsGridColumnWidths:v2';
+const DEFAULT_PR_GRID_COLUMN_WIDTHS = [52, 36, 110, 180, 82, 56, 76, 68, 78];
+const PR_GRID_COLUMN_MIN_WIDTHS = [48, 32, 96, 150, 72, 50, 68, 62, 70];
+const PR_GRID_COLUMN_MAX_WIDTHS = [120, 60, 520, 960, 240, 120, 240, 180, 240];
+const PR_GRID_COLUMN_WIDTHS_STORAGE_KEY = 'azdodeck:layout:myReviewsGridColumnWidths:v3';
 const PR_GRID_VIEW_STORAGE_KEY = "azdodeck:view:myReviewsGrid:v1";
 const PR_GRID_ROW_HEIGHT = 29;
 const PR_GRID_OVERSCAN = 8;
@@ -124,6 +143,45 @@ function RequiredBadge({ required }: { required: boolean }) {
   ) : (
     <span className="inline-flex items-center rounded border border-border bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
       Optional
+    </span>
+  );
+}
+
+// Compact CI verdict cell. Icon-only to keep the column minimal; the full
+// pipeline/status detail lives in the native tooltip. An unknown/none verdict
+// renders a muted dash so a missing CI fetch never reads as a failure.
+function CiBadge({ pr }: { pr: ReviewPullRequestSummary }) {
+  const status = pr.ciStatus ?? "none";
+  const contextLabel = pr.ciContext ? pr.ciContext : "—";
+  const statusLabel =
+    status === "succeeded"
+      ? "Succeeded"
+      : status === "failed"
+        ? "Failed"
+        : status === "in_progress"
+          ? "In progress"
+          : "Not run";
+  const tooltip = `Pipeline: ${contextLabel} | Status: ${statusLabel} | ${pr.ciCheckCount} check${pr.ciCheckCount === 1 ? "" : "s"}`;
+
+  let icon: ReactNode;
+  if (status === "succeeded") {
+    icon = <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400" aria-hidden="true" />;
+  } else if (status === "failed") {
+    icon = <XCircle className="h-3.5 w-3.5 text-red-600 dark:text-red-400" aria-hidden="true" />;
+  } else if (status === "in_progress") {
+    icon = <Loader className="h-3.5 w-3.5 animate-spin text-amber-500 dark:text-amber-400" aria-hidden="true" />;
+  } else {
+    icon = <CircleDashed className="h-3.5 w-3.5 text-muted-foreground/50" aria-hidden="true" />;
+  }
+
+  return (
+    <span
+      className="flex items-center justify-center"
+      title={tooltip}
+      aria-label={`CI ${statusLabel}`}
+      role="img"
+    >
+      {icon}
     </span>
   );
 }
@@ -198,6 +256,8 @@ function renderPrCell(key: SortKey, pr: ReviewPullRequestSummary, isStale: boole
       return <RequiredBadge required={pr.myIsRequired} />;
     case "myVote":
       return <VoteBadge vote={pr.myVote} label={pr.myVoteLabel} />;
+    case "ciStatus":
+      return <CiBadge pr={pr} />;
   }
 }
 
@@ -208,12 +268,13 @@ const ReviewPrRow = forwardRef<
     selected: boolean;
     columnTemplate: string;
     visibleColumns: SortKey[];
+    staleThresholdDays: number;
     onSelect: () => void;
   }
->(({ pr, selected, columnTemplate, visibleColumns, onSelect }, ref) => {
+>(({ pr, selected, columnTemplate, visibleColumns, staleThresholdDays, onSelect }, ref) => {
   const createdTime = new Date(pr.creationDate).getTime();
   const isStale = Number.isFinite(createdTime)
-    ? Math.floor((Date.now() - createdTime) / 86_400_000) >= 3
+    ? Math.floor((Date.now() - createdTime) / 86_400_000) >= staleThresholdDays
     : false;
   return (
     <div
@@ -250,6 +311,7 @@ ReviewPrRow.displayName = "ReviewPrRow";
 
 type SortKey =
   | "pullRequestId"
+  | "ciStatus"
   | "repositoryName"
   | "title"
   | "createdBy"
@@ -264,6 +326,7 @@ type SortState = {
 
 const sortLabels: Record<SortKey, string> = {
   pullRequestId: "PR#",
+  ciStatus: "CI",
   repositoryName: "Repository",
   title: "Title",
   createdBy: "Author",
@@ -276,6 +339,7 @@ const sortLabels: Record<SortKey, string> = {
 // Column order matches the width arrays; PR# and Title can never be hidden.
 const PR_GRID_KEYS: SortKey[] = [
   "pullRequestId",
+  "ciStatus",
   "repositoryName",
   "title",
   "createdBy",
@@ -302,6 +366,21 @@ function compareStrings(a: string | null | undefined, b: string | null | undefin
   return (a ?? "").localeCompare(b ?? "", undefined, { sensitivity: "base" });
 }
 
+// Ordering for the CI column: ascending sort surfaces failures first so a
+// reviewer can spot merge blockers, then in-progress, success, and unknown.
+function ciSortRank(status: string | null): number {
+  switch (status) {
+    case "failed":
+      return 0;
+    case "in_progress":
+      return 1;
+    case "succeeded":
+      return 2;
+    default:
+      return 3;
+  }
+}
+
 function compareReviewPrs(
   a: ReviewPullRequestSummary,
   b: ReviewPullRequestSummary,
@@ -310,6 +389,8 @@ function compareReviewPrs(
   switch (key) {
     case "pullRequestId":
       return a.pullRequestId - b.pullRequestId;
+    case "ciStatus":
+      return ciSortRank(a.ciStatus) - ciSortRank(b.ciStatus);
     case "repositoryName":
       return compareStrings(a.repositoryName, b.repositoryName);
     case "title":
@@ -547,6 +628,15 @@ export function MyReviewsGrid({
     enabled: !!organizationId,
     staleTime: 5 * 60_000,
   });
+
+  const settingsQuery = useQuery({
+    queryKey: ["appSettings"],
+    queryFn: getAppSettings,
+    staleTime: 5 * 60_000,
+  });
+  const staleThresholdDays =
+    settingsQuery.data?.reviewStaleThresholdDays ??
+    DEFAULT_REVIEW_STALE_THRESHOLD_DAYS;
 
   const queryClient = useQueryClient();
   const voteMutation = useMutation({
@@ -1602,6 +1692,7 @@ export function MyReviewsGrid({
                         pr={row.pr}
                         selected={row.prIndex === selectedIndex}
                         visibleColumns={visibleColumns}
+                        staleThresholdDays={staleThresholdDays}
                         onSelect={() => setSelectedIndex(row.prIndex)}
                       />
                     );
