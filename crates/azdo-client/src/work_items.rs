@@ -345,6 +345,25 @@ impl AdoClient {
             .await
     }
 
+    pub async fn update_work_item_comment(
+        &self,
+        project_id: &str,
+        work_item_id: i64,
+        comment_id: i64,
+        markdown: &str,
+    ) -> Result<WorkItemComment> {
+        let path = format!("{project_id}/_apis/wit/workItems/{work_item_id}/comments/{comment_id}");
+        self.patch_json(
+            &path,
+            &[("api-version", "7.1-preview.4"), ("format", "markdown")],
+            "application/json",
+            &WorkItemCommentCreate {
+                text: markdown.to_string(),
+            },
+        )
+        .await
+    }
+
     pub async fn list_work_item_comments(
         &self,
         project_id: &str,
@@ -923,6 +942,33 @@ mod tests {
             updates[0].fields["System.AssignedTo"].old_value.as_ref(),
             Some(&serde_json::json!("Bob Tanaka <bob@example.com>"))
         );
+    }
+
+    #[tokio::test]
+    async fn update_work_item_comment_patches_markdown() {
+        let server = MockServer::start().await;
+        Mock::given(method("PATCH"))
+            .and(path("/project-1/_apis/wit/workItems/10/comments/5"))
+            .and(query_param("api-version", "7.1-preview.4"))
+            .and(query_param("format", "markdown"))
+            .and(body_json(serde_json::json!({ "text": "edited body" })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 5,
+                "text": "edited body",
+                "renderedText": "<p>edited body</p>",
+                "createdBy": { "displayName": "Me" },
+                "createdDate": "2026-05-27T00:00:00Z"
+            })))
+            .mount(&server)
+            .await;
+
+        let comment = test_client(&server)
+            .await
+            .update_work_item_comment("project-1", 10, 5, "edited body")
+            .await
+            .unwrap();
+        assert_eq!(comment.id, 5);
+        assert_eq!(comment.text.as_deref(), Some("edited body"));
     }
 
     #[tokio::test]

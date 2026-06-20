@@ -16,8 +16,8 @@ use super::{
     summarize_work_item_comment, summarize_work_item_preview, validate_update_field_reference_name,
     work_item_to_cached, AddWorkItemCommentInput, AssignWorkItemsInput, BulkWorkItemResult,
     DeleteWorkItemCommentInput, SetWorkItemsPriorityInput, SetWorkItemsStateInput,
-    UpdateWorkItemFieldsInput, WorkItemComment, WorkItemPreview, WorkItemService,
-    WORK_ITEM_PREVIEW_COMMENT_LIMIT,
+    UpdateWorkItemCommentInput, UpdateWorkItemFieldsInput, WorkItemComment, WorkItemPreview,
+    WorkItemService, WORK_ITEM_PREVIEW_COMMENT_LIMIT,
 };
 
 impl WorkItemService {
@@ -253,6 +253,31 @@ impl WorkItemService {
             .delete_work_item_comment(&input.project_id, input.work_item_id, input.comment_id)
             .await?;
         Ok(())
+    }
+
+    pub async fn update_comment(
+        &self,
+        input: UpdateWorkItemCommentInput,
+    ) -> Result<WorkItemComment> {
+        if input.comment_id <= 0 {
+            return Err(AppError::InvalidInput("comment ID is required".to_string()));
+        }
+        let markdown = input.markdown.trim();
+        if markdown.is_empty() {
+            return Err(AppError::InvalidInput("comment is required".to_string()));
+        }
+
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let comment = client
+            .update_work_item_comment(
+                &input.project_id,
+                input.work_item_id,
+                input.comment_id,
+                markdown,
+            )
+            .await?;
+        Ok(summarize_work_item_comment(comment))
     }
 
     // Applies all staged property changes in one JSON Patch request so state

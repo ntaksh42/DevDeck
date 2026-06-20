@@ -69,9 +69,9 @@ use work_items::{
     RecordAssigneeInteractionInput, RecordMentionInteractionInput, RunWorkItemQueryInput,
     SavedQueryResult, SearchWorkItemAssigneesInput, SearchWorkItemMentionsInput,
     SearchWorkItemsInput, SetWorkItemsPriorityInput, SetWorkItemsStateInput,
-    UpdateWorkItemFieldsInput, WorkItemAssigneeCandidate, WorkItemComment, WorkItemFieldOption,
-    WorkItemImage, WorkItemPreview, WorkItemProjectOption, WorkItemService, WorkItemSummary,
-    WorkItemUpdateSummary,
+    UpdateWorkItemCommentInput, UpdateWorkItemFieldsInput, WorkItemAssigneeCandidate,
+    WorkItemComment, WorkItemFieldOption, WorkItemImage, WorkItemPreview, WorkItemProjectOption,
+    WorkItemService, WorkItemSummary, WorkItemUpdateSummary,
 };
 
 #[derive(Clone)]
@@ -482,6 +482,16 @@ async fn delete_work_item_comment(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn update_work_item_comment(
+    input: UpdateWorkItemCommentInput,
+    state: State<'_, AppState>,
+) -> Result<WorkItemComment> {
+    ensure_write_enabled(&state).await?;
+    state.work_items.update_comment(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn list_work_item_updates(
     input: ListWorkItemUpdatesInput,
     state: State<'_, AppState>,
@@ -863,6 +873,7 @@ pub fn run() {
             fetch_work_item_image,
             add_work_item_comment,
             delete_work_item_comment,
+            update_work_item_comment,
             update_work_item_fields,
             list_work_item_updates,
             list_work_item_field_allowed_values,

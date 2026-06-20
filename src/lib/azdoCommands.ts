@@ -801,6 +801,14 @@ export type DeleteWorkItemCommentInput = {
   commentId: number;
 };
 
+export type UpdateWorkItemCommentInput = {
+  organizationId?: string;
+  projectId: string;
+  workItemId: number;
+  commentId: number;
+  markdown: string;
+};
+
 export type ListWorkItemTypeStatesInput = {
   organizationId?: string;
   projectId: string;
@@ -1128,6 +1136,13 @@ export async function deleteWorkItemComment(
   input: DeleteWorkItemCommentInput,
 ): Promise<void> {
   await invokeCommand("delete_work_item_comment", { input });
+}
+
+export async function updateWorkItemComment(
+  input: UpdateWorkItemCommentInput,
+): Promise<WorkItemComment> {
+  const result = await invokeCommand("update_work_item_comment", { input });
+  return workItemCommentSchema.parse(result);
 }
 
 export async function updateWorkItemFields(
