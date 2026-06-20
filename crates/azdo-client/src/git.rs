@@ -1,5 +1,7 @@
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::client::AdoClient;
 use crate::error::Result;
@@ -50,6 +52,31 @@ pub struct GitPullRequest {
     pub reviewers: Option<Vec<IdentityRefWithVote>>,
     pub is_draft: Option<bool>,
     pub merge_status: Option<String>,
+}
+
+/// Request body for the Pull Request Query API. Looks up pull requests by the
+/// commits they contain (`type: "commit"`).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PullRequestQuery<'a> {
+    queries: Vec<PullRequestQueryInput<'a>>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PullRequestQueryInput<'a> {
+    items: Vec<&'a str>,
+    #[serde(rename = "type")]
+    query_type: &'a str,
+}
+
+/// Response from the Pull Request Query API. Each entry in `results` maps the
+/// queried commit id to the pull requests that contain it.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PullRequestQueryResponse {
+    #[serde(default)]
+    results: Vec<HashMap<String, Vec<GitPullRequest>>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -250,19 +277,30 @@ impl AdoClient {
 
     /// Lists the pull requests that contain the given commit.
     ///
-    /// Repository-scoped (no project segment), matching
-    /// `GET /_apis/git/repositories/{repoId}/commits/{commitId}/pullRequests`.
+    /// Repository-scoped (no project segment). Azure DevOps has no
+    /// `commits/{commitId}/pullRequests` route, so this uses the Pull Request
+    /// Query API: `POST /_apis/git/repositories/{repoId}/pullrequestquery`.
     pub async fn list_commit_pull_requests(
         &self,
         repository_id: &str,
         commit_id: &str,
     ) -> Result<Vec<GitPullRequest>> {
-        let path =
-            format!("_apis/git/repositories/{repository_id}/commits/{commit_id}/pullRequests");
-        let response: ListResponse<GitPullRequest> = self
-            .get_json(&path, &[("api-version", "7.1-preview")])
+        let path = format!("_apis/git/repositories/{repository_id}/pullrequestquery");
+        let body = PullRequestQuery {
+            queries: vec![PullRequestQueryInput {
+                items: vec![commit_id],
+                query_type: "commit",
+            }],
+        };
+        let response: PullRequestQueryResponse = self
+            .post_json(&path, &[("api-version", "7.1-preview")], &body)
             .await?;
-        Ok(response.value)
+        let prs = response
+            .results
+            .into_iter()
+            .flat_map(|mut result| result.remove(commit_id).unwrap_or_default())
+            .collect();
+        Ok(prs)
     }
 
     pub async fn get_commit(
@@ -594,25 +632,26 @@ mod tests {
     #[tokio::test]
     async fn list_commit_pull_requests_maps_response() {
         let server = MockServer::start().await;
-        Mock::given(method("GET"))
+        Mock::given(method("POST"))
             .and(path(
-                "/_apis/git/repositories/repo-1/commits/abc123/pullRequests",
+                "/_apis/git/repositories/repo-1/pullrequestquery",
             ))
             .and(query_param("api-version", "7.1-preview"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "count": 1,
-                "value": [{
-                    "pullRequestId": 99,
-                    "title": "Land the fix",
-                    "status": "completed",
-                    "creationDate": "2026-05-24T00:00:00Z",
-                    "repository": {
-                        "id": "repo-1",
-                        "name": "dashboard",
-                        "project": { "id": "project-1", "name": "Platform" }
-                    },
-                    "sourceRefName": "refs/heads/fix",
-                    "targetRefName": "refs/heads/main"
+                "results": [{
+                    "abc123": [{
+                        "pullRequestId": 99,
+                        "title": "Land the fix",
+                        "status": "completed",
+                        "creationDate": "2026-05-24T00:00:00Z",
+                        "repository": {
+                            "id": "repo-1",
+                            "name": "dashboard",
+                            "project": { "id": "project-1", "name": "Platform" }
+                        },
+                        "sourceRefName": "refs/heads/fix",
+                        "targetRefName": "refs/heads/main"
+                    }]
                 }]
             })))
             .mount(&server)
@@ -626,6 +665,25 @@ mod tests {
         assert_eq!(prs.len(), 1);
         assert_eq!(prs[0].pull_request_id, 99);
         assert_eq!(prs[0].status, "completed");
+    }
+
+    #[tokio::test]
+    async fn list_commit_pull_requests_empty_when_commit_absent() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/_apis/git/repositories/repo-1/pullrequestquery"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "results": [{}]
+            })))
+            .mount(&server)
+            .await;
+
+        let prs = test_client(&server)
+            .await
+            .list_commit_pull_requests("repo-1", "abc123")
+            .await
+            .unwrap();
+        assert!(prs.is_empty());
     }
 
     #[tokio::test]
