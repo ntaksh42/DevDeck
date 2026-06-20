@@ -1246,6 +1246,17 @@ export async function listSyncStates(): Promise<SyncState[]> {
   return syncStatesSchema.parse(result);
 }
 
+const diagnosticsExportSchema = z.object({
+  filePath: z.string(),
+});
+
+export type DiagnosticsExport = z.infer<typeof diagnosticsExportSchema>;
+
+export async function exportDiagnostics(): Promise<DiagnosticsExport> {
+  const result = await invokeCommand("export_diagnostics");
+  return diagnosticsExportSchema.parse(result);
+}
+
 export async function triggerSync(input: TriggerSyncInput = {}): Promise<void> {
   await invokeCommand("trigger_sync", { input });
 }

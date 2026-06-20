@@ -10,6 +10,7 @@ import {
   updateAppSettings,
   commandErrorMessage,
   triggerSync,
+  exportDiagnostics,
   DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
   REVIEW_STALE_THRESHOLD_DAY_OPTIONS,
   type AppSettings,
@@ -65,6 +66,7 @@ export function OrganizationSettings({
       <ReviewStaleThresholdSettings />
       <SyncHealthSettings organizations={organizations} />
       <DataCacheSettings />
+      <DiagnosticsSettings />
       <ValidationModeSettings />
       <div className="overflow-hidden rounded-md border border-border bg-card">
         <div className="border-b border-border px-3 py-2">
@@ -907,6 +909,60 @@ export function ReviewStaleThresholdSettings() {
         {mutation.isSuccess ? (
           <p className="text-sm text-green-700 dark:text-green-400">
             Stale review threshold saved.
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+export function DiagnosticsSettings() {
+  const mutation = useMutation({ mutationFn: exportDiagnostics });
+
+  return (
+    <div className="rounded-md border border-border bg-card">
+      <div className="border-b border-border px-3 py-2">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-secondary">
+            <FileText className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold">Diagnostics</h2>
+            <p className="text-sm text-muted-foreground">
+              Save a secret-free diagnostics bundle (app version, schema version,
+              sync state, recent errors) for bug reports. No PAT or token is ever
+              included.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-3 p-3">
+        <div>
+          <button
+            type="button"
+            onClick={() => mutation.mutate()}
+            disabled={mutation.isPending}
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {mutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <FileText className="h-4 w-4" aria-hidden="true" />
+            )}
+            Export diagnostics
+          </button>
+        </div>
+
+        {mutation.isError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {commandErrorMessage(mutation.error)}
+          </p>
+        ) : null}
+
+        {mutation.isSuccess ? (
+          <p className="break-all text-sm text-green-700 dark:text-green-400">
+            Saved to {mutation.data.filePath}
           </p>
         ) : null}
       </div>

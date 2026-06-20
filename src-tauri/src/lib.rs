@@ -6,6 +6,7 @@ mod auth;
 mod code_search;
 mod commits;
 mod db;
+mod diagnostics;
 mod error;
 mod orgs;
 mod pipelines;
@@ -145,6 +146,34 @@ async fn get_review_result_preview(
 async fn list_sync_states(state: State<'_, AppState>) -> Result<Vec<SyncState>> {
     let db = state.db.clone();
     run_blocking(move || db.list_sync_states()).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state, app))]
+async fn export_diagnostics(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<diagnostics::DiagnosticsExport> {
+    let db = state.db.clone();
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| AppError::InvalidInput(format!("could not resolve app data dir: {e}")))?;
+    run_blocking(move || {
+        let report = diagnostics::build_diagnostics_report(
+            &db,
+            env!("CARGO_PKG_VERSION"),
+            std::env::consts::OS,
+        )?;
+        let timestamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
+        let file_path = app_data_dir.join(format!("azdodeck-diagnostics-{timestamp}.txt"));
+        std::fs::create_dir_all(&app_data_dir)?;
+        std::fs::write(&file_path, report)?;
+        Ok(diagnostics::DiagnosticsExport {
+            file_path: file_path.display().to_string(),
+        })
+    })
+    .await
 }
 
 #[tauri::command]
@@ -768,6 +797,7 @@ pub fn run() {
             update_app_settings,
             get_review_result_preview,
             list_sync_states,
+            export_diagnostics,
             snooze_item,
             unsnooze_item,
             list_snoozed_items,

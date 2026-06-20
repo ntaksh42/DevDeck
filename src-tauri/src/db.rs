@@ -243,6 +243,13 @@ impl AppDatabase {
         Ok(conn)
     }
 
+    /// The on-disk schema version (`PRAGMA user_version`). Surfaced in the
+    /// diagnostics bundle for bug reports.
+    pub fn schema_version(&self) -> Result<i64> {
+        let conn = self.open()?;
+        Ok(conn.query_row("PRAGMA user_version", [], |row| row.get(0))?)
+    }
+
     // ── Organizations ────────────────────────────────────────────────────────
 
     pub fn list_organizations(&self) -> Result<Vec<Organization>> {

@@ -943,6 +943,8 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     }
     case "list_sync_states":
       return demoSyncStates;
+    case "export_diagnostics":
+      return { filePath: "azdodeck-diagnostics-demo.txt" };
     case "snooze_item": {
       const input = (
         args as
