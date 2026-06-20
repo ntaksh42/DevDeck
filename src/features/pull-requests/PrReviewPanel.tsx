@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Loader2, Maximize2, Minimize2 } from "lucide-react";
 import {
@@ -26,7 +26,11 @@ import { MarkdownView } from "@/lib/markdown";
 import { openExternalUrl, openLocalPath } from "@/lib/openExternal";
 import { LoadingState, ErrorState, PreviewEmptyState } from "@/components/StateDisplay";
 import { CommentComposer } from "./CommentComposer";
-import { PrFilesTab } from "./PrFilesTab";
+// The Files tab is not the default tab and pulls in the `diff` library, so it
+// is code-split to keep that weight out of the startup bundle.
+const PrFilesTab = lazy(() =>
+  import("./PrFilesTab").then((m) => ({ default: m.PrFilesTab })),
+);
 import { PrThreadCard } from "./PrThreadCard";
 import { VOTE_BADGE_CLASSES, VOTE_DOT_CLASSES, voteTone } from "./voteVisual";
 
@@ -192,7 +196,9 @@ export function PrReviewPanel({
           error={reviewQuery.isError ? commandErrorMessage(reviewQuery.error) : null}
         />
       ) : tab === "files" ? (
-        <PrFilesTab pr={selectedPr} threads={reviewQuery.data?.threads} />
+        <Suspense fallback={<LoadingState />}>
+          <PrFilesTab pr={selectedPr} threads={reviewQuery.data?.threads} />
+        </Suspense>
       ) : tab === "commits" ? (
         <CommitsTab pr={selectedPr} />
       ) : (
