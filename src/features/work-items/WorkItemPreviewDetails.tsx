@@ -88,6 +88,7 @@ export function WorkItemPreviewDetails({
   assigneeControl,
   deleteCommentError,
   deletingCommentId,
+  actionsControl,
   deletePending,
   mentionDisplayNames,
   onCustomPreviewFieldsChange,
@@ -106,6 +107,7 @@ export function WorkItemPreviewDetails({
 }: {
   customPreviewFields: CustomPreviewField[];
   preview: WorkItemPreview;
+  actionsControl?: ReactNode;
   assigneeControl: ReactNode;
   deleteCommentError: string | null;
   deletingCommentId: number | null;
@@ -259,6 +261,7 @@ export function WorkItemPreviewDetails({
             {statusChip}
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            {actionsControl}
             {presetsControl}
             <div ref={fieldMenuRef} className="relative">
               <button
