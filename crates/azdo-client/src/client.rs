@@ -1144,7 +1144,7 @@ mod tests {
             .unwrap_err();
 
         match err {
-            AdoError::Api { status, body } => {
+            AdoError::Api { status, body, .. } => {
                 assert_eq!(status, 500);
                 assert_eq!(body, "boom");
             }
