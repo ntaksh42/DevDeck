@@ -18,6 +18,13 @@ export default defineConfig(async () => ({
   //
   // 1. prevent Vite from obscuring rust errors
   clearScreen: false,
+  // The desktop app renders in WebView2 (evergreen Chromium) and the browser
+  // preview is exercised with Chromium via Playwright, so we can target a
+  // modern baseline and let esbuild skip legacy downleveling. That trims the
+  // startup bundle the webview has to parse before first paint.
+  build: {
+    target: "chrome110",
+  },
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {
     port: 1420,
