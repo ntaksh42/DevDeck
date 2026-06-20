@@ -10,6 +10,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { Copy, Loader2, Trash2, X, Zap } from 'lucide-react';
 import {
   deleteWorkItemComment,
+  updateWorkItemComment,
   listOrganizations,
   listWorkItemTypeStates,
   listWorkItemFieldAllowedValues,
@@ -297,6 +298,31 @@ export function WorkItemPreviewPanel({
                 ...current,
                 comments: current.comments.filter(
                   (comment) => comment.id !== variables.commentId,
+                ),
+              }
+            : current,
+      );
+      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
+    },
+  });
+
+  const editCommentMutation = useMutation({
+    mutationFn: updateWorkItemComment,
+    onSuccess: (updated, variables) => {
+      queryClient.setQueryData(
+        workItemQueryKeys.preview(
+          variables.organizationId,
+          variables.projectId,
+          variables.workItemId,
+        ),
+        (current: WorkItemPreview | undefined) =>
+          current
+            ? {
+                ...current,
+                comments: current.comments.map((comment) =>
+                  comment.id === variables.commentId
+                    ? { ...comment, text: updated.text, renderedText: updated.renderedText }
+                    : comment,
                 ),
               }
             : current,
@@ -612,6 +638,17 @@ export function WorkItemPreviewPanel({
       projectId: selectedItem.projectId,
       workItemId: selectedItem.id,
       commentId,
+    });
+  }
+
+  function editComment(commentId: number, markdown: string) {
+    if (!selectedItem || editCommentMutation.isPending) return;
+    editCommentMutation.mutate({
+      organizationId: selectedItem.organizationId,
+      projectId: selectedItem.projectId,
+      workItemId: selectedItem.id,
+      commentId,
+      markdown,
     });
   }
 
@@ -976,9 +1013,21 @@ export function WorkItemPreviewPanel({
                     : null
                 }
                 deletePending={deleteCommentMutation.isPending}
+                editCommentError={
+                  editCommentMutation.isError
+                    ? commandErrorMessage(editCommentMutation.error)
+                    : null
+                }
+                editingCommentId={
+                  editCommentMutation.isPending
+                    ? editCommentMutation.variables?.commentId ?? null
+                    : null
+                }
+                editPending={editCommentMutation.isPending}
                 mentionDisplayNames={commentMentionDisplayNames}
                 onCustomPreviewFieldsChange={onCustomPreviewFieldsChange}
                 onDeleteComment={deleteComment}
+                onEditComment={editComment}
                 preview={preview}
                 selectedFieldKeys={selectedPreviewFieldKeys}
                 onSelectedFieldKeysChange={setSelectedPreviewFieldKeys}

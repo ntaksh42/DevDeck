@@ -44,6 +44,7 @@ import type {
   SearchPullRequestMentionsInput,
   SearchWorkItemMentionsInput,
   SearchWorkItemsInput,
+  UpdateWorkItemCommentInput,
   UpdateWorkItemFieldsInput,
   ListWorkItemFieldAllowedValuesInput,
   SetWorkItemsPriorityInput,
@@ -125,6 +126,7 @@ let demoSyncStates: SyncState[] = [
 const writeCommands = new Set([
   "add_work_item_comment",
   "delete_work_item_comment",
+  "update_work_item_comment",
   "update_work_item_fields",
   "set_work_items_state",
   "assign_work_items",
@@ -840,6 +842,12 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         ?.input;
       if (input) deletedDemoWorkItemComments.add(input.commentId);
       return null;
+    }
+    case "update_work_item_comment": {
+      const input = (args as { input?: UpdateWorkItemCommentInput } | undefined)
+        ?.input;
+      const comment = demoWorkItemComment(input?.markdown);
+      return { ...comment, id: input?.commentId ?? comment.id };
     }
     case "update_work_item_fields": {
       const input = (args as { input?: UpdateWorkItemFieldsInput } | undefined)?.input;

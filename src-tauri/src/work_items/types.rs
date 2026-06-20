@@ -115,6 +115,16 @@ pub struct DeleteWorkItemCommentInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct UpdateWorkItemCommentInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_id: i64,
+    pub comment_id: i64,
+    pub markdown: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateWorkItemFieldsInput {
     pub organization_id: Option<String>,
     pub project_id: String,
