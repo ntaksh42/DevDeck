@@ -597,8 +597,17 @@ function activeColumnFilterCount(
   ).length;
 }
 
+export type MyReviewsSelectRequest = {
+  pullRequestId: number;
+  repositoryId: string | null;
+  organizationId?: string;
+  requestId: number;
+};
+
 type MyReviewsGridProps = {
   organizations: Organization[];
+  selectRequest?: MyReviewsSelectRequest | null;
+  onSelectRequestHandled?: () => void;
   selectedViewRequestId?: string | null;
   onSelectedViewRequestHandled?: () => void;
   onViewsChange?: (views: PullRequestView[]) => void;
@@ -611,6 +620,8 @@ function prViewExportFileName(): string {
 
 export function MyReviewsGrid({
   organizations,
+  selectRequest,
+  onSelectRequestHandled,
   selectedViewRequestId,
   onSelectedViewRequestHandled,
   onViewsChange,
@@ -705,6 +716,9 @@ export function MyReviewsGrid({
   const gridScrollRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
   const gridHadFocusRef = useRef(false);
+  // A cross-link select request that is waiting for the target PR to appear in
+  // the sorted/visible rows (e.g. after switching org or loading data).
+  const pendingSelectRef = useRef<MyReviewsSelectRequest | null>(null);
   const [gridViewport, setGridViewport] = useState({ height: 0, scrollTop: 0 });
 
   useEffect(() => {
@@ -978,6 +992,45 @@ export function MyReviewsGrid({
   useEffect(() => {
     containerRef.current?.focus();
   }, []);
+
+  // A cross-link asked us to reveal a specific PR. Switch org if needed, drop
+  // filters/collapsed sections that might hide it, and remember it as pending so
+  // the resolution effect below can select it once it lands in the sorted rows.
+  useEffect(() => {
+    if (!selectRequest) return;
+    pendingSelectRef.current = selectRequest;
+    if (selectRequest.organizationId && selectRequest.organizationId !== organizationId) {
+      setOrganizationId(selectRequest.organizationId);
+    }
+    setTextFilter("");
+    setColumnFilters({});
+    setShowDrafts(true);
+    setShowDone(false);
+    setShowSnoozed(false);
+    setCollapsedSections(new Set());
+    onSelectRequestHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectRequest?.requestId]);
+
+  // Land a pending cross-link selection once its target PR is present in the
+  // visible rows. Cleared when found, or left to retry as data loads.
+  useEffect(() => {
+    const pending = pendingSelectRef.current;
+    if (!pending) return;
+    const targetIndex = sortedPrs.findIndex(
+      (pr) =>
+        pr.pullRequestId === pending.pullRequestId &&
+        (!pending.repositoryId || pr.repositoryId === pending.repositoryId),
+    );
+    if (targetIndex < 0) return;
+    pendingSelectRef.current = null;
+    setSelectedIndex(targetIndex);
+    window.setTimeout(() => {
+      scrollPrIntoView(targetIndex);
+      focusRow(targetIndex);
+    }, 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortedPrs]);
 
   // Apply a view requested from the navigation sidebar.
   useEffect(() => {

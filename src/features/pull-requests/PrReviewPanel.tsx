@@ -21,6 +21,7 @@ import {
   type ReviewPullRequestSummary,
 } from "@/lib/azdoCommands";
 import { focusPrimaryGrid, formatDate, formatRelativeDate, isEditableTarget } from "@/lib/utils";
+import { extractWorkItemMentions, navigateToWorkItem } from "@/lib/crossLinks";
 import { MarkdownView } from "@/lib/markdown";
 import { openExternalUrl, openLocalPath } from "@/lib/openExternal";
 import { LoadingState, ErrorState, PreviewEmptyState } from "@/components/StateDisplay";
@@ -282,6 +283,19 @@ function ReviewTab({
     staleTime: 5 * 60_000,
   });
   const readOnly = settingsQuery.data?.readOnlyValidationModeEnabled ?? false;
+
+  // Linked work items: scan the PR description and commit messages for AB#NNN
+  // mentions. Commits share the CommitsTab query key, so this stays warm.
+  const commitsQuery = useQuery({
+    queryKey: ["prCommits", pr.organizationId, pr.repositoryId, pr.pullRequestId],
+    queryFn: () => listPullRequestCommits(prLocator(pr)),
+    staleTime: 60_000,
+  });
+  const linkedWorkItemIds = extractWorkItemMentions([
+    review?.description,
+    ...(commitsQuery.data?.map((commit) => commit.comment) ?? []),
+  ]);
+
   const [mergeStrategy, setMergeStrategy] = useState("squash");
   const [deleteSourceBranch, setDeleteSourceBranch] = useState(false);
 
@@ -468,6 +482,30 @@ function ReviewTab({
             <p className="mt-2 text-xs italic text-muted-foreground">No description.</p>
           )}
         </div>
+
+        {/* Linked work items (AB#NNN found in the description or commits). */}
+        {linkedWorkItemIds.length > 0 ? (
+          <div className="border-b border-border px-3 py-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Work Items ({linkedWorkItemIds.length})
+            </p>
+            <div className="mt-1 flex flex-wrap gap-1">
+              {linkedWorkItemIds.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() =>
+                    navigateToWorkItem({ organizationId: pr.organizationId, workItemId: id })
+                  }
+                  className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] text-primary hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring"
+                  title={`Open work item ${id} in Work Items`}
+                >
+                  AB#{id}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {/* Threads */}
         <div className="flex flex-col gap-2 px-3 py-2">

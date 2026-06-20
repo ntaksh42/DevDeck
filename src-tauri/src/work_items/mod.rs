@@ -283,6 +283,7 @@ impl WorkItemService {
             comments,
         );
         preview.comments_unavailable = comments_unavailable;
+        preview.pull_requests = self.resolve_pull_request_links(&organization, &raw_relations);
         preview.relations = self
             .resolve_preview_relations(
                 &client,
@@ -293,6 +294,62 @@ impl WorkItemService {
             )
             .await;
         Ok(preview)
+    }
+
+    /// Extracts pull request `ArtifactLink` relations and enriches them with
+    /// locally synced My Reviews data (title, vote, draft status) when present.
+    fn resolve_pull_request_links(
+        &self,
+        organization: &Organization,
+        raw_relations: &[WorkItemRelation],
+    ) -> Vec<WorkItemPullRequestLink> {
+        let mut pr_ids: Vec<i64> = raw_relations
+            .iter()
+            .filter(|relation| relation.rel == "ArtifactLink")
+            .filter(|relation| {
+                relation
+                    .attributes
+                    .as_ref()
+                    .and_then(|attributes| attributes.name.as_deref())
+                    .is_some_and(|name| name.eq_ignore_ascii_case("Pull Request"))
+            })
+            .filter_map(|relation| pull_request_id_from_artifact(&relation.url))
+            .collect();
+        pr_ids.sort_unstable();
+        pr_ids.dedup();
+        if pr_ids.is_empty() {
+            return Vec::new();
+        }
+
+        // Reviews are a progressive enhancement; missing local data still yields
+        // a clickable PR id, so ignore lookup failures.
+        let reviews = self
+            .db
+            .list_review_pull_requests(&organization.id)
+            .unwrap_or_default();
+
+        pr_ids
+            .into_iter()
+            .map(|pull_request_id| {
+                let review = reviews
+                    .iter()
+                    .find(|pr| pr.pull_request_id == pull_request_id);
+                WorkItemPullRequestLink {
+                    pull_request_id,
+                    repository_id: review.map(|pr| pr.repository_id.clone()),
+                    title: review.map(|pr| pr.title.clone()),
+                    status: review.map(|pr| {
+                        if pr.is_draft {
+                            "Draft".to_string()
+                        } else {
+                            "Active".to_string()
+                        }
+                    }),
+                    my_vote_label: review.map(|pr| pr.my_vote_label.clone()),
+                    web_url: review.and_then(|pr| pr.web_url.clone()),
+                }
+            })
+            .collect()
     }
 
     async fn resolve_preview_relations(
