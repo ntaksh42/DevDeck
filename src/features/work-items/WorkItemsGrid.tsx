@@ -41,6 +41,17 @@ import {
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { readStoredJson, writeStoredJson, storageKey } from '@/lib/storage';
 import { recordRecentWorkItem } from '@/lib/recentItems';
+import { RowShortcutHints, type RowShortcut } from '@/components/RowShortcutHints';
+
+// Key shortcuts available for the selected work item row (see handleKeyDown).
+const WORK_ITEM_ROW_SHORTCUTS: RowShortcut[] = [
+  { keys: "S", label: "State" },
+  { keys: "A", label: "Assign" },
+  { keys: "P", label: "Priority" },
+  { keys: "M", label: "Comment" },
+  { keys: "E", label: "Done" },
+  { keys: "↵", label: "Preview" },
+];
 import { isTauriRuntime } from '@/lib/runtime';
 import {
   markWorkItemRead,
@@ -1685,21 +1696,26 @@ export function WorkItemsGrid({
           )}
 
           <div className="flex items-center justify-between gap-2 border-t border-border px-2 py-1 text-xs text-muted-foreground">
-            <span>
-              {loading
-                ? "Loading…"
-                : searched
-                  ? hasActiveColumnFilters
-                    ? `${displayed.length} of ${sorted.length} item${sorted.length === 1 ? "" : "s"}`
-                    : `${displayed.length} item${displayed.length === 1 ? "" : "s"}`
-                  : "Ready"}
-              {dataUpdatedAt ? (
-                <span title={new Date(dataUpdatedAt).toLocaleString()}>
-                  {" · "}
-                  Updated {formatRelativeDate(new Date(dataUpdatedAt).toISOString())}
-                </span>
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="shrink-0">
+                {loading
+                  ? "Loading…"
+                  : searched
+                    ? hasActiveColumnFilters
+                      ? `${displayed.length} of ${sorted.length} item${sorted.length === 1 ? "" : "s"}`
+                      : `${displayed.length} item${displayed.length === 1 ? "" : "s"}`
+                    : "Ready"}
+                {dataUpdatedAt ? (
+                  <span title={new Date(dataUpdatedAt).toLocaleString()}>
+                    {" · "}
+                    Updated {formatRelativeDate(new Date(dataUpdatedAt).toISOString())}
+                  </span>
+                ) : null}
+                {isFetching ? <span>{" · "}Refreshing…</span> : null}
+              </span>
+              {selectedItem && checkedItems.length === 0 ? (
+                <RowShortcutHints hints={WORK_ITEM_ROW_SHORTCUTS} />
               ) : null}
-              {isFetching ? <span>{" · "}Refreshing…</span> : null}
             </span>
             <span className="flex items-center gap-2">
               {triageScope ? (

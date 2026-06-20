@@ -72,7 +72,7 @@ crates/azdo-client/                            — Tauri 非依存の独立 ADO 
 | **My Commits** | author = 自分のコミットを検索操作なしに自動ロード (Commits ビューを `myCommitsMode` で流用、組織の認証ユーザー名で seed・90 日窓・組織切替で再取得)。Commits と同じグリッド/プレビュー/関連 PR ルックアップ。 |
 | **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。 |
 | **Code Search** | リポジトリ横断のコード検索。ファイル/パス/ブランチとリンク。進行中の検索を Cancel でき (`operationId` + `cancel_operation`、`CancellationRegistry` が `tokio::select!` で実行中 future を drop)、キャンセル後も直近の結果が残る。 |
-| **Settings** | 組織設定 (PAT / Azure CLI)、通知設定、フォルダパス、グローバルホットキー、キーバインド上書き。 |
+| **Settings** | 組織設定 (PAT / Azure CLI)、通知設定、フォルダパス、グローバルホットキー、キーバインド上書き。Software update パネル (opt-in: 手動で更新確認→適用、失敗時は安全にスキップ。`tauri-plugin-updater`、ブラウザでは無効)。 |
 
 ### 横断機能
 
@@ -177,6 +177,8 @@ find-next) は、入力欄以外では抑止し、ネイティブ動作が素通
 `↑ ↓ / J K / Home / End / PageUp / PageDown` で移動、`Enter` でプレビュー/オープン、
 `Ctrl+Enter` でブラウザを開く、`C` で URL コピー。作業項目グリッドでは
 `S` 状態 / `A` 割当 / `P` 優先度 / `F` フィールド循環、`Ctrl+S` で適用、`M` でコメント。
+行を1件選択中は、ステータスバーに主要な行ショートカットのコンパクトな凡例を表示する
+(My Reviews / 作業項目グリッド)。
 
 ポップオーバー/メニュー/ダイアログは、最初の妥当なコントロールにフォーカスして開き、
 矢印/Enter/Space/Escape で完結し、閉じる際は呼び出し元へフォーカスを返す。
