@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, ArrowRight, Copy, Download, Eye, EyeOff, Loader2, Pin, PinOff, Play, Plus, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Columns3, Copy, Download, Eye, EyeOff, List, Loader2, Pin, PinOff, Play, Plus, Trash2, Upload, X } from 'lucide-react';
 import {
   getSavedQuery,
   countWorkItemQuery,
@@ -21,6 +21,7 @@ import {
 import { clamp, isEditableTarget } from '@/lib/utils';
 import { ErrorState } from '@/components/StateDisplay';
 import { WorkItemsGrid } from './WorkItemsGrid';
+import { WorkItemBoard } from './WorkItemBoard';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from './queryKeys';
 import {
   MAX_VIEW_REFRESH_INTERVAL_SEC,
@@ -32,7 +33,10 @@ import {
   recordViewCount,
   saveWorkItemQueryViews,
   viewCountBaseline,
+  loadWorkItemViewLayout,
+  saveWorkItemViewLayout,
   type WorkItemQueryView,
+  type WorkItemViewLayout,
 } from './workItemViewsStorage';
 
 type WiqlCompletion = {
@@ -239,6 +243,9 @@ export function WorkItemViewsPanel({
   const [formError, setFormError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewMessage, setViewMessage] = useState<string | null>(null);
+  const [layout, setLayout] = useState<WorkItemViewLayout>(() =>
+    initialSelectedView ? loadWorkItemViewLayout(initialSelectedView.id) : "list",
+  );
   const viewButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const restoreViewFocusIndexRef = useRef<number | null>(null);
   const viewFormRef = useRef<HTMLFormElement | null>(null);
@@ -432,6 +439,16 @@ export function WorkItemViewsPanel({
   useEffect(() => {
     onSelectedViewChange?.(selectedView?.id ?? null);
   }, [onSelectedViewChange, selectedView?.id]);
+
+  // Layout (list/board) is remembered per view.
+  useEffect(() => {
+    setLayout(selectedView ? loadWorkItemViewLayout(selectedView.id) : "list");
+  }, [selectedView?.id]);
+
+  function changeLayout(next: WorkItemViewLayout) {
+    setLayout(next);
+    if (selectedView) saveWorkItemViewLayout(selectedView.id, next);
+  }
 
   useEffect(() => {
     const index = restoreViewFocusIndexRef.current;
@@ -824,6 +841,38 @@ export function WorkItemViewsPanel({
             </p>
           </div>
           <div className="flex items-center gap-1.5">
+            <div
+              role="group"
+              aria-label="Result layout"
+              className="inline-flex items-center rounded-md border border-border p-0.5"
+            >
+              <button
+                type="button"
+                disabled={!selectedView}
+                aria-pressed={layout === "list"}
+                onClick={() => changeLayout("list")}
+                title="List layout"
+                className={`inline-flex h-7 items-center gap-1.5 rounded px-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50 ${
+                  layout === "list" ? "bg-secondary text-foreground" : "hover:bg-secondary/60"
+                }`}
+              >
+                <List className="h-3.5 w-3.5" aria-hidden="true" />
+                List
+              </button>
+              <button
+                type="button"
+                disabled={!selectedView}
+                aria-pressed={layout === "board"}
+                onClick={() => changeLayout("board")}
+                title="Board layout"
+                className={`inline-flex h-7 items-center gap-1.5 rounded px-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50 ${
+                  layout === "board" ? "bg-secondary text-foreground" : "hover:bg-secondary/60"
+                }`}
+              >
+                <Columns3 className="h-3.5 w-3.5" aria-hidden="true" />
+                Board
+              </button>
+            </div>
             <button
               type="button"
               disabled={!selectedView}
@@ -1071,28 +1120,38 @@ export function WorkItemViewsPanel({
             <ErrorState message={commandErrorMessage(selectedQuery.error)} />
           ) : null}
 
-          <WorkItemsGrid
-            key={selectedView.id}
-            dataUpdatedAt={selectedQuery?.dataUpdatedAt}
-            loading={selectedQueryInitialLoading}
-            results={selectedResults}
-            searched={!!selectedQuery}
-            autoFocus
-            emptyMessage="Select or save a WIQL view to load work items."
-            initialSort={{
-              key: selectedView.sortKey ?? "changedDate",
-              direction: selectedView.sortDirection ?? "desc",
-            }}
-            onSortChange={(sort) =>
-              updateSelectedView({
-                sortKey: sort.key,
-                sortDirection: sort.direction,
-              })
-            }
-            previewVisible={selectedView.previewVisible !== false}
-            storageKeyScope={selectedView.id}
-            extraColumns={selectedViewExtraColumns}
-          />
+          {layout === "board" ? (
+            <WorkItemBoard
+              key={`board-${selectedView.id}`}
+              organizationId={selectedOrganizationId}
+              projectId={selectedViewProjectId}
+              results={selectedResults}
+              autoFocus
+            />
+          ) : (
+            <WorkItemsGrid
+              key={selectedView.id}
+              dataUpdatedAt={selectedQuery?.dataUpdatedAt}
+              loading={selectedQueryInitialLoading}
+              results={selectedResults}
+              searched={!!selectedQuery}
+              autoFocus
+              emptyMessage="Select or save a WIQL view to load work items."
+              initialSort={{
+                key: selectedView.sortKey ?? "changedDate",
+                direction: selectedView.sortDirection ?? "desc",
+              }}
+              onSortChange={(sort) =>
+                updateSelectedView({
+                  sortKey: sort.key,
+                  sortDirection: sort.direction,
+                })
+              }
+              previewVisible={selectedView.previewVisible !== false}
+              storageKeyScope={selectedView.id}
+              extraColumns={selectedViewExtraColumns}
+            />
+          )}
         </div>
       ) : null}
 

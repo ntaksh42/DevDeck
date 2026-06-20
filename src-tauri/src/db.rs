@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, Result};
 
-const SCHEMA_VERSION: i64 = 12;
+const SCHEMA_VERSION: i64 = 14;
 
 /// Max rows kept in the my_work_items snapshot queries; sync notification
 /// diffing must know this cap to avoid treating re-entering rows as new.
@@ -45,7 +45,14 @@ pub struct AppSettings {
     pub notify_pr_vote_resets: bool,
     pub notify_pr_comment_replies: bool,
     pub wip_limit: i64,
+    pub review_stale_threshold_days: i64,
+    pub work_item_stale_threshold_days: i64,
 }
+
+pub const DEFAULT_REVIEW_STALE_THRESHOLD_DAYS: i64 = 3;
+pub const REVIEW_STALE_THRESHOLD_DAY_OPTIONS: [i64; 4] = [2, 3, 5, 7];
+pub const DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS: i64 = 7;
+pub const WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS: [i64; 3] = [7, 14, 30];
 
 impl Default for AppSettings {
     fn default() -> Self {
@@ -61,6 +68,8 @@ impl Default for AppSettings {
             notify_pr_vote_resets: true,
             notify_pr_comment_replies: true,
             wip_limit: 5,
+            review_stale_threshold_days: DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
+            work_item_stale_threshold_days: DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
         }
     }
 }
@@ -114,6 +123,14 @@ pub struct CachedReviewPr {
     pub my_is_required: bool,
     pub is_draft: bool,
     pub merge_status: Option<String>,
+    /// Aggregate CI verdict: `succeeded` | `failed` | `in_progress` | `none`.
+    /// `None` means CI was never fetched for this PR (e.g. beyond the sync cap
+    /// or the status fetch failed), which the UI renders the same as `none`.
+    pub ci_status: Option<String>,
+    /// Name of the most relevant status check, shown in the CI tooltip.
+    pub ci_context: Option<String>,
+    /// How many checks the verdict was aggregated from.
+    pub ci_check_count: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -156,6 +173,17 @@ pub struct CachedCommit {
     pub author_name: Option<String>,
     pub author_email: Option<String>,
     pub author_date: Option<String>,
+    pub web_url: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CachedCommitPr {
+    pub pull_request_id: i64,
+    pub pr_repository_id: String,
+    pub title: String,
+    pub status: String,
+    pub my_vote: i32,
+    pub my_vote_label: String,
     pub web_url: Option<String>,
 }
 
@@ -618,6 +646,107 @@ impl AppDatabase {
             "DELETE FROM commits WHERE org_id = ?1 AND (author_date IS NULL OR author_date < ?2)",
             rusqlite::params![org_id, before_date],
         )?;
+        Ok(())
+    }
+
+    // ── Commit ↔ PR cache ─────────────────────────────────────────────────────
+
+    /// Returns cached PRs for a commit, or `None` when the commit has never been
+    /// looked up or its cached lookup is older than `fresh_after`. An empty
+    /// `Vec` means "looked up recently, no related PRs" — distinct from `None`.
+    pub fn get_cached_commit_prs(
+        &self,
+        org_id: &str,
+        repository_id: &str,
+        commit_id: &str,
+        fresh_after: &str,
+    ) -> Result<Option<Vec<CachedCommitPr>>> {
+        let conn = self.open()?;
+        let fetched_at: Option<String> = conn
+            .query_row(
+                "SELECT MAX(fetched_at) FROM commit_prs \
+                 WHERE org_id = ?1 AND repository_id = ?2 AND commit_id = ?3",
+                params![org_id, repository_id, commit_id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .flatten();
+        let Some(fetched_at) = fetched_at else {
+            return Ok(None);
+        };
+        if fetched_at.as_str() < fresh_after {
+            return Ok(None);
+        }
+        let mut stmt = conn.prepare(
+            "SELECT pull_request_id, pr_repository_id, title, status, my_vote, my_vote_label, web_url \
+             FROM commit_prs \
+             WHERE org_id = ?1 AND repository_id = ?2 AND commit_id = ?3 AND pull_request_id IS NOT NULL \
+             ORDER BY pull_request_id DESC",
+        )?;
+        let rows = stmt.query_map(params![org_id, repository_id, commit_id], |row| {
+            Ok(CachedCommitPr {
+                pull_request_id: row.get(0)?,
+                pr_repository_id: row.get(1)?,
+                title: row.get(2)?,
+                status: row.get(3)?,
+                my_vote: row.get(4)?,
+                my_vote_label: row.get(5)?,
+                web_url: row.get(6)?,
+            })
+        })?;
+        let mut prs = Vec::new();
+        for row in rows {
+            prs.push(row?);
+        }
+        Ok(Some(prs))
+    }
+
+    /// Replaces the cached PR list for a single commit. An empty slice records a
+    /// marker row (pull_request_id = NULL) so "no related PRs" is cached.
+    pub fn replace_commit_prs(
+        &self,
+        org_id: &str,
+        repository_id: &str,
+        commit_id: &str,
+        prs: &[CachedCommitPr],
+    ) -> Result<()> {
+        let now = Utc::now().to_rfc3339();
+        let conn = self.open()?;
+        let tx = conn.unchecked_transaction()?;
+        tx.execute(
+            "DELETE FROM commit_prs WHERE org_id = ?1 AND repository_id = ?2 AND commit_id = ?3",
+            params![org_id, repository_id, commit_id],
+        )?;
+        if prs.is_empty() {
+            tx.execute(
+                "INSERT INTO commit_prs(org_id, repository_id, commit_id, pull_request_id, fetched_at) \
+                 VALUES (?1, ?2, ?3, NULL, ?4)",
+                params![org_id, repository_id, commit_id, now],
+            )?;
+        } else {
+            let mut stmt = tx.prepare_cached(
+                "INSERT INTO commit_prs(\
+                    org_id, repository_id, commit_id, pull_request_id, pr_repository_id, \
+                    title, status, my_vote, my_vote_label, web_url, fetched_at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            )?;
+            for pr in prs {
+                stmt.execute(params![
+                    org_id,
+                    repository_id,
+                    commit_id,
+                    pr.pull_request_id,
+                    pr.pr_repository_id,
+                    pr.title,
+                    pr.status,
+                    pr.my_vote,
+                    pr.my_vote_label,
+                    pr.web_url,
+                    now
+                ])?;
+            }
+        }
+        tx.commit()?;
         Ok(())
     }
 
@@ -1151,6 +1280,51 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             "#,
         )?;
     }
+    if current < 13 {
+        if !table_column_exists(conn, "review_pull_requests", "ci_status")? {
+            conn.execute_batch("ALTER TABLE review_pull_requests ADD COLUMN ci_status TEXT;")?;
+        }
+        if !table_column_exists(conn, "review_pull_requests", "ci_context")? {
+            conn.execute_batch("ALTER TABLE review_pull_requests ADD COLUMN ci_context TEXT;")?;
+        }
+        if !table_column_exists(conn, "review_pull_requests", "ci_check_count")? {
+            conn.execute_batch(
+                "ALTER TABLE review_pull_requests ADD COLUMN ci_check_count INTEGER NOT NULL DEFAULT 0;",
+            )?;
+        }
+        if !table_column_exists(conn, "review_pull_requests", "ci_status_updated_at")? {
+            conn.execute_batch(
+                "ALTER TABLE review_pull_requests ADD COLUMN ci_status_updated_at TEXT;",
+            )?;
+        }
+        conn.execute_batch("PRAGMA user_version = 13;")?;
+    }
+    if current < 14 {
+        // On-demand cache of the pull requests that contain a given commit.
+        // `fetched_at` records when the lookup ran so it can be refreshed after
+        // a TTL; a commit with zero related PRs still records a marker row with
+        // pull_request_id = NULL so "no PRs" is cached without re-querying.
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS commit_prs(
+                org_id            TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                repository_id     TEXT NOT NULL,
+                commit_id         TEXT NOT NULL,
+                pull_request_id   INTEGER,
+                pr_repository_id  TEXT,
+                title             TEXT,
+                status            TEXT,
+                my_vote           INTEGER NOT NULL DEFAULT 0,
+                my_vote_label     TEXT NOT NULL DEFAULT '',
+                web_url           TEXT,
+                fetched_at        TEXT NOT NULL,
+                PRIMARY KEY (org_id, repository_id, commit_id, pull_request_id)
+            );
+
+            PRAGMA user_version = 14;
+            "#,
+        )?;
+    }
     Ok(())
 }
 
@@ -1286,7 +1460,25 @@ fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
         notify_pr_vote_resets: get_bool_setting(conn, "notify_pr_vote_resets", true)?,
         notify_pr_comment_replies: get_bool_setting(conn, "notify_pr_comment_replies", true)?,
         wip_limit: get_int_setting(conn, "wip_limit", 5)?,
+        review_stale_threshold_days: get_review_stale_threshold_days(conn)?,
+        work_item_stale_threshold_days: get_work_item_stale_threshold_days(conn)?,
     })
+}
+
+fn get_review_stale_threshold_days(conn: &Connection) -> Result<i64> {
+    let value = get_setting(conn, "review_stale_threshold_days")?
+        .and_then(|raw| raw.trim().parse::<i64>().ok())
+        .filter(|days| REVIEW_STALE_THRESHOLD_DAY_OPTIONS.contains(days))
+        .unwrap_or(DEFAULT_REVIEW_STALE_THRESHOLD_DAYS);
+    Ok(value)
+}
+
+fn get_work_item_stale_threshold_days(conn: &Connection) -> Result<i64> {
+    let value = get_setting(conn, "work_item_stale_threshold_days")?
+        .and_then(|raw| raw.trim().parse::<i64>().ok())
+        .filter(|days| WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS.contains(days))
+        .unwrap_or(DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS);
+    Ok(value)
 }
 
 fn update_app_settings(conn: &Connection, settings: AppSettings) -> Result<AppSettings> {
@@ -1341,6 +1533,29 @@ fn update_app_settings(conn: &Connection, settings: AppSettings) -> Result<AppSe
         settings.notify_pr_comment_replies,
     )?;
     set_int_setting(conn, "wip_limit", settings.wip_limit)?;
+    let stale_days =
+        if REVIEW_STALE_THRESHOLD_DAY_OPTIONS.contains(&settings.review_stale_threshold_days) {
+            settings.review_stale_threshold_days
+        } else {
+            DEFAULT_REVIEW_STALE_THRESHOLD_DAYS
+        };
+    set_setting(
+        conn,
+        "review_stale_threshold_days",
+        Some(&stale_days.to_string()),
+    )?;
+    let work_item_stale_days = if WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS
+        .contains(&settings.work_item_stale_threshold_days)
+    {
+        settings.work_item_stale_threshold_days
+    } else {
+        DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS
+    };
+    set_setting(
+        conn,
+        "work_item_stale_threshold_days",
+        Some(&work_item_stale_days.to_string()),
+    )?;
     get_app_settings(conn)
 }
 
@@ -1577,8 +1792,9 @@ fn upsert_review_pull_requests(conn: &Connection, prs: &[CachedReviewPr]) -> Res
         INSERT INTO review_pull_requests(
             org_id, project_id, project_name, repository_id, repository_name,
             pull_request_id, title, created_by, creation_date, target_ref_name,
-            web_url, my_vote, my_vote_label, my_is_required, is_draft, merge_status
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+            web_url, my_vote, my_vote_label, my_is_required, is_draft, merge_status,
+            ci_status, ci_context, ci_check_count, ci_status_updated_at
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
         ON CONFLICT(org_id, repository_id, pull_request_id) DO UPDATE SET
             project_id = excluded.project_id,
             project_name = excluded.project_name,
@@ -1592,10 +1808,17 @@ fn upsert_review_pull_requests(conn: &Connection, prs: &[CachedReviewPr]) -> Res
             my_vote_label = excluded.my_vote_label,
             my_is_required = excluded.my_is_required,
             is_draft = excluded.is_draft,
-            merge_status = excluded.merge_status
+            merge_status = excluded.merge_status,
+            ci_status = excluded.ci_status,
+            ci_context = excluded.ci_context,
+            ci_check_count = excluded.ci_check_count,
+            ci_status_updated_at = excluded.ci_status_updated_at
         "#,
     )?;
+    let now = chrono::Utc::now().to_rfc3339();
     for pr in prs {
+        // Only stamp a fetch time when CI was actually resolved for this PR.
+        let ci_updated_at = pr.ci_status.as_ref().map(|_| now.as_str());
         stmt.execute(params![
             pr.org_id,
             pr.project_id,
@@ -1612,7 +1835,11 @@ fn upsert_review_pull_requests(conn: &Connection, prs: &[CachedReviewPr]) -> Res
             pr.my_vote_label,
             pr.my_is_required as i32,
             pr.is_draft as i32,
-            pr.merge_status
+            pr.merge_status,
+            pr.ci_status,
+            pr.ci_context,
+            pr.ci_check_count,
+            ci_updated_at
         ])?;
     }
     Ok(())
@@ -1623,7 +1850,8 @@ fn list_review_pull_requests(conn: &Connection, org_id: &str) -> Result<Vec<Cach
         r#"
         SELECT org_id, project_id, project_name, repository_id, repository_name,
                pull_request_id, title, created_by, creation_date, target_ref_name,
-               web_url, my_vote, my_vote_label, my_is_required, is_draft, merge_status
+               web_url, my_vote, my_vote_label, my_is_required, is_draft, merge_status,
+               ci_status, ci_context, ci_check_count
         FROM review_pull_requests
         WHERE org_id = ?1
         ORDER BY creation_date DESC
@@ -2082,6 +2310,9 @@ fn map_cached_review_pr(row: &rusqlite::Row<'_>) -> rusqlite::Result<CachedRevie
         my_is_required: row.get::<_, i32>(13)? != 0,
         is_draft: row.get::<_, i32>(14)? != 0,
         merge_status: row.get(15)?,
+        ci_status: row.get(16)?,
+        ci_context: row.get(17)?,
+        ci_check_count: row.get(18)?,
     })
 }
 
@@ -2288,6 +2519,9 @@ mod tests {
             my_is_required: false,
             is_draft: false,
             merge_status: None,
+            ci_status: None,
+            ci_context: None,
+            ci_check_count: 0,
         }
     }
 
@@ -2471,6 +2705,8 @@ mod tests {
                 notify_pr_vote_resets: true,
                 notify_pr_comment_replies: false,
                 wip_limit: 3,
+                review_stale_threshold_days: 7,
+                work_item_stale_threshold_days: 14,
             },
         )
         .unwrap();
@@ -2478,6 +2714,8 @@ mod tests {
             saved.review_result_folder_path.as_deref(),
             Some("C:/reports")
         );
+        assert_eq!(saved.review_stale_threshold_days, 7);
+        assert_eq!(saved.work_item_stale_threshold_days, 14);
         assert_eq!(saved.show_window_hotkey.as_deref(), Some("Ctrl+Alt+D"));
         assert!(saved.read_only_validation_mode_enabled);
         assert!(saved.desktop_notifications_enabled);
@@ -3440,5 +3678,56 @@ mod tests {
         let remaining = db.search_commits("org1", None, None, None, None).unwrap();
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].commit_id, "new");
+    }
+
+    #[test]
+    fn commit_prs_cache_round_trips_and_respects_freshness() {
+        let db_file = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(db_file.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        let pr = CachedCommitPr {
+            pull_request_id: 7,
+            pr_repository_id: "repo1".to_string(),
+            title: "Land the fix".to_string(),
+            status: "completed".to_string(),
+            my_vote: 10,
+            my_vote_label: "Approved".to_string(),
+            web_url: Some("https://example/pr/7".to_string()),
+        };
+        db.replace_commit_prs("org1", "repo1", "sha1", &[pr])
+            .unwrap();
+
+        // A miss with a future freshness bound forces a refresh (None).
+        let future = "2999-01-01T00:00:00+00:00";
+        assert!(db
+            .get_cached_commit_prs("org1", "repo1", "sha1", future)
+            .unwrap()
+            .is_none());
+
+        // Cached and still fresh: returns the stored row.
+        let past = "2000-01-01T00:00:00+00:00";
+        let cached = db
+            .get_cached_commit_prs("org1", "repo1", "sha1", past)
+            .unwrap()
+            .expect("cached");
+        assert_eq!(cached.len(), 1);
+        assert_eq!(cached[0].pull_request_id, 7);
+        assert_eq!(cached[0].my_vote_label, "Approved");
+
+        // An unknown commit is None, not an empty Vec.
+        assert!(db
+            .get_cached_commit_prs("org1", "repo1", "unknown", past)
+            .unwrap()
+            .is_none());
+
+        // "No related PRs" is cached as an empty Vec, distinct from None.
+        db.replace_commit_prs("org1", "repo1", "sha1", &[]).unwrap();
+        let empty = db
+            .get_cached_commit_prs("org1", "repo1", "sha1", past)
+            .unwrap()
+            .expect("empty marker cached");
+        assert!(empty.is_empty());
     }
 }

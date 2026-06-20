@@ -3,6 +3,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   lazy,
   Suspense,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -43,6 +44,13 @@ import {
 } from "@/lib/theme";
 import { subscribeTauriEvent } from "@/lib/tauriEvents";
 import {
+  KEYBINDINGS_CHANGED_EVENT,
+  matchesCombo,
+  normalizeKey,
+  resolveKeybindings,
+  type KeybindingMap,
+} from "@/lib/keybindings";
+import {
   storedNumber,
   isEditableTarget,
   focusWorkItemCommentInput,
@@ -66,6 +74,10 @@ import {
 } from '@/features/work-items/workItemViewsStorage';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from '@/features/work-items/queryKeys';
 import { MyReviewsGrid } from '@/features/pull-requests/MyReviewsGrid';
+import {
+  loadPullRequestViews,
+  type PullRequestView,
+} from '@/features/pull-requests/prViewsStorage';
 
 // Only the default view (My Reviews) loads eagerly; the other views are
 // code-split so app startup does not pay for panels that may never open.
@@ -107,9 +119,19 @@ const PullRequestSearch = lazy(() =>
 import {
   showWorkItemNotificationEvent,
   showPullRequestNotificationEvent,
+  showSyncFailedNotificationEvent,
   type WorkItemNotificationEvent,
   type PullRequestNotificationEvent,
+  type SyncFailedEvent,
 } from "@/lib/desktopNotifications";
+import { SyncStatusIndicator } from "@/features/sync/SyncStatusIndicator";
+import {
+  emptyViewHistory,
+  goBack as historyGoBack,
+  goForward as historyGoForward,
+  pushView,
+  type ViewHistory,
+} from "@/features/navigation/viewHistory";
 
 type View =
   | "pullRequestSearch"
@@ -218,24 +240,61 @@ function recordRecentPaletteItem(item: RecentPaletteItem) {
   window.localStorage.setItem(PALETTE_RECENT_ITEMS_STORAGE_KEY, JSON.stringify(items));
 }
 
-// Linear-style two-key navigation: press G, then one of these.
-const GOTO_VIEW_KEYS: Record<string, View> = {
-  r: "myReviews",
-  p: "pullRequestSearch",
-  w: "myWorkItems",
-  i: "workItems",
-  v: "workItemViews",
-  c: "commits",
-  b: "pipelines",
-  d: "codeSearch",
-  s: "settings",
-};
+// Linear-style two-key navigation: press the leader (G by default), then the
+// per-view key. The leader and each second key are resolved from the keybinding
+// registry so users can rebind them in Settings.
+const GOTO_BINDING_VIEWS = {
+  gotoMyReviews: "myReviews",
+  gotoPullRequestSearch: "pullRequestSearch",
+  gotoMyWorkItems: "myWorkItems",
+  gotoWorkItemSearch: "workItems",
+  gotoWorkItemViews: "workItemViews",
+  gotoCommits: "commits",
+  gotoPipelines: "pipelines",
+  gotoCodeSearch: "codeSearch",
+  gotoSettings: "settings",
+} satisfies Partial<Record<keyof KeybindingMap, View>>;
 const GOTO_CHAIN_TIMEOUT_MS = 1500;
+
+// Resolves the second-key -> view lookup for the goto chain from the current
+// keybinding map (normalized to upper-case single keys).
+function gotoViewMapFromKeybindings(keybindings: KeybindingMap): Record<string, View> {
+  const map: Record<string, View> = {};
+  for (const [id, view] of Object.entries(GOTO_BINDING_VIEWS) as [
+    keyof typeof GOTO_BINDING_VIEWS,
+    View,
+  ][]) {
+    const key = normalizeKey(keybindings[id]);
+    if (key) map[key] = view;
+  }
+  return map;
+}
+
+// Reactively reads the resolved keybinding map and refreshes when overrides
+// change (settings emit KEYBINDINGS_CHANGED_EVENT).
+function useKeybindings(): KeybindingMap {
+  const [keybindings, setKeybindings] = useState<KeybindingMap>(resolveKeybindings);
+  useEffect(() => {
+    function onChange() {
+      setKeybindings(resolveKeybindings());
+    }
+    window.addEventListener(KEYBINDINGS_CHANGED_EVENT, onChange);
+    return () => window.removeEventListener(KEYBINDINGS_CHANGED_EVENT, onChange);
+  }, []);
+  return keybindings;
+}
 
 
 
 function AppShell() {
   const [view, setView] = useState<View>("myReviews");
+  // Browser-like Alt+Left / Alt+Right history of visited views.
+  const [viewHistory, setViewHistory] = useState<ViewHistory<View>>(() =>
+    emptyViewHistory<View>(),
+  );
+  const viewHistoryRef = useRef(viewHistory);
+  viewHistoryRef.current = viewHistory;
+  const navigatingHistoryRef = useRef(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [navExpanded, setNavExpanded] = useState<Record<NavSectionId, boolean>>({
@@ -248,6 +307,9 @@ function AppShell() {
   );
   const [activeWorkItemViewId, setActiveWorkItemViewId] = useState<string | null>(null);
   const [selectedWorkItemViewRequestId, setSelectedWorkItemViewRequestId] = useState<string | null>(null);
+  const [pinnedPrViewsExpanded, setPinnedPrViewsExpanded] = useState(true);
+  const [prNavViews, setPrNavViews] = useState<PullRequestView[]>(() => loadPullRequestViews());
+  const [selectedPrViewRequestId, setSelectedPrViewRequestId] = useState<string | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(() =>
     storedNumber(SIDEBAR_WIDTH_STORAGE_KEY, DEFAULT_SIDEBAR_WIDTH, 160, 420),
   );
@@ -257,6 +319,7 @@ function AppShell() {
   // replayed once settings are available so the first events are not dropped.
   const pendingWorkItemEventsRef = useRef<WorkItemNotificationEvent[]>([]);
   const pendingPullRequestEventsRef = useRef<PullRequestNotificationEvent[]>([]);
+  const pendingSyncFailedEventsRef = useRef<SyncFailedEvent[]>([]);
   const startupHotSyncStartedRef = useRef(false);
   const lastHotSyncRequestedAtRef = useRef(0);
   const navTypeaheadRef = useRef<{ value: string; timer: number | null }>({
@@ -264,6 +327,7 @@ function AppShell() {
     timer: null,
   });
   const queryClient = useQueryClient();
+  const keybindings = useKeybindings();
   const organizationsQuery = useQuery({
     queryKey: ["organizations"],
     queryFn: listOrganizations,
@@ -279,10 +343,33 @@ function AppShell() {
     mutationFn: (input: { scope?: SyncScope }) => triggerSync(input),
     onSuccess: (_data, input) => {
       invalidateSyncedDataQueries(queryClient, invalidationScopesForSyncScope(input.scope ?? "all"));
+      void queryClient.invalidateQueries({ queryKey: ["syncStates"] });
     },
   });
 
   const activeView = organizations.length === 0 ? "settings" : view;
+
+  // Record each visited view so Alt+Left / Alt+Right can replay them. Skip the
+  // push when the change was itself triggered by a history navigation.
+  useEffect(() => {
+    if (navigatingHistoryRef.current) {
+      navigatingHistoryRef.current = false;
+      return;
+    }
+    setViewHistory((history) => pushView(history, activeView));
+  }, [activeView]);
+
+  const navigateHistory = useCallback((direction: "back" | "forward") => {
+    const result =
+      direction === "back"
+        ? historyGoBack(viewHistoryRef.current)
+        : historyGoForward(viewHistoryRef.current);
+    if (!result) return;
+    navigatingHistoryRef.current = true;
+    viewHistoryRef.current = result.history;
+    setViewHistory(result.history);
+    setView(result.view);
+  }, []);
 
   const [paletteSearchText, setPaletteSearchText] = useState("");
   const [debouncedPaletteSearchText, setDebouncedPaletteSearchText] = useState("");
@@ -507,6 +594,7 @@ function AppShell() {
   const activePinnedWorkItemView = pinnedWorkItemViews.find(
     (item) => item.id === activeWorkItemViewId,
   );
+  const pinnedPrViews = prNavViews.filter((item) => item.pinned);
 
   function getNavItems(): HTMLButtonElement[] {
     const nav = navRef.current;
@@ -859,8 +947,11 @@ function AppShell() {
     }
     if (event.key === "ArrowRight" && current.dataset.navSubgroup === "true") {
       event.preventDefault();
-      if (!pinnedViewsExpanded) {
-        setPinnedViewsExpanded(true);
+      const isPrViews = current.dataset.subgroupId === "pullRequestViews";
+      const expanded = isPrViews ? pinnedPrViewsExpanded : pinnedViewsExpanded;
+      if (!expanded) {
+        if (isPrViews) setPinnedPrViewsExpanded(true);
+        else setPinnedViewsExpanded(true);
       } else {
         focusNavItem(current, 1);
       }
@@ -868,8 +959,11 @@ function AppShell() {
     }
     if (event.key === "ArrowLeft" && current.dataset.navSubgroup === "true") {
       event.preventDefault();
-      if (pinnedViewsExpanded) {
-        setPinnedViewsExpanded(false);
+      const isPrViews = current.dataset.subgroupId === "pullRequestViews";
+      const expanded = isPrViews ? pinnedPrViewsExpanded : pinnedViewsExpanded;
+      if (expanded) {
+        if (isPrViews) setPinnedPrViewsExpanded(false);
+        else setPinnedViewsExpanded(false);
       }
       return;
     }
@@ -890,13 +984,18 @@ function AppShell() {
     // Replay events that arrived before settings were ready.
     const workItemEvents = pendingWorkItemEventsRef.current;
     const pullRequestEvents = pendingPullRequestEventsRef.current;
+    const syncFailedEvents = pendingSyncFailedEventsRef.current;
     pendingWorkItemEventsRef.current = [];
     pendingPullRequestEventsRef.current = [];
+    pendingSyncFailedEventsRef.current = [];
     for (const event of workItemEvents) {
       void showWorkItemNotificationEvent(event, settings);
     }
     for (const event of pullRequestEvents) {
       void showPullRequestNotificationEvent(event, settings);
+    }
+    for (const event of syncFailedEvents) {
+      void showSyncFailedNotificationEvent(event, settings);
     }
   }, [appSettingsQuery.data]);
 
@@ -960,6 +1059,20 @@ function AppShell() {
   }, []);
 
   useEffect(() => {
+    return subscribeTauriEvent<SyncFailedEvent>(
+      "notifications:sync-failed",
+      (payload) => {
+        const settings = appSettingsRef.current;
+        if (!settings) {
+          pendingSyncFailedEventsRef.current.push(payload);
+          return;
+        }
+        void showSyncFailedNotificationEvent(payload, settings);
+      },
+    );
+  }, []);
+
+  useEffect(() => {
     window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(sidebarWidth)));
   }, [sidebarWidth]);
 
@@ -996,6 +1109,9 @@ function AppShell() {
       }
     }
 
+    const leaderKey = normalizeKey(keybindings.gotoLeader);
+    const gotoViewKeys = gotoViewMapFromKeybindings(keybindings);
+
     function onKeyDownCapture(event: KeyboardEvent) {
       if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
       if (isEditableTarget(event.target)) {
@@ -1003,7 +1119,7 @@ function AppShell() {
         return;
       }
       if (armed) {
-        const view = GOTO_VIEW_KEYS[event.key.toLowerCase()];
+        const view = gotoViewKeys[normalizeKey(event.key)];
         disarm();
         if (view && (view === "settings" || organizations.length > 0)) {
           event.preventDefault();
@@ -1013,7 +1129,7 @@ function AppShell() {
         }
         return;
       }
-      if (event.key === "g" || event.key === "G") {
+      if (normalizeKey(event.key) === leaderKey) {
         armed = true;
         timer = window.setTimeout(disarm, GOTO_CHAIN_TIMEOUT_MS);
       }
@@ -1024,70 +1140,62 @@ function AppShell() {
       window.removeEventListener("keydown", onKeyDownCapture, true);
       disarm();
     };
-  }, [organizations.length]);
+  }, [organizations.length, keybindings]);
 
   useEffect(() => {
+    const isWorkItemView =
+      activeView === "myWorkItems" ||
+      activeView === "workItems" ||
+      activeView === "workItemViews";
+
     function onGlobalKeyDown(event: KeyboardEvent) {
+      // Alt+Left / Alt+Right: browser-like back/forward through visited views.
       if (
-        !event.defaultPrevented &&
-        (event.ctrlKey || event.metaKey) &&
-        !event.altKey &&
+        event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
         !event.shiftKey &&
-        (event.key === "k" || event.key === "K")
+        (event.key === "ArrowLeft" || event.key === "ArrowRight") &&
+        !isEditableTarget(event.target)
       ) {
+        event.preventDefault();
+        navigateHistory(event.key === "ArrowLeft" ? "back" : "forward");
+        return;
+      }
+
+      if (!event.defaultPrevented && matchesCombo(keybindings.commandPalette, event)) {
         event.preventDefault();
         setCommandPaletteOpen(true);
         return;
       }
 
-      if (
-        !event.defaultPrevented &&
-        (event.ctrlKey || event.metaKey) &&
-        !event.altKey &&
-        !event.shiftKey &&
-        (event.key === "f" || event.key === "F")
-      ) {
+      if (!event.defaultPrevented && matchesCombo(keybindings.focusFilter, event)) {
         if (focusFilterInput()) event.preventDefault();
         return;
       }
 
-      if (
-        !event.defaultPrevented &&
-        (event.ctrlKey || event.metaKey) &&
-        !event.altKey &&
-        !event.shiftKey &&
-        (event.key === "r" || event.key === "R")
-      ) {
+      if (!event.defaultPrevented && matchesCombo(keybindings.refreshCurrentView, event)) {
         event.preventDefault();
         refreshCurrentView();
         return;
       }
 
-      if (
-        !event.defaultPrevented &&
-        (event.ctrlKey || event.metaKey) &&
-        !event.altKey &&
-        !event.shiftKey &&
-        (event.key === "s" || event.key === "S")
-      ) {
-        if (
-          activeView === "myWorkItems" ||
-          activeView === "workItems" ||
-          activeView === "workItemViews"
-        ) {
+      if (!event.defaultPrevented && matchesCombo(keybindings.applyStaged, event)) {
+        if (isWorkItemView) {
           event.preventDefault();
           dispatchWorkItemCommand("apply-staged");
         }
         return;
       }
 
-      if (event.defaultPrevented || event.ctrlKey || event.metaKey) {
+      if (event.defaultPrevented) {
         return;
       }
 
+      // Escape and F1 keep their fixed behavior regardless of overrides.
       if (
-        (event.key === "?" || event.key === "F1") &&
-        !event.altKey &&
+        (event.key === "F1" ||
+          (!event.ctrlKey && !event.metaKey && matchesCombo(keybindings.help, event))) &&
         !isEditableTarget(event.target)
       ) {
         event.preventDefault();
@@ -1105,29 +1213,25 @@ function AppShell() {
         return;
       }
 
-      if (!event.altKey || event.shiftKey) {
-        return;
-      }
-
-      if (event.key === "n" || event.key === "N") {
+      if (matchesCombo(keybindings.focusNavigation, event)) {
         event.preventDefault();
         focusNavigation();
         return;
       }
 
-      if (event.key === "g" || event.key === "G") {
+      if (matchesCombo(keybindings.focusGrid, event)) {
         event.preventDefault();
         focusPrimaryGrid();
         return;
       }
 
-      if (event.key === "p" || event.key === "P") {
+      if (matchesCombo(keybindings.focusPreview, event)) {
         event.preventDefault();
         focusPrimaryPreview();
         return;
       }
 
-      if (event.key === "v" || event.key === "V") {
+      if (matchesCombo(keybindings.focusViewsPanel, event)) {
         if (activeView === "workItemViews") {
           event.preventDefault();
           focusViewsPanel();
@@ -1135,19 +1239,15 @@ function AppShell() {
         return;
       }
 
-      if (event.key === "m" || event.key === "M") {
-        if (
-          activeView === "myWorkItems" ||
-          activeView === "workItems" ||
-          activeView === "workItemViews"
-        ) {
+      if (matchesCombo(keybindings.focusComment, event)) {
+        if (isWorkItemView) {
           event.preventDefault();
           focusWorkItemCommentInput();
         }
         return;
       }
 
-      if (event.key === "s" || event.key === "S") {
+      if (matchesCombo(keybindings.syncNow, event)) {
         event.preventDefault();
         if (organizations.length > 0 && !syncMutation.isPending) {
           syncMutation.mutate({ scope: "all" });
@@ -1155,7 +1255,7 @@ function AppShell() {
         return;
       }
 
-      if (event.key === ",") {
+      if (matchesCombo(keybindings.openSettings, event)) {
         event.preventDefault();
         setView("settings");
       }
@@ -1163,7 +1263,7 @@ function AppShell() {
 
     window.addEventListener("keydown", onGlobalKeyDown);
     return () => window.removeEventListener("keydown", onGlobalKeyDown);
-  }, [activeView, organizations.length, syncMutation.isPending, syncMutation.mutate]);
+  }, [activeView, organizations.length, syncMutation.isPending, syncMutation.mutate, keybindings, navigateHistory]);
 
   return (
     <div className="h-screen overflow-hidden bg-background text-foreground">
@@ -1198,8 +1298,36 @@ function AppShell() {
                 active={activeView === "myReviews"}
                 disabled={organizations.length === 0}
                 label="My Reviews"
-                onClick={() => setView("myReviews")}
+                onClick={() => {
+                  setSelectedPrViewRequestId(null);
+                  setView("myReviews");
+                }}
               />
+              {pinnedPrViews.length > 0 ? (
+                <NavSubGroup
+                  id="pullRequestViews"
+                  active={false}
+                  disabled={organizations.length === 0}
+                  label="Views"
+                  expandable={pinnedPrViews.length > 0}
+                  expanded={pinnedPrViewsExpanded}
+                  onToggle={() => setPinnedPrViewsExpanded((value) => !value)}
+                  onClick={() => setPinnedPrViewsExpanded((value) => !value)}
+                >
+                  {pinnedPrViews.map((item) => (
+                    <NavSubItem
+                      key={item.id}
+                      active={false}
+                      disabled={organizations.length === 0}
+                      label={item.name}
+                      onClick={() => {
+                        setSelectedPrViewRequestId(item.id);
+                        setView("myReviews");
+                      }}
+                    />
+                  ))}
+                </NavSubGroup>
+              ) : null}
               <NavSubItem
                 active={activeView === "pullRequestSearch"}
                 disabled={organizations.length === 0}
@@ -1353,7 +1481,11 @@ function AppShell() {
             </p>
           </div>
           {organizations.length > 0 && (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <SyncStatusIndicator
+                onSync={() => syncMutation.mutate({ scope: "all" })}
+                syncing={syncMutation.isPending}
+              />
               <button
                 type="button"
                 disabled={syncMutation.isPending}
@@ -1391,7 +1523,12 @@ function AppShell() {
               onExternalSearchHandled={() => setPullRequestSearchRequest(null)}
             />
           ) : activeView === "myReviews" ? (
-            <MyReviewsGrid organizations={organizations} />
+            <MyReviewsGrid
+              organizations={organizations}
+              selectedViewRequestId={selectedPrViewRequestId}
+              onSelectedViewRequestHandled={() => setSelectedPrViewRequestId(null)}
+              onViewsChange={setPrNavViews}
+            />
           ) : activeView === "workItems" ? (
             <WorkItemSearch
               organizations={organizations}
@@ -1413,6 +1550,9 @@ function AppShell() {
               organizations={organizations}
               externalSearch={commitSearchRequest}
               onExternalSearchHandled={() => setCommitSearchRequest(null)}
+              onOpenPullRequest={(query, organizationId) =>
+                openSearchTarget("pullRequests", query, organizationId)
+              }
             />
           ) : activeView === "pipelines" ? (
             <PipelinesView organizations={organizations} />

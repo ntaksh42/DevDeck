@@ -3,7 +3,11 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::db::{AppDatabase, AppSettings};
+use crate::db::{
+    AppDatabase, AppSettings, DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
+    DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS, REVIEW_STALE_THRESHOLD_DAY_OPTIONS,
+    WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS,
+};
 use crate::error::{AppError, Result};
 
 #[derive(Debug, Deserialize)]
@@ -20,6 +24,8 @@ pub struct UpdateAppSettingsInput {
     pub notify_pr_vote_resets: Option<bool>,
     pub notify_pr_comment_replies: Option<bool>,
     pub wip_limit: Option<i64>,
+    pub review_stale_threshold_days: Option<i64>,
+    pub work_item_stale_threshold_days: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -71,6 +77,14 @@ pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
         notify_pr_vote_resets: input.notify_pr_vote_resets.unwrap_or(true),
         notify_pr_comment_replies: input.notify_pr_comment_replies.unwrap_or(true),
         wip_limit: input.wip_limit.unwrap_or(5).max(0),
+        review_stale_threshold_days: input
+            .review_stale_threshold_days
+            .filter(|days| REVIEW_STALE_THRESHOLD_DAY_OPTIONS.contains(days))
+            .unwrap_or(DEFAULT_REVIEW_STALE_THRESHOLD_DAYS),
+        work_item_stale_threshold_days: input
+            .work_item_stale_threshold_days
+            .filter(|days| WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS.contains(days))
+            .unwrap_or(DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS),
     }
 }
 

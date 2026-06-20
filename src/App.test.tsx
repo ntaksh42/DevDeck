@@ -417,6 +417,8 @@ describe("App", () => {
           notifyPrVoteResets: true,
           notifyPrCommentReplies: true,
           wipLimit: 5,
+          reviewStaleThresholdDays: 3,
+          workItemStaleThresholdDays: 7,
         },
       });
     });
@@ -474,6 +476,8 @@ describe("App", () => {
           notifyPrVoteResets: true,
           notifyPrCommentReplies: true,
           wipLimit: 5,
+          reviewStaleThresholdDays: 3,
+          workItemStaleThresholdDays: 7,
         },
       });
     });
@@ -529,6 +533,8 @@ describe("App", () => {
           notifyPrVoteResets: true,
           notifyPrCommentReplies: true,
           wipLimit: 5,
+          reviewStaleThresholdDays: 3,
+          workItemStaleThresholdDays: 7,
         },
       });
     });
@@ -583,6 +589,8 @@ describe("App", () => {
           notifyPrVoteResets: true,
           notifyPrCommentReplies: true,
           wipLimit: 5,
+          reviewStaleThresholdDays: 3,
+          workItemStaleThresholdDays: 7,
         },
       });
     });
@@ -1935,6 +1943,38 @@ describe("App", () => {
 
     fireEvent.keyDown(window, { key: ",", altKey: true });
     expect(await main.findByRole("heading", { name: "Organizations" })).toBeTruthy();
+  });
+
+  it("navigates view history with Alt+Left and Alt+Right", async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+    const main = within(await screen.findByRole("main"));
+    expect(await main.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
+
+    const nav = within(screen.getByRole("navigation", { name: "Primary navigation" }));
+    fireEvent.click(nav.getByRole("button", { name: "Views" }));
+    expect(await main.findByRole("heading", { name: "Work Item Views" })).toBeTruthy();
+    fireEvent.click(nav.getByRole("button", { name: "Commits" }));
+    expect(await main.findByRole("heading", { name: "Commits" })).toBeTruthy();
+
+    // Back: Commits -> Work Item Views -> My Reviews.
+    fireEvent.keyDown(window, { key: "ArrowLeft", altKey: true });
+    expect(await main.findByRole("heading", { name: "Work Item Views" })).toBeTruthy();
+    fireEvent.keyDown(window, { key: "ArrowLeft", altKey: true });
+    expect(await main.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
+
+    // Forward again restores the next view.
+    fireEvent.keyDown(window, { key: "ArrowRight", altKey: true });
+    expect(await main.findByRole("heading", { name: "Work Item Views" })).toBeTruthy();
   });
 
   it("resizes navigation and review preview panes from keyboard handles", async () => {

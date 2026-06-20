@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronUp, Filter, Loader2, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp, Filter, Loader2, X } from 'lucide-react';
 import {
   setWorkItemsState,
   assignWorkItems,
@@ -17,8 +17,10 @@ import {
   recordAssigneeInteraction,
   searchWorkItemAssignees,
   getWorkItemPreview,
+  getAppSettings,
   snoozeItem,
   commandErrorMessage,
+  DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
   type BulkWorkItemResult,
   type WorkItemAssigneeCandidate,
   type WorkItemPreview,
@@ -49,6 +51,7 @@ import {
   storeCustomPreviewFields,
   type CustomPreviewField,
 } from './previewFieldsStorage';
+import { isWorkItemStale, workItemStaleDays } from './workItemStale';
 const DEFAULT_WI_COLUMN_WIDTHS = [46, 64, 60, 180, 82, 84, 68];
 const WI_COLUMN_MIN_WIDTHS = [44, 58, 56, 150, 70, 74, 60];
 const WI_COLUMN_MAX_WIDTHS = [120, 200, 180, 720, 300, 260, 160];
@@ -412,10 +415,14 @@ const WorkItemGridRow = forwardRef<
     columnTemplate: string;
     visibleColumns: WiSortKey[];
     extraColumns: string[];
+    staleThresholdDays: number;
     onSelect: () => void;
     onCheckedChange: (checked: boolean, shiftKey: boolean) => void;
   }
->(({ item, selected, checked, columnTemplate, visibleColumns, extraColumns, onSelect, onCheckedChange }, ref) => (
+>(({ item, selected, checked, columnTemplate, visibleColumns, extraColumns, staleThresholdDays, onSelect, onCheckedChange }, ref) => {
+  const staleDays = workItemStaleDays(item, Date.now());
+  const isStale = staleDays !== null && staleDays >= staleThresholdDays;
+  return (
   <div
     ref={ref}
     tabIndex={selected ? 0 : -1}
@@ -434,7 +441,15 @@ const WorkItemGridRow = forwardRef<
       }
     }}
     className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
-      checked ? "bg-primary/5" : selected ? "bg-secondary" : "hover:bg-muted/50"
+      checked
+        ? "bg-primary/5"
+        : selected && isStale
+          ? "bg-orange-100 dark:bg-orange-900/30"
+          : selected
+            ? "bg-secondary"
+            : isStale
+              ? "bg-orange-50 dark:bg-orange-950/20 hover:bg-orange-100/70"
+              : "hover:bg-muted/50"
     }`}
     style={{ gridTemplateColumns: columnTemplate }}
   >
@@ -451,19 +466,37 @@ const WorkItemGridRow = forwardRef<
         className="h-3.5 w-3.5 cursor-pointer rounded border-input"
       />
     </div>
-    {visibleColumns.map((column) => (
-      <div
-        key={column}
-        className="min-w-0 truncate"
-        style={
-          column === "title" && item.depth
-            ? { paddingLeft: Math.min(item.depth, 8) * 14 }
-            : undefined
-        }
-      >
-        {workItemCellValue(item, column)}
-      </div>
-    ))}
+    {visibleColumns.map((column) => {
+      const isTitle = column === "title";
+      return (
+        <div
+          key={column}
+          className={isTitle ? "flex min-w-0 items-center gap-1" : "min-w-0 truncate"}
+          style={
+            isTitle && item.depth
+              ? { paddingLeft: Math.min(item.depth, 8) * 14 }
+              : undefined
+          }
+        >
+          {isTitle && isStale ? (
+            <AlertTriangle
+              role="img"
+              className="h-3.5 w-3.5 shrink-0 text-orange-600 dark:text-orange-400"
+              aria-label={`${staleDays} 日間更新なし`}
+            >
+              <title>{staleDays} 日間更新なし</title>
+            </AlertTriangle>
+          ) : null}
+          {isTitle ? (
+            <span className="min-w-0 flex-1 truncate">
+              {workItemCellValue(item, column)}
+            </span>
+          ) : (
+            workItemCellValue(item, column)
+          )}
+        </div>
+      );
+    })}
     {extraColumns.map((referenceName) => {
       const value = extraFieldValue(item, referenceName);
       return (
@@ -475,7 +508,8 @@ const WorkItemGridRow = forwardRef<
       );
     })}
   </div>
-));
+  );
+});
 WorkItemGridRow.displayName = "WorkItemGridRow";
 
 export function WorkItemsGrid({
@@ -574,6 +608,7 @@ export function WorkItemsGrid({
   );
   const [openFilterCol, setOpenFilterCol] = useState<FilterableColumn | null>(null);
   const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
+  const [staleOnly, setStaleOnly] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const gridScrollRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -692,12 +727,29 @@ export function WorkItemsGrid({
     return map;
   }, [effectiveResults]);
 
+  // Stale highlighting threshold (days). Mirrors the My Reviews stale setting.
+  const settingsQuery = useQuery({
+    queryKey: ["appSettings"],
+    queryFn: getAppSettings,
+    staleTime: 5 * 60_000,
+  });
+  const staleThresholdDays =
+    settingsQuery.data?.workItemStaleThresholdDays ??
+    DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS;
+  const staleCount = useMemo(() => {
+    const now = Date.now();
+    return sorted.filter((item) => isWorkItemStale(item, staleThresholdDays, now))
+      .length;
+  }, [sorted, staleThresholdDays]);
+
   const displayed = useMemo(() => {
     const hasFilters = (Object.keys(columnFilters) as FilterableColumn[]).some(
       col => columnFilters[col] !== undefined,
     );
-    if (!hasFilters) return sorted;
+    if (!hasFilters && !staleOnly) return sorted;
+    const now = Date.now();
     return sorted.filter(item => {
+      if (staleOnly && !isWorkItemStale(item, staleThresholdDays, now)) return false;
       for (const col of Object.keys(columnFilters) as FilterableColumn[]) {
         const activeValues = columnFilters[col];
         if (!activeValues) continue;
@@ -705,7 +757,7 @@ export function WorkItemsGrid({
       }
       return true;
     });
-  }, [sorted, columnFilters]);
+  }, [sorted, columnFilters, staleOnly, staleThresholdDays]);
 
   const selectedItem = displayed[selectedIndex] ?? null;
   const customPreviewFieldRefs = useMemo(
@@ -1585,6 +1637,7 @@ export function WorkItemsGrid({
                         columnTemplate={wiColTemplate}
                         visibleColumns={visibleColumns}
                         extraColumns={extraColumns}
+                        staleThresholdDays={staleThresholdDays}
                         onSelect={() => setSelectedIndex(i)}
                         onCheckedChange={(checked, shiftKey) => handleCheckboxChange(i, checked, shiftKey)}
                       />
@@ -1663,6 +1716,25 @@ export function WorkItemsGrid({
                     Clear filters
                   </button>
                 </>
+              ) : null}
+              {staleOnly || staleCount > 0 ? (
+                <button
+                  type="button"
+                  aria-pressed={staleOnly}
+                  title={`Show only stale items (no change in ${staleThresholdDays}+ days)`}
+                  onClick={() => {
+                    setStaleOnly((value) => !value);
+                    setSelectedIndex(0);
+                  }}
+                  className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs ${
+                    staleOnly
+                      ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-300"
+                      : "border-border bg-card hover:bg-secondary"
+                  }`}
+                >
+                  <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                  Stale ({staleCount})
+                </button>
               ) : null}
               <button
                 type="button"
