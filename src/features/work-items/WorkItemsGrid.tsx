@@ -50,7 +50,6 @@ const WORK_ITEM_ROW_SHORTCUTS: RowShortcut[] = [
   { keys: "P", label: "Priority" },
   { keys: "M", label: "Comment" },
   { keys: "E", label: "Done" },
-  { keys: "↵", label: "Preview" },
 ];
 import { isTauriRuntime } from '@/lib/runtime';
 import {
