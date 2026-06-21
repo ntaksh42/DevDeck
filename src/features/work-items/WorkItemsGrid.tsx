@@ -41,17 +41,6 @@ import {
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { readStoredJson, writeStoredJson, storageKey } from '@/lib/storage';
 import { recordRecentWorkItem } from '@/lib/recentItems';
-import { RowShortcutHints, type RowShortcut } from '@/components/RowShortcutHints';
-
-// Key shortcuts available for the selected work item row (see handleKeyDown).
-const WORK_ITEM_ROW_SHORTCUTS: RowShortcut[] = [
-  { keys: "S", label: "State" },
-  { keys: "A", label: "Assign" },
-  { keys: "P", label: "Priority" },
-  { keys: "M", label: "Comment" },
-  { keys: "E", label: "Done" },
-  { keys: "↵", label: "Preview" },
-];
 import { isTauriRuntime } from '@/lib/runtime';
 import {
   markWorkItemRead,
@@ -1713,9 +1702,6 @@ export function WorkItemsGrid({
                 ) : null}
                 {isFetching ? <span>{" · "}Refreshing…</span> : null}
               </span>
-              {selectedItem && checkedItems.length === 0 ? (
-                <RowShortcutHints hints={WORK_ITEM_ROW_SHORTCUTS} />
-              ) : null}
             </span>
             <span className="flex items-center gap-2">
               {triageScope ? (
