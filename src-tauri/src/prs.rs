@@ -800,6 +800,9 @@ async fn fetch_review_prs_for_project(
 
 // Threads are only fetched for the most recently created review PRs each sync.
 pub(crate) const PR_COMMENT_SCAN_LIMIT: usize = 50;
+// Concurrent thread fetches, mirroring CI_FETCH_CONCURRENCY so the comment scan
+// does not serialize up to 50 network round-trips and block the sync loop.
+const PR_COMMENT_FETCH_CONCURRENCY: usize = 6;
 
 pub(crate) struct CommentHit {
     pub author: Option<String>,
@@ -902,22 +905,57 @@ pub(crate) async fn collect_pr_comment_notifications(
         }
     };
     let me = org.authenticated_user_id.clone();
-    let mut items = Vec::new();
-    for pr in reviews.into_iter().take(PR_COMMENT_SCAN_LIMIT) {
-        let threads = match client
-            .list_pull_request_threads(&pr.project_id, &pr.repository_id, pr.pull_request_id)
-            .await
-        {
-            Ok(threads) => threads,
-            Err(e) => {
-                tracing::warn!(org = %org.name, pr = pr.pull_request_id, error = ?e, "pr-notify: failed to fetch threads");
-                continue;
+    let scanned: Vec<CachedReviewPr> =
+        reviews.into_iter().take(PR_COMMENT_SCAN_LIMIT).collect();
+
+    // Fetch each PR's threads concurrently (the network round-trip is the slow
+    // part); keep results by index so PRs are still processed in their original
+    // order below. A failure for one PR is logged and skipped.
+    let mut threads_by_index: std::collections::HashMap<usize, Vec<GitThread>> =
+        std::collections::HashMap::new();
+    let mut tasks: JoinSet<(usize, Option<Vec<GitThread>>)> = JoinSet::new();
+    for (index, pr) in scanned.iter().enumerate() {
+        let client = client.clone();
+        let org_name = org.name.clone();
+        let project_id = pr.project_id.clone();
+        let repository_id = pr.repository_id.clone();
+        let pull_request_id = pr.pull_request_id;
+        while tasks.len() >= PR_COMMENT_FETCH_CONCURRENCY {
+            if let Some((idx, Some(threads))) = join_comment_task(&mut tasks).await {
+                threads_by_index.insert(idx, threads);
             }
+        }
+        tasks.spawn(async move {
+            let value = match client
+                .list_pull_request_threads(&project_id, &repository_id, pull_request_id)
+                .await
+            {
+                Ok(threads) => Some(threads),
+                Err(e) => {
+                    tracing::warn!(org = %org_name, pr = pull_request_id, error = ?e, "pr-notify: failed to fetch threads");
+                    None
+                }
+            };
+            (index, value)
+        });
+    }
+    while !tasks.is_empty() {
+        if let Some((idx, Some(threads))) = join_comment_task(&mut tasks).await {
+            threads_by_index.insert(idx, threads);
+        }
+    }
+
+    // Detect new comments and advance the seen cursor serially, in PR order, so
+    // DB access stays single-threaded and notifications keep a stable order.
+    let mut items = Vec::new();
+    for (index, pr) in scanned.iter().enumerate() {
+        let Some(threads) = threads_by_index.get(&index) else {
+            continue;
         };
         let last_seen = db
             .get_pr_comment_seen(&org.id, &pr.repository_id, pr.pull_request_id)
             .unwrap_or(None);
-        let (hits, max_id) = pr_comment_notification_items(&threads, me.as_deref(), last_seen);
+        let (hits, max_id) = pr_comment_notification_items(threads, me.as_deref(), last_seen);
         for hit in hits {
             items.push(PrNotificationItem {
                 kind: PrNotificationKind::CommentReply,
@@ -940,6 +978,19 @@ pub(crate) async fn collect_pr_comment_notifications(
         }
     }
     items
+}
+
+async fn join_comment_task(
+    tasks: &mut JoinSet<(usize, Option<Vec<GitThread>>)>,
+) -> Option<(usize, Option<Vec<GitThread>>)> {
+    match tasks.join_next().await {
+        Some(Ok(result)) => Some(result),
+        Some(Err(e)) => {
+            tracing::warn!(error = %e, "PR comment thread task failed");
+            None
+        }
+        None => None,
+    }
 }
 
 #[cfg(test)]
