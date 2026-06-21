@@ -1504,6 +1504,9 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
     workItemType: summary.workItemType,
     state: summary.state,
     assignedTo: summary.assignedTo,
+    assignedToUniqueName: summary.assignedTo
+      ? `${summary.assignedTo.split(" ")[0]!.toLowerCase()}@example.com`
+      : null,
     createdBy: "Demo User",
     createdDate: "2026-05-20T09:00:00Z",
     changedDate: summary.changedDate,
