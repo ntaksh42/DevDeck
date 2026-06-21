@@ -15,6 +15,8 @@ use crate::sync::{PrNotificationItem, PrNotificationKind};
 const PR_SYNC_CONCURRENCY: usize = 4;
 // Active PRs across one project; well above what a project realistically has.
 const PROJECT_PR_SYNC_TOP: u32 = 500;
+// Page size for paging through completed PRs when generating release notes.
+const RELEASE_NOTES_PAGE_SIZE: u32 = 100;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -53,7 +55,9 @@ fn parse_day_start(value: &str) -> Option<DateTime<Utc>> {
 
 fn parse_day_end(value: &str) -> Option<DateTime<Utc>> {
     let date = NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d").ok()?;
-    Some(Utc.from_utc_datetime(&date.and_hms_opt(23, 59, 59)?))
+    // Include the entire last second so a PR merged at e.g. 23:59:59.5 is not
+    // dropped by the `closed > to` exclusion.
+    Some(Utc.from_utc_datetime(&date.and_hms_nano_opt(23, 59, 59, 999_999_999)?))
 }
 
 #[derive(Debug, Serialize)]
@@ -177,8 +181,20 @@ impl PullRequestService {
         let to = input.to_date.as_deref().and_then(parse_day_end);
 
         let client = client_for_organization(&organization, &self.secrets)?;
+        // Filter the merge (closed) date server-side and page through every match
+        // so projects with more than one page of completed PRs are covered in
+        // full (the old single 1000-row page silently dropped older/recent
+        // merges). The in-memory bounds below stay as the exact gate.
+        let from_iso = from.map(|f| f.to_rfc3339());
+        let to_iso = to.map(|t| t.to_rfc3339());
         let prs = client
-            .list_project_pull_requests(project_id, PullRequestStatus::Completed, 1000)
+            .list_pull_requests_closed_in_range(
+                project_id,
+                PullRequestStatus::Completed,
+                from_iso.as_deref(),
+                to_iso.as_deref(),
+                RELEASE_NOTES_PAGE_SIZE,
+            )
             .await?;
 
         let mut notes: Vec<ReleaseNotePr> = prs
