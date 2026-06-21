@@ -87,10 +87,6 @@ import {
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from '@/features/work-items/queryKeys';
 import { MyReviewsGrid } from '@/features/pull-requests/MyReviewsGrid';
 import { ReleaseNotesView } from '@/features/pull-requests/ReleaseNotesView';
-import {
-  loadPullRequestViews,
-  type PullRequestView,
-} from '@/features/pull-requests/prViewsStorage';
 
 // Only the default view (My Reviews) loads eagerly; the other views are
 // code-split so app startup does not pay for panels that may never open.
@@ -289,9 +285,6 @@ function AppShell() {
   );
   const [activeWorkItemViewId, setActiveWorkItemViewId] = useState<string | null>(null);
   const [selectedWorkItemViewRequestId, setSelectedWorkItemViewRequestId] = useState<string | null>(null);
-  const [pinnedPrViewsExpanded, setPinnedPrViewsExpanded] = useState(true);
-  const [prNavViews, setPrNavViews] = useState<PullRequestView[]>(() => loadPullRequestViews());
-  const [selectedPrViewRequestId, setSelectedPrViewRequestId] = useState<string | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(() =>
     storedNumber(SIDEBAR_WIDTH_STORAGE_KEY, DEFAULT_SIDEBAR_WIDTH, 160, 420),
   );
@@ -658,7 +651,6 @@ function AppShell() {
   const activePinnedWorkItemView = pinnedWorkItemViews.find(
     (item) => item.id === activeWorkItemViewId,
   );
-  const pinnedPrViews = prNavViews.filter((item) => item.pinned);
 
   function getNavItems(): HTMLButtonElement[] {
     const nav = navRef.current;
@@ -1038,11 +1030,8 @@ function AppShell() {
     }
     if (event.key === "ArrowRight" && current.dataset.navSubgroup === "true") {
       event.preventDefault();
-      const isPrViews = current.dataset.subgroupId === "pullRequestViews";
-      const expanded = isPrViews ? pinnedPrViewsExpanded : pinnedViewsExpanded;
-      if (!expanded) {
-        if (isPrViews) setPinnedPrViewsExpanded(true);
-        else setPinnedViewsExpanded(true);
+      if (!pinnedViewsExpanded) {
+        setPinnedViewsExpanded(true);
       } else {
         focusNavItem(current, 1);
       }
@@ -1050,12 +1039,7 @@ function AppShell() {
     }
     if (event.key === "ArrowLeft" && current.dataset.navSubgroup === "true") {
       event.preventDefault();
-      const isPrViews = current.dataset.subgroupId === "pullRequestViews";
-      const expanded = isPrViews ? pinnedPrViewsExpanded : pinnedViewsExpanded;
-      if (expanded) {
-        if (isPrViews) setPinnedPrViewsExpanded(false);
-        else setPinnedViewsExpanded(false);
-      }
+      if (pinnedViewsExpanded) setPinnedViewsExpanded(false);
       return;
     }
     if (event.key === "Enter" || event.key === " ") {
@@ -1414,36 +1398,8 @@ function AppShell() {
                 disabled={organizations.length === 0}
                 label="My Reviews"
                 badge={myReviewsBadge}
-                onClick={() => {
-                  setSelectedPrViewRequestId(null);
-                  setView("myReviews");
-                }}
+                onClick={() => setView("myReviews")}
               />
-              {pinnedPrViews.length > 0 ? (
-                <NavSubGroup
-                  id="pullRequestViews"
-                  active={false}
-                  disabled={organizations.length === 0}
-                  label="Views"
-                  expandable={pinnedPrViews.length > 0}
-                  expanded={pinnedPrViewsExpanded}
-                  onToggle={() => setPinnedPrViewsExpanded((value) => !value)}
-                  onClick={() => setPinnedPrViewsExpanded((value) => !value)}
-                >
-                  {pinnedPrViews.map((item) => (
-                    <NavSubItem
-                      key={item.id}
-                      active={false}
-                      disabled={organizations.length === 0}
-                      label={item.name}
-                      onClick={() => {
-                        setSelectedPrViewRequestId(item.id);
-                        setView("myReviews");
-                      }}
-                    />
-                  ))}
-                </NavSubGroup>
-              ) : null}
               <NavSubItem
                 active={activeView === "pullRequestSearch"}
                 disabled={organizations.length === 0}
@@ -1642,9 +1598,6 @@ function AppShell() {
               organizations={organizations}
               selectRequest={myReviewsSelectRequest}
               onSelectRequestHandled={() => setMyReviewsSelectRequest(null)}
-              selectedViewRequestId={selectedPrViewRequestId}
-              onSelectedViewRequestHandled={() => setSelectedPrViewRequestId(null)}
-              onViewsChange={setPrNavViews}
             />
           ) : activeView === "workItems" ? (
             <WorkItemSearch
