@@ -24,7 +24,6 @@ import {
   GitCommitHorizontal,
   GitPullRequest,
   ListChecks,
-  RefreshCw,
   Settings,
 } from "lucide-react";
 import {
@@ -1616,20 +1615,6 @@ function AppShell() {
                 onSync={() => syncMutation.mutate({ scope: "all" })}
                 syncing={syncMutation.isPending}
               />
-              <button
-                type="button"
-                disabled={syncMutation.isPending}
-                onClick={() => syncMutation.mutate({ scope: "all" })}
-                aria-keyshortcuts="Alt+S"
-                aria-label="Sync now"
-                className="flex items-center rounded-md border border-border bg-card p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
-                title="Sync now"
-              >
-                <RefreshCw
-                  className={`h-4 w-4 ${syncMutation.isPending ? "animate-spin" : ""}`}
-                  aria-hidden="true"
-                />
-              </button>
             </div>
           )}
         </header>
