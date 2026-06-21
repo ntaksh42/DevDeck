@@ -1,5 +1,6 @@
 use azdo_client::{
-    summarize_pr_ci, AdoClient, AdoError, GitThread, PullRequestStatus, TeamProject,
+    summarize_pr_ci, AdoClient, AdoError, GitThread, IdentityRefWithVote, PullRequestStatus,
+    TeamProject,
 };
 use chrono::{DateTime, NaiveDate, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
@@ -278,6 +279,33 @@ pub(crate) fn vote_label(vote: i32) -> &'static str {
         -10 => "Rejected",
         _ => "No Vote",
     }
+}
+
+/// Resolves the authenticated user's (vote, is_required) for a PR. The user may
+/// be a direct individual reviewer, or a reviewer only via a group/team. A group
+/// reviewer rolls up its members' votes into `voted_for`; if the user voted that
+/// way, surface their vote and treat them as required when the group is required.
+/// Falls back to (No Vote, not required) when the user is not found — note a
+/// group member who has not voted does not appear in `voted_for`, so that case
+/// is not detectable from PR data alone.
+fn resolve_reviewer_vote(reviewers: &[IdentityRefWithVote], user_id: &str) -> (i32, bool) {
+    if let Some(direct) = reviewers
+        .iter()
+        .find(|r| r.id.as_deref() == Some(user_id))
+    {
+        return (direct.vote, direct.is_required);
+    }
+    reviewers
+        .iter()
+        .find_map(|group| {
+            group
+                .voted_for
+                .as_deref()?
+                .iter()
+                .find(|member| member.id.as_deref() == Some(user_id))
+                .map(|member| (member.vote, group.is_required))
+        })
+        .unwrap_or((0, false))
 }
 
 fn normalize_optional(value: Option<String>) -> Option<String> {
@@ -753,15 +781,8 @@ async fn fetch_review_prs_for_project(
             .map(|p| (p.id.clone(), p.name.clone()))
             .unwrap_or_else(|| (project.id.clone(), project.name.clone()));
 
-        let reviewer = pr
-            .reviewers
-            .as_deref()
-            .unwrap_or(&[])
-            .iter()
-            .find(|r| r.id.as_deref() == Some(user_id.as_str()));
-        let (my_vote, my_is_required) = reviewer
-            .map(|r| (r.vote, r.is_required))
-            .unwrap_or((0, false));
+        let (my_vote, my_is_required) =
+            resolve_reviewer_vote(pr.reviewers.as_deref().unwrap_or(&[]), &user_id);
 
         let web_url = format!(
             "{}/{}/_git/{}/pullrequest/{}",
@@ -1167,6 +1188,40 @@ mod tests {
     fn short_ref_removes_heads_prefix() {
         assert_eq!(short_ref("refs/heads/feature/prs"), "feature/prs");
         assert_eq!(short_ref("refs/tags/v1"), "refs/tags/v1");
+    }
+
+    fn reviewer(id: &str, vote: i32, is_required: bool) -> IdentityRefWithVote {
+        IdentityRefWithVote {
+            id: Some(id.to_string()),
+            display_name: None,
+            unique_name: None,
+            vote,
+            is_required,
+            voted_for: None,
+        }
+    }
+
+    #[test]
+    fn resolve_reviewer_vote_prefers_direct_reviewer() {
+        let reviewers = vec![reviewer("me", 10, true), reviewer("other", -10, false)];
+        assert_eq!(resolve_reviewer_vote(&reviewers, "me"), (10, true));
+    }
+
+    #[test]
+    fn resolve_reviewer_vote_uses_group_rollup_when_not_direct() {
+        // The user is not a direct reviewer; they voted via a required group whose
+        // votedFor rolls up the member vote.
+        let mut group = reviewer("team-guid", 0, true);
+        group.voted_for = Some(vec![reviewer("me", 5, false)]);
+        let reviewers = vec![reviewer("other", -10, false), group];
+        // Member's vote, but the group's required flag.
+        assert_eq!(resolve_reviewer_vote(&reviewers, "me"), (5, true));
+    }
+
+    #[test]
+    fn resolve_reviewer_vote_defaults_when_absent() {
+        let reviewers = vec![reviewer("other", -10, true)];
+        assert_eq!(resolve_reviewer_vote(&reviewers, "me"), (0, false));
     }
 
     #[test]

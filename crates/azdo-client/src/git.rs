@@ -96,6 +96,11 @@ pub struct IdentityRefWithVote {
     pub vote: i32,
     #[serde(default)]
     pub is_required: bool,
+    /// For a group/team reviewer, the rolled-up votes of its members. A member
+    /// who voted via the group appears here even though they are not a direct
+    /// reviewer entry.
+    #[serde(default)]
+    pub voted_for: Option<Vec<IdentityRefWithVote>>,
 }
 
 #[derive(Debug, Deserialize)]
