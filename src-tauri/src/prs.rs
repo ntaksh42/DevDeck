@@ -10,9 +10,8 @@ use crate::commits::encode_path_segment;
 use crate::db::{AppDatabase, CachedPr, CachedReviewPr, Organization};
 use crate::error::{AppError, Result};
 use crate::secrets::SecretStore;
-use crate::sync::{PrNotificationItem, PrNotificationKind};
+use crate::sync::{PrNotificationItem, PrNotificationKind, SyncBudget};
 
-const PR_SYNC_CONCURRENCY: usize = 4;
 // Active PRs across one project; well above what a project realistically has.
 const PROJECT_PR_SYNC_TOP: u32 = 500;
 
@@ -330,11 +329,13 @@ pub async fn sync_prs_for_org(
     db: &AppDatabase,
     client: &AdoClient,
     org: &Organization,
+    projects: &[TeamProject],
+    budget: &SyncBudget,
 ) -> Result<()> {
     let scope = format!("prs:{}", org.id);
     let error_count = db.get_sync_state(&scope)?.map_or(0, |s| s.error_count);
 
-    match do_sync_prs(db, client, org).await {
+    match do_sync_prs(db, client, org, projects, budget).await {
         Ok(result) => {
             let now = Utc::now().to_rfc3339();
             db.update_sync_state(
@@ -364,144 +365,91 @@ pub async fn sync_prs_for_org(
     }
 }
 
+#[derive(Default)]
+struct ActivePrsFetch {
+    cached_prs: Vec<CachedPr>,
+    synced_project_ids: Vec<String>,
+    skipped: Vec<String>,
+    last_skip_error: Option<AppError>,
+}
+
+struct ReviewPrsFetch {
+    cached_reviews: Vec<CachedReviewPr>,
+    failed_projects: Vec<String>,
+}
+
 async fn do_sync_prs(
     db: &AppDatabase,
     client: &AdoClient,
     org: &Organization,
+    projects: &[TeamProject],
+    budget: &SyncBudget,
 ) -> Result<SyncPrsResult> {
-    let projects = client.list_projects().await?;
-    let mut cached_prs: Vec<CachedPr> = Vec::new();
-    let mut synced_project_ids: Vec<String> = Vec::new();
-    let mut skipped: Vec<String> = Vec::new();
-    let mut last_skip_error: Option<AppError> = None;
-    let mut pr_tasks = JoinSet::new();
-
-    let collect = |fetch: PrProjectFetch,
-                   cached_prs: &mut Vec<CachedPr>,
-                   synced_project_ids: &mut Vec<String>,
-                   skipped: &mut Vec<String>,
-                   last_skip_error: &mut Option<AppError>| {
-        match fetch.result {
-            Ok(prs) => {
-                synced_project_ids.push(fetch.project_id);
-                cached_prs.extend(prs);
+    // Run the active-PR and review-PR passes concurrently; both fan out over the
+    // same projects but issue independent queries, all bounded by the shared
+    // budget. The review pass is only meaningful when the signed-in user is known.
+    let review_user = org.authenticated_user_id.clone();
+    let (active, review) =
+        tokio::join!(fetch_all_active_prs(client, org, projects, budget), async {
+            match review_user.as_deref() {
+                Some(user_id) => {
+                    Some(fetch_all_review_prs(client, org, projects, user_id, budget).await)
+                }
+                None => None,
             }
-            Err(e) => {
-                tracing::warn!(
-                    org = %org.name,
-                    project = %fetch.label,
-                    error = %e,
-                    "PR sync failed for project, preserving cached data"
-                );
-                skipped.push(fetch.label);
-                *last_skip_error = Some(e);
-            }
-        }
-    };
-
-    for project in &projects {
-        while pr_tasks.len() >= PR_SYNC_CONCURRENCY {
-            let fetch = join_pr_task(&mut pr_tasks).await?;
-            collect(
-                fetch,
-                &mut cached_prs,
-                &mut synced_project_ids,
-                &mut skipped,
-                &mut last_skip_error,
-            );
-        }
-        pr_tasks.spawn(fetch_active_prs_for_project(
-            client.clone(),
-            org.clone(),
-            project.clone(),
-        ));
-    }
-    while !pr_tasks.is_empty() {
-        let fetch = join_pr_task(&mut pr_tasks).await?;
-        collect(
-            fetch,
-            &mut cached_prs,
-            &mut synced_project_ids,
-            &mut skipped,
-            &mut last_skip_error,
-        );
-    }
+        });
+    let active = active?;
 
     // If nothing synced and we have a real error, surface it instead of
     // recording a spurious success.
-    if synced_project_ids.is_empty() {
-        if let Some(e) = last_skip_error {
+    if active.synced_project_ids.is_empty() {
+        if let Some(e) = active.last_skip_error {
             return Err(e);
         }
     }
 
-    let synced_ids: Vec<&str> = synced_project_ids.iter().map(String::as_str).collect();
-    db.replace_pull_requests_for_projects(&org.id, &synced_ids, &cached_prs)?;
+    let synced_ids: Vec<&str> = active
+        .synced_project_ids
+        .iter()
+        .map(String::as_str)
+        .collect();
+    db.replace_pull_requests_for_projects(&org.id, &synced_ids, &active.cached_prs)?;
 
     let mut warning_parts: Vec<String> = Vec::new();
-    if !skipped.is_empty() {
+    if !active.skipped.is_empty() {
         warning_parts.push(format!(
             "{} project(s) skipped due to PR sync errors: {}.",
-            skipped.len(),
-            skipped.join(", ")
+            active.skipped.len(),
+            active.skipped.join(", ")
         ));
     }
 
-    if let Some(user_id) = &org.authenticated_user_id {
-        let mut cached_reviews: Vec<CachedReviewPr> = Vec::new();
-        let mut review_tasks = JoinSet::new();
-        let mut review_failed_projects: Vec<String> = Vec::new();
-
-        for project in &projects {
-            while review_tasks.len() >= PR_SYNC_CONCURRENCY {
-                let (project_name, result) = join_review_task(&mut review_tasks).await?;
-                collect_review_fetch(
-                    org,
-                    project_name,
-                    result,
-                    &mut cached_reviews,
-                    &mut review_failed_projects,
-                );
+    match review {
+        Some(review) => {
+            let mut review = review?;
+            if review.failed_projects.is_empty() {
+                enrich_review_ci_status(client, &mut review.cached_reviews, budget).await;
+                db.replace_review_pull_requests(&org.id, &review.cached_reviews)?;
+            } else {
+                // A partial review list would silently drop PRs from the failed
+                // projects, so keep the previous cache instead.
+                warning_parts.push(format!(
+                    "Review PR cache was not refreshed; query failed for project(s): {}.",
+                    review.failed_projects.join(", ")
+                ));
             }
-            review_tasks.spawn(fetch_review_prs_for_project(
-                client.clone(),
-                org.clone(),
-                project.clone(),
-                user_id.clone(),
-            ));
         }
-        while !review_tasks.is_empty() {
-            let (project_name, result) = join_review_task(&mut review_tasks).await?;
-            collect_review_fetch(
-                org,
-                project_name,
-                result,
-                &mut cached_reviews,
-                &mut review_failed_projects,
+        None => {
+            // Without an authenticated user id we cannot compute "my reviews".
+            // Clearing the cache avoids freezing a stale list after a re-auth that
+            // dropped the user id; the grid then shows empty rather than wrong.
+            db.replace_review_pull_requests(&org.id, &[])?;
+            warning_parts.push(
+                "My Reviews could not be refreshed because the signed-in user is unknown; \
+                 re-authenticate the organization to restore it."
+                    .to_string(),
             );
         }
-
-        if review_failed_projects.is_empty() {
-            enrich_review_ci_status(client, &mut cached_reviews).await;
-            db.replace_review_pull_requests(&org.id, &cached_reviews)?;
-        } else {
-            // A partial review list would silently drop PRs from the failed
-            // projects, so keep the previous cache instead.
-            warning_parts.push(format!(
-                "Review PR cache was not refreshed; query failed for project(s): {}.",
-                review_failed_projects.join(", ")
-            ));
-        }
-    } else {
-        // Without an authenticated user id we cannot compute "my reviews".
-        // Clearing the cache avoids freezing a stale list after a re-auth that
-        // dropped the user id; the grid then shows empty rather than wrong.
-        db.replace_review_pull_requests(&org.id, &[])?;
-        warning_parts.push(
-            "My Reviews could not be refreshed because the signed-in user is unknown; \
-             re-authenticate the organization to restore it."
-                .to_string(),
-        );
     }
 
     let warning = if warning_parts.is_empty() {
@@ -512,19 +460,108 @@ async fn do_sync_prs(
     Ok(SyncPrsResult { warning })
 }
 
+/// Fans out the active-PR query across all projects, bounded by the shared
+/// budget. A per-project error preserves that project's cached rows.
+async fn fetch_all_active_prs(
+    client: &AdoClient,
+    org: &Organization,
+    projects: &[TeamProject],
+    budget: &SyncBudget,
+) -> Result<ActivePrsFetch> {
+    let mut tasks: JoinSet<PrProjectFetch> = JoinSet::new();
+    for project in projects {
+        let client = client.clone();
+        let org = org.clone();
+        let project = project.clone();
+        let budget = budget.clone();
+        tasks.spawn(async move {
+            let _permit = budget.acquire_owned().await;
+            fetch_active_prs_for_project(client, org, project).await
+        });
+    }
+
+    let mut out = ActivePrsFetch::default();
+    while let Some(joined) = tasks.join_next().await {
+        let fetch =
+            joined.map_err(|e| AppError::AzureDevOps(format!("PR sync task failed: {e}")))?;
+        match fetch.result {
+            Ok(prs) => {
+                out.synced_project_ids.push(fetch.project_id);
+                out.cached_prs.extend(prs);
+            }
+            Err(e) => {
+                tracing::warn!(
+                    org = %org.name,
+                    project = %fetch.label,
+                    error = %e,
+                    "PR sync failed for project, preserving cached data"
+                );
+                out.skipped.push(fetch.label);
+                out.last_skip_error = Some(e);
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Fans out the review-PR query (PRs where the user is a reviewer) across all
+/// projects, bounded by the shared budget.
+async fn fetch_all_review_prs(
+    client: &AdoClient,
+    org: &Organization,
+    projects: &[TeamProject],
+    user_id: &str,
+    budget: &SyncBudget,
+) -> Result<ReviewPrsFetch> {
+    let mut tasks: JoinSet<(String, Result<Vec<CachedReviewPr>>)> = JoinSet::new();
+    for project in projects {
+        let client = client.clone();
+        let org = org.clone();
+        let project = project.clone();
+        let user_id = user_id.to_string();
+        let budget = budget.clone();
+        tasks.spawn(async move {
+            let _permit = budget.acquire_owned().await;
+            fetch_review_prs_for_project(client, org, project, user_id).await
+        });
+    }
+
+    let mut cached_reviews: Vec<CachedReviewPr> = Vec::new();
+    let mut failed_projects: Vec<String> = Vec::new();
+    while let Some(joined) = tasks.join_next().await {
+        let (project_name, result) = joined
+            .map_err(|e| AppError::AzureDevOps(format!("review PR sync task failed: {e}")))?;
+        collect_review_fetch(
+            org,
+            project_name,
+            result,
+            &mut cached_reviews,
+            &mut failed_projects,
+        );
+    }
+    Ok(ReviewPrsFetch {
+        cached_reviews,
+        failed_projects,
+    })
+}
+
 // CI status is fetched per-PR, so it is capped to keep sync cost bounded on
 // large review lists. The most recently created PRs are the ones a reviewer
 // acts on first, so they get the live CI verdict; older ones render as unknown.
 const CI_STATUS_SCAN_LIMIT: usize = 50;
-const CI_FETCH_CONCURRENCY: usize = 6;
 
 // (status, context_name, check_count) for one PR; `None` when the fetch failed.
 type CiFetchResult = (usize, Option<(String, Option<String>, i64)>);
 
 /// Fills in the CI verdict for the most recent review PRs by querying each PR's
 /// status checks. A failed fetch leaves the PR's CI fields unset (rendered as
-/// "unknown"), never failing the sync.
-async fn enrich_review_ci_status(client: &AdoClient, reviews: &mut [CachedReviewPr]) {
+/// "unknown"), never failing the sync. Per-PR fetches are bounded by the shared
+/// budget.
+async fn enrich_review_ci_status(
+    client: &AdoClient,
+    reviews: &mut [CachedReviewPr],
+    budget: &SyncBudget,
+) {
     // Pick the newest PRs by creation date; creation_date is an RFC3339 string
     // so lexicographic comparison matches chronological order.
     let mut indices: Vec<usize> = (0..reviews.len()).collect();
@@ -541,12 +578,9 @@ async fn enrich_review_ci_status(client: &AdoClient, reviews: &mut [CachedReview
         let project_id = pr.project_id.clone();
         let repository_id = pr.repository_id.clone();
         let pull_request_id = pr.pull_request_id;
-        while tasks.len() >= CI_FETCH_CONCURRENCY {
-            if let Some((idx, Some(value))) = join_ci_task(&mut tasks).await {
-                results.insert(idx, value);
-            }
-        }
+        let budget = budget.clone();
         tasks.spawn(async move {
+            let _permit = budget.acquire_owned().await;
             let outcome = client
                 .list_pull_request_statuses(&project_id, &repository_id, pull_request_id)
                 .await;
@@ -610,24 +644,6 @@ fn collect_review_fetch(
             review_failed_projects.push(project_name);
         }
     }
-}
-
-async fn join_pr_task(tasks: &mut JoinSet<PrProjectFetch>) -> Result<PrProjectFetch> {
-    tasks
-        .join_next()
-        .await
-        .expect("PR sync task set was unexpectedly empty")
-        .map_err(|e| AppError::AzureDevOps(format!("PR sync task failed: {e}")))
-}
-
-async fn join_review_task(
-    tasks: &mut JoinSet<(String, Result<Vec<CachedReviewPr>>)>,
-) -> Result<(String, Result<Vec<CachedReviewPr>>)> {
-    tasks
-        .join_next()
-        .await
-        .expect("review PR sync task set was unexpectedly empty")
-        .map_err(|e| AppError::AzureDevOps(format!("review PR sync task failed: {e}")))
 }
 
 // One project-level query replaces a request per repository; repositories
@@ -1138,7 +1154,11 @@ mod tests {
             .unwrap()
             .with_base_url(base_url);
 
-        let result = do_sync_prs(&db, &client, &org).await.unwrap();
+        let projects = client.list_projects().await.unwrap();
+        let budget: SyncBudget = std::sync::Arc::new(tokio::sync::Semaphore::new(8));
+        let result = do_sync_prs(&db, &client, &org, &projects, &budget)
+            .await
+            .unwrap();
 
         let cached = db.search_pull_requests(&org.id, None, None, None).unwrap();
         let titles: Vec<&str> = cached.iter().map(|pr| pr.title.as_str()).collect();
