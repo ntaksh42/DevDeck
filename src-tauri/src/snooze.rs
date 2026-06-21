@@ -156,6 +156,12 @@ impl SnoozeService {
         let rows = self.db.list_snoozed_items(org_id, ITEM_TYPE_PULL_REQUEST)?;
         let mut result = SnoozeReconcile::default();
         for row in rows {
+            // `live_comment` is the `pr_comment_seen` cursor, which only advances
+            // when comment-reply notifications are processed (requires both
+            // `desktop_notifications_enabled` and `notify_pr_comment_replies`).
+            // With notifications off the cursor stays put, so `new_activity` is
+            // always false and the PR revives by deadline only — see the note on
+            // `current_baseline`.
             let live_comment = parse_pr_key(&row.item_key).and_then(|(repo, pr_id)| {
                 self.db
                     .get_pr_comment_seen(org_id, &repo, pr_id)
@@ -208,6 +214,16 @@ impl SnoozeService {
     /// Captures the current activity marker so a later sync can tell whether the
     /// item saw new activity while snoozed. For PRs that is the last-seen comment
     /// id; for work items it is the cached `System.ChangedDate`.
+    ///
+    /// NOTE (PRs): the marker is the `pr_comment_seen` cursor, which only advances
+    /// while `collect_pr_comment_notifications` runs — i.e. when BOTH
+    /// `desktop_notifications_enabled` and `notify_pr_comment_replies` are on (see
+    /// `sync.rs`). With those off, the cursor never moves, so comment-activity
+    /// revival cannot trigger; only the deadline revives the item. Decoupling the
+    /// snooze activity marker from the notification cursor (so a new comment
+    /// revives a PR regardless of notification settings) would require fetching
+    /// the live thread state for snoozed PRs during sync independently of the
+    /// notification path; tracked as a follow-up.
     fn current_baseline(
         &self,
         org_id: &str,
