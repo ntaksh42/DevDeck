@@ -1381,6 +1381,57 @@ async function invokeCommand(command: string, args?: unknown): Promise<unknown> 
   return demoInvoke(command, args);
 }
 
+const wikiSummarySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+const wikiSummariesSchema = z.array(wikiSummarySchema);
+export type WikiSummary = z.infer<typeof wikiSummarySchema>;
+
+const wikiPageNodeSchema = z.object({
+  path: z.string(),
+  title: z.string(),
+  depth: z.number(),
+  isParentPage: z.boolean(),
+});
+const wikiPageNodesSchema = z.array(wikiPageNodeSchema);
+export type WikiPageNode = z.infer<typeof wikiPageNodeSchema>;
+
+const wikiPageContentSchema = z.object({
+  path: z.string(),
+  title: z.string(),
+  content: z.string(),
+  remoteUrl: z.string().nullable(),
+});
+export type WikiPageContent = z.infer<typeof wikiPageContentSchema>;
+
+export async function listWikis(input: {
+  organizationId?: string;
+  projectId: string;
+}): Promise<WikiSummary[]> {
+  const result = await invokeCommand("list_wikis", { input });
+  return wikiSummariesSchema.parse(result);
+}
+
+export async function listWikiPages(input: {
+  organizationId?: string;
+  projectId: string;
+  wikiId: string;
+}): Promise<WikiPageNode[]> {
+  const result = await invokeCommand("list_wiki_pages", { input });
+  return wikiPageNodesSchema.parse(result);
+}
+
+export async function getWikiPage(input: {
+  organizationId?: string;
+  projectId: string;
+  wikiId: string;
+  path: string;
+}): Promise<WikiPageContent> {
+  const result = await invokeCommand("get_wiki_page", { input });
+  return wikiPageContentSchema.parse(result);
+}
+
 export function commandErrorMessage(error: unknown): string {
   if (typeof error === "string") {
     return error;

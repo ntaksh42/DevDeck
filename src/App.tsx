@@ -18,6 +18,7 @@ import {
 } from "@tanstack/react-query";
 import {
   BookOpen,
+  BookText,
   Code,
   GitBranch,
   GitCommitHorizontal,
@@ -97,6 +98,9 @@ const PipelinesView = lazy(() =>
 const CodeSearchView = lazy(() =>
   import("@/features/code/CodeSearchView").then((m) => ({ default: m.CodeSearchView })),
 );
+const WikiView = lazy(() =>
+  import("@/features/wiki/WikiView").then((m) => ({ default: m.WikiView })),
+);
 const WorkItemSearch = lazy(() =>
   import("@/features/work-items/WorkItemSearch").then((m) => ({ default: m.WorkItemSearch })),
 );
@@ -157,6 +161,7 @@ type View =
   | "commits"
   | "pipelines"
   | "codeSearch"
+  | "wiki"
   | "settings";
 
 type NavSectionId = "pullRequests" | "workItems";
@@ -1468,6 +1473,13 @@ function AppShell() {
               label="Code"
               onClick={() => setView("codeSearch")}
             />
+            <NavButton
+              active={activeView === "wiki"}
+              disabled={organizations.length === 0}
+              icon={<BookText className="h-4 w-4" aria-hidden="true" />}
+              label="Wiki"
+              onClick={() => setView("wiki")}
+            />
           </div>
           <div className="mt-auto space-y-1 border-t border-border pt-2">
             <NavButton
@@ -1606,6 +1618,8 @@ function AppShell() {
             <PipelinesView organizations={organizations} />
           ) : activeView === "codeSearch" ? (
             <CodeSearchView organizations={organizations} />
+          ) : activeView === "wiki" ? (
+            <WikiView organizations={organizations} />
           ) : organizations.length === 0 ? (
             <SetupPanel />
           ) : (

@@ -18,6 +18,7 @@ mod secrets;
 mod settings;
 mod snooze;
 mod sync;
+mod wiki;
 mod work_items;
 
 use cancellation::{run_cancellable, CancellationRegistry};
@@ -61,6 +62,10 @@ use sync::{SyncRunner, SyncScope, SyncTrigger};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tokio::sync::{mpsc, oneshot};
+use wiki::{
+    GetWikiPageInput, ListWikiPagesInput, ListWikisInput, WikiPageContent, WikiPageNode,
+    WikiService, WikiSummary,
+};
 use work_items::{
     AddWorkItemCommentInput, AssignWorkItemsInput, BulkWorkItemResult, DeleteWorkItemCommentInput,
     FetchWorkItemImageInput, GetSavedQueryInput, GetWorkItemPreviewInput, ListMyWorkItemsInput,
@@ -84,6 +89,7 @@ struct AppState {
     commits: CommitService,
     pipelines: PipelineService,
     code_search: CodeSearchService,
+    wiki: WikiService,
     settings: SettingsService,
     snooze: SnoozeService,
     cancellation: CancellationRegistry,
@@ -712,6 +718,30 @@ async fn cancel_pipeline_run(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn list_wikis(input: ListWikisInput, state: State<'_, AppState>) -> Result<Vec<WikiSummary>> {
+    state.wiki.list_wikis(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn list_wiki_pages(
+    input: ListWikiPagesInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<WikiPageNode>> {
+    state.wiki.list_pages(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn get_wiki_page(
+    input: GetWikiPageInput,
+    state: State<'_, AppState>,
+) -> Result<WikiPageContent> {
+    state.wiki.get_page(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn trigger_sync(input: Option<TriggerSyncInput>, state: State<'_, AppState>) -> Result<()> {
     let (tx, rx) = oneshot::channel();
     state
@@ -814,6 +844,7 @@ pub fn run() {
                 commits: CommitService::new(db.clone(), SecretStore),
                 pipelines: PipelineService::new(db.clone(), SecretStore),
                 code_search: CodeSearchService::new(db.clone(), SecretStore),
+                wiki: WikiService::new(db.clone(), SecretStore),
                 settings: SettingsService::new(db.clone()),
                 snooze: SnoozeService::new(db.clone()),
                 cancellation: CancellationRegistry::new(),
@@ -888,6 +919,9 @@ pub fn run() {
             get_pipeline_run_log_tail,
             rerun_pipeline_run,
             cancel_pipeline_run,
+            list_wikis,
+            list_wiki_pages,
+            get_wiki_page,
             trigger_sync
         ])
         .run(tauri::generate_context!())

@@ -22,6 +22,9 @@ import type {
   ListWorkItemFieldsInput,
   MentionCandidate,
   Organization,
+  WikiPageContent,
+  WikiPageNode,
+  WikiSummary,
   PostPullRequestCommentInput,
   PrChangedFile,
   PrCommit,
@@ -368,6 +371,33 @@ function demoPipelineDefinitions() {
     { id: 1, name: "CI" },
     { id: 2, name: "Nightly" },
   ];
+}
+
+function demoWikis(): WikiSummary[] {
+  return [{ id: "demo-wiki", name: "Demo Project.wiki" }];
+}
+
+function demoWikiPages(): WikiPageNode[] {
+  return [
+    { path: "/Home", title: "Home", depth: 0, isParentPage: false },
+    { path: "/Onboarding", title: "Onboarding", depth: 0, isParentPage: true },
+    { path: "/Onboarding/Dev Setup", title: "Dev Setup", depth: 1, isParentPage: false },
+    { path: "/Architecture", title: "Architecture", depth: 0, isParentPage: false },
+  ];
+}
+
+function demoWikiPage(path: string): WikiPageContent {
+  const title = path.split("/").filter(Boolean).pop() ?? "Home";
+  const content =
+    path === "/Architecture"
+      ? "# Architecture\n\nThe app is a Tauri + React dashboard.\n\n- Frontend: React\n- Backend: Rust\n"
+      : `# ${title}\n\nThis is the **${title}** wiki page rendered from Markdown.\n\n1. First step\n2. Second step\n`;
+  return {
+    path,
+    title,
+    content,
+    remoteUrl: `https://dev.azure.com/contoso/Demo%20Project/_wiki/wikis/demo-wiki?pagePath=${encodeURIComponent(path)}`,
+  };
 }
 
 function demoPipelineRuns() {
@@ -958,6 +988,14 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       return demoPipelineDefinitions();
     case "list_pipeline_runs":
       return demoPipelineRuns();
+    case "list_wikis":
+      return demoWikis();
+    case "list_wiki_pages":
+      return demoWikiPages();
+    case "get_wiki_page": {
+      const input = (args as { input?: { path?: string } } | undefined)?.input;
+      return demoWikiPage(input?.path ?? "/Home");
+    }
     case "get_pipeline_run": {
       const input = (args as { input?: { buildId?: number } } | undefined)?.input;
       return demoPipelineRunDetail(input?.buildId ?? 1001);
