@@ -989,6 +989,7 @@ export async function updatePullRequest(input: {
   action: PullRequestAction;
   mergeStrategy?: string;
   deleteSourceBranch?: boolean;
+  transitionWorkItems?: boolean;
 }): Promise<PrStatusResult> {
   const result = await invokeCommand("update_pull_request", { input });
   return prStatusResultSchema.parse(result);

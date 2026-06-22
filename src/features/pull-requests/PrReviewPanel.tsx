@@ -304,6 +304,7 @@ function ReviewTab({
 
   const [mergeStrategy, setMergeStrategy] = useState("squash");
   const [deleteSourceBranch, setDeleteSourceBranch] = useState(false);
+  const [transitionWorkItems, setTransitionWorkItems] = useState(false);
 
   const updateMutation = useMutation({
     mutationFn: updatePullRequest,
@@ -319,7 +320,9 @@ function ReviewTab({
     updateMutation.mutate({
       ...prLocator(pr),
       action,
-      ...(action === "complete" ? { mergeStrategy, deleteSourceBranch } : {}),
+      ...(action === "complete"
+        ? { mergeStrategy, deleteSourceBranch, transitionWorkItems }
+        : {}),
     });
   }
 
@@ -420,6 +423,18 @@ function ReviewTab({
             onChange={(event) => setDeleteSourceBranch(event.target.checked)}
           />
           Delete branch
+        </label>
+        <label
+          className="flex items-center gap-1 text-muted-foreground"
+          title="Transition linked work items to their next state on completion"
+        >
+          <input
+            type="checkbox"
+            checked={transitionWorkItems}
+            disabled={readOnly || updateMutation.isPending}
+            onChange={(event) => setTransitionWorkItems(event.target.checked)}
+          />
+          Transition work items
         </label>
         <button
           type="button"
