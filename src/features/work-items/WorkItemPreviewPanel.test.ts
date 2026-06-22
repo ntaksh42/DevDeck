@@ -363,6 +363,7 @@ function makePreview(overrides: Partial<WorkItemPreview> = {}): WorkItemPreview 
     workItemType: "Bug",
     state: "Active",
     assignedTo: null,
+    assignedToUniqueName: null,
     createdBy: null,
     createdDate: null,
     changedDate: null,
