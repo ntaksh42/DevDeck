@@ -730,6 +730,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn update_pull_request_patches_title_and_description() {
+        let server = MockServer::start().await;
+        Mock::given(method("PATCH"))
+            .and(path(
+                "/project-1/_apis/git/repositories/repo-1/pullrequests/42",
+            ))
+            .and(body_partial_json(serde_json::json!({
+                "title": "New title",
+                "description": "New description"
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "pullRequestId": 42,
+                "title": "New title",
+                "description": "New description",
+                "sourceRefName": "refs/heads/feature",
+                "targetRefName": "refs/heads/main"
+            })))
+            .mount(&server)
+            .await;
+
+        let detail = test_client(&server)
+            .await
+            .update_pull_request(
+                "project-1",
+                "repo-1",
+                42,
+                &serde_json::json!({ "title": "New title", "description": "New description" }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(detail.title, "New title");
+        assert_eq!(detail.description.as_deref(), Some("New description"));
+    }
+
+    #[tokio::test]
     async fn submit_pull_request_vote_puts_vote_for_reviewer() {
         let server = MockServer::start().await;
         Mock::given(method("PUT"))

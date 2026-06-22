@@ -1,12 +1,13 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Loader2, Maximize2, Minimize2 } from "lucide-react";
+import { Check, ExternalLink, Loader2, Maximize2, Minimize2, Pencil, X } from "lucide-react";
 import {
   commandErrorMessage,
   deletePullRequestComment,
   editPullRequestComment,
   getAppSettings,
   getPullRequestReview,
+  updatePullRequestDetails,
   getReviewResultPreview,
   listPullRequestCommits,
   postPullRequestComment,
@@ -314,6 +315,36 @@ function ReviewTab({
     onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
   });
 
+  // Inline title/description editing (#388).
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftDescription, setDraftDescription] = useState("");
+  const detailsMutation = useMutation({
+    mutationFn: updatePullRequestDetails,
+    onSuccess: () => {
+      setActionError(null);
+      setEditingDetails(false);
+      invalidateReview();
+    },
+    onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
+  });
+
+  function startEditingDetails() {
+    setDraftTitle(review?.title ?? "");
+    setDraftDescription(review?.description ?? "");
+    setActionError(null);
+    setEditingDetails(true);
+  }
+
+  function saveDetails() {
+    if (!draftTitle.trim()) return;
+    detailsMutation.mutate({
+      ...prLocator(pr),
+      title: draftTitle.trim(),
+      description: draftDescription,
+    });
+  }
+
   function runPrAction(action: PullRequestAction, confirmMessage: string) {
     if (!window.confirm(confirmMessage)) return;
     updateMutation.mutate({
@@ -482,10 +513,90 @@ function ReviewTab({
               </span>
             ))}
           </div>
-          {review.description ? (
-            <MarkdownView text={review.description} className="mt-2 text-xs text-foreground" />
+          {editingDetails ? (
+            <div className="mt-2 grid gap-2">
+              <label className="grid gap-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Title
+                </span>
+                <input
+                  autoFocus
+                  value={draftTitle}
+                  onChange={(event) => setDraftTitle(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      event.stopPropagation();
+                      setEditingDetails(false);
+                    } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+                      event.preventDefault();
+                      saveDetails();
+                    }
+                  }}
+                  className="h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  aria-label="Pull request title"
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Description
+                </span>
+                <textarea
+                  value={draftDescription}
+                  onChange={(event) => setDraftDescription(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      event.stopPropagation();
+                      setEditingDetails(false);
+                    } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+                      event.preventDefault();
+                      saveDetails();
+                    }
+                  }}
+                  rows={4}
+                  className="resize-y rounded-md border border-input bg-background px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-ring"
+                  aria-label="Pull request description"
+                />
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={saveDetails}
+                  disabled={!draftTitle.trim() || detailsMutation.isPending}
+                  className="inline-flex h-7 items-center gap-1 rounded-md bg-primary px-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingDetails(false)}
+                  className="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 text-xs hover:bg-accent"
+                >
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                  Cancel
+                </button>
+                <span className="text-[11px] text-muted-foreground">Ctrl+Enter to save · Esc to cancel</span>
+              </div>
+            </div>
           ) : (
-            <p className="mt-2 text-xs italic text-muted-foreground">No description.</p>
+            <div className="mt-2 flex items-start gap-2">
+              <div className="min-w-0 flex-1">
+                {review.description ? (
+                  <MarkdownView text={review.description} className="text-xs text-foreground" />
+                ) : (
+                  <p className="text-xs italic text-muted-foreground">No description.</p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={startEditingDetails}
+                aria-label="Edit title and description"
+                title="Edit title and description"
+                className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </div>
           )}
         </div>
 

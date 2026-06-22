@@ -77,6 +77,22 @@ pub struct UpdatePullRequestInput {
     pub delete_source_branch: Option<bool>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdatePullRequestDetailsInput {
+    #[serde(flatten)]
+    pub pr: PrLocator,
+    pub title: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrDetailsResult {
+    pub title: String,
+    pub description: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PrStatusResult {
@@ -492,6 +508,40 @@ impl PrReviewService {
         Ok(PrStatusResult {
             status: updated.status,
             is_draft: updated.is_draft.unwrap_or(false),
+        })
+    }
+
+    /// Edits a pull request's title and description (issue #388). Sends a PATCH
+    /// with the new values and returns what Azure DevOps persisted.
+    pub async fn update_pull_request_details(
+        &self,
+        input: UpdatePullRequestDetailsInput,
+    ) -> Result<PrDetailsResult> {
+        let title = input.title.trim();
+        if title.is_empty() {
+            return Err(AppError::InvalidInput(
+                "pull request title cannot be empty".to_string(),
+            ));
+        }
+        let organization = self
+            .db
+            .resolve_organization(input.pr.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let body = serde_json::json!({
+            "title": title,
+            "description": input.description.as_deref().unwrap_or("").trim(),
+        });
+        let updated = client
+            .update_pull_request(
+                &input.pr.project_id,
+                &input.pr.repository_id,
+                input.pr.pull_request_id,
+                &body,
+            )
+            .await?;
+        Ok(PrDetailsResult {
+            title: updated.title,
+            description: updated.description,
         })
     }
 

@@ -135,6 +135,7 @@ const writeCommands = new Set([
   "set_pull_request_thread_status",
   "submit_pull_request_vote",
   "update_pull_request",
+  "update_pull_request_details",
   "edit_pull_request_comment",
   "delete_pull_request_comment",
   "rerun_pipeline_run",
@@ -756,6 +757,14 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       return {
         status: action === "abandon" ? "abandoned" : action === "complete" ? "completed" : "active",
         isDraft,
+      };
+    }
+    case "update_pull_request_details": {
+      const input = (args as { input?: { title?: string; description?: string } } | undefined)
+        ?.input;
+      return {
+        title: input?.title ?? "",
+        description: input?.description?.trim() ? input.description : null,
       };
     }
     case "search_work_items": {
