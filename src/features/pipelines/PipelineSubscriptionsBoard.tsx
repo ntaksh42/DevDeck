@@ -117,14 +117,24 @@ export function PipelineSubscriptionsBoard({
     rows: PipelineRunSummary[],
     definitionId: number,
   ) {
-    // Ignore the Open button and any modified chords.
-    if (event.ctrlKey || event.metaKey || event.altKey) return;
     const target = event.target as HTMLElement;
     const rowEl = target.closest('[role="row"]') as HTMLElement | null;
     if (!rowEl) return;
     const grid = event.currentTarget as HTMLElement;
     const rowEls = Array.from(grid.querySelectorAll<HTMLElement>('[role="row"]'));
     const current = rowEls.indexOf(rowEl);
+
+    // Ctrl/Cmd+Enter opens the focused run in the browser, mirroring the row's
+    // Open button.
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && current >= 0) {
+      event.preventDefault();
+      event.stopPropagation();
+      const run = rows[current];
+      if (run?.webUrl) void openExternalUrl(run.webUrl).catch(() => {});
+      return;
+    }
+    // Ignore the Open button and any other modified chords.
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
     const key = event.key.toLowerCase();
 
     let nextIndex = current;
