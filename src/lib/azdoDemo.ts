@@ -4,6 +4,7 @@ import type {
   AddWorkItemCommentInput,
   AppSettings,
   AssignWorkItemsInput,
+  BranchSummary,
   CommitActivityDay,
   CommitActivityInput,
   CommitPullRequest,
@@ -16,6 +17,7 @@ import type {
   GetPullRequestReviewInput,
   GetReviewResultPreviewInput,
   GetSavedQueryInput,
+  ListBranchesInput,
   ListPullRequestChangesInput,
   GetWorkItemPreviewInput,
   ListWorkItemTypeStatesInput,
@@ -578,6 +580,10 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       const input = (args as { input?: SearchPullRequestsInput } | undefined)?.input;
       return demoPullRequests(input);
     }
+    case "list_branches": {
+      const input = (args as { input?: ListBranchesInput } | undefined)?.input;
+      return demoBranches(input);
+    }
     case "list_my_review_pull_requests": {
       const snoozed = demoSnoozedKeys("pull_request");
       return demoReviewPullRequests().filter(
@@ -1078,6 +1084,85 @@ function demoReviewResultPreview(
   </body>
 </html>`,
   };
+}
+
+function demoBranches(input?: ListBranchesInput): BranchSummary[] {
+  const repositoryId = input?.repositoryId ?? "azdo-dashboard";
+  const now = new Date("2026-05-27T08:00:00Z");
+  const ago = (ms: number) => new Date(now.getTime() - ms).toISOString();
+  const hr = 3_600_000;
+  const day = 86_400_000;
+
+  // Link branches to the active PR that uses them as a source branch.
+  const activePrs = demoPullRequests({ status: "active" }).filter(
+    (pr) => pr.repositoryId === repositoryId,
+  );
+  const prForBranch = (branch: string) =>
+    activePrs.find((pr) => pr.sourceRefName === branch);
+
+  const rawBranches: Array<{
+    name: string;
+    isBaseVersion: boolean;
+    aheadCount: number;
+    behindCount: number;
+    lastUpdated: string;
+    lastAuthor: string;
+    lastCommitComment: string;
+  }> = [
+    {
+      name: "main",
+      isBaseVersion: true,
+      aheadCount: 0,
+      behindCount: 0,
+      lastUpdated: ago(2 * hr),
+      lastAuthor: "Demo User",
+      lastCommitComment: "Merge pull request #41",
+    },
+    {
+      name: "feature/pr-search",
+      isBaseVersion: false,
+      aheadCount: 6,
+      behindCount: 1,
+      lastUpdated: ago(2 * hr),
+      lastAuthor: "Demo User",
+      lastCommitComment: "Add pull request search dashboard",
+    },
+    {
+      name: "fix/payment-back-crash",
+      isBaseVersion: false,
+      aheadCount: 2,
+      behindCount: 4,
+      lastUpdated: ago(3 * hr),
+      lastAuthor: "Frank Lee",
+      lastCommitComment: "Guard against null payment session",
+    },
+    {
+      name: "chore/dependency-bump",
+      isBaseVersion: false,
+      aheadCount: 1,
+      behindCount: 12,
+      lastUpdated: ago(9 * day),
+      lastAuthor: "Grace Chen",
+      lastCommitComment: "Bump dependencies to latest patch",
+    },
+  ];
+
+  return rawBranches.map((b, index) => {
+    const pr = b.isBaseVersion ? undefined : prForBranch(b.name);
+    return {
+      name: b.name,
+      isBaseVersion: b.isBaseVersion,
+      aheadCount: b.aheadCount,
+      behindCount: b.behindCount,
+      lastCommitId: `demo-commit-${repositoryId}-${index}`,
+      lastCommitComment: b.lastCommitComment,
+      lastUpdated: b.lastUpdated,
+      lastAuthor: b.lastAuthor,
+      pullRequestId: pr?.pullRequestId ?? null,
+      pullRequestTitle: pr?.title ?? null,
+      pullRequestUrl: pr?.webUrl ?? null,
+    };
+  });
 }
 
 function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[] {

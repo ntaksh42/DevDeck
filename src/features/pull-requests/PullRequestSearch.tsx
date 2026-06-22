@@ -10,15 +10,17 @@ import {
   useState,
 } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Filter, Loader2, Search } from 'lucide-react';
+import { Filter, GitBranch, Loader2, Search } from 'lucide-react';
 import {
   searchPullRequests,
   listCommitRepositories,
+  listBranches,
   commandErrorMessage,
   type Organization,
   type SearchPullRequestsInput,
   type PullRequestSummary,
   type ReviewPullRequestSummary,
+  type BranchSummary,
 } from '@/lib/azdoCommands';
 import {
   clamp,
@@ -122,6 +124,28 @@ export function PullRequestSearch({
     setProjectId(newProjectId);
     setRepositoryId("");
   }
+
+  // The branches panel needs both project and repository; resolve the project
+  // from the selected repository so it works even when "All projects" is shown.
+  const selectedRepo = useMemo(
+    () => allRepositories.find((r) => r.repositoryId === repositoryId),
+    [allRepositories, repositoryId],
+  );
+  const [showBranches, setShowBranches] = useState(false);
+  useEffect(() => {
+    if (!repositoryId) setShowBranches(false);
+  }, [repositoryId]);
+  const branchesQuery = useQuery({
+    queryKey: ["prBranches", organizationId, selectedRepo?.projectId, repositoryId],
+    queryFn: () =>
+      listBranches({
+        organizationId,
+        projectId: selectedRepo?.projectId ?? "",
+        repositoryId,
+      }),
+    enabled: showBranches && !!organizationId && !!repositoryId && !!selectedRepo,
+    staleTime: 60_000,
+  });
 
   const mutation = useMutation({ mutationFn: searchPullRequests });
   const results = mutation.data ?? [];
@@ -266,12 +290,34 @@ export function PullRequestSearch({
               </button>
             </div>
           </div>
-          <p id="pr-search-status-note" className="text-xs text-muted-foreground">
-            Only active pull requests are synced locally. Completed and abandoned
-            pull requests are not available here yet.
-          </p>
+          <div className="flex items-center justify-between gap-2">
+            <p id="pr-search-status-note" className="text-xs text-muted-foreground">
+              Only active pull requests are synced locally. Completed and abandoned
+              pull requests are not available here yet.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowBranches((open) => !open)}
+              disabled={!repositoryId}
+              aria-expanded={showBranches}
+              title={repositoryId ? "Show branches for the selected repository" : "Select a repository to list its branches"}
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <GitBranch className="h-4 w-4" aria-hidden="true" />
+              {showBranches ? "Hide branches" : "Branches"}
+            </button>
+          </div>
         </form>
       </div>
+
+      {showBranches && repositoryId ? (
+        <BranchesPanel
+          loading={branchesQuery.isLoading}
+          error={branchesQuery.isError ? commandErrorMessage(branchesQuery.error) : null}
+          branches={branchesQuery.data ?? []}
+          onOpenPullRequest={(url) => void openExternalUrl(url)}
+        />
+      ) : null}
 
       {mutation.isError && <ErrorState message={commandErrorMessage(mutation.error)} />}
 
@@ -282,6 +328,92 @@ export function PullRequestSearch({
         results={results}
         searched={mutation.isSuccess}
       />
+    </div>
+  );
+}
+
+function BranchesPanel({
+  loading,
+  error,
+  branches,
+  onOpenPullRequest,
+}: {
+  loading: boolean;
+  error: string | null;
+  branches: BranchSummary[];
+  onOpenPullRequest: (url: string) => void;
+}) {
+  return (
+    <div className="shrink-0 rounded-md border border-border bg-card">
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-sm font-medium">
+        <GitBranch className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+        Branches
+        {!loading && !error ? (
+          <span className="text-xs font-normal text-muted-foreground">{branches.length}</span>
+        ) : null}
+      </div>
+      {loading ? (
+        <LoadingState />
+      ) : error ? (
+        <ErrorState message={error} />
+      ) : branches.length === 0 ? (
+        <p className="px-3 py-4 text-sm text-muted-foreground">No branches found.</p>
+      ) : (
+        <div className="max-h-72 overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-card text-left text-xs text-muted-foreground">
+              <tr>
+                <th className="px-3 py-1.5 font-medium">Branch</th>
+                <th className="px-3 py-1.5 font-medium">Ahead / Behind</th>
+                <th className="px-3 py-1.5 font-medium">Last update</th>
+                <th className="px-3 py-1.5 font-medium">Pull request</th>
+              </tr>
+            </thead>
+            <tbody>
+              {branches.map((b) => {
+                const pr =
+                  b.pullRequestId && b.pullRequestUrl
+                    ? { id: b.pullRequestId, url: b.pullRequestUrl, title: b.pullRequestTitle }
+                    : null;
+                return (
+                  <tr key={b.name} className="border-t border-border/60">
+                    <td className="px-3 py-1.5">
+                      <span className="font-medium">{b.name}</span>
+                      {b.isBaseVersion ? (
+                        <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
+                          default
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-1.5 tabular-nums text-muted-foreground">
+                      <span className="text-emerald-600 dark:text-emerald-400">↑{b.aheadCount}</span>{" "}
+                      <span className="text-amber-600 dark:text-amber-400">↓{b.behindCount}</span>
+                    </td>
+                    <td className="px-3 py-1.5 text-muted-foreground">
+                      {b.lastUpdated ? formatRelativeDate(b.lastUpdated) : "—"}
+                      {b.lastAuthor ? ` · ${b.lastAuthor}` : ""}
+                    </td>
+                    <td className="px-3 py-1.5">
+                      {pr ? (
+                        <button
+                          type="button"
+                          onClick={() => onOpenPullRequest(pr.url)}
+                          className="text-primary hover:underline"
+                          title={pr.title ?? undefined}
+                        >
+                          #{pr.id}
+                        </button>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

@@ -6,6 +6,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinSet;
 
+use crate::auth::client_for_organization;
 use crate::commits::encode_path_segment;
 use crate::db::{AppDatabase, CachedPr, CachedReviewPr, Organization};
 use crate::error::{AppError, Result};
@@ -73,10 +74,35 @@ pub struct PullRequestSummary {
     pub web_url: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListBranchesInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub repository_id: String,
+}
+
+/// A repository branch with its tip-commit metadata, divergence from the base
+/// branch, and the active pull request that targets it (if any).
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchSummary {
+    pub name: String,
+    pub is_base_version: bool,
+    pub ahead_count: i64,
+    pub behind_count: i64,
+    pub last_commit_id: Option<String>,
+    pub last_commit_comment: Option<String>,
+    pub last_updated: Option<String>,
+    pub last_author: Option<String>,
+    pub pull_request_id: Option<i64>,
+    pub pull_request_title: Option<String>,
+    pub pull_request_url: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct PullRequestService {
     db: AppDatabase,
-    #[allow(dead_code)]
     secrets: SecretStore,
 }
 
@@ -167,6 +193,92 @@ impl PullRequestService {
         results.sort_by(|a, b| b.creation_date.cmp(&a.creation_date));
         results.truncate(100);
         Ok(results)
+    }
+
+    /// Lists the repository's branches with tip-commit metadata and ahead/behind
+    /// counts, linking each to the active pull request that uses it as a source
+    /// branch (if any). Hits the API on demand rather than reading the cache.
+    pub async fn list_branches(&self, input: ListBranchesInput) -> Result<Vec<BranchSummary>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+
+        let stats = client
+            .list_branch_stats(&input.project_id, &input.repository_id)
+            .await?;
+
+        // Map active PRs by source branch so each branch can surface its open PR.
+        let active = client
+            .list_pull_requests(
+                &input.project_id,
+                &input.repository_id,
+                PullRequestStatus::Active,
+            )
+            .await
+            .unwrap_or_default();
+        let mut pr_by_branch: std::collections::HashMap<String, (i64, String, Option<String>)> =
+            std::collections::HashMap::new();
+        for pr in active {
+            let branch = short_ref(&pr.source_ref_name);
+            let web_url = pr.repository.as_ref().map(|repo| {
+                let project_name = repo
+                    .project
+                    .as_ref()
+                    .map(|p| p.name.clone())
+                    .unwrap_or_default();
+                format!(
+                    "{}/{}/_git/{}/pullrequest/{}",
+                    organization.base_url,
+                    encode_path_segment(&project_name),
+                    encode_path_segment(&repo.name),
+                    pr.pull_request_id
+                )
+            });
+            // Keep the lowest PR id when several PRs share a source branch.
+            pr_by_branch
+                .entry(branch)
+                .or_insert((pr.pull_request_id, pr.title.clone(), web_url));
+        }
+
+        let mut branches: Vec<BranchSummary> = stats
+            .into_iter()
+            .map(|b| {
+                let (last_commit_id, last_commit_comment, last_updated, last_author) =
+                    match b.commit {
+                        Some(c) => (
+                            Some(c.commit_id),
+                            c.comment,
+                            c.committer
+                                .as_ref()
+                                .and_then(|u| u.date)
+                                .map(|d| d.to_rfc3339()),
+                            c.committer.and_then(|u| u.name),
+                        ),
+                        None => (None, None, None, None),
+                    };
+                let linked = pr_by_branch.get(&b.name);
+                BranchSummary {
+                    name: b.name,
+                    is_base_version: b.is_base_version,
+                    ahead_count: b.ahead_count,
+                    behind_count: b.behind_count,
+                    last_commit_id,
+                    last_commit_comment,
+                    last_updated,
+                    last_author,
+                    pull_request_id: linked.map(|l| l.0),
+                    pull_request_title: linked.map(|l| l.1.clone()),
+                    pull_request_url: linked.and_then(|l| l.2.clone()),
+                }
+            })
+            .collect();
+
+        // Base branch first, then most-recently updated.
+        branches.sort_by(|a, b| {
+            b.is_base_version
+                .cmp(&a.is_base_version)
+                .then_with(|| b.last_updated.cmp(&a.last_updated))
+        });
+        Ok(branches)
     }
 
     fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {

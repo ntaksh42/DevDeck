@@ -128,6 +128,24 @@ const reviewPullRequestSummariesSchema = z.array(reviewPullRequestSummarySchema)
 
 export type ReviewPullRequestSummary = z.infer<typeof reviewPullRequestSummarySchema>;
 
+const branchSummarySchema = z.object({
+  name: z.string(),
+  isBaseVersion: z.boolean(),
+  aheadCount: z.number(),
+  behindCount: z.number(),
+  lastCommitId: z.string().nullable(),
+  lastCommitComment: z.string().nullable(),
+  lastUpdated: z.string().nullable(),
+  lastAuthor: z.string().nullable(),
+  pullRequestId: z.number().nullable(),
+  pullRequestTitle: z.string().nullable(),
+  pullRequestUrl: z.string().nullable(),
+});
+
+const branchSummariesSchema = z.array(branchSummarySchema);
+
+export type BranchSummary = z.infer<typeof branchSummarySchema>;
+
 export type SnoozeItemType = "pull_request" | "work_item";
 
 const snoozedItemSummarySchema = z.object({
@@ -610,6 +628,12 @@ export type ListMyReviewPullRequestsInput = {
   organizationId?: string;
 };
 
+export type ListBranchesInput = {
+  organizationId?: string;
+  projectId: string;
+  repositoryId: string;
+};
+
 export type PrLocatorInput = {
   organizationId?: string;
   projectId: string;
@@ -922,6 +946,13 @@ export async function listMyReviewPullRequests(
 ): Promise<ReviewPullRequestSummary[]> {
   const result = await invokeCommand("list_my_review_pull_requests", { input });
   return reviewPullRequestSummariesSchema.parse(result);
+}
+
+export async function listBranches(
+  input: ListBranchesInput,
+): Promise<BranchSummary[]> {
+  const result = await invokeCommand("list_branches", { input });
+  return branchSummariesSchema.parse(result);
 }
 
 export async function getPullRequestReview(

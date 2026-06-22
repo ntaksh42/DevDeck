@@ -105,6 +105,20 @@ pub struct GitUserDate {
     pub date: Option<DateTime<Utc>>,
 }
 
+/// Per-branch statistics relative to the repository's base (default) branch.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitBranchStats {
+    pub name: String,
+    #[serde(default)]
+    pub ahead_count: i64,
+    #[serde(default)]
+    pub behind_count: i64,
+    #[serde(default)]
+    pub is_base_version: bool,
+    pub commit: Option<GitCommitRef>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IdentityRef {
@@ -384,6 +398,20 @@ impl AdoClient {
             .await?;
         Ok(response.changes)
     }
+
+    /// Lists branch statistics for a repository: each branch's tip commit and its
+    /// ahead/behind counts relative to the repository's base (default) branch.
+    pub async fn list_branch_stats(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+    ) -> Result<Vec<GitBranchStats>> {
+        let path = format!("{project_id}/_apis/git/repositories/{repository_id}/stats/branches");
+        let response: ListResponse<GitBranchStats> = self
+            .get_json(&path, &[("api-version", "7.1-preview")])
+            .await?;
+        Ok(response.value)
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -493,6 +521,61 @@ mod tests {
         assert_eq!(
             prs[0].links.as_ref().unwrap().web.as_ref().unwrap().href,
             "https://dev.azure.com/testorg/project/_git/repo/pullrequest/42"
+        );
+    }
+
+    #[tokio::test]
+    async fn list_branch_stats_maps_ahead_behind_and_commit() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/project-1/_apis/git/repositories/repo-1/stats/branches",
+            ))
+            .and(query_param("api-version", "7.1-preview"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 2,
+                "value": [
+                    {
+                        "name": "main",
+                        "aheadCount": 0,
+                        "behindCount": 0,
+                        "isBaseVersion": true,
+                        "commit": {
+                            "commitId": "abc123",
+                            "comment": "Initial commit",
+                            "committer": { "name": "Test User", "email": "test@example.com", "date": "2026-05-24T00:00:00Z" }
+                        }
+                    },
+                    {
+                        "name": "feature/dashboard",
+                        "aheadCount": 3,
+                        "behindCount": 1,
+                        "isBaseVersion": false,
+                        "commit": {
+                            "commitId": "def456",
+                            "comment": "Add dashboard",
+                            "committer": { "name": "Dev", "email": "dev@example.com", "date": "2026-05-25T00:00:00Z" }
+                        }
+                    }
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let branches = test_client(&server)
+            .await
+            .list_branch_stats("project-1", "repo-1")
+            .await
+            .unwrap();
+        assert_eq!(branches.len(), 2);
+        assert_eq!(branches[0].name, "main");
+        assert!(branches[0].is_base_version);
+        assert_eq!(branches[1].name, "feature/dashboard");
+        assert_eq!(branches[1].ahead_count, 3);
+        assert_eq!(branches[1].behind_count, 1);
+        assert_eq!(
+            branches[1].commit.as_ref().unwrap().commit_id,
+            "def456".to_string()
         );
     }
 
