@@ -283,6 +283,12 @@ export function WorkItemPreviewPanel({
     [selectedItem],
   );
 
+  // Must match how the grids build their preview query key.
+  const customFieldsSignature = useMemo(
+    () => customPreviewFields.map((field) => field.referenceName).join("|"),
+    [customPreviewFields],
+  );
+
   const deleteCommentMutation = useMutation({
     mutationFn: deleteWorkItemComment,
     onSuccess: (_result, variables) => {
@@ -291,6 +297,7 @@ export function WorkItemPreviewPanel({
           variables.organizationId,
           variables.projectId,
           variables.workItemId,
+          customFieldsSignature,
         ),
         (current: WorkItemPreview | undefined) =>
           current
@@ -314,6 +321,7 @@ export function WorkItemPreviewPanel({
           variables.organizationId,
           variables.projectId,
           variables.workItemId,
+          customFieldsSignature,
         ),
         (current: WorkItemPreview | undefined) =>
           current
@@ -331,11 +339,6 @@ export function WorkItemPreviewPanel({
     },
   });
 
-  // Must match how the grids build their preview query key.
-  const customFieldsSignature = useMemo(
-    () => customPreviewFields.map((field) => field.referenceName).join("|"),
-    [customPreviewFields],
-  );
   const updateFieldsMutation = useMutation({
     mutationFn: updateWorkItemFields,
     onSuccess: (updatedPreview) => {
