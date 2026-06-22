@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use azdo_client::{Build, BuildListCriteria, Timeline};
 use serde::{Deserialize, Serialize};
 
@@ -63,6 +65,17 @@ pub struct RerunPipelineRunInput {
     pub project_id: String,
     pub definition_id: i64,
     pub source_branch: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueuePipelineRunInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub definition_id: i64,
+    pub source_branch: String,
+    /// Optional runtime/build parameter values (name -> value).
+    pub parameters: Option<HashMap<String, String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -278,7 +291,42 @@ impl PipelineService {
             .project(&client, &organization.id, &input.project_id)
             .await?;
         let build = client
-            .queue_build(&project.id, input.definition_id, &input.source_branch)
+            .queue_build(&project.id, input.definition_id, &input.source_branch, None)
+            .await?;
+        Ok(build_to_summary(
+            &organization,
+            &project.id,
+            &project.name,
+            build,
+        ))
+    }
+
+    /// Queues a new run of a pipeline definition on a branch, optionally passing
+    /// runtime parameter values (issue #397).
+    pub async fn queue_run(&self, input: QueuePipelineRunInput) -> Result<PipelineRunSummary> {
+        let branch = input.source_branch.trim();
+        if branch.is_empty() {
+            return Err(AppError::InvalidInput("a branch is required".to_string()));
+        }
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
+        let parameters = input
+            .parameters
+            .filter(|map| !map.is_empty())
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(|error| AppError::InvalidInput(format!("invalid parameters: {error}")))?;
+        let build = client
+            .queue_build(
+                &project.id,
+                input.definition_id,
+                branch,
+                parameters.as_ref(),
+            )
             .await?;
         Ok(build_to_summary(
             &organization,

@@ -138,6 +138,7 @@ const writeCommands = new Set([
   "edit_pull_request_comment",
   "delete_pull_request_comment",
   "rerun_pipeline_run",
+  "queue_pipeline_run",
   "cancel_pipeline_run",
 ]);
 
@@ -974,6 +975,16 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         buildId: input?.buildId ?? 1004,
         status: "notStarted",
         result: null,
+      };
+    }
+    case "queue_pipeline_run": {
+      const input = (args as { input?: { sourceBranch?: string } } | undefined)?.input;
+      return {
+        ...demoPipelineRuns()[0],
+        buildId: 1005,
+        status: "notStarted",
+        result: null,
+        sourceBranch: input?.sourceBranch ?? "refs/heads/main",
       };
     }
     case "cancel_pipeline_run": {

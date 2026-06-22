@@ -1309,6 +1309,17 @@ export async function rerunPipelineRun(input: {
   return pipelineRunSummarySchema.parse(result);
 }
 
+export async function queuePipelineRun(input: {
+  organizationId?: string;
+  projectId: string;
+  definitionId: number;
+  sourceBranch: string;
+  parameters?: Record<string, string>;
+}): Promise<PipelineRunSummary> {
+  const result = await invokeCommand("queue_pipeline_run", { input });
+  return pipelineRunSummarySchema.parse(result);
+}
+
 export async function cancelPipelineRun(input: {
   organizationId?: string;
   projectId: string;
