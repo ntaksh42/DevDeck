@@ -1,6 +1,6 @@
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ExternalLink, Loader2, Play, Square } from "lucide-react";
+import { AlertTriangle, ExternalLink, Loader2, Play, RotateCcw, Square } from "lucide-react";
 import {
   cancelPipelineRun,
   commandErrorMessage,
@@ -8,6 +8,7 @@ import {
   getPipelineRun,
   getPipelineRunLogTail,
   rerunPipelineRun,
+  retryPipelineStage,
   type PipelineRunDetail,
   type TimelineNode,
 } from "@/lib/azdoCommands";
@@ -49,44 +50,81 @@ function TimelineRow({
   depth,
   selectedLogId,
   onSelectLog,
+  onRetryStage,
+  retryingStageRef,
+  retryDisabled,
 }: {
   node: TreeNode;
   depth: number;
   selectedLogId: number | null;
   onSelectLog: (logId: number) => void;
+  onRetryStage: (stageRefName: string) => void;
+  retryingStageRef: string | null;
+  retryDisabled: boolean;
 }) {
   const visual = pipelineRunVisual(node.state, node.result);
   const hasLog = node.logId != null;
   const isSelected = hasLog && node.logId === selectedLogId;
+  // Only completed stages that failed can be retried, and only when the stage
+  // exposes its ref name (its `identifier`).
+  const canRetry =
+    node.nodeType === "Stage" &&
+    node.result === "failed" &&
+    !!node.identifier &&
+    !retryDisabled;
+  const retrying = !!node.identifier && retryingStageRef === node.identifier;
   return (
     <>
-      <button
-        type="button"
-        disabled={!hasLog}
-        onClick={() => hasLog && onSelectLog(node.logId as number)}
-        style={{ paddingLeft: `${8 + depth * 16}px` }}
-        className={`flex w-full items-center gap-2 border-b border-border py-1 pr-2 text-left text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
-          hasLog ? "hover:bg-muted/50" : "cursor-default"
-        } ${isSelected ? "bg-secondary" : ""}`}
+      <div
+        className={`flex w-full items-center border-b border-border ${
+          isSelected ? "bg-secondary" : ""
+        }`}
       >
-        <span
-          className={`inline-flex w-fit shrink-0 items-center rounded px-1.5 py-px text-[11px] font-medium ${runToneClasses(
-            visual.tone,
-          )}`}
+        <button
+          type="button"
+          disabled={!hasLog}
+          onClick={() => hasLog && onSelectLog(node.logId as number)}
+          style={{ paddingLeft: `${8 + depth * 16}px` }}
+          className={`flex min-w-0 flex-1 items-center gap-2 py-1 pr-2 text-left text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
+            hasLog ? "hover:bg-muted/50" : "cursor-default"
+          }`}
         >
-          {visual.label}
-        </span>
-        <span className="truncate">{node.name ?? "(unnamed)"}</span>
-        {node.errorCount > 0 ? (
-          <span className="shrink-0 text-xs text-red-700 dark:text-red-400">{node.errorCount} err</span>
+          <span
+            className={`inline-flex w-fit shrink-0 items-center rounded px-1.5 py-px text-[11px] font-medium ${runToneClasses(
+              visual.tone,
+            )}`}
+          >
+            {visual.label}
+          </span>
+          <span className="truncate">{node.name ?? "(unnamed)"}</span>
+          {node.errorCount > 0 ? (
+            <span className="shrink-0 text-xs text-red-700 dark:text-red-400">{node.errorCount} err</span>
+          ) : null}
+          {node.warningCount > 0 ? (
+            <span className="shrink-0 text-xs text-amber-700 dark:text-amber-400">{node.warningCount} warn</span>
+          ) : null}
+          <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+            {formatDuration(node.startTime, node.finishTime)}
+          </span>
+        </button>
+        {canRetry ? (
+          <button
+            type="button"
+            disabled={retrying}
+            onClick={() => onRetryStage(node.identifier as string)}
+            title={`Retry the ${node.name ?? "stage"} stage`}
+            aria-label={`Retry the ${node.name ?? "stage"} stage`}
+            className="mr-2 inline-flex h-6 shrink-0 items-center gap-1 rounded border border-border bg-background px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {retrying ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            Retry
+          </button>
         ) : null}
-        {node.warningCount > 0 ? (
-          <span className="shrink-0 text-xs text-amber-700 dark:text-amber-400">{node.warningCount} warn</span>
-        ) : null}
-        <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-          {formatDuration(node.startTime, node.finishTime)}
-        </span>
-      </button>
+      </div>
       {node.children.map((child) => (
         <TimelineRow
           key={child.id}
@@ -94,6 +132,9 @@ function TimelineRow({
           depth={depth + 1}
           selectedLogId={selectedLogId}
           onSelectLog={onSelectLog}
+          onRetryStage={onRetryStage}
+          retryingStageRef={retryingStageRef}
+          retryDisabled={retryDisabled}
         />
       ))}
     </>
@@ -183,6 +224,25 @@ export function PipelineRunDetailPanel({
     },
   });
 
+  const retryStage = useMutation({
+    mutationFn: (stageRefName: string) =>
+      retryPipelineStage({
+        organizationId,
+        projectId,
+        buildId: buildId as number,
+        stageRefName,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["pipelineRun", organizationId, projectId, buildId],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["pipelineSubscriptionHistory", organizationId, projectId],
+      });
+    },
+  });
+  const retryingStageRef = retryStage.isPending ? (retryStage.variables ?? null) : null;
+
   function handleKeyDown(event: ReactKeyboardEvent) {
     if (isEditableTarget(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.key === "Escape" || event.key === "ArrowLeft") {
@@ -206,8 +266,14 @@ export function PipelineRunDetailPanel({
     if (window.confirm("Cancel this run?")) cancel.mutate();
   }
 
+  function onRetryStageClick(stageRefName: string) {
+    if (window.confirm(`Retry the "${stageRefName}" stage's failed jobs?`)) {
+      retryStage.mutate(stageRefName);
+    }
+  }
+
   const visual = run ? pipelineRunVisual(run.status, run.result) : null;
-  const mutationError = rerun.error ?? cancel.error;
+  const mutationError = rerun.error ?? cancel.error ?? retryStage.error;
 
   return (
     <aside
@@ -327,6 +393,9 @@ export function PipelineRunDetailPanel({
                     depth={0}
                     selectedLogId={selectedLogId}
                     onSelectLog={setSelectedLogId}
+                    onRetryStage={onRetryStageClick}
+                    retryingStageRef={retryingStageRef}
+                    retryDisabled={readOnly || retryStage.isPending}
                   />
                 ))
               )}

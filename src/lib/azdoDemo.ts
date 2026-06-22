@@ -139,6 +139,7 @@ const writeCommands = new Set([
   "delete_pull_request_comment",
   "rerun_pipeline_run",
   "cancel_pipeline_run",
+  "retry_pipeline_stage",
 ]);
 
 let demoPrThreadSeq = 100;
@@ -438,30 +439,47 @@ function demoPipelineRunDetail(buildId: number) {
       {
         id: "stage-1",
         parentId: null,
+        identifier: "Build",
         nodeType: "Stage",
         name: "Build",
         state: "completed",
-        result: run.result ?? "succeeded",
+        result: "succeeded",
         startTime: run.startTime,
         finishTime: run.finishTime,
         logId: null,
-        errorCount: run.result === "failed" ? 1 : 0,
+        errorCount: 0,
         warningCount: 0,
         order: 1,
       },
       {
         id: "job-1",
         parentId: "stage-1",
+        identifier: null,
         nodeType: "Job",
         name: "Compile",
         state: "completed",
-        result: run.result ?? "succeeded",
+        result: "succeeded",
         startTime: run.startTime,
         finishTime: run.finishTime,
         logId: 7,
-        errorCount: run.result === "failed" ? 1 : 0,
+        errorCount: 0,
         warningCount: 0,
         order: 1,
+      },
+      {
+        id: "stage-2",
+        parentId: null,
+        identifier: "Deploy",
+        nodeType: "Stage",
+        name: "Deploy",
+        state: "completed",
+        result: "failed",
+        startTime: run.startTime,
+        finishTime: run.finishTime,
+        logId: null,
+        errorCount: 1,
+        warningCount: 0,
+        order: 2,
       },
     ],
   };
@@ -983,6 +1001,8 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         demoPipelineRuns()[2];
       return { ...run, status: "cancelling" };
     }
+    case "retry_pipeline_stage":
+      return null;
     case "list_sync_states":
       return demoSyncStates;
     case "snooze_item": {

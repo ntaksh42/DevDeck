@@ -48,6 +48,9 @@ pub struct TimelineLogRef {
 pub struct TimelineRecord {
     pub id: String,
     pub parent_id: Option<String>,
+    /// Stable reference name of the record; for stage records this is the
+    /// `stageRefName` used to retry the stage.
+    pub identifier: Option<String>,
     #[serde(rename = "type")]
     pub record_type: Option<String>,
     pub name: Option<String>,
@@ -188,6 +191,25 @@ impl AdoClient {
         let path = format!("{project_id}/_apis/build/builds/{build_id}");
         let body = json!({ "status": "cancelling" });
         self.patch_json(&path, &[("api-version", "7.1")], "application/json", &body)
+            .await
+    }
+
+    /// Retries a build stage (re-runs its failed jobs, or all jobs when
+    /// `force_retry_all_jobs` is set). `stage_ref_name` is the stage record's
+    /// `identifier` from the build timeline. Returns an empty 200.
+    pub async fn retry_build_stage(
+        &self,
+        project_id: &str,
+        build_id: i64,
+        stage_ref_name: &str,
+        force_retry_all_jobs: bool,
+    ) -> Result<()> {
+        let path = format!("{project_id}/_apis/build/builds/{build_id}/stages/{stage_ref_name}");
+        let body = json!({
+            "state": "retry",
+            "forceRetryAllJobs": force_retry_all_jobs,
+        });
+        self.patch_no_content(&path, &[("api-version", "7.1")], "application/json", &body)
             .await
     }
 }
@@ -378,5 +400,25 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(build.status.as_deref(), Some("cancelling"));
+    }
+
+    #[tokio::test]
+    async fn retry_build_stage_patches_retry_state() {
+        let server = MockServer::start().await;
+        Mock::given(method("PATCH"))
+            .and(path("/project-1/_apis/build/builds/101/stages/Deploy"))
+            .and(query_param("api-version", "7.1"))
+            .and(body_json(
+                serde_json::json!({ "state": "retry", "forceRetryAllJobs": false }),
+            ))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        test_client(&server)
+            .await
+            .retry_build_stage("project-1", 101, "Deploy", false)
+            .await
+            .unwrap();
     }
 }

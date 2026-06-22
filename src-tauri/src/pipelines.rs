@@ -73,6 +73,19 @@ pub struct CancelPipelineRunInput {
     pub build_id: i64,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RetryPipelineStageInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub build_id: i64,
+    /// The stage record's `identifier` (stageRefName) from the run timeline.
+    pub stage_ref_name: String,
+    /// Re-run every job in the stage rather than only failed ones.
+    #[serde(default)]
+    pub force_retry_all_jobs: bool,
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PipelineProjectOption {
@@ -113,6 +126,8 @@ pub struct PipelineRunSummary {
 pub struct TimelineNode {
     pub id: String,
     pub parent_id: Option<String>,
+    /// Stage records carry their `stageRefName` here, used to retry the stage.
+    pub identifier: Option<String>,
     pub node_type: Option<String>,
     pub name: Option<String>,
     pub state: Option<String>,
@@ -303,6 +318,31 @@ impl PipelineService {
             build,
         ))
     }
+
+    /// Retries a stage of a run (re-runs its failed jobs by default).
+    pub async fn retry_stage(&self, input: RetryPipelineStageInput) -> Result<()> {
+        let stage_ref_name = input.stage_ref_name.trim();
+        if stage_ref_name.is_empty() {
+            return Err(AppError::InvalidInput(
+                "stage reference name is required".to_string(),
+            ));
+        }
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
+        client
+            .retry_build_stage(
+                &project.id,
+                input.build_id,
+                stage_ref_name,
+                input.force_retry_all_jobs,
+            )
+            .await?;
+        Ok(())
+    }
 }
 
 /// Resolves the `requestedFor` filter for a run listing.
@@ -379,6 +419,7 @@ fn timeline_to_nodes(timeline: Timeline) -> Vec<TimelineNode> {
         .map(|record| TimelineNode {
             id: record.id,
             parent_id: record.parent_id,
+            identifier: record.identifier,
             node_type: record.record_type,
             name: record.name,
             state: record.state,

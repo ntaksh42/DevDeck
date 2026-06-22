@@ -35,7 +35,7 @@ use pipelines::{
     CancelPipelineRunInput, GetPipelineRunInput, GetPipelineRunLogTailInput,
     ListPipelineDefinitionsInput, ListPipelineProjectsInput, ListPipelineRunsInput,
     PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption, PipelineRunDetail,
-    PipelineRunSummary, PipelineService, RerunPipelineRunInput,
+    PipelineRunSummary, PipelineService, RerunPipelineRunInput, RetryPipelineStageInput,
 };
 use pr_review::{
     DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
@@ -712,6 +712,16 @@ async fn cancel_pipeline_run(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn retry_pipeline_stage(
+    input: RetryPipelineStageInput,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    ensure_write_enabled(&state).await?;
+    state.pipelines.retry_stage(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn trigger_sync(input: Option<TriggerSyncInput>, state: State<'_, AppState>) -> Result<()> {
     let (tx, rx) = oneshot::channel();
     state
@@ -888,6 +898,7 @@ pub fn run() {
             get_pipeline_run_log_tail,
             rerun_pipeline_run,
             cancel_pipeline_run,
+            retry_pipeline_stage,
             trigger_sync
         ])
         .run(tauri::generate_context!())

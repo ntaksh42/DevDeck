@@ -1221,6 +1221,7 @@ export type PipelineRunSummary = z.infer<typeof pipelineRunSummarySchema>;
 const timelineNodeSchema = z.object({
   id: z.string(),
   parentId: z.string().nullable(),
+  identifier: z.string().nullable(),
   nodeType: z.string().nullable(),
   name: z.string().nullable(),
   state: z.string().nullable(),
@@ -1316,6 +1317,16 @@ export async function cancelPipelineRun(input: {
 }): Promise<PipelineRunSummary> {
   const result = await invokeCommand("cancel_pipeline_run", { input });
   return pipelineRunSummarySchema.parse(result);
+}
+
+export async function retryPipelineStage(input: {
+  organizationId?: string;
+  projectId: string;
+  buildId: number;
+  stageRefName: string;
+  forceRetryAllJobs?: boolean;
+}): Promise<void> {
+  await invokeCommand("retry_pipeline_stage", { input });
 }
 
 export async function searchCommits(

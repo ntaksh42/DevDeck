@@ -362,6 +362,37 @@ impl AdoClient {
         .await
     }
 
+    /// Sends a PATCH whose response body is ignored (e.g. endpoints that return
+    /// an empty 200). Use this instead of `patch_json` when there is no JSON body
+    /// to decode.
+    pub(crate) async fn patch_no_content<B: Serialize + ?Sized>(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        content_type: &str,
+        body: &B,
+    ) -> Result<()> {
+        let url = self
+            .base_url
+            .join(path)
+            .map_err(|e| AdoError::Auth(e.to_string()))?;
+
+        self.send_with_retry(
+            "PATCH",
+            path,
+            true,
+            || {
+                self.http
+                    .patch(url.clone())
+                    .query(query)
+                    .header("Content-Type", content_type)
+                    .json(body)
+            },
+            |_resp| async move { Ok(()) },
+        )
+        .await
+    }
+
     /// Decides whether a non-success status should be retried.
     ///
     /// `idempotent` must be `false` for non-idempotent requests (POST). A 5xx
