@@ -70,6 +70,31 @@ pub struct Timeline {
     pub records: Vec<TimelineRecord>,
 }
 
+/// A pipeline approval (manual approval check gating a stage/environment).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Approval {
+    pub id: String,
+    pub status: Option<String>,
+    pub instructions: Option<String>,
+    #[serde(default)]
+    pub min_required_approvers: i64,
+    pub execution_order: Option<String>,
+    #[serde(default)]
+    pub steps: Vec<ApprovalStep>,
+    pub created_on: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApprovalStep {
+    pub status: Option<String>,
+    pub comment: Option<String>,
+    pub order: Option<i64>,
+    pub assigned_approver: Option<BuildIdentityRef>,
+    pub actual_approver: Option<BuildIdentityRef>,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct BuildListCriteria {
     pub definition_id: Option<i64>,
@@ -189,6 +214,50 @@ impl AdoClient {
         let body = json!({ "status": "cancelling" });
         self.patch_json(&path, &[("api-version", "7.1")], "application/json", &body)
             .await
+    }
+
+    /// Lists pipeline approvals (manual approval checks) for a project, filtered
+    /// by `state` (e.g. `"pending"`) and, when non-empty, by the approver
+    /// `user_ids` the approval is assigned to.
+    pub async fn list_pipeline_approvals(
+        &self,
+        project_id: &str,
+        user_ids: &[String],
+        state: &str,
+    ) -> Result<Vec<Approval>> {
+        let path = format!("{project_id}/_apis/pipelines/approvals");
+        let joined = user_ids.join(",");
+        let mut query: Vec<(&str, &str)> = vec![
+            ("api-version", "7.1"),
+            ("$expand", "steps"),
+            ("state", state),
+        ];
+        if !joined.is_empty() {
+            query.push(("userIds", joined.as_str()));
+        }
+        let response: ListResponse<Approval> = self.get_json(&path, &query).await?;
+        Ok(response.value)
+    }
+
+    /// Approves or rejects a single pipeline approval. `status` is `"approved"`
+    /// or `"rejected"`; returns the updated approval objects.
+    pub async fn update_pipeline_approval(
+        &self,
+        project_id: &str,
+        approval_id: &str,
+        status: &str,
+        comment: &str,
+    ) -> Result<Vec<Approval>> {
+        let path = format!("{project_id}/_apis/pipelines/approvals");
+        let body = json!([{
+            "approvalId": approval_id,
+            "status": status,
+            "comment": comment,
+        }]);
+        let response: ListResponse<Approval> = self
+            .patch_json(&path, &[("api-version", "7.1")], "application/json", &body)
+            .await?;
+        Ok(response.value)
     }
 }
 
@@ -378,5 +447,77 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(build.status.as_deref(), Some("cancelling"));
+    }
+
+    #[tokio::test]
+    async fn list_pipeline_approvals_filters_by_state_and_user() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/pipelines/approvals"))
+            .and(query_param("api-version", "7.1"))
+            .and(query_param("state", "pending"))
+            .and(query_param("$expand", "steps"))
+            .and(query_param("userIds", "user-1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 1,
+                "value": [{
+                    "id": "ee14f612-6838-43c0-b445-db238ef14153",
+                    "status": "pending",
+                    "instructions": "Approve to deploy",
+                    "minRequiredApprovers": 1,
+                    "executionOrder": "anyOrder",
+                    "steps": [{
+                        "status": "pending",
+                        "order": 1,
+                        "assignedApprover": { "id": "user-1", "displayName": "Test User" }
+                    }]
+                }]
+            })))
+            .mount(&server)
+            .await;
+
+        let approvals = test_client(&server)
+            .await
+            .list_pipeline_approvals("project-1", &["user-1".to_string()], "pending")
+            .await
+            .unwrap();
+        assert_eq!(approvals.len(), 1);
+        assert_eq!(approvals[0].status.as_deref(), Some("pending"));
+        assert_eq!(approvals[0].steps.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn update_pipeline_approval_patches_status() {
+        let server = MockServer::start().await;
+        Mock::given(method("PATCH"))
+            .and(path("/project-1/_apis/pipelines/approvals"))
+            .and(query_param("api-version", "7.1"))
+            .and(body_json(serde_json::json!([{
+                "approvalId": "aab27959-a5be-4ee3-97ca-f19b3602cd2f",
+                "status": "approved",
+                "comment": "Approving"
+            }])))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 1,
+                "value": [{
+                    "id": "aab27959-a5be-4ee3-97ca-f19b3602cd2f",
+                    "status": "approved"
+                }]
+            })))
+            .mount(&server)
+            .await;
+
+        let updated = test_client(&server)
+            .await
+            .update_pipeline_approval(
+                "project-1",
+                "aab27959-a5be-4ee3-97ca-f19b3602cd2f",
+                "approved",
+                "Approving",
+            )
+            .await
+            .unwrap();
+        assert_eq!(updated.len(), 1);
+        assert_eq!(updated[0].status.as_deref(), Some("approved"));
     }
 }
