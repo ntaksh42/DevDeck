@@ -240,6 +240,53 @@ impl AdoClient {
         Ok(all)
     }
 
+    /// Lists pull requests across a project filtered server-side by their CLOSED
+    /// date within the optional `[min_time, max_time]` window (RFC3339), paging
+    /// through all results with `$skip`/`$top`. Unlike [`list_project_pull_requests`]
+    /// this returns the set in full rather than a single `$top` page, so callers
+    /// such as release notes do not silently drop PRs once a project has more
+    /// completed PRs than one page. The time window uses `queryTimeRangeType=closed`
+    /// so the bound is the merge/close date, not creation.
+    pub async fn list_pull_requests_closed_in_range(
+        &self,
+        project_id: &str,
+        status: PullRequestStatus,
+        min_time: Option<&str>,
+        max_time: Option<&str>,
+        page_size: u32,
+    ) -> Result<Vec<GitPullRequest>> {
+        let path = format!("{project_id}/_apis/git/pullrequests");
+        let page_size = page_size.max(1);
+        let top_str = page_size.to_string();
+        let mut all = Vec::new();
+        let mut skip: u32 = 0;
+        loop {
+            let skip_str = skip.to_string();
+            let mut params: Vec<(&str, &str)> = vec![
+                ("api-version", "7.1-preview"),
+                ("searchCriteria.status", status.as_query_value()),
+                ("searchCriteria.queryTimeRangeType", "closed"),
+                ("$top", &top_str),
+                ("$skip", &skip_str),
+            ];
+            if let Some(min) = min_time {
+                params.push(("searchCriteria.minTime", min));
+            }
+            if let Some(max) = max_time {
+                params.push(("searchCriteria.maxTime", max));
+            }
+            let response: ListResponse<GitPullRequest> = self.get_json(&path, &params).await?;
+            let page_len = response.value.len() as u32;
+            all.extend(response.value);
+            // A short page means the server has no more results to return.
+            if page_len < page_size {
+                break;
+            }
+            skip += page_size;
+        }
+        Ok(all)
+    }
+
     pub async fn list_commits(
         &self,
         project_id: &str,
@@ -500,6 +547,66 @@ mod tests {
         assert_eq!(prs.len(), 2);
         assert_eq!(prs[0].repository.as_ref().unwrap().id, "repo-1");
         assert_eq!(prs[1].repository.as_ref().unwrap().id, "repo-2");
+    }
+
+    #[tokio::test]
+    async fn list_pull_requests_closed_in_range_pages_and_filters_by_close_time() {
+        let server = MockServer::start().await;
+        // First page (skip=0) is full, so a second page must be requested.
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/git/pullrequests"))
+            .and(query_param("searchCriteria.status", "completed"))
+            .and(query_param("searchCriteria.queryTimeRangeType", "closed"))
+            .and(query_param("searchCriteria.minTime", "2026-06-01T00:00:00+00:00"))
+            .and(query_param("$skip", "0"))
+            .and(query_param("$top", "2"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 2,
+                "value": [
+                    { "pullRequestId": 50, "title": "A", "status": "completed",
+                      "creationDate": "2026-06-02T00:00:00Z", "closedDate": "2026-06-05T00:00:00Z",
+                      "sourceRefName": "refs/heads/a", "targetRefName": "refs/heads/main",
+                      "repository": { "id": "r1", "name": "repo", "project": { "id": "project-1", "name": "Platform" } } },
+                    { "pullRequestId": 51, "title": "B", "status": "completed",
+                      "creationDate": "2026-06-03T00:00:00Z", "closedDate": "2026-06-06T00:00:00Z",
+                      "sourceRefName": "refs/heads/b", "targetRefName": "refs/heads/main",
+                      "repository": { "id": "r1", "name": "repo", "project": { "id": "project-1", "name": "Platform" } } }
+                ]
+            })))
+            .mount(&server)
+            .await;
+        // Second page (skip=2) is short, so paging stops here.
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/git/pullrequests"))
+            .and(query_param("$skip", "2"))
+            .and(query_param("$top", "2"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 1,
+                "value": [
+                    { "pullRequestId": 52, "title": "C", "status": "completed",
+                      "creationDate": "2026-06-04T00:00:00Z", "closedDate": "2026-06-07T00:00:00Z",
+                      "sourceRefName": "refs/heads/c", "targetRefName": "refs/heads/main",
+                      "repository": { "id": "r1", "name": "repo", "project": { "id": "project-1", "name": "Platform" } } }
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let prs = test_client(&server)
+            .await
+            .list_pull_requests_closed_in_range(
+                "project-1",
+                PullRequestStatus::Completed,
+                Some("2026-06-01T00:00:00+00:00"),
+                None,
+                2,
+            )
+            .await
+            .unwrap();
+        // All three completed PRs across both pages are returned (no truncation).
+        assert_eq!(prs.len(), 3);
+        assert_eq!(prs[0].pull_request_id, 50);
+        assert_eq!(prs[2].pull_request_id, 52);
     }
 
     #[tokio::test]
