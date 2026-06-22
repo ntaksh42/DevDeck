@@ -289,6 +289,7 @@ impl WorkItemService {
         );
         preview.comments_unavailable = comments_unavailable;
         preview.pull_requests = self.resolve_pull_request_links(&organization, &raw_relations);
+        preview.attachments = extract_attachments(&raw_relations);
         preview.relations = self
             .resolve_preview_relations(
                 &client,

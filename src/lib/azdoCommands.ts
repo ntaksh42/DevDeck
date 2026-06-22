@@ -312,6 +312,12 @@ const workItemPullRequestLinkSchema = z.object({
 
 export type WorkItemPullRequestLink = z.infer<typeof workItemPullRequestLinkSchema>;
 
+const workItemAttachmentSchema = z.object({
+  name: z.string(),
+  url: z.string(),
+});
+export type WorkItemAttachment = z.infer<typeof workItemAttachmentSchema>;
+
 const workItemPreviewSchema = z.object({
   organizationId: z.string(),
   projectId: z.string(),
@@ -341,6 +347,7 @@ const workItemPreviewSchema = z.object({
   commentsUnavailable: z.boolean().default(false),
   relations: z.array(workItemRelationSchema).default([]),
   pullRequests: z.array(workItemPullRequestLinkSchema).default([]),
+  attachments: z.array(workItemAttachmentSchema).default([]),
 });
 
 export type WorkItemPreview = z.infer<typeof workItemPreviewSchema>;

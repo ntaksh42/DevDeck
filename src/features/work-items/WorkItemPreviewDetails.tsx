@@ -590,6 +590,30 @@ export function WorkItemPreviewDetails({
         </PreviewSection>
       ) : null}
 
+      {preview.attachments.length > 0 ? (
+        <PreviewSection
+          className="mt-2"
+          collapseId="attachments"
+          title={`Attachments (${preview.attachments.length})`}
+        >
+          <div className="space-y-1">
+            {preview.attachments.map((attachment) => (
+              <button
+                key={attachment.url}
+                type="button"
+                onClick={() => openExternalUrl(attachment.url)}
+                title={`Download ${attachment.name}`}
+                aria-label={`Download attachment ${attachment.name}`}
+                className="flex w-full min-w-0 items-center gap-1.5 rounded border border-border bg-card px-1.5 py-1 text-left text-xs hover:bg-secondary"
+              >
+                <span className="min-w-0 flex-1 truncate">{attachment.name}</span>
+                <span className="shrink-0 text-[11px] text-primary">Download</span>
+              </button>
+            ))}
+          </div>
+        </PreviewSection>
+      ) : null}
+
       {preview.comments.length > 0 ? (
         <PreviewSection className="mt-2" collapseId="comments" title={`Comments (${preview.comments.length})`}>
           {deleteCommentError ? (

@@ -220,7 +220,34 @@ pub(super) fn summarize_work_item_preview(
         comments_unavailable: false,
         relations: Vec::new(),
         pull_requests: Vec::new(),
+        attachments: Vec::new(),
     }
+}
+
+/// Extracts attached files (`AttachedFile` relations) for the preview, newest
+/// last as Azure DevOps returns them. The display name comes from the relation
+/// attributes, falling back to the URL's last segment.
+pub(super) fn extract_attachments(raw_relations: &[WorkItemRelation]) -> Vec<WorkItemAttachment> {
+    raw_relations
+        .iter()
+        .filter(|relation| relation.rel == "AttachedFile")
+        .map(|relation| WorkItemAttachment {
+            name: relation
+                .attributes
+                .as_ref()
+                .and_then(|attributes| attributes.name.clone())
+                .filter(|name| !name.trim().is_empty())
+                .unwrap_or_else(|| {
+                    relation
+                        .url
+                        .rsplit('/')
+                        .next()
+                        .unwrap_or("attachment")
+                        .to_string()
+                }),
+            url: relation.url.clone(),
+        })
+        .collect()
 }
 
 /// Parses the pull request id from an `ArtifactLink` relation URL. Git PR links

@@ -1563,6 +1563,16 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
         webUrl: null,
       },
     ],
+    attachments: [
+      {
+        name: "repro-steps.png",
+        url: "https://dev.azure.com/contoso/_apis/wit/attachments/demo-attachment-1",
+      },
+      {
+        name: "diagnostics.log",
+        url: "https://dev.azure.com/contoso/_apis/wit/attachments/demo-attachment-2",
+      },
+    ],
   });
 }
 
