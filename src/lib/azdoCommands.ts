@@ -186,6 +186,7 @@ const pullRequestReviewSchema = z.object({
   createdBy: z.string().nullable(),
   creationDate: z.string().nullable(),
   isDraft: z.boolean(),
+  autoComplete: z.boolean().default(false),
   reviewers: z.array(prReviewerSchema),
   threads: z.array(prThreadSchema),
 });
@@ -979,7 +980,13 @@ const prStatusResultSchema = z.object({
 });
 export type PrStatusResult = z.infer<typeof prStatusResultSchema>;
 
-export type PullRequestAction = "abandon" | "reactivate" | "publish" | "complete";
+export type PullRequestAction =
+  | "abandon"
+  | "reactivate"
+  | "publish"
+  | "complete"
+  | "enableAutoComplete"
+  | "cancelAutoComplete";
 
 export async function updatePullRequest(input: {
   organizationId?: string;
