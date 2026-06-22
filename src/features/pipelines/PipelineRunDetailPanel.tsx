@@ -7,6 +7,7 @@ import {
   getAppSettings,
   getPipelineRun,
   getPipelineRunLogTail,
+  listPipelineArtifacts,
   rerunPipelineRun,
   type PipelineRunDetail,
   type TimelineNode,
@@ -155,6 +156,15 @@ export function PipelineRunDetailPanel({
       }),
     enabled: buildId != null && selectedLogId != null,
   });
+
+  const artifactsQuery = useQuery({
+    queryKey: ["pipelineArtifacts", organizationId, projectId, buildId],
+    queryFn: () =>
+      listPipelineArtifacts({ organizationId, projectId, buildId: buildId as number }),
+    enabled: buildId != null && !!projectId,
+    staleTime: 60_000,
+  });
+  const artifacts = artifactsQuery.data ?? [];
 
   const rerun = useMutation({
     mutationFn: () =>
@@ -331,6 +341,36 @@ export function PipelineRunDetailPanel({
                 ))
               )}
             </div>
+
+            {artifacts.length > 0 ? (
+              <div className="border-b border-border px-3 py-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Artifacts ({artifacts.length})
+                </p>
+                <ul className="mt-1 flex flex-col gap-1">
+                  {artifacts.map((artifact) => (
+                    <li key={artifact.name} className="flex items-center gap-2">
+                      <span className="truncate text-xs text-foreground" title={artifact.name}>
+                        {artifact.name}
+                      </span>
+                      {artifact.downloadUrl ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (artifact.downloadUrl) openExternalUrl(artifact.downloadUrl);
+                          }}
+                          title={`Download ${artifact.name}`}
+                          aria-label={`Download artifact ${artifact.name}`}
+                          className="ml-auto inline-flex shrink-0 items-center gap-1 rounded border border-border bg-card px-1.5 py-px text-[11px] text-primary hover:bg-secondary"
+                        >
+                          <ExternalLink className="h-3 w-3" aria-hidden="true" /> Download
+                        </button>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
 
             {selectedLogId != null ? (
               <div className="px-3 py-2">

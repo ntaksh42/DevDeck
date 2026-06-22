@@ -48,6 +48,14 @@ pub struct GetPipelineRunInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ListPipelineArtifactsInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub build_id: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetPipelineRunLogTailInput {
     pub organization_id: Option<String>,
     pub project_id: String,
@@ -130,6 +138,13 @@ pub struct TimelineNode {
 pub struct PipelineRunDetail {
     pub run: PipelineRunSummary,
     pub timeline: Vec<TimelineNode>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PipelineArtifact {
+    pub name: String,
+    pub download_url: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -249,6 +264,28 @@ impl PipelineService {
             run: build_to_summary(&organization, &project.id, &project.name, build),
             timeline: timeline_to_nodes(timeline),
         })
+    }
+
+    pub async fn list_artifacts(
+        &self,
+        input: ListPipelineArtifactsInput,
+    ) -> Result<Vec<PipelineArtifact>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
+        let artifacts = client
+            .list_build_artifacts(&project.id, input.build_id)
+            .await?;
+        Ok(artifacts
+            .into_iter()
+            .map(|artifact| PipelineArtifact {
+                name: artifact.name,
+                download_url: artifact.resource.and_then(|resource| resource.download_url),
+            })
+            .collect())
     }
 
     pub async fn get_run_log_tail(
