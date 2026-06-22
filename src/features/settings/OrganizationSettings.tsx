@@ -1223,8 +1223,17 @@ export function NotificationRulesSettings() {
     );
   }
 
+  function setMute(index: number, mute: boolean) {
+    setDraft((rules) =>
+      rules.map((rule, i) => (i === index ? { ...rule, mute } : rule)),
+    );
+  }
+
   function addRule() {
-    setDraft((rules) => [...rules, { types: [], projects: [], repositories: [] }]);
+    setDraft((rules) => [
+      ...rules,
+      { types: [], projects: [], repositories: [], mute: false },
+    ]);
   }
 
   function removeRule(index: number) {
@@ -1247,9 +1256,11 @@ export function NotificationRulesSettings() {
           <div>
             <h2 className="text-base font-semibold">Notification rules</h2>
             <p className="text-sm text-muted-foreground">
-              Only deliver desktop notifications that match a rule. With no rules,
-              the per-type toggles above apply. Repository filters apply to pull
-              requests only.
+              Allow rules deliver only matching desktop notifications. Mute rules
+              suppress matching notifications and take precedence, so you can
+              silence a noisy project/repository without allow-listing everything
+              else. With no rules, the per-type toggles above apply. Repository
+              filters apply to pull requests only.
             </p>
           </div>
         </div>
@@ -1267,7 +1278,27 @@ export function NotificationRulesSettings() {
               className="grid gap-2 rounded-md border border-border p-3"
             >
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Rule {index + 1}</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium">Rule {index + 1}</span>
+                  <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={rule.mute}
+                      onChange={(event) => setMute(index, event.target.checked)}
+                      className="h-3.5 w-3.5 cursor-pointer rounded border-input"
+                    />
+                    Mute matching notifications
+                  </label>
+                  <span
+                    className={`rounded px-1.5 py-px text-[10px] font-medium ${
+                      rule.mute
+                        ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                        : "bg-secondary text-muted-foreground"
+                    }`}
+                  >
+                    {rule.mute ? "Mute" : "Allow"}
+                  </span>
+                </div>
                 <button
                   type="button"
                   onClick={() => removeRule(index)}

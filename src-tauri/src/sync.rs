@@ -187,10 +187,21 @@ fn notification_allowed(
     project: &str,
     repository: Option<&str>,
 ) -> bool {
-    rules.is_empty()
-        || rules
-            .iter()
-            .any(|rule| notification_rule_matches(rule, kind, project, repository))
+    // A matching mute rule suppresses the notification outright, taking
+    // precedence over allow rules (so one noisy repo/project can be silenced
+    // without allow-listing everything else).
+    if rules
+        .iter()
+        .filter(|rule| rule.mute)
+        .any(|rule| notification_rule_matches(rule, kind, project, repository))
+    {
+        return false;
+    }
+    // Allow rules: with none configured everything (not muted) passes; otherwise
+    // at least one allow rule must match.
+    let mut allow_rules = rules.iter().filter(|rule| !rule.mute).peekable();
+    allow_rules.peek().is_none()
+        || allow_rules.any(|rule| notification_rule_matches(rule, kind, project, repository))
 }
 
 fn notification_rule_matches(
@@ -686,6 +697,14 @@ mod tests {
             types: types.iter().map(|s| s.to_string()).collect(),
             projects: projects.iter().map(|s| s.to_string()).collect(),
             repositories: repositories.iter().map(|s| s.to_string()).collect(),
+            mute: false,
+        }
+    }
+
+    fn mute_rule(types: &[&str], projects: &[&str], repositories: &[&str]) -> NotificationRule {
+        NotificationRule {
+            mute: true,
+            ..rule(types, projects, repositories)
         }
     }
 
@@ -775,6 +794,43 @@ mod tests {
             "stateChanged",
             "Platform",
             None
+        ));
+    }
+
+    #[test]
+    fn notification_allowed_mute_rule_suppresses_matching_scope() {
+        // With only a mute rule, everything else still passes (mute is a deny
+        // list, not an allow list).
+        let rules = vec![mute_rule(&[], &["Noisy"], &[])];
+        assert!(!notification_allowed(&rules, "assigned", "Noisy", None));
+        assert!(notification_allowed(&rules, "assigned", "Platform", None));
+        assert!(notification_allowed(
+            &rules,
+            "reviewRequested",
+            "Platform",
+            Some("Web")
+        ));
+    }
+
+    #[test]
+    fn notification_allowed_mute_takes_precedence_over_allow() {
+        // An allow rule would admit the notification, but a matching mute rule
+        // for one repository wins.
+        let rules = vec![
+            rule(&["reviewRequested"], &["Platform"], &[]),
+            mute_rule(&[], &[], &["Noisy"]),
+        ];
+        assert!(notification_allowed(
+            &rules,
+            "reviewRequested",
+            "Platform",
+            Some("Web")
+        ));
+        assert!(!notification_allowed(
+            &rules,
+            "reviewRequested",
+            "Platform",
+            Some("Noisy")
         ));
     }
 
