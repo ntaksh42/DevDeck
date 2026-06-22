@@ -6,6 +6,7 @@ import { PipelineSubscriptionsBoard } from "./PipelineSubscriptionsBoard";
 import type { PipelineSubscription } from "./pipelineSubscriptionsStorage";
 
 const listPipelineRuns = vi.fn();
+const openExternalUrl = vi.fn();
 
 vi.mock("@/lib/azdoCommands", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/azdoCommands")>();
@@ -14,6 +15,10 @@ vi.mock("@/lib/azdoCommands", async (importOriginal) => {
     listPipelineRuns: (...args: unknown[]) => listPipelineRuns(...args),
   };
 });
+
+vi.mock("@/lib/openExternal", () => ({
+  openExternalUrl: (...args: unknown[]) => openExternalUrl(...args),
+}));
 
 function run(overrides: Partial<PipelineRunSummary> & { buildId: number }): PipelineRunSummary {
   return {
@@ -54,6 +59,8 @@ const subscriptions: PipelineSubscription[] = [
 ];
 
 beforeEach(() => {
+  openExternalUrl.mockReset();
+  openExternalUrl.mockResolvedValue(undefined);
   listPipelineRuns.mockReset();
   listPipelineRuns.mockImplementation(
     async (input: { definitionId: number }) =>
@@ -179,5 +186,24 @@ describe("PipelineSubscriptionsBoard primary grid marker", () => {
       expect(ciGrid.getAttribute("data-primary-grid")).toBe("true");
       expect(nightlyGrid.getAttribute("data-primary-grid")).toBeNull();
     });
+  });
+
+  it("opens the focused run in the browser on Ctrl+Enter", async () => {
+    renderBoard(null);
+
+    fireEvent.click(await screen.findByRole("button", { name: /CI/, expanded: false }));
+
+    let row!: HTMLElement;
+    await waitFor(() => {
+      const ciGrid = gridByLabel("CI runs");
+      row = ciGrid.querySelector<HTMLElement>("[role='row']")!;
+      expect(row).not.toBeNull();
+    });
+
+    fireEvent.keyDown(row, { key: "Enter", ctrlKey: true });
+
+    expect(openExternalUrl).toHaveBeenCalledWith(
+      "https://dev.azure.com/contoso/demo-project/_build/results?buildId=101",
+    );
   });
 });
