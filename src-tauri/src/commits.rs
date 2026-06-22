@@ -31,6 +31,7 @@ pub struct SearchCommitsInput {
     pub query: Option<String>,
     pub author: Option<String>,
     pub branch: Option<String>,
+    pub item_path: Option<String>,
     pub from_date: Option<String>,
     pub to_date: Option<String>,
     pub project_id: Option<String>,
@@ -171,6 +172,7 @@ impl CommitService {
         let query = input.query.unwrap_or_default().trim().to_ascii_lowercase();
         let author = normalize_optional(input.author);
         let branch = normalize_optional(input.branch);
+        let item_path = normalize_optional(input.item_path).map(|p| normalize_item_path(&p));
         let from_date = normalize_date(input.from_date.as_deref(), false)?;
         let to_date = normalize_date(input.to_date.as_deref(), true)?;
         if let (Some(from_date), Some(to_date)) = (&from_date, &to_date) {
@@ -186,20 +188,22 @@ impl CommitService {
         let from_rfc = from_date.as_ref().map(DateTime::to_rfc3339);
         let to_rfc = to_date.as_ref().map(DateTime::to_rfc3339);
 
-        // Branch-scoped search bypasses the cache: sync only fetches each
-        // repository's default branch, so non-default branches never land in
-        // SQLite. Query Azure DevOps live for the requested branch instead.
-        let is_branch_search = branch.is_some();
-        let cached = if let Some(branch) = branch {
+        // Branch- or path-scoped search bypasses the cache: sync only fetches
+        // each repository's default branch and never records per-commit changed
+        // paths, so neither can be answered from SQLite. Query Azure DevOps live
+        // for the requested branch/path instead.
+        let is_live_search = branch.is_some() || item_path.is_some();
+        let cached = if is_live_search {
             let Some(repository_id) = repository_filter.as_deref() else {
                 return Err(AppError::InvalidInput(
-                    "select a repository to search a specific branch".to_string(),
+                    "select a repository to search a specific branch or path".to_string(),
                 ));
             };
-            self.fetch_branch_commits(
+            self.fetch_live_commits(
                 &organization,
                 repository_id,
-                &branch,
+                branch.as_deref(),
+                item_path.as_deref(),
                 from_rfc.as_deref(),
                 to_rfc.as_deref(),
             )
@@ -236,9 +240,9 @@ impl CommitService {
             .into_iter()
             .filter(|c| {
                 // FTS already applied the text query for the cached path; the
-                // live branch path returns unfiltered commits, so match the
-                // query against the comment here.
-                (!is_branch_search
+                // live branch/path route returns unfiltered commits, so match
+                // the query against the comment here.
+                (!is_live_search
                     || query.is_empty()
                     || c.comment.to_ascii_lowercase().contains(&query))
                     && project_filter.as_deref().is_none_or(|p| c.project_id == p)
@@ -270,14 +274,16 @@ impl CommitService {
         Ok(results)
     }
 
-    /// Fetches commits for a specific branch directly from Azure DevOps,
-    /// converting them into the same cache shape the offline path produces so
-    /// downstream filtering and ranking stay identical.
-    async fn fetch_branch_commits(
+    /// Fetches commits for a specific branch and/or changed path directly from
+    /// Azure DevOps, converting them into the same cache shape the offline path
+    /// produces so downstream filtering and ranking stay identical. Used when
+    /// the cache cannot answer the query (non-default branch, path filter).
+    async fn fetch_live_commits(
         &self,
         organization: &Organization,
         repository_id: &str,
-        branch: &str,
+        branch: Option<&str>,
+        item_path: Option<&str>,
         from_date: Option<&str>,
         to_date: Option<&str>,
     ) -> Result<Vec<CachedCommit>> {
@@ -297,7 +303,8 @@ impl CommitService {
                 &repository.repository_id,
                 CommitSearchCriteria {
                     author: None,
-                    branch: Some(branch.to_string()),
+                    branch: branch.map(str::to_string),
+                    item_path: item_path.map(str::to_string),
                     from_date: from_date.map(str::to_string),
                     to_date: to_date.map(str::to_string),
                     top: Some(100),
@@ -617,6 +624,17 @@ fn normalize_optional(value: Option<String>) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+/// Azure DevOps `searchCriteria.itemPath` expects a server-relative path with a
+/// leading slash (e.g. `/src/auth`). Accept user input with or without it.
+fn normalize_item_path(value: &str) -> String {
+    let trimmed = value.trim().trim_end_matches('/');
+    if trimmed.starts_with('/') {
+        trimmed.to_string()
+    } else {
+        format!("/{trimmed}")
+    }
+}
+
 fn normalize_date(value: Option<&str>, end_of_day: bool) -> Result<Option<DateTime<Utc>>> {
     let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(None);
@@ -822,6 +840,7 @@ async fn fetch_commits_for_repo(
                 CommitSearchCriteria {
                     author: None,
                     branch: None,
+                    item_path: None,
                     from_date: Some(from_date.clone()),
                     to_date: None,
                     top: Some(COMMIT_SYNC_PAGE_SIZE),
@@ -885,6 +904,13 @@ mod tests {
             Some("main".to_string())
         );
         assert_eq!(normalize_optional(Some(" ".to_string())), None);
+    }
+
+    #[test]
+    fn normalize_item_path_adds_leading_slash_and_trims() {
+        assert_eq!(normalize_item_path("src/auth"), "/src/auth");
+        assert_eq!(normalize_item_path("/src/auth/"), "/src/auth");
+        assert_eq!(normalize_item_path("  src/auth  "), "/src/auth");
     }
 
     #[test]

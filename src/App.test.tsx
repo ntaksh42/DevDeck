@@ -1610,7 +1610,7 @@ describe("App", () => {
     await screen.findByText("No pull requests assigned to you.");
     fireEvent.click(screen.getByRole("button", { name: "Commits" }));
     fireEvent.change(
-      await main.findByPlaceholderText("message, author, repository, SHA"),
+      await main.findByPlaceholderText("message, author, SHA — or path:src/auth"),
       {
         target: { value: "commit" },
       },

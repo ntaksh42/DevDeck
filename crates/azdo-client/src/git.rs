@@ -237,6 +237,9 @@ impl AdoClient {
             ));
             query.push(("searchCriteria.itemVersion.version", branch));
         }
+        if let Some(item_path) = criteria.item_path.filter(|value| !value.trim().is_empty()) {
+            query.push(("searchCriteria.itemPath", item_path));
+        }
         if let Some(from_date) = criteria.from_date.filter(|value| !value.trim().is_empty()) {
             query.push(("searchCriteria.fromDate", from_date));
         }
@@ -301,6 +304,9 @@ impl AdoClient {
 pub struct CommitSearchCriteria {
     pub author: Option<String>,
     pub branch: Option<String>,
+    /// Server-relative path (e.g. `/src/auth`) to restrict the search to
+    /// commits that changed files under it. Maps to `searchCriteria.itemPath`.
+    pub item_path: Option<String>,
     pub from_date: Option<String>,
     pub to_date: Option<String>,
     pub top: Option<u32>,
@@ -709,6 +715,7 @@ mod tests {
                 CommitSearchCriteria {
                     author: Some("test@example.com".to_string()),
                     branch: Some("refs/heads/main".to_string()),
+                    item_path: None,
                     from_date: Some("2026-05-01T00:00:00Z".to_string()),
                     to_date: Some("2026-05-24T23:59:59Z".to_string()),
                     top: Some(25),
@@ -723,6 +730,35 @@ mod tests {
             commits[0].author.as_ref().unwrap().name.as_deref(),
             Some("Test User")
         );
+    }
+
+    #[tokio::test]
+    async fn list_commits_sends_item_path() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/git/repositories/repo-1/commits"))
+            .and(query_param("searchCriteria.itemPath", "/src/auth"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 1,
+                "value": [{ "commitId": "pathmatch", "comment": "touch src/auth" }]
+            })))
+            .mount(&server)
+            .await;
+
+        let commits = test_client(&server)
+            .await
+            .list_commits(
+                "project-1",
+                "repo-1",
+                CommitSearchCriteria {
+                    item_path: Some("/src/auth".to_string()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(commits.len(), 1);
+        assert_eq!(commits[0].commit_id, "pathmatch");
     }
 
     #[tokio::test]
