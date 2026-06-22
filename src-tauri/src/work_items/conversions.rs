@@ -236,6 +236,19 @@ pub(super) fn pull_request_id_from_artifact(url: &str) -> Option<i64> {
 }
 
 /// Maps an Azure DevOps link relation to (display label, sort rank).
+/// Maps a friendly link type (as chosen in the UI) to its Azure DevOps link
+/// reference name. Inverse of the labels in `relation_type_label`.
+pub(super) fn link_type_to_rel(link_type: &str) -> Option<&'static str> {
+    match link_type.trim().to_ascii_lowercase().as_str() {
+        "parent" => Some("System.LinkTypes.Hierarchy-Reverse"),
+        "child" => Some("System.LinkTypes.Hierarchy-Forward"),
+        "related" => Some("System.LinkTypes.Related"),
+        "successor" => Some("System.LinkTypes.Dependency-Forward"),
+        "predecessor" => Some("System.LinkTypes.Dependency-Reverse"),
+        _ => None,
+    }
+}
+
 pub(super) fn relation_type_label(rel: &str) -> (String, u8) {
     match rel {
         "System.LinkTypes.Hierarchy-Reverse" => ("Parent".to_string(), 0),

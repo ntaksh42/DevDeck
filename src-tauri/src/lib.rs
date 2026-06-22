@@ -62,11 +62,12 @@ use tauri::{AppHandle, Manager, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tokio::sync::{mpsc, oneshot};
 use work_items::{
-    AddWorkItemCommentInput, AssignWorkItemsInput, BulkWorkItemResult, DeleteWorkItemCommentInput,
-    FetchWorkItemImageInput, GetSavedQueryInput, GetWorkItemPreviewInput, ListMyWorkItemsInput,
-    ListWorkItemFieldAllowedValuesInput, ListWorkItemFieldsInput, ListWorkItemProjectsInput,
-    ListWorkItemTypeStatesInput, ListWorkItemUpdatesInput, MentionCandidate,
-    RecordAssigneeInteractionInput, RecordMentionInteractionInput, RunWorkItemQueryInput,
+    AddWorkItemCommentInput, AddWorkItemLinkInput, AssignWorkItemsInput, BulkWorkItemResult,
+    DeleteWorkItemCommentInput, FetchWorkItemImageInput, GetSavedQueryInput,
+    GetWorkItemPreviewInput, ListMyWorkItemsInput, ListWorkItemFieldAllowedValuesInput,
+    ListWorkItemFieldsInput, ListWorkItemProjectsInput, ListWorkItemTypeStatesInput,
+    ListWorkItemUpdatesInput, MentionCandidate, RecordAssigneeInteractionInput,
+    RecordMentionInteractionInput, RemoveWorkItemLinkInput, RunWorkItemQueryInput,
     SavedQueryResult, SearchWorkItemAssigneesInput, SearchWorkItemMentionsInput,
     SearchWorkItemsInput, SetWorkItemsPriorityInput, SetWorkItemsStateInput,
     UpdateWorkItemCommentInput, UpdateWorkItemFieldsInput, WorkItemAssigneeCandidate,
@@ -459,6 +460,23 @@ async fn add_work_item_comment(
 ) -> Result<WorkItemComment> {
     ensure_write_enabled(&state).await?;
     state.work_items.add_comment(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn add_work_item_link(input: AddWorkItemLinkInput, state: State<'_, AppState>) -> Result<()> {
+    ensure_write_enabled(&state).await?;
+    state.work_items.add_link(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn remove_work_item_link(
+    input: RemoveWorkItemLinkInput,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    ensure_write_enabled(&state).await?;
+    state.work_items.remove_link(input).await
 }
 
 #[tauri::command]
@@ -862,6 +880,8 @@ pub fn run() {
             search_work_item_assignees,
             fetch_work_item_image,
             add_work_item_comment,
+            add_work_item_link,
+            remove_work_item_link,
             delete_work_item_comment,
             update_work_item_comment,
             update_work_item_fields,

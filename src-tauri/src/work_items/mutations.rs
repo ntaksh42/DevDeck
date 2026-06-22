@@ -12,12 +12,14 @@ use crate::db::{CachedWorkItem, Organization};
 use crate::error::{AppError, Result};
 use crate::settings::SettingsService;
 
+use super::conversions::{link_type_to_rel, related_work_item_id};
 use super::{
     summarize_work_item_comment, summarize_work_item_preview, validate_update_field_reference_name,
-    work_item_to_cached, AddWorkItemCommentInput, AssignWorkItemsInput, BulkWorkItemResult,
-    DeleteWorkItemCommentInput, SetWorkItemsPriorityInput, SetWorkItemsStateInput,
-    UpdateWorkItemCommentInput, UpdateWorkItemFieldsInput, WorkItemComment, WorkItemPreview,
-    WorkItemService, WORK_ITEM_PREVIEW_COMMENT_LIMIT,
+    work_item_to_cached, AddWorkItemCommentInput, AddWorkItemLinkInput, AssignWorkItemsInput,
+    BulkWorkItemResult, DeleteWorkItemCommentInput, RemoveWorkItemLinkInput,
+    SetWorkItemsPriorityInput, SetWorkItemsStateInput, UpdateWorkItemCommentInput,
+    UpdateWorkItemFieldsInput, WorkItemComment, WorkItemPreview, WorkItemService,
+    WORK_ITEM_PREVIEW_COMMENT_LIMIT,
 };
 
 impl WorkItemService {
@@ -278,6 +280,53 @@ impl WorkItemService {
             )
             .await?;
         Ok(summarize_work_item_comment(comment))
+    }
+
+    /// Adds a work item link (Parent/Child/Related/Predecessor/Successor) to
+    /// another work item by id (issue #390).
+    pub async fn add_link(&self, input: AddWorkItemLinkInput) -> Result<()> {
+        let rel = link_type_to_rel(&input.link_type).ok_or_else(|| {
+            AppError::InvalidInput(format!("unknown link type: {}", input.link_type))
+        })?;
+        if input.target_id <= 0 {
+            return Err(AppError::InvalidInput(
+                "target work item id is required".to_string(),
+            ));
+        }
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let url = format!(
+            "{}/_apis/wit/workItems/{}",
+            organization.base_url, input.target_id
+        );
+        client
+            .add_work_item_relation(&input.project_id, input.work_item_id, rel, &url)
+            .await?;
+        Ok(())
+    }
+
+    /// Removes the work item link of the given type to the given target
+    /// (issue #390). Looks up the relation's index just before removing so the
+    /// JSON Patch targets the correct entry.
+    pub async fn remove_link(&self, input: RemoveWorkItemLinkInput) -> Result<()> {
+        let rel = link_type_to_rel(&input.link_type).ok_or_else(|| {
+            AppError::InvalidInput(format!("unknown link type: {}", input.link_type))
+        })?;
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let relations = client
+            .get_work_item_relations(&input.project_id, input.work_item_id)
+            .await?;
+        let index = relations
+            .iter()
+            .position(|relation| {
+                relation.rel == rel && related_work_item_id(&relation.url) == Some(input.target_id)
+            })
+            .ok_or_else(|| AppError::InvalidInput("link not found".to_string()))?;
+        client
+            .remove_work_item_relation(&input.project_id, input.work_item_id, index)
+            .await?;
+        Ok(())
     }
 
     // Applies all staged property changes in one JSON Patch request so state

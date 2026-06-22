@@ -317,6 +317,50 @@ impl AdoClient {
         Ok(response.relations)
     }
 
+    /// Adds a relation (link) to a work item via JSON Patch. `rel` is an Azure
+    /// DevOps link type reference (e.g. System.LinkTypes.Related) and `url` is
+    /// the related work item's REST URL.
+    pub async fn add_work_item_relation(
+        &self,
+        project_id: &str,
+        work_item_id: i64,
+        rel: &str,
+        url: &str,
+    ) -> Result<WorkItem> {
+        let path = format!("{project_id}/_apis/wit/workItems/{work_item_id}");
+        let body = json!([{
+            "op": "add",
+            "path": "/relations/-",
+            "value": { "rel": rel, "url": url }
+        }]);
+        self.patch_json(
+            &path,
+            &[("api-version", "7.1-preview")],
+            "application/json-patch+json",
+            &body,
+        )
+        .await
+    }
+
+    /// Removes the relation at `index` (its position in the work item's
+    /// `relations` array) via JSON Patch.
+    pub async fn remove_work_item_relation(
+        &self,
+        project_id: &str,
+        work_item_id: i64,
+        index: usize,
+    ) -> Result<WorkItem> {
+        let path = format!("{project_id}/_apis/wit/workItems/{work_item_id}");
+        let body = json!([{ "op": "remove", "path": format!("/relations/{index}") }]);
+        self.patch_json(
+            &path,
+            &[("api-version", "7.1-preview")],
+            "application/json-patch+json",
+            &body,
+        )
+        .await
+    }
+
     pub async fn add_work_item_comment(
         &self,
         project_id: &str,
@@ -1058,6 +1102,64 @@ mod tests {
 
         assert_eq!(item.id, 10);
         assert_eq!(item.fields["System.State"].as_str(), Some("Active"));
+    }
+
+    #[tokio::test]
+    async fn add_work_item_relation_patches_relations_add() {
+        let server = MockServer::start().await;
+        Mock::given(method("PATCH"))
+            .and(path("/project-1/_apis/wit/workItems/10"))
+            .and(body_json(serde_json::json!([
+                {
+                    "op": "add",
+                    "path": "/relations/-",
+                    "value": {
+                        "rel": "System.LinkTypes.Related",
+                        "url": "https://dev.azure.com/x/_apis/wit/workItems/20"
+                    }
+                }
+            ])))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 10,
+                "fields": { "System.Title": "Fix bug" }
+            })))
+            .mount(&server)
+            .await;
+
+        let item = test_client(&server)
+            .await
+            .add_work_item_relation(
+                "project-1",
+                10,
+                "System.LinkTypes.Related",
+                "https://dev.azure.com/x/_apis/wit/workItems/20",
+            )
+            .await
+            .unwrap();
+        assert_eq!(item.id, 10);
+    }
+
+    #[tokio::test]
+    async fn remove_work_item_relation_patches_relations_remove() {
+        let server = MockServer::start().await;
+        Mock::given(method("PATCH"))
+            .and(path("/project-1/_apis/wit/workItems/10"))
+            .and(body_json(serde_json::json!([
+                { "op": "remove", "path": "/relations/2" }
+            ])))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 10,
+                "fields": { "System.Title": "Fix bug" }
+            })))
+            .mount(&server)
+            .await;
+
+        let item = test_client(&server)
+            .await
+            .remove_work_item_relation("project-1", 10, 2)
+            .await
+            .unwrap();
+        assert_eq!(item.id, 10);
     }
 
     #[tokio::test]

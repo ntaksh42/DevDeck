@@ -1111,6 +1111,28 @@ export async function deleteWorkItemComment(
   await invokeCommand("delete_work_item_comment", { input });
 }
 
+export type WorkItemLinkType = "Parent" | "Child" | "Related" | "Predecessor" | "Successor";
+
+export async function addWorkItemLink(input: {
+  organizationId?: string;
+  projectId: string;
+  workItemId: number;
+  targetId: number;
+  linkType: WorkItemLinkType;
+}): Promise<void> {
+  await invokeCommand("add_work_item_link", { input });
+}
+
+export async function removeWorkItemLink(input: {
+  organizationId?: string;
+  projectId: string;
+  workItemId: number;
+  targetId: number;
+  linkType: WorkItemLinkType;
+}): Promise<void> {
+  await invokeCommand("remove_work_item_link", { input });
+}
+
 export async function updateWorkItemComment(
   input: UpdateWorkItemCommentInput,
 ): Promise<WorkItemComment> {
