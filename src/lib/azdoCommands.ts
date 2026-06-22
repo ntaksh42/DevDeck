@@ -1218,6 +1218,22 @@ const pipelineRunSummarySchema = z.object({
 const pipelineRunSummariesSchema = z.array(pipelineRunSummarySchema);
 export type PipelineRunSummary = z.infer<typeof pipelineRunSummarySchema>;
 
+const failedTestSchema = z.object({
+  runName: z.string().nullable(),
+  title: z.string(),
+  errorMessage: z.string().nullable(),
+  durationMs: z.number(),
+});
+const pipelineTestSummarySchema = z.object({
+  runCount: z.number(),
+  totalTests: z.number(),
+  passedTests: z.number(),
+  failedTests: z.number(),
+  failed: z.array(failedTestSchema),
+  truncated: z.boolean(),
+});
+export type PipelineTestSummary = z.infer<typeof pipelineTestSummarySchema>;
+
 const timelineNodeSchema = z.object({
   id: z.string(),
   parentId: z.string().nullable(),
@@ -1316,6 +1332,15 @@ export async function cancelPipelineRun(input: {
 }): Promise<PipelineRunSummary> {
   const result = await invokeCommand("cancel_pipeline_run", { input });
   return pipelineRunSummarySchema.parse(result);
+}
+
+export async function getPipelineTestSummary(input: {
+  organizationId?: string;
+  projectId: string;
+  buildId: number;
+}): Promise<PipelineTestSummary> {
+  const result = await invokeCommand("get_pipeline_test_summary", { input });
+  return pipelineTestSummarySchema.parse(result);
 }
 
 export async function searchCommits(

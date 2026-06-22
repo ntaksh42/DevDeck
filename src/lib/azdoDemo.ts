@@ -958,6 +958,34 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       return demoPipelineDefinitions();
     case "list_pipeline_runs":
       return demoPipelineRuns();
+    case "get_pipeline_test_summary":
+      return {
+        runCount: 1,
+        totalTests: 128,
+        passedTests: 125,
+        failedTests: 3,
+        truncated: false,
+        failed: [
+          {
+            runName: "VSTest",
+            title: "PaymentFlowTests.RefundsAreIdempotent",
+            errorMessage: "Expected 1 refund, got 2.",
+            durationMs: 412,
+          },
+          {
+            runName: "VSTest",
+            title: "AuthTests.TokenRefreshRetries",
+            errorMessage: "Timed out waiting for token refresh.",
+            durationMs: 5031,
+          },
+          {
+            runName: "VSTest",
+            title: "SearchTests.RanksExactMatchFirst",
+            errorMessage: null,
+            durationMs: 88,
+          },
+        ],
+      };
     case "get_pipeline_run": {
       const input = (args as { input?: { buildId?: number } } | undefined)?.input;
       return demoPipelineRunDetail(input?.buildId ?? 1001);

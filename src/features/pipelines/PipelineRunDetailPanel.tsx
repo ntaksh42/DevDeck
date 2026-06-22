@@ -7,6 +7,7 @@ import {
   getAppSettings,
   getPipelineRun,
   getPipelineRunLogTail,
+  getPipelineTestSummary,
   rerunPipelineRun,
   type PipelineRunDetail,
   type TimelineNode,
@@ -138,6 +139,15 @@ export function PipelineRunDetailPanel({
   });
   const detail = runQuery.data ?? null;
   const run = detail?.run ?? null;
+
+  const testSummaryQuery = useQuery({
+    queryKey: ["pipelineTestSummary", organizationId, projectId, buildId],
+    queryFn: () =>
+      getPipelineTestSummary({ organizationId, projectId, buildId: buildId as number }),
+    enabled: buildId != null && !!projectId,
+    staleTime: 60_000,
+  });
+  const testSummary = testSummaryQuery.data ?? null;
 
   const tree = useMemo(
     () => (detail ? buildTimelineTree(detail.timeline) : []),
@@ -331,6 +341,51 @@ export function PipelineRunDetailPanel({
                 ))
               )}
             </div>
+
+            {testSummary && (testSummary.totalTests > 0 || testSummary.failed.length > 0) ? (
+              <div className="border-b border-border px-3 py-2">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                  <span className="font-medium">Tests</span>
+                  <span className="text-emerald-700 dark:text-emerald-400">
+                    {testSummary.passedTests} passed
+                  </span>
+                  <span
+                    className={
+                      testSummary.failedTests > 0
+                        ? "text-red-700 dark:text-red-400"
+                        : "text-muted-foreground"
+                    }
+                  >
+                    {testSummary.failedTests} failed
+                  </span>
+                  <span className="text-muted-foreground">{testSummary.totalTests} total</span>
+                </div>
+                {testSummary.failed.length > 0 ? (
+                  <ul className="mt-1.5 grid gap-1">
+                    {testSummary.failed.map((test, index) => (
+                      <li
+                        key={`${test.title}:${index}`}
+                        className="rounded border border-red-200 bg-red-50 px-2 py-1 dark:border-red-900/50 dark:bg-red-950/30"
+                      >
+                        <p className="truncate text-xs font-medium" title={test.title}>
+                          {test.title}
+                        </p>
+                        {test.errorMessage ? (
+                          <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">
+                            {test.errorMessage}
+                          </p>
+                        ) : null}
+                      </li>
+                    ))}
+                    {testSummary.truncated ? (
+                      <li className="text-[11px] text-muted-foreground">
+                        More failed tests exist; showing the first {testSummary.failed.length}.
+                      </li>
+                    ) : null}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
 
             {selectedLogId != null ? (
               <div className="px-3 py-2">

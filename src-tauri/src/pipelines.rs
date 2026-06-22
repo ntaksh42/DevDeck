@@ -1,4 +1,4 @@
-use azdo_client::{Build, BuildListCriteria, Timeline};
+use azdo_client::{Build, BuildListCriteria, TestCaseResult, TestRun, Timeline};
 use serde::{Deserialize, Serialize};
 
 use crate::auth::client_for_organization;
@@ -11,6 +11,9 @@ use crate::secrets::SecretStore;
 const RUN_LIST_TOP: u32 = 50;
 const DEFINITION_LIST_TOP: u32 = 200;
 const DEFAULT_LOG_TAIL_LINES: usize = 200;
+// Failed test results to pull per run and to surface overall in the summary.
+const FAILED_RESULTS_PER_RUN: u32 = 100;
+const FAILED_RESULTS_TOTAL_CAP: usize = 200;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -136,6 +139,35 @@ pub struct PipelineRunDetail {
 #[serde(rename_all = "camelCase")]
 pub struct PipelineLogTail {
     pub lines: Vec<String>,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetPipelineTestSummaryInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub build_id: i64,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FailedTest {
+    pub run_name: Option<String>,
+    pub title: String,
+    pub error_message: Option<String>,
+    pub duration_ms: f64,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PipelineTestSummary {
+    pub run_count: usize,
+    pub total_tests: i64,
+    pub passed_tests: i64,
+    pub failed_tests: usize,
+    pub failed: Vec<FailedTest>,
+    /// True when more failed results existed than were collected.
     pub truncated: bool,
 }
 
@@ -302,6 +334,80 @@ impl PipelineService {
             &project.name,
             build,
         ))
+    }
+
+    /// Aggregates the test runs published against a build into pass/fail counts
+    /// and a list of failed tests.
+    pub async fn get_test_summary(
+        &self,
+        input: GetPipelineTestSummaryInput,
+    ) -> Result<PipelineTestSummary> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
+
+        let runs = client
+            .list_test_runs_for_build(&project.id, input.build_id)
+            .await?;
+
+        let mut total_tests = 0;
+        let mut passed_tests = 0;
+        let mut failed: Vec<FailedTest> = Vec::new();
+        let mut truncated = false;
+        for run in &runs {
+            total_tests += run.total_tests;
+            passed_tests += run.passed_tests;
+            // Only query results for runs that report failures, to avoid an
+            // extra request per fully-passing run.
+            if !run_has_failures(run) {
+                continue;
+            }
+            let results = client
+                .list_failed_test_results(&project.id, run.id, FAILED_RESULTS_PER_RUN)
+                .await?;
+            if results.len() as u32 >= FAILED_RESULTS_PER_RUN {
+                truncated = true;
+            }
+            for result in results {
+                if failed.len() >= FAILED_RESULTS_TOTAL_CAP {
+                    truncated = true;
+                    break;
+                }
+                failed.push(failed_test_from(run, result));
+            }
+        }
+
+        Ok(PipelineTestSummary {
+            run_count: runs.len(),
+            total_tests,
+            passed_tests,
+            failed_tests: failed.len(),
+            failed,
+            truncated,
+        })
+    }
+}
+
+/// A run has failures when not every counted test passed (excluding the
+/// not-applicable/not-executed buckets that are not real failures).
+fn run_has_failures(run: &TestRun) -> bool {
+    run.unanalyzed_tests > 0
+        || run.total_tests > run.passed_tests + run.not_applicable_tests + run.incomplete_tests
+}
+
+fn failed_test_from(run: &TestRun, result: TestCaseResult) -> FailedTest {
+    let title = result
+        .test_case_title
+        .or(result.automated_test_name)
+        .unwrap_or_else(|| "(unnamed test)".to_string());
+    FailedTest {
+        run_name: run.name.clone(),
+        title,
+        error_message: result.error_message,
+        duration_ms: result.duration_in_ms,
     }
 }
 

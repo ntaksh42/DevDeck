@@ -86,6 +86,38 @@ pub struct BuildLogTail {
     pub truncated: bool,
 }
 
+/// A test run associated with a build (classic Test Management API), with its
+/// aggregate counts when requested via `includeRunDetails`.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TestRun {
+    pub id: i64,
+    pub name: Option<String>,
+    pub state: Option<String>,
+    #[serde(default)]
+    pub total_tests: i64,
+    #[serde(default)]
+    pub passed_tests: i64,
+    #[serde(default)]
+    pub unanalyzed_tests: i64,
+    #[serde(default)]
+    pub not_applicable_tests: i64,
+    #[serde(default)]
+    pub incomplete_tests: i64,
+}
+
+/// A single test case result.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TestCaseResult {
+    pub test_case_title: Option<String>,
+    pub automated_test_name: Option<String>,
+    pub outcome: Option<String>,
+    pub error_message: Option<String>,
+    #[serde(default)]
+    pub duration_in_ms: f64,
+}
+
 impl AdoClient {
     pub async fn list_builds(
         &self,
@@ -189,6 +221,49 @@ impl AdoClient {
         let body = json!({ "status": "cancelling" });
         self.patch_json(&path, &[("api-version", "7.1")], "application/json", &body)
             .await
+    }
+
+    /// Lists the test runs published against a build, including aggregate counts.
+    pub async fn list_test_runs_for_build(
+        &self,
+        project_id: &str,
+        build_id: i64,
+    ) -> Result<Vec<TestRun>> {
+        let path = format!("{project_id}/_apis/test/runs");
+        let build_uri = format!("vstfs:///Build/Build/{build_id}");
+        let response: ListResponse<TestRun> = self
+            .get_json(
+                &path,
+                &[
+                    ("api-version", "7.1"),
+                    ("buildUri", build_uri.as_str()),
+                    ("includeRunDetails", "true"),
+                ],
+            )
+            .await?;
+        Ok(response.value)
+    }
+
+    /// Lists the failed test results of a test run (up to `top`).
+    pub async fn list_failed_test_results(
+        &self,
+        project_id: &str,
+        run_id: i64,
+        top: u32,
+    ) -> Result<Vec<TestCaseResult>> {
+        let path = format!("{project_id}/_apis/test/Runs/{run_id}/results");
+        let top = top.to_string();
+        let response: ListResponse<TestCaseResult> = self
+            .get_json(
+                &path,
+                &[
+                    ("api-version", "7.1"),
+                    ("outcomes", "Failed"),
+                    ("$top", top.as_str()),
+                ],
+            )
+            .await?;
+        Ok(response.value)
     }
 }
 
@@ -378,5 +453,63 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(build.status.as_deref(), Some("cancelling"));
+    }
+
+    #[tokio::test]
+    async fn list_test_runs_for_build_passes_build_uri() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/test/runs"))
+            .and(query_param("api-version", "7.1"))
+            .and(query_param("buildUri", "vstfs:///Build/Build/101"))
+            .and(query_param("includeRunDetails", "true"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 1,
+                "value": [{
+                    "id": 9, "name": "VSTest", "state": "Completed",
+                    "totalTests": 10, "passedTests": 8, "unanalyzedTests": 2
+                }]
+            })))
+            .mount(&server)
+            .await;
+
+        let runs = test_client(&server)
+            .await
+            .list_test_runs_for_build("project-1", 101)
+            .await
+            .unwrap();
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].total_tests, 10);
+        assert_eq!(runs[0].passed_tests, 8);
+    }
+
+    #[tokio::test]
+    async fn list_failed_test_results_filters_outcome() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/test/Runs/9/results"))
+            .and(query_param("api-version", "7.1"))
+            .and(query_param("outcomes", "Failed"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 1,
+                "value": [{
+                    "testCaseTitle": "Fail1",
+                    "outcome": "Failed",
+                    "errorMessage": "Assert.Fail",
+                    "durationInMs": 74,
+                    "automatedTestName": "Ns.UnitTest1.Fail1"
+                }]
+            })))
+            .mount(&server)
+            .await;
+
+        let results = test_client(&server)
+            .await
+            .list_failed_test_results("project-1", 9, 50)
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].test_case_title.as_deref(), Some("Fail1"));
+        assert_eq!(results[0].outcome.as_deref(), Some("Failed"));
     }
 }

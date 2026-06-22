@@ -33,9 +33,10 @@ use error::{AppError, Result};
 use orgs::{AddAzureCliOrganizationInput, AddPatOrganizationInput, OrganizationService};
 use pipelines::{
     CancelPipelineRunInput, GetPipelineRunInput, GetPipelineRunLogTailInput,
-    ListPipelineDefinitionsInput, ListPipelineProjectsInput, ListPipelineRunsInput,
-    PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption, PipelineRunDetail,
-    PipelineRunSummary, PipelineService, RerunPipelineRunInput,
+    GetPipelineTestSummaryInput, ListPipelineDefinitionsInput, ListPipelineProjectsInput,
+    ListPipelineRunsInput, PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption,
+    PipelineRunDetail, PipelineRunSummary, PipelineService, PipelineTestSummary,
+    RerunPipelineRunInput,
 };
 use pr_review::{
     DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
@@ -712,6 +713,15 @@ async fn cancel_pipeline_run(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn get_pipeline_test_summary(
+    input: GetPipelineTestSummaryInput,
+    state: State<'_, AppState>,
+) -> Result<PipelineTestSummary> {
+    state.pipelines.get_test_summary(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn trigger_sync(input: Option<TriggerSyncInput>, state: State<'_, AppState>) -> Result<()> {
     let (tx, rx) = oneshot::channel();
     state
@@ -888,6 +898,7 @@ pub fn run() {
             get_pipeline_run_log_tail,
             rerun_pipeline_run,
             cancel_pipeline_run,
+            get_pipeline_test_summary,
             trigger_sync
         ])
         .run(tauri::generate_context!())
