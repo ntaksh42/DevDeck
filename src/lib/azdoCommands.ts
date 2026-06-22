@@ -618,10 +618,13 @@ export type GetReviewResultPreviewInput = {
   pullRequestId: number;
 };
 
+export type PullRequestStatusFilter = "active" | "completed" | "abandoned";
+
 export type SearchPullRequestsInput = {
   organizationId?: string;
   query?: string;
-  status?: "active" | "completed" | "abandoned" | "all";
+  /** Statuses to include. An empty or absent list defaults to active only. */
+  statuses?: PullRequestStatusFilter[];
   projectId?: string;
   repositoryId?: string;
 };

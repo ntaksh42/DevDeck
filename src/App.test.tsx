@@ -700,7 +700,7 @@ describe("App", () => {
         input: {
           organizationId: "contoso",
           query: "search",
-          status: "active",
+          statuses: ["active"],
           projectId: undefined,
           repositoryId: undefined,
         },
@@ -708,8 +708,26 @@ describe("App", () => {
     });
     expect(await screen.findByText("Add pull request search")).toBeTruthy();
     expect(screen.getByText("Platform / azdo-dashboard")).toBeTruthy();
-    expect(main.queryByRole("option", { name: "Completed" })).toBeNull();
-    expect(main.queryByRole("option", { name: "Abandoned" })).toBeNull();
+
+    // The status filter offers multiple selectable statuses (active by default).
+    const activeStatus = main.getByRole("checkbox", { name: "Active" }) as HTMLInputElement;
+    const completedStatus = main.getByRole("checkbox", { name: "Completed" }) as HTMLInputElement;
+    expect(activeStatus.checked).toBe(true);
+    expect(completedStatus.checked).toBe(false);
+
+    fireEvent.click(completedStatus);
+    fireEvent.click(main.getByRole("button", { name: "Search" }));
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("search_pull_requests", {
+        input: {
+          organizationId: "contoso",
+          query: "search",
+          statuses: ["active", "completed"],
+          projectId: undefined,
+          repositoryId: undefined,
+        },
+      });
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "#42" }));
 

@@ -1210,15 +1210,31 @@ function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[]
       targetRefName: "main",
       webUrl: "https://dev.azure.com/contoso/Infrastructure/_git/terraform-aws/pullrequest/55",
     },
+    {
+      organizationId: "contoso",
+      projectId: "infrastructure",
+      projectName: "Infrastructure",
+      repositoryId: "terraform-aws",
+      repositoryName: "terraform-aws",
+      pullRequestId: 48,
+      title: "Spike: migrate state backend to S3 (abandoned)",
+      status: "abandoned",
+      createdBy: "Eve Nakamura",
+      creationDate: ago(12 * day),
+      sourceRefName: "spike/s3-backend",
+      targetRefName: "main",
+      webUrl: "https://dev.azure.com/contoso/Infrastructure/_git/terraform-aws/pullrequest/48",
+    },
   ];
 
   const query = input?.query?.trim().toLowerCase();
-  const statusFilter = input?.status ?? "active";
+  const statuses =
+    input?.statuses && input.statuses.length > 0 ? input.statuses : ["active"];
 
   return applyPullRequestScenario(all).filter((pr) => {
     if (input?.projectId && pr.projectId !== input.projectId) return false;
     if (input?.repositoryId && pr.repositoryId !== input.repositoryId) return false;
-    if (statusFilter !== "all" && pr.status !== statusFilter) return false;
+    if (!statuses.includes(pr.status as (typeof statuses)[number])) return false;
     if (query) {
       const textMatch = [pr.title, pr.projectName, pr.repositoryName, pr.createdBy ?? "", pr.sourceRefName, pr.targetRefName].some(
         (v) => v.toLowerCase().includes(query),

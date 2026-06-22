@@ -16,7 +16,7 @@ import {
   listCommitRepositories,
   commandErrorMessage,
   type Organization,
-  type SearchPullRequestsInput,
+  type PullRequestStatusFilter,
   type PullRequestSummary,
   type ReviewPullRequestSummary,
 } from '@/lib/azdoCommands';
@@ -69,11 +69,15 @@ const PR_SEARCH_ROW_HEIGHT = 29;
 const PR_SEARCH_OVERSCAN = 8;
 type PrSearchFilterableColumn = "status" | "repository" | "createdBy" | "branch";
 
-// The local cache only holds Active PRs (see prs.rs search()). Surfacing other
-// statuses as choices would silently return zero rows and imply unsupported
-// backend coverage, so the status selector intentionally offers Active only and
-// the form explains the limitation.
-const PR_SEARCH_STATUS: NonNullable<SearchPullRequestsInput["status"]> = "active";
+// Active PRs come from the local cache; completed/abandoned are fetched live by
+// the backend (see prs.rs search()). The status filter lets the user pick any
+// combination, defaulting to active.
+const PR_STATUS_OPTIONS: { value: PullRequestStatusFilter; label: string }[] = [
+  { value: "active", label: "Active" },
+  { value: "completed", label: "Completed" },
+  { value: "abandoned", label: "Abandoned" },
+];
+const DEFAULT_PR_SEARCH_STATUSES: PullRequestStatusFilter[] = ["active"];
 
 const PR_SEARCH_FILTERABLE_COLUMNS: Record<PrSearchFilterableColumn, (pr: PullRequestSummary) => string> = {
   status: (pr) => pr.status,
@@ -98,6 +102,22 @@ export function PullRequestSearch({
   );
   const [projectId, setProjectId] = useState("");
   const [repositoryId, setRepositoryId] = useState("");
+  const [statuses, setStatuses] = useState<PullRequestStatusFilter[]>(DEFAULT_PR_SEARCH_STATUSES);
+
+  // Toggle a status, keeping at least one selected so a search always has a
+  // defined scope (an empty selection would otherwise fall back to active).
+  function toggleStatus(value: PullRequestStatusFilter) {
+    setStatuses((current) => {
+      if (current.includes(value)) {
+        const next = current.filter((status) => status !== value);
+        return next.length === 0 ? current : next;
+      }
+      // Preserve the canonical option order so the list stays stable.
+      return PR_STATUS_OPTIONS.map((option) => option.value).filter(
+        (status) => status === value || current.includes(status),
+      );
+    });
+  }
 
   const repositoriesQuery = useQuery({
     queryKey: ["prRepositories", organizationId],
@@ -141,7 +161,7 @@ export function PullRequestSearch({
     mutation.mutate({
       organizationId: targetOrganizationId,
       query: externalSearch.query,
-      status: PR_SEARCH_STATUS,
+      statuses,
       projectId: undefined,
       repositoryId: undefined,
     });
@@ -154,7 +174,7 @@ export function PullRequestSearch({
     mutation.mutate({
       organizationId,
       query,
-      status: PR_SEARCH_STATUS,
+      statuses,
       projectId: projectId || undefined,
       repositoryId: repositoryId || undefined,
     });
@@ -164,11 +184,12 @@ export function PullRequestSearch({
     setQuery("");
     setProjectId("");
     setRepositoryId("");
+    setStatuses(DEFAULT_PR_SEARCH_STATUSES);
     if (mutation.isSuccess) {
       mutation.mutate({
         organizationId,
         query: "",
-        status: PR_SEARCH_STATUS,
+        statuses: DEFAULT_PR_SEARCH_STATUSES,
         projectId: undefined,
         repositoryId: undefined,
       });
@@ -193,7 +214,7 @@ export function PullRequestSearch({
               </select>
             </label>
           )}
-          <div className="grid gap-3 lg:grid-cols-[1fr_140px_160px_200px_auto]">
+          <div className="grid gap-3 lg:grid-cols-[1fr_160px_200px_auto]">
             <label className="grid gap-2">
               <span className="text-sm font-medium">Search</span>
               <div className="flex h-9 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
@@ -206,19 +227,6 @@ export function PullRequestSearch({
                   className="min-w-0 flex-1 bg-transparent text-sm outline-none"
                 />
               </div>
-            </label>
-
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Status</span>
-              <select
-                value={PR_SEARCH_STATUS}
-                disabled
-                title="Only active pull requests are synced locally. Completed and abandoned PRs are not available yet."
-                aria-describedby="pr-search-status-note"
-                className="h-9 cursor-not-allowed rounded-md border border-input bg-background px-3 text-sm capitalize outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
-              >
-                <option value={PR_SEARCH_STATUS}>Active</option>
-              </select>
             </label>
 
             <label className="grid gap-2">
@@ -266,10 +274,30 @@ export function PullRequestSearch({
               </button>
             </div>
           </div>
-          <p id="pr-search-status-note" className="text-xs text-muted-foreground">
-            Only active pull requests are synced locally. Completed and abandoned
-            pull requests are not available here yet.
-          </p>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <span className="text-sm font-medium">Status</span>
+            <div
+              role="group"
+              aria-label="Pull request status"
+              aria-describedby="pr-search-status-note"
+              className="flex flex-wrap items-center gap-x-4 gap-y-1"
+            >
+              {PR_STATUS_OPTIONS.map((option) => (
+                <label key={option.value} className="flex cursor-pointer select-none items-center gap-1.5 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={statuses.includes(option.value)}
+                    onChange={() => toggleStatus(option.value)}
+                    className="h-3.5 w-3.5"
+                  />
+                  <span>{option.label}</span>
+                </label>
+              ))}
+            </div>
+            <p id="pr-search-status-note" className="text-xs text-muted-foreground">
+              Active PRs come from the local cache; completed and abandoned are fetched live.
+            </p>
+          </div>
         </form>
       </div>
 

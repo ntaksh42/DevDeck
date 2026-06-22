@@ -1,8 +1,11 @@
+use std::sync::Arc;
+
 use azdo_client::{
     summarize_pr_ci, AdoClient, AdoError, GitThread, PullRequestStatus, TeamProject,
 };
 use chrono::{DateTime, NaiveDate, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
+use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use crate::auth::client_for_organization;
@@ -14,6 +17,11 @@ use crate::sync::{PrNotificationItem, PrNotificationKind, SyncBudget};
 
 // Active PRs across one project; well above what a project realistically has.
 const PROJECT_PR_SYNC_TOP: u32 = 500;
+
+// On-demand search fans out completed/abandoned PR queries across projects. Cap
+// the per-project page and concurrency so a multi-project org stays bounded.
+const PROJECT_PR_SEARCH_TOP: u32 = 200;
+const SEARCH_API_CONCURRENCY: usize = 8;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -84,7 +92,10 @@ pub struct ReviewPullRequestSummary {
 pub struct SearchPullRequestsInput {
     pub organization_id: Option<String>,
     pub query: Option<String>,
-    pub status: Option<String>,
+    /// Statuses to include. An empty or absent list defaults to active only.
+    /// Recognized values: `active`, `completed`, `abandoned`.
+    #[serde(default)]
+    pub statuses: Option<Vec<String>>,
     pub project_id: Option<String>,
     pub repository_id: Option<String>,
 }
@@ -218,41 +229,107 @@ impl PullRequestService {
         Ok(notes)
     }
 
-    // Note: cache contains only Active PRs (synced with PullRequestStatus::Active).
-    // status filters other than "active" will return 0 results until sync scope is widened.
-    pub fn search(&self, input: SearchPullRequestsInput) -> Result<Vec<PullRequestSummary>> {
+    /// Searches pull requests by status. Active PRs are served from the local
+    /// cache the sync loop keeps fresh; completed and abandoned PRs are not
+    /// cached, so they are fetched on demand from Azure DevOps for whichever of
+    /// those statuses the caller requested.
+    pub async fn search(&self, input: SearchPullRequestsInput) -> Result<Vec<PullRequestSummary>> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let query = input.query.unwrap_or_default().trim().to_ascii_lowercase();
         let project_filter = normalize_optional(input.project_id);
         let repository_filter = normalize_optional(input.repository_id);
-        let status_filter = normalize_optional(input.status);
-        let cached = self.db.search_pull_requests(
-            &organization.id,
-            project_filter.as_deref(),
-            repository_filter.as_deref(),
-            status_filter.as_deref(),
-        )?;
-        let mut results: Vec<PullRequestSummary> = cached
-            .into_iter()
-            .map(|pr| PullRequestSummary {
-                organization_id: pr.org_id,
-                project_id: pr.project_id,
-                project_name: pr.project_name,
-                repository_id: pr.repository_id,
-                repository_name: pr.repository_name,
-                pull_request_id: pr.pull_request_id,
-                title: pr.title,
-                status: pr.status,
-                created_by: pr.created_by,
-                creation_date: pr.creation_date,
-                source_ref_name: pr.source_ref_name,
-                target_ref_name: pr.target_ref_name,
-                web_url: pr.web_url,
-            })
-            .filter(|summary| matches_query(summary, &query))
+        let statuses = parse_search_statuses(input.statuses.as_deref());
+
+        let mut results: Vec<PullRequestSummary> = Vec::new();
+
+        if statuses.contains(&PullRequestStatus::Active) {
+            let cached = self.db.search_pull_requests(
+                &organization.id,
+                project_filter.as_deref(),
+                repository_filter.as_deref(),
+                Some("active"),
+            )?;
+            results.extend(cached.into_iter().map(cached_pr_to_summary));
+        }
+
+        let api_statuses: Vec<PullRequestStatus> = statuses
+            .iter()
+            .copied()
+            .filter(|status| *status != PullRequestStatus::Active)
             .collect();
+        if !api_statuses.is_empty() {
+            let fetched = self
+                .fetch_pull_requests_from_api(
+                    &organization,
+                    &api_statuses,
+                    project_filter.as_deref(),
+                    repository_filter.as_deref(),
+                )
+                .await?;
+            results.extend(fetched);
+        }
+
+        results.retain(|summary| matches_query(summary, &query));
         results.sort_by(|a, b| b.creation_date.cmp(&a.creation_date));
         results.truncate(100);
+        Ok(results)
+    }
+
+    /// Fans out one PR query per (project, status) for the non-cached statuses,
+    /// bounded by a small concurrency budget. When no project is selected every
+    /// project is queried; a repository filter is applied to the results after
+    /// the fetch because the project endpoint returns all repositories.
+    async fn fetch_pull_requests_from_api(
+        &self,
+        organization: &Organization,
+        statuses: &[PullRequestStatus],
+        project_filter: Option<&str>,
+        repository_filter: Option<&str>,
+    ) -> Result<Vec<PullRequestSummary>> {
+        let client = client_for_organization(organization, &self.secrets)?;
+
+        let project_ids: Vec<String> = match project_filter {
+            Some(project_id) => vec![project_id.to_string()],
+            None => client
+                .list_projects()
+                .await?
+                .into_iter()
+                .map(|project| project.id)
+                .collect(),
+        };
+
+        let budget: SyncBudget = Arc::new(Semaphore::new(SEARCH_API_CONCURRENCY));
+        let mut tasks: JoinSet<Result<Vec<PullRequestSummary>>> = JoinSet::new();
+        for project_id in project_ids {
+            for status in statuses.iter().copied() {
+                let client = client.clone();
+                let org = organization.clone();
+                let project_id = project_id.clone();
+                let budget = budget.clone();
+                tasks.spawn(async move {
+                    let _permit = budget.acquire_owned().await;
+                    fetch_project_prs_by_status(&client, &org, &project_id, status).await
+                });
+            }
+        }
+
+        let mut results: Vec<PullRequestSummary> = Vec::new();
+        while let Some(joined) = tasks.join_next().await {
+            let fetched =
+                joined.map_err(|e| AppError::AzureDevOps(format!("PR search task failed: {e}")))?;
+            match fetched {
+                Ok(prs) => results.extend(prs),
+                Err(e) => {
+                    // A single project failing should not sink the whole search;
+                    // log it and return the PRs the other projects produced.
+                    tracing::warn!(error = %e, "PR search query failed for a project, skipping");
+                }
+            }
+        }
+
+        if let Some(repository_id) = repository_filter {
+            results.retain(|summary| summary.repository_id == repository_id);
+        }
         Ok(results)
     }
 
@@ -283,6 +360,101 @@ fn normalize_optional(value: Option<String>) -> Option<String> {
     value
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty() && value != "all")
+}
+
+/// Parses the requested status list into deduplicated `PullRequestStatus`
+/// values, defaulting to active only when nothing recognizable is supplied.
+fn parse_search_statuses(raw: Option<&[String]>) -> Vec<PullRequestStatus> {
+    let mut statuses: Vec<PullRequestStatus> = Vec::new();
+    for value in raw.unwrap_or(&[]) {
+        let parsed = match value.trim().to_ascii_lowercase().as_str() {
+            "active" => Some(PullRequestStatus::Active),
+            "completed" => Some(PullRequestStatus::Completed),
+            "abandoned" => Some(PullRequestStatus::Abandoned),
+            _ => None,
+        };
+        if let Some(status) = parsed {
+            if !statuses.contains(&status) {
+                statuses.push(status);
+            }
+        }
+    }
+    if statuses.is_empty() {
+        statuses.push(PullRequestStatus::Active);
+    }
+    statuses
+}
+
+fn cached_pr_to_summary(pr: CachedPr) -> PullRequestSummary {
+    PullRequestSummary {
+        organization_id: pr.org_id,
+        project_id: pr.project_id,
+        project_name: pr.project_name,
+        repository_id: pr.repository_id,
+        repository_name: pr.repository_name,
+        pull_request_id: pr.pull_request_id,
+        title: pr.title,
+        status: pr.status,
+        created_by: pr.created_by,
+        creation_date: pr.creation_date,
+        source_ref_name: pr.source_ref_name,
+        target_ref_name: pr.target_ref_name,
+        web_url: pr.web_url,
+    }
+}
+
+/// Fetches one project's pull requests for a single status and maps them to
+/// search summaries. A 404 (deleted/inaccessible project) yields an empty list
+/// rather than failing the whole search.
+async fn fetch_project_prs_by_status(
+    client: &AdoClient,
+    org: &Organization,
+    project_id: &str,
+    status: PullRequestStatus,
+) -> Result<Vec<PullRequestSummary>> {
+    let prs = match client
+        .list_project_pull_requests(project_id, status, PROJECT_PR_SEARCH_TOP)
+        .await
+    {
+        Ok(prs) => prs,
+        Err(e) if is_ado_not_found(&e) => return Ok(Vec::new()),
+        Err(e) => return Err(e.into()),
+    };
+
+    let summaries = prs
+        .into_iter()
+        .filter_map(|pr| {
+            let repo = pr.repository?;
+            let project_name = repo
+                .project
+                .as_ref()
+                .map(|p| p.name.clone())
+                .unwrap_or_default();
+            let web_url = format!(
+                "{}/{}/_git/{}/pullrequest/{}",
+                org.base_url,
+                encode_path_segment(&project_name),
+                encode_path_segment(&repo.name),
+                pr.pull_request_id
+            );
+            Some(PullRequestSummary {
+                organization_id: org.id.clone(),
+                project_id: project_id.to_string(),
+                project_name,
+                repository_id: repo.id,
+                repository_name: repo.name,
+                pull_request_id: pr.pull_request_id,
+                title: pr.title,
+                status: pr.status,
+                created_by: pr.created_by.and_then(|u| u.display_name.or(u.unique_name)),
+                creation_date: pr.creation_date.to_rfc3339(),
+                source_ref_name: short_ref(&pr.source_ref_name),
+                target_ref_name: short_ref(&pr.target_ref_name),
+                web_url: Some(web_url),
+            })
+        })
+        .collect();
+    Ok(summaries)
 }
 
 fn matches_query(summary: &PullRequestSummary, query: &str) -> bool {
@@ -1047,6 +1219,40 @@ mod tests {
             comments: Some(comments),
             thread_context: None,
         }
+    }
+
+    #[test]
+    fn parse_search_statuses_defaults_to_active() {
+        assert_eq!(
+            parse_search_statuses(None),
+            vec![PullRequestStatus::Active]
+        );
+        assert_eq!(
+            parse_search_statuses(Some(&[])),
+            vec![PullRequestStatus::Active]
+        );
+        assert_eq!(
+            parse_search_statuses(Some(&["bogus".to_string()])),
+            vec![PullRequestStatus::Active]
+        );
+    }
+
+    #[test]
+    fn parse_search_statuses_dedupes_and_preserves_order() {
+        let input = [
+            "Completed".to_string(),
+            "active".to_string(),
+            "completed".to_string(),
+            "abandoned".to_string(),
+        ];
+        assert_eq!(
+            parse_search_statuses(Some(&input)),
+            vec![
+                PullRequestStatus::Completed,
+                PullRequestStatus::Active,
+                PullRequestStatus::Abandoned,
+            ]
+        );
     }
 
     #[test]
