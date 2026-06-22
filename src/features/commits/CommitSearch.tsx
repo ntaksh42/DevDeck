@@ -41,6 +41,7 @@ import { ErrorState, LoadingState } from "@/components/StateDisplay";
 import { ActiveFilters } from "@/components/ActiveFilters";
 import { CommitFilesPanel } from "./CommitFilesPanel";
 import { CommitActivityHeatmap } from "./CommitActivityHeatmap";
+import { hasWorkItemReference } from "./commitLinks";
 
 const DEFAULT_COMMIT_PREVIEW_WIDTH = 460;
 const MIN_COMMIT_PREVIEW_WIDTH = 320;
@@ -704,7 +705,12 @@ function CommitSortHeaderButton({
 }
 
 // Cells stay direct grid items (keyed Fragment) so the column template lines up.
-function renderCommitCell(key: CommitColumnKey, commit: CommitSummary, prCount: number): ReactNode {
+function renderCommitCell(
+  key: CommitColumnKey,
+  commit: CommitSummary,
+  prCount: number,
+  markUnlinked: boolean,
+): ReactNode {
   switch (key) {
     case "sha":
       return (
@@ -728,9 +734,18 @@ function renderCommitCell(key: CommitColumnKey, commit: CommitSummary, prCount: 
       );
     case "comment": {
       const message = commit.comment.split(/\r?\n/, 1)[0] || "(no comment)";
+      const unlinked = markUnlinked && !hasWorkItemReference(commit.comment);
       return (
-        <span className="truncate font-medium text-foreground" title={commit.comment}>
-          {message}
+        <span className="flex min-w-0 items-center gap-1.5" title={commit.comment}>
+          <span className="min-w-0 truncate font-medium text-foreground">{message}</span>
+          {unlinked ? (
+            <span
+              className="shrink-0 rounded border border-amber-200 bg-amber-50 px-1 text-[10px] font-medium text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
+              title="No AB# work item reference in this commit"
+            >
+              Unlinked
+            </span>
+          ) : null}
         </span>
       );
     }
@@ -771,9 +786,10 @@ const CommitGridRow = forwardRef<
     selected: boolean;
     columnTemplate: string;
     visibleColumns: CommitColumnKey[];
+    markUnlinked: boolean;
     onSelect: () => void;
   }
->(({ commit, selected, columnTemplate, visibleColumns, onSelect }, ref) => {
+>(({ commit, selected, columnTemplate, visibleColumns, markUnlinked, onSelect }, ref) => {
   // Reflects the related-PR lookup that the preview triggers on selection;
   // reads cached query data only, so the grid never fans out N requests.
   const prQuery = useQuery({
@@ -803,7 +819,7 @@ const CommitGridRow = forwardRef<
       style={{ gridTemplateColumns: columnTemplate }}
     >
       {visibleColumns.map((key) => (
-        <Fragment key={key}>{renderCommitCell(key, commit, prCount)}</Fragment>
+        <Fragment key={key}>{renderCommitCell(key, commit, prCount, markUnlinked)}</Fragment>
       ))}
     </div>
   );
@@ -953,7 +969,7 @@ function CommitPreviewPanel({
       <div
         className="min-h-0 flex-1 overflow-y-auto outline-none"
         data-primary-preview="true"
-        aria-keyshortcuts="Alt+P"
+        aria-keyshortcuts="Control+P"
         tabIndex={-1}
       >
         {commit ? (
@@ -1038,6 +1054,23 @@ function CommitResults({
   const restoreFocusRef = useRef(false);
   const [scrollerEl, setScrollerEl] = useState<HTMLDivElement | null>(null);
   const [gridViewport, setGridViewport] = useState({ height: 0, scrollTop: 0 });
+  // Client-side view filter: show only commits whose message lacks an AB# work
+  // item reference (a traceability-gap finder). Applies to the loaded results
+  // without re-querying.
+  const [showUnlinkedOnly, setShowUnlinkedOnly] = useState(false);
+  const displayedResults = useMemo(
+    () =>
+      showUnlinkedOnly
+        ? results.filter((commit) => !hasWorkItemReference(commit.comment))
+        : results,
+    [results, showUnlinkedOnly],
+  );
+  // Only flag unlinked rows with a badge when the result set actually uses AB#
+  // linking somewhere; otherwise every row would be "unlinked" and just noisy.
+  const anyLinked = useMemo(
+    () => results.some((commit) => hasWorkItemReference(commit.comment)),
+    [results],
+  );
 
   useEffect(() => {
     localStorage.setItem(COMMIT_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
@@ -1099,12 +1132,12 @@ function CommitResults({
 
   const sorted = useMemo(() => {
     const dir = sort.direction === "asc" ? 1 : -1;
-    return [...results].sort((a, b) => {
+    return [...displayedResults].sort((a, b) => {
       const primary = compareCommitsByKey(a, b, sort.key);
       if (primary !== 0) return primary * dir;
       return `${a.repositoryId}:${a.commitId}`.localeCompare(`${b.repositoryId}:${b.commitId}`);
     });
-  }, [results, sort]);
+  }, [displayedResults, sort]);
 
   useEffect(() => {
     setSelectedIndex((i) => Math.min(i, Math.max(sorted.length - 1, 0)));
@@ -1189,8 +1222,10 @@ function CommitResults({
   const countLabel = useMemo(() => {
     if (loading) return "Searching";
     if (!searched) return "Ready";
-    return `${results.length} commit${results.length === 1 ? "" : "s"}`;
-  }, [loading, results.length, searched]);
+    const count = displayedResults.length;
+    const suffix = showUnlinkedOnly ? " unlinked" : "";
+    return `${count} commit${count === 1 ? "" : "s"}${suffix}`;
+  }, [loading, displayedResults.length, searched, showUnlinkedOnly]);
   const activeFilterCount = Math.max(0, activeExternalFilterCount);
 
   const firstVirtualRow = Math.max(
@@ -1232,6 +1267,19 @@ function CommitResults({
           <ActiveFilters count={activeFilterCount} onClear={onClearExternalFilters ?? (() => {})} />
           <button
             type="button"
+            onClick={() => setShowUnlinkedOnly((value) => !value)}
+            aria-pressed={showUnlinkedOnly}
+            title="Show only commits with no AB# work item reference"
+            className={`rounded border px-2 py-0.5 text-xs ${
+              showUnlinkedOnly
+                ? "border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
+                : "border-border bg-card hover:bg-secondary"
+            }`}
+          >
+            Unlinked only
+          </button>
+          <button
+            type="button"
             onClick={(event) => setColumnMenuRect(event.currentTarget.getBoundingClientRect())}
             className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary"
           >
@@ -1243,9 +1291,11 @@ function CommitResults({
         <div className="px-3 py-6 text-center text-sm text-muted-foreground">
           Run a search to load commits.
         </div>
-      ) : results.length === 0 && !loading ? (
+      ) : displayedResults.length === 0 && !loading ? (
         <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-          No commits matched.
+          {showUnlinkedOnly && results.length > 0
+            ? "No unlinked commits — every match references a work item (AB#)."
+            : "No commits matched."}
         </div>
       ) : (
         <div
@@ -1323,6 +1373,7 @@ function CommitResults({
                       selected={index === selectedIndex}
                       columnTemplate={commitColTemplate}
                       visibleColumns={visibleColumns}
+                      markUnlinked={anyLinked}
                       onSelect={() => setSelectedIndex(index)}
                     />
                   );
