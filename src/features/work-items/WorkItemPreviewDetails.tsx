@@ -226,7 +226,7 @@ export function WorkItemPreviewDetails({
 
   return (
     <div
-      aria-keyshortcuts="Alt+P"
+      aria-keyshortcuts="Control+P"
       aria-label="Work item preview"
       className="min-h-0 flex-1 overflow-auto bg-card px-2.5 pb-2 pt-1.5 text-xs outline-none focus:bg-primary/[0.02]"
       data-primary-preview="true"

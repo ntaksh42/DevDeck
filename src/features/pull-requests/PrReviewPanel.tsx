@@ -323,7 +323,7 @@ function ReviewTab({
     });
   }
 
-  // Keep a focus target (Alt+P) present even on loading/error states.
+  // Keep a focus target (Ctrl+P) present even on loading/error states.
   if (loading) {
     return (
       <div data-primary-preview="true" tabIndex={-1} className="min-h-0 flex-1 outline-none">
@@ -458,7 +458,7 @@ function ReviewTab({
       <div
         className="min-h-0 flex-1 overflow-y-auto outline-none"
         data-primary-preview="true"
-        aria-keyshortcuts="Alt+P"
+        aria-keyshortcuts="Control+P"
         tabIndex={-1}
       >
         {/* Meta + description (title shown in the persistent header above) */}
@@ -623,7 +623,7 @@ function CommitsTab({ pr }: { pr: ReviewPullRequestSummary }) {
     <div
       className="min-h-0 flex-1 overflow-y-auto outline-none"
       data-primary-preview="true"
-      aria-keyshortcuts="Alt+P"
+      aria-keyshortcuts="Control+P"
       tabIndex={-1}
     >
       {commits.map((commit) => {
@@ -726,7 +726,7 @@ function ResultTab({ selectedPr }: { selectedPr: ReviewPullRequestSummary }) {
     <div
       className="flex min-h-0 flex-1 flex-col outline-none"
       data-primary-preview="true"
-      aria-keyshortcuts="Alt+P"
+      aria-keyshortcuts="Control+P"
       tabIndex={-1}
       onKeyDown={handleResultKeyDown}
     >

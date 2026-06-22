@@ -835,7 +835,7 @@ function AppShell() {
       keywords: ["option", "preferences"],
       label: "Go to Settings",
       run: () => setView("settings"),
-      shortcut: "Alt+,",
+      shortcut: "Ctrl+,",
     },
     {
       group: "Focus",
@@ -853,7 +853,7 @@ function AppShell() {
       keywords: ["list", "table", "rows"],
       label: "Focus grid",
       run: focusPrimaryGrid,
-      shortcut: "Alt+G",
+      shortcut: "Ctrl+G",
     },
     {
       group: "Focus",
@@ -861,7 +861,7 @@ function AppShell() {
       keywords: ["details", "pane"],
       label: "Focus preview",
       run: focusPrimaryPreview,
-      shortcut: "Alt+P",
+      shortcut: "Ctrl+P",
     },
     {
       group: "Focus",
@@ -952,7 +952,7 @@ function AppShell() {
       keywords: ["refresh"],
       label: "Sync now",
       run: () => syncMutation.mutate({ scope: "all" }),
-      shortcut: "Alt+S",
+      shortcut: "Ctrl+E",
     },
     {
       disabled: organizations.length === 0 || syncMutation.isPending,
@@ -1310,25 +1310,30 @@ function AppShell() {
         return;
       }
 
-      if (matchesCombo(keybindings.focusNavigation, event)) {
+      // Focus-move shortcuts are now Ctrl-based, so their letters overlap text
+      // editing keys. Skip them while a text input/editor is focused; Escape
+      // already returns focus from an editor back to the grid.
+      const inEditableTarget = isEditableTarget(event.target);
+
+      if (!inEditableTarget && matchesCombo(keybindings.focusNavigation, event)) {
         event.preventDefault();
         focusNavigation();
         return;
       }
 
-      if (matchesCombo(keybindings.focusGrid, event)) {
+      if (!inEditableTarget && matchesCombo(keybindings.focusGrid, event)) {
         event.preventDefault();
         focusPrimaryGrid();
         return;
       }
 
-      if (matchesCombo(keybindings.focusPreview, event)) {
+      if (!inEditableTarget && matchesCombo(keybindings.focusPreview, event)) {
         event.preventDefault();
         focusPrimaryPreview();
         return;
       }
 
-      if (matchesCombo(keybindings.focusViewsPanel, event)) {
+      if (!inEditableTarget && matchesCombo(keybindings.focusViewsPanel, event)) {
         if (activeView === "workItemViews") {
           event.preventDefault();
           focusViewsPanel();
@@ -1336,7 +1341,7 @@ function AppShell() {
         return;
       }
 
-      if (matchesCombo(keybindings.focusComment, event)) {
+      if (!inEditableTarget && matchesCombo(keybindings.focusComment, event)) {
         if (isWorkItemView) {
           event.preventDefault();
           focusWorkItemCommentInput();
@@ -1544,7 +1549,7 @@ function AppShell() {
               active={activeView === "settings"}
               icon={<Settings className="h-4 w-4" aria-hidden="true" />}
               label="Settings"
-              shortcut="Alt+,"
+              shortcut="Control+,"
               onClick={() => setView("settings")}
             />
           </div>
@@ -1620,7 +1625,7 @@ function AppShell() {
                 type="button"
                 disabled={syncMutation.isPending}
                 onClick={() => syncMutation.mutate({ scope: "all" })}
-                aria-keyshortcuts="Alt+S"
+                aria-keyshortcuts="Control+E"
                 aria-label="Sync now"
                 className="flex items-center rounded-md border border-border bg-card p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
                 title="Sync now"
