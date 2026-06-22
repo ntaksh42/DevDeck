@@ -532,6 +532,31 @@ export async function searchCode(input: {
   return codeSearchResultsSchema.parse(result);
 }
 
+const codeContextLineSchema = z.object({
+  lineNumber: z.number(),
+  text: z.string(),
+  isMatch: z.boolean(),
+});
+const codeContextResultSchema = z.object({
+  blocks: z.array(z.object({ lines: z.array(codeContextLineSchema) })),
+  totalMatches: z.number(),
+  truncated: z.boolean(),
+});
+export type CodeContextResult = z.infer<typeof codeContextResultSchema>;
+
+export async function getCodeSearchContext(input: {
+  organizationId?: string;
+  project: string;
+  repository: string;
+  branch: string;
+  path: string;
+  query: string;
+  contextLines?: number;
+}): Promise<CodeContextResult> {
+  const result = await invokeCommand("get_code_search_context", { input });
+  return codeContextResultSchema.parse(result);
+}
+
 // Signals a cancellable command (e.g. code search) to stop, by the id passed as
 // its operationId. Best-effort — the command returns promptly once cancelled.
 export async function cancelOperation(operationId: string): Promise<void> {
