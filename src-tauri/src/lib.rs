@@ -41,8 +41,9 @@ use pr_review::{
     DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
     PostPullRequestCommentInput, PrCommit, PrFileDiff, PrLocator, PrReviewService, PrReviewer,
     PrStatusResult, PrThread, PullRequestChanges, PullRequestReview,
-    SearchPullRequestMentionsInput, SetPullRequestThreadStatusInput, SubmitPullRequestVoteInput,
-    UpdatePullRequestInput,
+    RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
+    SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
+    SubmitPullRequestVoteInput, UpdatePullRequestInput,
 };
 use prs::{
     ListMyReviewPullRequestsInput, PullRequestService, PullRequestSummary,
@@ -307,6 +308,26 @@ async fn update_pull_request(
 ) -> Result<PrStatusResult> {
     ensure_write_enabled(&state).await?;
     state.pr_review.update_pull_request(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn set_pull_request_reviewer_required(
+    input: SetPullRequestReviewerRequiredInput,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    ensure_write_enabled(&state).await?;
+    state.pr_review.set_reviewer_required(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn remove_pull_request_reviewer(
+    input: RemovePullRequestReviewerInput,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    ensure_write_enabled(&state).await?;
+    state.pr_review.remove_reviewer(input).await
 }
 
 #[tauri::command]
@@ -846,6 +867,8 @@ pub fn run() {
             set_pull_request_thread_status,
             submit_pull_request_vote,
             update_pull_request,
+            set_pull_request_reviewer_required,
+            remove_pull_request_reviewer,
             search_pull_request_mentions,
             edit_pull_request_comment,
             delete_pull_request_comment,

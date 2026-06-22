@@ -144,6 +144,7 @@ const snoozedItemSummariesSchema = z.array(snoozedItemSummarySchema);
 export type SnoozedItemSummary = z.infer<typeof snoozedItemSummarySchema>;
 
 const prReviewerSchema = z.object({
+  id: z.string().nullable(),
   displayName: z.string(),
   vote: z.number(),
   voteLabel: z.string(),
@@ -992,6 +993,27 @@ export async function updatePullRequest(input: {
 }): Promise<PrStatusResult> {
   const result = await invokeCommand("update_pull_request", { input });
   return prStatusResultSchema.parse(result);
+}
+
+export async function setPullRequestReviewerRequired(input: {
+  organizationId?: string;
+  projectId: string;
+  repositoryId: string;
+  pullRequestId: number;
+  reviewerId: string;
+  isRequired: boolean;
+}): Promise<void> {
+  await invokeCommand("set_pull_request_reviewer_required", { input });
+}
+
+export async function removePullRequestReviewer(input: {
+  organizationId?: string;
+  projectId: string;
+  repositoryId: string;
+  pullRequestId: number;
+  reviewerId: string;
+}): Promise<void> {
+  await invokeCommand("remove_pull_request_reviewer", { input });
 }
 
 export async function searchPullRequestMentions(
