@@ -177,6 +177,12 @@ const prThreadSchema = z.object({
 
 export type PrThread = z.infer<typeof prThreadSchema>;
 
+const prLabelSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+export type PrLabel = z.infer<typeof prLabelSchema>;
+
 const pullRequestReviewSchema = z.object({
   pullRequestId: z.number(),
   title: z.string(),
@@ -187,6 +193,7 @@ const pullRequestReviewSchema = z.object({
   creationDate: z.string().nullable(),
   isDraft: z.boolean(),
   reviewers: z.array(prReviewerSchema),
+  labels: z.array(prLabelSchema).default([]),
   threads: z.array(prThreadSchema),
 });
 
@@ -992,6 +999,26 @@ export async function updatePullRequest(input: {
 }): Promise<PrStatusResult> {
   const result = await invokeCommand("update_pull_request", { input });
   return prStatusResultSchema.parse(result);
+}
+
+export async function addPullRequestLabel(input: {
+  organizationId?: string;
+  projectId: string;
+  repositoryId: string;
+  pullRequestId: number;
+  name: string;
+}): Promise<void> {
+  await invokeCommand("add_pull_request_label", { input });
+}
+
+export async function removePullRequestLabel(input: {
+  organizationId?: string;
+  projectId: string;
+  repositoryId: string;
+  pullRequestId: number;
+  labelId: string;
+}): Promise<void> {
+  await invokeCommand("remove_pull_request_label", { input });
 }
 
 export async function searchPullRequestMentions(

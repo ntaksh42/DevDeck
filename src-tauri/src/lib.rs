@@ -38,11 +38,11 @@ use pipelines::{
     PipelineRunSummary, PipelineService, RerunPipelineRunInput,
 };
 use pr_review::{
-    DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
-    PostPullRequestCommentInput, PrCommit, PrFileDiff, PrLocator, PrReviewService, PrReviewer,
-    PrStatusResult, PrThread, PullRequestChanges, PullRequestReview,
-    SearchPullRequestMentionsInput, SetPullRequestThreadStatusInput, SubmitPullRequestVoteInput,
-    UpdatePullRequestInput,
+    AddPullRequestLabelInput, DeletePullRequestCommentInput, EditPullRequestCommentInput,
+    GetPullRequestFileDiffInput, PostPullRequestCommentInput, PrCommit, PrFileDiff, PrLocator,
+    PrReviewService, PrReviewer, PrStatusResult, PrThread, PullRequestChanges, PullRequestReview,
+    RemovePullRequestLabelInput, SearchPullRequestMentionsInput, SetPullRequestThreadStatusInput,
+    SubmitPullRequestVoteInput, UpdatePullRequestInput,
 };
 use prs::{
     ListMyReviewPullRequestsInput, PullRequestService, PullRequestSummary,
@@ -307,6 +307,26 @@ async fn update_pull_request(
 ) -> Result<PrStatusResult> {
     ensure_write_enabled(&state).await?;
     state.pr_review.update_pull_request(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn add_pull_request_label(
+    input: AddPullRequestLabelInput,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    ensure_write_enabled(&state).await?;
+    state.pr_review.add_label(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn remove_pull_request_label(
+    input: RemovePullRequestLabelInput,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    ensure_write_enabled(&state).await?;
+    state.pr_review.remove_label(input).await
 }
 
 #[tauri::command]
@@ -846,6 +866,8 @@ pub fn run() {
             set_pull_request_thread_status,
             submit_pull_request_vote,
             update_pull_request,
+            add_pull_request_label,
+            remove_pull_request_label,
             search_pull_request_mentions,
             edit_pull_request_comment,
             delete_pull_request_comment,

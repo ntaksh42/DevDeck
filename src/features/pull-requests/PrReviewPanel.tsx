@@ -1,7 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Loader2, Maximize2, Minimize2 } from "lucide-react";
+import { ExternalLink, Loader2, Maximize2, Minimize2, Plus, X } from "lucide-react";
 import {
+  addPullRequestLabel,
   commandErrorMessage,
   deletePullRequestComment,
   editPullRequestComment,
@@ -11,6 +12,7 @@ import {
   listPullRequestCommits,
   postPullRequestComment,
   prLocator,
+  removePullRequestLabel,
   searchPullRequestMentions,
   setPullRequestThreadStatus,
   submitPullRequestVote,
@@ -323,6 +325,33 @@ function ReviewTab({
     });
   }
 
+  // Label management (#386): add by name, remove by id.
+  const [newLabel, setNewLabel] = useState("");
+  const addLabelMutation = useMutation({
+    mutationFn: addPullRequestLabel,
+    onSuccess: () => {
+      setActionError(null);
+      setNewLabel("");
+      invalidateReview();
+    },
+    onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
+  });
+  const removeLabelMutation = useMutation({
+    mutationFn: removePullRequestLabel,
+    onSuccess: () => {
+      setActionError(null);
+      invalidateReview();
+    },
+    onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
+  });
+  const labelMutationPending = addLabelMutation.isPending || removeLabelMutation.isPending;
+
+  function submitNewLabel() {
+    const name = newLabel.trim();
+    if (!name) return;
+    addLabelMutation.mutate({ ...prLocator(pr), name });
+  }
+
   // Keep a focus target (Alt+P) present even on loading/error states.
   if (loading) {
     return (
@@ -482,6 +511,61 @@ function ReviewTab({
               </span>
             ))}
           </div>
+
+          {/* Labels (#386): show, add by name, remove. */}
+          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+            {review.labels.map((label) => (
+              <span
+                key={label.id}
+                className="inline-flex items-center gap-1 rounded-full border border-border bg-secondary px-2 py-0.5 text-[11px] text-foreground"
+              >
+                {label.name}
+                <button
+                  type="button"
+                  disabled={labelMutationPending}
+                  onClick={() =>
+                    removeLabelMutation.mutate({ ...prLocator(pr), labelId: label.id })
+                  }
+                  aria-label={`Remove label ${label.name}`}
+                  title="Remove label"
+                  className="rounded hover:text-destructive disabled:opacity-50"
+                >
+                  <X className="h-3 w-3" aria-hidden="true" />
+                </button>
+              </span>
+            ))}
+            <input
+              value={newLabel}
+              onChange={(event) => setNewLabel(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  submitNewLabel();
+                } else if (event.key === "Escape" && !newLabel) {
+                  // Let an empty-field Escape bubble to the panel (back to grid).
+                } else if (event.key === "Escape") {
+                  event.stopPropagation();
+                  setNewLabel("");
+                }
+              }}
+              placeholder="Add label…"
+              aria-label="Add label"
+              className="h-6 w-28 rounded border border-input bg-background px-1.5 text-[11px] outline-none focus:ring-2 focus:ring-ring"
+            />
+            {newLabel.trim() ? (
+              <button
+                type="button"
+                disabled={labelMutationPending}
+                onClick={submitNewLabel}
+                aria-label="Add label"
+                className="inline-flex items-center gap-0.5 rounded border border-border px-1 py-0.5 text-[11px] hover:bg-accent disabled:opacity-50"
+              >
+                <Plus className="h-3 w-3" aria-hidden="true" /> Add
+              </button>
+            ) : null}
+          </div>
+
           {review.description ? (
             <MarkdownView text={review.description} className="mt-2 text-xs text-foreground" />
           ) : (

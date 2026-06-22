@@ -133,7 +133,31 @@ pub struct PullRequestReview {
     pub creation_date: Option<String>,
     pub is_draft: bool,
     pub reviewers: Vec<PrReviewer>,
+    pub labels: Vec<PrLabelInfo>,
     pub threads: Vec<PrThread>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrLabelInfo {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddPullRequestLabelInput {
+    #[serde(flatten)]
+    pub pr: PrLocator,
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemovePullRequestLabelInput {
+    #[serde(flatten)]
+    pub pr: PrLocator,
+    pub label_id: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -212,10 +236,11 @@ impl PrReviewService {
             .db
             .resolve_organization(pr.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let (detail, threads) = tokio::try_join!(
+        let (detail, threads, labels) = tokio::try_join!(
             client.get_pull_request_detail(&pr.project_id, &pr.repository_id, pr.pull_request_id,),
             client
                 .list_pull_request_threads(&pr.project_id, &pr.repository_id, pr.pull_request_id,),
+            client.list_pull_request_labels(&pr.project_id, &pr.repository_id, pr.pull_request_id),
         )?;
 
         let me = organization.authenticated_user_id.as_deref();
@@ -240,8 +265,55 @@ impl PrReviewService {
                     is_required: reviewer.is_required,
                 })
                 .collect(),
+            labels: labels
+                .into_iter()
+                .map(|label| PrLabelInfo {
+                    id: label.id,
+                    name: label.name,
+                })
+                .collect(),
             threads: map_threads(threads, me),
         })
+    }
+
+    /// Adds a label to a pull request by name (issue #386).
+    pub async fn add_label(&self, input: AddPullRequestLabelInput) -> Result<()> {
+        let name = input.name.trim();
+        if name.is_empty() {
+            return Err(AppError::InvalidInput(
+                "label name cannot be empty".to_string(),
+            ));
+        }
+        let organization = self
+            .db
+            .resolve_organization(input.pr.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        client
+            .add_pull_request_label(
+                &input.pr.project_id,
+                &input.pr.repository_id,
+                input.pr.pull_request_id,
+                name,
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// Removes a label from a pull request (issue #386).
+    pub async fn remove_label(&self, input: RemovePullRequestLabelInput) -> Result<()> {
+        let organization = self
+            .db
+            .resolve_organization(input.pr.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        client
+            .remove_pull_request_label(
+                &input.pr.project_id,
+                &input.pr.repository_id,
+                input.pr.pull_request_id,
+                &input.label_id,
+            )
+            .await?;
+        Ok(())
     }
 
     pub async fn list_changes(&self, pr: PrLocator) -> Result<PullRequestChanges> {

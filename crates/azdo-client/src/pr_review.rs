@@ -24,6 +24,13 @@ pub struct GitPullRequestDetail {
     pub last_merge_source_commit: Option<GitCommitRefId>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrLabel {
+    pub id: String,
+    pub name: String,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GitThread {
@@ -135,6 +142,49 @@ impl AdoClient {
         );
         self.get_json(&path, &[("api-version", "7.1-preview")])
             .await
+    }
+
+    pub async fn list_pull_request_labels(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        pull_request_id: i64,
+    ) -> Result<Vec<PrLabel>> {
+        let path = format!(
+            "{project_id}/_apis/git/repositories/{repository_id}/pullRequests/{pull_request_id}/labels"
+        );
+        let response: ListResponse<PrLabel> = self
+            .get_json(&path, &[("api-version", "7.1-preview")])
+            .await?;
+        Ok(response.value)
+    }
+
+    pub async fn add_pull_request_label(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        pull_request_id: i64,
+        name: &str,
+    ) -> Result<PrLabel> {
+        let path = format!(
+            "{project_id}/_apis/git/repositories/{repository_id}/pullRequests/{pull_request_id}/labels"
+        );
+        let body = json!({ "name": name });
+        self.post_json(&path, &[("api-version", "7.1-preview")], &body)
+            .await
+    }
+
+    pub async fn remove_pull_request_label(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        pull_request_id: i64,
+        label_id: &str,
+    ) -> Result<()> {
+        let path = format!(
+            "{project_id}/_apis/git/repositories/{repository_id}/pullRequests/{pull_request_id}/labels/{label_id}"
+        );
+        self.delete(&path, &[("api-version", "7.1-preview")]).await
     }
 
     pub async fn list_pull_request_threads(
@@ -662,6 +712,71 @@ mod tests {
         test_client(&server)
             .await
             .delete_pull_request_comment("project-1", "repo-1", 42, 7, 2)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn list_pull_request_labels_maps_value() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path(
+                "/project-1/_apis/git/repositories/repo-1/pullRequests/42/labels",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 1,
+                "value": [{ "id": "lbl-1", "name": "hotfix", "active": true }]
+            })))
+            .mount(&server)
+            .await;
+
+        let labels = test_client(&server)
+            .await
+            .list_pull_request_labels("project-1", "repo-1", 42)
+            .await
+            .unwrap();
+        assert_eq!(labels.len(), 1);
+        assert_eq!(labels[0].name, "hotfix");
+    }
+
+    #[tokio::test]
+    async fn add_pull_request_label_posts_name() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path(
+                "/project-1/_apis/git/repositories/repo-1/pullRequests/42/labels",
+            ))
+            .and(body_partial_json(serde_json::json!({ "name": "hotfix" })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": "lbl-1",
+                "name": "hotfix",
+                "active": true
+            })))
+            .mount(&server)
+            .await;
+
+        let label = test_client(&server)
+            .await
+            .add_pull_request_label("project-1", "repo-1", 42, "hotfix")
+            .await
+            .unwrap();
+        assert_eq!(label.id, "lbl-1");
+    }
+
+    #[tokio::test]
+    async fn remove_pull_request_label_issues_delete() {
+        let server = MockServer::start().await;
+        Mock::given(method("DELETE"))
+            .and(path(
+                "/project-1/_apis/git/repositories/repo-1/pullRequests/42/labels/lbl-1",
+            ))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&server)
+            .await;
+
+        test_client(&server)
+            .await
+            .remove_pull_request_label("project-1", "repo-1", 42, "lbl-1")
             .await
             .unwrap();
     }

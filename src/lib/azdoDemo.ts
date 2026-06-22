@@ -135,6 +135,8 @@ const writeCommands = new Set([
   "set_pull_request_thread_status",
   "submit_pull_request_vote",
   "update_pull_request",
+  "add_pull_request_label",
+  "remove_pull_request_label",
   "edit_pull_request_comment",
   "delete_pull_request_comment",
   "rerun_pipeline_run",
@@ -616,10 +618,17 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
             isMe: false,
           },
         ],
+        labels: [
+          { id: "demo-label-1", name: "hotfix" },
+          { id: "demo-label-2", name: "needs-docs" },
+        ],
         threads: demoThreadsFor(prId),
       };
       return review;
     }
+    case "add_pull_request_label":
+    case "remove_pull_request_label":
+      return null;
     case "list_pull_request_commits":
       return demoPrCommits;
     case "list_pull_request_changes": {
