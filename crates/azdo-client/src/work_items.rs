@@ -189,6 +189,32 @@ pub struct SavedQuery {
     pub wiql: Option<String>,
 }
 
+/// A node in an area or iteration classification tree. The field-ready path
+/// (e.g. `Project\Team\Sprint 1`) is built by callers from the chain of node
+/// names, which matches the `System.AreaPath` / `System.IterationPath` format.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClassificationNode {
+    pub name: String,
+    #[serde(default)]
+    pub structure_type: Option<String>,
+    #[serde(default)]
+    pub has_children: bool,
+    #[serde(default)]
+    pub children: Vec<ClassificationNode>,
+    #[serde(default)]
+    pub attributes: Option<ClassificationNodeAttributes>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClassificationNodeAttributes {
+    #[serde(default)]
+    pub start_date: Option<String>,
+    #[serde(default)]
+    pub finish_date: Option<String>,
+}
+
 impl AdoClient {
     pub async fn query_work_item_ids(
         &self,
@@ -543,6 +569,24 @@ impl AdoClient {
         let path = format!("{project_id}/_apis/wit/queries/{query_id}");
         self.get_json(&path, &[("api-version", "7.1"), ("$expand", "all")])
             .await
+    }
+
+    /// Fetches an area or iteration classification tree for a project.
+    /// `structure_group` is `"areas"` or `"iterations"`; `depth` expands nested
+    /// child nodes in a single request.
+    pub async fn get_classification_nodes(
+        &self,
+        project_id: &str,
+        structure_group: &str,
+        depth: u32,
+    ) -> Result<ClassificationNode> {
+        let path = format!("{project_id}/_apis/wit/classificationnodes/{structure_group}");
+        let depth = depth.to_string();
+        self.get_json(
+            &path,
+            &[("api-version", "7.1-preview.2"), ("$depth", depth.as_str())],
+        )
+        .await
     }
 }
 
@@ -1304,5 +1348,49 @@ mod tests {
             .unwrap();
 
         assert!(values.is_empty());
+    }
+
+    #[tokio::test]
+    async fn get_classification_nodes_returns_tree() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/wit/classificationnodes/iterations"))
+            .and(query_param("api-version", "7.1-preview.2"))
+            .and(query_param("$depth", "5"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "name": "Platform",
+                "structureType": "iteration",
+                "hasChildren": true,
+                "children": [
+                    {
+                        "name": "Sprint 1",
+                        "structureType": "iteration",
+                        "hasChildren": false,
+                        "attributes": {
+                            "startDate": "2026-01-01T00:00:00Z",
+                            "finishDate": "2026-01-14T00:00:00Z"
+                        }
+                    }
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let root = test_client(&server)
+            .await
+            .get_classification_nodes("project-1", "iterations", 5)
+            .await
+            .unwrap();
+        assert_eq!(root.name, "Platform");
+        assert!(root.has_children);
+        assert_eq!(root.children.len(), 1);
+        assert_eq!(root.children[0].name, "Sprint 1");
+        assert_eq!(
+            root.children[0]
+                .attributes
+                .as_ref()
+                .and_then(|a| a.start_date.clone()),
+            Some("2026-01-01T00:00:00Z".to_string())
+        );
     }
 }

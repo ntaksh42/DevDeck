@@ -62,8 +62,9 @@ use tauri::{AppHandle, Manager, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tokio::sync::{mpsc, oneshot};
 use work_items::{
-    AddWorkItemCommentInput, AssignWorkItemsInput, BulkWorkItemResult, DeleteWorkItemCommentInput,
-    FetchWorkItemImageInput, GetSavedQueryInput, GetWorkItemPreviewInput, ListMyWorkItemsInput,
+    AddWorkItemCommentInput, AssignWorkItemsInput, BulkWorkItemResult, ClassificationNodesResult,
+    DeleteWorkItemCommentInput, FetchWorkItemImageInput, GetSavedQueryInput,
+    GetWorkItemPreviewInput, ListClassificationNodesInput, ListMyWorkItemsInput,
     ListWorkItemFieldAllowedValuesInput, ListWorkItemFieldsInput, ListWorkItemProjectsInput,
     ListWorkItemTypeStatesInput, ListWorkItemUpdatesInput, MentionCandidate,
     RecordAssigneeInteractionInput, RecordMentionInteractionInput, RunWorkItemQueryInput,
@@ -559,6 +560,15 @@ async fn list_work_item_fields(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn list_classification_nodes(
+    input: ListClassificationNodesInput,
+    state: State<'_, AppState>,
+) -> Result<ClassificationNodesResult> {
+    state.work_items.list_classification_nodes(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn get_saved_query(
     input: GetSavedQueryInput,
     state: State<'_, AppState>,
@@ -869,6 +879,7 @@ pub fn run() {
             list_work_item_field_allowed_values,
             list_work_item_type_states,
             list_work_item_fields,
+            list_classification_nodes,
             get_saved_query,
             set_work_items_state,
             assign_work_items,

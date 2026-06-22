@@ -275,6 +275,23 @@ const workItemFieldOptionsSchema = z.array(workItemFieldOptionSchema);
 
 export type WorkItemFieldOption = z.infer<typeof workItemFieldOptionSchema>;
 
+const classificationNodeOptionSchema = z.object({
+  name: z.string(),
+  path: z.string(),
+  depth: z.number(),
+  hasChildren: z.boolean(),
+  startDate: z.string().nullable(),
+  finishDate: z.string().nullable(),
+});
+
+const classificationNodesResultSchema = z.object({
+  areas: z.array(classificationNodeOptionSchema),
+  iterations: z.array(classificationNodeOptionSchema),
+});
+
+export type ClassificationNodeOption = z.infer<typeof classificationNodeOptionSchema>;
+export type ClassificationNodesResult = z.infer<typeof classificationNodesResultSchema>;
+
 const workItemCommentSchema = z.object({
   id: z.number(),
   text: z.string().nullable(),
@@ -800,6 +817,11 @@ export type ListWorkItemFieldsInput = {
   projectId: string;
 };
 
+export type ListClassificationNodesInput = {
+  organizationId?: string;
+  projectId: string;
+};
+
 export type BulkWorkItemResult = {
   id: number;
   error: string | null;
@@ -1153,6 +1175,13 @@ export async function listWorkItemFields(
 ): Promise<WorkItemFieldOption[]> {
   const result = await invokeCommand("list_work_item_fields", { input });
   return workItemFieldOptionsSchema.parse(result);
+}
+
+export async function listClassificationNodes(
+  input: ListClassificationNodesInput,
+): Promise<ClassificationNodesResult> {
+  const result = await invokeCommand("list_classification_nodes", { input });
+  return classificationNodesResultSchema.parse(result);
 }
 
 export async function setWorkItemsState(
