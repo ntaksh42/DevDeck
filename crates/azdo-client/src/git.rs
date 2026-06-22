@@ -177,6 +177,28 @@ impl AdoClient {
         Ok(response.value)
     }
 
+    /// Creates a pull request. `source_ref_name`/`target_ref_name` must be full
+    /// refs (e.g. `refs/heads/main`).
+    pub async fn create_pull_request(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        source_ref_name: &str,
+        target_ref_name: &str,
+        title: &str,
+        description: &str,
+    ) -> Result<GitPullRequest> {
+        let path = format!("{project_id}/_apis/git/repositories/{repository_id}/pullrequests");
+        let body = serde_json::json!({
+            "sourceRefName": source_ref_name,
+            "targetRefName": target_ref_name,
+            "title": title,
+            "description": description,
+        });
+        self.post_json(&path, &[("api-version", "7.1-preview")], &body)
+            .await
+    }
+
     /// Lists pull requests across every repository of a project in one call.
     pub async fn list_project_pull_requests(
         &self,
@@ -420,7 +442,9 @@ mod tests {
     use std::sync::Arc;
 
     use url::Url;
-    use wiremock::matchers::{method, path, query_param, query_param_is_missing};
+    use wiremock::matchers::{
+        body_partial_json, method, path, query_param, query_param_is_missing,
+    };
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
@@ -449,6 +473,53 @@ mod tests {
         let projects = test_client(&server).await.list_projects().await.unwrap();
         assert_eq!(projects.len(), 1);
         assert_eq!(projects[0].name, "Platform");
+    }
+
+    #[tokio::test]
+    async fn create_pull_request_posts_refs_and_title() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path(
+                "/project-1/_apis/git/repositories/repo-1/pullrequests",
+            ))
+            .and(body_partial_json(serde_json::json!({
+                "sourceRefName": "refs/heads/feature/x",
+                "targetRefName": "refs/heads/main",
+                "title": "New PR"
+            })))
+            .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({
+                "pullRequestId": 77,
+                "title": "New PR",
+                "status": "active",
+                "creationDate": "2026-05-24T00:00:00Z",
+                "repository": {
+                    "id": "repo-1",
+                    "name": "azdo-dashboard",
+                    "project": { "id": "project-1", "name": "Platform" }
+                },
+                "sourceRefName": "refs/heads/feature/x",
+                "targetRefName": "refs/heads/main"
+            })))
+            .mount(&server)
+            .await;
+
+        let pr = test_client(&server)
+            .await
+            .create_pull_request(
+                "project-1",
+                "repo-1",
+                "refs/heads/feature/x",
+                "refs/heads/main",
+                "New PR",
+                "Body",
+            )
+            .await
+            .unwrap();
+        assert_eq!(pr.pull_request_id, 77);
+        assert_eq!(
+            pr.repository.and_then(|r| r.project).map(|p| p.name),
+            Some("Platform".to_string())
+        );
     }
 
     #[tokio::test]

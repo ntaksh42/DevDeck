@@ -131,6 +131,7 @@ const writeCommands = new Set([
   "set_work_items_state",
   "assign_work_items",
   "set_work_items_priority",
+  "create_pull_request",
   "post_pull_request_comment",
   "set_pull_request_thread_status",
   "submit_pull_request_vote",
@@ -577,6 +578,13 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     case "search_pull_requests": {
       const input = (args as { input?: SearchPullRequestsInput } | undefined)?.input;
       return demoPullRequests(input);
+    }
+    case "create_pull_request": {
+      const input = (args as { input?: { repositoryId?: string } } | undefined)?.input;
+      return {
+        pullRequestId: 9100,
+        webUrl: `https://dev.azure.com/contoso/Platform/_git/${input?.repositoryId ?? "azdo-dashboard"}/pullrequest/9100`,
+      };
     }
     case "list_my_review_pull_requests": {
       const snoozed = demoSnoozedKeys("pull_request");

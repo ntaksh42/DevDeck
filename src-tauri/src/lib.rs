@@ -45,8 +45,8 @@ use pr_review::{
     UpdatePullRequestInput,
 };
 use prs::{
-    ListMyReviewPullRequestsInput, PullRequestService, PullRequestSummary,
-    ReviewPullRequestSummary, SearchPullRequestsInput,
+    CreatePullRequestInput, CreatePullRequestResult, ListMyReviewPullRequestsInput,
+    PullRequestService, PullRequestSummary, ReviewPullRequestSummary, SearchPullRequestsInput,
 };
 use search::{SearchAllInput, SearchAllResult};
 use secrets::SecretStore;
@@ -221,6 +221,16 @@ async fn search_pull_requests(
 ) -> Result<Vec<PullRequestSummary>> {
     let service = state.pull_requests.clone();
     run_blocking(move || service.search(input)).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn create_pull_request(
+    input: CreatePullRequestInput,
+    state: State<'_, AppState>,
+) -> Result<CreatePullRequestResult> {
+    ensure_write_enabled(&state).await?;
+    state.pull_requests.create_pull_request(input).await
 }
 
 #[tauri::command]
@@ -837,6 +847,7 @@ pub fn run() {
             add_pat_organization,
             add_azure_cli_organization,
             search_pull_requests,
+            create_pull_request,
             list_my_review_pull_requests,
             get_pull_request_review,
             list_pull_request_changes,

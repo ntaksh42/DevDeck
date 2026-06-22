@@ -10,9 +10,10 @@ import {
   useState,
 } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Filter, Loader2, Search } from 'lucide-react';
+import { Filter, Loader2, Plus, Search } from 'lucide-react';
 import {
   searchPullRequests,
+  createPullRequest,
   listCommitRepositories,
   commandErrorMessage,
   type Organization,
@@ -125,6 +126,47 @@ export function PullRequestSearch({
 
   const mutation = useMutation({ mutationFn: searchPullRequests });
   const results = mutation.data ?? [];
+
+  // Create pull request (#387): inline form, requires a project + repository.
+  const [showNewPr, setShowNewPr] = useState(false);
+  const [newPrSource, setNewPrSource] = useState("");
+  const [newPrTarget, setNewPrTarget] = useState("main");
+  const [newPrTitle, setNewPrTitle] = useState("");
+  const [newPrDescription, setNewPrDescription] = useState("");
+  const [newPrError, setNewPrError] = useState<string | null>(null);
+  const [newPrNotice, setNewPrNotice] = useState<string | null>(null);
+  const canCreatePr = !!organizationId && !!projectId && !!repositoryId;
+  const createMutation = useMutation({
+    mutationFn: createPullRequest,
+    onSuccess: (created) => {
+      setNewPrError(null);
+      setShowNewPr(false);
+      setNewPrSource("");
+      setNewPrTitle("");
+      setNewPrDescription("");
+      setNewPrNotice(`Created PR #${created.pullRequestId}.`);
+      window.setTimeout(() => setNewPrNotice(null), 5000);
+      if (created.webUrl) openExternalUrl(created.webUrl);
+    },
+    onError: (error) => setNewPrError(commandErrorMessage(error)),
+  });
+
+  function submitNewPr() {
+    if (!canCreatePr) return;
+    if (!newPrTitle.trim() || !newPrSource.trim() || !newPrTarget.trim()) {
+      setNewPrError("Title, source branch, and target branch are required.");
+      return;
+    }
+    createMutation.mutate({
+      organizationId,
+      projectId,
+      repositoryId,
+      sourceBranch: newPrSource.trim(),
+      targetBranch: newPrTarget.trim(),
+      title: newPrTitle.trim(),
+      description: newPrDescription,
+    });
+  }
   const activeSearchFilterCount = (query.trim() ? 1 : 0) + (projectId ? 1 : 0) + (repositoryId ? 1 : 0);
 
   useEffect(() => {
@@ -271,6 +313,100 @@ export function PullRequestSearch({
             pull requests are not available here yet.
           </p>
         </form>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setNewPrError(null);
+              setShowNewPr((open) => !open);
+            }}
+            disabled={!canCreatePr}
+            aria-expanded={showNewPr}
+            title={canCreatePr ? "Create a pull request" : "Select a project and repository to create a PR"}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            New pull request
+          </button>
+          {newPrNotice ? (
+            <span className="text-xs text-emerald-700 dark:text-emerald-400">{newPrNotice}</span>
+          ) : null}
+        </div>
+        {showNewPr && canCreatePr ? (
+          <div className="grid gap-2 rounded-md border border-border bg-background p-3">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="grid gap-1">
+                <span className="text-xs text-muted-foreground">Source branch</span>
+                <input
+                  value={newPrSource}
+                  onChange={(event) => setNewPrSource(event.target.value)}
+                  placeholder="feature/my-change"
+                  aria-label="Source branch"
+                  className="h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs text-muted-foreground">Target branch</span>
+                <input
+                  value={newPrTarget}
+                  onChange={(event) => setNewPrTarget(event.target.value)}
+                  placeholder="main"
+                  aria-label="Target branch"
+                  className="h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+              </label>
+            </div>
+            <label className="grid gap-1">
+              <span className="text-xs text-muted-foreground">Title</span>
+              <input
+                value={newPrTitle}
+                onChange={(event) => setNewPrTitle(event.target.value)}
+                aria-label="Pull request title"
+                className="h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className="text-xs text-muted-foreground">Description (optional)</span>
+              <textarea
+                value={newPrDescription}
+                onChange={(event) => setNewPrDescription(event.target.value)}
+                rows={3}
+                aria-label="Pull request description"
+                className="resize-y rounded-md border border-input bg-background px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </label>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={submitNewPr}
+                disabled={createMutation.isPending || !newPrTitle.trim() || !newPrSource.trim()}
+                className="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {createMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                )}
+                Create
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowNewPr(false)}
+                className="inline-flex h-8 items-center rounded-md border border-border px-3 text-sm hover:bg-accent"
+              >
+                Cancel
+              </button>
+            </div>
+            {newPrError ? (
+              <p role="alert" className="text-xs text-destructive">
+                {newPrError}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {mutation.isError && <ErrorState message={commandErrorMessage(mutation.error)} />}

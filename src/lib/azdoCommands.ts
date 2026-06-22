@@ -917,6 +917,25 @@ export async function searchPullRequests(
   return pullRequestSummariesSchema.parse(result);
 }
 
+const createPullRequestResultSchema = z.object({
+  pullRequestId: z.number(),
+  webUrl: z.string().nullable(),
+});
+export type CreatePullRequestResult = z.infer<typeof createPullRequestResultSchema>;
+
+export async function createPullRequest(input: {
+  organizationId?: string;
+  projectId: string;
+  repositoryId: string;
+  sourceBranch: string;
+  targetBranch: string;
+  title: string;
+  description?: string;
+}): Promise<CreatePullRequestResult> {
+  const result = await invokeCommand("create_pull_request", { input });
+  return createPullRequestResultSchema.parse(result);
+}
+
 export async function listMyReviewPullRequests(
   input: ListMyReviewPullRequestsInput,
 ): Promise<ReviewPullRequestSummary[]> {
