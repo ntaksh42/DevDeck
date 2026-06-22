@@ -204,6 +204,13 @@ find-next) は、入力欄以外では抑止し、ネイティブ動作が素通
 矢印/Enter/Space/Escape で完結し、閉じる際は呼び出し元へフォーカスを返す。
 ナビゲーションキーはポップアップ内に閉じ込め、背後グリッドが反応しないようにする。
 
+バックグラウンド同期 (`sync:updated`) が選択行の DOM ノードを差し替え/除去すると
+フォーカスが `<body>` に落ちるため、`useGridFocusRestoration`
+(`src/lib/useGridFocusRestoration.ts`) でグリッドが保持していたフォーカスを
+選択行へ復元する。ノード除去由来の blur (relatedTarget が null) は即座に所有権を
+手放さず、データ署名の変化後に選択行を仮想ウィンドウへスクロールして数フレーム
+リトライしながらフォーカスを戻す。My Reviews / 作業項目グリッドの両方で共有する。
+
 ---
 
 ## 8. Azure DevOps URL の組み立て

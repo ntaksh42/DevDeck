@@ -51,6 +51,7 @@ import {
   type SortDirection,
 } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
+import { useGridFocusRestoration } from '@/lib/useGridFocusRestoration';
 import { recordRecentPullRequest } from '@/lib/recentItems';
 import { isTauriRuntime } from '@/lib/runtime';
 import {
@@ -768,7 +769,6 @@ export function MyReviewsGrid({
   const filterInputRef = useRef<HTMLInputElement | null>(null);
   const gridScrollRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const gridHadFocusRef = useRef(false);
   // A cross-link select request that is waiting for the target PR to appear in
   // the sorted/visible rows (e.g. after switching org or loading data).
   const pendingSelectRef = useRef<MyReviewsSelectRequest | null>(null);
@@ -1076,12 +1076,20 @@ export function MyReviewsGrid({
   // A background sync can replace or remove the focused row's DOM node; once
   // the grid had focus, restore it to the selected row after data changes so
   // keyboard navigation keeps working.
-  useEffect(() => {
-    if (!gridHadFocusRef.current) return;
-    window.setTimeout(() => {
-      rowRefs.current[selectedIndex]?.focus();
-    }, 0);
-  }, [selectedIndex, resultKeysSignature]);
+  const {
+    onFocusCapture: handleGridFocusCapture,
+    onBlurCapture: handleGridBlurCapture,
+  } = useGridFocusRestoration({
+    containerRef,
+    restoreSignature: `${resultKeysSignature}#${selectedIndex}`,
+    restoreFocus: () => {
+      scrollPrIntoView(selectedIndex);
+      const node = rowRefs.current[selectedIndex];
+      if (!node) return false;
+      node.focus();
+      return true;
+    },
+  });
 
   useEffect(() => {
     const scroller = gridScrollRef.current;
@@ -1475,21 +1483,8 @@ export function MyReviewsGrid({
       className="flex min-h-0 flex-1 flex-col gap-2 outline-none"
       tabIndex={-1}
       onKeyDown={handleKeyDown}
-      onFocusCapture={(event) => {
-        const target = event.target;
-        gridHadFocusRef.current =
-          target instanceof HTMLElement &&
-          Boolean(target.closest('[role="grid"], [role="row"]'));
-      }}
-      onBlurCapture={(event) => {
-        const nextTarget = event.relatedTarget;
-        if (
-          !(nextTarget instanceof HTMLElement) ||
-          !nextTarget.closest('[role="grid"], [role="row"]')
-        ) {
-          gridHadFocusRef.current = false;
-        }
-      }}
+      onFocusCapture={handleGridFocusCapture}
+      onBlurCapture={handleGridBlurCapture}
     >
       {copyToast && (
         <div
