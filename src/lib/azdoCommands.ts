@@ -128,27 +128,6 @@ const reviewPullRequestSummariesSchema = z.array(reviewPullRequestSummarySchema)
 
 export type ReviewPullRequestSummary = z.infer<typeof reviewPullRequestSummarySchema>;
 
-const releaseNotePrSchema = z.object({
-  pullRequestId: z.number(),
-  title: z.string(),
-  createdBy: z.string().nullable(),
-  closedDate: z.string(),
-  repositoryName: z.string(),
-  targetRefName: z.string(),
-  webUrl: z.string().nullable(),
-});
-
-const releaseNotePrsSchema = z.array(releaseNotePrSchema);
-
-export type ReleaseNotePr = z.infer<typeof releaseNotePrSchema>;
-
-export type GenerateReleaseNotesInput = {
-  organizationId?: string;
-  projectId: string;
-  fromDate?: string;
-  toDate?: string;
-};
-
 export type SnoozeItemType = "pull_request" | "work_item";
 
 const snoozedItemSummarySchema = z.object({
@@ -943,13 +922,6 @@ export async function listMyReviewPullRequests(
 ): Promise<ReviewPullRequestSummary[]> {
   const result = await invokeCommand("list_my_review_pull_requests", { input });
   return reviewPullRequestSummariesSchema.parse(result);
-}
-
-export async function generateReleaseNotes(
-  input: GenerateReleaseNotesInput,
-): Promise<ReleaseNotePr[]> {
-  const result = await invokeCommand("generate_release_notes", { input });
-  return releaseNotePrsSchema.parse(result);
 }
 
 export async function getPullRequestReview(

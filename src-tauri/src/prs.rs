@@ -2,11 +2,10 @@ use azdo_client::{
     summarize_pr_ci, AdoClient, AdoError, GitThread, IdentityRefWithVote, PullRequestStatus,
     TeamProject,
 };
-use chrono::{DateTime, NaiveDate, TimeZone, Utc};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinSet;
 
-use crate::auth::client_for_organization;
 use crate::commits::encode_path_segment;
 use crate::db::{AppDatabase, CachedPr, CachedReviewPr, Organization};
 use crate::error::{AppError, Result};
@@ -15,49 +14,11 @@ use crate::sync::{PrNotificationItem, PrNotificationKind, SyncBudget};
 
 // Active PRs across one project; well above what a project realistically has.
 const PROJECT_PR_SYNC_TOP: u32 = 500;
-// Page size for paging through completed PRs when generating release notes.
-const RELEASE_NOTES_PAGE_SIZE: u32 = 100;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListMyReviewPullRequestsInput {
     pub organization_id: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GenerateReleaseNotesInput {
-    pub organization_id: Option<String>,
-    pub project_id: String,
-    /// Inclusive `YYYY-MM-DD` bounds on the PR completion (merge) date. Either
-    /// may be omitted to leave that side unbounded.
-    pub from_date: Option<String>,
-    pub to_date: Option<String>,
-}
-
-/// A completed pull request included in generated release notes.
-#[derive(Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct ReleaseNotePr {
-    pub pull_request_id: i64,
-    pub title: String,
-    pub created_by: Option<String>,
-    pub closed_date: String,
-    pub repository_name: String,
-    pub target_ref_name: String,
-    pub web_url: Option<String>,
-}
-
-fn parse_day_start(value: &str) -> Option<DateTime<Utc>> {
-    let date = NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d").ok()?;
-    Some(Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0)?))
-}
-
-fn parse_day_end(value: &str) -> Option<DateTime<Utc>> {
-    let date = NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d").ok()?;
-    // Include the entire last second so a PR merged at e.g. 23:59:59.5 is not
-    // dropped by the `closed > to` exclusion.
-    Some(Utc.from_utc_datetime(&date.and_hms_nano_opt(23, 59, 59, 999_999_999)?))
 }
 
 #[derive(Debug, Serialize)]
@@ -168,76 +129,6 @@ impl PullRequestService {
             .collect();
         results.sort_by(|a, b| b.creation_date.cmp(&a.creation_date));
         Ok(results)
-    }
-
-    /// On-demand: completed (merged) PRs in a project whose merge date falls in
-    /// the given range, newest first, for generating release notes. Not cached
-    /// (the sync only covers active PRs).
-    pub async fn generate_release_notes(
-        &self,
-        input: GenerateReleaseNotesInput,
-    ) -> Result<Vec<ReleaseNotePr>> {
-        let organization = self.resolve_organization(input.organization_id.as_deref())?;
-        let project_id = input.project_id.trim();
-        if project_id.is_empty() {
-            return Err(AppError::InvalidInput("a project is required".to_string()));
-        }
-        let from = input.from_date.as_deref().and_then(parse_day_start);
-        let to = input.to_date.as_deref().and_then(parse_day_end);
-
-        let client = client_for_organization(&organization, &self.secrets)?;
-        // Filter the merge (closed) date server-side and page through every match
-        // so projects with more than one page of completed PRs are covered in
-        // full (the old single 1000-row page silently dropped older/recent
-        // merges). The in-memory bounds below stay as the exact gate.
-        let from_iso = from.map(|f| f.to_rfc3339());
-        let to_iso = to.map(|t| t.to_rfc3339());
-        let prs = client
-            .list_pull_requests_closed_in_range(
-                project_id,
-                PullRequestStatus::Completed,
-                from_iso.as_deref(),
-                to_iso.as_deref(),
-                RELEASE_NOTES_PAGE_SIZE,
-            )
-            .await?;
-
-        let mut notes: Vec<ReleaseNotePr> = prs
-            .into_iter()
-            .filter_map(|pr| {
-                let closed = pr.closed_date?;
-                if from.is_some_and(|f| closed < f) || to.is_some_and(|t| closed > t) {
-                    return None;
-                }
-                let repo = pr.repository.as_ref()?;
-                let repo_name = repo.name.clone();
-                let proj_name = repo
-                    .project
-                    .as_ref()
-                    .map(|p| p.name.clone())
-                    .unwrap_or_default();
-                let web_url = format!(
-                    "{}/{}/_git/{}/pullrequest/{}",
-                    organization.base_url,
-                    encode_path_segment(&proj_name),
-                    encode_path_segment(&repo_name),
-                    pr.pull_request_id
-                );
-                Some(ReleaseNotePr {
-                    pull_request_id: pr.pull_request_id,
-                    title: pr.title,
-                    created_by: pr
-                        .created_by
-                        .and_then(|user| user.display_name.or(user.unique_name)),
-                    closed_date: closed.to_rfc3339(),
-                    repository_name: repo_name,
-                    target_ref_name: short_ref(&pr.target_ref_name),
-                    web_url: Some(web_url),
-                })
-            })
-            .collect();
-        notes.sort_by(|a, b| b.closed_date.cmp(&a.closed_date));
-        Ok(notes)
     }
 
     // Note: cache contains only Active PRs (synced with PullRequestStatus::Active).
