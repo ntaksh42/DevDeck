@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronRight, Loader2, Pencil, Plus, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { Check, ChevronRight, Loader2, Pencil, Plus, SlidersHorizontal, Star, Trash2, X } from "lucide-react";
 import type {
   WorkItemFieldOption,
   WorkItemPreview,
@@ -97,6 +97,8 @@ export function WorkItemPreviewDetails({
   onCustomPreviewFieldsChange,
   onDeleteComment,
   onEditComment,
+  isFollowed,
+  onToggleFollow,
   onSelectedFieldKeysChange,
   priorityControl,
   reasonControl,
@@ -123,6 +125,8 @@ export function WorkItemPreviewDetails({
   onCustomPreviewFieldsChange: (fields: CustomPreviewField[]) => void;
   onDeleteComment: (commentId: number) => void;
   onEditComment: (commentId: number, markdown: string) => void;
+  isFollowed?: boolean;
+  onToggleFollow?: () => void;
   onSelectedFieldKeysChange: (keys: PreviewFieldKey[]) => void;
   presetsControl?: ReactNode;
   priorityControl: ReactNode;
@@ -269,6 +273,30 @@ export function WorkItemPreviewDetails({
             {statusChip}
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            {onToggleFollow ? (
+              <button
+                type="button"
+                aria-pressed={!!isFollowed}
+                aria-label={isFollowed ? "Unfollow this work item" : "Follow this work item"}
+                title={
+                  isFollowed
+                    ? "Following (local watchlist) — click to unfollow"
+                    : "Follow (add to local watchlist)"
+                }
+                onClick={onToggleFollow}
+                className={`inline-flex h-5 w-5 items-center justify-center rounded border ${
+                  isFollowed
+                    ? "border-amber-400 bg-amber-50 text-amber-600 dark:bg-amber-950/40"
+                    : "border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground"
+                }`}
+              >
+                <Star
+                  className="h-3 w-3"
+                  aria-hidden="true"
+                  fill={isFollowed ? "currentColor" : "none"}
+                />
+              </button>
+            ) : null}
             {actionsControl}
             {presetsControl}
             <div ref={fieldMenuRef} className="relative">

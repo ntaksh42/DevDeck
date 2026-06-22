@@ -47,6 +47,11 @@ import {
   type WorkItemFieldPreset,
 } from './fieldPresetsStorage';
 import {
+  isWorkItemFollowed,
+  toggleWorkItemFollow,
+  workItemFollowKey,
+} from './workItemFollowStorage';
+import {
   buildDuplicateDraft,
   buildInverseChanges,
   customPreviewFieldValue,
@@ -138,6 +143,7 @@ export function WorkItemPreviewPanel({
   const [reasonEditorOpen, setReasonEditorOpen] = useState(false);
   const [priorityPickerOpen, setPriorityPickerOpen] = useState(false);
   const [customFieldEditor, setCustomFieldEditor] = useState<string | null>(null);
+  const [followed, setFollowed] = useState(false);
   const handledOpenAssigneeRequest = useRef(0);
   const handledOpenFieldRequest = useRef(0);
   const handledOpenPriorityRequest = useRef(0);
@@ -212,6 +218,30 @@ export function WorkItemPreviewPanel({
   useEffect(() => {
     storePreviewFieldKeys(selectedPreviewFieldKeys);
   }, [selectedPreviewFieldKeys]);
+
+  // Reflect the locally-stored follow ("watch") state for the selected item.
+  useEffect(() => {
+    if (!selectedItem) {
+      setFollowed(false);
+      return;
+    }
+    const key = workItemFollowKey(
+      selectedItem.organizationId,
+      selectedItem.projectId,
+      selectedItem.id,
+    );
+    setFollowed(isWorkItemFollowed(key));
+  }, [selectedItem]);
+
+  function toggleFollow() {
+    if (!selectedItem) return;
+    const key = workItemFollowKey(
+      selectedItem.organizationId,
+      selectedItem.projectId,
+      selectedItem.id,
+    );
+    setFollowed(toggleWorkItemFollow(key));
+  }
 
   // Load default candidates as soon as the picker opens.
   const assigneeDefaultQuery = useQuery({
@@ -1031,6 +1061,8 @@ export function WorkItemPreviewPanel({
                 onCustomPreviewFieldsChange={onCustomPreviewFieldsChange}
                 onDeleteComment={deleteComment}
                 onEditComment={editComment}
+                isFollowed={followed}
+                onToggleFollow={toggleFollow}
                 preview={preview}
                 selectedFieldKeys={selectedPreviewFieldKeys}
                 onSelectedFieldKeysChange={setSelectedPreviewFieldKeys}
