@@ -130,10 +130,15 @@ impl PullRequestService {
     ) -> Result<Vec<ReviewPullRequestSummary>> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let cached = self.db.list_review_pull_requests(&organization.id)?;
+        // Hide only items whose snooze is still in effect; an expired deadline
+        // returns the PR to the list immediately instead of waiting for the
+        // sync-driven reconcile to delete the row.
+        let now = Utc::now();
         let snoozed: std::collections::HashSet<String> = self
             .db
             .list_snoozed_items(&organization.id, crate::snooze::ITEM_TYPE_PULL_REQUEST)?
             .into_iter()
+            .filter(|row| crate::snooze::snooze_is_active(now, &row.snooze_until))
             .map(|row| row.item_key)
             .collect();
         let mut results: Vec<ReviewPullRequestSummary> = cached
