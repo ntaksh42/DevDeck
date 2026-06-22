@@ -321,6 +321,7 @@ const workItemPreviewSchema = z.object({
   workItemType: z.string().nullable(),
   state: z.string().nullable(),
   assignedTo: z.string().nullable(),
+  assignedToUniqueName: z.string().nullable(),
   createdBy: z.string().nullable(),
   createdDate: z.string().nullable(),
   changedDate: z.string().nullable(),

@@ -187,6 +187,7 @@ pub(super) fn summarize_work_item_preview(
         work_item_type: string_field(&work_item, "System.WorkItemType"),
         state: string_field(&work_item, "System.State"),
         assigned_to: identity_field(&work_item, "System.AssignedTo"),
+        assigned_to_unique_name: identity_unique_name_field(&work_item, "System.AssignedTo"),
         created_by: identity_field(&work_item, "System.CreatedBy"),
         created_date: string_field(&work_item, "System.CreatedDate"),
         changed_date: string_field(&work_item, "System.ChangedDate"),

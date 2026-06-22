@@ -249,6 +249,10 @@ pub struct WorkItemPreview {
     pub work_item_type: Option<String>,
     pub state: Option<String>,
     pub assigned_to: Option<String>,
+    /// Unique name (e.g. email) of the assignee, when available. Lets the UI
+    /// build an unambiguous `Display <unique>` value for undo so a duplicate
+    /// display name does not resolve to the wrong person.
+    pub assigned_to_unique_name: Option<String>,
     pub created_by: Option<String>,
     pub created_date: Option<String>,
     pub changed_date: Option<String>,

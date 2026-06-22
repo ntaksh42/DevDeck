@@ -51,6 +51,7 @@ import {
   type SortDirection,
 } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
+import { useGridFocusRestoration } from '@/lib/useGridFocusRestoration';
 import { recordRecentPullRequest } from '@/lib/recentItems';
 import { isTauriRuntime } from '@/lib/runtime';
 import {
@@ -611,8 +612,10 @@ function loadMyReviewsGridViewState(): MyReviewsGridViewState {
       for (const column of Object.keys(FILTERABLE_COLUMNS) as FilterableColumn[]) {
         const values = parsedFilters[column];
         if (Array.isArray(values)) {
+          // An empty array is a persisted "uncheck all" selection, so keep the
+          // key (with an empty set) rather than dropping it to "(All)".
           const cleaned = values.filter((value): value is string => typeof value === "string");
-          if (cleaned.length > 0) columnFilters[column] = new Set(cleaned);
+          columnFilters[column] = new Set(cleaned);
         }
       }
     }
@@ -634,7 +637,9 @@ function storeMyReviewsGridViewState(state: MyReviewsGridViewState) {
   const columnFilters: Partial<Record<FilterableColumn, string[]>> = {};
   for (const column of Object.keys(FILTERABLE_COLUMNS) as FilterableColumn[]) {
     const values = state.columnFilters[column];
-    if (values && values.size > 0) columnFilters[column] = [...values];
+    // Persist empty sets too: an empty set is an explicit "uncheck all" filter,
+    // distinct from an absent key which means "(All)".
+    if (values) columnFilters[column] = [...values];
   }
   window.localStorage.setItem(
     PR_GRID_VIEW_STORAGE_KEY,
@@ -649,8 +654,10 @@ function storeMyReviewsGridViewState(state: MyReviewsGridViewState) {
 function activeColumnFilterCount(
   filters: Partial<Record<FilterableColumn, Set<string>>>,
 ): number {
+  // An absent key means "(All)"; an empty set means "uncheck all" (an explicit
+  // selection of nothing), so both are counted as an active column filter.
   return (Object.values(filters) as (Set<string> | undefined)[]).filter(
-    (values) => values && values.size > 0,
+    (values) => values !== undefined,
   ).length;
 }
 
@@ -762,7 +769,6 @@ export function MyReviewsGrid({
   const filterInputRef = useRef<HTMLInputElement | null>(null);
   const gridScrollRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const gridHadFocusRef = useRef(false);
   // A cross-link select request that is waiting for the target PR to appear in
   // the sorted/visible rows (e.g. after switching org or loading data).
   const pendingSelectRef = useRef<MyReviewsSelectRequest | null>(null);
@@ -858,13 +864,13 @@ export function MyReviewsGrid({
 
   const filtered = useMemo(() => {
     const hasFilters = (Object.values(columnFilters) as (Set<string> | undefined)[]).some(
-      (values) => values && values.size > 0,
+      (values) => values !== undefined,
     );
     if (!hasFilters) return baseFiltered;
     return baseFiltered.filter((pr) => {
       for (const col of Object.keys(columnFilters) as FilterableColumn[]) {
         const activeValues = columnFilters[col];
-        if (!activeValues || activeValues.size === 0) continue;
+        if (!activeValues) continue;
         if (!activeValues.has(FILTERABLE_COLUMNS[col](pr))) return false;
       }
       return true;
@@ -1070,12 +1076,20 @@ export function MyReviewsGrid({
   // A background sync can replace or remove the focused row's DOM node; once
   // the grid had focus, restore it to the selected row after data changes so
   // keyboard navigation keeps working.
-  useEffect(() => {
-    if (!gridHadFocusRef.current) return;
-    window.setTimeout(() => {
-      rowRefs.current[selectedIndex]?.focus();
-    }, 0);
-  }, [selectedIndex, resultKeysSignature]);
+  const {
+    onFocusCapture: handleGridFocusCapture,
+    onBlurCapture: handleGridBlurCapture,
+  } = useGridFocusRestoration({
+    containerRef,
+    restoreSignature: `${resultKeysSignature}#${selectedIndex}`,
+    restoreFocus: () => {
+      scrollPrIntoView(selectedIndex);
+      const node = rowRefs.current[selectedIndex];
+      if (!node) return false;
+      node.focus();
+      return true;
+    },
+  });
 
   useEffect(() => {
     const scroller = gridScrollRef.current;
@@ -1198,22 +1212,20 @@ export function MyReviewsGrid({
     const allValues = columnUniqueValues[col] ?? [];
     setColumnFilters((prev) => {
       const current = prev[col];
-      if (!current || current.size === 0) {
+      // No active filter (absent key) means every value is checked, so the
+      // first toggle deselects just the clicked value.
+      if (!current) {
         const next = new Set(allValues.filter((candidate) => candidate !== value));
-        if (next.size === 0) return prev;
         return { ...prev, [col]: next };
       }
 
       const next = new Set(current);
       if (next.has(value)) {
         next.delete(value);
-        if (next.size === 0) {
-          const { [col]: _, ...rest } = prev;
-          return rest;
-        }
       } else {
         next.add(value);
         if (next.size === allValues.length) {
+          // Every value checked again collapses back to "(All)".
           const { [col]: _, ...rest } = prev;
           return rest;
         }
@@ -1223,11 +1235,19 @@ export function MyReviewsGrid({
     setSelectedIndex(0);
   }
 
+  // Removes the column filter entirely, which means "show all" / (All).
   function clearColumnFilter(col: FilterableColumn) {
     setColumnFilters((prev) => {
       const { [col]: _, ...rest } = prev;
       return rest;
     });
+    setSelectedIndex(0);
+  }
+
+  // Unchecks every value for the column, leaving an explicit empty selection so
+  // the user can then pick exactly the values they want.
+  function uncheckAllColumnFilter(col: FilterableColumn) {
+    setColumnFilters((prev) => ({ ...prev, [col]: new Set<string>() }));
     setSelectedIndex(0);
   }
 
@@ -1463,21 +1483,8 @@ export function MyReviewsGrid({
       className="flex min-h-0 flex-1 flex-col gap-2 outline-none"
       tabIndex={-1}
       onKeyDown={handleKeyDown}
-      onFocusCapture={(event) => {
-        const target = event.target;
-        gridHadFocusRef.current =
-          target instanceof HTMLElement &&
-          Boolean(target.closest('[role="grid"], [role="row"]'));
-      }}
-      onBlurCapture={(event) => {
-        const nextTarget = event.relatedTarget;
-        if (
-          !(nextTarget instanceof HTMLElement) ||
-          !nextTarget.closest('[role="grid"], [role="row"]')
-        ) {
-          gridHadFocusRef.current = false;
-        }
-      }}
+      onFocusCapture={handleGridFocusCapture}
+      onBlurCapture={handleGridBlurCapture}
     >
       {copyToast && (
         <div
@@ -1584,7 +1591,7 @@ export function MyReviewsGrid({
                       column={col}
                       sort={sort}
                       onSort={applySort}
-                      filterActive={isFilterableColumn(col) && !!columnFilters[col]?.size}
+                      filterActive={isFilterableColumn(col) && columnFilters[col] !== undefined}
                       onFilterOpen={isFilterableColumn(col) ? (el) => openFilter(col, el) : undefined}
                       resizeHandle={
                         isLast ? undefined : (
@@ -1800,6 +1807,7 @@ export function MyReviewsGrid({
           activeValues={columnFilters[openFilterCol]}
           onToggle={(value) => toggleFilter(openFilterCol, value)}
           onClearAll={() => clearColumnFilter(openFilterCol)}
+          onUncheckAll={() => uncheckAllColumnFilter(openFilterCol)}
           onClose={() => {
             setOpenFilterCol(null);
             setFilterAnchorRect(null);
@@ -1933,6 +1941,7 @@ function ColumnFilterDropdown({
   activeValues,
   onToggle,
   onClearAll,
+  onUncheckAll,
   onClose,
 }: {
   anchorRect: DOMRect;
@@ -1940,6 +1949,7 @@ function ColumnFilterDropdown({
   activeValues: Set<string> | undefined;
   onToggle: (value: string) => void;
   onClearAll: () => void;
+  onUncheckAll: () => void;
   onClose: () => void;
 }) {
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -1964,7 +1974,8 @@ function ColumnFilterDropdown({
     return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [onClose]);
 
-  const isAllChecked = !activeValues || activeValues.size === 0;
+  const isAllChecked = activeValues === undefined;
+  const anyChecked = isAllChecked || (activeValues?.size ?? 0) > 0;
   const filteredValues = search.trim()
     ? allValues.filter((value) => value.toLowerCase().includes(search.trim().toLowerCase()))
     : allValues;
@@ -1982,19 +1993,27 @@ function ColumnFilterDropdown({
           autoFocus
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search..."
+          placeholder="Search…"
           className="w-full rounded border border-input bg-background px-2 py-0.5 text-xs outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
-      <div className="border-b border-border p-1">
+      <div className="flex items-center gap-1 border-b border-border p-1">
         <button
           type="button"
           onClick={onClearAll}
-          className={`w-full rounded px-2 py-0.5 text-left text-xs hover:bg-secondary ${
+          className={`flex-1 rounded px-2 py-0.5 text-left text-xs hover:bg-secondary ${
             isAllChecked ? "font-medium text-foreground" : "text-muted-foreground"
           }`}
         >
           (All)
+        </button>
+        <button
+          type="button"
+          onClick={onUncheckAll}
+          disabled={!anyChecked}
+          className="rounded px-2 py-0.5 text-xs text-muted-foreground hover:bg-secondary disabled:cursor-default disabled:opacity-40"
+        >
+          Uncheck all
         </button>
       </div>
       <div className="max-h-44 overflow-auto p-1">
