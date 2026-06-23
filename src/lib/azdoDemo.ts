@@ -172,7 +172,7 @@ function demoVoteLabel(vote: number): string {
     case 5:
       return "Approved w/ Suggestions";
     case -5:
-      return "Waiting for Author";
+      return "Waiting";
     case -10:
       return "Rejected";
     default:
@@ -1925,7 +1925,7 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       targetRefName: "main",
       webUrl: "https://dev.azure.com/contoso/Mobile/_git/android-app/pullrequest/189",
       myVote: -5,
-      myVoteLabel: "Waiting for Author",
+      myVoteLabel: "Waiting",
       myIsRequired: false,
       isDraft: false,
       mergeStatus: null,
@@ -2029,7 +2029,7 @@ function demoCommitPullRequests(commitId?: string): CommitPullRequest[] {
         title: "Rate limiting hardening",
         status: "abandoned",
         myVote: -5,
-        myVoteLabel: "Waiting for Author",
+        myVoteLabel: "Waiting",
         webUrl:
           "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/4288",
       },

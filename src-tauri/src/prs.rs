@@ -274,7 +274,7 @@ pub(crate) fn vote_label(vote: i32) -> &'static str {
         10 => "Approved",
         5 => "Approved w/ Suggestions",
         0 => "No Vote",
-        -5 => "Waiting for Author",
+        -5 => "Waiting",
         -10 => "Rejected",
         _ => "No Vote",
     }
