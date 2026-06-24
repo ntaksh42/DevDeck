@@ -37,6 +37,12 @@ export function PipelineSubscriptionsBoard({
   onRemove: (projectId: string, definitionId: number) => void;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  // Run-history filters wired to the backend's existing BuildListCriteria.
+  const [branchFilter, setBranchFilter] = useState("");
+  const [resultFilter, setResultFilter] = useState("");
+  const [requestedForMe, setRequestedForMe] = useState(false);
+  const branchCriterion = branchFilter.trim() || undefined;
+  const resultCriterion = resultFilter || undefined;
 
   const orgSubscriptions = useMemo(
     () => subscriptions.filter((sub) => sub.organizationId === organizationId),
@@ -71,12 +77,18 @@ export function PipelineSubscriptionsBoard({
           organizationId,
           sub.projectId,
           sub.definitionId,
+          branchCriterion ?? null,
+          resultCriterion ?? null,
+          requestedForMe,
         ],
         queryFn: () =>
           listPipelineRuns({
             organizationId,
             projectId: sub.projectId,
             definitionId: sub.definitionId,
+            branch: branchCriterion,
+            result: resultCriterion,
+            requestedForMe: requestedForMe || undefined,
           }),
         enabled: !!organizationId,
         refetchInterval: (query: { state: { data?: PipelineRunSummary[] } }) => {
@@ -189,11 +201,42 @@ export function PipelineSubscriptionsBoard({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-card">
-      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
         <h2 className="text-base font-semibold">Watched pipelines</h2>
         <span className="text-sm text-muted-foreground">
           {orgSubscriptions.length}
         </span>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <input
+            type="text"
+            value={branchFilter}
+            onChange={(event) => setBranchFilter(event.target.value)}
+            placeholder="Branch…"
+            aria-label="Filter runs by branch"
+            className="h-7 w-32 rounded-md border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
+          />
+          <select
+            value={resultFilter}
+            onChange={(event) => setResultFilter(event.target.value)}
+            aria-label="Filter runs by result"
+            className="h-7 rounded-md border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option value="">All results</option>
+            <option value="succeeded">Succeeded</option>
+            <option value="failed">Failed</option>
+            <option value="canceled">Canceled</option>
+            <option value="partiallySucceeded">Partially succeeded</option>
+          </select>
+          <label className="flex items-center gap-1 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={requestedForMe}
+              onChange={(event) => setRequestedForMe(event.target.checked)}
+              className="h-3 w-3"
+            />
+            My runs
+          </label>
+        </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {orgSubscriptions.map((sub, index) => {

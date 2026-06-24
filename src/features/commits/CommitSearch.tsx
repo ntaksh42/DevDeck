@@ -219,7 +219,9 @@ export function CommitSearch({
         : repositoryOptions,
     [projectId, repositoryOptions],
   );
-  const results = mutation.data ?? [];
+  const results = mutation.data?.commits ?? [];
+  const totalMatches = mutation.data?.total ?? results.length;
+  const resultsTruncated = mutation.data?.truncated ?? false;
   const activeSearchFilterCount =
     (query.trim() ? 1 : 0) +
     (author.trim() ? 1 : 0) +
@@ -556,6 +558,8 @@ export function CommitSearch({
           onClearExternalFilters={clearSearchFilters}
           onOpenPullRequest={onOpenPullRequest}
           results={results}
+          total={totalMatches}
+          truncated={resultsTruncated}
           searched={mutation.isSuccess}
         />
       )}
@@ -1019,6 +1023,8 @@ function CommitResults({
   onClearExternalFilters,
   onOpenPullRequest,
   results,
+  total,
+  truncated = false,
   searched,
 }: {
   activeExternalFilterCount?: number;
@@ -1026,6 +1032,8 @@ function CommitResults({
   onClearExternalFilters?: () => void;
   onOpenPullRequest?: (query: string, organizationId?: string) => void;
   results: CommitSummary[];
+  total?: number;
+  truncated?: boolean;
   searched: boolean;
 }) {
   const [sort, setCommitSort] = useState<CommitSortState>(() => loadCommitSort());
@@ -1202,8 +1210,11 @@ function CommitResults({
   const countLabel = useMemo(() => {
     if (loading) return "Searching";
     if (!searched) return "Ready";
+    if (truncated) {
+      return `Showing ${results.length} of ${total ?? results.length} commits`;
+    }
     return `${results.length} commit${results.length === 1 ? "" : "s"}`;
-  }, [loading, results.length, searched]);
+  }, [loading, results.length, searched, truncated, total]);
   const activeFilterCount = Math.max(0, activeExternalFilterCount);
 
   const firstVirtualRow = Math.max(

@@ -15,6 +15,9 @@ use crate::sync::SyncBudget;
 /// How long a commit's related-PR lookup stays cached before being refreshed.
 const COMMIT_PR_CACHE_TTL_MINUTES: i64 = 30;
 const MAX_DIFF_CONTENT_BYTES: usize = 256 * 1024;
+/// Upper bound on commit search rows returned to the UI. When more matches
+/// exist the result is flagged `truncated` so the count is shown honestly.
+const COMMIT_SEARCH_RESULT_LIMIT: usize = 100;
 /// Sync window in days. Must cover the largest date preset offered by the
 /// commit search UI (`src/features/commits/CommitSearch.tsx`, 90d) so that
 /// preset does not silently return near-empty results.
@@ -93,6 +96,17 @@ pub struct CommitSummary {
     pub author_email: Option<String>,
     pub author_date: Option<String>,
     pub web_url: Option<String>,
+}
+
+/// Result of a commit search. `total` is the match count before the display
+/// cap; `truncated` is true when more matches existed than were returned, so
+/// the UI can show "Showing N of total" instead of silently dropping rows.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitSearchResult {
+    pub commits: Vec<CommitSummary>,
+    pub total: usize,
+    pub truncated: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -174,7 +188,7 @@ impl CommitService {
         Self { db, secrets }
     }
 
-    pub async fn search(&self, input: SearchCommitsInput) -> Result<Vec<CommitSummary>> {
+    pub async fn search(&self, input: SearchCommitsInput) -> Result<CommitSearchResult> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let query = input.query.unwrap_or_default().trim().to_ascii_lowercase();
         let author = normalize_optional(input.author);
@@ -272,13 +286,21 @@ impl CommitService {
                 .then_with(|| a.repository_name.cmp(&b.repository_name))
                 .then_with(|| a.commit_id.cmp(&b.commit_id))
         });
-        results.truncate(100);
+        let total = results.len();
+        let truncated = total > COMMIT_SEARCH_RESULT_LIMIT;
+        results.truncate(COMMIT_SEARCH_RESULT_LIMIT);
         tracing::info!(
             organization = %organization.name,
             count = results.len(),
+            total,
+            truncated,
             "commit search completed"
         );
-        Ok(results)
+        Ok(CommitSearchResult {
+            commits: results,
+            total,
+            truncated,
+        })
     }
 
     /// Fetches commits for a specific branch and/or changed path directly from

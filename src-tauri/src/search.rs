@@ -102,7 +102,8 @@ pub async fn search_all(
                     project_id: None,
                     repository_id: None,
                 })
-                .await?,
+                .await?
+                .commits,
         );
     }
     if org_ids.len() > 1 {

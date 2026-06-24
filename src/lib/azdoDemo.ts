@@ -4,6 +4,7 @@ import type {
   AddWorkItemCommentInput,
   AppSettings,
   AssignWorkItemsInput,
+  ClassificationNodesResult,
   CommitActivityDay,
   CommitActivityInput,
   CommitPullRequest,
@@ -924,6 +925,9 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       const input = (args as { input?: ListWorkItemFieldsInput } | undefined)?.input;
       return demoListWorkItemFields(input);
     }
+    case "list_classification_nodes": {
+      return demoClassificationNodes();
+    }
     case "set_work_items_state": {
       const input = (args as { input?: SetWorkItemsStateInput } | undefined)?.input;
       return (input?.workItemIds ?? []).map((id) => ({ id, error: null }));
@@ -939,7 +943,8 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     case "search_commits": {
       const input = (args as { input?: SearchCommitsInput } | undefined)
         ?.input;
-      return demoCommits(input);
+      const commits = demoCommits(input);
+      return { commits, total: commits.length, truncated: false };
     }
     case "commit_activity": {
       const input = (args as { input?: CommitActivityInput } | undefined)?.input;
@@ -1006,12 +1011,59 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         ],
       };
     }
+    case "get_code_search_context": {
+      const input = (args as { input?: { query?: string } } | undefined)?.input;
+      const query = input?.query?.trim() || "searchCode";
+      return {
+        totalMatches: 2,
+        truncated: false,
+        blocks: [
+          {
+            lines: [
+              { lineNumber: 521, text: "", isMatch: false },
+              { lineNumber: 522, text: `export async function ${query}(input: {`, isMatch: true },
+              { lineNumber: 523, text: "  organizationId?: string;", isMatch: false },
+            ],
+          },
+          {
+            lines: [
+              { lineNumber: 530, text: "}): Promise<CodeSearchResults> {", isMatch: false },
+              { lineNumber: 531, text: `  const result = await invokeCommand("${query}", { input });`, isMatch: true },
+              { lineNumber: 532, text: "  return codeSearchResultsSchema.parse(result);", isMatch: false },
+            ],
+          },
+        ],
+      };
+    }
     case "list_pipeline_projects":
       return demoPipelineProjects();
     case "list_pipeline_definitions":
       return demoPipelineDefinitions();
-    case "list_pipeline_runs":
-      return demoPipelineRuns();
+    case "list_pipeline_runs": {
+      const input = (
+        args as
+          | {
+              input?: {
+                branch?: string;
+                result?: string;
+                requestedForMe?: boolean;
+              };
+            }
+          | undefined
+      )?.input;
+      let runs = demoPipelineRuns();
+      if (input?.branch) {
+        const needle = input.branch.toLowerCase();
+        runs = runs.filter((run) => run.sourceBranch.toLowerCase().includes(needle));
+      }
+      if (input?.result) {
+        runs = runs.filter((run) => run.result === input.result);
+      }
+      if (input?.requestedForMe) {
+        runs = runs.filter((run) => run.requestedFor === "Demo User");
+      }
+      return runs;
+    }
     case "get_pipeline_run": {
       const input = (args as { input?: { buildId?: number } } | undefined)?.input;
       return demoPipelineRunDetail(input?.buildId ?? 1001);
@@ -1721,6 +1773,37 @@ function demoListWorkItemFields(_input?: ListWorkItemFieldsInput): WorkItemField
     { name: "Severity", referenceName: "Microsoft.VSTS.Common.Severity", fieldType: "string", custom: false },
     { name: "Story Points", referenceName: "Microsoft.VSTS.Scheduling.StoryPoints", fieldType: "double", custom: false },
   ];
+}
+
+function demoClassificationNodes(): ClassificationNodesResult {
+  return {
+    areas: [
+      { name: "Platform", path: "Platform", depth: 0, hasChildren: true, startDate: null, finishDate: null },
+      { name: "Web", path: "Platform\\Web", depth: 1, hasChildren: false, startDate: null, finishDate: null },
+      { name: "API", path: "Platform\\API", depth: 1, hasChildren: true, startDate: null, finishDate: null },
+      { name: "Gateway", path: "Platform\\API\\Gateway", depth: 2, hasChildren: false, startDate: null, finishDate: null },
+      { name: "Mobile", path: "Platform\\Mobile", depth: 1, hasChildren: false, startDate: null, finishDate: null },
+    ],
+    iterations: [
+      { name: "Platform", path: "Platform", depth: 0, hasChildren: true, startDate: null, finishDate: null },
+      {
+        name: "Sprint 24",
+        path: "Platform\\Sprint 24",
+        depth: 1,
+        hasChildren: false,
+        startDate: "2026-05-11T00:00:00Z",
+        finishDate: "2026-05-24T00:00:00Z",
+      },
+      {
+        name: "Sprint 25",
+        path: "Platform\\Sprint 25",
+        depth: 1,
+        hasChildren: false,
+        startDate: "2026-05-25T00:00:00Z",
+        finishDate: "2026-06-07T00:00:00Z",
+      },
+    ],
+  };
 }
 
 const demoMentionPeople: MentionCandidate[] = [
