@@ -97,6 +97,23 @@ export async function sendPipelineRunNotification(input: {
   });
 }
 
+export async function showPipelineFailedNotification(
+  input: { pipelineName: string; detail: string; webUrl?: string | null },
+  settings: AppSettings,
+): Promise<DesktopNotificationResult> {
+  if (!settings.desktopNotificationsEnabled) {
+    return "skipped";
+  }
+  return sendDesktopNotification(`Pipeline failed: ${input.pipelineName}`, {
+    body: input.detail,
+    onClick: input.webUrl
+      ? () => {
+          void openExternalUrl(input.webUrl!);
+        }
+      : undefined,
+  });
+}
+
 export async function showWorkItemNotificationEvent(
   event: WorkItemNotificationEvent,
   settings: AppSettings,

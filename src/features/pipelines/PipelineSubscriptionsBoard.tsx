@@ -1,9 +1,15 @@
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, ExternalLink, Loader2, X } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useState } from "react";
-import { listPipelineRuns, type PipelineRunSummary } from "@/lib/azdoCommands";
+import { getAppSettings, listPipelineRuns, type PipelineRunSummary } from "@/lib/azdoCommands";
+import { showPipelineFailedNotification } from "@/lib/desktopNotifications";
 import { openExternalUrl } from "@/lib/openExternal";
 import { formatDate, formatRelativeDate } from "@/lib/utils";
+import {
+  isNewFailure,
+  readPipelineCursor,
+  writePipelineCursor,
+} from "./pipelineFailureCursor";
 import {
   formatDuration,
   isInProgressStatus,
@@ -89,6 +95,48 @@ export function PipelineSubscriptionsBoard({
       };
     }),
   });
+
+  const appSettingsQuery = useQuery({
+    queryKey: ["appSettings"],
+    queryFn: getAppSettings,
+    staleTime: 5 * 60_000,
+  });
+  const notificationsEnabled = appSettingsQuery.data?.desktopNotificationsEnabled ?? false;
+
+  // Fire a desktop notification once when a watched pipeline's latest run flips
+  // to failed, using a localStorage cursor so it does not re-fire every poll
+  // (issue #438). Active while the board is mounted (polling continues for
+  // collapsed pipelines at the idle interval).
+  const latestRunSignature = queries
+    .map((query) => {
+      const run = query?.data?.[0];
+      return run ? `${run.buildId}:${run.result ?? ""}` : "";
+    })
+    .join("|");
+  useEffect(() => {
+    const settings = appSettingsQuery.data;
+    if (!settings || !notificationsEnabled) return;
+    orgSubscriptions.forEach((sub, index) => {
+      const latest = queries[index]?.data?.[0];
+      if (!latest) return;
+      const key = subscriptionKey(sub.organizationId, sub.projectId, sub.definitionId);
+      const cursor = { buildId: latest.buildId, result: latest.result ?? null };
+      if (isNewFailure(readPipelineCursor(key), cursor)) {
+        void showPipelineFailedNotification(
+          {
+            pipelineName: sub.definitionName,
+            detail: `${latest.buildNumber ?? `Build ${latest.buildId}`} on ${shortBranch(
+              latest.sourceBranch,
+            )} failed`,
+            webUrl: latest.webUrl,
+          },
+          settings,
+        );
+      }
+      writePipelineCursor(key, cursor);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notificationsEnabled, latestRunSignature]);
 
   if (orgSubscriptions.length === 0) {
     return (
