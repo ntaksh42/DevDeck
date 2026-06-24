@@ -3,8 +3,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use azdo_client::{
-    AdoClient, AdoError, WorkItem, WorkItemComment as AzdoWorkItemComment, WorkItemRelation,
-    WorkItemUpdate,
+    AdoClient, AdoError, ClassificationNode, WorkItem, WorkItemComment as AzdoWorkItemComment,
+    WorkItemRelation, WorkItemUpdate,
 };
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
@@ -524,8 +524,64 @@ impl WorkItemService {
         })
     }
 
+    /// Fetches the project's area and iteration trees, flattened into ordered
+    /// lists whose `path` values can be assigned to `System.AreaPath` /
+    /// `System.IterationPath` (via `update_fields`).
+    pub async fn list_classification_nodes(
+        &self,
+        input: ListClassificationNodesInput,
+    ) -> Result<ClassificationNodesResult> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let areas_root = client
+            .get_classification_nodes(&input.project_id, "areas", CLASSIFICATION_NODE_DEPTH)
+            .await?;
+        let iterations_root = client
+            .get_classification_nodes(&input.project_id, "iterations", CLASSIFICATION_NODE_DEPTH)
+            .await?;
+        let mut areas = Vec::new();
+        flatten_classification_node(&areas_root, None, 0, &mut areas);
+        let mut iterations = Vec::new();
+        flatten_classification_node(&iterations_root, None, 0, &mut iterations);
+        Ok(ClassificationNodesResult { areas, iterations })
+    }
+
     fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {
         self.db.resolve_organization(id)
+    }
+}
+
+// Area/iteration trees are rarely deeper than a handful of levels; expand
+// enough to capture them in a single request.
+const CLASSIFICATION_NODE_DEPTH: u32 = 10;
+
+/// Flattens a classification tree depth-first, building each node's field-ready
+/// path (`System.AreaPath` form) by backslash-joining ancestor names.
+fn flatten_classification_node(
+    node: &ClassificationNode,
+    parent_path: Option<&str>,
+    depth: usize,
+    out: &mut Vec<ClassificationNodeOption>,
+) {
+    let path = match parent_path {
+        Some(parent) => format!("{parent}\\{}", node.name),
+        None => node.name.clone(),
+    };
+    let (start_date, finish_date) = node
+        .attributes
+        .as_ref()
+        .map(|a| (a.start_date.clone(), a.finish_date.clone()))
+        .unwrap_or((None, None));
+    out.push(ClassificationNodeOption {
+        name: node.name.clone(),
+        path: path.clone(),
+        depth,
+        has_children: node.has_children,
+        start_date,
+        finish_date,
+    });
+    for child in &node.children {
+        flatten_classification_node(child, Some(&path), depth + 1, out);
     }
 }
 

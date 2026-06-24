@@ -29,6 +29,7 @@ pub use pr_review::{
 };
 pub use pr_status::{summarize_pr_ci, PrCiState, PrCiSummary, PrStatusCheck, PrStatusContext};
 pub use work_items::{
-    CommentReaction, WorkItem, WorkItemComment, WorkItemFieldDefinition, WorkItemLink,
-    WorkItemReference, WorkItemRelation, WorkItemRelationAttributes, WorkItemUpdate,
+    ClassificationNode, ClassificationNodeAttributes, CommentReaction, WorkItem, WorkItemComment,
+    WorkItemFieldDefinition, WorkItemLink, WorkItemReference, WorkItemRelation,
+    WorkItemRelationAttributes, WorkItemUpdate,
 };
