@@ -245,12 +245,9 @@ impl SnoozeService {
                 let id: i64 = item_key
                     .parse()
                     .map_err(|_| AppError::InvalidInput("invalid work item key".to_string()))?;
-                let changed = self
-                    .db
-                    .list_my_work_items(org_id)?
-                    .into_iter()
-                    .find(|item| item.id == id)
-                    .and_then(|item| item.changed_date);
+                // Read just this item's ChangedDate instead of scanning the whole
+                // my_work_items snapshot (issue #441).
+                let changed = self.db.my_work_item_changed_date(org_id, id)?;
                 Ok(changed)
             }
         }
