@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, ChevronUp, ChevronsUpDown, Folder, Loader2, Plus } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp, ChevronsUpDown, ExternalLink, Folder, Loader2, Plus } from "lucide-react";
 import {
   commandErrorMessage,
   deletePullRequestComment,
@@ -68,6 +68,14 @@ function loadWholeFile(): boolean {
 
 function viewedStorageKey(pr: ReviewPullRequestSummary): string {
   return `azdodeck:prViewed:${pr.organizationId}:${pr.repositoryId}:${pr.pullRequestId}`;
+}
+
+// Deep-links to the file's diff in the Azure DevOps PR web UI. The PR web URL
+// already targets the right org/project/repo/PR; `?path=…&_a=files` selects the
+// file in the Files tab, mirroring the commit view's per-file external link.
+function prFileDiffUrl(prWebUrl: string, path: string): string {
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  return `${prWebUrl}?path=${encodeURIComponent(normalized)}&_a=files`;
 }
 
 function loadViewedKeys(key: string): Set<string> {
@@ -445,7 +453,7 @@ export function PrFilesTab({
   }
 
   if (changesQuery.isLoading) return <LoadingState />;
-  if (changesQuery.isError) return <ErrorState message={commandErrorMessage(changesQuery.error)} />;
+  if (changesQuery.isError) return <ErrorState message={commandErrorMessage(changesQuery.error)} onRetry={() => void changesQuery.refetch()} />;
   if (files.length === 0) return <PreviewEmptyState message="No changed files." />;
 
   function postInlineComment(content: string): Promise<void> {
@@ -638,6 +646,17 @@ export function PrFilesTab({
               />
               Viewed
             </label>
+            {pr.webUrl ? (
+              <button
+                type="button"
+                onClick={() => openExternalUrl(prFileDiffUrl(pr.webUrl as string, selectedFile.path))}
+                title={`Open diff in Azure DevOps: ${selectedFile.path}`}
+                aria-label={`Open diff for ${selectedFile.path} in Azure DevOps`}
+                className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            ) : null}
             <button
               type="button"
               aria-pressed={showWholeFile}
@@ -700,7 +719,7 @@ export function PrFilesTab({
               Loading diff
             </div>
           ) : diffQuery.isError ? (
-            <ErrorState message={commandErrorMessage(diffQuery.error)} />
+            <ErrorState message={commandErrorMessage(diffQuery.error)} onRetry={() => void diffQuery.refetch()} />
           ) : diffQuery.data ? (
             <DiffContent
               // Remount per file/iteration so collapsed/expanded state resets.
