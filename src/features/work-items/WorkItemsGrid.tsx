@@ -39,19 +39,9 @@ import {
   type SortDirection,
 } from '@/lib/utils';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
+import { useGridFocusRestoration } from '@/lib/useGridFocusRestoration';
 import { readStoredJson, writeStoredJson, storageKey } from '@/lib/storage';
 import { recordRecentWorkItem } from '@/lib/recentItems';
-import { RowShortcutHints, type RowShortcut } from '@/components/RowShortcutHints';
-
-// Key shortcuts available for the selected work item row (see handleKeyDown).
-const WORK_ITEM_ROW_SHORTCUTS: RowShortcut[] = [
-  { keys: "S", label: "State" },
-  { keys: "A", label: "Assign" },
-  { keys: "P", label: "Priority" },
-  { keys: "M", label: "Comment" },
-  { keys: "E", label: "Done" },
-  { keys: "↵", label: "Preview" },
-];
 import { isTauriRuntime } from '@/lib/runtime';
 import {
   markWorkItemRead,
@@ -609,7 +599,6 @@ export function WorkItemsGrid({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const gridScrollRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const gridHadFocusRef = useRef(false);
   const previousResultKeysRef = useRef<string | null>(null);
   const [gridViewport, setGridViewport] = useState({ height: 0, scrollTop: 0 });
   const queryClient = useQueryClient();
@@ -1173,12 +1162,32 @@ export function WorkItemsGrid({
     setOpenFilterCol(null);
   }, [resultKeysSignature]);
 
-  useEffect(() => {
-    if (!gridHadFocusRef.current) return;
-    window.setTimeout(() => {
-      rowRefs.current[selectedIndex]?.focus();
-    }, 0);
-  }, [selectedIndex, resultKeysSignature]);
+  const {
+    onFocusCapture: handleGridFocusCapture,
+    onBlurCapture: handleGridBlurCapture,
+  } = useGridFocusRestoration({
+    containerRef,
+    restoreSignature: `${resultKeysSignature}#${selectedIndex}`,
+    restoreFocus: () => {
+      const count = displayed.length;
+      if (count === 0) return false;
+      const index = Math.max(0, Math.min(selectedIndex, count - 1));
+      const scroller = gridScrollRef.current;
+      if (scroller) {
+        const rowTop = index * WI_GRID_ROW_HEIGHT;
+        const rowBottom = rowTop + WI_GRID_ROW_HEIGHT;
+        if (rowTop < scroller.scrollTop) {
+          scroller.scrollTop = rowTop;
+        } else if (rowBottom > scroller.scrollTop + scroller.clientHeight) {
+          scroller.scrollTop = rowBottom - scroller.clientHeight;
+        }
+      }
+      const node = rowRefs.current[index];
+      if (!node) return false;
+      node.focus();
+      return true;
+    },
+  });
 
   function handlePreviewUpdated(preview: WorkItemPreview) {
     const key = workItemSummaryKey(preview);
@@ -1478,21 +1487,8 @@ export function WorkItemsGrid({
       className="flex min-h-0 flex-1 flex-col outline-none"
       tabIndex={-1}
       onKeyDown={handleKeyDown}
-      onFocusCapture={(event) => {
-        const target = event.target;
-        gridHadFocusRef.current =
-          target instanceof HTMLElement &&
-          Boolean(target.closest('[role="grid"], [role="row"]'));
-      }}
-      onBlurCapture={(event) => {
-        const nextTarget = event.relatedTarget;
-        if (
-          !(nextTarget instanceof HTMLElement) ||
-          !nextTarget.closest('[role="grid"], [role="row"]')
-        ) {
-          gridHadFocusRef.current = false;
-        }
-      }}
+      onFocusCapture={handleGridFocusCapture}
+      onBlurCapture={handleGridBlurCapture}
     >
       {copyToast || bulkToast ? (
         <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1 text-xs text-background shadow-lg">
@@ -1713,9 +1709,6 @@ export function WorkItemsGrid({
                 ) : null}
                 {isFetching ? <span>{" · "}Refreshing…</span> : null}
               </span>
-              {selectedItem && checkedItems.length === 0 ? (
-                <RowShortcutHints hints={WORK_ITEM_ROW_SHORTCUTS} />
-              ) : null}
             </span>
             <span className="flex items-center gap-2">
               {triageScope ? (

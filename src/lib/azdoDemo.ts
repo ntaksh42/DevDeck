@@ -127,6 +127,7 @@ const writeCommands = new Set([
   "add_work_item_comment",
   "delete_work_item_comment",
   "update_work_item_comment",
+  "set_work_item_comment_reaction",
   "update_work_item_fields",
   "set_work_items_state",
   "assign_work_items",
@@ -143,6 +144,48 @@ const writeCommands = new Set([
 
 let demoPrThreadSeq = 100;
 const demoPrVotes = new Map<number, number>();
+
+// In-memory work item comment reactions for browser demo mode, keyed by comment
+// id then reaction type, so toggling a reaction sticks across refetches.
+const demoCommentReactions = new Map<number, Map<string, { count: number; isMine: boolean }>>();
+let demoCommentReactionsSeeded = false;
+
+function demoReactionsFor(commentId: number): Map<string, { count: number; isMine: boolean }> {
+  if (!demoCommentReactionsSeeded) {
+    demoCommentReactionsSeeded = true;
+    demoCommentReactions.set(
+      2,
+      new Map([
+        ["like", { count: 2, isMine: true }],
+        ["heart", { count: 1, isMine: false }],
+      ]),
+    );
+  }
+  let reactions = demoCommentReactions.get(commentId);
+  if (!reactions) {
+    reactions = new Map();
+    demoCommentReactions.set(commentId, reactions);
+  }
+  return reactions;
+}
+
+function demoReactionsList(
+  commentId: number,
+): Array<{ reactionType: string; count: number; isMine: boolean }> {
+  return [...demoReactionsFor(commentId).entries()]
+    .filter(([, value]) => value.count > 0)
+    .map(([reactionType, value]) => ({ reactionType, ...value }));
+}
+
+function toggleDemoReaction(commentId: number, type: string, engaged: boolean): void {
+  const reactions = demoReactionsFor(commentId);
+  const current = reactions.get(type) ?? { count: 0, isMine: false };
+  if (engaged && !current.isMine) {
+    reactions.set(type, { count: current.count + 1, isMine: true });
+  } else if (!engaged && current.isMine) {
+    reactions.set(type, { count: Math.max(0, current.count - 1), isMine: false });
+  }
+}
 
 // In-memory snooze store for browser demo mode, keyed by `${itemType}:${itemKey}`
 // with the snooze deadline as the value. Auto-revival is not simulated; demo
@@ -172,7 +215,7 @@ function demoVoteLabel(vote: number): string {
     case 5:
       return "Approved w/ Suggestions";
     case -5:
-      return "Waiting for Author";
+      return "Waiting";
     case -10:
       return "Rejected";
     default:
@@ -584,39 +627,6 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         (pr) => !snoozed.has(`${pr.repositoryId}:${pr.pullRequestId}`),
       );
     }
-    case "generate_release_notes": {
-      const day = 86_400_000;
-      const ago = (n: number) => new Date(Date.now() - n * day).toISOString();
-      return [
-        {
-          pullRequestId: 380,
-          title: "Cache invalidation on settings change",
-          createdBy: "Demo User",
-          closedDate: ago(2),
-          repositoryName: "api-gateway",
-          targetRefName: "main",
-          webUrl: "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/380",
-        },
-        {
-          pullRequestId: 376,
-          title: "Add structured logging to the sync loop",
-          createdBy: "Alice Johnson",
-          closedDate: ago(3),
-          repositoryName: "api-gateway",
-          targetRefName: "main",
-          webUrl: "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/376",
-        },
-        {
-          pullRequestId: 371,
-          title: "Fix crash on empty work item list",
-          createdBy: "Demo User",
-          closedDate: ago(5),
-          repositoryName: "web-dashboard",
-          targetRefName: "main",
-          webUrl: "https://dev.azure.com/contoso/Platform/_git/web-dashboard/pullrequest/371",
-        },
-      ];
-    }
     case "get_pull_request_review": {
       const input = (args as { input?: GetPullRequestReviewInput } | undefined)?.input;
       const prId = input?.pullRequestId ?? 0;
@@ -881,6 +891,17 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         ?.input;
       const comment = demoWorkItemComment(input?.markdown);
       return { ...comment, id: input?.commentId ?? comment.id };
+    }
+    case "set_work_item_comment_reaction": {
+      const input = (
+        args as
+          | { input?: { commentId?: number; reactionType?: string; engaged?: boolean } }
+          | undefined
+      )?.input;
+      if (input?.commentId != null && input.reactionType) {
+        toggleDemoReaction(input.commentId, input.reactionType, !!input.engaged);
+      }
+      return null;
     }
     case "update_work_item_fields": {
       const input = (args as { input?: UpdateWorkItemFieldsInput } | undefined)?.input;
@@ -1511,6 +1532,9 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
     workItemType: summary.workItemType,
     state: summary.state,
     assignedTo: summary.assignedTo,
+    assignedToUniqueName: summary.assignedTo
+      ? `${summary.assignedTo.split(" ")[0]!.toLowerCase()}@example.com`
+      : null,
     createdBy: "Demo User",
     createdDate: "2026-05-20T09:00:00Z",
     changedDate: summary.changedDate,
@@ -1545,6 +1569,7 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
         createdById: "demo-alice",
         createdByUniqueName: "alice@contoso.example",
         createdDate: "2026-05-27T14:00:00Z",
+        reactions: demoReactionsList(2),
       },
       {
         id: 1,
@@ -1554,6 +1579,7 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
         createdById: "demo-user",
         createdByUniqueName: "demo.user@contoso.example",
         createdDate: "2026-05-26T09:00:00Z",
+        reactions: demoReactionsList(1),
       },
     ].filter((comment) => !deletedDemoWorkItemComments.has(comment.id)),
     relations: [
@@ -1932,7 +1958,7 @@ function demoReviewPullRequests(): ReviewPullRequestSummary[] {
       targetRefName: "main",
       webUrl: "https://dev.azure.com/contoso/Mobile/_git/android-app/pullrequest/189",
       myVote: -5,
-      myVoteLabel: "Waiting for Author",
+      myVoteLabel: "Waiting",
       myIsRequired: false,
       isDraft: false,
       mergeStatus: null,
@@ -2036,7 +2062,7 @@ function demoCommitPullRequests(commitId?: string): CommitPullRequest[] {
         title: "Rate limiting hardening",
         status: "abandoned",
         myVote: -5,
-        myVoteLabel: "Waiting for Author",
+        myVoteLabel: "Waiting",
         webUrl:
           "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/4288",
       },

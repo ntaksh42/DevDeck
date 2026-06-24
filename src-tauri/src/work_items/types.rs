@@ -249,6 +249,10 @@ pub struct WorkItemPreview {
     pub work_item_type: Option<String>,
     pub state: Option<String>,
     pub assigned_to: Option<String>,
+    /// Unique name (e.g. email) of the assignee, when available. Lets the UI
+    /// build an unambiguous `Display <unique>` value for undo so a duplicate
+    /// display name does not resolve to the wrong person.
+    pub assigned_to_unique_name: Option<String>,
     pub created_by: Option<String>,
     pub created_date: Option<String>,
     pub changed_date: Option<String>,
@@ -357,4 +361,28 @@ pub struct WorkItemComment {
     pub created_by_id: Option<String>,
     pub created_by_unique_name: Option<String>,
     pub created_date: Option<String>,
+    #[serde(default)]
+    pub reactions: Vec<CommentReactionSummary>,
+}
+
+/// A reaction aggregate on a comment: its type, total count, and whether the
+/// authenticated user has reacted with it.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommentReactionSummary {
+    pub reaction_type: String,
+    pub count: i64,
+    pub is_mine: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetWorkItemCommentReactionInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_id: i64,
+    pub comment_id: i64,
+    /// One of `like`, `dislike`, `heart`, `hooray`, `smile`, `confused`.
+    pub reaction_type: String,
+    pub engaged: bool,
 }
