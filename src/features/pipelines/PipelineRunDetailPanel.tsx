@@ -23,6 +23,21 @@ import {
 
 const LOG_REFRESH_INTERVAL_MS = 15_000;
 
+type LogSeverity = "error" | "warning" | null;
+
+// Classifies an Azure Pipelines log line by its severity markers so the UI can
+// highlight failures and optionally filter to just them.
+function logLineSeverity(line: string): LogSeverity {
+  if (/##\[error\]/i.test(line) || /\berror\b/i.test(line)) return "error";
+  if (/##\[warning\]/i.test(line) || /\bwarning\b/i.test(line)) return "warning";
+  return null;
+}
+
+const LOG_SEVERITY_CLASS: Record<"error" | "warning", string> = {
+  error: "text-red-400",
+  warning: "text-amber-300",
+};
+
 type TreeNode = TimelineNode & { children: TreeNode[] };
 
 function buildTimelineTree(nodes: TimelineNode[]): TreeNode[] {
@@ -111,6 +126,7 @@ export function PipelineRunDetailPanel({
 }) {
   const queryClient = useQueryClient();
   const [selectedLogId, setSelectedLogId] = useState<number | null>(null);
+  const [errorsOnly, setErrorsOnly] = useState(false);
 
   // Log ids are scoped to a single run, so a leftover selection would fetch a
   // log that does not exist on the newly selected run. Clear it when the run
@@ -351,23 +367,63 @@ export function PipelineRunDetailPanel({
                     {commandErrorMessage(logQuery.error) || "Log unavailable."}
                   </p>
                 ) : (
-                  <>
-                    {logQuery.data?.truncated ? (
-                      <p className="mb-1 flex items-center gap-2 text-[11px] text-muted-foreground">
-                        Showing last {logQuery.data.lines.length} lines.
-                        <button
-                          type="button"
-                          onClick={() => openExternalUrl(run.webUrl)}
-                          className="text-primary hover:underline"
-                        >
-                          Full log in Azure DevOps
-                        </button>
-                      </p>
-                    ) : null}
-                    <pre className="max-h-64 overflow-auto rounded bg-zinc-950 p-2 font-mono text-[11px] leading-relaxed text-zinc-100">
-                      {logQuery.data?.lines.join("\n") || "(empty log)"}
-                    </pre>
-                  </>
+                  (() => {
+                    const lines = logQuery.data?.lines ?? [];
+                    const classified = lines.map((line) => ({
+                      line,
+                      severity: logLineSeverity(line),
+                    }));
+                    const issueCount = classified.filter((l) => l.severity !== null).length;
+                    const shown = errorsOnly
+                      ? classified.filter((l) => l.severity !== null)
+                      : classified;
+                    return (
+                      <>
+                        <div className="mb-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                          {logQuery.data?.truncated ? (
+                            <>
+                              <span>Showing last {lines.length} lines.</span>
+                              <button
+                                type="button"
+                                onClick={() => openExternalUrl(run.webUrl)}
+                                className="text-primary hover:underline"
+                              >
+                                Full log in Azure DevOps
+                              </button>
+                            </>
+                          ) : null}
+                          {issueCount > 0 ? (
+                            <button
+                              type="button"
+                              aria-pressed={errorsOnly}
+                              onClick={() => setErrorsOnly((value) => !value)}
+                              className={`ml-auto rounded border px-1.5 py-px font-medium ${
+                                errorsOnly
+                                  ? "border-primary bg-primary/10 text-primary"
+                                  : "border-border bg-card text-muted-foreground hover:bg-secondary"
+                              }`}
+                            >
+                              Errors/warnings only ({issueCount})
+                            </button>
+                          ) : null}
+                        </div>
+                        <pre className="max-h-64 overflow-auto rounded bg-zinc-950 p-2 font-mono text-[11px] leading-relaxed text-zinc-100">
+                          {shown.length === 0
+                            ? errorsOnly
+                              ? "(no error or warning lines)"
+                              : "(empty log)"
+                            : shown.map(({ line, severity }, index) => (
+                                <div
+                                  key={index}
+                                  className={severity ? LOG_SEVERITY_CLASS[severity] : undefined}
+                                >
+                                  {line || " "}
+                                </div>
+                              ))}
+                        </pre>
+                      </>
+                    );
+                  })()
                 )}
               </div>
             ) : (

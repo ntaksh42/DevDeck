@@ -397,6 +397,29 @@ impl AdoClient {
         )
         .await
     }
+
+    /// Fetches the (text) content of a file at the tip of a branch.
+    pub async fn get_item_content_at_branch(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        item_path: &str,
+        branch: &str,
+    ) -> Result<GitItemContent> {
+        let path = format!("{project_id}/_apis/git/repositories/{repository_id}/items");
+        self.get_json(
+            &path,
+            &[
+                ("api-version", "7.1-preview"),
+                ("path", item_path),
+                ("versionDescriptor.versionType", "branch"),
+                ("versionDescriptor.version", branch),
+                ("includeContent", "true"),
+                ("$format", "json"),
+            ],
+        )
+        .await
+    }
 }
 
 #[cfg(test)]
@@ -888,5 +911,29 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(item.content.as_deref(), Some("const x = 1;\n"));
+    }
+
+    #[tokio::test]
+    async fn get_item_content_at_branch_requests_branch_version() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/git/repositories/repo-1/items"))
+            .and(query_param("path", "/src/app.ts"))
+            .and(query_param("versionDescriptor.versionType", "branch"))
+            .and(query_param("versionDescriptor.version", "main"))
+            .and(query_param("includeContent", "true"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "content": "line1\nline2\n",
+                "contentMetadata": { "isBinary": false }
+            })))
+            .mount(&server)
+            .await;
+
+        let item = test_client(&server)
+            .await
+            .get_item_content_at_branch("project-1", "repo-1", "/src/app.ts", "main")
+            .await
+            .unwrap();
+        assert_eq!(item.content.as_deref(), Some("line1\nline2\n"));
     }
 }
