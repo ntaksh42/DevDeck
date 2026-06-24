@@ -154,6 +154,10 @@ export function PipelineRunDetailPanel({
         logId: selectedLogId as number,
       }),
     enabled: buildId != null && selectedLogId != null,
+    // While the run is in progress, keep pulling the log tail so an open job's
+    // output follows live instead of freezing on the first fetch (issue #435).
+    refetchInterval: () =>
+      run && isInProgressStatus(run.status) ? LOG_REFRESH_INTERVAL_MS : false,
   });
 
   const rerun = useMutation({
