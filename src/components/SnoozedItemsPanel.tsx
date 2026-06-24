@@ -43,7 +43,7 @@ export function SnoozedItemsPanel({
   });
 
   if (query.isLoading) return <LoadingState />;
-  if (query.isError) return <ErrorState message={commandErrorMessage(query.error)} />;
+  if (query.isError) return <ErrorState message={commandErrorMessage(query.error)} onRetry={() => void query.refetch()} />;
 
   const items = query.data ?? [];
   if (items.length === 0) {
