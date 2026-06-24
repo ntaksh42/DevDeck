@@ -31,6 +31,6 @@ pub use pr_review::{
 pub use pr_status::{summarize_pr_ci, PrCiState, PrCiSummary, PrStatusCheck, PrStatusContext};
 pub use wiki::{WikiPage, WikiV2};
 pub use work_items::{
-    WorkItem, WorkItemComment, WorkItemFieldDefinition, WorkItemLink, WorkItemReference,
-    WorkItemRelation, WorkItemUpdate,
+    CommentReaction, WorkItem, WorkItemComment, WorkItemFieldDefinition, WorkItemLink,
+    WorkItemReference, WorkItemRelation, WorkItemUpdate,
 };
