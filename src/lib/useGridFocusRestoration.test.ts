@@ -96,6 +96,30 @@ describe("useGridFocusRestoration", () => {
     expect(result.current.hadFocusRef.current).toBe(false);
   });
 
+  it("does not steal focus when the user is editing in the preview pane", () => {
+    const restoreFocus = vi.fn(() => true);
+    const { result, rerender, container, row } = setup(restoreFocus);
+
+    // The grid owned focus, then the user moved into an editor that lives in
+    // the same container (e.g. the preview comment box) and started typing.
+    act(() => {
+      result.current.onFocusCapture({ target: row } as never);
+    });
+    const editor = document.createElement("textarea");
+    container.appendChild(editor);
+    editor.focus();
+
+    // A background sync replaces the rows: the signature changes but focus must
+    // stay on the editor rather than jumping back to the row.
+    rerender({ signature: "b" });
+    act(() => {
+      vi.advanceTimersByTime(40);
+    });
+
+    expect(restoreFocus).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(editor);
+  });
+
   it("retries restoration until the row mounts back into the window", () => {
     let mounted = false;
     const restoreFocus = vi.fn(() => {
