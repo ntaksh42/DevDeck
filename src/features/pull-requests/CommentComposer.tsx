@@ -1,14 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { type MentionCandidate } from "@/lib/azdoCommands";
-import { MarkdownView } from "@/lib/markdown";
-
-type Mode = "edit" | "preview";
 
 /**
- * Reusable comment editor with a Write/Preview toggle and optional @mention
- * autocomplete. Owns its own draft so it can keep the text when a submit fails.
- * `onSubmit` is awaited; the draft is cleared only on success.
+ * Reusable comment editor with optional @mention autocomplete. Owns its own
+ * draft so it can keep the text when a submit fails. `onSubmit` is awaited; the
+ * draft is cleared only on success.
  */
 export function CommentComposer({
   placeholder,
@@ -32,7 +29,6 @@ export function CommentComposer({
   mentionSearch?: (query: string) => Promise<MentionCandidate[]>;
 }) {
   const [text, setText] = useState(initialValue);
-  const [mode, setMode] = useState<Mode>("edit");
   const [submitting, setSubmitting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -47,7 +43,6 @@ export function CommentComposer({
     try {
       await onSubmit(trimmed);
       setText("");
-      setMode("edit");
       setMention(null);
       onSubmitted?.();
     } catch {
@@ -114,25 +109,7 @@ export function CommentComposer({
 
   return (
     <div className="rounded-md border border-border bg-card">
-      <div className="flex items-center gap-0.5 border-b border-border px-1.5 py-1" role="tablist" aria-label="Comment editor mode">
-        {(["edit", "preview"] as Mode[]).map((option) => (
-          <button
-            key={option}
-            type="button"
-            role="tab"
-            aria-selected={mode === option}
-            onClick={() => setMode(option)}
-            className={`rounded px-2 py-px text-[11px] font-medium ${
-              mode === option ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {option === "edit" ? "Write" : "Preview"}
-          </button>
-        ))}
-      </div>
-
-      {mode === "edit" ? (
-        <div className="relative">
+      <div className="relative">
           <textarea
             ref={textareaRef}
             autoFocus={autoFocus}
@@ -206,16 +183,7 @@ export function CommentComposer({
               ))}
             </ul>
           ) : null}
-        </div>
-      ) : (
-        <div className="min-h-[3rem] px-2 py-1.5 text-xs">
-          {text.trim() ? (
-            <MarkdownView text={text} className="text-foreground" />
-          ) : (
-            <span className="text-muted-foreground">Nothing to preview.</span>
-          )}
-        </div>
-      )}
+      </div>
 
       <div className="flex items-center justify-end gap-1 border-t border-border px-1.5 py-1">
         {submitting || busy ? (
