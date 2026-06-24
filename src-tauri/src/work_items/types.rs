@@ -361,4 +361,28 @@ pub struct WorkItemComment {
     pub created_by_id: Option<String>,
     pub created_by_unique_name: Option<String>,
     pub created_date: Option<String>,
+    #[serde(default)]
+    pub reactions: Vec<CommentReactionSummary>,
+}
+
+/// A reaction aggregate on a comment: its type, total count, and whether the
+/// authenticated user has reacted with it.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommentReactionSummary {
+    pub reaction_type: String,
+    pub count: i64,
+    pub is_mine: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetWorkItemCommentReactionInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_id: i64,
+    pub comment_id: i64,
+    /// One of `like`, `dislike`, `heart`, `hooray`, `smile`, `confused`.
+    pub reaction_type: String,
+    pub engaged: bool,
 }
