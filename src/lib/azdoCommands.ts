@@ -425,7 +425,14 @@ const commitSummarySchema = z.object({
 
 const commitSummariesSchema = z.array(commitSummarySchema);
 
+const commitSearchResultSchema = z.object({
+  commits: commitSummariesSchema,
+  total: z.number(),
+  truncated: z.boolean(),
+});
+
 export type CommitSummary = z.infer<typeof commitSummarySchema>;
+export type CommitSearchResult = z.infer<typeof commitSearchResultSchema>;
 
 const searchAllResultSchema = z.object({
   workItems: workItemSummariesSchema,
@@ -1348,9 +1355,9 @@ export async function cancelPipelineRun(input: {
 
 export async function searchCommits(
   input: SearchCommitsInput,
-): Promise<CommitSummary[]> {
+): Promise<CommitSearchResult> {
   const result = await invokeCommand("search_commits", { input });
-  return commitSummariesSchema.parse(result);
+  return commitSearchResultSchema.parse(result);
 }
 
 export async function listCommitRepositories(
