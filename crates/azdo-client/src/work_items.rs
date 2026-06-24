@@ -386,6 +386,11 @@ impl AdoClient {
     ) -> Result<Vec<WorkItemComment>> {
         let path = format!("{project_id}/_apis/wit/workItems/{work_item_id}/comments");
         let top_str = top.to_string();
+        // `$expand=all` returns both reactions and `renderedText`. Without
+        // `renderedText`, Azure DevOps does not resolve `@<guid>` mention tokens
+        // into display names, so the preview falls back to raw ids (and the
+        // sanitizer can even drop the token entirely). `all` lets the service
+        // resolve mentions the same way the web UI does.
         let response: WorkItemCommentsList = self
             .get_json(
                 &path,
@@ -393,7 +398,7 @@ impl AdoClient {
                     ("api-version", "7.1-preview.4"),
                     ("$top", &top_str),
                     ("order", "desc"),
-                    ("$expand", "reactions"),
+                    ("$expand", "all"),
                 ],
             )
             .await?;
@@ -886,14 +891,16 @@ mod tests {
             .and(query_param("api-version", "7.1-preview.4"))
             .and(query_param("$top", "50"))
             .and(query_param("order", "desc"))
+            // Mentions only resolve into `renderedText` when `all` is expanded.
+            .and(query_param("$expand", "all"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "totalCount": 2,
                 "count": 2,
                 "comments": [
                     {
                         "id": 2,
-                        "text": "Second comment",
-                        "renderedText": "<p>Second comment</p>",
+                        "text": "Second @<guid> comment",
+                        "renderedText": "<p>Second <a>@Alice</a> comment</p>",
                         "createdBy": { "displayName": "Bob" },
                         "createdDate": "2026-05-28T10:00:00Z"
                     },
@@ -916,6 +923,12 @@ mod tests {
             .unwrap();
         assert_eq!(comments.len(), 2);
         assert_eq!(comments[0].id, 2);
+        // The service-resolved mention HTML is carried through so the preview
+        // can show "@Alice" instead of the raw `@<guid>` token.
+        assert_eq!(
+            comments[0].rendered_text.as_deref(),
+            Some("<p>Second <a>@Alice</a> comment</p>")
+        );
         assert_eq!(
             comments[0]
                 .created_by
