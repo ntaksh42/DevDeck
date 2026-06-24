@@ -682,6 +682,21 @@ impl AppDatabase {
         Ok(())
     }
 
+    /// Delta-sync write: upsert the freshly fetched commits without deleting any
+    /// existing rows. Used by the incremental commit sync, which only fetches
+    /// commits newer than the last sync; deletions and rewrites are reconciled by
+    /// the next periodic full sync (which calls `replace_commits_for_repo`).
+    pub fn merge_commits(&self, commits: &[CachedCommit]) -> Result<()> {
+        if commits.is_empty() {
+            return Ok(());
+        }
+        let conn = self.open()?;
+        let tx = conn.unchecked_transaction()?;
+        upsert_commits(&tx, commits)?;
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn purge_old_commits(&self, org_id: &str, before_date: &str) -> Result<()> {
         let conn = self.open()?;
         conn.execute(

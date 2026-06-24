@@ -7,6 +7,11 @@
 
 use super::*;
 
+use azdo_client::TeamProject;
+use tokio::task::JoinSet;
+
+use crate::sync::SyncBudget;
+
 pub(super) const SYNC_WI_WIQL: &str =
     "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project \
      ORDER BY [System.ChangedDate] DESC";
@@ -73,15 +78,70 @@ pub(super) struct SyncWorkItemFetchResult {
     queried_count: usize,
 }
 
+/// Outcome of syncing one project's work items. `result` is `Ok(None)` for a
+/// 404 (skip silently, preserve cache), `Ok(Some((all, my)))` on success, and
+/// `Err` for a real error (skip and remember).
+struct ProjectWorkItemFetch {
+    project_id: String,
+    project_name: String,
+    #[allow(clippy::type_complexity)]
+    result: Result<Option<(SyncWorkItemFetchResult, SyncWorkItemFetchResult)>>,
+}
+
+/// Fetches one project's "all" and "my" work items together under a single
+/// budget permit, so project-level parallelism is bounded by the shared budget.
+async fn fetch_project_work_items(
+    client: AdoClient,
+    org: Organization,
+    project: TeamProject,
+    all_wiql: String,
+    fields: Vec<String>,
+    budget: SyncBudget,
+) -> ProjectWorkItemFetch {
+    let _permit = budget.acquire_owned().await;
+    let (all_result, my_result) = tokio::join!(
+        fetch_sync_work_items(
+            &client,
+            &org,
+            &project.id,
+            &project.name,
+            &all_wiql,
+            fields.clone(),
+            "work item",
+        ),
+        fetch_sync_work_items(
+            &client,
+            &org,
+            &project.id,
+            &project.name,
+            SYNC_MY_WI_WIQL,
+            fields.clone(),
+            "my work item",
+        ),
+    );
+    let result = match (all_result, my_result) {
+        (Err(e), _) | (_, Err(e)) => Err(e),
+        (Ok(None), _) | (_, Ok(None)) => Ok(None),
+        (Ok(Some(all)), Ok(Some(my))) => Ok(Some((all, my))),
+    };
+    ProjectWorkItemFetch {
+        project_id: project.id,
+        project_name: project.name,
+        result,
+    }
+}
+
 pub(crate) async fn sync_work_items_for_org(
     db: &AppDatabase,
     client: &AdoClient,
     org: &Organization,
+    projects: &[TeamProject],
+    budget: &SyncBudget,
 ) -> Result<()> {
     let scope = format!("work_items:{}", org.id);
     let error_count = db.get_sync_state(&scope)?.map_or(0, |s| s.error_count);
 
-    match do_sync_work_items(db, client, org).await {
+    match do_sync_work_items(db, client, org, projects, budget).await {
         Ok(result) => {
             let now = Utc::now().to_rfc3339();
             db.update_sync_state(
@@ -125,8 +185,9 @@ pub(super) async fn do_sync_work_items(
     db: &AppDatabase,
     client: &AdoClient,
     org: &Organization,
+    projects: &[TeamProject],
+    budget: &SyncBudget,
 ) -> Result<SyncWorkItemsResult> {
-    let projects = client.list_projects().await?;
     let fields: Vec<String> = WORK_ITEM_FIELDS.iter().map(ToString::to_string).collect();
     let delta_since = delta_sync_since(db, org);
     let all_wiql = match delta_since.as_deref() {
@@ -141,74 +202,51 @@ pub(super) async fn do_sync_work_items(
     let mut large_query_count = 0usize;
     let mut largest_query_result = 0usize;
 
-    for project in &projects {
-        let (all_result, my_result) = tokio::join!(
-            fetch_sync_work_items(
-                client,
-                org,
-                &project.id,
-                &project.name,
-                &all_wiql,
-                fields.clone(),
-                "work item",
-            ),
-            fetch_sync_work_items(
-                client,
-                org,
-                &project.id,
-                &project.name,
-                SYNC_MY_WI_WIQL,
-                fields.clone(),
-                "my work item",
-            ),
-        );
+    // Fetch every project concurrently, bounded by the shared budget; each
+    // project still runs its all/my WIQL queries together internally.
+    let mut tasks: JoinSet<ProjectWorkItemFetch> = JoinSet::new();
+    for project in projects {
+        tasks.spawn(fetch_project_work_items(
+            client.clone(),
+            org.clone(),
+            project.clone(),
+            all_wiql.clone(),
+            fields.clone(),
+            budget.clone(),
+        ));
+    }
 
-        let project_all = match all_result {
-            Ok(Some(r)) => r,
+    while let Some(joined) = tasks.join_next().await {
+        let fetch = joined
+            .map_err(|e| AppError::AzureDevOps(format!("work item sync task failed: {e}")))?;
+        match fetch.result {
+            // 404 on either query means the project is unreachable; skip it so
+            // its cached rows survive.
             Ok(None) => continue,
+            Ok(Some((project_all, project_my))) => {
+                synced_project_ids.push(fetch.project_id);
+                if project_all.queried_count > SYNC_WORK_ITEM_BATCH_SIZE {
+                    large_query_count += 1;
+                    largest_query_result = largest_query_result.max(project_all.queried_count);
+                }
+                all_cached.extend(project_all.items);
+                if project_my.queried_count > SYNC_WORK_ITEM_BATCH_SIZE {
+                    large_query_count += 1;
+                    largest_query_result = largest_query_result.max(project_my.queried_count);
+                }
+                my_cached.extend(project_my.items);
+            }
             Err(e) => {
                 tracing::warn!(
                     org = %org.name,
-                    project = %project.name,
+                    project = %fetch.project_name,
                     error = %e,
                     "work item sync failed for project, preserving cached data"
                 );
-                skipped_projects.push(project.name.clone());
+                skipped_projects.push(fetch.project_name);
                 last_skip_error = Some(e);
-                continue;
             }
-        };
-
-        let project_my = match my_result {
-            Ok(Some(r)) => r,
-            // The "my" query 404ing means the project itself is unreachable;
-            // skip it entirely so its cached my_work_items rows survive.
-            Ok(None) => continue,
-            Err(e) => {
-                tracing::warn!(
-                    org = %org.name,
-                    project = %project.name,
-                    error = %e,
-                    "my work item sync failed for project, preserving cached data"
-                );
-                skipped_projects.push(project.name.clone());
-                last_skip_error = Some(e);
-                continue;
-            }
-        };
-
-        synced_project_ids.push(project.id.clone());
-
-        if project_all.queried_count > SYNC_WORK_ITEM_BATCH_SIZE {
-            large_query_count += 1;
-            largest_query_result = largest_query_result.max(project_all.queried_count);
         }
-        all_cached.extend(project_all.items);
-        if project_my.queried_count > SYNC_WORK_ITEM_BATCH_SIZE {
-            large_query_count += 1;
-            largest_query_result = largest_query_result.max(project_my.queried_count);
-        }
-        my_cached.extend(project_my.items);
     }
 
     // If every project failed with a real error (not 404), surface it rather than
