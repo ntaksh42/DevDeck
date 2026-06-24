@@ -182,7 +182,9 @@ describe("App", () => {
       ([command]) => command === "list_my_review_pull_requests",
     ).length;
 
-    fireEvent.click(screen.getByRole("button", { name: "Sync now" }));
+    fireEvent.click(
+      screen.getByTitle("Last background sync — click to sync now"),
+    );
 
     await waitFor(() => {
       const reviewCallsAfterSync = invokeMock.mock.calls.filter(
@@ -774,6 +776,7 @@ describe("App", () => {
           workItemType: "Bug",
           state: "Active",
           assignedTo: "Test User",
+          assignedToUniqueName: null,
           createdBy: "Creator",
           createdDate: "2026-05-23T00:00:00Z",
           changedDate: "2026-05-24T00:00:00Z",
@@ -869,6 +872,7 @@ describe("App", () => {
           workItemType: "Bug",
           state: stateValue ?? "Active",
           assignedTo: assigneeValue?.startsWith("Creator") ? "Creator" : "Test User",
+          assignedToUniqueName: null,
           createdBy: "Creator",
           createdDate: "2026-05-23T00:00:00Z",
           changedDate: "2026-05-24T01:00:00Z",
@@ -1252,6 +1256,7 @@ describe("App", () => {
       workItemType: "Bug",
       state: "Active",
       assignedTo: "Test User",
+      assignedToUniqueName: null,
       createdBy: "Creator",
       createdDate: "2026-05-23T00:00:00Z",
       changedDate: "2026-05-24T00:00:00Z",
@@ -1432,6 +1437,7 @@ describe("App", () => {
           workItemType: "Bug",
           state: "Active",
           assignedTo: "Test User",
+          assignedToUniqueName: null,
           createdBy: "Creator",
           createdDate: "2026-05-23T00:00:00Z",
           changedDate: "2026-05-24T00:00:00Z",
