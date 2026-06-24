@@ -33,9 +33,11 @@ import {
   listOrganizations,
   rerunPipelineRun,
   searchAll,
+  submitPullRequestVote,
   searchCode,
   syncUpdatedEventSchema,
   triggerSync,
+  type PullRequestSummary,
   type SyncScope,
 } from "@/lib/azdoCommands";
 import {
@@ -520,6 +522,28 @@ function AppShell() {
     }
   }
 
+  // Cast a review vote on a PR directly from the command palette (E-36). The
+  // palette has no toast surface, so failures are logged; the resulting state
+  // reflects in My Reviews, which is invalidated on success.
+  const votePullRequest = useCallback(
+    (pr: PullRequestSummary, vote: 10 | -10) => {
+      void submitPullRequestVote({
+        organizationId: pr.organizationId,
+        projectId: pr.projectId,
+        repositoryId: pr.repositoryId,
+        pullRequestId: pr.pullRequestId,
+        vote,
+      })
+        .then(() => {
+          void queryClient.invalidateQueries({ queryKey: ["myReviews"] });
+        })
+        .catch((error) => {
+          console.error("Failed to submit pull request vote from palette", error);
+        });
+    },
+    [queryClient],
+  );
+
   const paletteSearchItems = useMemo<CommandPaletteSearchItem[]>(() => {
     const kind = paletteSearch.kind;
     const showOrg = organizations.length > 1;
@@ -617,6 +641,26 @@ function AppShell() {
           },
         });
       }
+      // When the user explicitly filters to PRs, offer direct approve/reject
+      // actions per result (E-36) so a review vote can be cast from the palette.
+      if (kind === "pullRequests") {
+        for (const pr of data.pullRequests) {
+          items.push({
+            id: `pr-approve:${pr.organizationId}:${pr.repositoryId}:${pr.pullRequestId}`,
+            group: "Pull Request actions",
+            label: `Approve PR ${pr.pullRequestId} — ${pr.title}`,
+            detail: showOrg ? pr.organizationId : pr.repositoryName,
+            run: () => votePullRequest(pr, 10),
+          });
+          items.push({
+            id: `pr-reject:${pr.organizationId}:${pr.repositoryId}:${pr.pullRequestId}`,
+            group: "Pull Request actions",
+            label: `Reject PR ${pr.pullRequestId} — ${pr.title}`,
+            detail: showOrg ? pr.organizationId : pr.repositoryName,
+            run: () => votePullRequest(pr, -10),
+          });
+        }
+      }
     }
     if (!kind || kind === "commits") {
       for (const commit of data.commits) {
@@ -659,6 +703,7 @@ function AppShell() {
     paletteSearch.query,
     paletteSearchEnabled,
     searchAllQuery.data,
+    votePullRequest,
     paletteCodeEnabled,
     paletteCodeQuery.data,
   ]);
