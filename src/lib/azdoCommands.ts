@@ -276,6 +276,22 @@ const workItemFieldOptionsSchema = z.array(workItemFieldOptionSchema);
 
 export type WorkItemFieldOption = z.infer<typeof workItemFieldOptionSchema>;
 
+export const COMMENT_REACTION_TYPES = [
+  "like",
+  "heart",
+  "hooray",
+  "smile",
+  "confused",
+  "dislike",
+] as const;
+export type CommentReactionType = (typeof COMMENT_REACTION_TYPES)[number];
+
+const commentReactionSchema = z.object({
+  reactionType: z.string(),
+  count: z.number(),
+  isMine: z.boolean(),
+});
+
 const workItemCommentSchema = z.object({
   id: z.number(),
   text: z.string().nullable(),
@@ -284,6 +300,7 @@ const workItemCommentSchema = z.object({
   createdById: z.string().nullable().optional(),
   createdByUniqueName: z.string().nullable().optional(),
   createdDate: z.string().nullable(),
+  reactions: z.array(commentReactionSchema).optional(),
 });
 
 export type WorkItemComment = z.infer<typeof workItemCommentSchema>;
@@ -1123,6 +1140,17 @@ export async function updateWorkItemComment(
 ): Promise<WorkItemComment> {
   const result = await invokeCommand("update_work_item_comment", { input });
   return workItemCommentSchema.parse(result);
+}
+
+export async function setWorkItemCommentReaction(input: {
+  organizationId?: string;
+  projectId: string;
+  workItemId: number;
+  commentId: number;
+  reactionType: CommentReactionType;
+  engaged: boolean;
+}): Promise<void> {
+  await invokeCommand("set_work_item_comment_reaction", { input });
 }
 
 export async function updateWorkItemFields(

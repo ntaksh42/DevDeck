@@ -286,10 +286,11 @@ export function CommandPalette({
         </div>
         {search ? (
           <div className="border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
-            Search work items, PRs, and commits — filter with{" "}
+            Search work items, PRs, commits, and code — filter with{" "}
             <kbd className="rounded bg-muted px-1 font-mono">wi:</kbd>{" "}
             <kbd className="rounded bg-muted px-1 font-mono">pr:</kbd>{" "}
-            <kbd className="rounded bg-muted px-1 font-mono">c:</kbd> · open in browser with{" "}
+            <kbd className="rounded bg-muted px-1 font-mono">c:</kbd>{" "}
+            <kbd className="rounded bg-muted px-1 font-mono">code:</kbd> · open in browser with{" "}
             <kbd className="rounded bg-muted px-1 font-mono">Ctrl+Enter</kbd>
           </div>
         ) : null}
