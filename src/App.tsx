@@ -33,6 +33,7 @@ import {
   listOrganizations,
   rerunPipelineRun,
   searchAll,
+  searchCode,
   syncUpdatedEventSchema,
   triggerSync,
   type SyncScope,
@@ -194,16 +195,23 @@ function invalidationScopesForSyncScope(scope: SyncScope = "all"): SyncScope[] {
   return scope === "hot" ? ["myReviews", "myWorkItems"] : [scope];
 }
 
-type PaletteSearchKind = "workItems" | "pullRequests" | "commits";
+type PaletteSearchKind = "workItems" | "pullRequests" | "commits" | "code";
 
 type ExternalSearchRequest = { query: string; requestId: number; organizationId?: string };
 
 function parsePaletteSearch(text: string): { kind: PaletteSearchKind | null; query: string } {
-  const match = /^(wi|pr|c):\s*(.*)$/i.exec(text.trim());
+  // `code`/`co` must precede `c` in the alternation so they win over commits.
+  const match = /^(wi|pr|code|co|c):\s*(.*)$/i.exec(text.trim());
   if (match) {
     const prefix = match[1].toLowerCase();
     const kind: PaletteSearchKind =
-      prefix === "wi" ? "workItems" : prefix === "pr" ? "pullRequests" : "commits";
+      prefix === "wi"
+        ? "workItems"
+        : prefix === "pr"
+          ? "pullRequests"
+          : prefix === "code" || prefix === "co"
+            ? "code"
+            : "commits";
     return { kind, query: match[2].trim() };
   }
   return { kind: null, query: text.trim() };
@@ -453,12 +461,21 @@ function AppShell() {
   }, []);
 
   const paletteSearch = parsePaletteSearch(debouncedPaletteSearchText);
+  const paletteQueryLongEnough = /^\d+$/.test(paletteSearch.query)
+    ? paletteSearch.query.length >= 1
+    : paletteSearch.query.length >= 2;
+  // Code search is heavy and hits the API, so it only runs behind the explicit
+  // `code:`/`co:` prefix — never on a generic palette query.
   const paletteSearchEnabled =
     commandPaletteOpen &&
     organizations.length > 0 &&
-    (/^\d+$/.test(paletteSearch.query)
-      ? paletteSearch.query.length >= 1
-      : paletteSearch.query.length >= 2);
+    paletteSearch.kind !== "code" &&
+    paletteQueryLongEnough;
+  const paletteCodeEnabled =
+    commandPaletteOpen &&
+    organizations.length > 0 &&
+    paletteSearch.kind === "code" &&
+    paletteSearch.query.length >= 2;
   const searchAllQuery = useQuery({
     // No organizationId: the palette searches every configured organization.
     queryKey: ["searchAll", paletteSearch.query],
@@ -468,6 +485,18 @@ function AppShell() {
     // Keep showing the previous results while the next keystroke's search
     // runs, instead of flashing an empty list.
     placeholderData: keepPreviousData,
+  });
+  // Code search targets the first configured organization (the palette has no
+  // org selector); the dedicated Code view offers per-org search.
+  const paletteCodeOrgId = organizations[0]?.id;
+  const paletteCodeQuery = useQuery({
+    queryKey: ["paletteCode", paletteCodeOrgId, paletteSearch.query],
+    queryFn: () => searchCode({ organizationId: paletteCodeOrgId, query: paletteSearch.query }),
+    enabled: paletteCodeEnabled,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+    // Code Search is an optional extension; a failed query just yields no items.
+    retry: false,
   });
 
   function openSearchTarget(
@@ -488,12 +517,35 @@ function AppShell() {
   }
 
   const paletteSearchItems = useMemo<CommandPaletteSearchItem[]>(() => {
+    const kind = paletteSearch.kind;
+    const showOrg = organizations.length > 1;
+
+    // Code is a distinct, opt-in search (own query); surface its file hits and
+    // return early since searchAll does not cover code.
+    if (kind === "code") {
+      const codeData = paletteCodeEnabled ? paletteCodeQuery.data : undefined;
+      const codeItems: CommandPaletteSearchItem[] = [];
+      for (const hit of codeData?.results ?? []) {
+        codeItems.push({
+          id: `code:${hit.projectName}:${hit.repositoryName}:${hit.branch ?? ""}:${hit.path}`,
+          group: "Code",
+          label: hit.fileName,
+          detail: [hit.path, `${hit.projectName} / ${hit.repositoryName}`]
+            .filter(Boolean)
+            .join(" · "),
+          // No in-app file viewer; open the file in Azure DevOps.
+          run: () => {
+            void openExternalUrl(hit.webUrl);
+          },
+        });
+      }
+      return codeItems;
+    }
+
     const data = paletteSearchEnabled ? searchAllQuery.data : undefined;
     if (!data) return [];
     const items: CommandPaletteSearchItem[] = [];
-    const kind = paletteSearch.kind;
     const rawQuery = paletteSearch.query;
-    const showOrg = organizations.length > 1;
 
     if (!kind || kind === "workItems") {
       for (const item of data.workItems) {
@@ -598,7 +650,14 @@ function AppShell() {
       }
     }
     return items;
-  }, [paletteSearch.kind, paletteSearch.query, paletteSearchEnabled, searchAllQuery.data]);
+  }, [
+    paletteSearch.kind,
+    paletteSearch.query,
+    paletteSearchEnabled,
+    searchAllQuery.data,
+    paletteCodeEnabled,
+    paletteCodeQuery.data,
+  ]);
 
   // The palette surfaces recently opened Work Items and PRs. With an empty query
   // it lists them newest-first; while typing it narrows them by id or title so a
