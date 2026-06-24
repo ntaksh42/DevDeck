@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::db::{AppDatabase, CachedReviewPr, CachedWorkItem};
@@ -156,6 +157,12 @@ impl SnoozeService {
         let rows = self.db.list_snoozed_items(org_id, ITEM_TYPE_PULL_REQUEST)?;
         let mut result = SnoozeReconcile::default();
         for row in rows {
+            // `live_comment` is the `pr_comment_seen` cursor, which only advances
+            // when comment-reply notifications are processed (requires both
+            // `desktop_notifications_enabled` and `notify_pr_comment_replies`).
+            // With notifications off the cursor stays put, so `new_activity` is
+            // always false and the PR revives by deadline only — see the note on
+            // `current_baseline`.
             let live_comment = parse_pr_key(&row.item_key).and_then(|(repo, pr_id)| {
                 self.db
                     .get_pr_comment_seen(org_id, &repo, pr_id)
@@ -208,6 +215,16 @@ impl SnoozeService {
     /// Captures the current activity marker so a later sync can tell whether the
     /// item saw new activity while snoozed. For PRs that is the last-seen comment
     /// id; for work items it is the cached `System.ChangedDate`.
+    ///
+    /// NOTE (PRs): the marker is the `pr_comment_seen` cursor, which only advances
+    /// while `collect_pr_comment_notifications` runs — i.e. when BOTH
+    /// `desktop_notifications_enabled` and `notify_pr_comment_replies` are on (see
+    /// `sync.rs`). With those off, the cursor never moves, so comment-activity
+    /// revival cannot trigger; only the deadline revives the item. Decoupling the
+    /// snooze activity marker from the notification cursor (so a new comment
+    /// revives a PR regardless of notification settings) would require fetching
+    /// the live thread state for snoozed PRs during sync independently of the
+    /// notification path; tracked as a follow-up.
     fn current_baseline(
         &self,
         org_id: &str,
@@ -252,6 +269,22 @@ impl SnoozeService {
 /// lexicographically.
 pub fn should_revive(now: &str, snooze_until: &str, new_activity: bool) -> bool {
     new_activity || now >= snooze_until
+}
+
+/// True while a snooze is still in effect at `now`. The read paths (My Reviews /
+/// My Work Items) use this to hide only items whose deadline is still in the
+/// future; an expired — or unparseable — deadline is treated as inactive so the
+/// item returns to the list immediately, without waiting for the periodic
+/// reconcile to delete the row (which only runs on a successful sync, so it can
+/// lag during sync backoff or before the first sync after startup).
+///
+/// `snooze_until` (frontend `Date.toISOString()` → `...Z`) and `now`
+/// (`Utc::now()`) are parsed to `DateTime<Utc>` so the comparison is correct
+/// regardless of RFC3339 spelling (`Z` vs `+00:00`, millis vs nanos).
+pub fn snooze_is_active(now: DateTime<Utc>, snooze_until: &str) -> bool {
+    DateTime::parse_from_rfc3339(snooze_until)
+        .map(|until| now < until.with_timezone(&Utc))
+        .unwrap_or(false)
 }
 
 /// Comment ids are integers; compare numerically rather than as strings so that
@@ -319,6 +352,21 @@ mod tests {
         assert!(!should_revive(now, "2026-06-20T09:00:00Z", false));
         // Deadline in the future but new activity: revive early.
         assert!(should_revive(now, "2026-06-20T09:00:00Z", true));
+    }
+
+    #[test]
+    fn snooze_is_active_parses_mixed_rfc3339_spellings() {
+        let now = DateTime::parse_from_rfc3339("2026-06-17T12:00:00+00:00")
+            .unwrap()
+            .with_timezone(&Utc);
+        // Future deadline (millis + Z, as the frontend emits): still snoozed.
+        assert!(snooze_is_active(now, "2026-06-17T12:00:00.500Z"));
+        // Past deadline: no longer snoozed even if reconcile has not run.
+        assert!(!snooze_is_active(now, "2026-06-17T09:00:00Z"));
+        // Exactly now is not "in the future": treated as expired.
+        assert!(!snooze_is_active(now, "2026-06-17T12:00:00Z"));
+        // Garbage deadline never keeps an item hidden.
+        assert!(!snooze_is_active(now, "not-a-date"));
     }
 
     #[test]
