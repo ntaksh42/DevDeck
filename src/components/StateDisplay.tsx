@@ -34,7 +34,17 @@ function classifyError(message: string): ErrorKind {
   return "default";
 }
 
-export function ErrorState({ message }: { message: string }) {
+export function ErrorState({
+  message,
+  onRetry,
+  onOpenSettings,
+}: {
+  message: string;
+  /** When provided, shows a "Try again" button (network/rate-limit/default). */
+  onRetry?: () => void;
+  /** When provided, shows an "Open Settings" button for auth failures. */
+  onOpenSettings?: () => void;
+}) {
   const kind = classifyError(message);
 
   const variants: Record<ErrorKind, { containerCls: string; textCls: string; icon: ReactNode; hint: string }> = {
@@ -66,12 +76,33 @@ export function ErrorState({ message }: { message: string }) {
 
   const { containerCls, textCls, icon, hint } = variants[kind];
 
+  // Auth failures point at Settings; everything else offers a retry. Buttons
+  // only render when the caller wires the matching handler, so existing
+  // call sites keep their message-only behavior.
+  const showOpenSettings = kind === "auth" && !!onOpenSettings;
+  const showRetry = !!onRetry && (kind !== "auth" || !onOpenSettings);
+  const actionCls = `rounded border border-current/30 px-2 py-0.5 text-xs font-medium ${textCls} hover:bg-current/10 focus:outline-none focus:ring-2 focus:ring-ring`;
+
   return (
     <div role="alert" className={`flex gap-3 rounded-md border p-3 ${containerCls}`}>
       <div className="mt-0.5">{icon}</div>
-      <div>
+      <div className="min-w-0">
         <p className={`text-sm font-medium ${textCls}`}>{message}</p>
         {hint && <p className={`mt-1 text-xs ${textCls} opacity-80`}>{hint}</p>}
+        {(showOpenSettings || showRetry) && (
+          <div className="mt-2 flex gap-2">
+            {showOpenSettings && (
+              <button type="button" onClick={onOpenSettings} className={actionCls}>
+                Open Settings
+              </button>
+            )}
+            {showRetry && (
+              <button type="button" onClick={onRetry} className={actionCls}>
+                Try again
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
