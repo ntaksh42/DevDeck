@@ -1450,7 +1450,7 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/project-1/_apis/wit/workItems/42/comments"))
-            .and(query_param("$expand", "reactions"))
+            .and(query_param("$expand", "all"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "comments": [{
                     "id": 7,
