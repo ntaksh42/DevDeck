@@ -241,6 +241,18 @@ pub struct SetWorkItemsPriorityInput {
     pub priority: i64,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetWorkItemsTagsInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_ids: Vec<i64>,
+    #[serde(default)]
+    pub add_tags: Vec<String>,
+    #[serde(default)]
+    pub remove_tags: Vec<String>,
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkItemSummary {

@@ -13,6 +13,7 @@ import {
   setWorkItemsState,
   assignWorkItems,
   setWorkItemsPriority,
+  setWorkItemsTags,
   listWorkItemTypeStates,
   recordAssigneeInteraction,
   searchWorkItemAssignees,
@@ -1114,6 +1115,41 @@ export function WorkItemsGrid({
     },
   });
 
+  const bulkTagsMutation = useMutation({
+    mutationFn: async (change: { tag: string; mode: "add" | "remove" }) => {
+      const groups = new Map<string, typeof checkedItems>();
+      for (const item of checkedItems) {
+        const key = `${item.organizationId}:${item.projectId}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(item);
+      }
+      const allResults: BulkWorkItemResult[] = [];
+      for (const [, items] of groups) {
+        const r = await setWorkItemsTags({
+          organizationId: items[0].organizationId,
+          projectId: items[0].projectId,
+          workItemIds: items.map((i) => i.id),
+          addTags: change.mode === "add" ? [change.tag] : [],
+          removeTags: change.mode === "remove" ? [change.tag] : [],
+        });
+        allResults.push(...r);
+      }
+      return allResults;
+    },
+    onSuccess: (results) => {
+      setCheckedIds(new Set());
+      setLastCheckedIndex(null);
+      showBulkToast(results);
+      // Tag changes are a server-side merge; refetch rather than guessing the
+      // new per-item tag set locally.
+      invalidateWorkItemMutationCaches(queryClient);
+    },
+    onError: (e) => {
+      setBulkToast(commandErrorMessage(e));
+      window.setTimeout(() => setBulkToast(null), 3000);
+    },
+  });
+
   useEffect(() => {
     if (autoFocus) containerRef.current?.focus();
   }, [autoFocus]);
@@ -1539,6 +1575,8 @@ export function WorkItemsGrid({
           }}
           priorityPending={bulkPriorityMutation.isPending}
           onPrioritySelect={(priority) => bulkPriorityMutation.mutate(priority)}
+          tagsPending={bulkTagsMutation.isPending}
+          onTagsApply={(tag, mode) => bulkTagsMutation.mutate({ tag, mode })}
         />
       ) : null}
       {bulkFailures.length > 0 ? (
@@ -2068,6 +2106,8 @@ function BulkActionBar({
   onPriorityOpenChange,
   priorityPending,
   onPrioritySelect,
+  tagsPending,
+  onTagsApply,
 }: {
   count: number;
   typeBreakdown: { label: string; count: number }[];
@@ -2091,11 +2131,21 @@ function BulkActionBar({
   onPriorityOpenChange: (open: boolean) => void;
   priorityPending: boolean;
   onPrioritySelect: (priority: number) => void;
+  tagsPending: boolean;
+  onTagsApply: (tag: string, mode: "add" | "remove") => void;
 }) {
   const stateListRef = useRef<HTMLDivElement>(null);
   const priorityListRef = useRef<HTMLDivElement>(null);
   const assignInputRef = useRef<HTMLInputElement>(null);
   const assignListRef = useRef<HTMLDivElement>(null);
+  const [tagDraft, setTagDraft] = useState("");
+
+  function applyTag(mode: "add" | "remove") {
+    const tag = tagDraft.trim();
+    if (!tag) return;
+    onTagsApply(tag, mode);
+    setTagDraft("");
+  }
 
   return (
     <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-1.5">
@@ -2266,6 +2316,41 @@ function BulkActionBar({
               ))}
             </div>
           ) : null}
+        </div>
+        {/* Tags add/remove across the selection */}
+        <div className="flex items-center gap-1">
+          <input
+            type="text"
+            value={tagDraft}
+            onChange={(event) => setTagDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                applyTag("add");
+              }
+            }}
+            disabled={tagsPending}
+            placeholder="Tag…"
+            aria-label="Tag to add or remove"
+            className="h-7 w-24 rounded-md border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+          />
+          <button
+            type="button"
+            disabled={tagsPending || !tagDraft.trim()}
+            onClick={() => applyTag("add")}
+            className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2 text-xs font-medium hover:bg-secondary disabled:opacity-60"
+          >
+            {tagsPending ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : null}
+            Add tag
+          </button>
+          <button
+            type="button"
+            disabled={tagsPending || !tagDraft.trim()}
+            onClick={() => applyTag("remove")}
+            className="inline-flex h-7 items-center rounded-md border border-border bg-card px-2 text-xs font-medium hover:bg-secondary disabled:opacity-60"
+          >
+            Remove
+          </button>
         </div>
       </div>
       <button

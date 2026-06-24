@@ -133,6 +133,7 @@ const writeCommands = new Set([
   "set_work_items_state",
   "assign_work_items",
   "set_work_items_priority",
+  "set_work_items_tags",
   "post_pull_request_comment",
   "set_pull_request_thread_status",
   "submit_pull_request_vote",
@@ -938,6 +939,10 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     }
     case "set_work_items_priority": {
       const input = (args as { input?: SetWorkItemsPriorityInput } | undefined)?.input;
+      return (input?.workItemIds ?? []).map((id) => ({ id, error: null }));
+    }
+    case "set_work_items_tags": {
+      const input = (args as { input?: { workItemIds?: number[] } } | undefined)?.input;
       return (input?.workItemIds ?? []).map((id) => ({ id, error: null }));
     }
     case "search_commits": {

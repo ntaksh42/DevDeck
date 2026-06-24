@@ -871,6 +871,14 @@ export type SetWorkItemsPriorityInput = {
   priority: number;
 };
 
+export type SetWorkItemsTagsInput = {
+  organizationId?: string;
+  projectId: string;
+  workItemIds: number[];
+  addTags?: string[];
+  removeTags?: string[];
+};
+
 export type SearchCommitsInput = {
   organizationId?: string;
   query?: string;
@@ -1230,6 +1238,13 @@ export async function setWorkItemsPriority(
   input: SetWorkItemsPriorityInput,
 ): Promise<BulkWorkItemResult[]> {
   const result = await invokeCommand("set_work_items_priority", { input });
+  return bulkWorkItemResultsSchema.parse(result);
+}
+
+export async function setWorkItemsTags(
+  input: SetWorkItemsTagsInput,
+): Promise<BulkWorkItemResult[]> {
+  const result = await invokeCommand("set_work_items_tags", { input });
   return bulkWorkItemResultsSchema.parse(result);
 }
 
