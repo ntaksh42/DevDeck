@@ -1210,6 +1210,10 @@ export function MyReviewsGrid({
           setCopyToast(`Voted: ${label}`);
           setTimeout(() => setCopyToast(null), 1500);
         },
+        onError: (error) => {
+          setCopyToast(`Vote failed: ${commandErrorMessage(error)}`);
+          setTimeout(() => setCopyToast(null), 3000);
+        },
       },
     );
   }
@@ -1611,7 +1615,7 @@ export function MyReviewsGrid({
               {query.isLoading ? (
                 <LoadingState />
               ) : query.isError ? (
-                <ErrorState message={commandErrorMessage(query.error)} />
+                <ErrorState message={commandErrorMessage(query.error)} onRetry={() => void query.refetch()} />
               ) : sortedPrs.length === 0 ? (
                 <div className="flex min-h-24 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
                   <span>
