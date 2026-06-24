@@ -32,7 +32,7 @@ function renderInPreview() {
         onReply={async () => {}}
         onToggleStatus={() => {}}
         onEditComment={async () => {}}
-        onDeleteComment={() => {}}
+        onDeleteComment={async () => {}}
       />
     </div>,
   );
