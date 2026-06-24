@@ -171,6 +171,34 @@ pub struct GetSavedQueryInput {
     pub query_id: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListClassificationNodesInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+}
+
+/// A flattened classification (area/iteration) node. `path` is the field-ready
+/// value for `System.AreaPath` / `System.IterationPath` (backslash-joined node
+/// names, e.g. `Project\Team\Sprint 1`); `depth` is its distance from the root.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ClassificationNodeOption {
+    pub name: String,
+    pub path: String,
+    pub depth: usize,
+    pub has_children: bool,
+    pub start_date: Option<String>,
+    pub finish_date: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ClassificationNodesResult {
+    pub areas: Vec<ClassificationNodeOption>,
+    pub iterations: Vec<ClassificationNodeOption>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SavedQueryResult {

@@ -49,6 +49,20 @@ describe("renderMarkdownHtml", () => {
     expect(html).not.toContain("ftp://");
     expect(html).toContain('referrerpolicy="no-referrer"');
   });
+
+  it("keeps unresolved @<guid> mention tokens visible as text", () => {
+    // marked would treat "<guid>" as inline HTML and DOMPurify would drop it,
+    // leaving a stray "@". The literal token must survive instead.
+    const guid = "a1b2c3d4-e5f6-7890-abcd-ef0123456789";
+    const html = renderMarkdownHtml(`hi @<${guid}> there`);
+    expect(html).toContain(`@&lt;${guid}&gt;`);
+    expect(html).not.toMatch(/hi @\s+there/);
+  });
+
+  it("leaves @<guid> inside code spans untouched", () => {
+    const html = renderMarkdownHtml("`@<guid>`");
+    expect(html).toContain("<code>@&lt;guid&gt;</code>");
+  });
 });
 
 describe("MarkdownView", () => {

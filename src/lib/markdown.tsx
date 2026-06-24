@@ -1,7 +1,36 @@
 import { useMemo } from "react";
 import DOMPurify from "dompurify";
-import { marked } from "marked";
+import { marked, type TokenizerAndRendererExtension } from "marked";
 import { openExternalUrl } from "@/lib/openExternal";
+
+// Azure DevOps stores @mentions as "@<identity-guid>" markdown. The browser has
+// no display name for the guid, and without help marked parses "<guid>" as
+// inline HTML that DOMPurify then drops, leaving only a stray "@" (or a raw id)
+// in the preview. This inline extension keeps the literal token visible as
+// text. It runs as a real marked token, so it never fires inside code spans or
+// fenced code blocks where "@<guid>" must stay verbatim.
+const azdoMentionExtension: TokenizerAndRendererExtension = {
+  name: "azdoMention",
+  level: "inline",
+  start(src) {
+    const index = src.indexOf("@<");
+    return index < 0 ? undefined : index;
+  },
+  tokenizer(src) {
+    const match = /^@<([^<>\s]+)>/.exec(src);
+    if (!match) return undefined;
+    return { type: "azdoMention", raw: match[0], text: match[1] };
+  },
+  renderer(token) {
+    return `@&lt;${escapeMentionText(String(token.text))}&gt;`;
+  },
+};
+
+function escapeMentionText(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+marked.use({ extensions: [azdoMentionExtension] });
 
 // Image sources are restricted to schemes that cannot exfiltrate beyond a plain
 // image fetch. https/data match the project's existing rich-text handling, and
