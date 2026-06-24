@@ -97,7 +97,9 @@ function stopPreviewNavigationKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
 export function WorkItemPreviewDetails({
   customPreviewFields,
   preview,
+  areaControl,
   assigneeControl,
+  iterationControl,
   deleteCommentError,
   editCommentError,
   deletingCommentId,
@@ -126,7 +128,9 @@ export function WorkItemPreviewDetails({
   customPreviewFields: CustomPreviewField[];
   preview: WorkItemPreview;
   actionsControl?: ReactNode;
+  areaControl?: ReactNode;
   assigneeControl: ReactNode;
+  iterationControl?: ReactNode;
   deleteCommentError: string | null;
   editCommentError: string | null;
   deletingCommentId: number | null;
@@ -467,6 +471,14 @@ export function WorkItemPreviewDetails({
             ) : field.editable === "reason" ? (
               <PreviewControl key={field.key} label={field.label} shortcut={field.shortcut}>
                 {reasonControl}
+              </PreviewControl>
+            ) : field.key === "areaPath" && areaControl ? (
+              <PreviewControl key={field.key} label={field.label}>
+                {areaControl}
+              </PreviewControl>
+            ) : field.key === "iterationPath" && iterationControl ? (
+              <PreviewControl key={field.key} label={field.label}>
+                {iterationControl}
               </PreviewControl>
             ) : field.key === "tags" ? (
               <PreviewTagsField

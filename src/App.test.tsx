@@ -1589,23 +1589,27 @@ describe("App", () => {
         ]);
       }
       if (command === "search_commits") {
-        return Promise.resolve([
-          {
-            organizationId: "contoso",
-            projectId: "project-1",
-            projectName: "Platform",
-            repositoryId: "repo-1",
-            repositoryName: "azdo-dashboard",
-            commitId: "abcdef1234567890abcdef1234567890abcdef12",
-            shortCommitId: "abcdef12",
-            comment: "Add commit search",
-            authorName: "Test User",
-            authorEmail: "test@example.com",
-            authorDate: "2026-05-24T00:00:00Z",
-            webUrl:
-              "https://dev.azure.com/contoso/project/_git/repo/commit/abcdef1234567890abcdef1234567890abcdef12",
-          },
-        ]);
+        return Promise.resolve({
+          commits: [
+            {
+              organizationId: "contoso",
+              projectId: "project-1",
+              projectName: "Platform",
+              repositoryId: "repo-1",
+              repositoryName: "azdo-dashboard",
+              commitId: "abcdef1234567890abcdef1234567890abcdef12",
+              shortCommitId: "abcdef12",
+              comment: "Add commit search",
+              authorName: "Test User",
+              authorEmail: "test@example.com",
+              authorDate: "2026-05-24T00:00:00Z",
+              webUrl:
+                "https://dev.azure.com/contoso/project/_git/repo/commit/abcdef1234567890abcdef1234567890abcdef12",
+            },
+          ],
+          total: 1,
+          truncated: false,
+        });
       }
       return Promise.reject(new Error(`Unhandled command: ${command}`));
     });
