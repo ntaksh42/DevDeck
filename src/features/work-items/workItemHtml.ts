@@ -296,19 +296,27 @@ function replaceAzureMentionDisplayNamesInHtml(
   value: string | null | undefined,
   mentionDisplayNames: ReadonlyMap<string, string>,
 ): string | null | undefined {
-  if (!value || mentionDisplayNames.size === 0) return value;
+  // Runs even when no display names are known: an unresolved `@<id>` token must
+  // still be neutralized so the sanitizer cannot mistake `<id>` for an unknown
+  // HTML tag and silently drop it (which left only a stray "@" in the preview).
+  if (!value) return value;
   return value.replace(
     /@(?:<|&lt;)([^<>&]+)(?:>|&gt;)/g,
-    (token, encodedId: string) => {
+    (_token, encodedId: string) => {
       const displayName = mentionDisplayNameForId(
         mentionDisplayNames,
         encodedId,
       );
-      // Mention-styled span so client-side substitutions look the same as
-      // mentions resolved by Azure DevOps itself.
-      return displayName
-        ? `<span class="azdo-mention">@${escapeHtml(displayName) ?? displayName}</span>`
-        : token;
+      if (displayName) {
+        // Mention-styled span so client-side substitutions look the same as
+        // mentions resolved by Azure DevOps itself.
+        return `<span class="azdo-mention">@${escapeHtml(displayName) ?? displayName}</span>`;
+      }
+      // No display name available: keep the literal `@<id>` as visible text by
+      // escaping the angle brackets, so the id survives sanitization instead of
+      // being parsed (and dropped) as markup.
+      const rawId = decodeBasicHtmlEntities(encodedId);
+      return `@&lt;${escapeHtml(rawId) ?? rawId}&gt;`;
     },
   );
 }
