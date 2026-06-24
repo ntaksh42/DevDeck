@@ -1199,6 +1199,10 @@ export function MyReviewsGrid({
           setCopyToast(`Voted: ${label}`);
           setTimeout(() => setCopyToast(null), 1500);
         },
+        onError: (error) => {
+          setCopyToast(`Vote failed: ${commandErrorMessage(error)}`);
+          setTimeout(() => setCopyToast(null), 3000);
+        },
       },
     );
   }
