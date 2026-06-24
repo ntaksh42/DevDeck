@@ -442,7 +442,14 @@ const commitSummarySchema = z.object({
 
 const commitSummariesSchema = z.array(commitSummarySchema);
 
+const commitSearchResultSchema = z.object({
+  commits: commitSummariesSchema,
+  total: z.number(),
+  truncated: z.boolean(),
+});
+
 export type CommitSummary = z.infer<typeof commitSummarySchema>;
+export type CommitSearchResult = z.infer<typeof commitSearchResultSchema>;
 
 const searchAllResultSchema = z.object({
   workItems: workItemSummariesSchema,
@@ -564,6 +571,31 @@ export async function searchCode(input: {
 }): Promise<CodeSearchResults> {
   const result = await invokeCommand("search_code", { input });
   return codeSearchResultsSchema.parse(result);
+}
+
+const codeContextLineSchema = z.object({
+  lineNumber: z.number(),
+  text: z.string(),
+  isMatch: z.boolean(),
+});
+const codeContextResultSchema = z.object({
+  blocks: z.array(z.object({ lines: z.array(codeContextLineSchema) })),
+  totalMatches: z.number(),
+  truncated: z.boolean(),
+});
+export type CodeContextResult = z.infer<typeof codeContextResultSchema>;
+
+export async function getCodeSearchContext(input: {
+  organizationId?: string;
+  project: string;
+  repository: string;
+  branch: string;
+  path: string;
+  query: string;
+  contextLines?: number;
+}): Promise<CodeContextResult> {
+  const result = await invokeCommand("get_code_search_context", { input });
+  return codeContextResultSchema.parse(result);
 }
 
 // Signals a cancellable command (e.g. code search) to stop, by the id passed as
@@ -1377,9 +1409,9 @@ export async function cancelPipelineRun(input: {
 
 export async function searchCommits(
   input: SearchCommitsInput,
-): Promise<CommitSummary[]> {
+): Promise<CommitSearchResult> {
   const result = await invokeCommand("search_commits", { input });
-  return commitSummariesSchema.parse(result);
+  return commitSearchResultSchema.parse(result);
 }
 
 export async function listCommitRepositories(
