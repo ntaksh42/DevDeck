@@ -251,13 +251,22 @@ export function CommandPalette({
                     ref={(element) => {
                       rowRefs.current[index] = element;
                     }}
+                    aria-current={index === activeIndex ? "true" : undefined}
                     onMouseEnter={() => setActiveIndex(index)}
                     onFocus={() => setActiveIndex(index)}
                     onClick={() => runActiveRow(index)}
-                    className={`flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-sm ${
-                      index === activeIndex ? "bg-secondary text-foreground" : "hover:bg-muted"
+                    className={`relative flex w-full items-center justify-between gap-3 rounded-md py-1.5 pl-3 pr-2 text-left text-sm outline-none transition-colors ${
+                      index === activeIndex
+                        ? "bg-primary/10 text-foreground ring-2 ring-inset ring-primary/70 shadow-sm"
+                        : "text-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                     }`}
                   >
+                    {index === activeIndex ? (
+                      <span
+                        className="absolute inset-y-1 left-1 w-1 rounded-full bg-primary"
+                        aria-hidden="true"
+                      />
+                    ) : null}
                     <span className="min-w-0 truncate">
                       {row.label}
                       {row.detail ? (
@@ -277,10 +286,11 @@ export function CommandPalette({
         </div>
         {search ? (
           <div className="border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
-            Search work items, PRs, and commits — filter with{" "}
+            Search work items, PRs, commits, and code — filter with{" "}
             <kbd className="rounded bg-muted px-1 font-mono">wi:</kbd>{" "}
             <kbd className="rounded bg-muted px-1 font-mono">pr:</kbd>{" "}
-            <kbd className="rounded bg-muted px-1 font-mono">c:</kbd> · open in browser with{" "}
+            <kbd className="rounded bg-muted px-1 font-mono">c:</kbd>{" "}
+            <kbd className="rounded bg-muted px-1 font-mono">code:</kbd> · open in browser with{" "}
             <kbd className="rounded bg-muted px-1 font-mono">Ctrl+Enter</kbd>
           </div>
         ) : null}

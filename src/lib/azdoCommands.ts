@@ -128,27 +128,6 @@ const reviewPullRequestSummariesSchema = z.array(reviewPullRequestSummarySchema)
 
 export type ReviewPullRequestSummary = z.infer<typeof reviewPullRequestSummarySchema>;
 
-const releaseNotePrSchema = z.object({
-  pullRequestId: z.number(),
-  title: z.string(),
-  createdBy: z.string().nullable(),
-  closedDate: z.string(),
-  repositoryName: z.string(),
-  targetRefName: z.string(),
-  webUrl: z.string().nullable(),
-});
-
-const releaseNotePrsSchema = z.array(releaseNotePrSchema);
-
-export type ReleaseNotePr = z.infer<typeof releaseNotePrSchema>;
-
-export type GenerateReleaseNotesInput = {
-  organizationId?: string;
-  projectId: string;
-  fromDate?: string;
-  toDate?: string;
-};
-
 export type SnoozeItemType = "pull_request" | "work_item";
 
 const snoozedItemSummarySchema = z.object({
@@ -296,6 +275,22 @@ const workItemFieldOptionsSchema = z.array(workItemFieldOptionSchema);
 
 export type WorkItemFieldOption = z.infer<typeof workItemFieldOptionSchema>;
 
+export const COMMENT_REACTION_TYPES = [
+  "like",
+  "heart",
+  "hooray",
+  "smile",
+  "confused",
+  "dislike",
+] as const;
+export type CommentReactionType = (typeof COMMENT_REACTION_TYPES)[number];
+
+const commentReactionSchema = z.object({
+  reactionType: z.string(),
+  count: z.number(),
+  isMine: z.boolean(),
+});
+
 const workItemCommentSchema = z.object({
   id: z.number(),
   text: z.string().nullable(),
@@ -304,6 +299,7 @@ const workItemCommentSchema = z.object({
   createdById: z.string().nullable().optional(),
   createdByUniqueName: z.string().nullable().optional(),
   createdDate: z.string().nullable(),
+  reactions: z.array(commentReactionSchema).optional(),
 });
 
 export type WorkItemComment = z.infer<typeof workItemCommentSchema>;
@@ -342,6 +338,7 @@ const workItemPreviewSchema = z.object({
   workItemType: z.string().nullable(),
   state: z.string().nullable(),
   assignedTo: z.string().nullable(),
+  assignedToUniqueName: z.string().nullable(),
   createdBy: z.string().nullable(),
   createdDate: z.string().nullable(),
   changedDate: z.string().nullable(),
@@ -946,13 +943,6 @@ export async function listMyReviewPullRequests(
   return reviewPullRequestSummariesSchema.parse(result);
 }
 
-export async function generateReleaseNotes(
-  input: GenerateReleaseNotesInput,
-): Promise<ReleaseNotePr[]> {
-  const result = await invokeCommand("generate_release_notes", { input });
-  return releaseNotePrsSchema.parse(result);
-}
-
 export async function getPullRequestReview(
   input: GetPullRequestReviewInput,
 ): Promise<PullRequestReview> {
@@ -1145,6 +1135,17 @@ export async function updateWorkItemComment(
 ): Promise<WorkItemComment> {
   const result = await invokeCommand("update_work_item_comment", { input });
   return workItemCommentSchema.parse(result);
+}
+
+export async function setWorkItemCommentReaction(input: {
+  organizationId?: string;
+  projectId: string;
+  workItemId: number;
+  commentId: number;
+  reactionType: CommentReactionType;
+  engaged: boolean;
+}): Promise<void> {
+  await invokeCommand("set_work_item_comment_reaction", { input });
 }
 
 export async function updateWorkItemFields(

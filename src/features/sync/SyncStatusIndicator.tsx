@@ -79,7 +79,8 @@ export function SyncStatusIndicator({
       disabled={syncing}
       title={title}
       aria-label={label}
-      className={`hidden items-center gap-1 rounded-md px-1.5 py-1 text-xs hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60 sm:flex ${
+      aria-keyshortcuts="Alt+S"
+      className={`flex items-center gap-1 rounded-md px-1.5 py-1 text-xs hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60 ${
         isProblem ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground"
       }`}
     >
