@@ -648,7 +648,11 @@ async fn sync_work_items_skips_not_found_project_and_keeps_other_results() {
     let org = db.upsert_organization(make_org_draft()).unwrap();
     let client = test_client(&server).await;
 
-    do_sync_work_items(&db, &client, &org).await.unwrap();
+    let projects = client.list_projects().await.unwrap();
+    let budget: crate::sync::SyncBudget = std::sync::Arc::new(tokio::sync::Semaphore::new(8));
+    do_sync_work_items(&db, &client, &org, &projects, &budget)
+        .await
+        .unwrap();
 
     let cached = db
         .search_work_items(&org.id, None, None, None, None)
@@ -760,7 +764,11 @@ async fn sync_work_items_delta_preserves_items_missing_from_window() {
     .unwrap();
 
     let client = test_client(&server).await;
-    let result = do_sync_work_items(&db, &client, &org).await.unwrap();
+    let projects = client.list_projects().await.unwrap();
+    let budget: crate::sync::SyncBudget = std::sync::Arc::new(tokio::sync::Semaphore::new(8));
+    let result = do_sync_work_items(&db, &client, &org, &projects, &budget)
+        .await
+        .unwrap();
     assert!(!result.was_full_sync);
 
     let cached = db
@@ -867,7 +875,11 @@ async fn sync_work_items_batches_more_than_two_hundred_ids() {
     let org = db.upsert_organization(make_org_draft()).unwrap();
     let client = test_client(&server).await;
 
-    sync_work_items_for_org(&db, &client, &org).await.unwrap();
+    let projects = client.list_projects().await.unwrap();
+    let budget: crate::sync::SyncBudget = std::sync::Arc::new(tokio::sync::Semaphore::new(8));
+    sync_work_items_for_org(&db, &client, &org, &projects, &budget)
+        .await
+        .unwrap();
 
     let cached = db
         .search_work_items(&org.id, None, None, None, None)
