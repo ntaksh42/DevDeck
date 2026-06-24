@@ -1011,6 +1011,30 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         ],
       };
     }
+    case "get_code_search_context": {
+      const input = (args as { input?: { query?: string } } | undefined)?.input;
+      const query = input?.query?.trim() || "searchCode";
+      return {
+        totalMatches: 2,
+        truncated: false,
+        blocks: [
+          {
+            lines: [
+              { lineNumber: 521, text: "", isMatch: false },
+              { lineNumber: 522, text: `export async function ${query}(input: {`, isMatch: true },
+              { lineNumber: 523, text: "  organizationId?: string;", isMatch: false },
+            ],
+          },
+          {
+            lines: [
+              { lineNumber: 530, text: "}): Promise<CodeSearchResults> {", isMatch: false },
+              { lineNumber: 531, text: `  const result = await invokeCommand("${query}", { input });`, isMatch: true },
+              { lineNumber: 532, text: "  return codeSearchResultsSchema.parse(result);", isMatch: false },
+            ],
+          },
+        ],
+      };
+    }
     case "list_pipeline_projects":
       return demoPipelineProjects();
     case "list_pipeline_definitions":

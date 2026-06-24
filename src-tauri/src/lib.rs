@@ -21,7 +21,9 @@ mod sync;
 mod work_items;
 
 use cancellation::{run_cancellable, CancellationRegistry};
-use code_search::{CodeSearchResults, CodeSearchService, SearchCodeInput};
+use code_search::{
+    CodeContextResult, CodeSearchResults, CodeSearchService, GetCodeContextInput, SearchCodeInput,
+};
 use commits::{
     CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
     CommitRepositoryOption, CommitSearchResult, CommitService, GetCommitChangesInput,
@@ -634,6 +636,15 @@ async fn search_code(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn get_code_search_context(
+    input: GetCodeContextInput,
+    state: State<'_, AppState>,
+) -> Result<CodeContextResult> {
+    state.code_search.get_context(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn cancel_operation(operation_id: String, state: State<'_, AppState>) -> Result<()> {
     state.cancellation.cancel(&operation_id);
     Ok(())
@@ -900,6 +911,7 @@ pub fn run() {
             list_commit_repositories,
             commit_activity,
             search_code,
+            get_code_search_context,
             cancel_operation,
             get_commit_changes,
             get_commit_file_diff,
