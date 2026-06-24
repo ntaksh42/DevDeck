@@ -417,6 +417,20 @@ export function PrFilesTab({
     });
   }
 
+  // Bulk-mark every changed file viewed (or clear them all) in one action.
+  function setAllViewed(viewed: boolean) {
+    setViewedKeys((prev) => {
+      const next = new Set(prev);
+      for (const file of files) {
+        const key = fileViewedKey(file.path);
+        if (viewed) next.add(key);
+        else next.delete(key);
+      }
+      window.localStorage.setItem(viewedStorageKey(pr), JSON.stringify([...next]));
+      return next;
+    });
+  }
+
   function handleFilesKeyDown(event: React.KeyboardEvent) {
     if (isEditableTarget(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.key === "j" || event.key === "k") {
@@ -432,6 +446,13 @@ export function PrFilesTab({
             : visibleFiles.length - 1
           : Math.max(0, Math.min(visibleFiles.length - 1, index + delta));
       setSelectedPath(visibleFiles[nextIndex].path);
+      return;
+    }
+    if (event.key === "v") {
+      if (!selectedPath) return;
+      event.preventDefault();
+      event.stopPropagation();
+      toggleViewed(selectedPath);
       return;
     }
     if (event.key === "n" || event.key === "p") {
@@ -560,9 +581,23 @@ export function PrFilesTab({
               {viewedCount}/{files.length} viewed
             </span>
           </span>
-          <span className="text-muted-foreground/70" title="j/k move files · n/p jump comments">
-            j/k · n/p
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setAllViewed(viewedCount < files.length)}
+              title={
+                viewedCount < files.length
+                  ? "Mark every file as viewed"
+                  : "Clear viewed on every file"
+              }
+              className="rounded px-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
+            >
+              {viewedCount < files.length ? "Mark all" : "Clear all"}
+            </button>
+            <span className="text-muted-foreground/70" title="j/k move files · v toggle viewed · n/p jump comments">
+              j/k · v · n/p
+            </span>
+          </div>
         </div>
         <div ref={fileListRef} className="min-h-0 flex-1 overflow-y-auto">
           {fileTreeRows.map((row) => {

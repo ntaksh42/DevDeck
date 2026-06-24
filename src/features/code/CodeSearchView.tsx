@@ -1,9 +1,10 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { FileCode, Info, Loader2, Search, X } from "lucide-react";
+import { ChevronRight, FileCode, Info, Loader2, Search, X } from "lucide-react";
 import {
   cancelOperation,
   commandErrorMessage,
+  getCodeSearchContext,
   listCommitRepositories,
   newOperationId,
   searchCode,
@@ -272,6 +273,8 @@ export function CodeSearchView({ organizations }: { organizations: Organization[
               <CodeResultRow
                 key={`${hit.projectName}:${hit.repositoryName}:${hit.branch ?? ""}:${hit.path}`}
                 hit={hit}
+                organizationId={selectedOrganizationId}
+                query={mutation.variables?.query ?? query}
               />
             ))}
           </ul>
@@ -281,25 +284,112 @@ export function CodeSearchView({ organizations }: { organizations: Organization[
   );
 }
 
-function CodeResultRow({ hit }: { hit: CodeSearchHit }) {
+function CodeResultRow({
+  hit,
+  organizationId,
+  query,
+}: {
+  hit: CodeSearchHit;
+  organizationId: string;
+  query: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const contextQuery = useQuery({
+    queryKey: [
+      "codeContext",
+      organizationId,
+      hit.projectName,
+      hit.repositoryName,
+      hit.branch ?? "",
+      hit.path,
+      query,
+    ],
+    queryFn: () =>
+      getCodeSearchContext({
+        organizationId,
+        project: hit.projectName,
+        repository: hit.repositoryName,
+        branch: hit.branch ?? "",
+        path: hit.path,
+        query,
+      }),
+    enabled: expanded && !!hit.branch && !!query.trim(),
+    staleTime: 60_000,
+  });
+
   return (
-    <li>
-      <button
-        type="button"
-        onClick={() => openExternalUrl(hit.webUrl)}
-        className="flex w-full items-center gap-2 border-b border-border px-3 py-1.5 text-left text-sm hover:bg-muted/50"
-        title={`${hit.path} — open in Azure DevOps`}
-      >
-        <FileCode className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <span className="shrink-0 font-medium">{hit.fileName}</span>
-        <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
-          {hit.path}
-        </span>
-        <span className="shrink-0 text-xs text-muted-foreground">
-          {hit.projectName} / {hit.repositoryName}
-          {hit.branch ? ` · ${hit.branch}` : ""}
-        </span>
-      </button>
+    <li className="border-b border-border">
+      <div className="flex w-full items-center">
+        <button
+          type="button"
+          onClick={() => setExpanded((open) => !open)}
+          disabled={!hit.branch}
+          aria-expanded={expanded}
+          aria-label={expanded ? "Hide matching lines" : "Show matching lines"}
+          title={hit.branch ? "Show matching lines" : "No branch available to preview"}
+          className="flex h-8 w-7 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <ChevronRight
+            className={`h-4 w-4 transition-transform ${expanded ? "rotate-90" : ""}`}
+            aria-hidden="true"
+          />
+        </button>
+        <button
+          type="button"
+          onClick={() => openExternalUrl(hit.webUrl)}
+          className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pr-3 text-left text-sm hover:bg-muted/50"
+          title={`${hit.path} — open in Azure DevOps`}
+        >
+          <FileCode className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <span className="shrink-0 font-medium">{hit.fileName}</span>
+          <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
+            {hit.path}
+          </span>
+          <span className="shrink-0 text-xs text-muted-foreground">
+            {hit.projectName} / {hit.repositoryName}
+            {hit.branch ? ` · ${hit.branch}` : ""}
+          </span>
+        </button>
+      </div>
+      {expanded ? (
+        <div className="border-t border-border bg-muted/30 px-3 py-2">
+          {contextQuery.isLoading ? (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Loading context…
+            </div>
+          ) : contextQuery.isError ? (
+            <p className="text-xs text-destructive">{commandErrorMessage(contextQuery.error)}</p>
+          ) : !contextQuery.data || contextQuery.data.blocks.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No matching lines found in the file.</p>
+          ) : (
+            <div className="grid gap-2">
+              {contextQuery.data.blocks.map((block, index) => (
+                <pre
+                  key={index}
+                  className="overflow-x-auto rounded border border-border bg-card font-mono text-[11px] leading-4"
+                >
+                  {block.lines.map((line) => (
+                    <div
+                      key={line.lineNumber}
+                      className={`flex ${line.isMatch ? "bg-amber-100 dark:bg-amber-950/40" : ""}`}
+                    >
+                      <span className="w-10 shrink-0 select-none px-1 text-right text-muted-foreground">
+                        {line.lineNumber}
+                      </span>
+                      <span className="whitespace-pre px-2">{line.text || " "}</span>
+                    </div>
+                  ))}
+                </pre>
+              ))}
+              {contextQuery.data.truncated ? (
+                <p className="text-[11px] text-muted-foreground">
+                  Showing the first matches; more exist in this file.
+                </p>
+              ) : null}
+            </div>
+          )}
+        </div>
+      ) : null}
     </li>
   );
 }
