@@ -453,7 +453,7 @@ export function PrFilesTab({
   }
 
   if (changesQuery.isLoading) return <LoadingState />;
-  if (changesQuery.isError) return <ErrorState message={commandErrorMessage(changesQuery.error)} />;
+  if (changesQuery.isError) return <ErrorState message={commandErrorMessage(changesQuery.error)} onRetry={() => void changesQuery.refetch()} />;
   if (files.length === 0) return <PreviewEmptyState message="No changed files." />;
 
   function postInlineComment(content: string): Promise<void> {
@@ -719,7 +719,7 @@ export function PrFilesTab({
               Loading diff
             </div>
           ) : diffQuery.isError ? (
-            <ErrorState message={commandErrorMessage(diffQuery.error)} />
+            <ErrorState message={commandErrorMessage(diffQuery.error)} onRetry={() => void diffQuery.refetch()} />
           ) : diffQuery.data ? (
             <DiffContent
               // Remount per file/iteration so collapsed/expanded state resets.
