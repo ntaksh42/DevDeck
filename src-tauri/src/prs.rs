@@ -186,7 +186,7 @@ pub(crate) fn vote_label(vote: i32) -> &'static str {
         10 => "Approved",
         5 => "Approved w/ Suggestions",
         0 => "No Vote",
-        -5 => "Waiting for Author",
+        -5 => "Waiting",
         -10 => "Rejected",
         _ => "No Vote",
     }
@@ -200,10 +200,7 @@ pub(crate) fn vote_label(vote: i32) -> &'static str {
 /// group member who has not voted does not appear in `voted_for`, so that case
 /// is not detectable from PR data alone.
 fn resolve_reviewer_vote(reviewers: &[IdentityRefWithVote], user_id: &str) -> (i32, bool) {
-    if let Some(direct) = reviewers
-        .iter()
-        .find(|r| r.id.as_deref() == Some(user_id))
-    {
+    if let Some(direct) = reviewers.iter().find(|r| r.id.as_deref() == Some(user_id)) {
         return (direct.vote, direct.is_required);
     }
     reviewers
@@ -854,8 +851,7 @@ pub(crate) async fn collect_pr_comment_notifications(
         }
     };
     let me = org.authenticated_user_id.clone();
-    let scanned: Vec<CachedReviewPr> =
-        reviews.into_iter().take(PR_COMMENT_SCAN_LIMIT).collect();
+    let scanned: Vec<CachedReviewPr> = reviews.into_iter().take(PR_COMMENT_SCAN_LIMIT).collect();
 
     // Fetch each PR's threads concurrently (the network round-trip is the slow
     // part); keep results by index so PRs are still processed in their original
