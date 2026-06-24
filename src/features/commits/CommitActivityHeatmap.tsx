@@ -196,7 +196,7 @@ export function CommitActivityHeatmap({
     return <LoadingState />;
   }
   if (activityQuery.isError) {
-    return <ErrorState message={commandErrorMessage(activityQuery.error)} />;
+    return <ErrorState message={commandErrorMessage(activityQuery.error)} onRetry={() => void activityQuery.refetch()} />;
   }
 
   return (

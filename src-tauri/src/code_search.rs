@@ -8,6 +8,11 @@ use crate::error::{AppError, Result};
 use crate::secrets::SecretStore;
 
 const CODE_SEARCH_TOP: u32 = 50;
+// Context preview bounds: at most this many matched lines, each with up to this
+// many lines of surrounding context, to keep one file's preview small.
+const CODE_CONTEXT_MAX_MATCHES: usize = 25;
+const CODE_CONTEXT_DEFAULT_LINES: usize = 3;
+const CODE_CONTEXT_MAX_LINES: usize = 8;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -42,6 +47,43 @@ pub struct CodeSearchResults {
     /// Set when Azure DevOps could not return full results, e.g. the
     /// organization is still being indexed after enabling Code Search.
     pub notice: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetCodeContextInput {
+    pub organization_id: Option<String>,
+    pub project: String,
+    pub repository: String,
+    pub branch: String,
+    pub path: String,
+    /// The search text whose occurrences are highlighted; lines containing it
+    /// (case-insensitive) anchor each context block.
+    pub query: String,
+    pub context_lines: Option<usize>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeContextLine {
+    pub line_number: usize,
+    pub text: String,
+    pub is_match: bool,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeContextBlock {
+    pub lines: Vec<CodeContextLine>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeContextResult {
+    pub blocks: Vec<CodeContextBlock>,
+    pub total_matches: usize,
+    /// True when more matches existed than were rendered.
+    pub truncated: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -122,6 +164,80 @@ impl CodeSearchService {
             results,
             notice: index_notice(response.info_code),
         })
+    }
+
+    /// Fetches a code-search hit's file content and returns the lines matching
+    /// the query, each with surrounding context. Used for the inline preview.
+    pub async fn get_context(&self, input: GetCodeContextInput) -> Result<CodeContextResult> {
+        let query = input.query.trim();
+        if query.is_empty() {
+            return Err(AppError::InvalidInput("query is required".to_string()));
+        }
+        let context_lines = input
+            .context_lines
+            .unwrap_or(CODE_CONTEXT_DEFAULT_LINES)
+            .min(CODE_CONTEXT_MAX_LINES);
+        let organization = self
+            .db
+            .resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let item = client
+            .get_item_content_at_branch(
+                &input.project,
+                &input.repository,
+                &input.path,
+                &input.branch,
+            )
+            .await?;
+        let content = item.content.unwrap_or_default();
+        Ok(build_code_context(&content, query, context_lines))
+    }
+}
+
+/// Extracts context blocks around lines containing `query` (case-insensitive),
+/// merging overlapping/adjacent regions so neighbouring matches share a block.
+fn build_code_context(content: &str, query: &str, context_lines: usize) -> CodeContextResult {
+    let lines: Vec<&str> = content.lines().collect();
+    let needle = query.to_lowercase();
+    let match_indices: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| line.to_lowercase().contains(&needle))
+        .map(|(index, _)| index)
+        .collect();
+
+    let total_matches = match_indices.len();
+    let truncated = total_matches > CODE_CONTEXT_MAX_MATCHES;
+    let capped = &match_indices[..total_matches.min(CODE_CONTEXT_MAX_MATCHES)];
+
+    // Merge each match's [i-ctx, i+ctx] window into non-overlapping ranges.
+    let mut ranges: Vec<(usize, usize)> = Vec::new();
+    for &index in capped {
+        let start = index.saturating_sub(context_lines);
+        let end = (index + context_lines).min(lines.len().saturating_sub(1));
+        match ranges.last_mut() {
+            Some(last) if start <= last.1 + 1 => last.1 = last.1.max(end),
+            _ => ranges.push((start, end)),
+        }
+    }
+
+    let blocks = ranges
+        .into_iter()
+        .map(|(start, end)| CodeContextBlock {
+            lines: (start..=end)
+                .map(|index| CodeContextLine {
+                    line_number: index + 1,
+                    text: lines[index].to_string(),
+                    is_match: lines[index].to_lowercase().contains(&needle),
+                })
+                .collect(),
+        })
+        .collect();
+
+    CodeContextResult {
+        blocks,
+        total_matches,
+        truncated,
     }
 }
 
@@ -211,5 +327,31 @@ mod tests {
         assert!(index_notice(None).is_none());
         assert!(index_notice(Some(0)).is_none());
         assert!(index_notice(Some(1)).is_some());
+    }
+
+    #[test]
+    fn build_code_context_returns_matches_with_surrounding_lines() {
+        // Matches at lines 2 and 7 with ctx=1 leave a gap, so they stay separate.
+        let content = "a\nb TODO\nc\nd\ne\nf\ng TODO\nh\n";
+        let result = build_code_context(content, "todo", 1);
+        assert_eq!(result.total_matches, 2);
+        assert!(!result.truncated);
+        assert_eq!(result.blocks.len(), 2);
+        // First block: lines 1..=3 (a / b TODO / c).
+        let first = &result.blocks[0];
+        assert_eq!(first.lines[0].line_number, 1);
+        assert_eq!(first.lines[1].text, "b TODO");
+        assert!(first.lines[1].is_match);
+        assert!(!first.lines[0].is_match);
+    }
+
+    #[test]
+    fn build_code_context_merges_adjacent_matches() {
+        let content = "TODO a\nTODO b\nc\n";
+        let result = build_code_context(content, "todo", 1);
+        assert_eq!(result.total_matches, 2);
+        // Overlapping windows merge into a single block covering lines 1..=3.
+        assert_eq!(result.blocks.len(), 1);
+        assert_eq!(result.blocks[0].lines.len(), 3);
     }
 }
