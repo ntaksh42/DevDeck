@@ -63,6 +63,21 @@ describe("renderMarkdownHtml", () => {
     const html = renderMarkdownHtml("`@<guid>`");
     expect(html).toContain("<code>@&lt;guid&gt;</code>");
   });
+
+  it("resolves @<guid> mentions to display-name spans when known", () => {
+    const guid = "11111111-1111-4111-8111-111111111111";
+    const names = new Map([[guid, "Alice Example"]]);
+    const html = renderMarkdownHtml(`hi @<${guid}> there`, names);
+    expect(html).toContain('<span class="azdo-mention">@Alice Example</span>');
+    expect(html).not.toContain(guid);
+  });
+
+  it("keeps unknown mentions as the literal token when no name is known", () => {
+    const guid = "11111111-1111-4111-8111-111111111111";
+    const html = renderMarkdownHtml(`hi @<${guid}>`, new Map([["other", "Bob"]]));
+    expect(html).toContain(`@&lt;${guid}&gt;`);
+    expect(html).not.toContain("azdo-mention");
+  });
 });
 
 describe("MarkdownView", () => {

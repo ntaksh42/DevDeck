@@ -188,6 +188,7 @@ const pullRequestReviewSchema = z.object({
   isDraft: z.boolean(),
   reviewers: z.array(prReviewerSchema),
   threads: z.array(prThreadSchema),
+  mentionDisplayNames: z.record(z.string(), z.string()).default({}),
 });
 
 export type PullRequestReview = z.infer<typeof pullRequestReviewSchema>;

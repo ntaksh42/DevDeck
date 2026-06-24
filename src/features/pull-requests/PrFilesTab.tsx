@@ -172,9 +172,11 @@ function buildFileTreeRows(
 export function PrFilesTab({
   pr,
   threads,
+  mentionDisplayNames,
 }: {
   pr: ReviewPullRequestSummary;
   threads: PrThread[] | undefined;
+  mentionDisplayNames?: ReadonlyMap<string, string>;
 }) {
   const queryClient = useQueryClient();
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -515,6 +517,7 @@ export function PrFilesTab({
             busy={mutationsBusy}
             showFilePath={false}
             mentionSearch={mentionSearch}
+            mentionDisplayNames={mentionDisplayNames}
             onReply={(content) => replyToThread(thread, content)}
             onToggleStatus={() => toggleThreadStatus(thread)}
             onEditComment={(commentId, content) => editComment(thread, commentId, content)}

@@ -2,6 +2,9 @@ import { useMemo } from "react";
 import DOMPurify from "dompurify";
 import { marked, type TokenizerAndRendererExtension } from "marked";
 import { openExternalUrl } from "@/lib/openExternal";
+import { replaceMentionTokensWithDisplayNames } from "@/lib/mentions";
+
+const EMPTY_MENTION_NAMES: ReadonlyMap<string, string> = new Map();
 
 // Azure DevOps stores @mentions as "@<identity-guid>" markdown. The browser has
 // no display name for the guid, and without help marked parses "<guid>" as
@@ -54,9 +57,17 @@ DOMPurify.addHook("afterSanitizeAttributes", (node) => {
   }
 });
 
-export function renderMarkdownHtml(text: string): string {
+export function renderMarkdownHtml(
+  text: string,
+  mentionDisplayNames: ReadonlyMap<string, string> = EMPTY_MENTION_NAMES,
+): string {
   const html = marked.parse(text, { async: false, gfm: true, breaks: true });
-  return DOMPurify.sanitize(html, {
+  // The mention extension above leaves each token as escaped `@&lt;id&gt;`
+  // text. Resolve those to display-name spans before sanitizing so the injected
+  // markup is sanitized too; unknown ids stay visible as the literal token.
+  const withMentions =
+    replaceMentionTokensWithDisplayNames(html, mentionDisplayNames) ?? html;
+  return DOMPurify.sanitize(withMentions, {
     USE_PROFILES: { html: true },
     ADD_ATTR: ["target"],
   });
@@ -80,14 +91,26 @@ const MARKDOWN_CLASSES = [
   "[&_th]:border [&_th]:border-border [&_th]:px-1.5 [&_th]:py-0.5 [&_th]:font-semibold",
   "[&_img]:max-w-full",
   "[&_hr]:my-2 [&_hr]:border-border",
+  "[&_.azdo-mention]:font-medium [&_.azdo-mention]:text-primary",
 ].join(" ");
 
 /**
  * Renders sanitized markdown. Links open in the external browser instead of
  * navigating the app webview.
  */
-export function MarkdownView({ text, className }: { text: string; className?: string }) {
-  const html = useMemo(() => renderMarkdownHtml(text), [text]);
+export function MarkdownView({
+  text,
+  className,
+  mentionDisplayNames,
+}: {
+  text: string;
+  className?: string;
+  mentionDisplayNames?: ReadonlyMap<string, string>;
+}) {
+  const html = useMemo(
+    () => renderMarkdownHtml(text, mentionDisplayNames ?? EMPTY_MENTION_NAMES),
+    [text, mentionDisplayNames],
+  );
   return (
     <div
       className={`${MARKDOWN_CLASSES} ${className ?? ""}`}

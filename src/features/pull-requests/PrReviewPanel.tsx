@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Loader2, Maximize2, Minimize2 } from "lucide-react";
 import {
@@ -84,6 +84,10 @@ export function PrReviewPanel({
     enabled: !!selectedPr && (tab === "review" || tab === "files"),
     staleTime: 60_000,
   });
+  const filesMentionDisplayNames = useMemo(
+    () => new Map(Object.entries(reviewQuery.data?.mentionDisplayNames ?? {})),
+    [reviewQuery.data?.mentionDisplayNames],
+  );
 
   const settingsQuery = useQuery({
     queryKey: ["appSettings"],
@@ -197,7 +201,11 @@ export function PrReviewPanel({
         />
       ) : tab === "files" ? (
         <Suspense fallback={<LoadingState />}>
-          <PrFilesTab pr={selectedPr} threads={reviewQuery.data?.threads} />
+          <PrFilesTab
+            pr={selectedPr}
+            threads={reviewQuery.data?.threads}
+            mentionDisplayNames={filesMentionDisplayNames}
+          />
         </Suspense>
       ) : tab === "commits" ? (
         <CommitsTab pr={selectedPr} />
@@ -301,6 +309,14 @@ function ReviewTab({
     review?.description,
     ...(commitsQuery.data?.map((commit) => commit.comment) ?? []),
   ]);
+
+  // Display names for the `@<guid>` mention tokens the backend found in the
+  // description and comments, so previews resolve them to names instead of
+  // showing raw guids.
+  const mentionDisplayNames = useMemo(
+    () => new Map(Object.entries(review?.mentionDisplayNames ?? {})),
+    [review?.mentionDisplayNames],
+  );
 
   const [mergeStrategy, setMergeStrategy] = useState("squash");
   const [deleteSourceBranch, setDeleteSourceBranch] = useState(false);
@@ -483,7 +499,11 @@ function ReviewTab({
             ))}
           </div>
           {review.description ? (
-            <MarkdownView text={review.description} className="mt-2 text-xs text-foreground" />
+            <MarkdownView
+              text={review.description}
+              className="mt-2 text-xs text-foreground"
+              mentionDisplayNames={mentionDisplayNames}
+            />
           ) : (
             <p className="mt-2 text-xs italic text-muted-foreground">No description.</p>
           )}
@@ -527,6 +547,7 @@ function ReviewTab({
                 thread={thread}
                 busy={commentMutation.isPending || statusMutation.isPending}
                 mentionSearch={mentionSearch}
+                mentionDisplayNames={mentionDisplayNames}
                 onReply={(content) =>
                   commentMutation.mutateAsync({
                     ...prLocator(pr),

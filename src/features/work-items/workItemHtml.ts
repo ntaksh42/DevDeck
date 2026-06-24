@@ -7,6 +7,8 @@
 
 import DOMPurify from "dompurify";
 
+import { replaceMentionTokensWithDisplayNames } from "@/lib/mentions";
+
 export function hydrateAuthenticatedImages(
   doc: Document,
   baseUrl: string | null | undefined,
@@ -181,7 +183,7 @@ export function commentRichHtml(
     normalizeRichHtml(plainText) ??
     markdownishTextToHtml(plainText) ??
     "No text";
-  return replaceAzureMentionDisplayNamesInHtml(html, mentionDisplayNames) ?? html;
+  return replaceMentionTokensWithDisplayNames(html, mentionDisplayNames) ?? html;
 }
 
 function markdownishTextToHtml(value: string | null | undefined): string | null {
@@ -290,47 +292,6 @@ export function commentAuthorInitials(name: string | null | undefined): string {
     return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
   }
   return [...normalized].slice(0, 2).join("").toUpperCase();
-}
-
-function replaceAzureMentionDisplayNamesInHtml(
-  value: string | null | undefined,
-  mentionDisplayNames: ReadonlyMap<string, string>,
-): string | null | undefined {
-  // Runs even when no display names are known: an unresolved `@<id>` token must
-  // still be neutralized so the sanitizer cannot mistake `<id>` for an unknown
-  // HTML tag and silently drop it (which left only a stray "@" in the preview).
-  if (!value) return value;
-  return value.replace(
-    /@(?:<|&lt;)([^<>&]+)(?:>|&gt;)/g,
-    (_token, encodedId: string) => {
-      const displayName = mentionDisplayNameForId(
-        mentionDisplayNames,
-        encodedId,
-      );
-      if (displayName) {
-        // Mention-styled span so client-side substitutions look the same as
-        // mentions resolved by Azure DevOps itself.
-        return `<span class="azdo-mention">@${escapeHtml(displayName) ?? displayName}</span>`;
-      }
-      // No display name available: keep the literal `@<id>` as visible text by
-      // escaping the angle brackets, so the id survives sanitization instead of
-      // being parsed (and dropped) as markup.
-      const rawId = decodeBasicHtmlEntities(encodedId);
-      return `@&lt;${escapeHtml(rawId) ?? rawId}&gt;`;
-    },
-  );
-}
-
-function mentionDisplayNameForId(
-  mentionDisplayNames: ReadonlyMap<string, string>,
-  id: string,
-): string | null {
-  const normalizedId = decodeBasicHtmlEntities(id).trim();
-  return (
-    mentionDisplayNames.get(normalizedId) ??
-    mentionDisplayNames.get(normalizedId.toLowerCase()) ??
-    null
-  );
 }
 
 function decodeBasicHtmlEntities(value: string): string {

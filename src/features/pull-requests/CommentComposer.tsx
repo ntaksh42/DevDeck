@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { type MentionCandidate } from "@/lib/azdoCommands";
+import {
+  addSelectedMention,
+  renderAzureMentionMarkdown,
+  type SelectedMention,
+} from "@/features/work-items/workItemMentions";
 
 /**
  * Reusable comment editor with optional @mention autocomplete. Owns its own
@@ -35,15 +40,21 @@ export function CommentComposer({
   const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
   const [candidates, setCandidates] = useState<MentionCandidate[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
+  // Mentions chosen from the picker, kept so their plain "@Name" text can be
+  // converted back to the "@<guid>" markdown Azure DevOps needs to create a real
+  // mention (with a notification) instead of leaving inert text.
+  const [selectedMentions, setSelectedMentions] = useState<SelectedMention[]>([]);
 
   async function submit() {
     const trimmed = text.trim();
     if (!trimmed || submitting) return;
+    const content = renderAzureMentionMarkdown(trimmed, selectedMentions);
     setSubmitting(true);
     try {
-      await onSubmit(trimmed);
+      await onSubmit(content);
       setText("");
       setMention(null);
+      setSelectedMentions([]);
       onSubmitted?.();
     } catch {
       // Keep the draft; the caller surfaces the error.
@@ -96,6 +107,7 @@ export function CommentComposer({
     const after = text.slice(caret);
     const inserted = `@${candidate.displayName} `;
     setText(before + inserted + after);
+    setSelectedMentions((current) => addSelectedMention(current, candidate));
     setMention(null);
     setCandidates([]);
     const pos = before.length + inserted.length;

@@ -1,4 +1,6 @@
-use azdo_client::{AdoError, GitThread, NewThreadContext};
+use std::collections::{BTreeSet, HashMap};
+
+use azdo_client::{AdoClient, AdoError, GitThread, NewThreadContext};
 use serde::{Deserialize, Serialize};
 
 use crate::auth::client_for_organization;
@@ -134,6 +136,10 @@ pub struct PullRequestReview {
     pub is_draft: bool,
     pub reviewers: Vec<PrReviewer>,
     pub threads: Vec<PrThread>,
+    /// Maps the identity GUIDs found in `@<guid>` mention tokens (in the
+    /// description and comments) to display names, keyed lowercase. The frontend
+    /// substitutes these so previews show "@Alice" instead of a raw guid.
+    pub mention_display_names: HashMap<String, String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -219,6 +225,9 @@ impl PrReviewService {
         )?;
 
         let me = organization.authenticated_user_id.as_deref();
+        let threads = map_threads(threads, me);
+        let mention_display_names =
+            resolve_mention_display_names(&client, detail.description.as_deref(), &threads).await;
         Ok(PullRequestReview {
             pull_request_id: detail.pull_request_id,
             title: detail.title,
@@ -240,7 +249,8 @@ impl PrReviewService {
                     is_required: reviewer.is_required,
                 })
                 .collect(),
-            threads: map_threads(threads, me),
+            threads,
+            mention_display_names,
         })
     }
 
@@ -783,6 +793,83 @@ async fn fetch_side(
     }
 }
 
+/// Resolves the `@<guid>` mention tokens in a PR's description and comments to
+/// display names. Failures are non-fatal: an unresolved mention falls back to
+/// the raw token in the preview rather than failing the whole review load.
+async fn resolve_mention_display_names(
+    client: &AdoClient,
+    description: Option<&str>,
+    threads: &[PrThread],
+) -> HashMap<String, String> {
+    let mut ids = BTreeSet::new();
+    if let Some(description) = description {
+        collect_mention_ids(description, &mut ids);
+    }
+    for thread in threads {
+        for comment in &thread.comments {
+            if let Some(content) = &comment.content {
+                collect_mention_ids(content, &mut ids);
+            }
+        }
+    }
+    if ids.is_empty() {
+        return HashMap::new();
+    }
+    let ids: Vec<String> = ids.into_iter().collect();
+    match client.resolve_identities_by_ids(&ids).await {
+        Ok(identities) => identities
+            .into_iter()
+            .filter_map(|identity| {
+                let id = identity.id?;
+                let display = identity
+                    .provider_display_name
+                    .or(identity.custom_display_name)
+                    .or(identity.display_name)
+                    .or(identity.unique_name)?;
+                Some((id.to_ascii_lowercase(), display))
+            })
+            .collect(),
+        Err(error) => {
+            tracing::warn!(%error, "failed to resolve PR mention display names");
+            HashMap::new()
+        }
+    }
+}
+
+/// Scans text for `@<guid>` mention tokens, inserting each storage-key GUID
+/// (lowercased) into `out`. Only the 8-4-4-4-12 hex form Azure DevOps resolves
+/// is collected; other `@<...>` content is ignored.
+fn collect_mention_ids(text: &str, out: &mut BTreeSet<String>) {
+    let bytes = text.as_bytes();
+    let mut index = 0;
+    while index + 1 < bytes.len() {
+        if bytes[index] == b'@' && bytes[index + 1] == b'<' {
+            let rest = &text[index + 2..];
+            if let Some(close) = rest.find('>') {
+                let inner = &rest[..close];
+                if is_mention_guid(inner) {
+                    out.insert(inner.to_ascii_lowercase());
+                }
+                index += 2 + close + 1;
+                continue;
+            }
+        }
+        index += 1;
+    }
+}
+
+fn is_mention_guid(value: &str) -> bool {
+    const GROUPS: [usize; 5] = [8, 4, 4, 4, 12];
+    let mut parts = value.split('-');
+    for len in GROUPS {
+        match parts.next() {
+            Some(part) if part.len() == len && part.bytes().all(|b| b.is_ascii_hexdigit()) => {}
+            _ => return false,
+        }
+    }
+    parts.next().is_none()
+}
+
 fn map_threads(threads: Vec<GitThread>, me: Option<&str>) -> Vec<PrThread> {
     threads
         .into_iter()
@@ -934,6 +1021,42 @@ mod tests {
         assert!(!thread_resolved(Some("pending")));
         assert!(!thread_resolved(Some("unknown")));
         assert!(!thread_resolved(None));
+    }
+
+    #[test]
+    fn collect_mention_ids_extracts_only_guid_tokens() {
+        let mut ids = BTreeSet::new();
+        collect_mention_ids(
+            "hi @<A1B2C3D4-E5F6-7890-ABCD-EF0123456789> see @<not-a-guid> and @plain",
+            &mut ids,
+        );
+        assert_eq!(ids.len(), 1);
+        assert!(ids.contains("a1b2c3d4-e5f6-7890-abcd-ef0123456789"));
+    }
+
+    #[test]
+    fn collect_mention_ids_handles_multibyte_surroundings() {
+        let mut ids = BTreeSet::new();
+        collect_mention_ids(
+            "田中さん @<11111111-2222-3333-4444-555555555555> よろしく",
+            &mut ids,
+        );
+        assert_eq!(ids.len(), 1);
+        assert!(ids.contains("11111111-2222-3333-4444-555555555555"));
+    }
+
+    #[test]
+    fn is_mention_guid_validates_storage_key_form() {
+        assert!(is_mention_guid("a1b2c3d4-e5f6-7890-abcd-ef0123456789"));
+        // One hex digit short in the final group.
+        assert!(!is_mention_guid("a1b2c3d4-e5f6-7890-abcd-ef012345678"));
+        // Non-hex character.
+        assert!(!is_mention_guid("zzzzzzzz-e5f6-7890-abcd-ef0123456789"));
+        // Extra trailing group.
+        assert!(!is_mention_guid(
+            "a1b2c3d4-e5f6-7890-abcd-ef0123456789-0000"
+        ));
+        assert!(!is_mention_guid("plainname"));
     }
 
     #[test]

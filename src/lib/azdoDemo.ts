@@ -239,7 +239,8 @@ function demoThreadsFor(pullRequestId: number): PrThread[] {
         {
           id: 1,
           parentCommentId: 0,
-          content: "Could you add a test for the empty case?",
+          content:
+            "@<11111111-1111-4111-8111-111111111111> could you add a test for the empty case?",
           author: "Riley Reviewer",
           publishedDate: "2026-05-22T09:00:00Z",
           isSystem: false,
@@ -661,6 +662,9 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
           },
         ],
         threads: demoThreadsFor(prId),
+        mentionDisplayNames: {
+          "11111111-1111-4111-8111-111111111111": "Demo User",
+        },
       };
       return review;
     }

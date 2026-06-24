@@ -143,6 +143,36 @@ impl AdoClient {
         Ok(identities)
     }
 
+    /// Resolves identity storage GUIDs to their display metadata in one batch.
+    /// Used to turn `@<guid>` mention tokens (the form Azure DevOps persists in
+    /// comment/description markdown) into human-readable names. Ids the service
+    /// does not recognize are simply absent from the response.
+    pub async fn resolve_identities_by_ids(&self, ids: &[String]) -> Result<Vec<Identity>> {
+        let joined = ids
+            .iter()
+            .map(|id| id.trim())
+            .filter(|id| !id.is_empty())
+            .collect::<Vec<_>>()
+            .join(",");
+        if joined.is_empty() {
+            return Ok(Vec::new());
+        }
+        let response: IdentitySearchResponse = self
+            .get_json_vssps(
+                "_apis/identities",
+                &[
+                    ("api-version", "7.1"),
+                    ("identityIds", &joined),
+                    ("queryMembership", "None"),
+                ],
+            )
+            .await?;
+        Ok(match response {
+            IdentitySearchResponse::Wrapped { value } => value,
+            IdentitySearchResponse::List(value) => value,
+        })
+    }
+
     pub async fn search_identity_picker(
         &self,
         query: &str,
