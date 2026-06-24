@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronRight, Loader2, Pencil, Plus, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { Check, ChevronRight, Loader2, Pencil, Plus, SlidersHorizontal, SmilePlus, Trash2, X } from "lucide-react";
 import type {
   WorkItemFieldOption,
   WorkItemPreview,
@@ -65,6 +65,18 @@ const PREVIEW_FIELD_DEFINITIONS: PreviewFieldDefinition[] = [
 
 const VISIBLE_COMMENT_LIMIT = 20;
 
+// Azure DevOps comment reaction types, in display order, with their emoji.
+const COMMENT_REACTIONS: { type: string; emoji: string; label: string }[] = [
+  { type: "like", emoji: "👍", label: "Like" },
+  { type: "heart", emoji: "❤️", label: "Heart" },
+  { type: "hooray", emoji: "🎉", label: "Hooray" },
+  { type: "smile", emoji: "😄", label: "Smile" },
+  { type: "confused", emoji: "😕", label: "Confused" },
+  { type: "dislike", emoji: "👎", label: "Dislike" },
+];
+
+type CommentReaction = { reactionType: string; count: number; isMine: boolean };
+
 
 function stopPreviewNavigationKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
   if (
@@ -99,6 +111,8 @@ export function WorkItemPreviewDetails({
   onCustomPreviewFieldsChange,
   onDeleteComment,
   onEditComment,
+  onToggleCommentReaction,
+  reactionPendingCommentId,
   onSelectedFieldKeysChange,
   priorityControl,
   reasonControl,
@@ -127,6 +141,8 @@ export function WorkItemPreviewDetails({
   onCustomPreviewFieldsChange: (fields: CustomPreviewField[]) => void;
   onDeleteComment: (commentId: number) => void;
   onEditComment: (commentId: number, markdown: string) => void;
+  onToggleCommentReaction?: (commentId: number, reactionType: string, engaged: boolean) => void;
+  reactionPendingCommentId?: number | null;
   onSelectedFieldKeysChange: (keys: PreviewFieldKey[]) => void;
   presetsControl?: ReactNode;
   priorityControl: ReactNode;
@@ -638,6 +654,9 @@ export function WorkItemPreviewDetails({
                   onDelete={onDeleteComment}
                   onEdit={onEditComment}
                   onImageOpen={setLightboxSrc}
+                  reactions={comment.reactions ?? []}
+                  onToggleReaction={onToggleCommentReaction}
+                  reactionPending={reactionPendingCommentId === comment.id}
                   resolveImageSource={resolveImageSource}
                 />
               );
@@ -788,6 +807,9 @@ function CollapsibleComment({
   onDelete,
   onEdit,
   onImageOpen,
+  reactions,
+  onToggleReaction,
+  reactionPending,
   resolveImageSource,
 }: {
   baseUrl?: string | null;
@@ -803,12 +825,17 @@ function CollapsibleComment({
   onDelete: (commentId: number) => void;
   onEdit: (commentId: number, markdown: string) => void;
   onImageOpen: (src: string) => void;
+  reactions: CommentReaction[];
+  onToggleReaction?: (commentId: number, reactionType: string, engaged: boolean) => void;
+  reactionPending: boolean;
   resolveImageSource: (url: string) => Promise<string | null>;
 }) {
   const [expanded, setExpanded] = useState(commentHtml.length < 700);
   const [editMode, setEditMode] = useState(false);
   const [draft, setDraft] = useState(commentText ?? "");
+  const [pickerOpen, setPickerOpen] = useState(false);
   const collapsible = commentHtml.length >= 700;
+  const reactionByType = new Map(reactions.map((reaction) => [reaction.reactionType, reaction]));
 
   function startEdit() {
     setDraft(commentText ?? "");
@@ -949,6 +976,80 @@ function CollapsibleComment({
               >
                 {expanded ? "Collapse" : "Expand"}
               </button>
+            ) : null}
+            {onToggleReaction ? (
+              <div className="mt-1 flex flex-wrap items-center gap-1">
+                {COMMENT_REACTIONS.filter(
+                  (reaction) => (reactionByType.get(reaction.type)?.count ?? 0) > 0,
+                ).map((reaction) => {
+                  const state = reactionByType.get(reaction.type);
+                  const mine = state?.isMine ?? false;
+                  return (
+                    <button
+                      key={reaction.type}
+                      type="button"
+                      disabled={reactionPending}
+                      onClick={() => onToggleReaction(id, reaction.type, !mine)}
+                      aria-pressed={mine}
+                      title={`${reaction.label}${mine ? " (you reacted)" : ""}`}
+                      className={`inline-flex h-5 items-center gap-1 rounded-full border px-1.5 text-[11px] tabular-nums disabled:cursor-not-allowed disabled:opacity-60 ${
+                        mine
+                          ? "border-primary bg-primary/10 text-foreground"
+                          : "border-border bg-card text-muted-foreground hover:bg-accent"
+                      }`}
+                    >
+                      <span aria-hidden="true">{reaction.emoji}</span>
+                      {state?.count ?? 0}
+                    </button>
+                  );
+                })}
+                <div className="relative">
+                  <button
+                    type="button"
+                    disabled={reactionPending}
+                    aria-label="Add reaction"
+                    aria-expanded={pickerOpen}
+                    title="Add reaction"
+                    onClick={() => setPickerOpen((open) => !open)}
+                    className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <SmilePlus className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                  {pickerOpen ? (
+                    <div
+                      role="menu"
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          setPickerOpen(false);
+                        }
+                      }}
+                      className="absolute left-0 top-full z-30 mt-1 flex gap-0.5 rounded-md border border-border bg-popover p-1 shadow-lg"
+                    >
+                      {COMMENT_REACTIONS.map((reaction) => {
+                        const mine = reactionByType.get(reaction.type)?.isMine ?? false;
+                        return (
+                          <button
+                            key={reaction.type}
+                            type="button"
+                            role="menuitem"
+                            title={reaction.label}
+                            onClick={() => {
+                              onToggleReaction(id, reaction.type, !mine);
+                              setPickerOpen(false);
+                            }}
+                            className={`inline-flex h-7 w-7 items-center justify-center rounded text-base hover:bg-accent ${
+                              mine ? "bg-primary/10" : ""
+                            }`}
+                          >
+                            <span aria-hidden="true">{reaction.emoji}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
             ) : null}
           </>
         )}
