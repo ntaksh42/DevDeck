@@ -114,6 +114,20 @@ pub struct WorkItemComment {
     pub rendered_text: Option<String>,
     pub created_date: Option<String>,
     pub created_by: Option<CommentIdentityRef>,
+    #[serde(default)]
+    pub reactions: Vec<CommentReaction>,
+}
+
+/// A reaction aggregate on a work item comment for one reaction type.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommentReaction {
+    #[serde(rename = "type")]
+    pub reaction_type: String,
+    #[serde(default)]
+    pub count: i64,
+    #[serde(default)]
+    pub is_current_user_engaged: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -423,10 +437,34 @@ impl AdoClient {
                     ("api-version", "7.1-preview.4"),
                     ("$top", &top_str),
                     ("order", "desc"),
+                    ("$expand", "reactions"),
                 ],
             )
             .await?;
         Ok(response.comments)
+    }
+
+    /// Adds (`engaged = true`) or removes (`engaged = false`) the current user's
+    /// reaction of `reaction_type` on a work item comment. `reaction_type` is one
+    /// of `like`, `dislike`, `heart`, `hooray`, `smile`, `confused`.
+    pub async fn set_work_item_comment_reaction(
+        &self,
+        project_id: &str,
+        work_item_id: i64,
+        comment_id: i64,
+        reaction_type: &str,
+        engaged: bool,
+    ) -> Result<()> {
+        let path = format!(
+            "{project_id}/_apis/wit/workItems/{work_item_id}/comments/{comment_id}/reactions/{reaction_type}"
+        );
+        let query = [("api-version", "7.1-preview.1")];
+        if engaged {
+            let _: CommentReaction = self.put_json(&path, &query, &serde_json::json!({})).await?;
+        } else {
+            self.delete(&path, &query).await?;
+        }
+        Ok(())
     }
 
     pub async fn list_work_item_updates(
@@ -1406,5 +1444,68 @@ mod tests {
             .unwrap();
 
         assert!(values.is_empty());
+    }
+
+    #[tokio::test]
+    async fn list_work_item_comments_includes_reactions() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/wit/workItems/42/comments"))
+            .and(query_param("$expand", "reactions"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "comments": [{
+                    "id": 7,
+                    "text": "Looks good",
+                    "reactions": [
+                        { "type": "like", "count": 2, "isCurrentUserEngaged": true },
+                        { "type": "heart", "count": 1, "isCurrentUserEngaged": false }
+                    ]
+                }]
+            })))
+            .mount(&server)
+            .await;
+
+        let comments = test_client(&server)
+            .await
+            .list_work_item_comments("project-1", 42, 50)
+            .await
+            .unwrap();
+        assert_eq!(comments[0].reactions.len(), 2);
+        assert_eq!(comments[0].reactions[0].reaction_type, "like");
+        assert_eq!(comments[0].reactions[0].count, 2);
+        assert!(comments[0].reactions[0].is_current_user_engaged);
+    }
+
+    #[tokio::test]
+    async fn set_work_item_comment_reaction_puts_and_deletes() {
+        let server = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path(
+                "/project-1/_apis/wit/workItems/42/comments/7/reactions/like",
+            ))
+            .and(query_param("api-version", "7.1-preview.1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "type": "like", "count": 1, "isCurrentUserEngaged": true
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("DELETE"))
+            .and(path(
+                "/project-1/_apis/wit/workItems/42/comments/7/reactions/heart",
+            ))
+            .and(query_param("api-version", "7.1-preview.1"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        let client = test_client(&server).await;
+        client
+            .set_work_item_comment_reaction("project-1", 42, 7, "like", true)
+            .await
+            .unwrap();
+        client
+            .set_work_item_comment_reaction("project-1", 42, 7, "heart", false)
+            .await
+            .unwrap();
     }
 }

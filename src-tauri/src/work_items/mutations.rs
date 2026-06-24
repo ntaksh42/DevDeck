@@ -17,9 +17,9 @@ use super::{
     summarize_work_item_comment, summarize_work_item_preview, validate_update_field_reference_name,
     work_item_to_cached, AddWorkItemCommentInput, AddWorkItemLinkInput, AssignWorkItemsInput,
     BulkWorkItemResult, DeleteWorkItemCommentInput, RemoveWorkItemLinkInput,
-    SetWorkItemsPriorityInput, SetWorkItemsStateInput, UpdateWorkItemCommentInput,
-    UpdateWorkItemFieldsInput, WorkItemComment, WorkItemPreview, WorkItemService,
-    WORK_ITEM_PREVIEW_COMMENT_LIMIT,
+    SetWorkItemCommentReactionInput, SetWorkItemsPriorityInput, SetWorkItemsStateInput,
+    UpdateWorkItemCommentInput, UpdateWorkItemFieldsInput, WorkItemComment, WorkItemPreview,
+    WorkItemService, WORK_ITEM_PREVIEW_COMMENT_LIMIT,
 };
 
 impl WorkItemService {
@@ -325,6 +325,36 @@ impl WorkItemService {
             .ok_or_else(|| AppError::InvalidInput("link not found".to_string()))?;
         client
             .remove_work_item_relation(&input.project_id, input.work_item_id, index)
+            .await?;
+        Ok(())
+    }
+
+    /// Adds or removes the authenticated user's emoji reaction on a work item
+    /// comment.
+    pub async fn set_comment_reaction(&self, input: SetWorkItemCommentReactionInput) -> Result<()> {
+        if input.comment_id <= 0 {
+            return Err(AppError::InvalidInput("comment ID is required".to_string()));
+        }
+        let reaction_type = match input.reaction_type.trim().to_ascii_lowercase().as_str() {
+            value @ ("like" | "dislike" | "heart" | "hooray" | "smile" | "confused") => {
+                value.to_string()
+            }
+            other => {
+                return Err(AppError::InvalidInput(format!(
+                    "invalid reaction type: {other}"
+                )))
+            }
+        };
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        client
+            .set_work_item_comment_reaction(
+                &input.project_id,
+                input.work_item_id,
+                input.comment_id,
+                &reaction_type,
+                input.engaged,
+            )
             .await?;
         Ok(())
     }
