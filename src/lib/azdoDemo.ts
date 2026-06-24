@@ -477,6 +477,7 @@ function demoPipelineRunDetail(buildId: number) {
   const run = runs.find((r) => r.buildId === buildId) ?? runs[0];
   return {
     run,
+    timelineUnavailable: false,
     timeline: [
       {
         id: "stage-1",
