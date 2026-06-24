@@ -60,6 +60,7 @@ import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { LoadingState } from '@/components/StateDisplay';
 import { ActiveFilters } from '@/components/ActiveFilters';
+import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { WorkItemPreviewPanel } from './WorkItemPreviewPanel';
 import { invalidateWorkItemMutationCaches, workItemQueryKeys } from './queryKeys';
 import {
@@ -1858,9 +1859,11 @@ export function WorkItemsGrid({
         />
       ) : null}
       {columnMenuRect ? (
-        <ColumnVisibilityDropdown
+        <ColumnVisibilityMenu
           anchorRect={columnMenuRect}
+          columns={WI_GRID_KEYS.map((key) => ({ key, label: wiSortLabels[key] }))}
           visibleColumns={visibleColumns}
+          requiredColumns={WI_GRID_REQUIRED_COLUMNS}
           onToggle={toggleColumnVisibility}
           onReset={resetColumnVisibility}
           onClose={() => setColumnMenuRect(null)}
@@ -1989,85 +1992,6 @@ function ColumnFilterDropdown({
             );
           })
         )}
-      </div>
-    </div>
-  );
-}
-
-function ColumnVisibilityDropdown({
-  anchorRect,
-  visibleColumns,
-  onToggle,
-  onReset,
-  onClose,
-}: {
-  anchorRect: DOMRect;
-  visibleColumns: WiSortKey[];
-  onToggle: (column: WiSortKey) => void;
-  onReset: () => void;
-  onClose: () => void;
-}) {
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function onMouseDown(e: MouseEvent) {
-      if (!dropdownRef.current?.contains(e.target as Node)) onClose();
-    }
-    document.addEventListener("mousedown", onMouseDown);
-    return () => document.removeEventListener("mousedown", onMouseDown);
-  }, [onClose]);
-
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        onClose();
-      }
-    }
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [onClose]);
-
-  const top = Math.min(anchorRect.bottom + 2, window.innerHeight - 300);
-  const left = Math.min(anchorRect.left, window.innerWidth - 224);
-
-  return (
-    <div
-      ref={dropdownRef}
-      className="fixed z-50 w-56 rounded-md border border-border bg-popover p-1 shadow-lg"
-      style={{ top, left }}
-    >
-      <div className="border-b border-border px-2 py-1.5 text-xs font-semibold text-foreground">
-        Visible columns
-      </div>
-      <div className="py-1">
-        {WI_GRID_KEYS.map((column) => {
-          const required = WI_GRID_REQUIRED_COLUMNS.includes(column);
-          return (
-            <label
-              key={column}
-              className="flex cursor-pointer select-none items-center justify-between gap-2 rounded px-2 py-1 text-xs hover:bg-secondary"
-            >
-              <span>{wiSortLabels[column]}</span>
-              <input
-                type="checkbox"
-                checked={visibleColumns.includes(column)}
-                disabled={required}
-                onChange={() => onToggle(column)}
-                className="h-3 w-3"
-              />
-            </label>
-          );
-        })}
-      </div>
-      <div className="border-t border-border p-1">
-        <button
-          type="button"
-          onClick={onReset}
-          className="w-full rounded px-2 py-1 text-left text-xs text-muted-foreground hover:bg-secondary hover:text-foreground"
-        >
-          Reset columns
-        </button>
       </div>
     </div>
   );
