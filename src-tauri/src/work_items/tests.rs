@@ -1073,3 +1073,38 @@ fn prioritized_relation_links_keep_parent_child_over_cap() {
     assert_eq!(links[0], ("Parent".to_string(), 0, 7));
     assert_eq!(links[1], ("Child".to_string(), 1, 8));
 }
+
+fn area_node(name: &str, children: Vec<ClassificationNode>) -> ClassificationNode {
+    ClassificationNode {
+        name: name.to_string(),
+        structure_type: Some("area".to_string()),
+        has_children: !children.is_empty(),
+        children,
+        attributes: None,
+    }
+}
+
+#[test]
+fn flatten_classification_node_builds_field_paths_from_names() {
+    let tree = area_node(
+        "Platform",
+        vec![
+            area_node("Web", vec![]),
+            area_node("API", vec![area_node("Gateway", vec![])]),
+        ],
+    );
+
+    let mut out = Vec::new();
+    flatten_classification_node(&tree, None, 0, &mut out);
+
+    let paths: Vec<(&str, usize)> = out.iter().map(|n| (n.path.as_str(), n.depth)).collect();
+    assert_eq!(
+        paths,
+        vec![
+            ("Platform", 0),
+            ("Platform\\Web", 1),
+            ("Platform\\API", 1),
+            ("Platform\\API\\Gateway", 2),
+        ]
+    );
+}

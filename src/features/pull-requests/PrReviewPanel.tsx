@@ -644,7 +644,7 @@ function CommitsTab({ pr }: { pr: ReviewPullRequestSummary }) {
 
   if (commitsQuery.isLoading) return <LoadingState />;
   if (commitsQuery.isError) {
-    return <ErrorState message={commandErrorMessage(commitsQuery.error)} />;
+    return <ErrorState message={commandErrorMessage(commitsQuery.error)} onRetry={() => void commitsQuery.refetch()} />;
   }
   const commits = commitsQuery.data ?? [];
   if (commits.length === 0) return <PreviewEmptyState message="No commits." />;
