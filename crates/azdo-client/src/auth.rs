@@ -209,10 +209,9 @@ impl AzureCliTokenSource for AzCommandTokenSource {
             )));
         }
 
-        let value: serde_json::Value =
-            serde_json::from_slice(&output.stdout).map_err(|error| {
-                AdoError::Auth(format!("could not parse Azure CLI token output: {error}"))
-            })?;
+        let value: serde_json::Value = serde_json::from_slice(&output.stdout).map_err(|error| {
+            AdoError::Auth(format!("could not parse Azure CLI token output: {error}"))
+        })?;
         let token = value
             .get("accessToken")
             .and_then(|v| v.as_str())
@@ -240,11 +239,8 @@ fn token_expires_in(value: &serde_json::Value) -> Option<Duration> {
     let raw = value.get("expiresOn").and_then(|v| v.as_str())?;
     // `az` reports this in local time without a timezone, e.g.
     // "2026-06-25 13:45:30.123456".
-    let naive =
-        chrono::NaiveDateTime::parse_from_str(raw.trim(), "%Y-%m-%d %H:%M:%S%.f").ok()?;
-    let local = chrono::Local
-        .from_local_datetime(&naive)
-        .single()?;
+    let naive = chrono::NaiveDateTime::parse_from_str(raw.trim(), "%Y-%m-%d %H:%M:%S%.f").ok()?;
+    let local = chrono::Local.from_local_datetime(&naive).single()?;
     local
         .signed_duration_since(chrono::Local::now())
         .to_std()
