@@ -19,6 +19,7 @@ function makePreview(overrides: Partial<WorkItemPreview> = {}): WorkItemPreview 
     workItemType: "Bug",
     state: "Active",
     assignedTo: null,
+    assignedToUniqueName: null,
     createdBy: null,
     createdDate: null,
     changedDate: null,
@@ -97,7 +98,10 @@ describe("buildInverseChanges", () => {
   it("restores the prior values for each staged field", () => {
     const preview = makePreview({
       state: "Active",
-      assignedTo: "Alice <alice@corp.com>",
+      // The preview carries the display name only; the unique name is a separate
+      // field, mirroring how the backend builds the preview.
+      assignedTo: "Alice",
+      assignedToUniqueName: "alice@corp.com",
       priority: "2",
       reason: "Approved",
       tags: "alpha; beta",
@@ -114,7 +118,13 @@ describe("buildInverseChanges", () => {
 
     expect(buildInverseChanges(preview, staged)).toEqual({
       state: "Active",
-      assignee: { assignValue: "Alice <alice@corp.com>", displayName: "Alice <alice@corp.com>" },
+      // The unambiguous "Display <unique>" form is restored so a duplicate
+      // display name cannot resolve to the wrong person.
+      assignee: {
+        assignValue: "Alice <alice@corp.com>",
+        displayName: "Alice",
+        uniqueName: "alice@corp.com",
+      },
       priority: 2,
       reason: "Approved",
       tags: ["alpha", "beta"],
@@ -122,11 +132,27 @@ describe("buildInverseChanges", () => {
     });
   });
 
+  it("falls back to the display name when the prior assignee has no unique name", () => {
+    const inverse = buildInverseChanges(
+      makePreview({ assignedTo: "Alice", assignedToUniqueName: null }),
+      { assignee: { assignValue: "Bob <bob@corp.com>", displayName: "Bob" } },
+    );
+    expect(inverse.assignee).toEqual({
+      assignValue: "Alice",
+      displayName: "Alice",
+      uniqueName: null,
+    });
+  });
+
   it("uses Unassigned and empty value when prior assignee is missing", () => {
     const inverse = buildInverseChanges(makePreview({ assignedTo: null }), {
       assignee: { assignValue: "Bob <bob@corp.com>", displayName: "Bob" },
     });
-    expect(inverse.assignee).toEqual({ assignValue: "", displayName: "Unassigned" });
+    expect(inverse.assignee).toEqual({
+      assignValue: "",
+      displayName: "Unassigned",
+      uniqueName: null,
+    });
   });
 
   it("skips priority when the prior value was never set", () => {

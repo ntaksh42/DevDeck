@@ -56,9 +56,18 @@ export function buildInverseChanges(
     inverse.state = preview.state;
   }
   if (staged.assignee) {
+    // Restore the previous assignee unambiguously: send "Display <unique>" when
+    // the unique name is known so a duplicate display name does not fail to
+    // resolve or land on the wrong person. An empty value clears the assignment
+    // (the item was previously unassigned).
+    const displayName = preview.assignedTo ?? "";
+    const uniqueName = preview.assignedToUniqueName ?? null;
+    const assignValue =
+      displayName && uniqueName ? `${displayName} <${uniqueName}>` : displayName;
     inverse.assignee = {
-      assignValue: preview.assignedTo ?? "",
+      assignValue,
       displayName: preview.assignedTo ?? "Unassigned",
+      uniqueName,
     };
   }
   if (staged.priority !== undefined && preview.priority) {
