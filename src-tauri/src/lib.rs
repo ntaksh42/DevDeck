@@ -68,10 +68,11 @@ use work_items::{
     ListWorkItemTypeStatesInput, ListWorkItemUpdatesInput, MentionCandidate,
     RecordAssigneeInteractionInput, RecordMentionInteractionInput, RunWorkItemQueryInput,
     SavedQueryResult, SearchWorkItemAssigneesInput, SearchWorkItemMentionsInput,
-    SearchWorkItemsInput, SetWorkItemsPriorityInput, SetWorkItemsStateInput,
-    UpdateWorkItemCommentInput, UpdateWorkItemFieldsInput, WorkItemAssigneeCandidate,
-    WorkItemComment, WorkItemFieldOption, WorkItemImage, WorkItemPreview, WorkItemProjectOption,
-    WorkItemService, WorkItemSummary, WorkItemUpdateSummary,
+    SearchWorkItemsInput, SetWorkItemCommentReactionInput, SetWorkItemsPriorityInput,
+    SetWorkItemsStateInput, UpdateWorkItemCommentInput, UpdateWorkItemFieldsInput,
+    WorkItemAssigneeCandidate, WorkItemComment, WorkItemFieldOption, WorkItemImage,
+    WorkItemPreview, WorkItemProjectOption, WorkItemService, WorkItemSummary,
+    WorkItemUpdateSummary,
 };
 
 #[derive(Clone)]
@@ -483,6 +484,16 @@ async fn update_work_item_comment(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn set_work_item_comment_reaction(
+    input: SetWorkItemCommentReactionInput,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    ensure_write_enabled(&state).await?;
+    state.work_items.set_comment_reaction(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn list_work_item_updates(
     input: ListWorkItemUpdatesInput,
     state: State<'_, AppState>,
@@ -864,6 +875,7 @@ pub fn run() {
             add_work_item_comment,
             delete_work_item_comment,
             update_work_item_comment,
+            set_work_item_comment_reaction,
             update_work_item_fields,
             list_work_item_updates,
             list_work_item_field_allowed_values,
