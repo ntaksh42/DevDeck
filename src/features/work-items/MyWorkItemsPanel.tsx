@@ -92,7 +92,7 @@ export function MyWorkItemsPanel({ organizations }: { organizations: Organizatio
         <WorkItemTemplatesPanel />
       </div>
       {query.isError ? (
-        <ErrorState message={commandErrorMessage(query.error)} />
+        <ErrorState message={commandErrorMessage(query.error)} onRetry={() => void query.refetch()} />
       ) : null}
 
       <WorkItemsGrid

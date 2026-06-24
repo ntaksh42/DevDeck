@@ -507,6 +507,21 @@ impl AppDatabase {
         list_my_work_items(&conn, org_id)
     }
 
+    /// Reads just one work item's cached `System.ChangedDate` by id, avoiding a
+    /// full my_work_items scan for callers (e.g. snooze baseline capture) that
+    /// only need a single item's activity marker.
+    pub fn my_work_item_changed_date(&self, org_id: &str, id: i64) -> Result<Option<String>> {
+        let conn = self.open()?;
+        conn.query_row(
+            "SELECT changed_date FROM my_work_items WHERE org_id = ?1 AND id = ?2",
+            params![org_id, id],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .optional()
+        .map(|opt| opt.flatten())
+        .map_err(AppError::from)
+    }
+
     /// Keeps the my_work_items snapshot consistent after a single-item edit.
     ///
     /// When `my_unique_name` is known and the item is no longer assigned to that
