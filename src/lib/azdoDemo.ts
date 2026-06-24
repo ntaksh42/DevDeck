@@ -943,7 +943,8 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     case "search_commits": {
       const input = (args as { input?: SearchCommitsInput } | undefined)
         ?.input;
-      return demoCommits(input);
+      const commits = demoCommits(input);
+      return { commits, total: commits.length, truncated: false };
     }
     case "commit_activity": {
       const input = (args as { input?: CommitActivityInput } | undefined)?.input;

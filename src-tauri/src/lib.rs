@@ -24,7 +24,7 @@ use cancellation::{run_cancellable, CancellationRegistry};
 use code_search::{CodeSearchResults, CodeSearchService, SearchCodeInput};
 use commits::{
     CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
-    CommitRepositoryOption, CommitService, CommitSummary, GetCommitChangesInput,
+    CommitRepositoryOption, CommitSearchResult, CommitService, GetCommitChangesInput,
     GetCommitFileDiffInput, GetCommitPullRequestsInput, ListCommitRepositoriesInput,
     SearchCommitsInput,
 };
@@ -592,7 +592,7 @@ async fn get_saved_query(
 async fn search_commits(
     input: SearchCommitsInput,
     state: State<'_, AppState>,
-) -> Result<Vec<CommitSummary>> {
+) -> Result<CommitSearchResult> {
     let service = state.commits.clone();
     service.search(input).await
 }
