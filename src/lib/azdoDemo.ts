@@ -1014,8 +1014,31 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       return demoPipelineProjects();
     case "list_pipeline_definitions":
       return demoPipelineDefinitions();
-    case "list_pipeline_runs":
-      return demoPipelineRuns();
+    case "list_pipeline_runs": {
+      const input = (
+        args as
+          | {
+              input?: {
+                branch?: string;
+                result?: string;
+                requestedForMe?: boolean;
+              };
+            }
+          | undefined
+      )?.input;
+      let runs = demoPipelineRuns();
+      if (input?.branch) {
+        const needle = input.branch.toLowerCase();
+        runs = runs.filter((run) => run.sourceBranch.toLowerCase().includes(needle));
+      }
+      if (input?.result) {
+        runs = runs.filter((run) => run.result === input.result);
+      }
+      if (input?.requestedForMe) {
+        runs = runs.filter((run) => run.requestedFor === "Demo User");
+      }
+      return runs;
+    }
     case "get_pipeline_run": {
       const input = (args as { input?: { buildId?: number } } | undefined)?.input;
       return demoPipelineRunDetail(input?.buildId ?? 1001);
