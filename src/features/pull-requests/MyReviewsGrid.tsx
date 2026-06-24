@@ -16,15 +16,9 @@ import {
   ChevronRight,
   ChevronUp,
   CircleDashed,
-  Download,
   Filter,
   Loader,
-  Pin,
-  PinOff,
-  Plus,
   Search,
-  Trash2,
-  Upload,
   X,
   XCircle,
 } from 'lucide-react';
@@ -57,32 +51,32 @@ import {
   type SortDirection,
 } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
+import { useGridFocusRestoration } from '@/lib/useGridFocusRestoration';
 import { recordRecentPullRequest } from '@/lib/recentItems';
+import { isTauriRuntime } from '@/lib/runtime';
+import {
+  acknowledgeReturn,
+  reconcileReturns,
+  seedDemoReturn,
+} from './reviewReturnTracking';
 import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { LoadingState, ErrorState } from '@/components/StateDisplay';
 import { ActiveFilters } from '@/components/ActiveFilters';
+
 import { PrReviewPanel } from './PrReviewPanel';
 import { VOTE_BADGE_CLASSES, voteTone } from './voteVisual';
-import {
-  createPullRequestViewsExport,
-  loadPullRequestViews,
-  newPullRequestViewId,
-  parsePullRequestViewsImport,
-  savePullRequestViews,
-  type PullRequestView,
-} from './prViewsStorage';
 
 const DEFAULT_REVIEW_PREVIEW_WIDTH = 420;
 const MIN_REVIEW_PREVIEW_WIDTH = 280;
 // Effectively unbounded: the pane is still capped by the window width.
 const MAX_REVIEW_PREVIEW_WIDTH = 8192;
 const REVIEW_PREVIEW_WIDTH_STORAGE_KEY = 'azdodeck:layout:reviewPreviewWidth';
-const DEFAULT_PR_GRID_COLUMN_WIDTHS = [52, 36, 110, 180, 82, 56, 76, 68, 78];
-const PR_GRID_COLUMN_MIN_WIDTHS = [48, 32, 96, 150, 72, 50, 68, 62, 70];
-const PR_GRID_COLUMN_MAX_WIDTHS = [120, 60, 520, 960, 240, 120, 240, 180, 240];
-const PR_GRID_COLUMN_WIDTHS_STORAGE_KEY = 'azdodeck:layout:myReviewsGridColumnWidths:v3';
+const DEFAULT_PR_GRID_COLUMN_WIDTHS = [52, 36, 110, 180, 82, 56, 64, 76, 68, 78];
+const PR_GRID_COLUMN_MIN_WIDTHS = [48, 32, 96, 150, 72, 50, 52, 68, 62, 70];
+const PR_GRID_COLUMN_MAX_WIDTHS = [120, 60, 520, 960, 240, 120, 120, 240, 180, 240];
+const PR_GRID_COLUMN_WIDTHS_STORAGE_KEY = 'azdodeck:layout:myReviewsGridColumnWidths:v4';
 const PR_GRID_VIEW_STORAGE_KEY = "azdodeck:view:myReviewsGrid:v1";
 const PR_GRID_ROW_HEIGHT = 29;
 const PR_GRID_OVERSCAN = 8;
@@ -193,7 +187,23 @@ function CiBadge({ pr }: { pr: ReviewPullRequestSummary }) {
 
 // Renders a single grid cell for the given column key. Cells stay direct grid
 // items (wrapped only in a keyed Fragment) so the column template lines up.
-function renderPrCell(key: SortKey, pr: ReviewPullRequestSummary, isStale: boolean): ReactNode {
+// Whole days a PR has been open (review age), or null when the creation date
+// is unparseable. Negative ages (clock skew) clamp to 0.
+export function reviewAgeDays(
+  creationDate: string,
+  now: number = Date.now(),
+): number | null {
+  const created = new Date(creationDate).getTime();
+  if (!Number.isFinite(created)) return null;
+  return Math.max(0, Math.floor((now - created) / 86_400_000));
+}
+
+function renderPrCell(
+  key: SortKey,
+  pr: ReviewPullRequestSummary,
+  isStale: boolean,
+  returned: boolean,
+): ReactNode {
   switch (key) {
     case "pullRequestId":
       return (
@@ -218,6 +228,14 @@ function renderPrCell(key: SortKey, pr: ReviewPullRequestSummary, isStale: boole
     case "title":
       return (
         <div className="flex min-w-0 items-center gap-1.5">
+          {returned ? (
+            <span
+              className="inline-flex shrink-0 items-center rounded border border-purple-300 bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-800 dark:border-purple-800 dark:bg-purple-950 dark:text-purple-300"
+              title="The author pushed new changes after your review — returned to you"
+            >
+              Returned
+            </span>
+          ) : null}
           {pr.isDraft && (
             <span className="inline-flex shrink-0 items-center rounded border border-input bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
               Draft
@@ -251,6 +269,21 @@ function renderPrCell(key: SortKey, pr: ReviewPullRequestSummary, isStale: boole
           {formatRelativeDate(pr.creationDate)}
         </span>
       );
+    case "reviewAge": {
+      const days = reviewAgeDays(pr.creationDate);
+      return (
+        <span
+          className={`text-xs tabular-nums ${isStale ? "font-medium text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`}
+          title={
+            days === null
+              ? "Review age unavailable"
+              : `Open for ${days} day${days === 1 ? "" : "s"} (since ${formatDate(pr.creationDate)})`
+          }
+        >
+          {days === null ? "—" : `${days}d`}
+        </span>
+      );
+    }
     case "targetRefName":
       return (
         <span className="truncate text-xs text-muted-foreground" title={pr.targetRefName}>
@@ -272,12 +305,13 @@ const ReviewPrRow = forwardRef<
     pr: ReviewPullRequestSummary;
     selected: boolean;
     inMultiSelection: boolean;
+    returned: boolean;
     columnTemplate: string;
     visibleColumns: SortKey[];
     staleThresholdDays: number;
     onSelect: (event: { shiftKey: boolean }) => void;
   }
->(({ pr, selected, inMultiSelection, columnTemplate, visibleColumns, staleThresholdDays, onSelect }, ref) => {
+>(({ pr, selected, inMultiSelection, returned, columnTemplate, visibleColumns, staleThresholdDays, onSelect }, ref) => {
   const createdTime = new Date(pr.creationDate).getTime();
   const isStale = Number.isFinite(createdTime)
     ? Math.floor((Date.now() - createdTime) / 86_400_000) >= staleThresholdDays
@@ -309,7 +343,7 @@ const ReviewPrRow = forwardRef<
       style={{ gridTemplateColumns: columnTemplate }}
     >
       {visibleColumns.map((key) => (
-        <Fragment key={key}>{renderPrCell(key, pr, isStale)}</Fragment>
+        <Fragment key={key}>{renderPrCell(key, pr, isStale, returned)}</Fragment>
       ))}
     </div>
   );
@@ -323,6 +357,7 @@ type SortKey =
   | "title"
   | "createdBy"
   | "creationDate"
+  | "reviewAge"
   | "targetRefName"
   | "myIsRequired"
   | "myVote";
@@ -338,6 +373,7 @@ const sortLabels: Record<SortKey, string> = {
   title: "Title",
   createdBy: "Author",
   creationDate: "Created",
+  reviewAge: "Review age",
   targetRefName: "Target",
   myIsRequired: "Role",
   myVote: "My Vote",
@@ -351,6 +387,7 @@ const PR_GRID_KEYS: SortKey[] = [
   "title",
   "createdBy",
   "creationDate",
+  "reviewAge",
   "targetRefName",
   "myIsRequired",
   "myVote",
@@ -366,7 +403,9 @@ function loadVisibleColumns(value: unknown): SortKey[] {
 }
 
 function defaultSortDirection(key: SortKey): SortDirection {
-  return key === "creationDate" ? "desc" : "asc";
+  // Created (newest first) and Review age (oldest/longest-waiting first) both
+  // default to descending.
+  return key === "creationDate" || key === "reviewAge" ? "desc" : "asc";
 }
 
 function compareStrings(a: string | null | undefined, b: string | null | undefined): number {
@@ -412,6 +451,18 @@ function compareReviewPrs(
         if (Number.isFinite(left)) return -1;
         if (Number.isFinite(right)) return 1;
         return compareStrings(a.creationDate, b.creationDate);
+      }
+    case "reviewAge":
+      {
+        // Sort by age ascending (youngest first); descending surfaces the
+        // longest-waiting reviews. Age = now - creation, so this is the
+        // creation-time comparison reversed.
+        const left = new Date(a.creationDate).getTime();
+        const right = new Date(b.creationDate).getTime();
+        if (Number.isFinite(left) && Number.isFinite(right)) return right - left;
+        if (Number.isFinite(left)) return -1;
+        if (Number.isFinite(right)) return 1;
+        return compareStrings(b.creationDate, a.creationDate);
       }
     case "targetRefName":
       return compareStrings(a.targetRefName, b.targetRefName);
@@ -561,8 +612,10 @@ function loadMyReviewsGridViewState(): MyReviewsGridViewState {
       for (const column of Object.keys(FILTERABLE_COLUMNS) as FilterableColumn[]) {
         const values = parsedFilters[column];
         if (Array.isArray(values)) {
+          // An empty array is a persisted "uncheck all" selection, so keep the
+          // key (with an empty set) rather than dropping it to "(All)".
           const cleaned = values.filter((value): value is string => typeof value === "string");
-          if (cleaned.length > 0) columnFilters[column] = new Set(cleaned);
+          columnFilters[column] = new Set(cleaned);
         }
       }
     }
@@ -584,7 +637,9 @@ function storeMyReviewsGridViewState(state: MyReviewsGridViewState) {
   const columnFilters: Partial<Record<FilterableColumn, string[]>> = {};
   for (const column of Object.keys(FILTERABLE_COLUMNS) as FilterableColumn[]) {
     const values = state.columnFilters[column];
-    if (values && values.size > 0) columnFilters[column] = [...values];
+    // Persist empty sets too: an empty set is an explicit "uncheck all" filter,
+    // distinct from an absent key which means "(All)".
+    if (values) columnFilters[column] = [...values];
   }
   window.localStorage.setItem(
     PR_GRID_VIEW_STORAGE_KEY,
@@ -599,8 +654,10 @@ function storeMyReviewsGridViewState(state: MyReviewsGridViewState) {
 function activeColumnFilterCount(
   filters: Partial<Record<FilterableColumn, Set<string>>>,
 ): number {
+  // An absent key means "(All)"; an empty set means "uncheck all" (an explicit
+  // selection of nothing), so both are counted as an active column filter.
   return (Object.values(filters) as (Set<string> | undefined)[]).filter(
-    (values) => values && values.size > 0,
+    (values) => values !== undefined,
   ).length;
 }
 
@@ -615,23 +672,12 @@ type MyReviewsGridProps = {
   organizations: Organization[];
   selectRequest?: MyReviewsSelectRequest | null;
   onSelectRequestHandled?: () => void;
-  selectedViewRequestId?: string | null;
-  onSelectedViewRequestHandled?: () => void;
-  onViewsChange?: (views: PullRequestView[]) => void;
 };
-
-function prViewExportFileName(): string {
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  return `azdodeck-pull-request-views-${stamp}.json`;
-}
 
 export function MyReviewsGrid({
   organizations,
   selectRequest,
   onSelectRequestHandled,
-  selectedViewRequestId,
-  onSelectedViewRequestHandled,
-  onViewsChange,
 }: MyReviewsGridProps) {
   const initialViewState = useMemo(() => loadMyReviewsGridViewState(), []);
   const [organizationId, setOrganizationId] = useState(() =>
@@ -719,16 +765,10 @@ export function MyReviewsGrid({
   );
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const [maximized, setMaximized] = useState(false);
-  const [savedViews, setSavedViews] = useState<PullRequestView[]>(() => loadPullRequestViews());
-  const [activeViewId, setActiveViewId] = useState<string | null>(null);
-  const [viewMessage, setViewMessage] = useState<string | null>(null);
-  const viewButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const importViewsInputRef = useRef<HTMLInputElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const filterInputRef = useRef<HTMLInputElement | null>(null);
   const gridScrollRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const gridHadFocusRef = useRef(false);
   // A cross-link select request that is waiting for the target PR to appear in
   // the sorted/visible rows (e.g. after switching org or loading data).
   const pendingSelectRef = useRef<MyReviewsSelectRequest | null>(null);
@@ -756,129 +796,31 @@ export function MyReviewsGrid({
     });
   }, [collapsedSections, columnFilters, organizationId, showDrafts, sort, textFilter, visibleColumns]);
 
-  useEffect(() => {
-    savePullRequestViews(savedViews);
-    onViewsChange?.(savedViews);
-  }, [onViewsChange, savedViews]);
-
-  // Capture the current grid filter/sort state as a saved view payload.
-  function currentViewState(): Omit<PullRequestView, "id" | "name" | "pinned"> {
-    const filters: PullRequestView["columnFilters"] = {};
-    for (const col of Object.keys(columnFilters) as FilterableColumn[]) {
-      const values = columnFilters[col];
-      if (values && values.size > 0) filters[col] = [...values];
-    }
-    return {
-      organizationId,
-      textFilter,
-      columnFilters: filters,
-      showDrafts,
-      sortKey: sort.key,
-      sortDirection: sort.direction,
-    };
-  }
-
-  function applyView(view: PullRequestView) {
-    if (
-      view.organizationId &&
-      organizations.some((organization) => organization.id === view.organizationId)
-    ) {
-      setOrganizationId(view.organizationId);
-    }
-    setTextFilter(view.textFilter);
-    const restored: Partial<Record<FilterableColumn, Set<string>>> = {};
-    for (const col of Object.keys(view.columnFilters) as FilterableColumn[]) {
-      const values = view.columnFilters[col];
-      if (values && values.length > 0) restored[col] = new Set(values);
-    }
-    setColumnFilters(restored);
-    setShowDrafts(view.showDrafts);
-    setSort({ key: view.sortKey, direction: view.sortDirection });
-    setActiveViewId(view.id);
-    setSelectedIndex(0);
-  }
-
-  function saveCurrentAsView() {
-    const name = window.prompt("Save current filters as view named:")?.trim();
-    if (!name) return;
-    const view: PullRequestView = {
-      id: newPullRequestViewId(),
-      name,
-      pinned: false,
-      ...currentViewState(),
-    };
-    setSavedViews((current) => [...current, view]);
-    setActiveViewId(view.id);
-    setViewMessage(`Saved view "${name}".`);
-  }
-
-  function updateActiveView() {
-    if (!activeViewId) return;
-    setSavedViews((current) =>
-      current.map((view) =>
-        view.id === activeViewId ? { ...view, ...currentViewState() } : view,
-      ),
-    );
-    setViewMessage("Updated view with current filters.");
-  }
-
-  function deleteActiveView() {
-    if (!activeViewId) return;
-    setSavedViews((current) => current.filter((view) => view.id !== activeViewId));
-    setActiveViewId(null);
-    setViewMessage("Deleted view.");
-  }
-
-  function toggleActiveViewPinned() {
-    if (!activeViewId) return;
-    setSavedViews((current) =>
-      current.map((view) =>
-        view.id === activeViewId ? { ...view, pinned: !view.pinned } : view,
-      ),
-    );
-  }
-
-  function exportViews() {
-    if (savedViews.length === 0) return;
-    const text = JSON.stringify(createPullRequestViewsExport(savedViews), null, 2);
-    const blob = new Blob([text], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = prViewExportFileName();
-    link.click();
-    URL.revokeObjectURL(url);
-    setViewMessage(`Exported ${savedViews.length} view${savedViews.length === 1 ? "" : "s"}.`);
-  }
-
-  async function importViews(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.currentTarget.files?.[0];
-    event.currentTarget.value = "";
-    if (!file) return;
-    try {
-      const imported = parsePullRequestViewsImport(await file.text()).map((view) => ({
-        ...view,
-        id: newPullRequestViewId(),
-      }));
-      setSavedViews((current) => [...current, ...imported]);
-      setViewMessage(`Imported ${imported.length} view${imported.length === 1 ? "" : "s"}.`);
-    } catch (error) {
-      setViewMessage(error instanceof Error ? error.message : "Failed to import views.");
-    }
-  }
-
-  function selectViewAt(index: number) {
-    if (savedViews.length === 0) return;
-    const clamped = Math.max(0, Math.min(index, savedViews.length - 1));
-    const view = savedViews[clamped];
-    if (!view) return;
-    applyView(view);
-    window.setTimeout(() => viewButtonRefs.current[clamped]?.focus(), 0);
-  }
-
-  const activeView = savedViews.find((view) => view.id === activeViewId) ?? null;
-
   const allPrs = query.data ?? [];
+
+  // "Returned to me": PRs whose vote was reset (author pushed) after I reviewed.
+  // Tracked locally by diffing successive vote snapshots.
+  const [returnedKeys, setReturnedKeys] = useState<Set<string>>(new Set());
+  const demoSeededRef = useRef(false);
+  const voteSignature = useMemo(
+    () => allPrs.map((pr) => `${reviewTriageKey(pr)}:${pr.myVote}`).join("|"),
+    [allPrs],
+  );
+  useEffect(() => {
+    // Seed one demo PR as returned so the feature is reproducible in the
+    // browser preview without a live vote-reset.
+    if (!demoSeededRef.current && !isTauriRuntime()) {
+      demoSeededRef.current = true;
+      const candidate = allPrs.find((pr) => pr.myVote === 0 && !pr.isDraft);
+      if (candidate) seedDemoReturn(reviewTriageKey(candidate));
+    }
+    setReturnedKeys(
+      reconcileReturns(
+        allPrs.map((pr) => ({ key: reviewTriageKey(pr), myVote: pr.myVote })),
+      ),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voteSignature]);
 
   // Local "done" triage: archived PRs leave the inbox until they change.
   const [showDone, setShowDone] = useState(false);
@@ -922,13 +864,13 @@ export function MyReviewsGrid({
 
   const filtered = useMemo(() => {
     const hasFilters = (Object.values(columnFilters) as (Set<string> | undefined)[]).some(
-      (values) => values && values.size > 0,
+      (values) => values !== undefined,
     );
     if (!hasFilters) return baseFiltered;
     return baseFiltered.filter((pr) => {
       for (const col of Object.keys(columnFilters) as FilterableColumn[]) {
         const activeValues = columnFilters[col];
-        if (!activeValues || activeValues.size === 0) continue;
+        if (!activeValues) continue;
         if (!activeValues.has(FILTERABLE_COLUMNS[col](pr))) return false;
       }
       return true;
@@ -991,7 +933,10 @@ export function MyReviewsGrid({
   }, [sortedPrs, collapsedSections]);
 
   const resultKeysSignature = useMemo(
-    () => sortedPrs.map((pr) => `${pr.organizationId}-${pr.pullRequestId}`).join("|"),
+    () =>
+      sortedPrs
+        .map((pr) => `${pr.organizationId}-${pr.repositoryId}-${pr.pullRequestId}`)
+        .join("|"),
     [sortedPrs],
   );
 
@@ -1090,18 +1035,20 @@ export function MyReviewsGrid({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sortedPrs]);
 
-  // Apply a view requested from the navigation sidebar.
   useEffect(() => {
-    if (!selectedViewRequestId) return;
-    const requested = savedViews.find((view) => view.id === selectedViewRequestId);
-    if (requested) applyView(requested);
-    onSelectedViewRequestHandled?.();
-    // applyView is stable enough for this one-shot request; deps kept minimal.
+    if (!selectedPr) return;
+    recordRecentPullRequest(selectedPr);
+    // Opening a returned PR acknowledges it, clearing the highlight.
+    const key = reviewTriageKey(selectedPr);
+    if (returnedKeys.has(key)) {
+      acknowledgeReturn(key);
+      setReturnedKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedViewRequestId, savedViews]);
-
-  useEffect(() => {
-    if (selectedPr) recordRecentPullRequest(selectedPr);
   }, [selectedPr]);
 
   useEffect(() => {
@@ -1129,12 +1076,20 @@ export function MyReviewsGrid({
   // A background sync can replace or remove the focused row's DOM node; once
   // the grid had focus, restore it to the selected row after data changes so
   // keyboard navigation keeps working.
-  useEffect(() => {
-    if (!gridHadFocusRef.current) return;
-    window.setTimeout(() => {
-      rowRefs.current[selectedIndex]?.focus();
-    }, 0);
-  }, [selectedIndex, resultKeysSignature]);
+  const {
+    onFocusCapture: handleGridFocusCapture,
+    onBlurCapture: handleGridBlurCapture,
+  } = useGridFocusRestoration({
+    containerRef,
+    restoreSignature: `${resultKeysSignature}#${selectedIndex}`,
+    restoreFocus: () => {
+      scrollPrIntoView(selectedIndex);
+      const node = rowRefs.current[selectedIndex];
+      if (!node) return false;
+      node.focus();
+      return true;
+    },
+  });
 
   useEffect(() => {
     const scroller = gridScrollRef.current;
@@ -1257,22 +1212,20 @@ export function MyReviewsGrid({
     const allValues = columnUniqueValues[col] ?? [];
     setColumnFilters((prev) => {
       const current = prev[col];
-      if (!current || current.size === 0) {
+      // No active filter (absent key) means every value is checked, so the
+      // first toggle deselects just the clicked value.
+      if (!current) {
         const next = new Set(allValues.filter((candidate) => candidate !== value));
-        if (next.size === 0) return prev;
         return { ...prev, [col]: next };
       }
 
       const next = new Set(current);
       if (next.has(value)) {
         next.delete(value);
-        if (next.size === 0) {
-          const { [col]: _, ...rest } = prev;
-          return rest;
-        }
       } else {
         next.add(value);
         if (next.size === allValues.length) {
+          // Every value checked again collapses back to "(All)".
           const { [col]: _, ...rest } = prev;
           return rest;
         }
@@ -1282,11 +1235,19 @@ export function MyReviewsGrid({
     setSelectedIndex(0);
   }
 
+  // Removes the column filter entirely, which means "show all" / (All).
   function clearColumnFilter(col: FilterableColumn) {
     setColumnFilters((prev) => {
       const { [col]: _, ...rest } = prev;
       return rest;
     });
+    setSelectedIndex(0);
+  }
+
+  // Unchecks every value for the column, leaving an explicit empty selection so
+  // the user can then pick exactly the values they want.
+  function uncheckAllColumnFilter(col: FilterableColumn) {
+    setColumnFilters((prev) => ({ ...prev, [col]: new Set<string>() }));
     setSelectedIndex(0);
   }
 
@@ -1522,21 +1483,8 @@ export function MyReviewsGrid({
       className="flex min-h-0 flex-1 flex-col gap-2 outline-none"
       tabIndex={-1}
       onKeyDown={handleKeyDown}
-      onFocusCapture={(event) => {
-        const target = event.target;
-        gridHadFocusRef.current =
-          target instanceof HTMLElement &&
-          Boolean(target.closest('[role="grid"], [role="row"]'));
-      }}
-      onBlurCapture={(event) => {
-        const nextTarget = event.relatedTarget;
-        if (
-          !(nextTarget instanceof HTMLElement) ||
-          !nextTarget.closest('[role="grid"], [role="row"]')
-        ) {
-          gridHadFocusRef.current = false;
-        }
-      }}
+      onFocusCapture={handleGridFocusCapture}
+      onBlurCapture={handleGridBlurCapture}
     >
       {copyToast && (
         <div
@@ -1603,150 +1551,6 @@ export function MyReviewsGrid({
 
       </div>
 
-      {/* Saved views bar */}
-      <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5">
-        <span className="text-xs font-medium text-muted-foreground">Views</span>
-        {savedViews.length > 0 ? (
-          <div
-            role="listbox"
-            aria-label="Saved pull request views"
-            className="flex flex-wrap items-center gap-1"
-            onKeyDown={(event) => {
-              if (event.target instanceof HTMLElement && event.target.closest("input,select,textarea")) {
-                return;
-              }
-              const activeIndex = savedViews.findIndex((view) => view.id === activeViewId);
-              if (event.key === "ArrowRight" || event.key === "ArrowDown") {
-                event.preventDefault();
-                event.stopPropagation();
-                selectViewAt((activeIndex < 0 ? -1 : activeIndex) + 1);
-              } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
-                event.preventDefault();
-                event.stopPropagation();
-                selectViewAt((activeIndex < 0 ? savedViews.length : activeIndex) - 1);
-              } else if (event.key === "Home") {
-                event.preventDefault();
-                event.stopPropagation();
-                selectViewAt(0);
-              } else if (event.key === "End") {
-                event.preventDefault();
-                event.stopPropagation();
-                selectViewAt(savedViews.length - 1);
-              } else if (event.key === "Delete" && activeViewId) {
-                event.preventDefault();
-                event.stopPropagation();
-                deleteActiveView();
-              }
-            }}
-          >
-            {savedViews.map((view, index) => {
-              const active = view.id === activeViewId;
-              return (
-                <button
-                  key={view.id}
-                  ref={(element) => {
-                    viewButtonRefs.current[index] = element;
-                  }}
-                  type="button"
-                  role="option"
-                  aria-selected={active}
-                  onClick={() => applyView(view)}
-                  className={`inline-flex h-7 items-center gap-1 rounded-md border px-2 text-xs font-medium outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
-                    active
-                      ? "border-primary bg-secondary text-foreground"
-                      : "border-border bg-card text-muted-foreground hover:bg-secondary"
-                  }`}
-                  title={`Apply view "${view.name}"`}
-                >
-                  {view.pinned ? <Pin className="h-3 w-3 text-primary" aria-hidden="true" /> : null}
-                  <span className="max-w-[160px] truncate">{view.name}</span>
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <span className="text-xs text-muted-foreground/70">
-            Save the current filters as a reusable view.
-          </span>
-        )}
-        <span className="ml-auto flex items-center gap-1">
-          {activeView ? (
-            <>
-              <button
-                type="button"
-                onClick={updateActiveView}
-                title={`Update "${activeView.name}" with current filters`}
-                className="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 text-xs font-medium hover:bg-secondary"
-              >
-                Update
-              </button>
-              <button
-                type="button"
-                onClick={toggleActiveViewPinned}
-                title={activeView.pinned ? "Unpin from sidebar" : "Pin to sidebar"}
-                aria-label={activeView.pinned ? "Unpin view" : "Pin view"}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-secondary"
-              >
-                {activeView.pinned ? (
-                  <PinOff className="h-3.5 w-3.5" aria-hidden="true" />
-                ) : (
-                  <Pin className="h-3.5 w-3.5" aria-hidden="true" />
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={deleteActiveView}
-                title={`Delete "${activeView.name}"`}
-                aria-label="Delete view"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-destructive hover:bg-destructive/10"
-              >
-                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-              </button>
-            </>
-          ) : null}
-          <button
-            type="button"
-            onClick={saveCurrentAsView}
-            title="Save current filters as a new view"
-            className="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 text-xs font-medium hover:bg-secondary"
-          >
-            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-            Save
-          </button>
-          <button
-            type="button"
-            disabled={savedViews.length === 0}
-            onClick={exportViews}
-            title="Export views as JSON"
-            aria-label="Export views"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Download className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            onClick={() => importViewsInputRef.current?.click()}
-            title="Import views from JSON"
-            aria-label="Import views"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-secondary"
-          >
-            <Upload className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
-          <input
-            ref={importViewsInputRef}
-            type="file"
-            accept="application/json,.json"
-            className="hidden"
-            onChange={(event) => void importViews(event)}
-          />
-        </span>
-        {viewMessage ? (
-          <p role="status" className="w-full text-xs text-muted-foreground">
-            {viewMessage}
-          </p>
-        ) : null}
-      </div>
-
       <div
         className={
           maximized
@@ -1787,7 +1591,7 @@ export function MyReviewsGrid({
                       column={col}
                       sort={sort}
                       onSort={applySort}
-                      filterActive={isFilterableColumn(col) && !!columnFilters[col]?.size}
+                      filterActive={isFilterableColumn(col) && columnFilters[col] !== undefined}
                       onFilterOpen={isFilterableColumn(col) ? (el) => openFilter(col, el) : undefined}
                       resizeHandle={
                         isLast ? undefined : (
@@ -1858,12 +1662,13 @@ export function MyReviewsGrid({
                     }
                     return (
                       <ReviewPrRow
-                        key={`${row.pr.organizationId}-${row.pr.pullRequestId}`}
+                        key={`${row.pr.organizationId}-${row.pr.repositoryId}-${row.pr.pullRequestId}`}
                         ref={(el) => { rowRefs.current[row.prIndex] = el; }}
                         columnTemplate={COLS}
                         pr={row.pr}
                         selected={row.prIndex === selectedIndex}
                         inMultiSelection={selectedKeys.has(reviewTriageKey(row.pr))}
+                        returned={returnedKeys.has(reviewTriageKey(row.pr))}
                         visibleColumns={visibleColumns}
                         staleThresholdDays={staleThresholdDays}
                         onSelect={({ shiftKey }) => {
@@ -1896,6 +1701,15 @@ export function MyReviewsGrid({
               <span>
                 {visiblePrs.length} total,{" "}
                 <span className="font-medium text-foreground">{noVoteCount}</span> not voted
+                {returnedKeys.size > 0 ? (
+                  <>
+                    {", "}
+                    <span className="font-medium text-purple-700 dark:text-purple-300">
+                      {returnedKeys.size}
+                    </span>{" "}
+                    returned
+                  </>
+                ) : null}
               </span>
               {isMultiSelect ? (
                 changesLoading ? (
@@ -1993,6 +1807,7 @@ export function MyReviewsGrid({
           activeValues={columnFilters[openFilterCol]}
           onToggle={(value) => toggleFilter(openFilterCol, value)}
           onClearAll={() => clearColumnFilter(openFilterCol)}
+          onUncheckAll={() => uncheckAllColumnFilter(openFilterCol)}
           onClose={() => {
             setOpenFilterCol(null);
             setFilterAnchorRect(null);
@@ -2126,6 +1941,7 @@ function ColumnFilterDropdown({
   activeValues,
   onToggle,
   onClearAll,
+  onUncheckAll,
   onClose,
 }: {
   anchorRect: DOMRect;
@@ -2133,6 +1949,7 @@ function ColumnFilterDropdown({
   activeValues: Set<string> | undefined;
   onToggle: (value: string) => void;
   onClearAll: () => void;
+  onUncheckAll: () => void;
   onClose: () => void;
 }) {
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -2157,7 +1974,8 @@ function ColumnFilterDropdown({
     return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [onClose]);
 
-  const isAllChecked = !activeValues || activeValues.size === 0;
+  const isAllChecked = activeValues === undefined;
+  const anyChecked = isAllChecked || (activeValues?.size ?? 0) > 0;
   const filteredValues = search.trim()
     ? allValues.filter((value) => value.toLowerCase().includes(search.trim().toLowerCase()))
     : allValues;
@@ -2175,19 +1993,27 @@ function ColumnFilterDropdown({
           autoFocus
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search..."
+          placeholder="Search…"
           className="w-full rounded border border-input bg-background px-2 py-0.5 text-xs outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
-      <div className="border-b border-border p-1">
+      <div className="flex items-center gap-1 border-b border-border p-1">
         <button
           type="button"
           onClick={onClearAll}
-          className={`w-full rounded px-2 py-0.5 text-left text-xs hover:bg-secondary ${
+          className={`flex-1 rounded px-2 py-0.5 text-left text-xs hover:bg-secondary ${
             isAllChecked ? "font-medium text-foreground" : "text-muted-foreground"
           }`}
         >
           (All)
+        </button>
+        <button
+          type="button"
+          onClick={onUncheckAll}
+          disabled={!anyChecked}
+          className="rounded px-2 py-0.5 text-xs text-muted-foreground hover:bg-secondary disabled:cursor-default disabled:opacity-40"
+        >
+          Uncheck all
         </button>
       </div>
       <div className="max-h-44 overflow-auto p-1">
@@ -2216,4 +2042,3 @@ function ColumnFilterDropdown({
     </div>
   );
 }
-

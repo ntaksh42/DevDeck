@@ -15,9 +15,9 @@ use crate::settings::SettingsService;
 use super::{
     summarize_work_item_comment, summarize_work_item_preview, validate_update_field_reference_name,
     work_item_to_cached, AddWorkItemCommentInput, AssignWorkItemsInput, BulkWorkItemResult,
-    DeleteWorkItemCommentInput, SetWorkItemsPriorityInput, SetWorkItemsStateInput,
-    UpdateWorkItemFieldsInput, WorkItemComment, WorkItemPreview, WorkItemService,
-    WORK_ITEM_PREVIEW_COMMENT_LIMIT,
+    DeleteWorkItemCommentInput, SetWorkItemCommentReactionInput, SetWorkItemsPriorityInput,
+    SetWorkItemsStateInput, UpdateWorkItemCommentInput, UpdateWorkItemFieldsInput, WorkItemComment,
+    WorkItemPreview, WorkItemService, WORK_ITEM_PREVIEW_COMMENT_LIMIT,
 };
 
 impl WorkItemService {
@@ -251,6 +251,61 @@ impl WorkItemService {
         let client = client_for_organization(&organization, &self.secrets)?;
         client
             .delete_work_item_comment(&input.project_id, input.work_item_id, input.comment_id)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn update_comment(
+        &self,
+        input: UpdateWorkItemCommentInput,
+    ) -> Result<WorkItemComment> {
+        if input.comment_id <= 0 {
+            return Err(AppError::InvalidInput("comment ID is required".to_string()));
+        }
+        let markdown = input.markdown.trim();
+        if markdown.is_empty() {
+            return Err(AppError::InvalidInput("comment is required".to_string()));
+        }
+
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let comment = client
+            .update_work_item_comment(
+                &input.project_id,
+                input.work_item_id,
+                input.comment_id,
+                markdown,
+            )
+            .await?;
+        Ok(summarize_work_item_comment(comment))
+    }
+
+    /// Adds or removes the authenticated user's emoji reaction on a work item
+    /// comment.
+    pub async fn set_comment_reaction(&self, input: SetWorkItemCommentReactionInput) -> Result<()> {
+        if input.comment_id <= 0 {
+            return Err(AppError::InvalidInput("comment ID is required".to_string()));
+        }
+        let reaction_type = match input.reaction_type.trim().to_ascii_lowercase().as_str() {
+            value @ ("like" | "dislike" | "heart" | "hooray" | "smile" | "confused") => {
+                value.to_string()
+            }
+            other => {
+                return Err(AppError::InvalidInput(format!(
+                    "invalid reaction type: {other}"
+                )))
+            }
+        };
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        client
+            .set_work_item_comment_reaction(
+                &input.project_id,
+                input.work_item_id,
+                input.comment_id,
+                &reaction_type,
+                input.engaged,
+            )
             .await?;
         Ok(())
     }

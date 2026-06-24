@@ -35,6 +35,7 @@ import {
 } from "@/features/pipelines/quickPipelinesStorage";
 import { emitQuickPipelinesChanged } from "@/features/pipelines/quickPipelinesEvents";
 import { sendTestDesktopNotification } from "@/lib/desktopNotifications";
+import { SoftwareUpdateSettings } from "./SoftwareUpdateSettings";
 import {
   LAYOUT_STORAGE_PREFIX,
   clearLayoutStorage,
@@ -88,6 +89,7 @@ export function OrganizationSettings({
       <WorkItemStaleThresholdSettings />
       <SyncHealthSettings organizations={organizations} />
       <DataCacheSettings />
+      <SoftwareUpdateSettings />
       <ValidationModeSettings />
       <div className="overflow-hidden rounded-md border border-border bg-card">
         <div className="border-b border-border px-3 py-2">

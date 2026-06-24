@@ -39,8 +39,16 @@ import {
   type SortDirection,
 } from '@/lib/utils';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
+import { useGridFocusRestoration } from '@/lib/useGridFocusRestoration';
 import { readStoredJson, writeStoredJson, storageKey } from '@/lib/storage';
 import { recordRecentWorkItem } from '@/lib/recentItems';
+import { isTauriRuntime } from '@/lib/runtime';
+import {
+  markWorkItemRead,
+  reconcileUnread,
+  seedDemoUnread,
+  workItemUnreadKey,
+} from './workItemUnreadTracking';
 import { openExternalUrl } from '@/lib/openExternal';
 import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
@@ -384,6 +392,7 @@ const WorkItemGridRow = forwardRef<
     item: WorkItemSummary;
     selected: boolean;
     checked: boolean;
+    unread: boolean;
     columnTemplate: string;
     visibleColumns: WiSortKey[];
     extraColumns: string[];
@@ -391,7 +400,7 @@ const WorkItemGridRow = forwardRef<
     onSelect: () => void;
     onCheckedChange: (checked: boolean, shiftKey: boolean) => void;
   }
->(({ item, selected, checked, columnTemplate, visibleColumns, extraColumns, staleThresholdDays, onSelect, onCheckedChange }, ref) => {
+>(({ item, selected, checked, unread, columnTemplate, visibleColumns, extraColumns, staleThresholdDays, onSelect, onCheckedChange }, ref) => {
   const staleDays = workItemStaleDays(item, Date.now());
   const isStale = staleDays !== null && staleDays >= staleThresholdDays;
   return (
@@ -450,6 +459,14 @@ const WorkItemGridRow = forwardRef<
               : undefined
           }
         >
+          {isTitle && unread ? (
+            <span
+              role="img"
+              aria-label="Unread activity"
+              title="Changed since you last opened it"
+              className="h-2 w-2 shrink-0 rounded-full bg-blue-500 dark:bg-blue-400"
+            />
+          ) : null}
           {isTitle && isStale ? (
             <AlertTriangle
               role="img"
@@ -582,7 +599,6 @@ export function WorkItemsGrid({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const gridScrollRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const gridHadFocusRef = useRef(false);
   const previousResultKeysRef = useRef<string | null>(null);
   const [gridViewport, setGridViewport] = useState({ height: 0, scrollTop: 0 });
   const queryClient = useQueryClient();
@@ -776,9 +792,52 @@ export function WorkItemsGrid({
   );
   const firstCheckedItem = checkedItems[0] ?? null;
 
+  // Unread markers: work items changed since the user last opened them.
+  const [unreadKeys, setUnreadKeys] = useState<Set<string>>(new Set());
+  const unreadDemoSeededRef = useRef(false);
+  const activitySignature = useMemo(
+    () =>
+      results
+        .map((item) => `${workItemUnreadKey(item.organizationId, item.id)}:${item.changedDate ?? ""}`)
+        .join("|"),
+    [results],
+  );
+  useEffect(() => {
+    if (!unreadDemoSeededRef.current && !isTauriRuntime()) {
+      unreadDemoSeededRef.current = true;
+      const candidate = results.find((item) => item.changedDate);
+      if (candidate) {
+        seedDemoUnread(
+          workItemUnreadKey(candidate.organizationId, candidate.id),
+          "2000-01-01T00:00:00Z",
+        );
+      }
+    }
+    setUnreadKeys(
+      reconcileUnread(
+        results.map((item) => ({
+          key: workItemUnreadKey(item.organizationId, item.id),
+          changedDate: item.changedDate,
+        })),
+      ),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activitySignature]);
+
   useEffect(() => {
     if (!selectedItem) return;
     recordRecentWorkItem(selectedItem);
+    // Opening an item marks it read.
+    const key = workItemUnreadKey(selectedItem.organizationId, selectedItem.id);
+    if (unreadKeys.has(key)) {
+      markWorkItemRead(key, selectedItem.changedDate);
+      setUnreadKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedItem]);
 
   useEffect(() => {
@@ -1103,12 +1162,32 @@ export function WorkItemsGrid({
     setOpenFilterCol(null);
   }, [resultKeysSignature]);
 
-  useEffect(() => {
-    if (!gridHadFocusRef.current) return;
-    window.setTimeout(() => {
-      rowRefs.current[selectedIndex]?.focus();
-    }, 0);
-  }, [selectedIndex, resultKeysSignature]);
+  const {
+    onFocusCapture: handleGridFocusCapture,
+    onBlurCapture: handleGridBlurCapture,
+  } = useGridFocusRestoration({
+    containerRef,
+    restoreSignature: `${resultKeysSignature}#${selectedIndex}`,
+    restoreFocus: () => {
+      const count = displayed.length;
+      if (count === 0) return false;
+      const index = Math.max(0, Math.min(selectedIndex, count - 1));
+      const scroller = gridScrollRef.current;
+      if (scroller) {
+        const rowTop = index * WI_GRID_ROW_HEIGHT;
+        const rowBottom = rowTop + WI_GRID_ROW_HEIGHT;
+        if (rowTop < scroller.scrollTop) {
+          scroller.scrollTop = rowTop;
+        } else if (rowBottom > scroller.scrollTop + scroller.clientHeight) {
+          scroller.scrollTop = rowBottom - scroller.clientHeight;
+        }
+      }
+      const node = rowRefs.current[index];
+      if (!node) return false;
+      node.focus();
+      return true;
+    },
+  });
 
   function handlePreviewUpdated(preview: WorkItemPreview) {
     const key = workItemSummaryKey(preview);
@@ -1408,21 +1487,8 @@ export function WorkItemsGrid({
       className="flex min-h-0 flex-1 flex-col outline-none"
       tabIndex={-1}
       onKeyDown={handleKeyDown}
-      onFocusCapture={(event) => {
-        const target = event.target;
-        gridHadFocusRef.current =
-          target instanceof HTMLElement &&
-          Boolean(target.closest('[role="grid"], [role="row"]'));
-      }}
-      onBlurCapture={(event) => {
-        const nextTarget = event.relatedTarget;
-        if (
-          !(nextTarget instanceof HTMLElement) ||
-          !nextTarget.closest('[role="grid"], [role="row"]')
-        ) {
-          gridHadFocusRef.current = false;
-        }
-      }}
+      onFocusCapture={handleGridFocusCapture}
+      onBlurCapture={handleGridBlurCapture}
     >
       {copyToast || bulkToast ? (
         <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1 text-xs text-background shadow-lg">
@@ -1606,6 +1672,7 @@ export function WorkItemsGrid({
                         item={item}
                         selected={i === selectedIndex}
                         checked={checkedIds.has(`${item.organizationId}:${item.projectId}:${item.id}`)}
+                        unread={unreadKeys.has(workItemUnreadKey(item.organizationId, item.id))}
                         columnTemplate={wiColTemplate}
                         visibleColumns={visibleColumns}
                         extraColumns={extraColumns}
@@ -1625,21 +1692,23 @@ export function WorkItemsGrid({
           )}
 
           <div className="flex items-center justify-between gap-2 border-t border-border px-2 py-1 text-xs text-muted-foreground">
-            <span>
-              {loading
-                ? "Loading…"
-                : searched
-                  ? hasActiveColumnFilters
-                    ? `${displayed.length} of ${sorted.length} item${sorted.length === 1 ? "" : "s"}`
-                    : `${displayed.length} item${displayed.length === 1 ? "" : "s"}`
-                  : "Ready"}
-              {dataUpdatedAt ? (
-                <span title={new Date(dataUpdatedAt).toLocaleString()}>
-                  {" · "}
-                  Updated {formatRelativeDate(new Date(dataUpdatedAt).toISOString())}
-                </span>
-              ) : null}
-              {isFetching ? <span>{" · "}Refreshing…</span> : null}
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="shrink-0">
+                {loading
+                  ? "Loading…"
+                  : searched
+                    ? hasActiveColumnFilters
+                      ? `${displayed.length} of ${sorted.length} item${sorted.length === 1 ? "" : "s"}`
+                      : `${displayed.length} item${displayed.length === 1 ? "" : "s"}`
+                    : "Ready"}
+                {dataUpdatedAt ? (
+                  <span title={new Date(dataUpdatedAt).toLocaleString()}>
+                    {" · "}
+                    Updated {formatRelativeDate(new Date(dataUpdatedAt).toISOString())}
+                  </span>
+                ) : null}
+                {isFetching ? <span>{" · "}Refreshing…</span> : null}
+              </span>
             </span>
             <span className="flex items-center gap-2">
               {triageScope ? (

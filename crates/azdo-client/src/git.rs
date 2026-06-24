@@ -1,5 +1,7 @@
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::client::AdoClient;
 use crate::error::Result;
@@ -40,6 +42,9 @@ pub struct GitPullRequest {
     pub title: String,
     pub status: String,
     pub creation_date: DateTime<Utc>,
+    /// Set when the PR is completed/abandoned; the date a PR actually merged.
+    #[serde(default)]
+    pub closed_date: Option<DateTime<Utc>>,
     pub created_by: Option<IdentityRef>,
     pub repository: Option<GitRepository>,
     pub source_ref_name: String,
@@ -50,6 +55,31 @@ pub struct GitPullRequest {
     pub reviewers: Option<Vec<IdentityRefWithVote>>,
     pub is_draft: Option<bool>,
     pub merge_status: Option<String>,
+}
+
+/// Request body for the Pull Request Query API. Looks up pull requests by the
+/// commits they contain (`type: "commit"`).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PullRequestQuery<'a> {
+    queries: Vec<PullRequestQueryInput<'a>>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PullRequestQueryInput<'a> {
+    items: Vec<&'a str>,
+    #[serde(rename = "type")]
+    query_type: &'a str,
+}
+
+/// Response from the Pull Request Query API. Each entry in `results` maps the
+/// queried commit id to the pull requests that contain it.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PullRequestQueryResponse {
+    #[serde(default)]
+    results: Vec<HashMap<String, Vec<GitPullRequest>>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -92,6 +122,11 @@ pub struct IdentityRefWithVote {
     pub vote: i32,
     #[serde(default)]
     pub is_required: bool,
+    /// For a group/team reviewer, the rolled-up votes of its members. A member
+    /// who voted via the group appears here even though they are not a direct
+    /// reviewer entry.
+    #[serde(default)]
+    pub voted_for: Option<Vec<IdentityRefWithVote>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -204,6 +239,53 @@ impl AdoClient {
         Ok(all)
     }
 
+    /// Lists pull requests across a project filtered server-side by their CLOSED
+    /// date within the optional `[min_time, max_time]` window (RFC3339), paging
+    /// through all results with `$skip`/`$top`. Unlike [`list_project_pull_requests`]
+    /// this returns the set in full rather than a single `$top` page, so callers
+    /// such as release notes do not silently drop PRs once a project has more
+    /// completed PRs than one page. The time window uses `queryTimeRangeType=closed`
+    /// so the bound is the merge/close date, not creation.
+    pub async fn list_pull_requests_closed_in_range(
+        &self,
+        project_id: &str,
+        status: PullRequestStatus,
+        min_time: Option<&str>,
+        max_time: Option<&str>,
+        page_size: u32,
+    ) -> Result<Vec<GitPullRequest>> {
+        let path = format!("{project_id}/_apis/git/pullrequests");
+        let page_size = page_size.max(1);
+        let top_str = page_size.to_string();
+        let mut all = Vec::new();
+        let mut skip: u32 = 0;
+        loop {
+            let skip_str = skip.to_string();
+            let mut params: Vec<(&str, &str)> = vec![
+                ("api-version", "7.1-preview"),
+                ("searchCriteria.status", status.as_query_value()),
+                ("searchCriteria.queryTimeRangeType", "closed"),
+                ("$top", &top_str),
+                ("$skip", &skip_str),
+            ];
+            if let Some(min) = min_time {
+                params.push(("searchCriteria.minTime", min));
+            }
+            if let Some(max) = max_time {
+                params.push(("searchCriteria.maxTime", max));
+            }
+            let response: ListResponse<GitPullRequest> = self.get_json(&path, &params).await?;
+            let page_len = response.value.len() as u32;
+            all.extend(response.value);
+            // A short page means the server has no more results to return.
+            if page_len < page_size {
+                break;
+            }
+            skip += page_size;
+        }
+        Ok(all)
+    }
+
     pub async fn list_commits(
         &self,
         project_id: &str,
@@ -250,19 +332,30 @@ impl AdoClient {
 
     /// Lists the pull requests that contain the given commit.
     ///
-    /// Repository-scoped (no project segment), matching
-    /// `GET /_apis/git/repositories/{repoId}/commits/{commitId}/pullRequests`.
+    /// Repository-scoped (no project segment). Azure DevOps has no
+    /// `commits/{commitId}/pullRequests` route, so this uses the Pull Request
+    /// Query API: `POST /_apis/git/repositories/{repoId}/pullrequestquery`.
     pub async fn list_commit_pull_requests(
         &self,
         repository_id: &str,
         commit_id: &str,
     ) -> Result<Vec<GitPullRequest>> {
-        let path =
-            format!("_apis/git/repositories/{repository_id}/commits/{commit_id}/pullRequests");
-        let response: ListResponse<GitPullRequest> = self
-            .get_json(&path, &[("api-version", "7.1-preview")])
+        let path = format!("_apis/git/repositories/{repository_id}/pullrequestquery");
+        let body = PullRequestQuery {
+            queries: vec![PullRequestQueryInput {
+                items: vec![commit_id],
+                query_type: "commit",
+            }],
+        };
+        let response: PullRequestQueryResponse = self
+            .post_json(&path, &[("api-version", "7.1-preview")], &body)
             .await?;
-        Ok(response.value)
+        let prs = response
+            .results
+            .into_iter()
+            .flat_map(|mut result| result.remove(commit_id).unwrap_or_default())
+            .collect();
+        Ok(prs)
     }
 
     pub async fn get_commit(
@@ -456,6 +549,66 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn list_pull_requests_closed_in_range_pages_and_filters_by_close_time() {
+        let server = MockServer::start().await;
+        // First page (skip=0) is full, so a second page must be requested.
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/git/pullrequests"))
+            .and(query_param("searchCriteria.status", "completed"))
+            .and(query_param("searchCriteria.queryTimeRangeType", "closed"))
+            .and(query_param("searchCriteria.minTime", "2026-06-01T00:00:00+00:00"))
+            .and(query_param("$skip", "0"))
+            .and(query_param("$top", "2"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 2,
+                "value": [
+                    { "pullRequestId": 50, "title": "A", "status": "completed",
+                      "creationDate": "2026-06-02T00:00:00Z", "closedDate": "2026-06-05T00:00:00Z",
+                      "sourceRefName": "refs/heads/a", "targetRefName": "refs/heads/main",
+                      "repository": { "id": "r1", "name": "repo", "project": { "id": "project-1", "name": "Platform" } } },
+                    { "pullRequestId": 51, "title": "B", "status": "completed",
+                      "creationDate": "2026-06-03T00:00:00Z", "closedDate": "2026-06-06T00:00:00Z",
+                      "sourceRefName": "refs/heads/b", "targetRefName": "refs/heads/main",
+                      "repository": { "id": "r1", "name": "repo", "project": { "id": "project-1", "name": "Platform" } } }
+                ]
+            })))
+            .mount(&server)
+            .await;
+        // Second page (skip=2) is short, so paging stops here.
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/git/pullrequests"))
+            .and(query_param("$skip", "2"))
+            .and(query_param("$top", "2"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 1,
+                "value": [
+                    { "pullRequestId": 52, "title": "C", "status": "completed",
+                      "creationDate": "2026-06-04T00:00:00Z", "closedDate": "2026-06-07T00:00:00Z",
+                      "sourceRefName": "refs/heads/c", "targetRefName": "refs/heads/main",
+                      "repository": { "id": "r1", "name": "repo", "project": { "id": "project-1", "name": "Platform" } } }
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let prs = test_client(&server)
+            .await
+            .list_pull_requests_closed_in_range(
+                "project-1",
+                PullRequestStatus::Completed,
+                Some("2026-06-01T00:00:00+00:00"),
+                None,
+                2,
+            )
+            .await
+            .unwrap();
+        // All three completed PRs across both pages are returned (no truncation).
+        assert_eq!(prs.len(), 3);
+        assert_eq!(prs[0].pull_request_id, 50);
+        assert_eq!(prs[2].pull_request_id, 52);
+    }
+
+    #[tokio::test]
     async fn list_pull_requests_by_reviewer_filters_by_reviewer_id() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
@@ -594,25 +747,24 @@ mod tests {
     #[tokio::test]
     async fn list_commit_pull_requests_maps_response() {
         let server = MockServer::start().await;
-        Mock::given(method("GET"))
-            .and(path(
-                "/_apis/git/repositories/repo-1/commits/abc123/pullRequests",
-            ))
+        Mock::given(method("POST"))
+            .and(path("/_apis/git/repositories/repo-1/pullrequestquery"))
             .and(query_param("api-version", "7.1-preview"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "count": 1,
-                "value": [{
-                    "pullRequestId": 99,
-                    "title": "Land the fix",
-                    "status": "completed",
-                    "creationDate": "2026-05-24T00:00:00Z",
-                    "repository": {
-                        "id": "repo-1",
-                        "name": "dashboard",
-                        "project": { "id": "project-1", "name": "Platform" }
-                    },
-                    "sourceRefName": "refs/heads/fix",
-                    "targetRefName": "refs/heads/main"
+                "results": [{
+                    "abc123": [{
+                        "pullRequestId": 99,
+                        "title": "Land the fix",
+                        "status": "completed",
+                        "creationDate": "2026-05-24T00:00:00Z",
+                        "repository": {
+                            "id": "repo-1",
+                            "name": "dashboard",
+                            "project": { "id": "project-1", "name": "Platform" }
+                        },
+                        "sourceRefName": "refs/heads/fix",
+                        "targetRefName": "refs/heads/main"
+                    }]
                 }]
             })))
             .mount(&server)
@@ -626,6 +778,25 @@ mod tests {
         assert_eq!(prs.len(), 1);
         assert_eq!(prs[0].pull_request_id, 99);
         assert_eq!(prs[0].status, "completed");
+    }
+
+    #[tokio::test]
+    async fn list_commit_pull_requests_empty_when_commit_absent() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/_apis/git/repositories/repo-1/pullrequestquery"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "results": [{}]
+            })))
+            .mount(&server)
+            .await;
+
+        let prs = test_client(&server)
+            .await
+            .list_commit_pull_requests("repo-1", "abc123")
+            .await
+            .unwrap();
+        assert!(prs.is_empty());
     }
 
     #[tokio::test]

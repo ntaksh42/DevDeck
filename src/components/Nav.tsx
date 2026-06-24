@@ -81,15 +81,39 @@ export function NavSection({
   );
 }
 
+// A small count pill shown on the right of a nav item. Hidden for null/0 so an
+// empty inbox doesn't show a noisy "0". Purely visual: the count is announced via
+// the owning button's aria-label (see navItemAriaLabel) because a button's
+// aria-label otherwise overrides any nested text/aria from this badge.
+function NavBadge({ count }: { count: number | null | undefined }) {
+  if (count == null || count <= 0) return null;
+  return (
+    <span
+      aria-hidden="true"
+      className="ml-auto shrink-0 rounded-full bg-secondary px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground group-hover:bg-background/70"
+    >
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
+// The accessible name for a nav item, folding the badge count in so screen
+// readers announce e.g. "My Reviews, 2" instead of just "My Reviews".
+function navItemAriaLabel(label: string, badge?: number | null): string {
+  return badge != null && badge > 0 ? `${label}, ${badge}` : label;
+}
+
 export function NavSubItem({
   active,
   disabled = false,
   label,
+  badge,
   onClick,
 }: {
   active: boolean;
   disabled?: boolean;
   label: string;
+  badge?: number | null;
   onClick: () => void;
 }) {
   return (
@@ -97,7 +121,7 @@ export function NavSubItem({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      aria-label={label}
+      aria-label={navItemAriaLabel(label, badge)}
       data-nav-item="true"
       data-nav-active={active ? "true" : undefined}
       data-nav-label={label}
@@ -106,6 +130,7 @@ export function NavSubItem({
       } disabled:cursor-not-allowed disabled:opacity-50`}
     >
       <span className="min-w-0 truncate">{label}</span>
+      <NavBadge count={badge} />
     </button>
   );
 }
@@ -118,6 +143,7 @@ export function NavSubGroup({
   active,
   disabled = false,
   label,
+  badge,
   expandable,
   expanded,
   onToggle,
@@ -128,6 +154,7 @@ export function NavSubGroup({
   active: boolean;
   disabled?: boolean;
   label: string;
+  badge?: number | null;
   expandable: boolean;
   expanded: boolean;
   onToggle: () => void;
@@ -141,7 +168,7 @@ export function NavSubGroup({
           type="button"
           disabled={disabled}
           onClick={onClick}
-          aria-label={label}
+          aria-label={navItemAriaLabel(label, badge)}
           data-nav-item="true"
           data-nav-active={active ? "true" : undefined}
           data-nav-label={label}
@@ -152,6 +179,7 @@ export function NavSubGroup({
           } disabled:cursor-not-allowed disabled:opacity-50`}
         >
           <span className="min-w-0 truncate">{label}</span>
+          <NavBadge count={badge} />
         </button>
         {expandable && (
           <button

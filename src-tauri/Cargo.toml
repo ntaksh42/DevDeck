@@ -18,6 +18,10 @@ tauri = { version = "2", features = [] }
 tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-global-shortcut = "2"
+# native-tls keeps the updater on the OS TLS stack (schannel) like the rest of
+# the app, avoiding the ring/clang build dependency that rustls-tls pulls in.
+tauri-plugin-updater = { version = "2", default-features = false, features = ["native-tls"] }
+tauri-plugin-process = "2"
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }

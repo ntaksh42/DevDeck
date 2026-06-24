@@ -3,6 +3,7 @@ use std::str::FromStr;
 use serde::Deserialize;
 
 mod auth;
+mod cancellation;
 mod code_search;
 mod commits;
 mod db;
@@ -19,6 +20,7 @@ mod snooze;
 mod sync;
 mod work_items;
 
+use cancellation::{run_cancellable, CancellationRegistry};
 use code_search::{CodeSearchResults, CodeSearchService, SearchCodeInput};
 use commits::{
     CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
@@ -66,9 +68,10 @@ use work_items::{
     ListWorkItemTypeStatesInput, ListWorkItemUpdatesInput, MentionCandidate,
     RecordAssigneeInteractionInput, RecordMentionInteractionInput, RunWorkItemQueryInput,
     SavedQueryResult, SearchWorkItemAssigneesInput, SearchWorkItemMentionsInput,
-    SearchWorkItemsInput, SetWorkItemsPriorityInput, SetWorkItemsStateInput,
-    UpdateWorkItemFieldsInput, WorkItemAssigneeCandidate, WorkItemComment, WorkItemFieldOption,
-    WorkItemImage, WorkItemPreview, WorkItemProjectOption, WorkItemService, WorkItemSummary,
+    SearchWorkItemsInput, SetWorkItemCommentReactionInput, SetWorkItemsPriorityInput,
+    SetWorkItemsStateInput, UpdateWorkItemCommentInput, UpdateWorkItemFieldsInput,
+    WorkItemAssigneeCandidate, WorkItemComment, WorkItemFieldOption, WorkItemImage,
+    WorkItemPreview, WorkItemProjectOption, WorkItemService, WorkItemSummary,
     WorkItemUpdateSummary,
 };
 
@@ -84,6 +87,7 @@ struct AppState {
     code_search: CodeSearchService,
     settings: SettingsService,
     snooze: SnoozeService,
+    cancellation: CancellationRegistry,
     sync_trigger: mpsc::Sender<SyncTrigger>,
 }
 
@@ -470,6 +474,26 @@ async fn delete_work_item_comment(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn update_work_item_comment(
+    input: UpdateWorkItemCommentInput,
+    state: State<'_, AppState>,
+) -> Result<WorkItemComment> {
+    ensure_write_enabled(&state).await?;
+    state.work_items.update_comment(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn set_work_item_comment_reaction(
+    input: SetWorkItemCommentReactionInput,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    ensure_write_enabled(&state).await?;
+    state.work_items.set_comment_reaction(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn list_work_item_updates(
     input: ListWorkItemUpdatesInput,
     state: State<'_, AppState>,
@@ -589,7 +613,20 @@ async fn search_code(
     input: SearchCodeInput,
     state: State<'_, AppState>,
 ) -> Result<CodeSearchResults> {
-    state.code_search.search(input).await
+    let operation_id = input.operation_id.clone();
+    run_cancellable(
+        &state.cancellation,
+        operation_id,
+        state.code_search.search(input),
+    )
+    .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn cancel_operation(operation_id: String, state: State<'_, AppState>) -> Result<()> {
+    state.cancellation.cancel(&operation_id);
+    Ok(())
 }
 
 #[tauri::command]
@@ -749,6 +786,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
@@ -788,6 +827,7 @@ pub fn run() {
                 code_search: CodeSearchService::new(db.clone(), SecretStore),
                 settings: SettingsService::new(db.clone()),
                 snooze: SnoozeService::new(db.clone()),
+                cancellation: CancellationRegistry::new(),
                 sync_trigger: sync_tx,
             });
             tauri::async_runtime::spawn(
@@ -834,6 +874,8 @@ pub fn run() {
             fetch_work_item_image,
             add_work_item_comment,
             delete_work_item_comment,
+            update_work_item_comment,
+            set_work_item_comment_reaction,
             update_work_item_fields,
             list_work_item_updates,
             list_work_item_field_allowed_values,
@@ -847,6 +889,7 @@ pub fn run() {
             list_commit_repositories,
             commit_activity,
             search_code,
+            cancel_operation,
             get_commit_changes,
             get_commit_file_diff,
             get_commit_pull_requests,

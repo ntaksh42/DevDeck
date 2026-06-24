@@ -278,6 +278,22 @@ const workItemFieldOptionsSchema = z.array(workItemFieldOptionSchema);
 
 export type WorkItemFieldOption = z.infer<typeof workItemFieldOptionSchema>;
 
+export const COMMENT_REACTION_TYPES = [
+  "like",
+  "heart",
+  "hooray",
+  "smile",
+  "confused",
+  "dislike",
+] as const;
+export type CommentReactionType = (typeof COMMENT_REACTION_TYPES)[number];
+
+const commentReactionSchema = z.object({
+  reactionType: z.string(),
+  count: z.number(),
+  isMine: z.boolean(),
+});
+
 const workItemCommentSchema = z.object({
   id: z.number(),
   text: z.string().nullable(),
@@ -286,6 +302,7 @@ const workItemCommentSchema = z.object({
   createdById: z.string().nullable().optional(),
   createdByUniqueName: z.string().nullable().optional(),
   createdDate: z.string().nullable(),
+  reactions: z.array(commentReactionSchema).optional(),
 });
 
 export type WorkItemComment = z.infer<typeof workItemCommentSchema>;
@@ -324,6 +341,7 @@ const workItemPreviewSchema = z.object({
   workItemType: z.string().nullable(),
   state: z.string().nullable(),
   assignedTo: z.string().nullable(),
+  assignedToUniqueName: z.string().nullable(),
   createdBy: z.string().nullable(),
   createdDate: z.string().nullable(),
   changedDate: z.string().nullable(),
@@ -528,9 +546,21 @@ export async function searchCode(input: {
   repository?: string;
   branch?: string;
   path?: string;
+  operationId?: string;
 }): Promise<CodeSearchResults> {
   const result = await invokeCommand("search_code", { input });
   return codeSearchResultsSchema.parse(result);
+}
+
+// Signals a cancellable command (e.g. code search) to stop, by the id passed as
+// its operationId. Best-effort — the command returns promptly once cancelled.
+export async function cancelOperation(operationId: string): Promise<void> {
+  await invokeCommand("cancel_operation", { operationId });
+}
+
+// Generates a unique id for a cancellable operation.
+export function newOperationId(): string {
+  return `op-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 const syncScopeSchema = z.enum(["all", "hot", "myReviews", "myWorkItems", "commits"]);
@@ -772,6 +802,14 @@ export type DeleteWorkItemCommentInput = {
   projectId: string;
   workItemId: number;
   commentId: number;
+};
+
+export type UpdateWorkItemCommentInput = {
+  organizationId?: string;
+  projectId: string;
+  workItemId: number;
+  commentId: number;
+  markdown: string;
 };
 
 export type ListWorkItemTypeStatesInput = {
@@ -1094,6 +1132,24 @@ export async function deleteWorkItemComment(
   input: DeleteWorkItemCommentInput,
 ): Promise<void> {
   await invokeCommand("delete_work_item_comment", { input });
+}
+
+export async function updateWorkItemComment(
+  input: UpdateWorkItemCommentInput,
+): Promise<WorkItemComment> {
+  const result = await invokeCommand("update_work_item_comment", { input });
+  return workItemCommentSchema.parse(result);
+}
+
+export async function setWorkItemCommentReaction(input: {
+  organizationId?: string;
+  projectId: string;
+  workItemId: number;
+  commentId: number;
+  reactionType: CommentReactionType;
+  engaged: boolean;
+}): Promise<void> {
+  await invokeCommand("set_work_item_comment_reaction", { input });
 }
 
 export async function updateWorkItemFields(

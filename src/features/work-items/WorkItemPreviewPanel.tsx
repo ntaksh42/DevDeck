@@ -10,6 +10,8 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { Copy, Loader2, Trash2, X, Zap } from 'lucide-react';
 import {
   deleteWorkItemComment,
+  setWorkItemCommentReaction,
+  updateWorkItemComment,
   listOrganizations,
   listWorkItemTypeStates,
   listWorkItemFieldAllowedValues,
@@ -282,6 +284,12 @@ export function WorkItemPreviewPanel({
     [selectedItem],
   );
 
+  // Must match how the grids build their preview query key.
+  const customFieldsSignature = useMemo(
+    () => customPreviewFields.map((field) => field.referenceName).join("|"),
+    [customPreviewFields],
+  );
+
   const deleteCommentMutation = useMutation({
     mutationFn: deleteWorkItemComment,
     onSuccess: (_result, variables) => {
@@ -290,6 +298,7 @@ export function WorkItemPreviewPanel({
           variables.organizationId,
           variables.projectId,
           variables.workItemId,
+          customFieldsSignature,
         ),
         (current: WorkItemPreview | undefined) =>
           current
@@ -305,11 +314,63 @@ export function WorkItemPreviewPanel({
     },
   });
 
-  // Must match how the grids build their preview query key.
-  const customFieldsSignature = useMemo(
-    () => customPreviewFields.map((field) => field.referenceName).join("|"),
-    [customPreviewFields],
-  );
+  const editCommentMutation = useMutation({
+    mutationFn: updateWorkItemComment,
+    onSuccess: (updated, variables) => {
+      queryClient.setQueryData(
+        workItemQueryKeys.preview(
+          variables.organizationId,
+          variables.projectId,
+          variables.workItemId,
+          customFieldsSignature,
+        ),
+        (current: WorkItemPreview | undefined) =>
+          current
+            ? {
+                ...current,
+                comments: current.comments.map((comment) =>
+                  comment.id === variables.commentId
+                    ? { ...comment, text: updated.text, renderedText: updated.renderedText }
+                    : comment,
+                ),
+              }
+            : current,
+      );
+      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
+    },
+  });
+
+  const reactionMutation = useMutation({
+    mutationFn: setWorkItemCommentReaction,
+    onSuccess: (_result, variables) => {
+      // Refetch the open preview so the reaction counts reflect the server.
+      void queryClient.invalidateQueries({
+        queryKey: workItemQueryKeys.preview(
+          variables.organizationId,
+          variables.projectId,
+          variables.workItemId,
+          customFieldsSignature,
+        ),
+      });
+    },
+  });
+  const reactionPendingCommentId = reactionMutation.isPending
+    ? (reactionMutation.variables?.commentId ?? null)
+    : null;
+
+  function toggleCommentReaction(commentId: number, reactionType: string, engaged: boolean) {
+    if (!selectedItem) return;
+    reactionMutation.mutate({
+      organizationId: selectedItem.organizationId,
+      projectId: selectedItem.projectId,
+      workItemId: selectedItem.id,
+      commentId,
+      reactionType:
+        reactionType as Parameters<typeof setWorkItemCommentReaction>[0]["reactionType"],
+      engaged,
+    });
+  }
+
   const updateFieldsMutation = useMutation({
     mutationFn: updateWorkItemFields,
     onSuccess: (updatedPreview) => {
@@ -612,6 +673,17 @@ export function WorkItemPreviewPanel({
       projectId: selectedItem.projectId,
       workItemId: selectedItem.id,
       commentId,
+    });
+  }
+
+  function editComment(commentId: number, markdown: string) {
+    if (!selectedItem || editCommentMutation.isPending) return;
+    editCommentMutation.mutate({
+      organizationId: selectedItem.organizationId,
+      projectId: selectedItem.projectId,
+      workItemId: selectedItem.id,
+      commentId,
+      markdown,
     });
   }
 
@@ -976,9 +1048,23 @@ export function WorkItemPreviewPanel({
                     : null
                 }
                 deletePending={deleteCommentMutation.isPending}
+                editCommentError={
+                  editCommentMutation.isError
+                    ? commandErrorMessage(editCommentMutation.error)
+                    : null
+                }
+                editingCommentId={
+                  editCommentMutation.isPending
+                    ? editCommentMutation.variables?.commentId ?? null
+                    : null
+                }
+                editPending={editCommentMutation.isPending}
                 mentionDisplayNames={commentMentionDisplayNames}
                 onCustomPreviewFieldsChange={onCustomPreviewFieldsChange}
                 onDeleteComment={deleteComment}
+                onEditComment={editComment}
+                onToggleCommentReaction={toggleCommentReaction}
+                reactionPendingCommentId={reactionPendingCommentId}
                 preview={preview}
                 selectedFieldKeys={selectedPreviewFieldKeys}
                 onSelectedFieldKeysChange={setSelectedPreviewFieldKeys}

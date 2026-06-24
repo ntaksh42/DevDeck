@@ -23,15 +23,17 @@ import {
   GitCommitHorizontal,
   GitPullRequest,
   ListChecks,
-  RefreshCw,
   Settings,
 } from "lucide-react";
 import {
   commandErrorMessage,
   getAppSettings,
+  listMyReviewPullRequests,
+  listMyWorkItems,
   listOrganizations,
   rerunPipelineRun,
   searchAll,
+  searchCode,
   syncUpdatedEventSchema,
   triggerSync,
   type SyncScope,
@@ -79,14 +81,11 @@ import {
 } from "@/components/CommandPalette";
 import {
   loadWorkItemQueryViews,
+  viewCountBaseline,
   type WorkItemQueryView,
 } from '@/features/work-items/workItemViewsStorage';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from '@/features/work-items/queryKeys';
 import { MyReviewsGrid } from '@/features/pull-requests/MyReviewsGrid';
-import {
-  loadPullRequestViews,
-  type PullRequestView,
-} from '@/features/pull-requests/prViewsStorage';
 
 // Only the default view (My Reviews) loads eagerly; the other views are
 // code-split so app startup does not pay for panels that may never open.
@@ -196,16 +195,23 @@ function invalidationScopesForSyncScope(scope: SyncScope = "all"): SyncScope[] {
   return scope === "hot" ? ["myReviews", "myWorkItems"] : [scope];
 }
 
-type PaletteSearchKind = "workItems" | "pullRequests" | "commits";
+type PaletteSearchKind = "workItems" | "pullRequests" | "commits" | "code";
 
 type ExternalSearchRequest = { query: string; requestId: number; organizationId?: string };
 
 function parsePaletteSearch(text: string): { kind: PaletteSearchKind | null; query: string } {
-  const match = /^(wi|pr|c):\s*(.*)$/i.exec(text.trim());
+  // `code`/`co` must precede `c` in the alternation so they win over commits.
+  const match = /^(wi|pr|code|co|c):\s*(.*)$/i.exec(text.trim());
   if (match) {
     const prefix = match[1].toLowerCase();
     const kind: PaletteSearchKind =
-      prefix === "wi" ? "workItems" : prefix === "pr" ? "pullRequests" : "commits";
+      prefix === "wi"
+        ? "workItems"
+        : prefix === "pr"
+          ? "pullRequests"
+          : prefix === "code" || prefix === "co"
+            ? "code"
+            : "commits";
     return { kind, query: match[2].trim() };
   }
   return { kind: null, query: text.trim() };
@@ -284,9 +290,6 @@ function AppShell() {
   );
   const [activeWorkItemViewId, setActiveWorkItemViewId] = useState<string | null>(null);
   const [selectedWorkItemViewRequestId, setSelectedWorkItemViewRequestId] = useState<string | null>(null);
-  const [pinnedPrViewsExpanded, setPinnedPrViewsExpanded] = useState(true);
-  const [prNavViews, setPrNavViews] = useState<PullRequestView[]>(() => loadPullRequestViews());
-  const [selectedPrViewRequestId, setSelectedPrViewRequestId] = useState<string | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(() =>
     storedNumber(SIDEBAR_WIDTH_STORAGE_KEY, DEFAULT_SIDEBAR_WIDTH, 160, 420),
   );
@@ -317,6 +320,28 @@ function AppShell() {
   });
   const organizations = organizationsQuery.data ?? [];
   const readOnlyMode = appSettingsQuery.data?.readOnlyValidationModeEnabled ?? false;
+
+  // Sidebar count badges. Queried for the first organization (the default the
+  // views open to) and kept fresh by the same sync:updated invalidation the
+  // grids use, so the cache is shared rather than double-fetched.
+  const badgeOrganizationId = organizations[0]?.id ?? "";
+  const myReviewsCountQuery = useQuery({
+    queryKey: ["myReviews", badgeOrganizationId],
+    queryFn: () => listMyReviewPullRequests({ organizationId: badgeOrganizationId }),
+    enabled: !!badgeOrganizationId,
+    staleTime: 5 * 60_000,
+  });
+  const myWorkItemsCountQuery = useQuery({
+    queryKey: ["myWorkItems", badgeOrganizationId],
+    queryFn: () => listMyWorkItems({ organizationId: badgeOrganizationId }),
+    enabled: !!badgeOrganizationId,
+    staleTime: 5 * 60_000,
+  });
+  // My Reviews badge counts PRs still awaiting my vote (the actionable inbox).
+  const myReviewsBadge = myReviewsCountQuery.data
+    ? myReviewsCountQuery.data.filter((pr) => pr.myVote === 0 && !pr.isDraft).length
+    : null;
+  const myWorkItemsBadge = myWorkItemsCountQuery.data?.length ?? null;
   const [quickPipelines, setQuickPipelines] = useState<QuickPipeline[]>(() =>
     loadQuickPipelines(),
   );
@@ -436,12 +461,21 @@ function AppShell() {
   }, []);
 
   const paletteSearch = parsePaletteSearch(debouncedPaletteSearchText);
+  const paletteQueryLongEnough = /^\d+$/.test(paletteSearch.query)
+    ? paletteSearch.query.length >= 1
+    : paletteSearch.query.length >= 2;
+  // Code search is heavy and hits the API, so it only runs behind the explicit
+  // `code:`/`co:` prefix — never on a generic palette query.
   const paletteSearchEnabled =
     commandPaletteOpen &&
     organizations.length > 0 &&
-    (/^\d+$/.test(paletteSearch.query)
-      ? paletteSearch.query.length >= 1
-      : paletteSearch.query.length >= 2);
+    paletteSearch.kind !== "code" &&
+    paletteQueryLongEnough;
+  const paletteCodeEnabled =
+    commandPaletteOpen &&
+    organizations.length > 0 &&
+    paletteSearch.kind === "code" &&
+    paletteSearch.query.length >= 2;
   const searchAllQuery = useQuery({
     // No organizationId: the palette searches every configured organization.
     queryKey: ["searchAll", paletteSearch.query],
@@ -451,6 +485,18 @@ function AppShell() {
     // Keep showing the previous results while the next keystroke's search
     // runs, instead of flashing an empty list.
     placeholderData: keepPreviousData,
+  });
+  // Code search targets the first configured organization (the palette has no
+  // org selector); the dedicated Code view offers per-org search.
+  const paletteCodeOrgId = organizations[0]?.id;
+  const paletteCodeQuery = useQuery({
+    queryKey: ["paletteCode", paletteCodeOrgId, paletteSearch.query],
+    queryFn: () => searchCode({ organizationId: paletteCodeOrgId, query: paletteSearch.query }),
+    enabled: paletteCodeEnabled,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+    // Code Search is an optional extension; a failed query just yields no items.
+    retry: false,
   });
 
   function openSearchTarget(
@@ -471,12 +517,35 @@ function AppShell() {
   }
 
   const paletteSearchItems = useMemo<CommandPaletteSearchItem[]>(() => {
+    const kind = paletteSearch.kind;
+    const showOrg = organizations.length > 1;
+
+    // Code is a distinct, opt-in search (own query); surface its file hits and
+    // return early since searchAll does not cover code.
+    if (kind === "code") {
+      const codeData = paletteCodeEnabled ? paletteCodeQuery.data : undefined;
+      const codeItems: CommandPaletteSearchItem[] = [];
+      for (const hit of codeData?.results ?? []) {
+        codeItems.push({
+          id: `code:${hit.projectName}:${hit.repositoryName}:${hit.branch ?? ""}:${hit.path}`,
+          group: "Code",
+          label: hit.fileName,
+          detail: [hit.path, `${hit.projectName} / ${hit.repositoryName}`]
+            .filter(Boolean)
+            .join(" · "),
+          // No in-app file viewer; open the file in Azure DevOps.
+          run: () => {
+            void openExternalUrl(hit.webUrl);
+          },
+        });
+      }
+      return codeItems;
+    }
+
     const data = paletteSearchEnabled ? searchAllQuery.data : undefined;
     if (!data) return [];
     const items: CommandPaletteSearchItem[] = [];
-    const kind = paletteSearch.kind;
     const rawQuery = paletteSearch.query;
-    const showOrg = organizations.length > 1;
 
     if (!kind || kind === "workItems") {
       for (const item of data.workItems) {
@@ -581,7 +650,14 @@ function AppShell() {
       }
     }
     return items;
-  }, [paletteSearch.kind, paletteSearch.query, paletteSearchEnabled, searchAllQuery.data]);
+  }, [
+    paletteSearch.kind,
+    paletteSearch.query,
+    paletteSearchEnabled,
+    searchAllQuery.data,
+    paletteCodeEnabled,
+    paletteCodeQuery.data,
+  ]);
 
   // The palette surfaces recently opened Work Items and PRs. With an empty query
   // it lists them newest-first; while typing it narrows them by id or title so a
@@ -631,7 +707,6 @@ function AppShell() {
   const activePinnedWorkItemView = pinnedWorkItemViews.find(
     (item) => item.id === activeWorkItemViewId,
   );
-  const pinnedPrViews = prNavViews.filter((item) => item.pinned);
 
   function getNavItems(): HTMLButtonElement[] {
     const nav = navRef.current;
@@ -1003,11 +1078,8 @@ function AppShell() {
     }
     if (event.key === "ArrowRight" && current.dataset.navSubgroup === "true") {
       event.preventDefault();
-      const isPrViews = current.dataset.subgroupId === "pullRequestViews";
-      const expanded = isPrViews ? pinnedPrViewsExpanded : pinnedViewsExpanded;
-      if (!expanded) {
-        if (isPrViews) setPinnedPrViewsExpanded(true);
-        else setPinnedViewsExpanded(true);
+      if (!pinnedViewsExpanded) {
+        setPinnedViewsExpanded(true);
       } else {
         focusNavItem(current, 1);
       }
@@ -1015,12 +1087,7 @@ function AppShell() {
     }
     if (event.key === "ArrowLeft" && current.dataset.navSubgroup === "true") {
       event.preventDefault();
-      const isPrViews = current.dataset.subgroupId === "pullRequestViews";
-      const expanded = isPrViews ? pinnedPrViewsExpanded : pinnedViewsExpanded;
-      if (expanded) {
-        if (isPrViews) setPinnedPrViewsExpanded(false);
-        else setPinnedViewsExpanded(false);
-      }
+      if (pinnedViewsExpanded) setPinnedViewsExpanded(false);
       return;
     }
     if (event.key === "Enter" || event.key === " ") {
@@ -1378,36 +1445,9 @@ function AppShell() {
                 active={activeView === "myReviews"}
                 disabled={organizations.length === 0}
                 label="My Reviews"
-                onClick={() => {
-                  setSelectedPrViewRequestId(null);
-                  setView("myReviews");
-                }}
+                badge={myReviewsBadge}
+                onClick={() => setView("myReviews")}
               />
-              {pinnedPrViews.length > 0 ? (
-                <NavSubGroup
-                  id="pullRequestViews"
-                  active={false}
-                  disabled={organizations.length === 0}
-                  label="Views"
-                  expandable={pinnedPrViews.length > 0}
-                  expanded={pinnedPrViewsExpanded}
-                  onToggle={() => setPinnedPrViewsExpanded((value) => !value)}
-                  onClick={() => setPinnedPrViewsExpanded((value) => !value)}
-                >
-                  {pinnedPrViews.map((item) => (
-                    <NavSubItem
-                      key={item.id}
-                      active={false}
-                      disabled={organizations.length === 0}
-                      label={item.name}
-                      onClick={() => {
-                        setSelectedPrViewRequestId(item.id);
-                        setView("myReviews");
-                      }}
-                    />
-                  ))}
-                </NavSubGroup>
-              ) : null}
               <NavSubItem
                 active={activeView === "pullRequestSearch"}
                 disabled={organizations.length === 0}
@@ -1427,6 +1467,7 @@ function AppShell() {
                 active={activeView === "myWorkItems"}
                 disabled={organizations.length === 0}
                 label="My Items"
+                badge={myWorkItemsBadge}
                 onClick={() => setView("myWorkItems")}
               />
               <NavSubGroup
@@ -1449,6 +1490,7 @@ function AppShell() {
                     active={activeView === "workItemViews" && activeWorkItemViewId === item.id}
                     disabled={organizations.length === 0}
                     label={item.name}
+                    badge={viewCountBaseline(item.id)}
                     onClick={() => {
                       setActiveWorkItemViewId(item.id);
                       setSelectedWorkItemViewRequestId(item.id);
@@ -1566,20 +1608,6 @@ function AppShell() {
                 onSync={() => syncMutation.mutate({ scope: "all" })}
                 syncing={syncMutation.isPending}
               />
-              <button
-                type="button"
-                disabled={syncMutation.isPending}
-                onClick={() => syncMutation.mutate({ scope: "all" })}
-                aria-keyshortcuts="Alt+S"
-                aria-label="Sync now"
-                className="flex items-center rounded-md border border-border bg-card p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
-                title="Sync now"
-              >
-                <RefreshCw
-                  className={`h-4 w-4 ${syncMutation.isPending ? "animate-spin" : ""}`}
-                  aria-hidden="true"
-                />
-              </button>
             </div>
           )}
         </header>
@@ -1607,9 +1635,6 @@ function AppShell() {
               organizations={organizations}
               selectRequest={myReviewsSelectRequest}
               onSelectRequestHandled={() => setMyReviewsSelectRequest(null)}
-              selectedViewRequestId={selectedPrViewRequestId}
-              onSelectedViewRequestHandled={() => setSelectedPrViewRequestId(null)}
-              onViewsChange={setPrNavViews}
             />
           ) : activeView === "workItems" ? (
             <WorkItemSearch
