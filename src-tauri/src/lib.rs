@@ -22,10 +22,12 @@ mod wiki;
 mod work_items;
 
 use cancellation::{run_cancellable, CancellationRegistry};
-use code_search::{CodeSearchResults, CodeSearchService, SearchCodeInput};
+use code_search::{
+    CodeContextResult, CodeSearchResults, CodeSearchService, GetCodeContextInput, SearchCodeInput,
+};
 use commits::{
     CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
-    CommitRepositoryOption, CommitService, CommitSummary, GetCommitChangesInput,
+    CommitRepositoryOption, CommitSearchResult, CommitService, GetCommitChangesInput,
     GetCommitFileDiffInput, GetCommitPullRequestsInput, ListCommitRepositoriesInput,
     SearchCommitsInput,
 };
@@ -67,8 +69,9 @@ use wiki::{
     WikiService, WikiSummary,
 };
 use work_items::{
-    AddWorkItemCommentInput, AssignWorkItemsInput, BulkWorkItemResult, DeleteWorkItemCommentInput,
-    FetchWorkItemImageInput, GetSavedQueryInput, GetWorkItemPreviewInput, ListMyWorkItemsInput,
+    AddWorkItemCommentInput, AssignWorkItemsInput, BulkWorkItemResult, ClassificationNodesResult,
+    DeleteWorkItemCommentInput, FetchWorkItemImageInput, GetSavedQueryInput,
+    GetWorkItemPreviewInput, ListClassificationNodesInput, ListMyWorkItemsInput,
     ListWorkItemFieldAllowedValuesInput, ListWorkItemFieldsInput, ListWorkItemProjectsInput,
     ListWorkItemTypeStatesInput, ListWorkItemUpdatesInput, MentionCandidate,
     RecordAssigneeInteractionInput, RecordMentionInteractionInput, RunWorkItemQueryInput,
@@ -576,6 +579,15 @@ async fn list_work_item_fields(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn list_classification_nodes(
+    input: ListClassificationNodesInput,
+    state: State<'_, AppState>,
+) -> Result<ClassificationNodesResult> {
+    state.work_items.list_classification_nodes(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn get_saved_query(
     input: GetSavedQueryInput,
     state: State<'_, AppState>,
@@ -588,7 +600,7 @@ async fn get_saved_query(
 async fn search_commits(
     input: SearchCommitsInput,
     state: State<'_, AppState>,
-) -> Result<Vec<CommitSummary>> {
+) -> Result<CommitSearchResult> {
     let service = state.commits.clone();
     service.search(input).await
 }
@@ -626,6 +638,15 @@ async fn search_code(
         state.code_search.search(input),
     )
     .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn get_code_search_context(
+    input: GetCodeContextInput,
+    state: State<'_, AppState>,
+) -> Result<CodeContextResult> {
+    state.code_search.get_context(input).await
 }
 
 #[tauri::command]
@@ -912,6 +933,7 @@ pub fn run() {
             list_work_item_field_allowed_values,
             list_work_item_type_states,
             list_work_item_fields,
+            list_classification_nodes,
             get_saved_query,
             set_work_items_state,
             assign_work_items,
@@ -920,6 +942,7 @@ pub fn run() {
             list_commit_repositories,
             commit_activity,
             search_code,
+            get_code_search_context,
             cancel_operation,
             get_commit_changes,
             get_commit_file_diff,

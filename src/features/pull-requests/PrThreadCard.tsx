@@ -61,16 +61,16 @@ export function PrThreadCard({
             </span>
           ) : null}
         </div>
-        {thread.status ? (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onToggleStatus}
-            className="shrink-0 rounded border border-border bg-card px-1.5 py-px text-[10px] text-muted-foreground hover:bg-secondary disabled:opacity-50"
-          >
-            {resolved ? "Reactivate" : "Resolve"}
-          </button>
-        ) : null}
+        {/* Threads without a status are still user discussions; default them to
+            active so the Resolve toggle stays available (issue #434). */}
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onToggleStatus}
+          className="shrink-0 rounded border border-border bg-card px-1.5 py-px text-[10px] text-muted-foreground hover:bg-secondary disabled:opacity-50"
+        >
+          {resolved ? "Reactivate" : "Resolve"}
+        </button>
       </div>
       <div className="mt-1 space-y-1.5">
         {thread.comments
