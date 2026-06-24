@@ -53,6 +53,18 @@ export function useGridFocusRestoration({
     );
   }, [containerRef]);
 
+  // True when focus currently rests on a concrete element that is not a grid
+  // row — typically an editor in the preview pane that shares this container.
+  // A background data update (e.g. sync replacing rows) must never yank focus
+  // away from there; restoration is only meant to recover focus that fell back
+  // to `<body>` when the selected row's node was detached.
+  const focusMovedOffGrid = useCallback(() => {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement) || active === document.body) return false;
+    const container = containerRef.current;
+    return !(container?.contains(active) && active.closest(GRID_FOCUS_SELECTOR));
+  }, [containerRef]);
+
   const clearBlurTimer = useCallback(() => {
     if (blurClearTimerRef.current !== null) {
       window.clearTimeout(blurClearTimerRef.current);
@@ -101,6 +113,10 @@ export function useGridFocusRestoration({
     let timer = 0;
     const attempt = (remaining: number) => {
       if (cancelled) return;
+      // The user may have moved focus into the preview pane (an editor in the
+      // same container) between the data update and this deferred attempt.
+      // Bail rather than steal focus back to the row mid-edit.
+      if (focusMovedOffGrid()) return;
       if (restoreFocusRef.current()) return;
       if (remaining <= 0) return;
       // A row scrolled out of the virtual window mounts on the next frame after
@@ -112,7 +128,7 @@ export function useGridFocusRestoration({
       cancelled = true;
       if (timer) window.clearTimeout(timer);
     };
-  }, [restoreSignature, clearBlurTimer]);
+  }, [restoreSignature, clearBlurTimer, focusMovedOffGrid]);
 
   return { onFocusCapture, onBlurCapture, hadFocusRef };
 }

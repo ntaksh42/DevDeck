@@ -10,6 +10,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { Copy, Loader2, Trash2, X, Zap } from 'lucide-react';
 import {
   deleteWorkItemComment,
+  setWorkItemCommentReaction,
   updateWorkItemComment,
   listOrganizations,
   listWorkItemTypeStates,
@@ -368,6 +369,37 @@ export function WorkItemPreviewPanel({
       void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
     },
   });
+
+  const reactionMutation = useMutation({
+    mutationFn: setWorkItemCommentReaction,
+    onSuccess: (_result, variables) => {
+      // Refetch the open preview so the reaction counts reflect the server.
+      void queryClient.invalidateQueries({
+        queryKey: workItemQueryKeys.preview(
+          variables.organizationId,
+          variables.projectId,
+          variables.workItemId,
+          customFieldsSignature,
+        ),
+      });
+    },
+  });
+  const reactionPendingCommentId = reactionMutation.isPending
+    ? (reactionMutation.variables?.commentId ?? null)
+    : null;
+
+  function toggleCommentReaction(commentId: number, reactionType: string, engaged: boolean) {
+    if (!selectedItem) return;
+    reactionMutation.mutate({
+      organizationId: selectedItem.organizationId,
+      projectId: selectedItem.projectId,
+      workItemId: selectedItem.id,
+      commentId,
+      reactionType:
+        reactionType as Parameters<typeof setWorkItemCommentReaction>[0]["reactionType"],
+      engaged,
+    });
+  }
 
   const updateFieldsMutation = useMutation({
     mutationFn: updateWorkItemFields,
@@ -1063,6 +1095,8 @@ export function WorkItemPreviewPanel({
                 onEditComment={editComment}
                 isFollowed={followed}
                 onToggleFollow={toggleFollow}
+                onToggleCommentReaction={toggleCommentReaction}
+                reactionPendingCommentId={reactionPendingCommentId}
                 preview={preview}
                 selectedFieldKeys={selectedPreviewFieldKeys}
                 onSelectedFieldKeysChange={setSelectedPreviewFieldKeys}

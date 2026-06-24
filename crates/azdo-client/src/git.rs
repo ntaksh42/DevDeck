@@ -748,9 +748,7 @@ mod tests {
     async fn list_commit_pull_requests_maps_response() {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
-            .and(path(
-                "/_apis/git/repositories/repo-1/pullrequestquery",
-            ))
+            .and(path("/_apis/git/repositories/repo-1/pullrequestquery"))
             .and(query_param("api-version", "7.1-preview"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "results": [{
