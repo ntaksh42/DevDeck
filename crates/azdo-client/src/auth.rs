@@ -2,6 +2,7 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use chrono::TimeZone;
 use secrecy::{ExposeSecret, SecretString};
 
 use crate::error::{AdoError, Result};
@@ -106,24 +107,30 @@ impl AdoCredentialProvider for AzureCliProvider {
 
         // `az` shells out synchronously; run it off the async worker thread.
         let token_source = Arc::clone(&self.token_source);
-        let token = tokio::task::spawn_blocking(move || token_source.access_token())
+        let fetched = tokio::task::spawn_blocking(move || token_source.access_token())
             .await
             .map_err(|error| AdoError::Auth(format!("Azure CLI token task failed: {error}")))??;
-        if token.trim().is_empty() {
+        if fetched.token.trim().is_empty() {
             return Err(AdoError::Auth(
                 "Azure CLI returned an empty access token".to_string(),
             ));
         }
 
-        let token = token.trim().to_string();
+        let token = fetched.token.trim().to_string();
         let header = format!("Bearer {token}");
+        // Cache until just before the CLI-reported expiry; fall back to the fixed
+        // TTL when the CLI did not report (or we could not parse) one.
+        let lifetime = match fetched.expires_in {
+            Some(expires_in) => expires_in.saturating_sub(TOKEN_EXPIRY_MARGIN),
+            None => self.token_ttl,
+        };
         let mut cache = self
             .cache
             .lock()
             .map_err(|_| AdoError::Auth("Azure CLI token cache lock poisoned".to_string()))?;
         *cache = Some(CachedBearerToken {
             token: SecretString::from(token),
-            fetched_at: Instant::now(),
+            valid_until: Instant::now() + lifetime,
         });
 
         Ok(header)
@@ -137,7 +144,7 @@ impl AzureCliProvider {
             .lock()
             .map_err(|_| AdoError::Auth("Azure CLI token cache lock poisoned".to_string()))?;
         Ok(cache.as_ref().and_then(|cached| {
-            if cached.fetched_at.elapsed() < self.token_ttl {
+            if Instant::now() < cached.valid_until {
                 Some(cached.token.expose_secret().to_string())
             } else {
                 None
@@ -148,11 +155,24 @@ impl AzureCliProvider {
 
 struct CachedBearerToken {
     token: SecretString,
-    fetched_at: Instant,
+    /// Monotonic instant after which the cached token must be refetched.
+    valid_until: Instant,
+}
+
+/// Refresh the token this long before its real expiry, so a request never goes
+/// out with a token that expires mid-flight.
+const TOKEN_EXPIRY_MARGIN: Duration = Duration::from_secs(60);
+
+/// An Azure CLI access token plus, when the CLI reported it, how long it stays
+/// valid. `expires_in` is `None` for older `az` versions or unparsable output,
+/// in which case the provider falls back to its fixed TTL.
+struct AzureCliToken {
+    token: String,
+    expires_in: Option<Duration>,
 }
 
 trait AzureCliTokenSource: Send + Sync {
-    fn access_token(&self) -> Result<String>;
+    fn access_token(&self) -> Result<AzureCliToken>;
 }
 
 struct AzCommandTokenSource {
@@ -160,17 +180,15 @@ struct AzCommandTokenSource {
 }
 
 impl AzureCliTokenSource for AzCommandTokenSource {
-    fn access_token(&self) -> Result<String> {
+    fn access_token(&self) -> Result<AzureCliToken> {
         let output = Command::new("az")
             .args([
                 "account",
                 "get-access-token",
                 "--resource",
                 &self.resource,
-                "--query",
-                "accessToken",
                 "--output",
-                "tsv",
+                "json",
             ])
             .output()
             .map_err(|error| {
@@ -191,8 +209,46 @@ impl AzureCliTokenSource for AzCommandTokenSource {
             )));
         }
 
-        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+        let value: serde_json::Value =
+            serde_json::from_slice(&output.stdout).map_err(|error| {
+                AdoError::Auth(format!("could not parse Azure CLI token output: {error}"))
+            })?;
+        let token = value
+            .get("accessToken")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+        Ok(AzureCliToken {
+            token,
+            expires_in: token_expires_in(&value),
+        })
     }
+}
+
+/// Derives the token's remaining lifetime from the Azure CLI JSON. Prefers the
+/// unambiguous unix `expires_on` (seconds since epoch, newer `az`); falls back
+/// to the local-time `expiresOn` string; returns `None` if neither is usable.
+fn token_expires_in(value: &serde_json::Value) -> Option<Duration> {
+    if let Some(epoch) = value.get("expires_on").and_then(|v| v.as_i64()) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?
+            .as_secs() as i64;
+        let remaining = epoch - now;
+        return (remaining > 0).then(|| Duration::from_secs(remaining as u64));
+    }
+    let raw = value.get("expiresOn").and_then(|v| v.as_str())?;
+    // `az` reports this in local time without a timezone, e.g.
+    // "2026-06-25 13:45:30.123456".
+    let naive =
+        chrono::NaiveDateTime::parse_from_str(raw.trim(), "%Y-%m-%d %H:%M:%S%.f").ok()?;
+    let local = chrono::Local
+        .from_local_datetime(&naive)
+        .single()?;
+    local
+        .signed_duration_since(chrono::Local::now())
+        .to_std()
+        .ok()
 }
 
 #[cfg(test)]
@@ -219,9 +275,12 @@ mod tests {
     }
 
     impl AzureCliTokenSource for StaticTokenSource {
-        fn access_token(&self) -> Result<String> {
+        fn access_token(&self) -> Result<AzureCliToken> {
             self.calls.fetch_add(1, Ordering::SeqCst);
-            Ok(self.token.clone())
+            Ok(AzureCliToken {
+                token: self.token.clone(),
+                expires_in: None,
+            })
         }
     }
 
@@ -292,10 +351,13 @@ mod tests {
     }
 
     impl AzureCliTokenSource for SlowTokenSource {
-        fn access_token(&self) -> Result<String> {
+        fn access_token(&self) -> Result<AzureCliToken> {
             self.calls.fetch_add(1, Ordering::SeqCst);
             std::thread::sleep(Duration::from_millis(50));
-            Ok(self.token.clone())
+            Ok(AzureCliToken {
+                token: self.token.clone(),
+                expires_in: None,
+            })
         }
     }
 
@@ -321,5 +383,62 @@ mod tests {
         // Despite eight concurrent callers, the gate plus cache re-check should
         // limit the external process to a single invocation.
         assert_eq!(source.calls(), 1);
+    }
+
+    #[test]
+    fn token_expires_in_prefers_unix_expires_on() {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let value = serde_json::json!({
+            "accessToken": "t",
+            "expires_on": now + 3600,
+            "expiresOn": "1999-01-01 00:00:00.000000",
+        });
+        let remaining = token_expires_in(&value).expect("should parse expiry");
+        // ~1 hour out, allowing for the second that elapsed during the test.
+        assert!(remaining <= Duration::from_secs(3600));
+        assert!(remaining >= Duration::from_secs(3590));
+    }
+
+    #[test]
+    fn token_expires_in_is_none_when_absent() {
+        let value = serde_json::json!({ "accessToken": "t" });
+        assert!(token_expires_in(&value).is_none());
+    }
+
+    /// A token whose reported lifetime is shorter than a fresh fetch interval is
+    /// refetched once it lapses, instead of being held for the fixed fallback TTL.
+    struct ShortLivedTokenSource {
+        calls: AtomicUsize,
+    }
+
+    impl AzureCliTokenSource for ShortLivedTokenSource {
+        fn access_token(&self) -> Result<AzureCliToken> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            // expires_in below the margin → lifetime saturates to zero, so the
+            // very next call is a cache miss.
+            Ok(AzureCliToken {
+                token: "short".to_string(),
+                expires_in: Some(Duration::from_secs(1)),
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn azure_cli_provider_refetches_when_token_lifetime_elapsed() {
+        let source = Arc::new(ShortLivedTokenSource {
+            calls: AtomicUsize::new(0),
+        });
+        let provider =
+            AzureCliProvider::with_token_source(source.clone(), Duration::from_secs(300));
+
+        provider.auth_header_value().await.unwrap();
+        provider.auth_header_value().await.unwrap();
+
+        // Lifetime (1s) minus the 60s margin saturates to zero, so the cached
+        // token is already stale and the second call refetches.
+        assert_eq!(source.calls.load(Ordering::SeqCst), 2);
     }
 }
