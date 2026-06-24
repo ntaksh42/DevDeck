@@ -1623,7 +1623,11 @@ function AppShell() {
           {organizationsQuery.isLoading ? (
             <LoadingState />
           ) : organizationsQuery.isError ? (
-            <ErrorState message={commandErrorMessage(organizationsQuery.error)} />
+            <ErrorState
+              message={commandErrorMessage(organizationsQuery.error)}
+              onRetry={() => void organizationsQuery.refetch()}
+              onOpenSettings={() => setView("settings")}
+            />
           ) : activeView === "pullRequestSearch" ? (
             <PullRequestSearch
               organizations={organizations}

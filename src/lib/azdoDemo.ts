@@ -4,6 +4,7 @@ import type {
   AddWorkItemCommentInput,
   AppSettings,
   AssignWorkItemsInput,
+  ClassificationNodesResult,
   CommitActivityDay,
   CommitActivityInput,
   CommitPullRequest,
@@ -924,6 +925,9 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       const input = (args as { input?: ListWorkItemFieldsInput } | undefined)?.input;
       return demoListWorkItemFields(input);
     }
+    case "list_classification_nodes": {
+      return demoClassificationNodes();
+    }
     case "set_work_items_state": {
       const input = (args as { input?: SetWorkItemsStateInput } | undefined)?.input;
       return (input?.workItemIds ?? []).map((id) => ({ id, error: null }));
@@ -1721,6 +1725,37 @@ function demoListWorkItemFields(_input?: ListWorkItemFieldsInput): WorkItemField
     { name: "Severity", referenceName: "Microsoft.VSTS.Common.Severity", fieldType: "string", custom: false },
     { name: "Story Points", referenceName: "Microsoft.VSTS.Scheduling.StoryPoints", fieldType: "double", custom: false },
   ];
+}
+
+function demoClassificationNodes(): ClassificationNodesResult {
+  return {
+    areas: [
+      { name: "Platform", path: "Platform", depth: 0, hasChildren: true, startDate: null, finishDate: null },
+      { name: "Web", path: "Platform\\Web", depth: 1, hasChildren: false, startDate: null, finishDate: null },
+      { name: "API", path: "Platform\\API", depth: 1, hasChildren: true, startDate: null, finishDate: null },
+      { name: "Gateway", path: "Platform\\API\\Gateway", depth: 2, hasChildren: false, startDate: null, finishDate: null },
+      { name: "Mobile", path: "Platform\\Mobile", depth: 1, hasChildren: false, startDate: null, finishDate: null },
+    ],
+    iterations: [
+      { name: "Platform", path: "Platform", depth: 0, hasChildren: true, startDate: null, finishDate: null },
+      {
+        name: "Sprint 24",
+        path: "Platform\\Sprint 24",
+        depth: 1,
+        hasChildren: false,
+        startDate: "2026-05-11T00:00:00Z",
+        finishDate: "2026-05-24T00:00:00Z",
+      },
+      {
+        name: "Sprint 25",
+        path: "Platform\\Sprint 25",
+        depth: 1,
+        hasChildren: false,
+        startDate: "2026-05-25T00:00:00Z",
+        finishDate: "2026-06-07T00:00:00Z",
+      },
+    ],
+  };
 }
 
 const demoMentionPeople: MentionCandidate[] = [
