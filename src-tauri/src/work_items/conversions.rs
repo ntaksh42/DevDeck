@@ -341,6 +341,8 @@ pub(super) fn validate_update_field_reference_name(value: &str) -> Result<&str> 
         "System.Reason",
         "System.AssignedTo",
         "System.Tags",
+        "System.AreaPath",
+        "System.IterationPath",
     ];
     let field = value.trim();
     if let Some(allowed) = ALLOWED_SYSTEM_FIELDS
