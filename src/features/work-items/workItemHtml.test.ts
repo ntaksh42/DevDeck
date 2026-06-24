@@ -55,6 +55,17 @@ describe("commentRichHtml", () => {
     expect(html).toContain("@&lt;unknown&gt;");
   });
 
+  it("keeps a guid-shaped unresolved mention visible instead of dropping it", () => {
+    // A guid starting with a letter looks like an unknown HTML tag, so the
+    // sanitizer used to strip "<guid>" and leave only "@". The token must
+    // survive as escaped, sanitizer-safe text.
+    const id = "a1b2c3d4-e5f6-7890-abcd-ef0123456789";
+    const html = commentRichHtml(null, `Hi @<${id}>`, new Map());
+    const body = bodyOf(buildRichHtmlDocument(html));
+    expect(body).toContain(`@&lt;${id}&gt;`);
+    expect(body).not.toMatch(/Hi @\s*<\/p>/);
+  });
+
   it("falls back to plain text and finally to a placeholder", () => {
     expect(commentRichHtml(null, "just text", new Map())).toContain("just text");
     expect(commentRichHtml(null, null, new Map())).toBe("No text");
