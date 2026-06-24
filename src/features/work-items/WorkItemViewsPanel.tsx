@@ -1117,7 +1117,7 @@ export function WorkItemViewsPanel({
       {selectedView && !dialogOpen ? (
         <div className="flex min-h-0 flex-1 flex-col gap-3">
           {selectedQuery?.isError ? (
-            <ErrorState message={commandErrorMessage(selectedQuery.error)} />
+            <ErrorState message={commandErrorMessage(selectedQuery.error)} onRetry={() => void selectedQuery.refetch()} />
           ) : null}
 
           {layout === "board" ? (
