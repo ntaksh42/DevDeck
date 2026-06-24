@@ -15,6 +15,7 @@ import {
   listOrganizations,
   listWorkItemTypeStates,
   listWorkItemFieldAllowedValues,
+  listClassificationNodes,
   searchWorkItemAssignees,
   recordAssigneeInteraction,
   updateWorkItemFields,
@@ -73,6 +74,7 @@ import {
 } from './workItemMentions';
 import {
   AssigneePicker,
+  ClassificationPicker,
   CustomFieldPicker,
   PriorityPicker,
   ReasonEditor,
@@ -143,6 +145,8 @@ export function WorkItemPreviewPanel({
   const [statePickerOpen, setStatePickerOpen] = useState(false);
   const [reasonEditorOpen, setReasonEditorOpen] = useState(false);
   const [priorityPickerOpen, setPriorityPickerOpen] = useState(false);
+  const [areaPickerOpen, setAreaPickerOpen] = useState(false);
+  const [iterationPickerOpen, setIterationPickerOpen] = useState(false);
   const [customFieldEditor, setCustomFieldEditor] = useState<string | null>(null);
   const [followed, setFollowed] = useState(false);
   const handledOpenAssigneeRequest = useRef(0);
@@ -164,6 +168,20 @@ export function WorkItemPreviewPanel({
       }),
     enabled: statePickerOpen && !!preview?.workItemType,
     staleTime: Infinity,
+  });
+  const classificationQuery = useQuery({
+    queryKey: [
+      "classificationNodes",
+      selectedItem?.organizationId,
+      selectedItem?.projectId,
+    ],
+    queryFn: () =>
+      listClassificationNodes({
+        organizationId: selectedItem?.organizationId,
+        projectId: selectedItem?.projectId ?? "",
+      }),
+    enabled: (areaPickerOpen || iterationPickerOpen) && !!selectedItem?.projectId,
+    staleTime: 5 * 60_000,
   });
   const customFieldValuesQuery = useQuery({
     queryKey: workItemQueryKeys.fieldAllowedValues(
@@ -532,6 +550,20 @@ export function WorkItemPreviewPanel({
       projectId: selectedItem.projectId,
       workItemId: selectedItem.id,
       fields,
+    });
+  }
+
+  // Area/iteration are picked from the classification tree and applied
+  // immediately (they are not part of the Ctrl+S staged batch).
+  function applyClassification(referenceName: string, path: string) {
+    if (!selectedItem) return;
+    setAreaPickerOpen(false);
+    setIterationPickerOpen(false);
+    updateFieldsMutation.mutate({
+      organizationId: selectedItem.organizationId,
+      projectId: selectedItem.projectId,
+      workItemId: selectedItem.id,
+      fields: [{ referenceName, value: path }],
     });
   }
 
@@ -1212,6 +1244,48 @@ export function WorkItemPreviewPanel({
                     pending={applying}
                     query={assigneeQuery}
                     shortcut="A"
+                  />
+                }
+                areaControl={
+                  <ClassificationPicker
+                    ariaLabel="Change area path"
+                    current={preview.areaPath}
+                    emptyLabel="No areas available"
+                    error={
+                      areaPickerOpen && classificationQuery.isError
+                        ? commandErrorMessage(classificationQuery.error)
+                        : null
+                    }
+                    loading={classificationQuery.isFetching}
+                    onOpenChange={(open) => {
+                      setAreaPickerOpen(open);
+                      if (open) setIterationPickerOpen(false);
+                    }}
+                    onSelect={(path) => applyClassification("System.AreaPath", path)}
+                    open={areaPickerOpen}
+                    options={classificationQuery.data?.areas ?? []}
+                    pending={applying || updateFieldsMutation.isPending}
+                  />
+                }
+                iterationControl={
+                  <ClassificationPicker
+                    ariaLabel="Change iteration path"
+                    current={preview.iterationPath}
+                    emptyLabel="No iterations available"
+                    error={
+                      iterationPickerOpen && classificationQuery.isError
+                        ? commandErrorMessage(classificationQuery.error)
+                        : null
+                    }
+                    loading={classificationQuery.isFetching}
+                    onOpenChange={(open) => {
+                      setIterationPickerOpen(open);
+                      if (open) setAreaPickerOpen(false);
+                    }}
+                    onSelect={(path) => applyClassification("System.IterationPath", path)}
+                    open={iterationPickerOpen}
+                    options={classificationQuery.data?.iterations ?? []}
+                    pending={applying || updateFieldsMutation.isPending}
                   />
                 }
               />
