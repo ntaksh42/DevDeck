@@ -16,6 +16,16 @@ pub(super) fn summarize_work_item_comment(comment: AzdoWorkItemComment) -> WorkI
         })
         .unwrap_or((None, None, None));
 
+    let reactions = comment
+        .reactions
+        .into_iter()
+        .map(|reaction| CommentReactionSummary {
+            reaction_type: reaction.reaction_type,
+            count: reaction.count,
+            is_mine: reaction.is_current_user_engaged,
+        })
+        .collect();
+
     WorkItemComment {
         id: comment.id,
         text: comment.text,
@@ -24,6 +34,7 @@ pub(super) fn summarize_work_item_comment(comment: AzdoWorkItemComment) -> WorkI
         created_by_id,
         created_by_unique_name,
         created_date: comment.created_date,
+        reactions,
     }
 }
 
