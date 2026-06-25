@@ -1670,6 +1670,71 @@ describe("App", () => {
     });
   });
 
+  it("refreshes the active commit search after commit sync", async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_commit_repositories") {
+        return Promise.resolve([
+          {
+            projectId: "project-1",
+            projectName: "Platform",
+            repositoryId: "repo-1",
+            repositoryName: "azdo-dashboard",
+          },
+        ]);
+      }
+      if (command === "search_commits") {
+        return Promise.resolve({ commits: [], total: 0, truncated: false });
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+    const main = within(await screen.findByRole("main"));
+
+    await screen.findByText("No pull requests assigned to you.");
+    fireEvent.click(screen.getByRole("button", { name: "Commits" }));
+    fireEvent.change(await main.findByPlaceholderText("message, author, repository, SHA"), {
+      target: { value: "cache" },
+    });
+    fireEvent.click(main.getByRole("button", { name: "Search" }));
+
+    await waitFor(() => {
+      expect(
+        invokeMock.mock.calls.filter(([command]) => command === "search_commits"),
+      ).toHaveLength(1);
+    });
+
+    tauriEventHandlers.get("sync:updated")?.({ payload: { scopes: ["commits"] } });
+
+    await waitFor(() => {
+      expect(
+        invokeMock.mock.calls.filter(([command]) => command === "search_commits"),
+      ).toHaveLength(2);
+    });
+    const searchCalls = invokeMock.mock.calls.filter(([command]) => command === "search_commits");
+    expect(searchCalls[1]).toEqual([
+      "search_commits",
+      {
+        input: {
+          organizationId: "contoso",
+          query: "cache",
+          author: "",
+          branch: "",
+          fromDate: "",
+          toDate: "",
+          projectId: "",
+          repositoryId: "",
+        },
+      },
+    ]);
+  });
+
   it("validates commit date range before searching", async () => {
     invokeMock.mockImplementation((command: string) => {
       if (command === "list_organizations") {

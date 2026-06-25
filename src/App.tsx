@@ -167,6 +167,7 @@ type NavSectionId = "pullRequests" | "workItems";
 const DEFAULT_SIDEBAR_WIDTH = 232;
 const SIDEBAR_WIDTH_STORAGE_KEY = "azdodeck:layout:sidebarWidth";
 const HOT_SYNC_FOCUS_MIN_INTERVAL_MS = 2 * 60_000;
+const COMMITS_SYNCED_EVENT = "azdodeck:commits-synced";
 
 function invalidateSyncedDataQueries(
   queryClient: QueryClient,
@@ -190,6 +191,10 @@ function invalidateSyncedDataQueries(
   }
   if (all || scopeSet.has("commits")) {
     void queryClient.invalidateQueries({ queryKey: ["commitRepositories"], refetchType });
+    void queryClient.invalidateQueries({ queryKey: ["commitActivity"], refetchType });
+    if (refetchType === "active") {
+      window.dispatchEvent(new Event(COMMITS_SYNCED_EVENT));
+    }
   }
 }
 

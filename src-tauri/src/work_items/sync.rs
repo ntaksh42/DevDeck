@@ -76,6 +76,7 @@ pub(super) fn delta_sync_since(db: &AppDatabase, org: &Organization) -> Option<S
 pub(super) struct SyncWorkItemFetchResult {
     items: Vec<CachedWorkItem>,
     queried_count: usize,
+    complete: bool,
 }
 
 /// Outcome of syncing one project's work items. `result` is `Ok(None)` for a
@@ -196,8 +197,11 @@ pub(super) async fn do_sync_work_items(
     };
     let mut all_cached: Vec<CachedWorkItem> = Vec::new();
     let mut my_cached: Vec<CachedWorkItem> = Vec::new();
-    let mut synced_project_ids: Vec<String> = Vec::new();
+    let mut replace_all_project_ids: Vec<String> = Vec::new();
+    let mut replace_my_project_ids: Vec<String> = Vec::new();
+    let mut synced_any_project = false;
     let mut skipped_projects: Vec<String> = Vec::new();
+    let mut capped_projects: Vec<String> = Vec::new();
     let mut last_skip_error: Option<AppError> = None;
     let mut large_query_count = 0usize;
     let mut largest_query_result = 0usize;
@@ -224,15 +228,25 @@ pub(super) async fn do_sync_work_items(
             // its cached rows survive.
             Ok(None) => continue,
             Ok(Some((project_all, project_my))) => {
-                synced_project_ids.push(fetch.project_id);
+                synced_any_project = true;
                 if project_all.queried_count > SYNC_WORK_ITEM_BATCH_SIZE {
                     large_query_count += 1;
                     largest_query_result = largest_query_result.max(project_all.queried_count);
+                }
+                if project_all.complete {
+                    replace_all_project_ids.push(fetch.project_id.clone());
+                } else {
+                    capped_projects.push(format!("{} all-items", fetch.project_name));
                 }
                 all_cached.extend(project_all.items);
                 if project_my.queried_count > SYNC_WORK_ITEM_BATCH_SIZE {
                     large_query_count += 1;
                     largest_query_result = largest_query_result.max(project_my.queried_count);
+                }
+                if project_my.complete {
+                    replace_my_project_ids.push(fetch.project_id);
+                } else {
+                    capped_projects.push(format!("{} my-items", fetch.project_name));
                 }
                 my_cached.extend(project_my.items);
             }
@@ -251,18 +265,29 @@ pub(super) async fn do_sync_work_items(
 
     // If every project failed with a real error (not 404), surface it rather than
     // recording a spurious success with no cache update.
-    if synced_project_ids.is_empty() {
+    if !synced_any_project {
         if let Some(e) = last_skip_error {
             return Err(e);
         }
     }
 
-    let synced_ids: Vec<&str> = synced_project_ids.iter().map(String::as_str).collect();
     let was_full_sync = delta_since.is_none();
-    if was_full_sync {
-        db.replace_work_items(&org.id, &synced_ids, &all_cached, &my_cached)?;
+    let replace_all_ids: Vec<&str> = if was_full_sync {
+        replace_all_project_ids.iter().map(String::as_str).collect()
     } else {
-        db.apply_work_items_delta(&org.id, &synced_ids, &all_cached, &my_cached)?;
+        Vec::new()
+    };
+    let replace_my_ids: Vec<&str> = replace_my_project_ids.iter().map(String::as_str).collect();
+    if was_full_sync {
+        db.apply_work_items_sync(
+            &org.id,
+            &replace_all_ids,
+            &replace_my_ids,
+            &all_cached,
+            &my_cached,
+        )?;
+    } else {
+        db.apply_work_items_delta(&org.id, &replace_my_ids, &all_cached, &my_cached)?;
     }
 
     let mut warning_parts: Vec<String> = Vec::new();
@@ -276,6 +301,12 @@ pub(super) async fn do_sync_work_items(
     if large_query_count > 0 {
         warning_parts.push(format!(
             "Work item sync fetched more than {SYNC_WORK_ITEM_BATCH_SIZE} IDs in {large_query_count} query result(s); largest result had {largest_query_result} IDs and was loaded in batches."
+        ));
+    }
+    if !capped_projects.is_empty() {
+        warning_parts.push(format!(
+            "Work item sync hit the {SYNC_WORK_ITEM_QUERY_TOP} item cap for {}; cached rows missing from those capped snapshots were preserved.",
+            capped_projects.join(", ")
         ));
     }
     let warning = if warning_parts.is_empty() {
@@ -317,10 +348,12 @@ pub(super) async fn fetch_sync_work_items(
         Err(e) => return Err(e.into()),
     };
     let queried_count = ids.len();
+    let complete = queried_count < SYNC_WORK_ITEM_QUERY_TOP;
     if ids.is_empty() {
         return Ok(Some(SyncWorkItemFetchResult {
             items: Vec::new(),
             queried_count,
+            complete,
         }));
     }
 
@@ -352,6 +385,7 @@ pub(super) async fn fetch_sync_work_items(
             .map(|wi| work_item_to_cached(org, project_id, project_name, &wi))
             .collect(),
         queried_count,
+        complete,
     }))
 }
 

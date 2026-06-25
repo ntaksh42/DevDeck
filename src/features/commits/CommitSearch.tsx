@@ -20,6 +20,7 @@ import {
   type CommitSummary,
   type CommitPullRequest,
   type CommitRepositoryOption,
+  type SearchCommitsInput,
   type Organization,
 } from "@/lib/azdoCommands";
 import {
@@ -55,6 +56,7 @@ const COMMIT_SEARCH_VIEW_STORAGE_KEY = "azdodeck:view:commitSearch:v1";
 const COMMIT_VIEW_MODE_STORAGE_KEY = "azdodeck:view:commitViewMode:v1";
 const COMMIT_SORT_STORAGE_KEY = "azdodeck:view:commitGridSort:v1";
 const COMMIT_VISIBLE_COLUMNS_STORAGE_KEY = "azdodeck:layout:commitVisibleColumns:v1";
+const COMMITS_SYNCED_EVENT = "azdodeck:commits-synced";
 const COMMIT_GRID_ROW_HEIGHT = 29;
 const COMMIT_GRID_OVERSCAN = 8;
 
@@ -197,6 +199,7 @@ export function CommitSearch({
   const [repositoryId, setRepositoryId] = useState(initialViewState.repositoryId);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<CommitViewMode>(() => loadCommitViewMode());
+  const latestSearchRef = useRef<SearchCommitsInput | null>(null);
 
   const mutation = useMutation({
     mutationFn: searchCommits,
@@ -254,6 +257,16 @@ export function CommitSearch({
   }, [viewMode]);
 
   useEffect(() => {
+    function onCommitsSynced() {
+      const input = latestSearchRef.current;
+      if (!input || mutation.isPending) return;
+      mutation.mutate(input);
+    }
+    window.addEventListener(COMMITS_SYNCED_EVENT, onCommitsSynced);
+    return () => window.removeEventListener(COMMITS_SYNCED_EVENT, onCommitsSynced);
+  }, [mutation]);
+
+  useEffect(() => {
     if (
       repositoryId &&
       !filteredRepositoryOptions.some((repository) => repository.repositoryId === repositoryId)
@@ -275,7 +288,7 @@ export function CommitSearch({
     setProjectId("");
     setRepositoryId("");
     setValidationError(null);
-    mutation.mutate({
+    const input = {
       organizationId: targetOrganizationId,
       query: externalSearch.query,
       author: "",
@@ -284,7 +297,9 @@ export function CommitSearch({
       toDate: "",
       projectId: "",
       repositoryId: "",
-    });
+    };
+    latestSearchRef.current = input;
+    mutation.mutate(input);
     onExternalSearchHandled?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalSearch?.requestId]);
@@ -301,7 +316,7 @@ export function CommitSearch({
       return;
     }
     setValidationError(null);
-    mutation.mutate({
+    const input = {
       organizationId: selectedOrganizationId,
       query,
       author,
@@ -310,7 +325,9 @@ export function CommitSearch({
       toDate,
       projectId,
       repositoryId,
-    });
+    };
+    latestSearchRef.current = input;
+    mutation.mutate(input);
   }
 
   function clearSearchFilters() {
@@ -323,7 +340,7 @@ export function CommitSearch({
     setRepositoryId("");
     setValidationError(null);
     if (mutation.isSuccess) {
-      mutation.mutate({
+      const input = {
         organizationId: selectedOrganizationId,
         query: "",
         author: "",
@@ -332,7 +349,9 @@ export function CommitSearch({
         toDate: "",
         projectId: "",
         repositoryId: "",
-      });
+      };
+      latestSearchRef.current = input;
+      mutation.mutate(input);
     }
   }
 

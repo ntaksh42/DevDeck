@@ -552,10 +552,33 @@ impl AppDatabase {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn replace_work_items(
         &self,
         org_id: &str,
         synced_project_ids: &[&str],
+        all_items: &[CachedWorkItem],
+        my_items: &[CachedWorkItem],
+    ) -> Result<()> {
+        self.apply_work_items_sync(
+            org_id,
+            synced_project_ids,
+            synced_project_ids,
+            all_items,
+            my_items,
+        )
+    }
+
+    /// Applies a work-item sync while keeping deletion scopes separate from
+    /// upsert scopes. Callers should include a project in `replace_all_project_ids`
+    /// or `replace_my_project_ids` only when that query returned a complete
+    /// snapshot. Projects omitted from those lists are still upserted, but their
+    /// missing rows are preserved.
+    pub fn apply_work_items_sync(
+        &self,
+        org_id: &str,
+        replace_all_project_ids: &[&str],
+        replace_my_project_ids: &[&str],
         all_items: &[CachedWorkItem],
         my_items: &[CachedWorkItem],
     ) -> Result<()> {
@@ -571,11 +594,13 @@ impl AppDatabase {
                 insert.execute([item.id])?;
             }
         }
-        for &project_id in synced_project_ids {
+        for &project_id in replace_all_project_ids {
             tx.execute(
                 "DELETE FROM work_items WHERE org_id = ?1 AND project_id = ?2 AND id NOT IN (SELECT id FROM sync_work_item_ids)",
                 rusqlite::params![org_id, project_id],
             )?;
+        }
+        for &project_id in replace_my_project_ids {
             tx.execute(
                 "DELETE FROM my_work_items WHERE org_id = ?1 AND project_id = ?2",
                 rusqlite::params![org_id, project_id],
@@ -599,18 +624,7 @@ impl AppDatabase {
         delta_items: &[CachedWorkItem],
         my_items: &[CachedWorkItem],
     ) -> Result<()> {
-        let conn = self.open()?;
-        let tx = conn.unchecked_transaction()?;
-        upsert_work_items(&tx, delta_items)?;
-        for &project_id in synced_project_ids {
-            tx.execute(
-                "DELETE FROM my_work_items WHERE org_id = ?1 AND project_id = ?2",
-                rusqlite::params![org_id, project_id],
-            )?;
-        }
-        upsert_my_work_items(&tx, my_items)?;
-        tx.commit()?;
-        Ok(())
+        self.apply_work_items_sync(org_id, &[], synced_project_ids, delta_items, my_items)
     }
 
     // ── Commits cache ─────────────────────────────────────────────────────────
@@ -3336,6 +3350,47 @@ mod tests {
     }
 
     #[test]
+    fn pull_request_sync_can_upsert_without_deleting_capped_project_rows() {
+        let tf = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        let make_pr = |id: i64, title: &str| CachedPr {
+            org_id: "org1".to_string(),
+            project_id: "p1".to_string(),
+            project_name: "Project One".to_string(),
+            repository_id: "repo1".to_string(),
+            repository_name: "Repo One".to_string(),
+            pull_request_id: id,
+            title: title.to_string(),
+            status: "active".to_string(),
+            created_by: None,
+            creation_date: format!("2024-01-{id:02}T00:00:00Z"),
+            source_ref_name: "feature".to_string(),
+            target_ref_name: "main".to_string(),
+            web_url: None,
+        };
+
+        db.replace_pull_requests_for_projects("org1", &["p1"], &[make_pr(1, "preserve")])
+            .unwrap();
+        db.replace_pull_requests_for_projects("org1", &[], &[make_pr(2, "upsert")])
+            .unwrap();
+
+        let ids: Vec<i64> = db
+            .search_pull_requests("org1", None, None, None)
+            .unwrap()
+            .iter()
+            .map(|pr| pr.pull_request_id)
+            .collect();
+        assert!(ids.contains(&1), "capped project row must be preserved");
+        assert!(
+            ids.contains(&2),
+            "new capped project row must still be upserted"
+        );
+    }
+
+    #[test]
     fn sync_state_upsert_and_read() {
         let tf = NamedTempFile::new().unwrap();
         let db = AppDatabase::new(tf.path().to_path_buf());
@@ -3721,6 +3776,69 @@ mod tests {
         assert!(!my_ids.contains(&10), "old p1 my row must be replaced");
         assert!(my_ids.contains(&20), "p2 my row must be preserved");
         assert!(my_ids.contains(&30), "new p1 my row must be present");
+    }
+
+    #[test]
+    fn apply_work_items_sync_preserves_rows_for_capped_snapshots() {
+        let tf = NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(tf.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(make_org_draft("org1")).unwrap();
+
+        let make_item = |id: i64, title: &str| CachedWorkItem {
+            org_id: "org1".to_string(),
+            project_id: "p1".to_string(),
+            project_name: "P1".to_string(),
+            id,
+            title: title.to_string(),
+            work_item_type: None,
+            state: None,
+            assigned_to: None,
+            assigned_to_unique_name: None,
+            changed_date: None,
+            web_url: None,
+        };
+
+        db.replace_work_items(
+            "org1",
+            &["p1"],
+            &[make_item(1, "old-all"), make_item(2, "preserve-all")],
+            &[make_item(10, "old-my"), make_item(20, "preserve-my")],
+        )
+        .unwrap();
+
+        db.apply_work_items_sync(
+            "org1",
+            &[],
+            &[],
+            &[make_item(1, "new-all")],
+            &[make_item(10, "new-my")],
+        )
+        .unwrap();
+
+        let all_ids: Vec<i64> = db
+            .search_work_items("org1", None, None, None, None)
+            .unwrap()
+            .iter()
+            .map(|w| w.id)
+            .collect();
+        assert!(all_ids.contains(&1));
+        assert!(
+            all_ids.contains(&2),
+            "capped all snapshot must not delete missing rows"
+        );
+
+        let my_ids: Vec<i64> = db
+            .list_my_work_items("org1")
+            .unwrap()
+            .iter()
+            .map(|w| w.id)
+            .collect();
+        assert!(my_ids.contains(&10));
+        assert!(
+            my_ids.contains(&20),
+            "capped my snapshot must not delete missing rows"
+        );
     }
 
     #[test]

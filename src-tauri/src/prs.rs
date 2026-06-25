@@ -305,7 +305,9 @@ pub async fn sync_prs_for_org(
 #[derive(Default)]
 struct ActivePrsFetch {
     cached_prs: Vec<CachedPr>,
-    synced_project_ids: Vec<String>,
+    replace_project_ids: Vec<String>,
+    synced_any_project: bool,
+    capped_projects: Vec<String>,
     skipped: Vec<String>,
     last_skip_error: Option<AppError>,
 }
@@ -339,14 +341,14 @@ async fn do_sync_prs(
 
     // If nothing synced and we have a real error, surface it instead of
     // recording a spurious success.
-    if active.synced_project_ids.is_empty() {
+    if !active.synced_any_project {
         if let Some(e) = active.last_skip_error {
             return Err(e);
         }
     }
 
     let synced_ids: Vec<&str> = active
-        .synced_project_ids
+        .replace_project_ids
         .iter()
         .map(String::as_str)
         .collect();
@@ -358,6 +360,12 @@ async fn do_sync_prs(
             "{} project(s) skipped due to PR sync errors: {}.",
             active.skipped.len(),
             active.skipped.join(", ")
+        ));
+    }
+    if !active.capped_projects.is_empty() {
+        warning_parts.push(format!(
+            "Active PR sync hit the {PROJECT_PR_SYNC_TOP} item cap for project(s): {}; cached rows missing from those capped snapshots were preserved.",
+            active.capped_projects.join(", ")
         ));
     }
 
@@ -423,7 +431,12 @@ async fn fetch_all_active_prs(
             joined.map_err(|e| AppError::AzureDevOps(format!("PR sync task failed: {e}")))?;
         match fetch.result {
             Ok(prs) => {
-                out.synced_project_ids.push(fetch.project_id);
+                out.synced_any_project = true;
+                if prs.len() < PROJECT_PR_SYNC_TOP as usize {
+                    out.replace_project_ids.push(fetch.project_id);
+                } else {
+                    out.capped_projects.push(fetch.label);
+                }
                 out.cached_prs.extend(prs);
             }
             Err(e) => {
