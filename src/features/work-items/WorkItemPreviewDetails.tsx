@@ -155,10 +155,31 @@ export function WorkItemPreviewDetails({
   tagsPending: boolean;
   onTagsChange: (tags: string[]) => void;
 }) {
+  const rootRef = useRef<HTMLDivElement>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
-  // Comments arrive newest first; only the recent ones mount their iframe by
-  // default because each comment is a full sandboxed document.
+  // Comments arrive newest first; the list shows only the most recent
+  // VISIBLE_COMMENT_LIMIT, and each of those mounts its sandboxed-iframe body
+  // lazily as it scrolls into view.
   const [showAllComments, setShowAllComments] = useState(false);
+
+  // The lightbox opens from a click inside a sandboxed comment/description
+  // iframe, so focus lives in that frame; close on Escape and hand focus back to
+  // the preview body rather than stranding it. Capture phase so this wins over
+  // the panel's own Escape handler, which would otherwise discard staged edits
+  // or jump to the grid before the lightbox ever closes.
+  useEffect(() => {
+    if (!lightboxSrc) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        setLightboxSrc(null);
+        rootRef.current?.focus();
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown, true);
+    return () => document.removeEventListener("keydown", handleKeyDown, true);
+  }, [lightboxSrc]);
   useEffect(() => {
     setShowAllComments(false);
   }, [preview.id]);
@@ -175,6 +196,21 @@ export function WorkItemPreviewDetails({
     fieldMenuOpen,
     () => setFieldMenuOpen(false),
   );
+  const fieldMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  const fieldMenuPopoverRef = useRef<HTMLDivElement>(null);
+  const fieldMenuWasOpenRef = useRef(false);
+  // Open onto the first checkbox; on close hand focus back to the gear trigger
+  // so keyboard users aren't dropped onto <body> (mirrors the field pickers).
+  useEffect(() => {
+    if (fieldMenuOpen && !fieldMenuWasOpenRef.current) {
+      fieldMenuPopoverRef.current
+        ?.querySelector<HTMLInputElement>('input[type="checkbox"]')
+        ?.focus();
+    } else if (!fieldMenuOpen && fieldMenuWasOpenRef.current) {
+      fieldMenuTriggerRef.current?.focus();
+    }
+    fieldMenuWasOpenRef.current = fieldMenuOpen;
+  }, [fieldMenuOpen]);
   const selectedFieldDefinitions = selectedPreviewFieldDefinitions(selectedFieldKeys);
   const fieldOptionsQuery = useQuery({
     queryKey: workItemQueryKeys.fields(preview.organizationId, preview.projectId),
@@ -246,6 +282,7 @@ export function WorkItemPreviewDetails({
 
   return (
     <div
+      ref={rootRef}
       aria-keyshortcuts="Alt+P"
       aria-label="Work item preview"
       className="min-h-0 flex-1 overflow-auto bg-card px-2.5 pb-2 pt-1.5 text-xs outline-none focus:bg-primary/[0.02]"
@@ -291,8 +328,21 @@ export function WorkItemPreviewDetails({
           <div className="flex shrink-0 items-center gap-1">
             {actionsControl}
             {presetsControl}
-            <div ref={fieldMenuRef} className="relative">
+            <div
+              ref={fieldMenuRef}
+              className="relative"
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && fieldMenuOpen) {
+                  // Close the menu instead of letting Escape bubble to the
+                  // panel (which would discard staged edits / leave the panel).
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setFieldMenuOpen(false);
+                }
+              }}
+            >
               <button
+                ref={fieldMenuTriggerRef}
                 type="button"
                 aria-expanded={fieldMenuOpen}
                 aria-label="Configure preview fields"
@@ -303,7 +353,10 @@ export function WorkItemPreviewDetails({
                 <SlidersHorizontal className="h-3 w-3" aria-hidden="true" />
               </button>
               {fieldMenuOpen ? (
-                <div className="absolute right-0 top-full z-30 mt-1 w-56 rounded-md border border-border bg-popover p-1 shadow-lg">
+                <div
+                  ref={fieldMenuPopoverRef}
+                  className="absolute right-0 top-full z-30 mt-1 w-56 rounded-md border border-border bg-popover p-1 shadow-lg"
+                >
                   <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground">
                     Show attributes
                   </div>
@@ -683,8 +736,12 @@ export function WorkItemPreviewDetails({
       {lightboxSrc ? (
         <button
           type="button"
+          autoFocus
           className="fixed inset-0 z-50 flex cursor-zoom-out items-center justify-center bg-black/75 p-6"
-          onClick={() => setLightboxSrc(null)}
+          onClick={() => {
+            setLightboxSrc(null);
+            rootRef.current?.focus();
+          }}
           aria-label="Close image preview"
         >
           <img
@@ -727,12 +784,19 @@ function WorkItemHistorySection({ preview }: { preview: WorkItemPreview }) {
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
-        className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground"
+        className="flex w-full items-center gap-1 rounded bg-muted px-1.5 py-1 text-left hover:bg-muted/80 focus:outline-none focus:ring-1 focus:ring-ring"
       >
-        History
-        <span aria-hidden="true">{open ? "▾" : "▸"}</span>
+        <ChevronRight
+          className={`h-3 w-3 shrink-0 text-muted-foreground transition-transform ${
+            open ? "rotate-90" : ""
+          }`}
+          aria-hidden="true"
+        />
+        <h3 className="text-[10px] font-semibold uppercase tracking-wide leading-4 text-muted-foreground">
+          History
+        </h3>
         {open && updatesQuery.isFetching ? (
-          <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" aria-hidden="true" />
         ) : null}
       </button>
       {open ? (
@@ -830,12 +894,24 @@ function CollapsibleComment({
   reactionPending: boolean;
   resolveImageSource: (url: string) => Promise<string | null>;
 }) {
+  // Char count is the pre-render guess (avoids a flicker before the iframe
+  // reports its height); the measured height refines it so a short comment with
+  // heavy markup isn't collapsed and a tall one always gets its toggle.
   const [expanded, setExpanded] = useState(commentHtml.length < 700);
   const [editMode, setEditMode] = useState(false);
   const [draft, setDraft] = useState(commentText ?? "");
   const [pickerOpen, setPickerOpen] = useState(false);
-  const collapsible = commentHtml.length >= 700;
+  const [contentHeight, setContentHeight] = useState<number | null>(null);
+  // Headroom over the max-h-32 (128px) clamp so a comment barely past it doesn't
+  // sprout a toggle for a few pixels.
+  const collapsible =
+    contentHeight == null ? commentHtml.length >= 700 : contentHeight > 150;
   const reactionByType = new Map(reactions.map((reaction) => [reaction.reactionType, reaction]));
+
+  // Once measured short, drop any pre-render collapse so the toggle disappears.
+  useEffect(() => {
+    if (contentHeight != null && contentHeight <= 150) setExpanded(true);
+  }, [contentHeight]);
 
   function startEdit() {
     setDraft(commentText ?? "");
@@ -865,7 +941,7 @@ function CollapsibleComment({
   return (
     <article className="group min-w-0 overflow-hidden rounded-md border border-border bg-card shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
       <div className="flex min-w-0 items-center gap-1.5 border-b border-border bg-muted px-1.5 py-0.5">
-        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[10px] font-semibold text-blue-700">
+        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[10px] font-semibold text-blue-700 dark:bg-blue-500/25 dark:text-blue-200">
           {commentAuthorInitials(createdBy)}
         </span>
         <span className="min-w-0 truncate font-semibold">
@@ -956,15 +1032,17 @@ function CollapsibleComment({
           </div>
         ) : (
           <>
-            <div className={expanded ? "" : "max-h-32 overflow-hidden"}>
+            <div className={expanded || !collapsible ? "" : "max-h-32 overflow-hidden"}>
               <RichHtmlFrame
                 baseUrl={baseUrl}
                 density="compact"
                 framed={false}
                 html={commentHtml}
+                lazy
                 title={`Comment by ${createdBy ?? "Unknown"}`}
                 resolveImageSource={resolveImageSource}
                 onImageOpen={onImageOpen}
+                onHeight={setContentHeight}
                 minHeight={22}
               />
             </div>
@@ -1221,13 +1299,15 @@ function PreviewSection({
 
   return (
     <section className={`min-w-0 ${className}`}>
-      <div className="sticky top-0 z-10 mb-1 border-t border-border bg-card/95 pb-0.5 pt-1 backdrop-blur-sm">
+      {/* Muted band so each section reads as a distinct group and the
+          Description ↔ Comments boundary is obvious; collapse stays. */}
+      <div className="sticky top-0 z-10 mb-1 bg-card/95 pt-1 backdrop-blur-sm">
         {collapseId ? (
           <button
             type="button"
             aria-expanded={!collapsed}
             onClick={toggleCollapsed}
-            className="flex w-full items-center gap-1 rounded text-left hover:bg-muted/60 focus:outline-none focus:ring-1 focus:ring-ring"
+            className="flex w-full items-center gap-1 rounded bg-slate-200 px-1.5 py-1 text-left hover:bg-slate-300 focus:outline-none focus:ring-1 focus:ring-ring dark:bg-muted dark:hover:bg-muted/80"
           >
             <ChevronRight
               className={`h-3 w-3 shrink-0 text-muted-foreground transition-transform ${
@@ -1235,12 +1315,12 @@ function PreviewSection({
               }`}
               aria-hidden="true"
             />
-            <h3 className="text-[11px] font-semibold leading-4 text-foreground/75">
+            <h3 className="text-[10px] font-semibold uppercase tracking-wide leading-4 text-muted-foreground">
               {title}
             </h3>
           </button>
         ) : (
-          <h3 className="text-[11px] font-semibold leading-4 text-foreground/75">
+          <h3 className="rounded bg-slate-200 px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wide leading-4 text-muted-foreground dark:bg-muted">
             {title}
           </h3>
         )}
@@ -1392,7 +1472,9 @@ function RichHtmlFrame({
   density = "compact",
   framed = true,
   html,
+  lazy = false,
   minHeight = 40,
+  onHeight,
   onImageOpen,
   resolveImageSource,
   title,
@@ -1401,12 +1483,19 @@ function RichHtmlFrame({
   density?: "compact" | "comfortable";
   framed?: boolean;
   html: string;
+  // Defer mounting the iframe until it scrolls near the viewport. Comment
+  // threads can hold dozens of these sandboxed documents; mounting them all at
+  // once is the preview's heaviest cost.
+  lazy?: boolean;
   minHeight?: number;
+  onHeight?: (height: number) => void;
   onImageOpen?: (src: string) => void;
   resolveImageSource?: (url: string) => Promise<string | null>;
   title: string;
 }) {
   const [height, setHeight] = useState(minHeight);
+  const [visible, setVisible] = useState(!lazy);
+  const placeholderRef = useRef<HTMLDivElement>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const srcDoc = useMemo(() => buildRichHtmlDocument(html, density), [density, html]);
 
@@ -1415,6 +1504,39 @@ function RichHtmlFrame({
       resizeObserverRef.current?.disconnect();
     };
   }, []);
+
+  // Mount once on first intersection and stay mounted — remounting would reload
+  // the document and lose its measured height.
+  useEffect(() => {
+    if (visible) return;
+    const el = placeholderRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [visible]);
+
+  if (!visible) {
+    return (
+      <div
+        ref={placeholderRef}
+        aria-hidden="true"
+        className={`block w-full bg-white ${framed ? "rounded border border-border" : ""}`}
+        style={{ height: minHeight }}
+      />
+    );
+  }
 
   return (
     <iframe
@@ -1430,7 +1552,9 @@ function RichHtmlFrame({
         const body = doc?.body;
         if (!body) return;
         const syncHeight = () => {
-          setHeight(Math.max(minHeight, Math.ceil(body.scrollHeight)));
+          const next = Math.max(minHeight, Math.ceil(body.scrollHeight));
+          setHeight(next);
+          onHeight?.(next);
         };
         syncHeight();
         frame.contentWindow?.requestAnimationFrame(syncHeight);
