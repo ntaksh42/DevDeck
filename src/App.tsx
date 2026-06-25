@@ -136,6 +136,7 @@ import {
   type SyncFailedEvent,
 } from "@/lib/desktopNotifications";
 import { SyncStatusIndicator } from "@/features/sync/SyncStatusIndicator";
+import { usePipelineWatchNotifications } from "@/features/pipelines/usePipelineWatchNotifications";
 import {
   NAVIGATE_WORK_ITEM_EVENT,
   NAVIGATE_PULL_REQUEST_EVENT,
@@ -322,6 +323,10 @@ function AppShell() {
   });
   const organizations = organizationsQuery.data ?? [];
   const readOnlyMode = appSettingsQuery.data?.readOnlyValidationModeEnabled ?? false;
+
+  // Watch every subscribed pipeline app-wide so start/finish notifications fire
+  // regardless of the active view (the Pipelines view unmounts when not shown).
+  usePipelineWatchNotifications(appSettingsQuery.data ?? null);
 
   // Sidebar count badges. Queried for the first organization (the default the
   // views open to) and kept fresh by the same sync:updated invalidation the
