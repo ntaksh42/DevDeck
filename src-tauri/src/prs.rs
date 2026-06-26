@@ -1722,9 +1722,11 @@ mod tests {
             status: "active".to_string(),
             created_by: Some("Test User".to_string()),
             creation_date: "2026-05-24T00:00:00Z".to_string(),
+            closed_date: None,
             source_ref_name: "feature/pr-search".to_string(),
             target_ref_name: "main".to_string(),
             web_url: None,
+            is_draft: false,
         };
 
         assert!(matches_query(&summary, "dashboard"));
@@ -1746,9 +1748,11 @@ mod tests {
             status: "active".to_string(),
             created_by: Some("Test User".to_string()),
             creation_date: "2026-05-24T00:00:00Z".to_string(),
+            closed_date: None,
             source_ref_name: "feature/pr-search".to_string(),
             target_ref_name: "main".to_string(),
             web_url: None,
+            is_draft: false,
         };
 
         assert!(matches_query(&summary, "421"));
