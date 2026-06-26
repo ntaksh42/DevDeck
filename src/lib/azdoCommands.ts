@@ -1335,6 +1335,29 @@ const pipelineLogTailSchema = z.object({
 });
 export type PipelineLogTail = z.infer<typeof pipelineLogTailSchema>;
 
+const pipelineTriggerSchema = z.object({
+  triggerType: z.string().nullable(),
+  branchFilters: z.array(z.string()),
+  pathFilters: z.array(z.string()),
+});
+export type PipelineTrigger = z.infer<typeof pipelineTriggerSchema>;
+
+const pipelineVariableSchema = z.object({
+  name: z.string(),
+  value: z.string().nullable(),
+  isSecret: z.boolean(),
+  allowOverride: z.boolean(),
+});
+export type PipelineVariable = z.infer<typeof pipelineVariableSchema>;
+
+const pipelineDefinitionDetailSchema = z.object({
+  definitionId: z.number(),
+  name: z.string(),
+  triggers: z.array(pipelineTriggerSchema),
+  variables: z.array(pipelineVariableSchema),
+});
+export type PipelineDefinitionDetail = z.infer<typeof pipelineDefinitionDetailSchema>;
+
 export type ListPipelineRunsInput = {
   organizationId?: string;
   projectId: string;
@@ -1375,6 +1398,15 @@ export async function getPipelineRun(input: {
 }): Promise<PipelineRunDetail> {
   const result = await invokeCommand("get_pipeline_run", { input });
   return pipelineRunDetailSchema.parse(result);
+}
+
+export async function getPipelineDefinition(input: {
+  organizationId?: string;
+  projectId: string;
+  definitionId: number;
+}): Promise<PipelineDefinitionDetail> {
+  const result = await invokeCommand("get_pipeline_definition", { input });
+  return pipelineDefinitionDetailSchema.parse(result);
 }
 
 export async function getPipelineRunLogTail(input: {

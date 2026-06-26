@@ -34,10 +34,11 @@ use db::{AppDatabase, AppSettings, Organization, SyncState};
 use error::{AppError, Result};
 use orgs::{AddAzureCliOrganizationInput, AddPatOrganizationInput, OrganizationService};
 use pipelines::{
-    CancelPipelineRunInput, GetPipelineRunInput, GetPipelineRunLogTailInput,
-    ListPipelineDefinitionsInput, ListPipelineProjectsInput, ListPipelineRunsInput,
-    PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption, PipelineRunDetail,
-    PipelineRunSummary, PipelineService, RerunPipelineRunInput,
+    CancelPipelineRunInput, GetPipelineDefinitionInput, GetPipelineRunInput,
+    GetPipelineRunLogTailInput, ListPipelineDefinitionsInput, ListPipelineProjectsInput,
+    ListPipelineRunsInput, PipelineDefinitionDetail, PipelineDefinitionOption, PipelineLogTail,
+    PipelineProjectOption, PipelineRunDetail, PipelineRunSummary, PipelineService,
+    RerunPipelineRunInput,
 };
 use pr_review::{
     DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
@@ -715,6 +716,15 @@ async fn get_pipeline_run(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn get_pipeline_definition(
+    input: GetPipelineDefinitionInput,
+    state: State<'_, AppState>,
+) -> Result<PipelineDefinitionDetail> {
+    state.pipelines.get_definition(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn get_pipeline_run_log_tail(
     input: GetPipelineRunLogTailInput,
     state: State<'_, AppState>,
@@ -920,6 +930,7 @@ pub fn run() {
             list_pipeline_runs,
             list_pipeline_definitions,
             get_pipeline_run,
+            get_pipeline_definition,
             get_pipeline_run_log_tail,
             rerun_pipeline_run,
             cancel_pipeline_run,

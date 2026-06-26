@@ -511,6 +511,60 @@ function demoPipelineRunDetail(buildId: number) {
   };
 }
 
+function demoPipelineDefinitionDetail(definitionId: number) {
+  if (definitionId === 2) {
+    return {
+      definitionId: 2,
+      name: "Nightly",
+      triggers: [
+        {
+          triggerType: "schedule",
+          branchFilters: ["+refs/heads/main"],
+          pathFilters: [],
+        },
+      ],
+      variables: [
+        {
+          name: "BuildConfiguration",
+          value: "Release",
+          isSecret: false,
+          allowOverride: true,
+        },
+      ],
+    };
+  }
+  return {
+    definitionId: 1,
+    name: "CI",
+    triggers: [
+      {
+        triggerType: "continuousIntegration",
+        branchFilters: ["+refs/heads/main"],
+        pathFilters: ["-/docs"],
+      },
+      {
+        triggerType: "pullRequest",
+        branchFilters: ["+refs/heads/main"],
+        pathFilters: [],
+      },
+    ],
+    variables: [
+      {
+        name: "BuildConfiguration",
+        value: "Debug",
+        isSecret: false,
+        allowOverride: true,
+      },
+      {
+        name: "DeployApiKey",
+        value: null,
+        isSecret: true,
+        allowOverride: false,
+      },
+    ],
+  };
+}
+
 export async function demoInvoke(command: string, args?: unknown): Promise<unknown> {
   await new Promise((resolve) => window.setTimeout(resolve, demoResponseDelayMs()));
 
@@ -1067,6 +1121,10 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     case "get_pipeline_run": {
       const input = (args as { input?: { buildId?: number } } | undefined)?.input;
       return demoPipelineRunDetail(input?.buildId ?? 1001);
+    }
+    case "get_pipeline_definition": {
+      const input = (args as { input?: { definitionId?: number } } | undefined)?.input;
+      return demoPipelineDefinitionDetail(input?.definitionId ?? 1);
     }
     case "get_pipeline_run_log_tail":
       return {
