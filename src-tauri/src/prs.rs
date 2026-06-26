@@ -213,7 +213,8 @@ impl PullRequestService {
             let client = client.clone();
             let org = organization.clone();
             tasks.spawn(async move {
-                fetch_status_prs_for_project(&client, &org, &project_id, &project_name, status).await
+                fetch_status_prs_for_project(&client, &org, &project_id, &project_name, status)
+                    .await
             });
         }
 
