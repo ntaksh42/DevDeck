@@ -82,13 +82,17 @@ pub async fn search_all(
             work_item_type: None,
             project_id: None,
         })?);
-        pull_request_results.extend(pull_requests.search(SearchPullRequestsInput {
-            organization_id: Some(org_id.clone()),
-            query: Some(query.clone()),
-            status: None,
-            project_id: None,
-            repository_id: None,
-        })?);
+        pull_request_results.extend(
+            pull_requests
+                .search(SearchPullRequestsInput {
+                    organization_id: Some(org_id.clone()),
+                    query: Some(query.clone()),
+                    status: None,
+                    project_id: None,
+                    repository_id: None,
+                })
+                .await?,
+        );
         commit_results.extend(
             commits
                 .search(SearchCommitsInput {

@@ -710,8 +710,26 @@ describe("App", () => {
     });
     expect(await screen.findByText("Add pull request search")).toBeTruthy();
     expect(screen.getByText("Platform / azdo-dashboard")).toBeTruthy();
-    expect(main.queryByRole("option", { name: "Completed" })).toBeNull();
-    expect(main.queryByRole("option", { name: "Abandoned" })).toBeNull();
+    // Non-active statuses are now selectable and forwarded to the backend.
+    expect(main.getByRole("option", { name: "Completed" })).toBeTruthy();
+    expect(main.getByRole("option", { name: "Abandoned" })).toBeTruthy();
+    expect(main.getByRole("option", { name: "All" })).toBeTruthy();
+
+    fireEvent.change(main.getByRole("combobox", { name: /Status/i }), {
+      target: { value: "completed" },
+    });
+    fireEvent.click(main.getByRole("button", { name: "Search" }));
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("search_pull_requests", {
+        input: {
+          organizationId: "contoso",
+          query: "search",
+          status: "completed",
+          projectId: undefined,
+          repositoryId: undefined,
+        },
+      });
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "#42" }));
 

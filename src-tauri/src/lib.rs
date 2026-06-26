@@ -224,7 +224,7 @@ async fn search_pull_requests(
     state: State<'_, AppState>,
 ) -> Result<Vec<PullRequestSummary>> {
     let service = state.pull_requests.clone();
-    run_blocking(move || service.search(input)).await
+    service.search(input).await
 }
 
 #[tauri::command]

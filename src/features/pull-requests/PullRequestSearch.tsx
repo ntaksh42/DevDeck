@@ -69,11 +69,25 @@ const PR_SEARCH_ROW_HEIGHT = 29;
 const PR_SEARCH_OVERSCAN = 8;
 type PrSearchFilterableColumn = "status" | "repository" | "createdBy" | "branch";
 
-// The local cache only holds Active PRs (see prs.rs search()). Surfacing other
-// statuses as choices would silently return zero rows and imply unsupported
-// backend coverage, so the status selector intentionally offers Active only and
-// the form explains the limitation.
-const PR_SEARCH_STATUS: NonNullable<SearchPullRequestsInput["status"]> = "active";
+type PrSearchStatus = NonNullable<SearchPullRequestsInput["status"]>;
+
+// Active PRs come from the local cache; the other statuses are fetched live from
+// Azure DevOps by prs.rs search() because completed/abandoned history is too
+// large to sync. The note under the form explains the difference.
+const PR_SEARCH_STATUS_OPTIONS: { value: PrSearchStatus; label: string }[] = [
+  { value: "active", label: "Active" },
+  { value: "completed", label: "Completed" },
+  { value: "abandoned", label: "Abandoned" },
+  { value: "all", label: "All" },
+];
+const PR_SEARCH_STATUS_STORAGE_KEY = "azdodeck:view:prSearchStatus";
+
+function loadPrSearchStatus(): PrSearchStatus {
+  const stored = window.localStorage.getItem(PR_SEARCH_STATUS_STORAGE_KEY);
+  return PR_SEARCH_STATUS_OPTIONS.some((option) => option.value === stored)
+    ? (stored as PrSearchStatus)
+    : "active";
+}
 
 const PR_SEARCH_FILTERABLE_COLUMNS: Record<PrSearchFilterableColumn, (pr: PullRequestSummary) => string> = {
   status: (pr) => pr.status,
@@ -96,6 +110,7 @@ export function PullRequestSearch({
   const [query, setQuery] = useState(
     () => window.localStorage.getItem(PR_SEARCH_QUERY_STORAGE_KEY) ?? "",
   );
+  const [status, setStatus] = useState<PrSearchStatus>(loadPrSearchStatus);
   const [projectId, setProjectId] = useState("");
   const [repositoryId, setRepositoryId] = useState("");
 
@@ -132,16 +147,22 @@ export function PullRequestSearch({
   }, [query]);
 
   useEffect(() => {
+    window.localStorage.setItem(PR_SEARCH_STATUS_STORAGE_KEY, status);
+  }, [status]);
+
+  useEffect(() => {
     if (!externalSearch) return;
     const targetOrganizationId = externalSearch.organizationId ?? organizationId;
     setOrganizationId(targetOrganizationId);
     setQuery(externalSearch.query);
+    // The palette looks up active PRs, so reset the status alongside the scope.
+    setStatus("active");
     setProjectId("");
     setRepositoryId("");
     mutation.mutate({
       organizationId: targetOrganizationId,
       query: externalSearch.query,
-      status: PR_SEARCH_STATUS,
+      status: "active",
       projectId: undefined,
       repositoryId: undefined,
     });
@@ -154,7 +175,7 @@ export function PullRequestSearch({
     mutation.mutate({
       organizationId,
       query,
-      status: PR_SEARCH_STATUS,
+      status,
       projectId: projectId || undefined,
       repositoryId: repositoryId || undefined,
     });
@@ -168,7 +189,7 @@ export function PullRequestSearch({
       mutation.mutate({
         organizationId,
         query: "",
-        status: PR_SEARCH_STATUS,
+        status,
         projectId: undefined,
         repositoryId: undefined,
       });
@@ -211,13 +232,14 @@ export function PullRequestSearch({
             <label className="grid gap-2">
               <span className="text-sm font-medium">Status</span>
               <select
-                value={PR_SEARCH_STATUS}
-                disabled
-                title="Only active pull requests are synced locally. Completed and abandoned PRs are not available yet."
+                value={status}
+                onChange={(e) => setStatus(e.target.value as PrSearchStatus)}
                 aria-describedby="pr-search-status-note"
-                className="h-9 cursor-not-allowed rounded-md border border-input bg-background px-3 text-sm capitalize outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm capitalize outline-none focus:ring-2 focus:ring-ring"
               >
-                <option value={PR_SEARCH_STATUS}>Active</option>
+                {PR_SEARCH_STATUS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
               </select>
             </label>
 
@@ -267,8 +289,9 @@ export function PullRequestSearch({
             </div>
           </div>
           <p id="pr-search-status-note" className="text-xs text-muted-foreground">
-            Only active pull requests are synced locally. Completed and abandoned
-            pull requests are not available here yet.
+            Active pull requests are served from the local cache. Completed,
+            abandoned, and all-status searches are fetched live from Azure
+            DevOps, so they may take a moment.
           </p>
         </form>
       </div>
