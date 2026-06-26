@@ -1497,8 +1497,7 @@ function AppShell() {
         className="fixed inset-y-0 left-0 hidden flex-col border-r border-border bg-card lg:flex"
         style={{ width: sidebarWidth }}
       >
-        <div className="flex h-12 min-w-0 items-center gap-2 border-b border-border px-4">
-          <img src="/azdodeck.svg" alt="" aria-hidden="true" className="h-8 w-8 shrink-0" />
+        <div className="flex h-12 min-w-0 items-center border-b border-border px-4">
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold tracking-tight">AzDoDeck</p>
             <p className="truncate text-xs text-muted-foreground">Azure DevOps</p>
