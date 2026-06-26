@@ -1439,8 +1439,12 @@ pub fn migrate(conn: &Connection) -> Result<()> {
     if current < 16 {
         // PR search can now exclude draft PRs, so the active-PR cache needs to
         // remember which rows are drafts. Existing rows default to non-draft and
-        // are corrected on the next sync.
-        if !table_column_exists(conn, "pull_requests", "is_draft")? {
+        // are corrected on the next sync. The table-exists guard keeps partial
+        // historical databases (e.g. migration tests that start past step 2)
+        // from tripping over a not-yet-created pull_requests table.
+        if table_exists(conn, "pull_requests")?
+            && !table_column_exists(conn, "pull_requests", "is_draft")?
+        {
             conn.execute_batch(
                 "ALTER TABLE pull_requests ADD COLUMN is_draft INTEGER NOT NULL DEFAULT 0;",
             )?;
@@ -1448,6 +1452,15 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         conn.execute_batch("PRAGMA user_version = 16;")?;
     }
     Ok(())
+}
+
+fn table_exists(conn: &Connection, table: &str) -> Result<bool> {
+    let count: i64 = conn.query_row(
+        "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+        [table],
+        |row| row.get(0),
+    )?;
+    Ok(count > 0)
 }
 
 fn table_column_exists(conn: &Connection, table: &str, column: &str) -> Result<bool> {
