@@ -89,6 +89,35 @@ function loadPrSearchStatus(): PrSearchStatus {
     : "active";
 }
 
+type PrSearchDateBasis = NonNullable<SearchPullRequestsInput["dateBasis"]>;
+const PR_SEARCH_DATE_BASIS_OPTIONS: { value: PrSearchDateBasis; label: string }[] = [
+  { value: "created", label: "Created date" },
+  { value: "closed", label: "Closed date" },
+];
+const PR_SEARCH_DATE_BASIS_STORAGE_KEY = "azdodeck:view:prSearchDateBasis";
+
+function loadPrSearchDateBasis(): PrSearchDateBasis {
+  const stored = window.localStorage.getItem(PR_SEARCH_DATE_BASIS_STORAGE_KEY);
+  return PR_SEARCH_DATE_BASIS_OPTIONS.some((option) => option.value === stored)
+    ? (stored as PrSearchDateBasis)
+    : "created";
+}
+
+type PrSearchSortBy = NonNullable<SearchPullRequestsInput["sortBy"]>;
+const PR_SEARCH_SORT_OPTIONS: { value: PrSearchSortBy; label: string }[] = [
+  { value: "created", label: "Newest created" },
+  { value: "closed", label: "Recently closed" },
+  { value: "title", label: "Title (A–Z)" },
+];
+const PR_SEARCH_SORT_STORAGE_KEY = "azdodeck:view:prSearchSort";
+
+function loadPrSearchSortBy(): PrSearchSortBy {
+  const stored = window.localStorage.getItem(PR_SEARCH_SORT_STORAGE_KEY);
+  return PR_SEARCH_SORT_OPTIONS.some((option) => option.value === stored)
+    ? (stored as PrSearchSortBy)
+    : "created";
+}
+
 const PR_SEARCH_FILTERABLE_COLUMNS: Record<PrSearchFilterableColumn, (pr: PullRequestSummary) => string> = {
   status: (pr) => pr.status,
   repository: (pr) => `${pr.projectName} / ${pr.repositoryName}`,
@@ -113,6 +142,12 @@ export function PullRequestSearch({
   const [status, setStatus] = useState<PrSearchStatus>(loadPrSearchStatus);
   const [projectId, setProjectId] = useState("");
   const [repositoryId, setRepositoryId] = useState("");
+  const [targetBranch, setTargetBranch] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [dateBasis, setDateBasis] = useState<PrSearchDateBasis>(loadPrSearchDateBasis);
+  const [sortBy, setSortBy] = useState<PrSearchSortBy>(loadPrSearchSortBy);
+  const [excludeDrafts, setExcludeDrafts] = useState(false);
 
   const repositoriesQuery = useQuery({
     queryKey: ["prRepositories", organizationId],
@@ -139,8 +174,29 @@ export function PullRequestSearch({
   }
 
   const mutation = useMutation({ mutationFn: searchPullRequests });
-  const results = mutation.data ?? [];
-  const activeSearchFilterCount = (query.trim() ? 1 : 0) + (projectId ? 1 : 0) + (repositoryId ? 1 : 0);
+  const results = mutation.data?.pullRequests ?? [];
+  const truncated = mutation.data?.truncated ?? false;
+  const total = mutation.data?.total ?? 0;
+  const activeSearchFilterCount =
+    (query.trim() ? 1 : 0) +
+    (projectId ? 1 : 0) +
+    (repositoryId ? 1 : 0) +
+    (targetBranch.trim() ? 1 : 0) +
+    (fromDate ? 1 : 0) +
+    (toDate ? 1 : 0) +
+    (excludeDrafts ? 1 : 0);
+
+  // Bundles the advanced filter state shared by every search trigger.
+  function advancedFilters(): Partial<SearchPullRequestsInput> {
+    return {
+      targetBranch: targetBranch.trim() || undefined,
+      fromDate: fromDate || undefined,
+      toDate: toDate || undefined,
+      dateBasis,
+      excludeDrafts: excludeDrafts || undefined,
+      sortBy,
+    };
+  }
 
   useEffect(() => {
     window.localStorage.setItem(PR_SEARCH_QUERY_STORAGE_KEY, query);
@@ -151,14 +207,26 @@ export function PullRequestSearch({
   }, [status]);
 
   useEffect(() => {
+    window.localStorage.setItem(PR_SEARCH_DATE_BASIS_STORAGE_KEY, dateBasis);
+  }, [dateBasis]);
+
+  useEffect(() => {
+    window.localStorage.setItem(PR_SEARCH_SORT_STORAGE_KEY, sortBy);
+  }, [sortBy]);
+
+  useEffect(() => {
     if (!externalSearch) return;
     const targetOrganizationId = externalSearch.organizationId ?? organizationId;
     setOrganizationId(targetOrganizationId);
     setQuery(externalSearch.query);
-    // The palette looks up active PRs, so reset the status alongside the scope.
+    // The palette looks up active PRs, so reset the status and scope filters.
     setStatus("active");
     setProjectId("");
     setRepositoryId("");
+    setTargetBranch("");
+    setFromDate("");
+    setToDate("");
+    setExcludeDrafts(false);
     mutation.mutate({
       organizationId: targetOrganizationId,
       query: externalSearch.query,
@@ -178,6 +246,7 @@ export function PullRequestSearch({
       status,
       projectId: projectId || undefined,
       repositoryId: repositoryId || undefined,
+      ...advancedFilters(),
     });
   }
 
@@ -185,6 +254,10 @@ export function PullRequestSearch({
     setQuery("");
     setProjectId("");
     setRepositoryId("");
+    setTargetBranch("");
+    setFromDate("");
+    setToDate("");
+    setExcludeDrafts(false);
     if (mutation.isSuccess) {
       mutation.mutate({
         organizationId,
@@ -192,6 +265,8 @@ export function PullRequestSearch({
         status,
         projectId: undefined,
         repositoryId: undefined,
+        dateBasis,
+        sortBy,
       });
     }
   }
@@ -288,10 +363,85 @@ export function PullRequestSearch({
               </button>
             </div>
           </div>
+
+          <div className="grid gap-3 lg:grid-cols-[1fr_150px_150px_150px_170px_auto]">
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Target branch</span>
+              <input
+                value={targetBranch}
+                onChange={(e) => setTargetBranch(e.target.value)}
+                placeholder="e.g. main"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">From</span>
+              <input
+                type="date"
+                value={fromDate}
+                max={toDate || undefined}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">To</span>
+              <input
+                type="date"
+                value={toDate}
+                min={fromDate || undefined}
+                onChange={(e) => setToDate(e.target.value)}
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Date basis</span>
+              <select
+                value={dateBasis}
+                onChange={(e) => setDateBasis(e.target.value as PrSearchDateBasis)}
+                title={status === "active"
+                  ? "Active PRs have no close date, so the window always uses the created date."
+                  : "Whether the date window filters by created or closed date."}
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              >
+                {PR_SEARCH_DATE_BASIS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Sort by</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as PrSearchSortBy)}
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              >
+                {PR_SEARCH_SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex items-end gap-2 pb-2 lg:pb-0 lg:items-center">
+              <input
+                type="checkbox"
+                checked={excludeDrafts}
+                onChange={(e) => setExcludeDrafts(e.target.checked)}
+                className="h-4 w-4"
+              />
+              <span className="text-sm font-medium">Hide drafts</span>
+            </label>
+          </div>
+
           <p id="pr-search-status-note" className="text-xs text-muted-foreground">
             Active pull requests are served from the local cache. Completed,
             abandoned, and all-status searches are fetched live from Azure
-            DevOps, so they may take a moment.
+            DevOps, so they may take a moment. Target branch and the date window
+            narrow the live query server-side.
           </p>
         </form>
       </div>
@@ -304,6 +454,8 @@ export function PullRequestSearch({
         onClearExternalFilters={clearSearchFilters}
         results={results}
         searched={mutation.isSuccess}
+        truncated={truncated}
+        total={total}
       />
     </div>
   );
@@ -432,12 +584,16 @@ function PullRequestResults({
   onClearExternalFilters,
   results,
   searched,
+  truncated = false,
+  total = 0,
 }: {
   activeExternalFilterCount?: number;
   loading: boolean;
   onClearExternalFilters?: () => void;
   results: PullRequestSummary[];
   searched: boolean;
+  truncated?: boolean;
+  total?: number;
 }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [columnWidths, setColumnWidths] = useState(() =>
@@ -558,11 +714,15 @@ function PullRequestResults({
   const countLabel = useMemo(() => {
     if (loading) return "Searching";
     if (!searched) return "Ready";
+    // When the backend capped the result set, show the cap (e.g. "100+") so the
+    // count does not read as the full match total.
+    const shown = truncated ? `${results.length}+` : `${results.length}`;
     if (hasActiveColumnFilters) {
-      return `${filteredResults.length} of ${results.length} pull request${results.length === 1 ? "" : "s"}`;
+      return `${filteredResults.length} of ${shown} pull request${results.length === 1 ? "" : "s"}`;
     }
-    return `${results.length} pull request${results.length === 1 ? "" : "s"}`;
-  }, [filteredResults.length, hasActiveColumnFilters, loading, results.length, searched]);
+    const suffix = truncated ? ` (showing first ${results.length} of ${total}+)` : "";
+    return `${shown} pull request${results.length === 1 ? "" : "s"}${suffix}`;
+  }, [filteredResults.length, hasActiveColumnFilters, loading, results.length, searched, total, truncated]);
 
   function scrollRowIntoView(index: number) {
     if (!scrollerEl) return;

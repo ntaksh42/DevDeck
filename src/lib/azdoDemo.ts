@@ -30,6 +30,7 @@ import type {
   PrThread,
   PullRequestChanges,
   PullRequestReview,
+  PullRequestSearchResult,
   PullRequestSummary,
   ReviewPullRequestSummary,
   ReviewResultPreview,
@@ -819,7 +820,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         } satisfies SearchAllResult;
       }
       const workItems = demoWorkItems({ query });
-      const pullRequests = demoPullRequests({ query });
+      const pullRequests = demoPullRequests({ query }).pullRequests;
       const commits = demoCommits({ query });
       return {
         workItems: workItems.slice(0, limit),
@@ -1186,7 +1187,7 @@ function demoReviewResultPreview(
   };
 }
 
-function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[] {
+function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSearchResult {
   const now = new Date("2026-05-27T08:00:00Z");
   const ago = (ms: number) => new Date(now.getTime() - ms).toISOString();
   const hr = 3_600_000;
@@ -1206,6 +1207,8 @@ function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[]
       creationDate: ago(2 * hr),
       sourceRefName: "feature/pr-search",
       targetRefName: "main",
+      closedDate: null,
+      isDraft: false,
       webUrl: "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/pullrequest/42",
     },
     {
@@ -1221,6 +1224,8 @@ function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[]
       creationDate: ago(1 * day),
       sourceRefName: "feature/oauth-pkce",
       targetRefName: "main",
+      closedDate: null,
+      isDraft: false,
       webUrl: "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/103",
     },
     {
@@ -1236,6 +1241,8 @@ function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[]
       creationDate: ago(5 * day),
       sourceRefName: "feature/otel-tracing",
       targetRefName: "main",
+      closedDate: ago(3 * day),
+      isDraft: false,
       webUrl: "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/99",
     },
     {
@@ -1251,6 +1258,8 @@ function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[]
       creationDate: ago(3 * hr),
       sourceRefName: "fix/payment-back-crash",
       targetRefName: "main",
+      closedDate: null,
+      isDraft: false,
       webUrl: "https://dev.azure.com/contoso/Mobile/_git/android-app/pullrequest/189",
     },
     {
@@ -1266,6 +1275,8 @@ function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[]
       creationDate: ago(12 * day),
       sourceRefName: "spike/offline-sync",
       targetRefName: "main",
+      closedDate: ago(9 * day),
+      isDraft: false,
       webUrl: "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/pullrequest/88",
     },
     {
@@ -1281,6 +1292,8 @@ function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[]
       creationDate: ago(2 * day),
       sourceRefName: "feature/biometric-auth",
       targetRefName: "develop",
+      closedDate: null,
+      isDraft: true,
       webUrl: "https://dev.azure.com/contoso/Mobile/_git/android-app/pullrequest/180",
     },
     {
@@ -1296,17 +1309,42 @@ function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[]
       creationDate: ago(8 * day),
       sourceRefName: "infra/eks-1.29",
       targetRefName: "main",
+      closedDate: null,
+      isDraft: false,
       webUrl: "https://dev.azure.com/contoso/Infrastructure/_git/terraform-aws/pullrequest/55",
     },
   ];
 
   const query = input?.query?.trim().toLowerCase();
   const statusFilter = input?.status ?? "active";
+  const targetBranch = input?.targetBranch
+    ?.trim()
+    .replace(/^refs\/heads\//, "")
+    .toLowerCase();
+  const fromDate = input?.fromDate?.trim() || undefined;
+  const toDate = input?.toDate?.trim() || undefined;
+  // Active rows have no close date, so they always filter on creation date —
+  // mirroring the backend's cache path.
+  const useClosedBasis = statusFilter !== "active" && input?.dateBasis === "closed";
+  const excludeDrafts = input?.excludeDrafts ?? false;
+  const sortBy = input?.sortBy ?? "created";
 
-  return applyPullRequestScenario(all).filter((pr) => {
+  const inWindow = (iso: string | null) => {
+    if (!fromDate && !toDate) return true;
+    if (!iso) return false;
+    const day = iso.slice(0, 10);
+    if (fromDate && day < fromDate) return false;
+    if (toDate && day > toDate) return false;
+    return true;
+  };
+
+  const matched = applyPullRequestScenario(all).filter((pr) => {
     if (input?.projectId && pr.projectId !== input.projectId) return false;
     if (input?.repositoryId && pr.repositoryId !== input.repositoryId) return false;
     if (statusFilter !== "all" && pr.status !== statusFilter) return false;
+    if (targetBranch && pr.targetRefName.toLowerCase() !== targetBranch) return false;
+    if (!inWindow(useClosedBasis ? pr.closedDate : pr.creationDate)) return false;
+    if (excludeDrafts && pr.isDraft) return false;
     if (query) {
       const textMatch = [pr.title, pr.projectName, pr.repositoryName, pr.createdBy ?? "", pr.sourceRefName, pr.targetRefName].some(
         (v) => v.toLowerCase().includes(query),
@@ -1316,6 +1354,24 @@ function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[]
     }
     return true;
   });
+
+  const sorted = matched.slice().sort((a, b) => {
+    if (sortBy === "title") {
+      return a.title.toLowerCase().localeCompare(b.title.toLowerCase());
+    }
+    if (sortBy === "closed") {
+      const cmp = (b.closedDate ?? "").localeCompare(a.closedDate ?? "");
+      return cmp !== 0 ? cmp : b.creationDate.localeCompare(a.creationDate);
+    }
+    return b.creationDate.localeCompare(a.creationDate);
+  });
+
+  const limit = 100;
+  return {
+    pullRequests: sorted.slice(0, limit),
+    total: sorted.length,
+    truncated: sorted.length > limit,
+  };
 }
 
 function withEmptyExtraFields(

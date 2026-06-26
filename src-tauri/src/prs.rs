@@ -2,7 +2,7 @@ use azdo_client::{
     summarize_pr_ci, AdoClient, AdoError, GitPullRequest, GitThread, IdentityRefWithVote,
     PullRequestStatus, TeamProject,
 };
-use chrono::Utc;
+use chrono::{NaiveDate, NaiveTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinSet;
 
@@ -54,6 +54,16 @@ pub struct SearchPullRequestsInput {
     pub status: Option<String>,
     pub project_id: Option<String>,
     pub repository_id: Option<String>,
+    /// Target branch to filter by, e.g. `main` or `refs/heads/main`.
+    pub target_branch: Option<String>,
+    /// Inclusive date window (`YYYY-MM-DD`) interpreted against `date_basis`.
+    pub from_date: Option<String>,
+    pub to_date: Option<String>,
+    /// `created` (default) or `closed`: which date the window applies to.
+    pub date_basis: Option<String>,
+    pub exclude_drafts: Option<bool>,
+    /// `created` (default), `closed`, or `title`.
+    pub sort_by: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -69,9 +79,20 @@ pub struct PullRequestSummary {
     pub status: String,
     pub created_by: Option<String>,
     pub creation_date: String,
+    pub closed_date: Option<String>,
     pub source_ref_name: String,
     pub target_ref_name: String,
     pub web_url: Option<String>,
+    pub is_draft: bool,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PullRequestSearchResult {
+    pub pull_requests: Vec<PullRequestSummary>,
+    /// Total matches before the display cap, so the UI can show "100+".
+    pub total: usize,
+    pub truncated: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -136,13 +157,31 @@ impl PullRequestService {
     // sync). Completed/abandoned/all are historical and effectively unbounded,
     // so they are never cached; the search fetches them live from Azure DevOps
     // on demand, mirroring how commit search bypasses the cache for non-default
-    // branches.
-    pub async fn search(&self, input: SearchPullRequestsInput) -> Result<Vec<PullRequestSummary>> {
+    // branches. Target-branch and date-window filters are pushed to the server
+    // on the live path and applied in memory on the cache path.
+    pub async fn search(&self, input: SearchPullRequestsInput) -> Result<PullRequestSearchResult> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let query = input.query.unwrap_or_default().trim().to_ascii_lowercase();
         let project_filter = normalize_optional(input.project_id);
         let repository_filter = normalize_optional(input.repository_id);
         let status = parse_search_status(input.status.as_deref())?;
+
+        // Stored target refs are short (no refs/heads/ prefix), so normalize the
+        // input the same way for comparison and rebuild the full ref for the API.
+        let target_branch =
+            normalize_optional(input.target_branch).map(|branch| short_ref(&branch).to_string());
+        let from_rfc = parse_date_bound(input.from_date.as_deref(), false)?;
+        let to_rfc = parse_date_bound(input.to_date.as_deref(), true)?;
+        if let (Some(from), Some(to)) = (&from_rfc, &to_rfc) {
+            if from > to {
+                return Err(AppError::InvalidInput(
+                    "from date must be before or equal to to date".to_string(),
+                ));
+            }
+        }
+        let date_basis = parse_date_basis(input.date_basis.as_deref());
+        let exclude_drafts = input.exclude_drafts.unwrap_or(false);
+        let sort_by = parse_sort_by(input.sort_by.as_deref());
 
         let mut results: Vec<PullRequestSummary> = match status {
             SearchStatus::CachedActive => {
@@ -152,36 +191,72 @@ impl PullRequestService {
                     repository_filter.as_deref(),
                     Some("active"),
                 )?;
-                cached.into_iter().map(cached_pr_to_summary).collect()
+                cached
+                    .into_iter()
+                    .map(cached_pr_to_summary)
+                    .filter(|pr| {
+                        // Active rows have no close date, so the window always
+                        // applies to creation date here regardless of basis.
+                        target_branch
+                            .as_deref()
+                            .is_none_or(|branch| pr.target_ref_name.eq_ignore_ascii_case(branch))
+                            && within_window(
+                                pr.creation_date.as_str(),
+                                from_rfc.as_deref(),
+                                to_rfc.as_deref(),
+                            )
+                    })
+                    .collect()
             }
             SearchStatus::Live(status) => {
+                let target_ref_full = target_branch
+                    .as_deref()
+                    .map(|branch| format!("refs/heads/{branch}"));
                 self.fetch_live_prs(
                     &organization,
                     status,
                     project_filter.as_deref(),
                     repository_filter.as_deref(),
+                    target_ref_full.as_deref(),
+                    from_rfc.as_deref(),
+                    to_rfc.as_deref(),
+                    date_basis,
                 )
                 .await?
             }
         };
 
-        results.retain(|summary| matches_query(summary, &query));
-        results.sort_by(|a, b| b.creation_date.cmp(&a.creation_date));
-        results.truncate(100);
-        Ok(results)
+        results.retain(|summary| {
+            matches_query(summary, &query) && (!exclude_drafts || !summary.is_draft)
+        });
+        sort_summaries(&mut results, sort_by);
+        let total = results.len();
+        let truncated = total > PR_SEARCH_RESULT_LIMIT;
+        results.truncate(PR_SEARCH_RESULT_LIMIT);
+        Ok(PullRequestSearchResult {
+            pull_requests: results,
+            total,
+            truncated,
+        })
     }
 
     /// Fetches PRs of a non-active status straight from Azure DevOps. The query
     /// is scoped to a single project when one is selected, to the project that
     /// owns the selected repository when only a repository is chosen, and to
-    /// every project otherwise. A repository filter is applied after the fetch
-    /// because the project-level endpoint spans all repositories.
+    /// every project otherwise. Target branch and the date window are filtered
+    /// server-side; a repository filter is applied after the fetch because the
+    /// project-level endpoint spans all repositories.
+    #[allow(clippy::too_many_arguments)]
     async fn fetch_live_prs(
         &self,
         organization: &Organization,
         status: PullRequestStatus,
         project_filter: Option<&str>,
         repository_filter: Option<&str>,
+        target_ref_full: Option<&str>,
+        from_rfc: Option<&str>,
+        to_rfc: Option<&str>,
+        date_basis: DateBasis,
     ) -> Result<Vec<PullRequestSummary>> {
         let client = client_for_organization(organization, &self.secrets)?;
 
@@ -208,13 +283,32 @@ impl PullRequestService {
             "fetching pull requests live for search"
         );
 
+        // Owned copies so each spawned task can hold the filter values.
+        let target = target_ref_full.map(str::to_string);
+        let from = from_rfc.map(str::to_string);
+        let to = to_rfc.map(str::to_string);
+        let time_range_type = date_basis.query_value();
+
         let mut tasks: JoinSet<Result<Vec<PullRequestSummary>>> = JoinSet::new();
         for (project_id, project_name) in projects {
             let client = client.clone();
             let org = organization.clone();
+            let target = target.clone();
+            let from = from.clone();
+            let to = to.clone();
             tasks.spawn(async move {
-                fetch_status_prs_for_project(&client, &org, &project_id, &project_name, status)
-                    .await
+                fetch_status_prs_for_project(
+                    &client,
+                    &org,
+                    &project_id,
+                    &project_name,
+                    status,
+                    target.as_deref(),
+                    from.as_deref(),
+                    to.as_deref(),
+                    time_range_type,
+                )
+                .await
             });
         }
 
@@ -257,6 +351,89 @@ fn parse_search_status(value: Option<&str>) -> Result<SearchStatus> {
     }
 }
 
+// How many search rows the UI renders; extra matches set the `truncated` flag.
+const PR_SEARCH_RESULT_LIMIT: usize = 100;
+
+/// Which date a date-window filter applies to.
+#[derive(Clone, Copy)]
+enum DateBasis {
+    Created,
+    Closed,
+}
+
+impl DateBasis {
+    fn query_value(self) -> &'static str {
+        match self {
+            DateBasis::Created => "created",
+            DateBasis::Closed => "closed",
+        }
+    }
+}
+
+fn parse_date_basis(value: Option<&str>) -> DateBasis {
+    match value.map(str::trim) {
+        Some("closed") => DateBasis::Closed,
+        _ => DateBasis::Created,
+    }
+}
+
+#[derive(Clone, Copy)]
+enum SortBy {
+    Created,
+    Closed,
+    Title,
+}
+
+fn parse_sort_by(value: Option<&str>) -> SortBy {
+    match value.map(str::trim) {
+        Some("closed") => SortBy::Closed,
+        Some("title") => SortBy::Title,
+        _ => SortBy::Created,
+    }
+}
+
+fn sort_summaries(results: &mut [PullRequestSummary], sort_by: SortBy) {
+    match sort_by {
+        SortBy::Created => results.sort_by(|a, b| b.creation_date.cmp(&a.creation_date)),
+        SortBy::Closed => results.sort_by(|a, b| {
+            // Most recently closed first; PRs without a close date sort last.
+            b.closed_date
+                .cmp(&a.closed_date)
+                .then_with(|| b.creation_date.cmp(&a.creation_date))
+        }),
+        SortBy::Title => results.sort_by(|a, b| {
+            a.title
+                .to_ascii_lowercase()
+                .cmp(&b.title.to_ascii_lowercase())
+        }),
+    }
+}
+
+/// Parses a `YYYY-MM-DD` filter bound into an RFC3339 instant. `end_of_day`
+/// pushes the bound to 23:59:59 so the `to` date is inclusive.
+fn parse_date_bound(value: Option<&str>, end_of_day: bool) -> Result<Option<String>> {
+    let Some(trimmed) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(None);
+    };
+    let date = NaiveDate::parse_from_str(trimmed, "%Y-%m-%d")
+        .map_err(|_| AppError::InvalidInput(format!("invalid date: {trimmed}")))?;
+    let time = if end_of_day {
+        NaiveTime::from_hms_opt(23, 59, 59)
+    } else {
+        NaiveTime::from_hms_opt(0, 0, 0)
+    }
+    .expect("valid constant time");
+    Ok(Some(
+        Utc.from_utc_datetime(&date.and_time(time)).to_rfc3339(),
+    ))
+}
+
+/// Inclusive RFC3339 range check by lexicographic comparison; both bounds and
+/// `value` are produced by `to_rfc3339()` so the string order matches time order.
+fn within_window(value: &str, from: Option<&str>, to: Option<&str>) -> bool {
+    from.is_none_or(|f| value >= f) && to.is_none_or(|t| value <= t)
+}
+
 async fn project_id_name_pairs(client: &AdoClient) -> Result<Vec<(String, String)>> {
     Ok(client
         .list_projects()
@@ -266,17 +443,31 @@ async fn project_id_name_pairs(client: &AdoClient) -> Result<Vec<(String, String
         .collect())
 }
 
-/// Lists PRs of `status` across one project, dropping a deleted project (404)
-/// rather than failing the whole search.
+/// Lists PRs of `status` across one project with optional server-side target
+/// branch and date-window filters, dropping a deleted project (404) rather than
+/// failing the whole search.
+#[allow(clippy::too_many_arguments)]
 async fn fetch_status_prs_for_project(
     client: &AdoClient,
     org: &Organization,
     project_id: &str,
     project_name: &str,
     status: PullRequestStatus,
+    target_ref_name: Option<&str>,
+    min_time: Option<&str>,
+    max_time: Option<&str>,
+    time_range_type: &str,
 ) -> Result<Vec<PullRequestSummary>> {
     let prs = match client
-        .list_project_pull_requests(project_id, status, PROJECT_PR_SYNC_TOP)
+        .search_project_pull_requests(
+            project_id,
+            status,
+            target_ref_name,
+            min_time,
+            max_time,
+            Some(time_range_type),
+            PROJECT_PR_SYNC_TOP,
+        )
         .await
     {
         Ok(prs) => prs,
@@ -309,9 +500,12 @@ fn cached_pr_to_summary(pr: CachedPr) -> PullRequestSummary {
         status: pr.status,
         created_by: pr.created_by,
         creation_date: pr.creation_date,
+        // Active PRs have no close date; live results fill this in.
+        closed_date: None,
         source_ref_name: pr.source_ref_name,
         target_ref_name: pr.target_ref_name,
         web_url: pr.web_url,
+        is_draft: pr.is_draft,
     }
 }
 
@@ -352,9 +546,11 @@ fn live_pr_to_summary(
         status: pr.status,
         created_by: pr.created_by.and_then(|u| u.display_name.or(u.unique_name)),
         creation_date: pr.creation_date.to_rfc3339(),
+        closed_date: pr.closed_date.map(|date| date.to_rfc3339()),
         source_ref_name: short_ref(&pr.source_ref_name),
         target_ref_name: short_ref(&pr.target_ref_name),
         web_url: Some(web_url),
+        is_draft: pr.is_draft.unwrap_or(false),
     })
 }
 
@@ -843,6 +1039,7 @@ async fn fetch_active_prs_for_project(
                 source_ref_name: short_ref(&pr.source_ref_name),
                 target_ref_name: short_ref(&pr.target_ref_name),
                 web_url: Some(web_url),
+                is_draft: pr.is_draft.unwrap_or(false),
             })
         })
         .collect();
@@ -1293,6 +1490,7 @@ mod tests {
                     source_ref_name: "feature".to_string(),
                     target_ref_name: "main".to_string(),
                     web_url: None,
+                    is_draft: false,
                 },
                 CachedPr {
                     org_id: org.id.clone(),
@@ -1308,6 +1506,7 @@ mod tests {
                     source_ref_name: "feature".to_string(),
                     target_ref_name: "main".to_string(),
                     web_url: None,
+                    is_draft: false,
                 },
             ],
         )
@@ -1370,6 +1569,104 @@ mod tests {
             SearchStatus::Live(PullRequestStatus::All)
         ));
         assert!(parse_search_status(Some("draft")).is_err());
+    }
+
+    #[test]
+    fn parse_date_bound_spans_start_and_end_of_day() {
+        let from = parse_date_bound(Some("2026-05-01"), false)
+            .unwrap()
+            .unwrap();
+        let to = parse_date_bound(Some(" 2026-05-31 "), true)
+            .unwrap()
+            .unwrap();
+        assert!(from.starts_with("2026-05-01T00:00:00"));
+        assert!(to.starts_with("2026-05-31T23:59:59"));
+        assert_eq!(parse_date_bound(None, false).unwrap(), None);
+        assert_eq!(parse_date_bound(Some("  "), false).unwrap(), None);
+        assert!(parse_date_bound(Some("not-a-date"), false).is_err());
+    }
+
+    #[test]
+    fn within_window_is_inclusive_and_open_ended() {
+        assert!(within_window("2026-05-10T00:00:00+00:00", None, None));
+        assert!(within_window(
+            "2026-05-10T00:00:00+00:00",
+            Some("2026-05-01T00:00:00+00:00"),
+            Some("2026-05-31T23:59:59+00:00"),
+        ));
+        assert!(!within_window(
+            "2026-04-30T00:00:00+00:00",
+            Some("2026-05-01T00:00:00+00:00"),
+            None,
+        ));
+        assert!(!within_window(
+            "2026-06-01T00:00:00+00:00",
+            None,
+            Some("2026-05-31T23:59:59+00:00"),
+        ));
+    }
+
+    #[test]
+    fn parse_date_basis_and_sort_by_default_and_match() {
+        assert!(matches!(parse_date_basis(None), DateBasis::Created));
+        assert!(matches!(
+            parse_date_basis(Some("closed")),
+            DateBasis::Closed
+        ));
+        assert_eq!(DateBasis::Closed.query_value(), "closed");
+        assert!(matches!(parse_sort_by(None), SortBy::Created));
+        assert!(matches!(parse_sort_by(Some("closed")), SortBy::Closed));
+        assert!(matches!(parse_sort_by(Some("title")), SortBy::Title));
+        assert!(matches!(parse_sort_by(Some("bogus")), SortBy::Created));
+    }
+
+    #[test]
+    fn sort_summaries_orders_by_close_then_title() {
+        let make = |id: i64, title: &str, created: &str, closed: Option<&str>| PullRequestSummary {
+            organization_id: "o".into(),
+            project_id: "p".into(),
+            project_name: "P".into(),
+            repository_id: "r".into(),
+            repository_name: "R".into(),
+            pull_request_id: id,
+            title: title.into(),
+            status: "completed".into(),
+            created_by: None,
+            creation_date: created.into(),
+            closed_date: closed.map(str::to_string),
+            source_ref_name: "f".into(),
+            target_ref_name: "main".into(),
+            web_url: None,
+            is_draft: false,
+        };
+        let mut rows = vec![
+            make(
+                1,
+                "banana",
+                "2026-05-01T00:00:00Z",
+                Some("2026-05-10T00:00:00Z"),
+            ),
+            make(2, "apple", "2026-05-02T00:00:00Z", None),
+            make(
+                3,
+                "cherry",
+                "2026-05-03T00:00:00Z",
+                Some("2026-05-20T00:00:00Z"),
+            ),
+        ];
+
+        sort_summaries(&mut rows, SortBy::Closed);
+        // Most recent close first; the PR with no close date sorts last.
+        assert_eq!(
+            rows.iter().map(|r| r.pull_request_id).collect::<Vec<_>>(),
+            vec![3, 1, 2]
+        );
+
+        sort_summaries(&mut rows, SortBy::Title);
+        assert_eq!(
+            rows.iter().map(|r| r.title.clone()).collect::<Vec<_>>(),
+            vec!["apple", "banana", "cherry"]
+        );
     }
 
     #[test]

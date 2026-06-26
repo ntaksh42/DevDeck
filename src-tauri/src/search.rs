@@ -90,8 +90,15 @@ pub async fn search_all(
                     status: None,
                     project_id: None,
                     repository_id: None,
+                    target_branch: None,
+                    from_date: None,
+                    to_date: None,
+                    date_basis: None,
+                    exclude_drafts: None,
+                    sort_by: None,
                 })
-                .await?,
+                .await?
+                .pull_requests,
         );
         commit_results.extend(
             commits
@@ -208,6 +215,7 @@ mod tests {
                 source_ref_name: "refs/heads/retry-backoff".to_string(),
                 target_ref_name: "refs/heads/main".to_string(),
                 web_url: None,
+                is_draft: false,
             }],
         )
         .unwrap();

@@ -665,23 +665,29 @@ describe("App", () => {
         return Promise.resolve([]);
       }
       if (command === "search_pull_requests") {
-        return Promise.resolve([
-          {
-            organizationId: "contoso",
-            projectId: "project-1",
-            projectName: "Platform",
-            repositoryId: "repo-1",
-            repositoryName: "azdo-dashboard",
-            pullRequestId: 42,
-            title: "Add pull request search",
-            status: "active",
-            createdBy: "Test User",
-            creationDate: "2026-05-24T00:00:00Z",
-            sourceRefName: "feature/pr-search",
-            targetRefName: "main",
-            webUrl: "https://dev.azure.com/contoso/project/_git/repo/pullrequest/42",
-          },
-        ]);
+        return Promise.resolve({
+          pullRequests: [
+            {
+              organizationId: "contoso",
+              projectId: "project-1",
+              projectName: "Platform",
+              repositoryId: "repo-1",
+              repositoryName: "azdo-dashboard",
+              pullRequestId: 42,
+              title: "Add pull request search",
+              status: "active",
+              createdBy: "Test User",
+              creationDate: "2026-05-24T00:00:00Z",
+              closedDate: null,
+              sourceRefName: "feature/pr-search",
+              targetRefName: "main",
+              webUrl: "https://dev.azure.com/contoso/project/_git/repo/pullrequest/42",
+              isDraft: false,
+            },
+          ],
+          total: 1,
+          truncated: false,
+        });
       }
       return Promise.reject(new Error(`Unhandled command: ${command}`));
     });
@@ -705,6 +711,12 @@ describe("App", () => {
           status: "active",
           projectId: undefined,
           repositoryId: undefined,
+          targetBranch: undefined,
+          fromDate: undefined,
+          toDate: undefined,
+          dateBasis: "created",
+          excludeDrafts: undefined,
+          sortBy: "created",
         },
       });
     });
@@ -727,6 +739,12 @@ describe("App", () => {
           status: "completed",
           projectId: undefined,
           repositoryId: undefined,
+          targetBranch: undefined,
+          fromDate: undefined,
+          toDate: undefined,
+          dateBasis: "created",
+          excludeDrafts: undefined,
+          sortBy: "created",
         },
       });
     });
@@ -2376,9 +2394,11 @@ describe("App", () => {
               status: "active",
               createdBy: "Alice",
               creationDate: "2026-05-24T00:00:00Z",
+              closedDate: null,
               sourceRefName: "feature/retry",
               targetRefName: "main",
               webUrl: null,
+              isDraft: false,
             },
           ],
           commits: [
