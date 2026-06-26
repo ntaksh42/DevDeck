@@ -24,9 +24,7 @@ import {
 } from "@/lib/azdoCommands";
 import {
   clamp,
-  storedNumbers,
   storedNumber,
-  gridColumnTemplate,
   isEditableTarget,
   focusFilterInput,
   focusPrimaryGrid,
@@ -34,6 +32,7 @@ import {
   formatDate,
   formatRelativeDate,
 } from "@/lib/utils";
+import { useGridColumns } from "@/lib/useGridColumns";
 import { openExternalUrl } from "@/lib/openExternal";
 import { ColumnResizeHandle, ResizeHandle } from "@/components/ResizeHandle";
 import { ColumnVisibilityMenu } from "@/components/ColumnVisibilityMenu";
@@ -1025,12 +1024,22 @@ function CommitResults({
 }) {
   const [sort, setCommitSort] = useState<CommitSortState>(() => loadCommitSort());
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [columnWidths, setColumnWidths] = useState(() =>
-    storedNumbers(COMMIT_COLUMN_WIDTHS_STORAGE_KEY, DEFAULT_COMMIT_COLUMN_WIDTHS, COMMIT_COLUMN_MIN_WIDTHS, COMMIT_COLUMN_MAX_WIDTHS),
-  );
   const [visibleColumns, setVisibleColumns] = useState<CommitColumnKey[]>(
     loadCommitVisibleColumns,
   );
+  const {
+    template: commitColTemplate,
+    minWidth: gridMinWidth,
+    resizeProps: columnResizeProps,
+  } = useGridColumns({
+    keys: COMMIT_COLUMN_KEYS,
+    visibleColumns,
+    flexibleKey: "comment",
+    defaults: DEFAULT_COMMIT_COLUMN_WIDTHS,
+    min: COMMIT_COLUMN_MIN_WIDTHS,
+    max: COMMIT_COLUMN_MAX_WIDTHS,
+    storageKey: COMMIT_COLUMN_WIDTHS_STORAGE_KEY,
+  });
   const [columnMenuRect, setColumnMenuRect] = useState<DOMRect | null>(null);
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const [maximized, setMaximized] = useState(false);
@@ -1046,10 +1055,6 @@ function CommitResults({
   const restoreFocusRef = useRef(false);
   const [scrollerEl, setScrollerEl] = useState<HTMLDivElement | null>(null);
   const [gridViewport, setGridViewport] = useState({ height: 0, scrollTop: 0 });
-
-  useEffect(() => {
-    localStorage.setItem(COMMIT_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
-  }, [columnWidths]);
 
   useEffect(() => {
     localStorage.setItem(COMMIT_PREVIEW_WIDTH_STORAGE_KEY, String(Math.round(previewWidth)));
@@ -1096,14 +1101,6 @@ function CommitResults({
   function resetColumnVisibility() {
     setVisibleColumns([...COMMIT_COLUMN_KEYS]);
   }
-
-  // Width array is indexed by the full column order; pick out the visible ones
-  // and keep the message column as the flexible one.
-  const visibleColumnWidths = visibleColumns.map(
-    (column) => columnWidths[COMMIT_COLUMN_KEYS.indexOf(column)],
-  );
-  const messageFlexIndex = Math.max(0, visibleColumns.indexOf("comment"));
-  const commitColTemplate = gridColumnTemplate(visibleColumnWidths, messageFlexIndex);
 
   const sorted = useMemo(() => {
     const dir = sort.direction === "asc" ? 1 : -1;
@@ -1267,25 +1264,17 @@ function CommitResults({
           className="flex min-h-0 flex-1 flex-col outline-none"
           onKeyDown={handleKeyDown}
         >
-          <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-          <div className="min-w-[724px]">
+          <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
+          <div style={{ minWidth: gridMinWidth }}>
             <div
               role="row"
               className="grid items-center gap-2 border-b border-border bg-muted px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
               style={{ gridTemplateColumns: commitColTemplate }}
             >
               {visibleColumns.map((col, i) => {
-                const fullIndex = COMMIT_COLUMN_KEYS.indexOf(col);
                 const isLast = i === visibleColumns.length - 1;
                 const resizeHandle = isLast ? undefined : (
-                  <ColumnResizeHandle
-                    columnIndex={fullIndex}
-                    widths={columnWidths}
-                    setWidths={setColumnWidths}
-                    min={COMMIT_COLUMN_MIN_WIDTHS[fullIndex]}
-                    max={COMMIT_COLUMN_MAX_WIDTHS[fullIndex]}
-                    defaultWidth={DEFAULT_COMMIT_COLUMN_WIDTHS[fullIndex]}
-                  />
+                  <ColumnResizeHandle {...columnResizeProps(col)} />
                 );
                 if (col === "sha") {
                   return (

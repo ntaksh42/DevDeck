@@ -29,15 +29,14 @@ import {
 import { SnoozeMenu } from '@/components/SnoozeMenu';
 import { SnoozedItemsPanel } from '@/components/SnoozedItemsPanel';
 import {
-  storedNumbers,
   storedNumber,
-  gridColumnTemplate,
   isEditableTarget,
   focusFilterInput,
   focusPrimaryPreview,
   formatRelativeDate,
   type SortDirection,
 } from '@/lib/utils';
+import { useGridColumns } from '@/lib/useGridColumns';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { useGridFocusRestoration } from '@/lib/useGridFocusRestoration';
 import { readStoredJson, writeStoredJson, storageKey } from '@/lib/storage';
@@ -558,12 +557,25 @@ export function WorkItemsGrid({
   const [sort, setWiSort] = useState<WiSortState>(
     initialSort ?? loadWorkItemSort(sortStorageKey, defaultWorkItemSort()),
   );
-  const [columnWidths, setColumnWidths] = useState(() =>
-    storedNumbers(columnWidthsStorageKey, DEFAULT_WI_COLUMN_WIDTHS, WI_COLUMN_MIN_WIDTHS, WI_COLUMN_MAX_WIDTHS),
-  );
   const [visibleColumns, setVisibleColumns] = useState<WiSortKey[]>(() =>
     loadVisibleWorkItemColumns(visibleColumnsStorageKey),
   );
+  const {
+    template: wiColTemplate,
+    minWidth: gridMinWidth,
+    resetWidths: resetColumnWidths,
+    resizeProps: columnResizeProps,
+  } = useGridColumns({
+    keys: WI_GRID_KEYS,
+    visibleColumns,
+    flexibleKey: "title",
+    defaults: DEFAULT_WI_COLUMN_WIDTHS,
+    min: WI_COLUMN_MIN_WIDTHS,
+    max: WI_COLUMN_MAX_WIDTHS,
+    storageKey: columnWidthsStorageKey,
+    prefixColumns: ["28px"],
+    suffixColumns: extraColumns.map(() => "120px"),
+  });
   const [previewWidth, setPreviewWidth] = useState(() =>
     storedNumber(
       previewWidthStorageKey,
@@ -627,9 +639,6 @@ export function WorkItemsGrid({
   }, [initialSort?.direction, initialSort?.key, sortStorageKey]);
 
   useEffect(() => {
-    setColumnWidths(
-      storedNumbers(columnWidthsStorageKey, DEFAULT_WI_COLUMN_WIDTHS, WI_COLUMN_MIN_WIDTHS, WI_COLUMN_MAX_WIDTHS),
-    );
     setVisibleColumns(loadVisibleWorkItemColumns(visibleColumnsStorageKey));
     setColumnFilters(loadWorkItemColumnFilters(columnFiltersStorageKey));
     setPreviewWidth(
@@ -640,11 +649,7 @@ export function WorkItemsGrid({
         MAX_WORK_ITEM_PREVIEW_WIDTH,
       ),
     );
-  }, [columnFiltersStorageKey, columnWidthsStorageKey, previewWidthStorageKey, visibleColumnsStorageKey]);
-
-  useEffect(() => {
-    localStorage.setItem(columnWidthsStorageKey, JSON.stringify(columnWidths));
-  }, [columnWidths, columnWidthsStorageKey]);
+  }, [columnFiltersStorageKey, previewWidthStorageKey, visibleColumnsStorageKey]);
 
   useEffect(() => {
     localStorage.setItem(visibleColumnsStorageKey, JSON.stringify(visibleColumns));
@@ -1451,17 +1456,9 @@ export function WorkItemsGrid({
 
   function resetColumnVisibility() {
     setVisibleColumns([...WI_GRID_KEYS]);
-    setColumnWidths([...DEFAULT_WI_COLUMN_WIDTHS]);
+    resetColumnWidths();
   }
 
-  const visibleColumnWidths = visibleColumns.map(
-    (column) => columnWidths[WI_GRID_KEYS.indexOf(column)],
-  );
-  const wiFlexibleIndex = Math.max(0, visibleColumns.indexOf("title"));
-  const wiColTemplate = [
-    gridColumnTemplate(visibleColumnWidths, wiFlexibleIndex, ["28px"]),
-    ...extraColumns.map(() => "120px"),
-  ].join(" ");
   const columnFilterCount = activeColumnFilterCount(columnFilters);
   const activeFilterCount = Math.max(0, activeExternalFilterCount) + columnFilterCount;
   const hasActiveColumnFilters = columnFilterCount > 0;
@@ -1567,8 +1564,8 @@ export function WorkItemsGrid({
               }
             />
           ) : (
-          <div ref={gridScrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-            <div className="min-w-[520px]">
+          <div ref={gridScrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
+            <div style={{ minWidth: gridMinWidth }}>
               <div
                 role="row"
                 className="grid items-center gap-2 border-b border-border bg-muted px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
@@ -1607,14 +1604,7 @@ export function WorkItemsGrid({
                     onFilterOpen={isFilterableColumn(col) ? (el) => openFilter(col, el) : undefined}
                     resizeHandle={
                       i < visibleColumns.length - 1 ? (
-                        <ColumnResizeHandle
-                          columnIndex={WI_GRID_KEYS.indexOf(col)}
-                          widths={columnWidths}
-                          setWidths={setColumnWidths}
-                          min={WI_COLUMN_MIN_WIDTHS[WI_GRID_KEYS.indexOf(col)]}
-                          max={WI_COLUMN_MAX_WIDTHS[WI_GRID_KEYS.indexOf(col)]}
-                          defaultWidth={DEFAULT_WI_COLUMN_WIDTHS[WI_GRID_KEYS.indexOf(col)]}
-                        />
+                        <ColumnResizeHandle {...columnResizeProps(col)} />
                       ) : undefined
                     }
                   />

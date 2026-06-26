@@ -22,15 +22,14 @@ import {
 } from '@/lib/azdoCommands';
 import {
   clamp,
-  storedNumbers,
   storedNumber,
-  gridColumnTemplate,
   isEditableTarget,
   focusFilterInput,
   focusPrimaryPreview,
   formatDate,
   formatRelativeDate,
 } from '@/lib/utils';
+import { useGridColumns } from '@/lib/useGridColumns';
 import { openExternalUrl } from '@/lib/openExternal';
 import { recordRecentPullRequest } from '@/lib/recentItems';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
@@ -417,20 +416,25 @@ function PullRequestResults({
   searched: boolean;
 }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [columnWidths, setColumnWidths] = useState(() =>
-    storedNumbers(
-      PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY,
-      DEFAULT_PR_SEARCH_COLUMN_WIDTHS,
-      PR_SEARCH_COLUMN_MIN_WIDTHS,
-      PR_SEARCH_COLUMN_MAX_WIDTHS,
-    ),
-  );
   const [columnFilters, setColumnFilters] = useState<Partial<Record<PrSearchFilterableColumn, Set<string>>>>({});
   const [openFilterCol, setOpenFilterCol] = useState<PrSearchFilterableColumn | null>(null);
   const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
   const [visibleColumns, setVisibleColumns] = useState<PrSearchColumnKey[]>(
     loadPrSearchVisibleColumns,
   );
+  const {
+    template: columnTemplate,
+    minWidth: gridMinWidth,
+    resizeProps: columnResizeProps,
+  } = useGridColumns({
+    keys: PR_SEARCH_KEYS,
+    visibleColumns,
+    flexibleKey: "title",
+    defaults: DEFAULT_PR_SEARCH_COLUMN_WIDTHS,
+    min: PR_SEARCH_COLUMN_MIN_WIDTHS,
+    max: PR_SEARCH_COLUMN_MAX_WIDTHS,
+    storageKey: PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY,
+  });
   const [columnMenuRect, setColumnMenuRect] = useState<DOMRect | null>(null);
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const [maximized, setMaximized] = useState(false);
@@ -446,10 +450,6 @@ function PullRequestResults({
   const restoreFocusRef = useRef(false);
   const [scrollerEl, setScrollerEl] = useState<HTMLDivElement | null>(null);
   const [gridViewport, setGridViewport] = useState({ height: 0, scrollTop: 0 });
-
-  useEffect(() => {
-    localStorage.setItem(PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
-  }, [columnWidths]);
 
   useEffect(() => {
     localStorage.setItem(PR_SEARCH_PREVIEW_WIDTH_STORAGE_KEY, String(Math.round(previewWidth)));
@@ -493,11 +493,6 @@ function PullRequestResults({
     setVisibleColumns([...PR_SEARCH_KEYS]);
   }
 
-  const visibleColumnWidths = visibleColumns.map(
-    (column) => columnWidths[PR_SEARCH_KEYS.indexOf(column)],
-  );
-  const titleFlexIndex = Math.max(0, visibleColumns.indexOf("title"));
-  const columnTemplate = gridColumnTemplate(visibleColumnWidths, titleFlexIndex);
 
   const columnUniqueValues = useMemo(() => {
     const map = {} as Record<PrSearchFilterableColumn, string[]>;
@@ -749,15 +744,14 @@ function PullRequestResults({
           className="flex min-h-0 flex-1 flex-col outline-none"
           onKeyDown={handleKeyDown}
         >
-          <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-          <div className="min-w-[680px]">
+          <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
+          <div style={{ minWidth: gridMinWidth }}>
           <div
             role="row"
             className="grid border-b border-border bg-muted/40 px-2 py-1 text-xs font-medium text-muted-foreground"
             style={{ gridTemplateColumns: columnTemplate }}
           >
             {visibleColumns.map((key, i) => {
-              const fullIndex = PR_SEARCH_KEYS.indexOf(key);
               const filterKey = PR_SEARCH_COLUMN_FILTER_KEY[key];
               const isLast = i === visibleColumns.length - 1;
               return (
@@ -780,14 +774,7 @@ function PullRequestResults({
                     ) : null}
                   </div>
                   {isLast ? null : (
-                    <ColumnResizeHandle
-                      columnIndex={fullIndex}
-                      widths={columnWidths}
-                      setWidths={setColumnWidths}
-                      min={PR_SEARCH_COLUMN_MIN_WIDTHS[fullIndex]}
-                      max={PR_SEARCH_COLUMN_MAX_WIDTHS[fullIndex]}
-                      defaultWidth={DEFAULT_PR_SEARCH_COLUMN_WIDTHS[fullIndex]}
-                    />
+                    <ColumnResizeHandle {...columnResizeProps(key)} />
                   )}
                 </div>
               );
