@@ -1630,6 +1630,21 @@ function KeyboardShortcutSettings() {
     event: ReactKeyboardEvent<HTMLButtonElement>,
     id: KeybindingId,
   ) {
+    // Not capturing yet: only Enter/Space arms capture, so merely tabbing onto
+    // the button (or any other key) never starts a capture (issue #445).
+    if (capturingId !== id) {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        setCapturingId(id);
+      }
+      return;
+    }
+    // Tab leaves the field and cancels capture instead of being bound, so the
+    // user can move focus normally while armed.
+    if (event.key === "Tab") {
+      setCapturingId(null);
+      return;
+    }
     // Escape cancels capture without changing the binding.
     if (event.key === "Escape") {
       event.preventDefault();
@@ -1714,8 +1729,10 @@ function KeyboardShortcutSettings() {
                       <button
                         type="button"
                         disabled={reserved}
-                        aria-label={`Shortcut for ${binding.label}`}
-                        onFocus={() => !reserved && setCapturingId(id)}
+                        aria-label={`Shortcut for ${binding.label}${
+                          capturingId === id ? " (press keys, Esc to cancel)" : " (Enter to rebind)"
+                        }`}
+                        onClick={() => !reserved && setCapturingId(id)}
                         onBlur={() => setCapturingId((current) => (current === id ? null : current))}
                         onKeyDown={(event) => !reserved && onCaptureKeyDown(event, id)}
                         className={`h-8 min-w-[7rem] rounded-md border px-2 text-xs font-mono outline-none focus:ring-2 focus:ring-ring ${
