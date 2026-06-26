@@ -283,6 +283,10 @@ function AppShell() {
   const navigatingHistoryRef = useRef(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  // Element focused when an overlay opened, so closing the palette/help returns
+  // focus there (falling back to the grid) instead of stranding it on <body>.
+  const paletteReturnRef = useRef<HTMLElement | null>(null);
+  const helpReturnRef = useRef<HTMLElement | null>(null);
   const [navExpanded, setNavExpanded] = useState<Record<NavSectionId, boolean>>({
     pullRequests: true,
     workItems: true,
@@ -747,10 +751,35 @@ function AppShell() {
     paletteSearchEnabled,
   ]);
 
+  function restoreOverlayFocus(target: HTMLElement | null): void {
+    window.setTimeout(() => {
+      if (target && document.contains(target)) target.focus();
+      else focusPrimaryGrid();
+    }, 0);
+  }
+
+  function openCommandPalette(): void {
+    paletteReturnRef.current = document.activeElement as HTMLElement | null;
+    setCommandPaletteOpen(true);
+  }
+
   function closeCommandPalette(): void {
     setCommandPaletteOpen(false);
     setPaletteSearchText("");
     setDebouncedPaletteSearchText("");
+    restoreOverlayFocus(paletteReturnRef.current);
+    paletteReturnRef.current = null;
+  }
+
+  function openHelp(): void {
+    helpReturnRef.current = document.activeElement as HTMLElement | null;
+    setHelpOpen(true);
+  }
+
+  function closeHelp(): void {
+    setHelpOpen(false);
+    restoreOverlayFocus(helpReturnRef.current);
+    helpReturnRef.current = null;
   }
 
   const pinnedWorkItemViews = workItemNavViews.filter((item) => item.pinned);
@@ -1057,7 +1086,7 @@ function AppShell() {
       id: "general.shortcuts",
       keywords: ["keyboard", "help"],
       label: "Show keyboard shortcuts",
-      run: () => setHelpOpen(true),
+      run: () => openHelp(),
       shortcut: "?",
     },
     {
@@ -1338,7 +1367,7 @@ function AppShell() {
 
       if (!event.defaultPrevented && matchesCombo(keybindings.commandPalette, event)) {
         event.preventDefault();
-        setCommandPaletteOpen(true);
+        openCommandPalette();
         return;
       }
 
@@ -1377,7 +1406,7 @@ function AppShell() {
         !isEditableTarget(event.target)
       ) {
         event.preventDefault();
-        setHelpOpen(true);
+        openHelp();
         return;
       }
 
@@ -1386,7 +1415,7 @@ function AppShell() {
           event.preventDefault();
           return;
         }
-        setHelpOpen(false);
+        closeHelp();
         closeCommandPalette();
         return;
       }
@@ -1584,7 +1613,7 @@ function AppShell() {
               icon={<BookOpen className="h-4 w-4" aria-hidden="true" />}
               label="Help"
               shortcut="F1"
-              onClick={() => setHelpOpen(true)}
+              onClick={() => openHelp()}
             />
             <NavButton
               active={activeView === "settings"}
@@ -1727,7 +1756,7 @@ function AppShell() {
           </Suspense>
         </section>
       </main>
-      {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
+      {helpOpen && <HelpDialog onClose={() => closeHelp()} />}
       {commandPaletteOpen && (
         <CommandPalette
           actions={commandActions}
