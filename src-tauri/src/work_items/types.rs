@@ -315,6 +315,15 @@ pub struct WorkItemPreview {
     pub relations: Vec<WorkItemRelationSummary>,
     /// Pull requests linked to this work item via `ArtifactLink` relations.
     pub pull_requests: Vec<WorkItemPullRequestLink>,
+    /// Files attached to the work item (`AttachedFile` relations).
+    pub attachments: Vec<WorkItemAttachment>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemAttachment {
+    pub name: String,
+    pub url: String,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
