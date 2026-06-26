@@ -91,14 +91,23 @@ const pullRequestSummarySchema = z.object({
   status: z.string(),
   createdBy: z.string().nullable(),
   creationDate: z.string(),
+  closedDate: z.string().nullable(),
   sourceRefName: z.string(),
   targetRefName: z.string(),
   webUrl: z.string().nullable(),
+  isDraft: z.boolean(),
 });
 
 const pullRequestSummariesSchema = z.array(pullRequestSummarySchema);
 
+const pullRequestSearchResultSchema = z.object({
+  pullRequests: pullRequestSummariesSchema,
+  total: z.number(),
+  truncated: z.boolean(),
+});
+
 export type PullRequestSummary = z.infer<typeof pullRequestSummarySchema>;
+export type PullRequestSearchResult = z.infer<typeof pullRequestSearchResultSchema>;
 
 const reviewPullRequestSummarySchema = z.object({
   organizationId: z.string(),
@@ -670,6 +679,16 @@ export type SearchPullRequestsInput = {
   status?: "active" | "completed" | "abandoned" | "all";
   projectId?: string;
   repositoryId?: string;
+  /** Branch name, e.g. "main" or "refs/heads/main". */
+  targetBranch?: string;
+  /** Inclusive date window as "YYYY-MM-DD". */
+  fromDate?: string;
+  toDate?: string;
+  /** Which date the window applies to. Defaults to "created". */
+  dateBasis?: "created" | "closed";
+  excludeDrafts?: boolean;
+  /** Result ordering. Defaults to "created". */
+  sortBy?: "created" | "closed" | "title";
 };
 
 export type ListMyReviewPullRequestsInput = {
@@ -983,9 +1002,9 @@ export async function deleteOrganization(
 
 export async function searchPullRequests(
   input: SearchPullRequestsInput,
-): Promise<PullRequestSummary[]> {
+): Promise<PullRequestSearchResult> {
   const result = await invokeCommand("search_pull_requests", { input });
-  return pullRequestSummariesSchema.parse(result);
+  return pullRequestSearchResultSchema.parse(result);
 }
 
 export async function listMyReviewPullRequests(

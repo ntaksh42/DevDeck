@@ -48,7 +48,7 @@ use pr_review::{
     UpdatePullRequestInput,
 };
 use prs::{
-    ListMyReviewPullRequestsInput, PullRequestService, PullRequestSummary,
+    ListMyReviewPullRequestsInput, PullRequestSearchResult, PullRequestService,
     ReviewPullRequestSummary, SearchPullRequestsInput,
 };
 use search::{SearchAllInput, SearchAllResult};
@@ -223,9 +223,9 @@ async fn add_azure_cli_organization(
 async fn search_pull_requests(
     input: SearchPullRequestsInput,
     state: State<'_, AppState>,
-) -> Result<Vec<PullRequestSummary>> {
+) -> Result<PullRequestSearchResult> {
     let service = state.pull_requests.clone();
-    run_blocking(move || service.search(input)).await
+    service.search(input).await
 }
 
 #[tauri::command]

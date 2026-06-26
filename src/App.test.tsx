@@ -665,23 +665,29 @@ describe("App", () => {
         return Promise.resolve([]);
       }
       if (command === "search_pull_requests") {
-        return Promise.resolve([
-          {
-            organizationId: "contoso",
-            projectId: "project-1",
-            projectName: "Platform",
-            repositoryId: "repo-1",
-            repositoryName: "azdo-dashboard",
-            pullRequestId: 42,
-            title: "Add pull request search",
-            status: "active",
-            createdBy: "Test User",
-            creationDate: "2026-05-24T00:00:00Z",
-            sourceRefName: "feature/pr-search",
-            targetRefName: "main",
-            webUrl: "https://dev.azure.com/contoso/project/_git/repo/pullrequest/42",
-          },
-        ]);
+        return Promise.resolve({
+          pullRequests: [
+            {
+              organizationId: "contoso",
+              projectId: "project-1",
+              projectName: "Platform",
+              repositoryId: "repo-1",
+              repositoryName: "azdo-dashboard",
+              pullRequestId: 42,
+              title: "Add pull request search",
+              status: "active",
+              createdBy: "Test User",
+              creationDate: "2026-05-24T00:00:00Z",
+              closedDate: null,
+              sourceRefName: "feature/pr-search",
+              targetRefName: "main",
+              webUrl: "https://dev.azure.com/contoso/project/_git/repo/pullrequest/42",
+              isDraft: false,
+            },
+          ],
+          total: 1,
+          truncated: false,
+        });
       }
       return Promise.reject(new Error(`Unhandled command: ${command}`));
     });
@@ -705,13 +711,43 @@ describe("App", () => {
           status: "active",
           projectId: undefined,
           repositoryId: undefined,
+          targetBranch: undefined,
+          fromDate: undefined,
+          toDate: undefined,
+          dateBasis: "created",
+          excludeDrafts: undefined,
+          sortBy: "created",
         },
       });
     });
     expect(await screen.findByText("Add pull request search")).toBeTruthy();
     expect(screen.getByText("Platform / azdo-dashboard")).toBeTruthy();
-    expect(main.queryByRole("option", { name: "Completed" })).toBeNull();
-    expect(main.queryByRole("option", { name: "Abandoned" })).toBeNull();
+    // Non-active statuses are now selectable and forwarded to the backend.
+    expect(main.getByRole("option", { name: "Completed" })).toBeTruthy();
+    expect(main.getByRole("option", { name: "Abandoned" })).toBeTruthy();
+    expect(main.getByRole("option", { name: "All" })).toBeTruthy();
+
+    fireEvent.change(main.getByRole("combobox", { name: /Status/i }), {
+      target: { value: "completed" },
+    });
+    fireEvent.click(main.getByRole("button", { name: "Search" }));
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("search_pull_requests", {
+        input: {
+          organizationId: "contoso",
+          query: "search",
+          status: "completed",
+          projectId: undefined,
+          repositoryId: undefined,
+          targetBranch: undefined,
+          fromDate: undefined,
+          toDate: undefined,
+          dateBasis: "created",
+          excludeDrafts: undefined,
+          sortBy: "created",
+        },
+      });
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "#42" }));
 
@@ -2358,9 +2394,11 @@ describe("App", () => {
               status: "active",
               createdBy: "Alice",
               creationDate: "2026-05-24T00:00:00Z",
+              closedDate: null,
               sourceRefName: "feature/retry",
               targetRefName: "main",
               webUrl: null,
+              isDraft: false,
             },
           ],
           commits: [

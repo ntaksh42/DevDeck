@@ -82,13 +82,24 @@ pub async fn search_all(
             work_item_type: None,
             project_id: None,
         })?);
-        pull_request_results.extend(pull_requests.search(SearchPullRequestsInput {
-            organization_id: Some(org_id.clone()),
-            query: Some(query.clone()),
-            status: None,
-            project_id: None,
-            repository_id: None,
-        })?);
+        pull_request_results.extend(
+            pull_requests
+                .search(SearchPullRequestsInput {
+                    organization_id: Some(org_id.clone()),
+                    query: Some(query.clone()),
+                    status: None,
+                    project_id: None,
+                    repository_id: None,
+                    target_branch: None,
+                    from_date: None,
+                    to_date: None,
+                    date_basis: None,
+                    exclude_drafts: None,
+                    sort_by: None,
+                })
+                .await?
+                .pull_requests,
+        );
         commit_results.extend(
             commits
                 .search(SearchCommitsInput {
@@ -204,6 +215,7 @@ mod tests {
                 source_ref_name: "refs/heads/retry-backoff".to_string(),
                 target_ref_name: "refs/heads/main".to_string(),
                 web_url: None,
+                is_draft: false,
             }],
         )
         .unwrap();

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, Result};
 
-const SCHEMA_VERSION: i64 = 15;
+const SCHEMA_VERSION: i64 = 16;
 
 /// Max rows kept in the my_work_items snapshot queries; sync notification
 /// diffing must know this cap to avoid treating re-entering rows as new.
@@ -128,6 +128,7 @@ pub struct CachedPr {
     pub source_ref_name: String,
     pub target_ref_name: String,
     pub web_url: Option<String>,
+    pub is_draft: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1435,7 +1436,31 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             "#,
         )?;
     }
+    if current < 16 {
+        // PR search can now exclude draft PRs, so the active-PR cache needs to
+        // remember which rows are drafts. Existing rows default to non-draft and
+        // are corrected on the next sync. The table-exists guard keeps partial
+        // historical databases (e.g. migration tests that start past step 2)
+        // from tripping over a not-yet-created pull_requests table.
+        if table_exists(conn, "pull_requests")?
+            && !table_column_exists(conn, "pull_requests", "is_draft")?
+        {
+            conn.execute_batch(
+                "ALTER TABLE pull_requests ADD COLUMN is_draft INTEGER NOT NULL DEFAULT 0;",
+            )?;
+        }
+        conn.execute_batch("PRAGMA user_version = 16;")?;
+    }
     Ok(())
+}
+
+fn table_exists(conn: &Connection, table: &str) -> Result<bool> {
+    let count: i64 = conn.query_row(
+        "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+        [table],
+        |row| row.get(0),
+    )?;
+    Ok(count > 0)
 }
 
 fn table_column_exists(conn: &Connection, table: &str, column: &str) -> Result<bool> {
@@ -1826,8 +1851,8 @@ fn upsert_pull_requests(conn: &Connection, prs: &[CachedPr]) -> Result<()> {
         INSERT INTO pull_requests(
             org_id, project_id, project_name, repository_id, repository_name,
             pull_request_id, title, status, created_by, creation_date,
-            source_ref_name, target_ref_name, web_url
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+            source_ref_name, target_ref_name, web_url, is_draft
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
         ON CONFLICT(org_id, repository_id, pull_request_id) DO UPDATE SET
             project_id = excluded.project_id,
             project_name = excluded.project_name,
@@ -1838,7 +1863,8 @@ fn upsert_pull_requests(conn: &Connection, prs: &[CachedPr]) -> Result<()> {
             creation_date = excluded.creation_date,
             source_ref_name = excluded.source_ref_name,
             target_ref_name = excluded.target_ref_name,
-            web_url = excluded.web_url
+            web_url = excluded.web_url,
+            is_draft = excluded.is_draft
         "#,
     )?;
     for pr in prs {
@@ -1855,7 +1881,8 @@ fn upsert_pull_requests(conn: &Connection, prs: &[CachedPr]) -> Result<()> {
             pr.creation_date,
             pr.source_ref_name,
             pr.target_ref_name,
-            pr.web_url
+            pr.web_url,
+            pr.is_draft
         ])?;
     }
     Ok(())
@@ -1872,7 +1899,7 @@ fn search_pull_requests(
         r#"
         SELECT org_id, project_id, project_name, repository_id, repository_name,
                pull_request_id, title, status, created_by, creation_date,
-               source_ref_name, target_ref_name, web_url
+               source_ref_name, target_ref_name, web_url, is_draft
         FROM pull_requests
         WHERE org_id = ?1
           AND (?2 IS NULL OR project_id = ?2)
@@ -2497,6 +2524,7 @@ fn map_cached_pr(row: &rusqlite::Row<'_>) -> rusqlite::Result<CachedPr> {
         source_ref_name: row.get(10)?,
         target_ref_name: row.get(11)?,
         web_url: row.get(12)?,
+        is_draft: row.get(13)?,
     })
 }
 
@@ -3319,6 +3347,7 @@ mod tests {
             source_ref_name: "refs/heads/feature".to_string(),
             target_ref_name: "refs/heads/main".to_string(),
             web_url: None,
+            is_draft: false,
         };
         db.replace_pull_requests_for_projects("org1", &["p1"], &[pr])
             .unwrap();
