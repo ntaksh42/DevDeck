@@ -1,4 +1,7 @@
-use azdo_client::{Build, BuildListCriteria, Timeline};
+use azdo_client::{
+    Build, BuildDefinitionDetail, BuildListCriteria, DefinitionTrigger, DefinitionVariable,
+    Timeline,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::auth::client_for_organization;
@@ -44,6 +47,14 @@ pub struct GetPipelineRunInput {
     pub organization_id: Option<String>,
     pub project_id: String,
     pub build_id: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetPipelineDefinitionInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub definition_id: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -137,6 +148,32 @@ pub struct PipelineRunDetail {
 pub struct PipelineLogTail {
     pub lines: Vec<String>,
     pub truncated: bool,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PipelineTrigger {
+    pub trigger_type: Option<String>,
+    pub branch_filters: Vec<String>,
+    pub path_filters: Vec<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PipelineVariable {
+    pub name: String,
+    pub value: Option<String>,
+    pub is_secret: bool,
+    pub allow_override: bool,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PipelineDefinitionDetail {
+    pub definition_id: i64,
+    pub name: String,
+    pub triggers: Vec<PipelineTrigger>,
+    pub variables: Vec<PipelineVariable>,
 }
 
 #[derive(Debug, Clone)]
@@ -249,6 +286,22 @@ impl PipelineService {
             run: build_to_summary(&organization, &project.id, &project.name, build),
             timeline: timeline_to_nodes(timeline),
         })
+    }
+
+    pub async fn get_definition(
+        &self,
+        input: GetPipelineDefinitionInput,
+    ) -> Result<PipelineDefinitionDetail> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
+        let definition = client
+            .get_build_definition(&project.id, input.definition_id)
+            .await?;
+        Ok(definition_to_detail(definition))
     }
 
     pub async fn get_run_log_tail(
@@ -372,6 +425,40 @@ fn build_to_summary(
     }
 }
 
+fn definition_to_detail(definition: BuildDefinitionDetail) -> PipelineDefinitionDetail {
+    PipelineDefinitionDetail {
+        definition_id: definition.id,
+        name: definition.name,
+        triggers: definition
+            .triggers
+            .into_iter()
+            .map(trigger_to_ipc)
+            .collect(),
+        variables: definition
+            .variables
+            .into_iter()
+            .map(variable_to_ipc)
+            .collect(),
+    }
+}
+
+fn trigger_to_ipc(trigger: DefinitionTrigger) -> PipelineTrigger {
+    PipelineTrigger {
+        trigger_type: trigger.trigger_type,
+        branch_filters: trigger.branch_filters,
+        path_filters: trigger.path_filters,
+    }
+}
+
+fn variable_to_ipc(variable: DefinitionVariable) -> PipelineVariable {
+    PipelineVariable {
+        name: variable.name,
+        value: variable.value,
+        is_secret: variable.is_secret,
+        allow_override: variable.allow_override,
+    }
+}
+
 fn timeline_to_nodes(timeline: Timeline) -> Vec<TimelineNode> {
     timeline
         .records
@@ -428,6 +515,48 @@ mod tests {
             normalize_optional(Some(" failed ".to_string())),
             Some("failed".to_string())
         );
+    }
+
+    #[test]
+    fn definition_to_detail_maps_triggers_and_variables() {
+        let detail = definition_to_detail(BuildDefinitionDetail {
+            id: 12,
+            name: "CI".to_string(),
+            triggers: vec![DefinitionTrigger {
+                trigger_type: Some("continuousIntegration".to_string()),
+                branch_filters: vec!["+refs/heads/main".to_string()],
+                path_filters: vec![],
+            }],
+            variables: vec![
+                DefinitionVariable {
+                    name: "Alpha".to_string(),
+                    value: Some("first".to_string()),
+                    is_secret: false,
+                    allow_override: true,
+                },
+                DefinitionVariable {
+                    name: "ApiKey".to_string(),
+                    value: None,
+                    is_secret: true,
+                    allow_override: false,
+                },
+            ],
+        });
+
+        assert_eq!(detail.definition_id, 12);
+        assert_eq!(detail.triggers.len(), 1);
+        assert_eq!(
+            detail.triggers[0].trigger_type.as_deref(),
+            Some("continuousIntegration")
+        );
+        // Secret variables carry no value through the mapping.
+        let secret = detail
+            .variables
+            .iter()
+            .find(|v| v.name == "ApiKey")
+            .unwrap();
+        assert!(secret.is_secret);
+        assert_eq!(secret.value, None);
     }
 
     #[test]

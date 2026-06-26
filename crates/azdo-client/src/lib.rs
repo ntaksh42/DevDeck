@@ -19,8 +19,8 @@ pub use git::{
 };
 pub use identity::{AuthenticatedUser, ConnectionData, Identity, IdentityPickerIdentity};
 pub use pipelines::{
-    Build, BuildDefinitionRef, BuildIdentityRef, BuildListCriteria, BuildLogTail, Timeline,
-    TimelineLogRef, TimelineRecord,
+    Build, BuildDefinitionDetail, BuildDefinitionRef, BuildIdentityRef, BuildListCriteria,
+    BuildLogTail, DefinitionTrigger, DefinitionVariable, Timeline, TimelineLogRef, TimelineRecord,
 };
 pub use pr_review::{
     GitChangeEntry, GitChangeItem, GitCommitRefId, GitContentMetadata, GitFilePosition,
