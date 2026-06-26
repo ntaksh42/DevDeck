@@ -73,9 +73,9 @@ use work_items::{
     RecordAssigneeInteractionInput, RecordMentionInteractionInput, RunWorkItemQueryInput,
     SavedQueryResult, SearchWorkItemAssigneesInput, SearchWorkItemMentionsInput,
     SearchWorkItemsInput, SetWorkItemCommentReactionInput, SetWorkItemsPriorityInput,
-    SetWorkItemsStateInput, UpdateWorkItemCommentInput, UpdateWorkItemFieldsInput,
-    WorkItemAssigneeCandidate, WorkItemComment, WorkItemFieldOption, WorkItemImage,
-    WorkItemPreview, WorkItemProjectOption, WorkItemService, WorkItemSummary,
+    SetWorkItemsStateInput, SetWorkItemsTagsInput, UpdateWorkItemCommentInput,
+    UpdateWorkItemFieldsInput, WorkItemAssigneeCandidate, WorkItemComment, WorkItemFieldOption,
+    WorkItemImage, WorkItemPreview, WorkItemProjectOption, WorkItemService, WorkItemSummary,
     WorkItemUpdateSummary,
 };
 
@@ -537,6 +537,16 @@ async fn set_work_items_priority(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn set_work_items_tags(
+    input: SetWorkItemsTagsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<BulkWorkItemResult>> {
+    ensure_write_enabled(&state).await?;
+    state.work_items.set_items_tags(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn update_work_item_fields(
     input: UpdateWorkItemFieldsInput,
     state: State<'_, AppState>,
@@ -917,6 +927,7 @@ pub fn run() {
             set_work_items_state,
             assign_work_items,
             set_work_items_priority,
+            set_work_items_tags,
             search_commits,
             list_commit_repositories,
             commit_activity,
