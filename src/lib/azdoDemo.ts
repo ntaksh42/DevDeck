@@ -33,6 +33,7 @@ import type {
   PullRequestReview,
   PullRequestSearchResult,
   PullRequestSummary,
+  MyCreatedPullRequestSummary,
   ReviewPullRequestSummary,
   ReviewResultPreview,
   SnoozedItemSummary,
@@ -715,6 +716,9 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       return demoReviewPullRequests().filter(
         (pr) => !snoozed.has(`${pr.repositoryId}:${pr.pullRequestId}`),
       );
+    }
+    case "list_my_created_pull_requests": {
+      return demoMyCreatedPullRequests();
     }
     case "get_pull_request_review": {
       const input = (args as { input?: GetPullRequestReviewInput } | undefined)?.input;
@@ -2136,6 +2140,46 @@ function demoListSnoozedItems(itemType: string): SnoozedItemSummary[] {
       subtitle: item.state ?? null,
       webUrl: item.webUrl ?? null,
     }));
+}
+
+function demoMyCreatedPullRequests(): MyCreatedPullRequestSummary[] {
+  const now = new Date("2026-05-24T08:00:00Z");
+  const ago = (ms: number) => new Date(now.getTime() - ms).toISOString();
+  const day = 86_400_000;
+  return [
+    {
+      organizationId: "contoso",
+      projectId: "platform",
+      projectName: "Platform",
+      repositoryId: "api-gateway",
+      repositoryName: "api-gateway",
+      pullRequestId: 210,
+      title: "Add request tracing to the gateway",
+      creationDate: ago(1 * day),
+      sourceRefName: "feature/gateway-tracing",
+      targetRefName: "main",
+      webUrl: "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/210",
+      isDraft: false,
+      approvals: 1,
+      reviewerCount: 2,
+    },
+    {
+      organizationId: "contoso",
+      projectId: "platform",
+      projectName: "Platform",
+      repositoryId: "auth-service",
+      repositoryName: "auth-service",
+      pullRequestId: 205,
+      title: "Refactor session store for clustering",
+      creationDate: ago(4 * day),
+      sourceRefName: "feature/session-cluster",
+      targetRefName: "main",
+      webUrl: "https://dev.azure.com/contoso/Platform/_git/auth-service/pullrequest/205",
+      isDraft: true,
+      approvals: 0,
+      reviewerCount: 1,
+    },
+  ];
 }
 
 function demoReviewPullRequests(): ReviewPullRequestSummary[] {

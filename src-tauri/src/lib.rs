@@ -50,8 +50,8 @@ use pr_review::{
     SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
 };
 use prs::{
-    ListMyReviewPullRequestsInput, PullRequestSearchResult, PullRequestService,
-    ReviewPullRequestSummary, SearchPullRequestsInput,
+    ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestSummary,
+    PullRequestSearchResult, PullRequestService, ReviewPullRequestSummary, SearchPullRequestsInput,
 };
 use search::{SearchAllInput, SearchAllResult};
 use secrets::SecretStore;
@@ -238,6 +238,16 @@ async fn list_my_review_pull_requests(
 ) -> Result<Vec<ReviewPullRequestSummary>> {
     let service = state.pull_requests.clone();
     run_blocking(move || service.list_my_reviews(input)).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn list_my_created_pull_requests(
+    input: ListMyCreatedPullRequestsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<MyCreatedPullRequestSummary>> {
+    let service = state.pull_requests.clone();
+    service.list_my_created_pull_requests(input).await
 }
 
 #[tauri::command]
@@ -977,6 +987,7 @@ pub fn run() {
             add_azure_cli_organization,
             search_pull_requests,
             list_my_review_pull_requests,
+            list_my_created_pull_requests,
             get_pull_request_review,
             list_pull_request_changes,
             get_pull_request_file_diff,

@@ -129,6 +129,11 @@ const PullRequestSearch = lazy(() =>
     default: m.PullRequestSearch,
   })),
 );
+const MyPullRequestsGrid = lazy(() =>
+  import("@/features/pull-requests/MyPullRequestsGrid").then((m) => ({
+    default: m.MyPullRequestsGrid,
+  })),
+);
 import {
   sendPipelineRunNotification,
   showWorkItemNotificationEvent,
@@ -158,6 +163,7 @@ import {
 type View =
   | "pullRequestSearch"
   | "myReviews"
+  | "myPullRequests"
   | "workItems"
   | "myWorkItems"
   | "workItemViews"
@@ -1575,6 +1581,12 @@ function AppShell() {
           onClick={() => setView("myReviews")}
         />
         <NavSubItem
+          active={activeView === "myPullRequests"}
+          disabled={organizations.length === 0}
+          label="My Pull Requests"
+          onClick={() => setView("myPullRequests")}
+        />
+        <NavSubItem
           active={activeView === "pullRequestSearch"}
           disabled={organizations.length === 0}
           label="Search"
@@ -1742,6 +1754,8 @@ function AppShell() {
                 ? "Pull Requests"
                 : activeView === "myReviews"
                   ? "My Reviews"
+                  : activeView === "myPullRequests"
+                  ? "My Pull Requests"
                   : activeView === "workItems"
                     ? "Work Items"
                     : activeView === "myWorkItems"
@@ -1761,6 +1775,8 @@ function AppShell() {
                 ? "Search Azure DevOps pull requests across projects and repositories"
                 : activeView === "myReviews"
                   ? "Pull requests assigned to you for review"
+                  : activeView === "myPullRequests"
+                  ? "Active pull requests you authored"
                   : activeView === "workItems"
                     ? "Search Azure DevOps work items across projects"
                     : activeView === "myWorkItems"
@@ -1814,6 +1830,8 @@ function AppShell() {
               selectRequest={myReviewsSelectRequest}
               onSelectRequestHandled={() => setMyReviewsSelectRequest(null)}
             />
+          ) : activeView === "myPullRequests" ? (
+            <MyPullRequestsGrid organizations={organizations} />
           ) : activeView === "workItems" ? (
             <WorkItemSearch
               organizations={organizations}
