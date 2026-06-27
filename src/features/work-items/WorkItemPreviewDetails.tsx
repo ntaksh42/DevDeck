@@ -644,6 +644,68 @@ export function WorkItemPreviewDetails({
         </div>
       )}
 
+      {preview.comments.length > 0 ? (
+        <PreviewSection className="mt-2" collapseId="comments" title={`Comments (${preview.comments.length})`}>
+          {deleteCommentError ? (
+            <p className="mb-1 text-[11px] leading-4 text-destructive">
+              {deleteCommentError}
+            </p>
+          ) : null}
+          {editCommentError ? (
+            <p className="mb-1 text-[11px] leading-4 text-destructive">
+              {editCommentError}
+            </p>
+          ) : null}
+          <div className="space-y-1">
+            {visibleComments.map((comment) => {
+              const deleting = deletingCommentId === comment.id;
+              const editing = editingCommentId === comment.id;
+              return (
+                <CollapsibleComment
+                  baseUrl={preview.webUrl}
+                  commentHtml={commentRichHtml(
+                    comment.renderedText,
+                    comment.text,
+                    mentionDisplayNames,
+                  )}
+                  commentText={comment.text}
+                  createdBy={comment.createdBy}
+                  createdDate={comment.createdDate}
+                  deleting={deleting}
+                  deletePending={deletePending}
+                  editing={editing}
+                  editPending={editPending}
+                  id={comment.id}
+                  key={comment.id}
+                  onDelete={onDeleteComment}
+                  onEdit={onEditComment}
+                  onImageOpen={setLightboxSrc}
+                  reactions={comment.reactions ?? []}
+                  onToggleReaction={onToggleCommentReaction}
+                  reactionPending={reactionPendingCommentId === comment.id}
+                  resolveImageSource={resolveImageSource}
+                />
+              );
+            })}
+            {hiddenCommentCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => setShowAllComments(true)}
+                className="w-full rounded border border-dashed border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+              >
+                Show {hiddenCommentCount} older comment{hiddenCommentCount === 1 ? "" : "s"}
+              </button>
+            ) : null}
+          </div>
+        </PreviewSection>
+      ) : preview.commentsUnavailable ? (
+        <PreviewSection className="mt-2" collapseId="comments" title="Comments">
+          <p className="text-[11px] leading-4 text-destructive">
+            Comments could not be loaded. Try refreshing.
+          </p>
+        </PreviewSection>
+      ) : null}
+
       <PreviewSection className="mt-2" collapseId="links" title={`Links (${preview.relations.length})`}>
         <div className="space-y-1">
           {preview.relations.map((relation) => (
@@ -818,67 +880,6 @@ export function WorkItemPreviewDetails({
         </PreviewSection>
       ) : null}
 
-      {preview.comments.length > 0 ? (
-        <PreviewSection className="mt-2" collapseId="comments" title={`Comments (${preview.comments.length})`}>
-          {deleteCommentError ? (
-            <p className="mb-1 text-[11px] leading-4 text-destructive">
-              {deleteCommentError}
-            </p>
-          ) : null}
-          {editCommentError ? (
-            <p className="mb-1 text-[11px] leading-4 text-destructive">
-              {editCommentError}
-            </p>
-          ) : null}
-          <div className="space-y-1">
-            {visibleComments.map((comment) => {
-              const deleting = deletingCommentId === comment.id;
-              const editing = editingCommentId === comment.id;
-              return (
-                <CollapsibleComment
-                  baseUrl={preview.webUrl}
-                  commentHtml={commentRichHtml(
-                    comment.renderedText,
-                    comment.text,
-                    mentionDisplayNames,
-                  )}
-                  commentText={comment.text}
-                  createdBy={comment.createdBy}
-                  createdDate={comment.createdDate}
-                  deleting={deleting}
-                  deletePending={deletePending}
-                  editing={editing}
-                  editPending={editPending}
-                  id={comment.id}
-                  key={comment.id}
-                  onDelete={onDeleteComment}
-                  onEdit={onEditComment}
-                  onImageOpen={setLightboxSrc}
-                  reactions={comment.reactions ?? []}
-                  onToggleReaction={onToggleCommentReaction}
-                  reactionPending={reactionPendingCommentId === comment.id}
-                  resolveImageSource={resolveImageSource}
-                />
-              );
-            })}
-            {hiddenCommentCount > 0 ? (
-              <button
-                type="button"
-                onClick={() => setShowAllComments(true)}
-                className="w-full rounded border border-dashed border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
-              >
-                Show {hiddenCommentCount} older comment{hiddenCommentCount === 1 ? "" : "s"}
-              </button>
-            ) : null}
-          </div>
-        </PreviewSection>
-      ) : preview.commentsUnavailable ? (
-        <PreviewSection className="mt-2" collapseId="comments" title="Comments">
-          <p className="text-[11px] leading-4 text-destructive">
-            Comments could not be loaded. Try refreshing.
-          </p>
-        </PreviewSection>
-      ) : null}
       <WorkItemHistorySection preview={preview} />
       {lightboxSrc ? (
         <button
