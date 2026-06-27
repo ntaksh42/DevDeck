@@ -199,6 +199,49 @@ impl AdoClient {
         Ok(response.value)
     }
 
+    /// Lists pull requests across a project with optional server-side filtering
+    /// by target branch and a creation/close date window. `time_range_type`
+    /// selects which date `min_time`/`max_time` bound (`"created"` or
+    /// `"closed"`). Used by on-demand PR search; sync keeps using the simpler
+    /// [`list_project_pull_requests`].
+    #[allow(clippy::too_many_arguments)]
+    pub async fn search_project_pull_requests(
+        &self,
+        project_id: &str,
+        status: PullRequestStatus,
+        target_ref_name: Option<&str>,
+        min_time: Option<&str>,
+        max_time: Option<&str>,
+        time_range_type: Option<&str>,
+        top: u32,
+    ) -> Result<Vec<GitPullRequest>> {
+        let path = format!("{project_id}/_apis/git/pullrequests");
+        let top_str = top.to_string();
+        let mut params: Vec<(&str, &str)> = vec![
+            ("api-version", "7.1-preview"),
+            ("searchCriteria.status", status.as_query_value()),
+            ("$top", top_str.as_str()),
+        ];
+        if let Some(target) = target_ref_name {
+            params.push(("searchCriteria.targetRefName", target));
+        }
+        // queryTimeRangeType must accompany a bound for the window to apply.
+        if min_time.is_some() || max_time.is_some() {
+            params.push((
+                "searchCriteria.queryTimeRangeType",
+                time_range_type.unwrap_or("created"),
+            ));
+        }
+        if let Some(min) = min_time {
+            params.push(("searchCriteria.minTime", min));
+        }
+        if let Some(max) = max_time {
+            params.push(("searchCriteria.maxTime", max));
+        }
+        let response: ListResponse<GitPullRequest> = self.get_json(&path, &params).await?;
+        Ok(response.value)
+    }
+
     /// Lists every active PR where `reviewer_id` is a reviewer, paging through
     /// the result set with `$skip`/`$top` so projects with more reviewer PRs
     /// than a single page (`page_size`) are returned in full rather than being
@@ -546,6 +589,98 @@ mod tests {
         assert_eq!(prs.len(), 2);
         assert_eq!(prs[0].repository.as_ref().unwrap().id, "repo-1");
         assert_eq!(prs[1].repository.as_ref().unwrap().id, "repo-2");
+    }
+
+    #[tokio::test]
+    async fn search_project_pull_requests_passes_target_branch_and_close_window() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/git/pullrequests"))
+            .and(query_param("api-version", "7.1-preview"))
+            .and(query_param("searchCriteria.status", "completed"))
+            .and(query_param(
+                "searchCriteria.targetRefName",
+                "refs/heads/main",
+            ))
+            .and(query_param("searchCriteria.queryTimeRangeType", "closed"))
+            .and(query_param(
+                "searchCriteria.minTime",
+                "2026-05-01T00:00:00Z",
+            ))
+            .and(query_param(
+                "searchCriteria.maxTime",
+                "2026-05-31T23:59:59Z",
+            ))
+            .and(query_param("$top", "500"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 1,
+                "value": [
+                    {
+                        "pullRequestId": 7,
+                        "title": "Ship release",
+                        "status": "completed",
+                        "creationDate": "2026-05-10T00:00:00Z",
+                        "closedDate": "2026-05-20T00:00:00Z",
+                        "repository": {
+                            "id": "repo-1",
+                            "name": "dashboard",
+                            "project": { "id": "project-1", "name": "Platform" }
+                        },
+                        "sourceRefName": "refs/heads/release",
+                        "targetRefName": "refs/heads/main"
+                    }
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let prs = test_client(&server)
+            .await
+            .search_project_pull_requests(
+                "project-1",
+                PullRequestStatus::Completed,
+                Some("refs/heads/main"),
+                Some("2026-05-01T00:00:00Z"),
+                Some("2026-05-31T23:59:59Z"),
+                Some("closed"),
+                500,
+            )
+            .await
+            .unwrap();
+        assert_eq!(prs.len(), 1);
+        assert_eq!(prs[0].pull_request_id, 7);
+        assert!(prs[0].closed_date.is_some());
+    }
+
+    #[tokio::test]
+    async fn search_project_pull_requests_omits_time_range_without_bounds() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/git/pullrequests"))
+            .and(query_param("searchCriteria.status", "all"))
+            .and(query_param_is_missing("searchCriteria.queryTimeRangeType"))
+            .and(query_param_is_missing("searchCriteria.targetRefName"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 0,
+                "value": []
+            })))
+            .mount(&server)
+            .await;
+
+        let prs = test_client(&server)
+            .await
+            .search_project_pull_requests(
+                "project-1",
+                PullRequestStatus::All,
+                None,
+                None,
+                None,
+                None,
+                500,
+            )
+            .await
+            .unwrap();
+        assert!(prs.is_empty());
     }
 
     #[tokio::test]

@@ -9,9 +9,10 @@ pub struct CodeSearchRequest {
     pub search_text: String,
     pub top: u32,
     pub skip: u32,
-    /// Optional filters by name. Branch is a short name (e.g. "main").
-    pub project: Option<String>,
-    pub repository: Option<String>,
+    /// Optional filters by name. Empty lists are omitted. Branch is a short
+    /// name (e.g. "main").
+    pub project: Vec<String>,
+    pub repository: Vec<String>,
     pub branch: Option<String>,
     pub path: Option<String>,
 }
@@ -59,12 +60,19 @@ impl AdoClient {
             "$skip": request.skip,
         });
         let mut filters = serde_json::Map::new();
-        for (key, value) in [
+        for (key, values) in [
             ("Project", request.project),
             ("Repository", request.repository),
-            ("Branch", request.branch),
-            ("Path", request.path),
         ] {
+            let values: Vec<String> = values
+                .into_iter()
+                .filter(|value| !value.trim().is_empty())
+                .collect();
+            if !values.is_empty() {
+                filters.insert(key.to_string(), json!(values));
+            }
+        }
+        for (key, value) in [("Branch", request.branch), ("Path", request.path)] {
             if let Some(value) = value.filter(|value| !value.trim().is_empty()) {
                 filters.insert(key.to_string(), json!([value]));
             }
@@ -165,8 +173,8 @@ mod tests {
                 search_text: "AdoClient".to_string(),
                 top: 50,
                 skip: 0,
-                project: Some("Platform".to_string()),
-                repository: Some("azdo-dashboard".to_string()),
+                project: vec!["Platform".to_string()],
+                repository: vec!["azdo-dashboard".to_string()],
                 branch: Some("main".to_string()),
                 path: None,
             })

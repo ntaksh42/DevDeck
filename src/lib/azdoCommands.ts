@@ -91,14 +91,23 @@ const pullRequestSummarySchema = z.object({
   status: z.string(),
   createdBy: z.string().nullable(),
   creationDate: z.string(),
+  closedDate: z.string().nullable(),
   sourceRefName: z.string(),
   targetRefName: z.string(),
   webUrl: z.string().nullable(),
+  isDraft: z.boolean(),
 });
 
 const pullRequestSummariesSchema = z.array(pullRequestSummarySchema);
 
+const pullRequestSearchResultSchema = z.object({
+  pullRequests: pullRequestSummariesSchema,
+  total: z.number(),
+  truncated: z.boolean(),
+});
+
 export type PullRequestSummary = z.infer<typeof pullRequestSummarySchema>;
+export type PullRequestSearchResult = z.infer<typeof pullRequestSearchResultSchema>;
 
 const reviewPullRequestSummarySchema = z.object({
   organizationId: z.string(),
@@ -347,6 +356,12 @@ const workItemPullRequestLinkSchema = z.object({
 
 export type WorkItemPullRequestLink = z.infer<typeof workItemPullRequestLinkSchema>;
 
+const workItemAttachmentSchema = z.object({
+  name: z.string(),
+  url: z.string(),
+});
+export type WorkItemAttachment = z.infer<typeof workItemAttachmentSchema>;
+
 const workItemPreviewSchema = z.object({
   organizationId: z.string(),
   projectId: z.string(),
@@ -376,6 +391,7 @@ const workItemPreviewSchema = z.object({
   commentsUnavailable: z.boolean().default(false),
   relations: z.array(workItemRelationSchema).default([]),
   pullRequests: z.array(workItemPullRequestLinkSchema).default([]),
+  attachments: z.array(workItemAttachmentSchema).default([]),
 });
 
 export type WorkItemPreview = z.infer<typeof workItemPreviewSchema>;
@@ -564,8 +580,10 @@ export type CodeSearchResults = z.infer<typeof codeSearchResultsSchema>;
 export async function searchCode(input: {
   organizationId?: string;
   query: string;
-  project?: string;
-  repository?: string;
+  /** Project names to include. Empty/omitted means all projects. */
+  projects?: string[];
+  /** Repository names to include. Empty/omitted means all repositories. */
+  repositories?: string[];
   branch?: string;
   path?: string;
   operationId?: string;
@@ -668,9 +686,22 @@ export type GetReviewResultPreviewInput = {
 export type SearchPullRequestsInput = {
   organizationId?: string;
   query?: string;
-  status?: "active" | "completed" | "abandoned" | "all";
-  projectId?: string;
-  repositoryId?: string;
+  /** Statuses to include. Empty/omitted defaults to active only. */
+  statuses?: ("active" | "completed" | "abandoned")[];
+  /** Projects to include. Empty/omitted means all projects. */
+  projectIds?: string[];
+  /** Repositories to include. Empty/omitted means all repositories. */
+  repositoryIds?: string[];
+  /** Branch name, e.g. "main" or "refs/heads/main". */
+  targetBranch?: string;
+  /** Inclusive date window as "YYYY-MM-DD". */
+  fromDate?: string;
+  toDate?: string;
+  /** Which date the window applies to. Defaults to "created". */
+  dateBasis?: "created" | "closed";
+  excludeDrafts?: boolean;
+  /** Result ordering. Defaults to "created". */
+  sortBy?: "created" | "closed" | "title";
 };
 
 export type ListMyReviewPullRequestsInput = {
@@ -753,9 +784,12 @@ export type SearchAllInput = {
 export type SearchWorkItemsInput = {
   organizationId?: string;
   query?: string;
-  state?: string;
-  workItemType?: string;
-  projectId?: string;
+  /** States to include. Empty/omitted means all states. */
+  states?: string[];
+  /** Work item types to include. Empty/omitted means any type. */
+  workItemTypes?: string[];
+  /** Projects to include. Empty/omitted means all projects. */
+  projectIds?: string[];
 };
 
 export type RunWorkItemQueryInput = {
@@ -904,6 +938,14 @@ export type SetWorkItemsPriorityInput = {
   priority: number;
 };
 
+export type SetWorkItemsTagsInput = {
+  organizationId?: string;
+  projectId: string;
+  workItemIds: number[];
+  addTags?: string[];
+  removeTags?: string[];
+};
+
 export type SearchCommitsInput = {
   organizationId?: string;
   query?: string;
@@ -911,8 +953,10 @@ export type SearchCommitsInput = {
   branch?: string;
   fromDate?: string;
   toDate?: string;
-  projectId?: string;
-  repositoryId?: string;
+  /** Projects to include. Empty/omitted means all projects. */
+  projectIds?: string[];
+  /** Repositories to include. Empty/omitted means all repositories. */
+  repositoryIds?: string[];
 };
 
 export type GetSavedQueryInput = {
@@ -984,9 +1028,9 @@ export async function deleteOrganization(
 
 export async function searchPullRequests(
   input: SearchPullRequestsInput,
-): Promise<PullRequestSummary[]> {
+): Promise<PullRequestSearchResult> {
   const result = await invokeCommand("search_pull_requests", { input });
-  return pullRequestSummariesSchema.parse(result);
+  return pullRequestSearchResultSchema.parse(result);
 }
 
 export async function listMyReviewPullRequests(
@@ -1287,6 +1331,13 @@ export async function setWorkItemsPriority(
   return bulkWorkItemResultsSchema.parse(result);
 }
 
+export async function setWorkItemsTags(
+  input: SetWorkItemsTagsInput,
+): Promise<BulkWorkItemResult[]> {
+  const result = await invokeCommand("set_work_items_tags", { input });
+  return bulkWorkItemResultsSchema.parse(result);
+}
+
 export async function getSavedQuery(
   input: GetSavedQueryInput,
 ): Promise<SavedQueryResult> {
@@ -1348,6 +1399,7 @@ export type TimelineNode = z.infer<typeof timelineNodeSchema>;
 const pipelineRunDetailSchema = z.object({
   run: pipelineRunSummarySchema,
   timeline: z.array(timelineNodeSchema),
+  timelineUnavailable: z.boolean().default(false),
 });
 export type PipelineRunDetail = z.infer<typeof pipelineRunDetailSchema>;
 
@@ -1356,6 +1408,29 @@ const pipelineLogTailSchema = z.object({
   truncated: z.boolean(),
 });
 export type PipelineLogTail = z.infer<typeof pipelineLogTailSchema>;
+
+const pipelineTriggerSchema = z.object({
+  triggerType: z.string().nullable(),
+  branchFilters: z.array(z.string()),
+  pathFilters: z.array(z.string()),
+});
+export type PipelineTrigger = z.infer<typeof pipelineTriggerSchema>;
+
+const pipelineVariableSchema = z.object({
+  name: z.string(),
+  value: z.string().nullable(),
+  isSecret: z.boolean(),
+  allowOverride: z.boolean(),
+});
+export type PipelineVariable = z.infer<typeof pipelineVariableSchema>;
+
+const pipelineDefinitionDetailSchema = z.object({
+  definitionId: z.number(),
+  name: z.string(),
+  triggers: z.array(pipelineTriggerSchema),
+  variables: z.array(pipelineVariableSchema),
+});
+export type PipelineDefinitionDetail = z.infer<typeof pipelineDefinitionDetailSchema>;
 
 export type ListPipelineRunsInput = {
   organizationId?: string;
@@ -1397,6 +1472,15 @@ export async function getPipelineRun(input: {
 }): Promise<PipelineRunDetail> {
   const result = await invokeCommand("get_pipeline_run", { input });
   return pipelineRunDetailSchema.parse(result);
+}
+
+export async function getPipelineDefinition(input: {
+  organizationId?: string;
+  projectId: string;
+  definitionId: number;
+}): Promise<PipelineDefinitionDetail> {
+  const result = await invokeCommand("get_pipeline_definition", { input });
+  return pipelineDefinitionDetailSchema.parse(result);
 }
 
 export async function getPipelineRunLogTail(input: {

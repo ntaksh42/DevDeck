@@ -22,21 +22,21 @@ import {
 } from '@/lib/azdoCommands';
 import {
   clamp,
-  storedNumbers,
   storedNumber,
-  gridColumnTemplate,
   isEditableTarget,
   focusFilterInput,
   focusPrimaryPreview,
   formatDate,
   formatRelativeDate,
 } from '@/lib/utils';
+import { useGridColumns } from '@/lib/useGridColumns';
 import { openExternalUrl } from '@/lib/openExternal';
 import { recordRecentPullRequest } from '@/lib/recentItems';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { ErrorState, LoadingState } from '@/components/StateDisplay';
 import { ActiveFilters } from '@/components/ActiveFilters';
+import { MultiSelectFilter } from '@/components/MultiSelectFilter';
 import { PrReviewPanel } from './PrReviewPanel';
 
 const DEFAULT_PR_SEARCH_PREVIEW_WIDTH = 460;
@@ -69,11 +69,62 @@ const PR_SEARCH_ROW_HEIGHT = 29;
 const PR_SEARCH_OVERSCAN = 8;
 type PrSearchFilterableColumn = "status" | "repository" | "createdBy" | "branch";
 
-// The local cache only holds Active PRs (see prs.rs search()). Surfacing other
-// statuses as choices would silently return zero rows and imply unsupported
-// backend coverage, so the status selector intentionally offers Active only and
-// the form explains the limitation.
-const PR_SEARCH_STATUS: NonNullable<SearchPullRequestsInput["status"]> = "active";
+type PrSearchStatus = NonNullable<SearchPullRequestsInput["statuses"]>[number];
+
+// Active PRs come from the local cache; the other statuses are fetched live from
+// Azure DevOps by prs.rs search() because completed/abandoned history is too
+// large to sync. The note under the form explains the difference.
+const PR_SEARCH_STATUS_OPTIONS: { value: PrSearchStatus; label: string }[] = [
+  { value: "active", label: "Active" },
+  { value: "completed", label: "Completed" },
+  { value: "abandoned", label: "Abandoned" },
+];
+const PR_SEARCH_STATUS_STORAGE_KEY = "azdodeck:view:prSearchStatuses";
+
+function loadPrSearchStatuses(): PrSearchStatus[] {
+  const valid = new Set(PR_SEARCH_STATUS_OPTIONS.map((option) => option.value));
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(PR_SEARCH_STATUS_STORAGE_KEY) ?? "null",
+    );
+    if (Array.isArray(parsed)) {
+      const kept = parsed.filter((value): value is PrSearchStatus => valid.has(value));
+      if (kept.length > 0) return kept;
+    }
+  } catch {
+    // Ignore malformed storage and fall back to the default below.
+  }
+  return ["active"];
+}
+
+type PrSearchDateBasis = NonNullable<SearchPullRequestsInput["dateBasis"]>;
+const PR_SEARCH_DATE_BASIS_OPTIONS: { value: PrSearchDateBasis; label: string }[] = [
+  { value: "created", label: "Created date" },
+  { value: "closed", label: "Closed date" },
+];
+const PR_SEARCH_DATE_BASIS_STORAGE_KEY = "azdodeck:view:prSearchDateBasis";
+
+function loadPrSearchDateBasis(): PrSearchDateBasis {
+  const stored = window.localStorage.getItem(PR_SEARCH_DATE_BASIS_STORAGE_KEY);
+  return PR_SEARCH_DATE_BASIS_OPTIONS.some((option) => option.value === stored)
+    ? (stored as PrSearchDateBasis)
+    : "created";
+}
+
+type PrSearchSortBy = NonNullable<SearchPullRequestsInput["sortBy"]>;
+const PR_SEARCH_SORT_OPTIONS: { value: PrSearchSortBy; label: string }[] = [
+  { value: "created", label: "Newest created" },
+  { value: "closed", label: "Recently closed" },
+  { value: "title", label: "Title (A–Z)" },
+];
+const PR_SEARCH_SORT_STORAGE_KEY = "azdodeck:view:prSearchSort";
+
+function loadPrSearchSortBy(): PrSearchSortBy {
+  const stored = window.localStorage.getItem(PR_SEARCH_SORT_STORAGE_KEY);
+  return PR_SEARCH_SORT_OPTIONS.some((option) => option.value === stored)
+    ? (stored as PrSearchSortBy)
+    : "created";
+}
 
 const PR_SEARCH_FILTERABLE_COLUMNS: Record<PrSearchFilterableColumn, (pr: PullRequestSummary) => string> = {
   status: (pr) => pr.status,
@@ -96,8 +147,15 @@ export function PullRequestSearch({
   const [query, setQuery] = useState(
     () => window.localStorage.getItem(PR_SEARCH_QUERY_STORAGE_KEY) ?? "",
   );
-  const [projectId, setProjectId] = useState("");
-  const [repositoryId, setRepositoryId] = useState("");
+  const [statuses, setStatuses] = useState<PrSearchStatus[]>(loadPrSearchStatuses);
+  const [projectIds, setProjectIds] = useState<string[]>([]);
+  const [repositoryIds, setRepositoryIds] = useState<string[]>([]);
+  const [targetBranch, setTargetBranch] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [dateBasis, setDateBasis] = useState<PrSearchDateBasis>(loadPrSearchDateBasis);
+  const [sortBy, setSortBy] = useState<PrSearchSortBy>(loadPrSearchSortBy);
+  const [excludeDrafts, setExcludeDrafts] = useState(false);
 
   const repositoriesQuery = useQuery({
     queryKey: ["prRepositories", organizationId],
@@ -114,36 +172,87 @@ export function PullRequestSearch({
   }, [allRepositories]);
 
   const filteredRepositories = useMemo(
-    () => (projectId ? allRepositories.filter((r) => r.projectId === projectId) : allRepositories),
-    [allRepositories, projectId],
+    () =>
+      projectIds.length > 0
+        ? allRepositories.filter((r) => projectIds.includes(r.projectId))
+        : allRepositories,
+    [allRepositories, projectIds],
   );
 
-  function onProjectChange(newProjectId: string) {
-    setProjectId(newProjectId);
-    setRepositoryId("");
+  // Changing the project scope drops repository selections that no longer
+  // belong to any selected project, so the two filters stay consistent.
+  function onProjectsChange(nextProjectIds: string[]) {
+    setProjectIds(nextProjectIds);
+    if (nextProjectIds.length > 0) {
+      const allowed = new Set(
+        allRepositories
+          .filter((r) => nextProjectIds.includes(r.projectId))
+          .map((r) => r.repositoryId),
+      );
+      setRepositoryIds((prev) => prev.filter((id) => allowed.has(id)));
+    }
   }
 
   const mutation = useMutation({ mutationFn: searchPullRequests });
-  const results = mutation.data ?? [];
-  const activeSearchFilterCount = (query.trim() ? 1 : 0) + (projectId ? 1 : 0) + (repositoryId ? 1 : 0);
+  const results = mutation.data?.pullRequests ?? [];
+  const truncated = mutation.data?.truncated ?? false;
+  const total = mutation.data?.total ?? 0;
+  const activeSearchFilterCount =
+    (query.trim() ? 1 : 0) +
+    (projectIds.length > 0 ? 1 : 0) +
+    (repositoryIds.length > 0 ? 1 : 0) +
+    (targetBranch.trim() ? 1 : 0) +
+    (fromDate ? 1 : 0) +
+    (toDate ? 1 : 0) +
+    (excludeDrafts ? 1 : 0);
+
+  // Bundles the advanced filter state shared by every search trigger.
+  function advancedFilters(): Partial<SearchPullRequestsInput> {
+    return {
+      targetBranch: targetBranch.trim() || undefined,
+      fromDate: fromDate || undefined,
+      toDate: toDate || undefined,
+      dateBasis,
+      excludeDrafts: excludeDrafts || undefined,
+      sortBy,
+    };
+  }
 
   useEffect(() => {
     window.localStorage.setItem(PR_SEARCH_QUERY_STORAGE_KEY, query);
   }, [query]);
 
   useEffect(() => {
+    window.localStorage.setItem(PR_SEARCH_STATUS_STORAGE_KEY, JSON.stringify(statuses));
+  }, [statuses]);
+
+  useEffect(() => {
+    window.localStorage.setItem(PR_SEARCH_DATE_BASIS_STORAGE_KEY, dateBasis);
+  }, [dateBasis]);
+
+  useEffect(() => {
+    window.localStorage.setItem(PR_SEARCH_SORT_STORAGE_KEY, sortBy);
+  }, [sortBy]);
+
+  useEffect(() => {
     if (!externalSearch) return;
     const targetOrganizationId = externalSearch.organizationId ?? organizationId;
     setOrganizationId(targetOrganizationId);
     setQuery(externalSearch.query);
-    setProjectId("");
-    setRepositoryId("");
+    // The palette looks up active PRs, so reset the status and scope filters.
+    setStatuses(["active"]);
+    setProjectIds([]);
+    setRepositoryIds([]);
+    setTargetBranch("");
+    setFromDate("");
+    setToDate("");
+    setExcludeDrafts(false);
     mutation.mutate({
       organizationId: targetOrganizationId,
       query: externalSearch.query,
-      status: PR_SEARCH_STATUS,
-      projectId: undefined,
-      repositoryId: undefined,
+      statuses: ["active"],
+      projectIds: undefined,
+      repositoryIds: undefined,
     });
     onExternalSearchHandled?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -154,23 +263,30 @@ export function PullRequestSearch({
     mutation.mutate({
       organizationId,
       query,
-      status: PR_SEARCH_STATUS,
-      projectId: projectId || undefined,
-      repositoryId: repositoryId || undefined,
+      statuses: statuses.length > 0 ? statuses : undefined,
+      projectIds: projectIds.length > 0 ? projectIds : undefined,
+      repositoryIds: repositoryIds.length > 0 ? repositoryIds : undefined,
+      ...advancedFilters(),
     });
   }
 
   function clearSearchFilters() {
     setQuery("");
-    setProjectId("");
-    setRepositoryId("");
+    setProjectIds([]);
+    setRepositoryIds([]);
+    setTargetBranch("");
+    setFromDate("");
+    setToDate("");
+    setExcludeDrafts(false);
     if (mutation.isSuccess) {
       mutation.mutate({
         organizationId,
         query: "",
-        status: PR_SEARCH_STATUS,
-        projectId: undefined,
-        repositoryId: undefined,
+        statuses: statuses.length > 0 ? statuses : undefined,
+        projectIds: undefined,
+        repositoryIds: undefined,
+        dateBasis,
+        sortBy,
       });
     }
   }
@@ -184,7 +300,7 @@ export function PullRequestSearch({
               <span className="text-sm font-medium">Organization</span>
               <select
                 value={organizationId}
-                onChange={(e) => { setOrganizationId(e.target.value); setProjectId(""); setRepositoryId(""); }}
+                onChange={(e) => { setOrganizationId(e.target.value); setProjectIds([]); setRepositoryIds([]); }}
                 className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               >
                 {organizations.map((o) => (
@@ -208,48 +324,46 @@ export function PullRequestSearch({
               </div>
             </label>
 
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Status</span>
-              <select
-                value={PR_SEARCH_STATUS}
-                disabled
-                title="Only active pull requests are synced locally. Completed and abandoned PRs are not available yet."
-                aria-describedby="pr-search-status-note"
-                className="h-9 cursor-not-allowed rounded-md border border-input bg-background px-3 text-sm capitalize outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
-              >
-                <option value={PR_SEARCH_STATUS}>Active</option>
-              </select>
-            </label>
+            <div className="grid gap-2">
+              <span className="text-sm font-medium" id="pr-search-status-label">Status</span>
+              <MultiSelectFilter
+                options={PR_SEARCH_STATUS_OPTIONS}
+                selected={statuses}
+                onChange={(next) => setStatuses(next as PrSearchStatus[])}
+                placeholder="Active"
+                ariaLabel="Filter by status"
+                capitalize
+              />
+            </div>
 
-            <label className="grid gap-2">
+            <div className="grid gap-2">
               <span className="text-sm font-medium">Project</span>
-              <select
-                value={projectId}
-                onChange={(e) => onProjectChange(e.target.value)}
+              <MultiSelectFilter
+                options={projects.map((p) => ({ value: p.id, label: p.name }))}
+                selected={projectIds}
+                onChange={onProjectsChange}
+                placeholder="All projects"
+                ariaLabel="Filter by project"
+                searchable
                 disabled={repositoriesQuery.isLoading}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
-              >
-                <option value="">All projects</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </label>
+              />
+            </div>
 
-            <label className="grid gap-2">
+            <div className="grid gap-2">
               <span className="text-sm font-medium">Repository</span>
-              <select
-                value={repositoryId}
-                onChange={(e) => setRepositoryId(e.target.value)}
+              <MultiSelectFilter
+                options={filteredRepositories.map((r) => ({
+                  value: r.repositoryId,
+                  label: r.repositoryName,
+                }))}
+                selected={repositoryIds}
+                onChange={setRepositoryIds}
+                placeholder="All repositories"
+                ariaLabel="Filter by repository"
+                searchable
                 disabled={repositoriesQuery.isLoading}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
-              >
-                <option value="">All repositories</option>
-                {filteredRepositories.map((r) => (
-                  <option key={r.repositoryId} value={r.repositoryId}>{r.repositoryName}</option>
-                ))}
-              </select>
-            </label>
+              />
+            </div>
 
             <div className="flex items-end">
               <button
@@ -266,9 +380,85 @@ export function PullRequestSearch({
               </button>
             </div>
           </div>
+
+          <div className="grid gap-3 lg:grid-cols-[1fr_150px_150px_150px_170px_auto]">
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Target branch</span>
+              <input
+                value={targetBranch}
+                onChange={(e) => setTargetBranch(e.target.value)}
+                placeholder="e.g. main"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">From</span>
+              <input
+                type="date"
+                value={fromDate}
+                max={toDate || undefined}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">To</span>
+              <input
+                type="date"
+                value={toDate}
+                min={fromDate || undefined}
+                onChange={(e) => setToDate(e.target.value)}
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Date basis</span>
+              <select
+                value={dateBasis}
+                onChange={(e) => setDateBasis(e.target.value as PrSearchDateBasis)}
+                title={statuses.length === 0 || statuses.includes("active")
+                  ? "Active PRs have no close date, so the window uses the created date for them."
+                  : "Whether the date window filters by created or closed date."}
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              >
+                {PR_SEARCH_DATE_BASIS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-medium">Sort by</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as PrSearchSortBy)}
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              >
+                {PR_SEARCH_SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex items-end gap-2 pb-2 lg:pb-0 lg:items-center">
+              <input
+                type="checkbox"
+                checked={excludeDrafts}
+                onChange={(e) => setExcludeDrafts(e.target.checked)}
+                className="h-4 w-4"
+              />
+              <span className="text-sm font-medium">Hide drafts</span>
+            </label>
+          </div>
+
           <p id="pr-search-status-note" className="text-xs text-muted-foreground">
-            Only active pull requests are synced locally. Completed and abandoned
-            pull requests are not available here yet.
+            Active pull requests are served from the local cache. Completed and
+            abandoned pull requests are fetched live from Azure DevOps, so those
+            statuses may take a moment. Target branch and the date window narrow
+            the live query server-side.
           </p>
         </form>
       </div>
@@ -281,6 +471,8 @@ export function PullRequestSearch({
         onClearExternalFilters={clearSearchFilters}
         results={results}
         searched={mutation.isSuccess}
+        truncated={truncated}
+        total={total}
       />
     </div>
   );
@@ -409,28 +601,37 @@ function PullRequestResults({
   onClearExternalFilters,
   results,
   searched,
+  truncated = false,
+  total = 0,
 }: {
   activeExternalFilterCount?: number;
   loading: boolean;
   onClearExternalFilters?: () => void;
   results: PullRequestSummary[];
   searched: boolean;
+  truncated?: boolean;
+  total?: number;
 }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [columnWidths, setColumnWidths] = useState(() =>
-    storedNumbers(
-      PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY,
-      DEFAULT_PR_SEARCH_COLUMN_WIDTHS,
-      PR_SEARCH_COLUMN_MIN_WIDTHS,
-      PR_SEARCH_COLUMN_MAX_WIDTHS,
-    ),
-  );
   const [columnFilters, setColumnFilters] = useState<Partial<Record<PrSearchFilterableColumn, Set<string>>>>({});
   const [openFilterCol, setOpenFilterCol] = useState<PrSearchFilterableColumn | null>(null);
   const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
   const [visibleColumns, setVisibleColumns] = useState<PrSearchColumnKey[]>(
     loadPrSearchVisibleColumns,
   );
+  const {
+    template: columnTemplate,
+    minWidth: gridMinWidth,
+    resizeProps: columnResizeProps,
+  } = useGridColumns({
+    keys: PR_SEARCH_KEYS,
+    visibleColumns,
+    flexibleKey: "title",
+    defaults: DEFAULT_PR_SEARCH_COLUMN_WIDTHS,
+    min: PR_SEARCH_COLUMN_MIN_WIDTHS,
+    max: PR_SEARCH_COLUMN_MAX_WIDTHS,
+    storageKey: PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY,
+  });
   const [columnMenuRect, setColumnMenuRect] = useState<DOMRect | null>(null);
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const [maximized, setMaximized] = useState(false);
@@ -446,10 +647,6 @@ function PullRequestResults({
   const restoreFocusRef = useRef(false);
   const [scrollerEl, setScrollerEl] = useState<HTMLDivElement | null>(null);
   const [gridViewport, setGridViewport] = useState({ height: 0, scrollTop: 0 });
-
-  useEffect(() => {
-    localStorage.setItem(PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
-  }, [columnWidths]);
 
   useEffect(() => {
     localStorage.setItem(PR_SEARCH_PREVIEW_WIDTH_STORAGE_KEY, String(Math.round(previewWidth)));
@@ -493,11 +690,6 @@ function PullRequestResults({
     setVisibleColumns([...PR_SEARCH_KEYS]);
   }
 
-  const visibleColumnWidths = visibleColumns.map(
-    (column) => columnWidths[PR_SEARCH_KEYS.indexOf(column)],
-  );
-  const titleFlexIndex = Math.max(0, visibleColumns.indexOf("title"));
-  const columnTemplate = gridColumnTemplate(visibleColumnWidths, titleFlexIndex);
 
   const columnUniqueValues = useMemo(() => {
     const map = {} as Record<PrSearchFilterableColumn, string[]>;
@@ -535,11 +727,15 @@ function PullRequestResults({
   const countLabel = useMemo(() => {
     if (loading) return "Searching";
     if (!searched) return "Ready";
+    // When the backend capped the result set, show the cap (e.g. "100+") so the
+    // count does not read as the full match total.
+    const shown = truncated ? `${results.length}+` : `${results.length}`;
     if (hasActiveColumnFilters) {
-      return `${filteredResults.length} of ${results.length} pull request${results.length === 1 ? "" : "s"}`;
+      return `${filteredResults.length} of ${shown} pull request${results.length === 1 ? "" : "s"}`;
     }
-    return `${results.length} pull request${results.length === 1 ? "" : "s"}`;
-  }, [filteredResults.length, hasActiveColumnFilters, loading, results.length, searched]);
+    const suffix = truncated ? ` (showing first ${results.length} of ${total}+)` : "";
+    return `${shown} pull request${results.length === 1 ? "" : "s"}${suffix}`;
+  }, [filteredResults.length, hasActiveColumnFilters, loading, results.length, searched, total, truncated]);
 
   function scrollRowIntoView(index: number) {
     if (!scrollerEl) return;
@@ -749,15 +945,14 @@ function PullRequestResults({
           className="flex min-h-0 flex-1 flex-col outline-none"
           onKeyDown={handleKeyDown}
         >
-          <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-          <div className="min-w-[680px]">
+          <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
+          <div style={{ minWidth: gridMinWidth }}>
           <div
             role="row"
             className="grid border-b border-border bg-muted/40 px-2 py-1 text-xs font-medium text-muted-foreground"
             style={{ gridTemplateColumns: columnTemplate }}
           >
             {visibleColumns.map((key, i) => {
-              const fullIndex = PR_SEARCH_KEYS.indexOf(key);
               const filterKey = PR_SEARCH_COLUMN_FILTER_KEY[key];
               const isLast = i === visibleColumns.length - 1;
               return (
@@ -780,14 +975,7 @@ function PullRequestResults({
                     ) : null}
                   </div>
                   {isLast ? null : (
-                    <ColumnResizeHandle
-                      columnIndex={fullIndex}
-                      widths={columnWidths}
-                      setWidths={setColumnWidths}
-                      min={PR_SEARCH_COLUMN_MIN_WIDTHS[fullIndex]}
-                      max={PR_SEARCH_COLUMN_MAX_WIDTHS[fullIndex]}
-                      defaultWidth={DEFAULT_PR_SEARCH_COLUMN_WIDTHS[fullIndex]}
-                    />
+                    <ColumnResizeHandle {...columnResizeProps(key)} />
                   )}
                 </div>
               );
