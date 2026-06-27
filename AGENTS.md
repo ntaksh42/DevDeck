@@ -223,6 +223,8 @@ statuses", unless the service and cache layer are updated at the same time.
 
 - Keep browser demo mode healthy when touching command code.
 - Keep the standalone `azdo-client` crate independent from the Tauri app.
+- Keep files at or under 500 lines. When a file would grow past that, split it
+  along existing module/feature boundaries instead of letting it balloon.
 - Avoid broad refactors unless they are needed for the requested change.
 - Do not move secrets out of the keyring-backed path.
 - When changing REST behavior, prefer tests in `crates/azdo-client/` using
