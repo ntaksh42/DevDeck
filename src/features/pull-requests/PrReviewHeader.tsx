@@ -196,9 +196,13 @@ export function PrReviewHeader({
         </span>
         {maximizeButton}
       </div>
-      <span className="truncate text-sm font-semibold text-foreground" title={title}>
-        {title}
-      </span>
+      {/* The grid already shows the title in split view, so only repeat it in the
+          header when maximized (grid hidden) to avoid a duplicate on screen. */}
+      {maximized ? (
+        <span className="truncate text-sm font-semibold text-foreground" title={title}>
+          {title}
+        </span>
+      ) : null}
       <p className="truncate text-xs text-muted-foreground">
         {createdBy ?? "Unknown"}
         {creationDate ? ` · opened ${formatRelativeDate(creationDate)}` : ""}
