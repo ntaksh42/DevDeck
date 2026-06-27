@@ -1105,6 +1105,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         args as
           | {
               input?: {
+                definitionId?: number;
                 branch?: string;
                 result?: string;
                 requestedForMe?: boolean;
@@ -1113,6 +1114,9 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
           | undefined
       )?.input;
       let runs = demoPipelineRuns();
+      if (input?.definitionId != null) {
+        runs = runs.filter((run) => run.definitionId === input.definitionId);
+      }
       if (input?.branch) {
         const needle = input.branch.toLowerCase();
         runs = runs.filter((run) => run.sourceBranch.toLowerCase().includes(needle));
