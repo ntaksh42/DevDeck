@@ -708,9 +708,9 @@ describe("App", () => {
         input: {
           organizationId: "contoso",
           query: "search",
-          status: "active",
-          projectId: undefined,
-          repositoryId: undefined,
+          statuses: ["active"],
+          projectIds: undefined,
+          repositoryIds: undefined,
           targetBranch: undefined,
           fromDate: undefined,
           toDate: undefined,
@@ -722,23 +722,24 @@ describe("App", () => {
     });
     expect(await screen.findByText("Add pull request search")).toBeTruthy();
     expect(screen.getByText("Platform / azdo-dashboard")).toBeTruthy();
-    // Non-active statuses are now selectable and forwarded to the backend.
+
+    // Status is now a multi-select filter: non-active statuses are selectable
+    // and forwarded to the backend as an array.
+    fireEvent.click(main.getByRole("button", { name: "Filter by status" }));
     expect(main.getByRole("option", { name: "Completed" })).toBeTruthy();
     expect(main.getByRole("option", { name: "Abandoned" })).toBeTruthy();
-    expect(main.getByRole("option", { name: "All" })).toBeTruthy();
-
-    fireEvent.change(main.getByRole("combobox", { name: /Status/i }), {
-      target: { value: "completed" },
-    });
+    // Switch the selection from the default active to completed only.
+    fireEvent.click(main.getByRole("option", { name: "Active" }));
+    fireEvent.click(main.getByRole("option", { name: "Completed" }));
     fireEvent.click(main.getByRole("button", { name: "Search" }));
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("search_pull_requests", {
         input: {
           organizationId: "contoso",
           query: "search",
-          status: "completed",
-          projectId: undefined,
-          repositoryId: undefined,
+          statuses: ["completed"],
+          projectIds: undefined,
+          repositoryIds: undefined,
           targetBranch: undefined,
           fromDate: undefined,
           toDate: undefined,
@@ -963,7 +964,12 @@ describe("App", () => {
 
     await screen.findByText("No pull requests assigned to you.");
     fireEvent.click(within(screen.getByRole("navigation", { name: "Primary navigation" })).getAllByRole("button", { name: "Search" })[1]);
-    await main.findByText("Platform");
+    // Projects load into the multi-select project filter; opening it reveals them.
+    const projectFilter = await main.findByRole("button", { name: "Filter by project" });
+    await waitFor(() => expect(projectFilter.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(projectFilter);
+    await main.findByRole("option", { name: "Platform" });
+    fireEvent.click(projectFilter);
     fireEvent.change(await main.findByPlaceholderText("Search work items…"), {
       target: { value: "save" },
     });
@@ -974,9 +980,9 @@ describe("App", () => {
         input: {
           organizationId: "contoso",
           query: "save",
-          state: "all",
-          workItemType: "",
-          projectId: undefined,
+          states: undefined,
+          workItemTypes: undefined,
+          projectIds: undefined,
         },
       });
       expect(invokeMock).toHaveBeenCalledWith("list_work_item_projects", {
@@ -1667,14 +1673,19 @@ describe("App", () => {
     fireEvent.change(main.getByLabelText("To"), {
       target: { value: "2026-05-24" },
     });
-    await main.findByText("Platform");
-    fireEvent.change(await main.findByLabelText("Project"), {
-      target: { value: "project-1" },
-    });
-    await main.findByText("azdo-dashboard");
-    fireEvent.change(main.getByLabelText("Repository"), {
-      target: { value: "repo-1" },
-    });
+    // Project/repository are multi-select filters; open each and pick a value.
+    const projectFilter = await main.findByRole("button", { name: "Filter by project" });
+    await waitFor(() => expect(projectFilter.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(projectFilter);
+    fireEvent.click(await main.findByRole("option", { name: "Platform" }));
+    fireEvent.click(projectFilter);
+
+    const repositoryFilter = main.getByRole("button", { name: "Filter by repository" });
+    await waitFor(() => expect(repositoryFilter.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(repositoryFilter);
+    fireEvent.click(await main.findByRole("option", { name: "azdo-dashboard" }));
+    fireEvent.click(repositoryFilter);
+
     fireEvent.click(main.getByRole("button", { name: "Search" }));
 
     await waitFor(() => {
@@ -1686,8 +1697,8 @@ describe("App", () => {
           branch: "",
           fromDate: "2026-05-01",
           toDate: "2026-05-24",
-          projectId: "project-1",
-          repositoryId: "repo-1",
+          projectIds: ["project-1"],
+          repositoryIds: ["repo-1"],
         },
       });
     });
@@ -2462,9 +2473,9 @@ describe("App", () => {
         input: {
           organizationId: "contoso",
           query: "123",
-          state: "all",
-          workItemType: "",
-          projectId: undefined,
+          states: undefined,
+          workItemTypes: undefined,
+          projectIds: undefined,
         },
       });
     });

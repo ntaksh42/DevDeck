@@ -4,6 +4,7 @@ use azdo_client::{
 };
 use chrono::{NaiveDate, NaiveTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use tokio::task::JoinSet;
 
 use crate::auth::client_for_organization;
@@ -51,9 +52,12 @@ pub struct ReviewPullRequestSummary {
 pub struct SearchPullRequestsInput {
     pub organization_id: Option<String>,
     pub query: Option<String>,
-    pub status: Option<String>,
-    pub project_id: Option<String>,
-    pub repository_id: Option<String>,
+    /// Statuses to include. Empty/omitted defaults to active (cached) only.
+    pub statuses: Option<Vec<String>>,
+    /// Projects to include. Empty/omitted means all projects.
+    pub project_ids: Option<Vec<String>>,
+    /// Repositories to include. Empty/omitted means all repositories.
+    pub repository_ids: Option<Vec<String>>,
     /// Target branch to filter by, e.g. `main` or `refs/heads/main`.
     pub target_branch: Option<String>,
     /// Inclusive date window (`YYYY-MM-DD`) interpreted against `date_basis`.
@@ -162,9 +166,9 @@ impl PullRequestService {
     pub async fn search(&self, input: SearchPullRequestsInput) -> Result<PullRequestSearchResult> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let query = input.query.unwrap_or_default().trim().to_ascii_lowercase();
-        let project_filter = normalize_optional(input.project_id);
-        let repository_filter = normalize_optional(input.repository_id);
-        let status = parse_search_status(input.status.as_deref())?;
+        let project_set = normalize_set(input.project_ids);
+        let repository_set = normalize_set(input.repository_ids);
+        let statuses = parse_search_statuses(input.statuses.as_deref())?;
 
         // Stored target refs are short (no refs/heads/ prefix), so normalize the
         // input the same way for comparison and rebuild the full ref for the API.
@@ -183,48 +187,67 @@ impl PullRequestService {
         let exclude_drafts = input.exclude_drafts.unwrap_or(false);
         let sort_by = parse_sort_by(input.sort_by.as_deref());
 
-        let mut results: Vec<PullRequestSummary> = match status {
-            SearchStatus::CachedActive => {
-                let cached = self.db.search_pull_requests(
-                    &organization.id,
-                    project_filter.as_deref(),
-                    repository_filter.as_deref(),
-                    Some("active"),
-                )?;
-                cached
-                    .into_iter()
-                    .map(cached_pr_to_summary)
-                    .filter(|pr| {
-                        // Active rows have no close date, so the window always
-                        // applies to creation date here regardless of basis.
-                        target_branch
-                            .as_deref()
-                            .is_none_or(|branch| pr.target_ref_name.eq_ignore_ascii_case(branch))
-                            && within_window(
-                                pr.creation_date.as_str(),
-                                from_rfc.as_deref(),
-                                to_rfc.as_deref(),
-                            )
-                    })
-                    .collect()
-            }
-            SearchStatus::Live(status) => {
-                let target_ref_full = target_branch
+        // Active rows are served from the local cache; completed/abandoned are
+        // fetched live. With multiple statuses selected we run each path and
+        // union the results (the status sets are disjoint, so no dedup needed).
+        let want_cached_active = statuses
+            .iter()
+            .any(|s| matches!(s, SearchStatus::CachedActive));
+        let live_statuses: Vec<PullRequestStatus> = statuses
+            .iter()
+            .filter_map(|s| match s {
+                SearchStatus::Live(status) => Some(*status),
+                SearchStatus::CachedActive => None,
+            })
+            .collect();
+
+        let mut results: Vec<PullRequestSummary> = Vec::new();
+
+        if want_cached_active {
+            let cached =
+                self.db
+                    .search_pull_requests(&organization.id, None, None, Some("active"))?;
+            results.extend(cached.into_iter().map(cached_pr_to_summary).filter(|pr| {
+                // Active rows have no close date, so the window always applies
+                // to creation date here regardless of basis.
+                target_branch
                     .as_deref()
-                    .map(|branch| format!("refs/heads/{branch}"));
-                self.fetch_live_prs(
+                    .is_none_or(|branch| pr.target_ref_name.eq_ignore_ascii_case(branch))
+                    && within_window(
+                        pr.creation_date.as_str(),
+                        from_rfc.as_deref(),
+                        to_rfc.as_deref(),
+                    )
+            }));
+        }
+
+        for status in live_statuses {
+            let target_ref_full = target_branch
+                .as_deref()
+                .map(|branch| format!("refs/heads/{branch}"));
+            let fetched = self
+                .fetch_live_prs(
                     &organization,
                     status,
-                    project_filter.as_deref(),
-                    repository_filter.as_deref(),
+                    project_set.as_ref(),
+                    repository_set.as_ref(),
                     target_ref_full.as_deref(),
                     from_rfc.as_deref(),
                     to_rfc.as_deref(),
                     date_basis,
                 )
-                .await?
-            }
-        };
+                .await?;
+            results.extend(fetched);
+        }
+
+        // Project/repository scoping is applied in memory so the cache path and
+        // every live status share one consistent membership filter.
+        if let Some(set) = &project_set {
+            results.retain(|pr| set.contains(&pr.project_id));
+        }
+        if let Some(set) = &repository_set {
+            results.retain(|pr| set.contains(&pr.repository_id));
+        }
 
         results.retain(|summary| {
             matches_query(summary, &query) && (!exclude_drafts || !summary.is_draft)
@@ -251,8 +274,8 @@ impl PullRequestService {
         &self,
         organization: &Organization,
         status: PullRequestStatus,
-        project_filter: Option<&str>,
-        repository_filter: Option<&str>,
+        project_set: Option<&HashSet<String>>,
+        repository_set: Option<&HashSet<String>>,
         target_ref_full: Option<&str>,
         from_rfc: Option<&str>,
         to_rfc: Option<&str>,
@@ -260,20 +283,33 @@ impl PullRequestService {
     ) -> Result<Vec<PullRequestSummary>> {
         let client = client_for_organization(organization, &self.secrets)?;
 
-        let projects: Vec<(String, String)> = if let Some(project_id) = project_filter {
-            vec![(project_id.to_string(), project_id.to_string())]
-        } else if let Some(repository_id) = repository_filter {
-            match self
+        // Scope the live query to the relevant projects to limit API calls:
+        // the selected projects, or the projects owning the selected
+        // repositories, or every project when nothing is scoped.
+        let all_pairs = project_id_name_pairs(&client).await?;
+        let projects: Vec<(String, String)> = if let Some(set) = project_set {
+            all_pairs
+                .into_iter()
+                .filter(|(id, _)| set.contains(id))
+                .collect()
+        } else if let Some(repo_set) = repository_set {
+            let owning: HashSet<String> = self
                 .db
                 .list_commit_repositories(&organization.id)?
                 .into_iter()
-                .find(|repo| repo.repository_id == repository_id)
-            {
-                Some(repo) => vec![(repo.project_id, repo.project_name)],
-                None => project_id_name_pairs(&client).await?,
+                .filter(|repo| repo_set.contains(&repo.repository_id))
+                .map(|repo| repo.project_id)
+                .collect();
+            if owning.is_empty() {
+                all_pairs
+            } else {
+                all_pairs
+                    .into_iter()
+                    .filter(|(id, _)| owning.contains(id))
+                    .collect()
             }
         } else {
-            project_id_name_pairs(&client).await?
+            all_pairs
         };
 
         tracing::info!(
@@ -319,9 +355,6 @@ impl PullRequestService {
             results.extend(fetched?);
         }
 
-        if let Some(repository_id) = repository_filter {
-            results.retain(|pr| pr.repository_id == repository_id);
-        }
         Ok(results)
     }
 
@@ -338,17 +371,43 @@ enum SearchStatus {
     Live(PullRequestStatus),
 }
 
-fn parse_search_status(value: Option<&str>) -> Result<SearchStatus> {
-    let normalized = value.map(|value| value.trim().to_ascii_lowercase());
-    match normalized.as_deref() {
-        None | Some("") | Some("active") => Ok(SearchStatus::CachedActive),
-        Some("completed") => Ok(SearchStatus::Live(PullRequestStatus::Completed)),
-        Some("abandoned") => Ok(SearchStatus::Live(PullRequestStatus::Abandoned)),
-        Some("all") => Ok(SearchStatus::Live(PullRequestStatus::All)),
-        Some(other) => Err(AppError::InvalidInput(format!(
-            "unsupported pull request status: {other}"
-        ))),
+/// Resolves the requested statuses, de-duplicating and defaulting to active
+/// (the cheap cached path) when nothing is selected. Unknown values are
+/// rejected so the UI cannot silently request an unsupported status.
+fn parse_search_statuses(values: Option<&[String]>) -> Result<Vec<SearchStatus>> {
+    let mut seen = HashSet::new();
+    let normalized: Vec<String> = values
+        .unwrap_or(&[])
+        .iter()
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty() && seen.insert(value.clone()))
+        .collect();
+    if normalized.is_empty() {
+        return Ok(vec![SearchStatus::CachedActive]);
     }
+    normalized
+        .into_iter()
+        .map(|value| match value.as_str() {
+            "active" => Ok(SearchStatus::CachedActive),
+            "completed" => Ok(SearchStatus::Live(PullRequestStatus::Completed)),
+            "abandoned" => Ok(SearchStatus::Live(PullRequestStatus::Abandoned)),
+            other => Err(AppError::InvalidInput(format!(
+                "unsupported pull request status: {other}"
+            ))),
+        })
+        .collect()
+}
+
+/// Trims and drops blanks from a multi-value filter, returning `None` when the
+/// resulting set is empty so callers can treat "no values" as "no filter".
+fn normalize_set(values: Option<Vec<String>>) -> Option<HashSet<String>> {
+    let set: HashSet<String> = values
+        .unwrap_or_default()
+        .into_iter()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .collect();
+    (!set.is_empty()).then_some(set)
 }
 
 // How many search rows the UI renders; extra matches set the `truncated` flag.
@@ -1547,28 +1606,52 @@ mod tests {
     }
 
     #[test]
-    fn parse_search_status_routes_active_to_cache_and_others_live() {
+    fn parse_search_statuses_routes_active_to_cache_and_others_live() {
+        // Nothing selected defaults to the cached active path.
         assert!(matches!(
-            parse_search_status(None).unwrap(),
-            SearchStatus::CachedActive
+            parse_search_statuses(None).as_deref().unwrap(),
+            [SearchStatus::CachedActive]
         ));
         assert!(matches!(
-            parse_search_status(Some(" Active ")).unwrap(),
-            SearchStatus::CachedActive
+            parse_search_statuses(Some(&[])).as_deref().unwrap(),
+            [SearchStatus::CachedActive]
         ));
+
+        let owned = [" Active ".to_string(), "completed".to_string()];
         assert!(matches!(
-            parse_search_status(Some("completed")).unwrap(),
-            SearchStatus::Live(PullRequestStatus::Completed)
+            parse_search_statuses(Some(&owned)).as_deref().unwrap(),
+            [
+                SearchStatus::CachedActive,
+                SearchStatus::Live(PullRequestStatus::Completed)
+            ]
         ));
+
+        // Duplicates collapse to a single entry.
+        let dupes = ["active".to_string(), "Active".to_string()];
+        assert_eq!(
+            parse_search_statuses(Some(&dupes)).unwrap().len(),
+            1,
+            "duplicate statuses should be de-duplicated"
+        );
+
+        let abandoned = ["abandoned".to_string()];
         assert!(matches!(
-            parse_search_status(Some("abandoned")).unwrap(),
-            SearchStatus::Live(PullRequestStatus::Abandoned)
+            parse_search_statuses(Some(&abandoned)).as_deref().unwrap(),
+            [SearchStatus::Live(PullRequestStatus::Abandoned)]
         ));
-        assert!(matches!(
-            parse_search_status(Some("all")).unwrap(),
-            SearchStatus::Live(PullRequestStatus::All)
-        ));
-        assert!(parse_search_status(Some("draft")).is_err());
+
+        let bad = ["draft".to_string()];
+        assert!(parse_search_statuses(Some(&bad)).is_err());
+    }
+
+    #[test]
+    fn normalize_set_drops_blanks_and_empty() {
+        assert_eq!(normalize_set(None), None);
+        assert_eq!(normalize_set(Some(vec![" ".to_string()])), None);
+        assert_eq!(
+            normalize_set(Some(vec![" repo-1 ".to_string(), "".to_string()])),
+            Some(HashSet::from(["repo-1".to_string()]))
+        );
     }
 
     #[test]

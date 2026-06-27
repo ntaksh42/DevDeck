@@ -8,8 +8,21 @@ import {
   type Organization,
 } from "@/lib/azdoCommands";
 import { ErrorState } from "@/components/StateDisplay";
+import { MultiSelectFilter } from "@/components/MultiSelectFilter";
 import { WorkItemsGrid } from "./WorkItemsGrid";
 import { workItemQueryKeys } from "./queryKeys";
+
+const WORK_ITEM_STATE_OPTIONS = ["New", "Active", "Resolved", "Closed"].map(
+  (value) => ({ value, label: value }),
+);
+const WORK_ITEM_TYPE_OPTIONS = [
+  "Bug",
+  "Epic",
+  "Feature",
+  "Task",
+  "User Story",
+  "Test Case",
+].map((value) => ({ value, label: value }));
 
 export function WorkItemSearch({
   organizations,
@@ -22,9 +35,9 @@ export function WorkItemSearch({
 }) {
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
   const [query, setQuery] = useState("");
-  const [state, setState] = useState("all");
-  const [workItemType, setWorkItemType] = useState("");
-  const [projectId, setProjectId] = useState("");
+  const [states, setStates] = useState<string[]>([]);
+  const [workItemTypes, setWorkItemTypes] = useState<string[]>([]);
+  const [projectIds, setProjectIds] = useState<string[]>([]);
 
   const projectsQuery = useQuery({
     queryKey: workItemQueryKeys.searchProjects(organizationId),
@@ -42,15 +55,15 @@ export function WorkItemSearch({
     const targetOrganizationId = externalSearch.organizationId ?? organizationId;
     setOrganizationId(targetOrganizationId);
     setQuery(externalSearch.query);
-    setState("all");
-    setWorkItemType("");
-    setProjectId("");
+    setStates([]);
+    setWorkItemTypes([]);
+    setProjectIds([]);
     mutation.mutate({
       organizationId: targetOrganizationId,
       query: externalSearch.query,
-      state: "all",
-      workItemType: "",
-      projectId: undefined,
+      states: undefined,
+      workItemTypes: undefined,
+      projectIds: undefined,
     });
     onExternalSearchHandled?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -61,9 +74,9 @@ export function WorkItemSearch({
     mutation.mutate({
       organizationId,
       query,
-      state,
-      workItemType,
-      projectId: projectId || undefined,
+      states: states.length > 0 ? states : undefined,
+      workItemTypes: workItemTypes.length > 0 ? workItemTypes : undefined,
+      projectIds: projectIds.length > 0 ? projectIds : undefined,
     });
   }
 
@@ -73,7 +86,7 @@ export function WorkItemSearch({
         {organizations.length > 1 && (
           <select
             value={organizationId}
-            onChange={(e) => { setOrganizationId(e.target.value); setProjectId(""); }}
+            onChange={(e) => { setOrganizationId(e.target.value); setProjectIds([]); }}
             aria-label="Organization"
             className="h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
           >
@@ -93,44 +106,38 @@ export function WorkItemSearch({
             className="min-w-0 flex-1 bg-transparent text-sm outline-none"
           />
         </div>
-        <select
-          value={projectId}
-          onChange={(event) => setProjectId(event.target.value)}
-          disabled={projectsQuery.isLoading}
-          aria-label="Project"
-          className="h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
-        >
-          <option value="">All projects</option>
-          {projects.map((p) => (
-            <option key={p.projectId} value={p.projectId}>{p.projectName}</option>
-          ))}
-        </select>
-        <select
-          value={state}
-          onChange={(event) => setState(event.target.value)}
-          aria-label="State"
-          className="h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-        >
-          <option value="all">All states</option>
-          <option value="New">New</option>
-          <option value="Active">Active</option>
-          <option value="Resolved">Resolved</option>
-          <option value="Closed">Closed</option>
-        </select>
-        <select
-          value={workItemType}
-          onChange={(event) => setWorkItemType(event.target.value)}
-          aria-label="Type"
-          className="h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-        >
-          <option value="">Any type</option>
-          <option value="Bug">Bug</option>
-          <option value="Epic">Epic</option>
-          <option value="Feature">Feature</option>
-          <option value="Task">Task</option>
-          <option value="User Story">User Story</option>
-          <option value="Test Case">Test Case</option>
-        </select>
+        <div className="w-44">
+          <MultiSelectFilter
+            options={projects.map((p) => ({ value: p.projectId, label: p.projectName }))}
+            selected={projectIds}
+            onChange={setProjectIds}
+            placeholder="All projects"
+            ariaLabel="Filter by project"
+            searchable
+            disabled={projectsQuery.isLoading}
+            className="h-8"
+          />
+        </div>
+        <div className="w-36">
+          <MultiSelectFilter
+            options={WORK_ITEM_STATE_OPTIONS}
+            selected={states}
+            onChange={setStates}
+            placeholder="All states"
+            ariaLabel="Filter by state"
+            className="h-8"
+          />
+        </div>
+        <div className="w-36">
+          <MultiSelectFilter
+            options={WORK_ITEM_TYPE_OPTIONS}
+            selected={workItemTypes}
+            onChange={setWorkItemTypes}
+            placeholder="Any type"
+            ariaLabel="Filter by type"
+            className="h-8"
+          />
+        </div>
         <button
           type="submit"
           disabled={mutation.isPending || !organizationId}

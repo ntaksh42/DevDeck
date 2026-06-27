@@ -8,9 +8,12 @@ use serde::{Deserialize, Serialize};
 pub struct SearchWorkItemsInput {
     pub organization_id: Option<String>,
     pub query: Option<String>,
-    pub state: Option<String>,
-    pub work_item_type: Option<String>,
-    pub project_id: Option<String>,
+    /// States to include. Empty/omitted means all states.
+    pub states: Option<Vec<String>>,
+    /// Work item types to include. Empty/omitted means any type.
+    pub work_item_types: Option<Vec<String>>,
+    /// Projects to include. Empty/omitted means all projects.
+    pub project_ids: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
