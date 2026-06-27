@@ -23,6 +23,7 @@ import type {
   ListWorkItemFieldsInput,
   MentionCandidate,
   Organization,
+  PipelineApprovalSummary,
   PostPullRequestCommentInput,
   PrChangedFile,
   PrCommit,
@@ -139,10 +140,15 @@ const writeCommands = new Set([
   "set_pull_request_thread_status",
   "submit_pull_request_vote",
   "update_pull_request",
+  "set_pull_request_reviewer_required",
+  "remove_pull_request_reviewer",
+  "update_pull_request_details",
   "edit_pull_request_comment",
   "delete_pull_request_comment",
   "rerun_pipeline_run",
+  "queue_pipeline_run",
   "cancel_pipeline_run",
+  "update_pipeline_approval",
 ]);
 
 let demoPrThreadSeq = 100;
@@ -413,6 +419,29 @@ function demoPipelineDefinitions() {
   return [
     { id: 1, name: "CI" },
     { id: 2, name: "Nightly" },
+  ];
+}
+
+function demoPipelineApprovals(): PipelineApprovalSummary[] {
+  return [
+    {
+      id: "demo-approval-1",
+      status: "pending",
+      instructions: "Approve to deploy to Production.",
+      minRequiredApprovers: 1,
+      executionOrder: "anyOrder",
+      createdOn: "2026-05-27T07:30:00Z",
+      assignedApprovers: ["Demo User"],
+    },
+    {
+      id: "demo-approval-2",
+      status: "pending",
+      instructions: null,
+      minRequiredApprovers: 2,
+      executionOrder: "inSequence",
+      createdOn: "2026-05-27T06:10:00Z",
+      assignedApprovers: ["Demo User", "Grace Chen"],
+    },
   ];
 }
 
@@ -701,8 +730,10 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         createdBy: summary?.createdBy ?? "Avery Author",
         creationDate: summary?.creationDate ?? "2026-05-20T08:00:00Z",
         isDraft: summary?.isDraft ?? false,
+        autoComplete: false,
         reviewers: [
           {
+            id: "demo-user",
             displayName: "Demo User",
             vote: myVote,
             voteLabel: demoVoteLabel(myVote),
@@ -710,6 +741,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
             isMe: true,
           },
           {
+            id: "riley-reviewer",
             displayName: "Riley Reviewer",
             vote: 10,
             voteLabel: "Approved",
@@ -838,6 +870,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       if (!input) throw new Error("missing input");
       demoPrVotes.set(input.pullRequestId, input.vote);
       return {
+        id: "demo-user",
         displayName: "Demo User",
         vote: input.vote,
         voteLabel: demoVoteLabel(input.vote),
@@ -845,6 +878,9 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         isMe: true,
       };
     }
+    case "set_pull_request_reviewer_required":
+    case "remove_pull_request_reviewer":
+      return null;
     case "update_pull_request": {
       const input = (args as { input?: { action?: string; pullRequestId?: number } } | undefined)
         ?.input;
@@ -857,6 +893,14 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       return {
         status: action === "abandon" ? "abandoned" : action === "complete" ? "completed" : "active",
         isDraft,
+      };
+    }
+    case "update_pull_request_details": {
+      const input = (args as { input?: { title?: string; description?: string } } | undefined)
+        ?.input;
+      return {
+        title: input?.title ?? "",
+        description: input?.description?.trim() ? input.description : null,
       };
     }
     case "search_work_items": {
@@ -1147,12 +1191,33 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         result: null,
       };
     }
+    case "queue_pipeline_run": {
+      const input = (args as { input?: { sourceBranch?: string } } | undefined)?.input;
+      return {
+        ...demoPipelineRuns()[0],
+        buildId: 1005,
+        status: "notStarted",
+        result: null,
+        sourceBranch: input?.sourceBranch ?? "refs/heads/main",
+      };
+    }
     case "cancel_pipeline_run": {
       const input = (args as { input?: { buildId?: number } } | undefined)?.input;
       const run =
         demoPipelineRuns().find((r) => r.buildId === input?.buildId) ??
         demoPipelineRuns()[2];
       return { ...run, status: "cancelling" };
+    }
+    case "list_pipeline_approvals":
+      return demoPipelineApprovals();
+    case "update_pipeline_approval": {
+      const input = (
+        args as { input?: { approvalId?: string; status?: string } } | undefined
+      )?.input;
+      const approval =
+        demoPipelineApprovals().find((a) => a.id === input?.approvalId) ??
+        demoPipelineApprovals()[0];
+      return [{ ...approval, status: input?.status ?? "approved" }];
     }
     case "list_sync_states":
       return demoSyncStates;
@@ -2298,6 +2363,30 @@ function demoCommitPullRequests(commitId?: string): CommitPullRequest[] {
   return commitId ? map[commitId] ?? [] : [];
 }
 
+// Representative changed paths per demo commit so the `path:` filter (#302) has
+// something to match against in the browser preview. Real commits resolve this
+// server-side via searchCriteria.itemPath.
+const DEMO_COMMIT_PATHS: Record<string, string[]> = {
+  abcdef1234567890abcdef1234567890abcdef12: ["/src/features/commits/CommitSearch.tsx"],
+  beef1234567890abcdef1234567890abcdef1234: ["/src/features/pull-requests/MyReviewsGrid.tsx"],
+  "1234567890abcdef1234567890abcdef12345678": ["/src/middleware/tracing.go"],
+  cafe5678901234567890abcdef1234567890cafe: ["/src/ratelimit/retry.go"],
+  fedcba9876543210fedcba9876543210fedcba98: ["/app/src/main/java/payment/Checkout.kt"],
+  dead1234567890abcdef1234567890abcdefdead: ["/app/src/main/java/auth/Biometric.kt"],
+  f00d5678901234567890abcdef1234567890f00d: ["/modules/eks/main.tf"],
+  babe1234567890abcdef1234567890abcdefbabe: ["/modules/ecs/task.tf"],
+};
+
+function normalizeDemoPath(value: string): string {
+  const trimmed = value.trim().replace(/\/+$/, "");
+  return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+}
+
+function demoCommitMatchesPath(commitId: string, normalized: string): boolean {
+  const paths = DEMO_COMMIT_PATHS[commitId] ?? [];
+  return paths.some((path) => path === normalized || path.startsWith(`${normalized}/`));
+}
+
 function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
   const commits: CommitSummary[] = [
     {
@@ -2417,11 +2506,13 @@ function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
   const projectFilter = new Set((input?.projectIds ?? []).filter(Boolean));
   const repositoryFilter = new Set((input?.repositoryIds ?? []).filter(Boolean));
 
-  // Mirror the backend contract: branch-scoped search needs exactly one
-  // repository because it queries that repository's branch live, not the cache.
-  if (input?.branch?.trim() && repositoryFilter.size !== 1) {
-    throw new Error("select a single repository to search a specific branch");
+  const itemPath = input?.itemPath?.trim();
+  // Mirror the backend contract: branch- or path-scoped search needs exactly
+  // one repository because it queries Azure DevOps live instead of the cache.
+  if ((input?.branch?.trim() || itemPath) && repositoryFilter.size !== 1) {
+    throw new Error("select a single repository to search a specific branch or path");
   }
+  const normalizedPath = itemPath ? normalizeDemoPath(itemPath) : null;
 
   const query = input?.query?.trim().toLowerCase();
   const author = input?.author?.trim().toLowerCase();
@@ -2433,6 +2524,9 @@ function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
       return false;
     }
     if (repositoryFilter.size > 0 && !repositoryFilter.has(commit.repositoryId)) {
+      return false;
+    }
+    if (normalizedPath && !demoCommitMatchesPath(commit.commitId, normalizedPath)) {
       return false;
     }
     if (

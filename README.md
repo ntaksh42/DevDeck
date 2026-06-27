@@ -43,7 +43,7 @@ Code signing is tracked in issue [#1](../../issues/1).
 
 ## First-time setup
 
-1. Open **Settings** (`Alt+,` or the gear icon in the sidebar).
+1. Open **Settings** (`Ctrl+,` or the gear icon in the sidebar).
 2. Enter your **Azure DevOps organization name** (the part after `dev.azure.com/`).
 3. Choose an authentication method:
    - **PAT**: paste a Personal Access Token. Required scopes: `Code (Read)`, `Work Items (Read)`, `Project and Team (Read)`.
