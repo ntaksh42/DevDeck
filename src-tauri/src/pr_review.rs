@@ -79,6 +79,23 @@ pub struct UpdatePullRequestInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SetPullRequestReviewerRequiredInput {
+    #[serde(flatten)]
+    pub pr: PrLocator,
+    pub reviewer_id: String,
+    pub is_required: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemovePullRequestReviewerInput {
+    #[serde(flatten)]
+    pub pr: PrLocator,
+    pub reviewer_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdatePullRequestDetailsInput {
     #[serde(flatten)]
     pub pr: PrLocator,
@@ -156,6 +173,8 @@ pub struct PullRequestReview {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PrReviewer {
+    /// Azure DevOps identity id, used to target reviewer mutations.
+    pub id: Option<String>,
     pub display_name: String,
     pub vote: i32,
     pub vote_label: String,
@@ -252,6 +271,7 @@ impl PrReviewService {
                 .into_iter()
                 .map(|reviewer| PrReviewer {
                     is_me: me.is_some() && reviewer.id.as_deref() == me,
+                    id: reviewer.id.clone(),
                     display_name: reviewer.display_name.unwrap_or_default(),
                     vote: reviewer.vote,
                     vote_label: vote_label(reviewer.vote).to_string(),
@@ -543,6 +563,44 @@ impl PrReviewService {
         })
     }
 
+    /// Marks an existing reviewer as required or optional (issue #384).
+    pub async fn set_reviewer_required(
+        &self,
+        input: SetPullRequestReviewerRequiredInput,
+    ) -> Result<()> {
+        let organization = self
+            .db
+            .resolve_organization(input.pr.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        client
+            .set_pull_request_reviewer_required(
+                &input.pr.project_id,
+                &input.pr.repository_id,
+                input.pr.pull_request_id,
+                &input.reviewer_id,
+                input.is_required,
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// Removes a reviewer from a pull request (issue #384).
+    pub async fn remove_reviewer(&self, input: RemovePullRequestReviewerInput) -> Result<()> {
+        let organization = self
+            .db
+            .resolve_organization(input.pr.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        client
+            .remove_pull_request_reviewer(
+                &input.pr.project_id,
+                &input.pr.repository_id,
+                input.pr.pull_request_id,
+                &input.reviewer_id,
+            )
+            .await?;
+        Ok(())
+    }
+
     /// Edits a pull request's title and description (issue #388). Sends a PATCH
     /// with the new values and returns what Azure DevOps persisted.
     pub async fn update_pull_request_details(
@@ -740,6 +798,7 @@ impl PrReviewService {
             }
         }
         Ok(PrReviewer {
+            id: reviewer.id.clone(),
             is_me: true,
             display_name: reviewer.display_name.unwrap_or_default(),
             vote: reviewer.vote,

@@ -12,7 +12,9 @@ import {
   listPullRequestCommits,
   postPullRequestComment,
   prLocator,
+  removePullRequestReviewer,
   searchPullRequestMentions,
+  setPullRequestReviewerRequired,
   setPullRequestThreadStatus,
   submitPullRequestVote,
   updatePullRequest,
@@ -356,6 +358,27 @@ function ReviewTab({
     });
   }
 
+  // Reviewer management (#384): toggle required/optional and remove existing
+  // reviewers. Adding new reviewers is a follow-up (needs identity resolution).
+  const reviewerRequiredMutation = useMutation({
+    mutationFn: setPullRequestReviewerRequired,
+    onSuccess: () => {
+      setActionError(null);
+      invalidateReview();
+    },
+    onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
+  });
+  const removeReviewerMutation = useMutation({
+    mutationFn: removePullRequestReviewer,
+    onSuccess: () => {
+      setActionError(null);
+      invalidateReview();
+    },
+    onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
+  });
+  const reviewerMutationPending =
+    reviewerRequiredMutation.isPending || removeReviewerMutation.isPending;
+
   // Keep a focus target (Ctrl+P) present even on loading/error states.
   if (loading) {
     return (
@@ -533,13 +556,50 @@ function ReviewTab({
           <div className="mt-1.5 flex flex-wrap gap-1">
             {review.reviewers.map((reviewer) => (
               <span
-                key={`${reviewer.displayName}-${reviewer.isMe}`}
+                key={reviewer.id ?? `${reviewer.displayName}-${reviewer.isMe}`}
                 className="inline-flex items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
                 title={`${reviewer.voteLabel}${reviewer.isRequired ? " (Required)" : ""}`}
               >
                 {reviewer.displayName}
                 {reviewer.isMe ? " (you)" : ""}
                 <VoteDot vote={reviewer.vote} />
+                {reviewer.id ? (
+                  <>
+                    <button
+                      type="button"
+                      disabled={reviewerMutationPending}
+                      onClick={() =>
+                        reviewerRequiredMutation.mutate({
+                          ...prLocator(pr),
+                          reviewerId: reviewer.id!,
+                          isRequired: !reviewer.isRequired,
+                        })
+                      }
+                      title={reviewer.isRequired ? "Make optional" : "Make required"}
+                      aria-label={`${reviewer.isRequired ? "Make optional" : "Make required"}: ${reviewer.displayName}`}
+                      className="rounded px-1 text-[10px] font-medium uppercase tracking-wide hover:bg-background disabled:opacity-50"
+                    >
+                      {reviewer.isRequired ? "Req" : "Opt"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={reviewerMutationPending}
+                      onClick={() => {
+                        if (window.confirm(`Remove ${reviewer.displayName} as a reviewer?`)) {
+                          removeReviewerMutation.mutate({
+                            ...prLocator(pr),
+                            reviewerId: reviewer.id!,
+                          });
+                        }
+                      }}
+                      aria-label={`Remove reviewer ${reviewer.displayName}`}
+                      title="Remove reviewer"
+                      className="rounded p-0.5 hover:bg-background hover:text-destructive disabled:opacity-50"
+                    >
+                      <X className="h-3 w-3" aria-hidden="true" />
+                    </button>
+                  </>
+                ) : null}
               </span>
             ))}
           </div>

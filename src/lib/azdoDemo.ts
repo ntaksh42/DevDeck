@@ -140,6 +140,8 @@ const writeCommands = new Set([
   "set_pull_request_thread_status",
   "submit_pull_request_vote",
   "update_pull_request",
+  "set_pull_request_reviewer_required",
+  "remove_pull_request_reviewer",
   "update_pull_request_details",
   "edit_pull_request_comment",
   "delete_pull_request_comment",
@@ -731,6 +733,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         autoComplete: false,
         reviewers: [
           {
+            id: "demo-user",
             displayName: "Demo User",
             vote: myVote,
             voteLabel: demoVoteLabel(myVote),
@@ -738,6 +741,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
             isMe: true,
           },
           {
+            id: "riley-reviewer",
             displayName: "Riley Reviewer",
             vote: 10,
             voteLabel: "Approved",
@@ -866,6 +870,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       if (!input) throw new Error("missing input");
       demoPrVotes.set(input.pullRequestId, input.vote);
       return {
+        id: "demo-user",
         displayName: "Demo User",
         vote: input.vote,
         voteLabel: demoVoteLabel(input.vote),
@@ -873,6 +878,9 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         isMe: true,
       };
     }
+    case "set_pull_request_reviewer_required":
+    case "remove_pull_request_reviewer":
+      return null;
     case "update_pull_request": {
       const input = (args as { input?: { action?: string; pullRequestId?: number } } | undefined)
         ?.input;
