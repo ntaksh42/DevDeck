@@ -5,6 +5,8 @@
 //! mode stops a run partway, the remaining items are reported as failures rather
 //! than being silently dropped, so the frontend can notify the user.
 
+use std::collections::HashMap;
+
 use serde_json::Value;
 
 use crate::auth::client_for_organization;
@@ -18,8 +20,8 @@ use super::{
     work_item_to_cached, AddWorkItemCommentInput, AddWorkItemLinkInput, AssignWorkItemsInput,
     BulkWorkItemResult, DeleteWorkItemCommentInput, RemoveWorkItemLinkInput,
     SetWorkItemCommentReactionInput, SetWorkItemsPriorityInput, SetWorkItemsStateInput,
-    UpdateWorkItemCommentInput, UpdateWorkItemFieldsInput, WorkItemComment, WorkItemPreview,
-    WorkItemService, WORK_ITEM_PREVIEW_COMMENT_LIMIT,
+    SetWorkItemsTagsInput, UpdateWorkItemCommentInput, UpdateWorkItemFieldsInput, WorkItemComment,
+    WorkItemPreview, WorkItemService, WORK_ITEM_PREVIEW_COMMENT_LIMIT,
 };
 
 impl WorkItemService {
@@ -230,6 +232,102 @@ impl WorkItemService {
         Ok(results)
     }
 
+    /// Adds and/or removes `System.Tags` across many work items. Tags are a
+    /// single ';'-joined field, so the current tags are read first and merged
+    /// (case-insensitive add/remove) rather than overwritten (issue #448).
+    pub async fn set_items_tags(
+        &self,
+        input: SetWorkItemsTagsInput,
+    ) -> Result<Vec<BulkWorkItemResult>> {
+        let add = normalize_tags(&input.add_tags);
+        let remove = normalize_tags(&input.remove_tags);
+        if add.is_empty() && remove.is_empty() {
+            return Err(AppError::InvalidInput(
+                "at least one tag to add or remove is required".to_string(),
+            ));
+        }
+        if input.work_item_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
+
+        let existing = client
+            .get_work_items_batch(
+                &project.id,
+                input.work_item_ids.clone(),
+                vec!["System.Tags".to_string()],
+            )
+            .await?;
+        let mut current_tags: HashMap<i64, Vec<String>> = HashMap::new();
+        for wi in existing {
+            let tags = wi
+                .fields
+                .get("System.Tags")
+                .and_then(|value| value.as_str())
+                .map(split_tags)
+                .unwrap_or_default();
+            current_tags.insert(wi.id, tags);
+        }
+        let remove_lower: std::collections::HashSet<String> =
+            remove.iter().map(|tag| tag.to_lowercase()).collect();
+
+        let mut results = Vec::new();
+        let mut updated = Vec::new();
+        let mut ids = input.work_item_ids.into_iter();
+        for id in ids.by_ref() {
+            if let Err(e) = self.ensure_write_enabled() {
+                let message = e.to_string();
+                results.push(BulkWorkItemResult {
+                    id,
+                    error: Some(message.clone()),
+                });
+                for skipped in ids.by_ref() {
+                    results.push(BulkWorkItemResult {
+                        id: skipped,
+                        error: Some(message.clone()),
+                    });
+                }
+                break;
+            }
+            let mut tags = current_tags.remove(&id).unwrap_or_default();
+            tags.retain(|tag| !remove_lower.contains(&tag.to_lowercase()));
+            for tag in &add {
+                if !tags
+                    .iter()
+                    .any(|existing| existing.eq_ignore_ascii_case(tag))
+                {
+                    tags.push(tag.clone());
+                }
+            }
+            let value = Value::from(tags.join("; "));
+            match client
+                .update_work_item_fields(&project.id, id, &[("System.Tags".to_string(), value)])
+                .await
+            {
+                Ok(wi) => {
+                    updated.push(work_item_to_cached(
+                        &organization,
+                        &project.id,
+                        &project.name,
+                        &wi,
+                    ));
+                    results.push(BulkWorkItemResult { id, error: None });
+                }
+                Err(e) => results.push(BulkWorkItemResult {
+                    id,
+                    error: Some(e.to_string()),
+                }),
+            }
+        }
+        self.apply_bulk_cache_updates(&updated, &organization, "set_items_tags");
+        Ok(results)
+    }
+
     pub async fn add_comment(&self, input: AddWorkItemCommentInput) -> Result<WorkItemComment> {
         let markdown = input.markdown.trim();
         if markdown.is_empty() {
@@ -423,4 +521,28 @@ impl WorkItemService {
         preview.comments_unavailable = comments_unavailable;
         Ok(preview)
     }
+}
+
+/// Splits a `System.Tags` field value ("a; b; c") into trimmed, non-empty tags.
+fn split_tags(raw: &str) -> Vec<String> {
+    raw.split(';')
+        .map(|tag| tag.trim().to_string())
+        .filter(|tag| !tag.is_empty())
+        .collect()
+}
+
+/// Trims, drops empties, and de-duplicates (case-insensitively) a tag list.
+fn normalize_tags(tags: &[String]) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut result = Vec::new();
+    for tag in tags {
+        let trimmed = tag.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if seen.insert(trimmed.to_lowercase()) {
+            result.push(trimmed.to_string());
+        }
+    }
+    result
 }

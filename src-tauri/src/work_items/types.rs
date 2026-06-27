@@ -8,9 +8,12 @@ use serde::{Deserialize, Serialize};
 pub struct SearchWorkItemsInput {
     pub organization_id: Option<String>,
     pub query: Option<String>,
-    pub state: Option<String>,
-    pub work_item_type: Option<String>,
-    pub project_id: Option<String>,
+    /// States to include. Empty/omitted means all states.
+    pub states: Option<Vec<String>>,
+    /// Work item types to include. Empty/omitted means any type.
+    pub work_item_types: Option<Vec<String>>,
+    /// Projects to include. Empty/omitted means all projects.
+    pub project_ids: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -262,6 +265,18 @@ pub struct SetWorkItemsPriorityInput {
     pub priority: i64,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetWorkItemsTagsInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_ids: Vec<i64>,
+    #[serde(default)]
+    pub add_tags: Vec<String>,
+    #[serde(default)]
+    pub remove_tags: Vec<String>,
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkItemSummary {
@@ -324,6 +339,15 @@ pub struct WorkItemPreview {
     pub relations: Vec<WorkItemRelationSummary>,
     /// Pull requests linked to this work item via `ArtifactLink` relations.
     pub pull_requests: Vec<WorkItemPullRequestLink>,
+    /// Files attached to the work item (`AttachedFile` relations).
+    pub attachments: Vec<WorkItemAttachment>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemAttachment {
+    pub name: String,
+    pub url: String,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]

@@ -38,10 +38,25 @@ pub(super) fn summarize_work_item_comment(comment: AzdoWorkItemComment) -> WorkI
     }
 }
 
-pub(super) fn normalize_optional_filter(value: Option<String>) -> Option<String> {
-    value
+/// Trims and drops blank entries from a multi-value filter, returning `None`
+/// when nothing is left so callers can treat "no values" as "no filter".
+pub(super) fn normalize_filter_set(values: Option<Vec<String>>) -> Option<Vec<String>> {
+    let cleaned: Vec<String> = values
+        .unwrap_or_default()
+        .into_iter()
         .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty() && value != "all")
+        .filter(|value| !value.is_empty())
+        .collect();
+    (!cleaned.is_empty()).then_some(cleaned)
+}
+
+/// Membership test for an optional multi-value filter: `None` (no filter)
+/// matches everything; otherwise the value must be present in the set.
+pub(super) fn filter_matches(filter: &Option<Vec<String>>, value: Option<&str>) -> bool {
+    match filter {
+        None => true,
+        Some(values) => value.is_some_and(|value| values.iter().any(|f| f == value)),
+    }
 }
 
 pub(super) fn summarize_work_item(
@@ -231,7 +246,34 @@ pub(super) fn summarize_work_item_preview(
         comments_unavailable: false,
         relations: Vec::new(),
         pull_requests: Vec::new(),
+        attachments: Vec::new(),
     }
+}
+
+/// Extracts attached files (`AttachedFile` relations) for the preview, newest
+/// last as Azure DevOps returns them. The display name comes from the relation
+/// attributes, falling back to the URL's last segment.
+pub(super) fn extract_attachments(raw_relations: &[WorkItemRelation]) -> Vec<WorkItemAttachment> {
+    raw_relations
+        .iter()
+        .filter(|relation| relation.rel == "AttachedFile")
+        .map(|relation| WorkItemAttachment {
+            name: relation
+                .attributes
+                .as_ref()
+                .and_then(|attributes| attributes.name.clone())
+                .filter(|name| !name.trim().is_empty())
+                .unwrap_or_else(|| {
+                    relation
+                        .url
+                        .rsplit('/')
+                        .next()
+                        .unwrap_or("attachment")
+                        .to_string()
+                }),
+            url: relation.url.clone(),
+        })
+        .collect()
 }
 
 /// Parses the pull request id from an `ArtifactLink` relation URL. Git PR links
