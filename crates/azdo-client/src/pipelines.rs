@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde_json::json;
@@ -11,6 +13,63 @@ use crate::git::ListResponse;
 pub struct BuildDefinitionRef {
     pub id: i64,
     pub name: String,
+}
+
+/// A build definition's trigger and variable configuration, as parsed from
+/// `GET .../_apis/build/definitions/{id}`. Variables arrive as an unordered
+/// map in the API; we flatten them into a sorted `Vec` for stable display.
+#[derive(Debug, Clone)]
+pub struct BuildDefinitionDetail {
+    pub id: i64,
+    pub name: String,
+    pub triggers: Vec<DefinitionTrigger>,
+    pub variables: Vec<DefinitionVariable>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DefinitionTrigger {
+    pub trigger_type: Option<String>,
+    pub branch_filters: Vec<String>,
+    pub path_filters: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DefinitionVariable {
+    pub name: String,
+    pub value: Option<String>,
+    pub is_secret: bool,
+    pub allow_override: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawBuildDefinition {
+    id: i64,
+    name: String,
+    #[serde(default)]
+    triggers: Vec<RawTrigger>,
+    #[serde(default)]
+    variables: HashMap<String, RawVariable>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawTrigger {
+    trigger_type: Option<String>,
+    #[serde(default)]
+    branch_filters: Vec<String>,
+    #[serde(default)]
+    path_filters: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawVariable {
+    value: Option<String>,
+    #[serde(default)]
+    is_secret: bool,
+    #[serde(default)]
+    allow_override: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -153,6 +212,16 @@ impl AdoClient {
         Ok(response.value)
     }
 
+    pub async fn get_build_definition(
+        &self,
+        project_id: &str,
+        definition_id: i64,
+    ) -> Result<BuildDefinitionDetail> {
+        let path = format!("{project_id}/_apis/build/definitions/{definition_id}");
+        let raw: RawBuildDefinition = self.get_json(&path, &[("api-version", "7.1")]).await?;
+        Ok(build_definition_detail(raw))
+    }
+
     pub async fn get_build_log_tail(
         &self,
         project_id: &str,
@@ -195,6 +264,35 @@ impl AdoClient {
         let body = json!({ "status": "cancelling" });
         self.patch_json(&path, &[("api-version", "7.1")], "application/json", &body)
             .await
+    }
+}
+
+fn build_definition_detail(raw: RawBuildDefinition) -> BuildDefinitionDetail {
+    let triggers = raw
+        .triggers
+        .into_iter()
+        .map(|trigger| DefinitionTrigger {
+            trigger_type: trigger.trigger_type,
+            branch_filters: trigger.branch_filters,
+            path_filters: trigger.path_filters,
+        })
+        .collect();
+    let mut variables: Vec<DefinitionVariable> = raw
+        .variables
+        .into_iter()
+        .map(|(name, variable)| DefinitionVariable {
+            name,
+            value: variable.value,
+            is_secret: variable.is_secret,
+            allow_override: variable.allow_override,
+        })
+        .collect();
+    variables.sort_by(|a, b| a.name.cmp(&b.name));
+    BuildDefinitionDetail {
+        id: raw.id,
+        name: raw.name,
+        triggers,
+        variables,
     }
 }
 
@@ -323,6 +421,65 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(defs[0].id, 12);
+    }
+
+    #[tokio::test]
+    async fn get_build_definition_parses_triggers_and_sorts_variables() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/build/definitions/12"))
+            .and(query_param("api-version", "7.1"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 12,
+                "name": "CI",
+                "triggers": [
+                    {
+                        "triggerType": "continuousIntegration",
+                        "branchFilters": ["+refs/heads/main"],
+                        "pathFilters": []
+                    },
+                    {
+                        "triggerType": "schedule"
+                    }
+                ],
+                "variables": {
+                    "Zeta": { "value": "last", "allowOverride": true },
+                    "Alpha": { "value": "first" },
+                    "ApiKey": { "isSecret": true }
+                }
+            })))
+            .mount(&server)
+            .await;
+
+        let detail = test_client(&server)
+            .await
+            .get_build_definition("project-1", 12)
+            .await
+            .unwrap();
+
+        assert_eq!(detail.id, 12);
+        assert_eq!(detail.triggers.len(), 2);
+        assert_eq!(
+            detail.triggers[0].trigger_type.as_deref(),
+            Some("continuousIntegration")
+        );
+        assert_eq!(detail.triggers[0].branch_filters, vec!["+refs/heads/main"]);
+        assert_eq!(detail.triggers[1].trigger_type.as_deref(), Some("schedule"));
+
+        // Variables are sorted by name regardless of map order.
+        let names: Vec<&str> = detail.variables.iter().map(|v| v.name.as_str()).collect();
+        assert_eq!(names, vec!["Alpha", "ApiKey", "Zeta"]);
+
+        let secret = detail
+            .variables
+            .iter()
+            .find(|v| v.name == "ApiKey")
+            .unwrap();
+        assert!(secret.is_secret);
+        assert_eq!(secret.value, None);
+
+        let overridable = detail.variables.iter().find(|v| v.name == "Zeta").unwrap();
+        assert!(overridable.allow_override);
     }
 
     #[tokio::test]
