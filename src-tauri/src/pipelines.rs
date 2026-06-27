@@ -53,6 +53,14 @@ pub struct GetPipelineRunInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ListPipelineArtifactsInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub build_id: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetPipelineDefinitionInput {
     pub organization_id: Option<String>,
     pub project_id: String,
@@ -187,6 +195,13 @@ pub struct PipelineRunDetail {
     /// True when the timeline request itself failed (vs. a run that genuinely
     /// has no timeline yet), so the UI can distinguish a fetch error from empty.
     pub timeline_unavailable: bool,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PipelineArtifact {
+    pub name: String,
+    pub download_url: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -342,6 +357,28 @@ impl PipelineService {
             timeline: timeline_to_nodes(timeline),
             timeline_unavailable,
         })
+    }
+
+    pub async fn list_artifacts(
+        &self,
+        input: ListPipelineArtifactsInput,
+    ) -> Result<Vec<PipelineArtifact>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
+        let artifacts = client
+            .list_build_artifacts(&project.id, input.build_id)
+            .await?;
+        Ok(artifacts
+            .into_iter()
+            .map(|artifact| PipelineArtifact {
+                name: artifact.name,
+                download_url: artifact.resource.and_then(|resource| resource.download_url),
+            })
+            .collect())
     }
 
     pub async fn get_definition(

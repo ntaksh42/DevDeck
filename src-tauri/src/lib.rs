@@ -35,11 +35,11 @@ use error::{AppError, Result};
 use orgs::{AddAzureCliOrganizationInput, AddPatOrganizationInput, OrganizationService};
 use pipelines::{
     CancelPipelineRunInput, GetPipelineDefinitionInput, GetPipelineRunInput,
-    GetPipelineRunLogTailInput, ListPipelineApprovalsInput, ListPipelineDefinitionsInput,
-    ListPipelineProjectsInput, ListPipelineRunsInput, PipelineApprovalSummary,
-    PipelineDefinitionDetail, PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption,
-    PipelineRunDetail, PipelineRunSummary, PipelineService, QueuePipelineRunInput,
-    RerunPipelineRunInput, UpdatePipelineApprovalInput,
+    GetPipelineRunLogTailInput, ListPipelineApprovalsInput, ListPipelineArtifactsInput,
+    ListPipelineDefinitionsInput, ListPipelineProjectsInput, ListPipelineRunsInput,
+    PipelineApprovalSummary, PipelineArtifact, PipelineDefinitionDetail, PipelineDefinitionOption,
+    PipelineLogTail, PipelineProjectOption, PipelineRunDetail, PipelineRunSummary, PipelineService,
+    QueuePipelineRunInput, RerunPipelineRunInput, UpdatePipelineApprovalInput,
 };
 use pr_review::{
     DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
@@ -775,6 +775,15 @@ async fn get_pipeline_run(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn list_pipeline_artifacts(
+    input: ListPipelineArtifactsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<PipelineArtifact>> {
+    state.pipelines.list_artifacts(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn get_pipeline_definition(
     input: GetPipelineDefinitionInput,
     state: State<'_, AppState>,
@@ -1024,6 +1033,7 @@ pub fn run() {
             list_pipeline_runs,
             list_pipeline_definitions,
             get_pipeline_run,
+            list_pipeline_artifacts,
             get_pipeline_definition,
             get_pipeline_run_log_tail,
             rerun_pipeline_run,

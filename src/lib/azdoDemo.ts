@@ -1178,6 +1178,14 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       const input = (args as { input?: { buildId?: number } } | undefined)?.input;
       return demoPipelineRunDetail(input?.buildId ?? 1001);
     }
+    case "list_pipeline_artifacts": {
+      const input = (args as { input?: { buildId?: number } } | undefined)?.input;
+      const buildId = input?.buildId ?? 1001;
+      return [
+        { name: "drop", downloadUrl: `https://dev.azure.com/contoso/_apis/build/builds/${buildId}/artifacts?artifactName=drop` },
+        { name: "test-results", downloadUrl: `https://dev.azure.com/contoso/_apis/build/builds/${buildId}/artifacts?artifactName=test-results` },
+      ];
+    }
     case "get_pipeline_definition": {
       const input = (args as { input?: { definitionId?: number } } | undefined)?.input;
       return demoPipelineDefinitionDetail(input?.definitionId ?? 1);

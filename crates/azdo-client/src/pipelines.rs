@@ -98,6 +98,19 @@ pub struct Build {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct BuildArtifactResource {
+    pub download_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuildArtifact {
+    pub name: String,
+    pub resource: Option<BuildArtifactResource>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TimelineLogRef {
     pub id: i64,
 }
@@ -212,6 +225,17 @@ impl AdoClient {
     pub async fn get_build(&self, project_id: &str, build_id: i64) -> Result<Build> {
         let path = format!("{project_id}/_apis/build/builds/{build_id}");
         self.get_json(&path, &[("api-version", "7.1")]).await
+    }
+
+    pub async fn list_build_artifacts(
+        &self,
+        project_id: &str,
+        build_id: i64,
+    ) -> Result<Vec<BuildArtifact>> {
+        let path = format!("{project_id}/_apis/build/builds/{build_id}/artifacts");
+        let response: ListResponse<BuildArtifact> =
+            self.get_json(&path, &[("api-version", "7.1")]).await?;
+        Ok(response.value)
     }
 
     pub async fn get_build_timeline(&self, project_id: &str, build_id: i64) -> Result<Timeline> {
@@ -469,6 +493,40 @@ mod tests {
         assert_eq!(job.parent_id.as_deref(), Some("stage-1"));
         assert_eq!(job.log.as_ref().unwrap().id, 7);
         assert_eq!(job.error_count, 1);
+    }
+
+    #[tokio::test]
+    async fn list_build_artifacts_maps_download_urls() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/build/builds/101/artifacts"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 1,
+                "value": [{
+                    "id": 1,
+                    "name": "drop",
+                    "resource": { "type": "Container", "downloadUrl": "https://dev.azure.com/x/drop.zip" }
+                }]
+            })))
+            .mount(&server)
+            .await;
+
+        let artifacts = test_client(&server)
+            .await
+            .list_build_artifacts("project-1", 101)
+            .await
+            .unwrap();
+        assert_eq!(artifacts.len(), 1);
+        assert_eq!(artifacts[0].name, "drop");
+        assert_eq!(
+            artifacts[0]
+                .resource
+                .as_ref()
+                .unwrap()
+                .download_url
+                .as_deref(),
+            Some("https://dev.azure.com/x/drop.zip")
+        );
     }
 
     #[tokio::test]

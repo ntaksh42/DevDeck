@@ -1539,6 +1539,22 @@ export async function getPipelineRun(input: {
   return pipelineRunDetailSchema.parse(result);
 }
 
+const pipelineArtifactSchema = z.object({
+  name: z.string(),
+  downloadUrl: z.string().nullable(),
+});
+const pipelineArtifactsSchema = z.array(pipelineArtifactSchema);
+export type PipelineArtifact = z.infer<typeof pipelineArtifactSchema>;
+
+export async function listPipelineArtifacts(input: {
+  organizationId?: string;
+  projectId: string;
+  buildId: number;
+}): Promise<PipelineArtifact[]> {
+  const result = await invokeCommand("list_pipeline_artifacts", { input });
+  return pipelineArtifactsSchema.parse(result);
+}
+
 export async function getPipelineDefinition(input: {
   organizationId?: string;
   projectId: string;
