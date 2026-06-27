@@ -37,6 +37,7 @@ import {
 import { emitQuickPipelinesChanged } from "@/features/pipelines/quickPipelinesEvents";
 import { sendTestDesktopNotification } from "@/lib/desktopNotifications";
 import { SoftwareUpdateSettings } from "./SoftwareUpdateSettings";
+import { RowColorRulesSettings } from "./RowColorRulesSettings";
 import {
   LAYOUT_STORAGE_PREFIX,
   clearLayoutStorage,
@@ -84,6 +85,7 @@ export function OrganizationSettings({
       <QuickPipelinesSettings organizations={organizations} />
       <ReviewStaleThresholdSettings />
       <WorkItemStaleThresholdSettings />
+      <RowColorRulesSettings />
       <SyncHealthSettings organizations={organizations} />
       <DataCacheSettings />
       <SoftwareUpdateSettings />
