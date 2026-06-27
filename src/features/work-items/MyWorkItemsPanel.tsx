@@ -1,43 +1,13 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
-import { listMyWorkItems, commandErrorMessage, type Organization, type WorkItemSummary } from '@/lib/azdoCommands';
-import {
-  matchesWorkItemQuery,
-  parseSearchQuery,
-  type WorkItemMatchTarget,
-} from '@/lib/searchQuery';
+import { listMyWorkItems, commandErrorMessage, type Organization } from '@/lib/azdoCommands';
+import { matchesWorkItemQuery, parseSearchQuery } from '@/lib/searchQuery';
 import { ErrorState } from '@/components/StateDisplay';
 import { WorkItemsGrid } from './WorkItemsGrid';
 import { WorkItemTemplatesPanel } from './WorkItemTemplatesPanel';
+import { toMatchTarget } from './workItemMatchTarget';
 import { workItemQueryKeys } from './queryKeys';
-
-const PRIORITY_REFERENCE_NAME = "Microsoft.VSTS.Common.Priority";
-const TAGS_REFERENCE_NAME = "System.Tags";
-
-function extraFieldValue(item: WorkItemSummary, referenceName: string): string | null {
-  return (
-    item.extraFields.find(
-      (field) => field.referenceName.toLowerCase() === referenceName.toLowerCase(),
-    )?.value ?? null
-  );
-}
-
-function toMatchTarget(item: WorkItemSummary): WorkItemMatchTarget {
-  const priorityRaw = extraFieldValue(item, PRIORITY_REFERENCE_NAME);
-  const priority = priorityRaw !== null && priorityRaw.trim() !== "" ? Number(priorityRaw) : NaN;
-  const tagsRaw = extraFieldValue(item, TAGS_REFERENCE_NAME);
-  return {
-    id: item.id,
-    title: item.title,
-    workItemType: item.workItemType,
-    state: item.state,
-    assignedTo: item.assignedTo,
-    projectName: item.projectName,
-    priority: Number.isFinite(priority) ? priority : null,
-    tags: tagsRaw ? tagsRaw.split(";").map((tag) => tag.trim()).filter(Boolean) : [],
-  };
-}
 
 export function MyWorkItemsPanel({ organizations }: { organizations: Organization[] }) {
   const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");

@@ -24,6 +24,7 @@ import {
   type SyncState,
   type UpdateAppSettingsInput,
 } from '@/lib/azdoCommands';
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { FilterableSelect, type SelectOption } from "@/features/pipelines/FilterableSelect";
 import {
   DEFAULT_QUICK_PIPELINE_BRANCH,
@@ -63,17 +64,13 @@ export function OrganizationSettings({
   organizations: Organization[];
 }) {
   const queryClient = useQueryClient();
+  const [pendingDelete, setPendingDelete] = useState<Organization | null>(null);
   const deleteMutation = useMutation({
     mutationFn: deleteOrganization,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["organizations"] });
     },
   });
-
-  function onDelete(org: Organization) {
-    if (!window.confirm(`Remove "${org.name}"? This cannot be undone.`)) return;
-    deleteMutation.mutate({ id: org.id });
-  }
 
   return (
     <div className="space-y-3">
@@ -126,7 +123,7 @@ export function OrganizationSettings({
               </div>
               <button
                 type="button"
-                onClick={() => onDelete(organization)}
+                onClick={() => setPendingDelete(organization)}
                 disabled={deleteMutation.isPending}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
                 aria-label={`Remove ${organization.name}`}
@@ -138,6 +135,19 @@ export function OrganizationSettings({
           ))}
         </div>
       </div>
+      {pendingDelete ? (
+        <ConfirmDialog
+          title="Remove organization"
+          message={`Remove "${pendingDelete.name}"? This deletes its stored credential and cannot be undone.`}
+          confirmLabel="Remove"
+          destructive
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() => {
+            deleteMutation.mutate({ id: pendingDelete.id });
+            setPendingDelete(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1651,6 +1661,21 @@ function KeyboardShortcutSettings() {
     event: ReactKeyboardEvent<HTMLButtonElement>,
     id: KeybindingId,
   ) {
+    // Not capturing yet: only Enter/Space arms capture, so merely tabbing onto
+    // the button (or any other key) never starts a capture (issue #445).
+    if (capturingId !== id) {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        setCapturingId(id);
+      }
+      return;
+    }
+    // Tab leaves the field and cancels capture instead of being bound, so the
+    // user can move focus normally while armed.
+    if (event.key === "Tab") {
+      setCapturingId(null);
+      return;
+    }
     // Escape cancels capture without changing the binding.
     if (event.key === "Escape") {
       event.preventDefault();
@@ -1735,8 +1760,10 @@ function KeyboardShortcutSettings() {
                       <button
                         type="button"
                         disabled={reserved}
-                        aria-label={`Shortcut for ${binding.label}`}
-                        onFocus={() => !reserved && setCapturingId(id)}
+                        aria-label={`Shortcut for ${binding.label}${
+                          capturingId === id ? " (press keys, Esc to cancel)" : " (Enter to rebind)"
+                        }`}
+                        onClick={() => !reserved && setCapturingId(id)}
                         onBlur={() => setCapturingId((current) => (current === id ? null : current))}
                         onKeyDown={(event) => !reserved && onCaptureKeyDown(event, id)}
                         className={`h-8 min-w-[7rem] rounded-md border px-2 text-xs font-mono outline-none focus:ring-2 focus:ring-ring ${

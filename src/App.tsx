@@ -136,6 +136,7 @@ import {
   type SyncFailedEvent,
 } from "@/lib/desktopNotifications";
 import { SyncStatusIndicator } from "@/features/sync/SyncStatusIndicator";
+import { usePipelineWatchNotifications } from "@/features/pipelines/usePipelineWatchNotifications";
 import {
   NAVIGATE_WORK_ITEM_EVENT,
   NAVIGATE_PULL_REQUEST_EVENT,
@@ -282,6 +283,10 @@ function AppShell() {
   const navigatingHistoryRef = useRef(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  // Element focused when an overlay opened, so closing the palette/help returns
+  // focus there (falling back to the grid) instead of stranding it on <body>.
+  const paletteReturnRef = useRef<HTMLElement | null>(null);
+  const helpReturnRef = useRef<HTMLElement | null>(null);
   const [navExpanded, setNavExpanded] = useState<Record<NavSectionId, boolean>>({
     pullRequests: true,
     workItems: true,
@@ -322,6 +327,10 @@ function AppShell() {
   });
   const organizations = organizationsQuery.data ?? [];
   const readOnlyMode = appSettingsQuery.data?.readOnlyValidationModeEnabled ?? false;
+
+  // Watch every subscribed pipeline app-wide so start/finish notifications fire
+  // regardless of the active view (the Pipelines view unmounts when not shown).
+  usePipelineWatchNotifications(appSettingsQuery.data ?? null);
 
   // Sidebar count badges. Queried for the first organization (the default the
   // views open to) and kept fresh by the same sync:updated invalidation the
@@ -742,10 +751,35 @@ function AppShell() {
     paletteSearchEnabled,
   ]);
 
+  function restoreOverlayFocus(target: HTMLElement | null): void {
+    window.setTimeout(() => {
+      if (target && document.contains(target)) target.focus();
+      else focusPrimaryGrid();
+    }, 0);
+  }
+
+  function openCommandPalette(): void {
+    paletteReturnRef.current = document.activeElement as HTMLElement | null;
+    setCommandPaletteOpen(true);
+  }
+
   function closeCommandPalette(): void {
     setCommandPaletteOpen(false);
     setPaletteSearchText("");
     setDebouncedPaletteSearchText("");
+    restoreOverlayFocus(paletteReturnRef.current);
+    paletteReturnRef.current = null;
+  }
+
+  function openHelp(): void {
+    helpReturnRef.current = document.activeElement as HTMLElement | null;
+    setHelpOpen(true);
+  }
+
+  function closeHelp(): void {
+    setHelpOpen(false);
+    restoreOverlayFocus(helpReturnRef.current);
+    helpReturnRef.current = null;
   }
 
   const pinnedWorkItemViews = workItemNavViews.filter((item) => item.pinned);
@@ -1052,7 +1086,7 @@ function AppShell() {
       id: "general.shortcuts",
       keywords: ["keyboard", "help"],
       label: "Show keyboard shortcuts",
-      run: () => setHelpOpen(true),
+      run: () => openHelp(),
       shortcut: "?",
     },
     {
@@ -1333,7 +1367,7 @@ function AppShell() {
 
       if (!event.defaultPrevented && matchesCombo(keybindings.commandPalette, event)) {
         event.preventDefault();
-        setCommandPaletteOpen(true);
+        openCommandPalette();
         return;
       }
 
@@ -1372,7 +1406,7 @@ function AppShell() {
         !isEditableTarget(event.target)
       ) {
         event.preventDefault();
-        setHelpOpen(true);
+        openHelp();
         return;
       }
 
@@ -1381,7 +1415,7 @@ function AppShell() {
           event.preventDefault();
           return;
         }
-        setHelpOpen(false);
+        closeHelp();
         closeCommandPalette();
         return;
       }
@@ -1463,13 +1497,6 @@ function AppShell() {
         className="fixed inset-y-0 left-0 hidden flex-col border-r border-border bg-card lg:flex"
         style={{ width: sidebarWidth }}
       >
-        <div className="flex h-12 min-w-0 items-center gap-2 border-b border-border px-4">
-          <img src="/azdodeck.svg" alt="" aria-hidden="true" className="h-8 w-8 shrink-0" />
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold tracking-tight">AzDoDeck</p>
-            <p className="truncate text-xs text-muted-foreground">Azure DevOps</p>
-          </div>
-        </div>
         <nav
           ref={navRef}
           aria-label="Primary navigation"
@@ -1579,7 +1606,7 @@ function AppShell() {
               icon={<BookOpen className="h-4 w-4" aria-hidden="true" />}
               label="Help"
               shortcut="F1"
-              onClick={() => setHelpOpen(true)}
+              onClick={() => openHelp()}
             />
             <NavButton
               active={activeView === "settings"}
@@ -1722,7 +1749,7 @@ function AppShell() {
           </Suspense>
         </section>
       </main>
-      {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} />}
+      {helpOpen && <HelpDialog onClose={() => closeHelp()} />}
       {commandPaletteOpen && (
         <CommandPalette
           actions={commandActions}

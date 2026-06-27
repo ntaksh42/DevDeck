@@ -97,6 +97,51 @@ export async function sendPipelineRunNotification(input: {
   });
 }
 
+// Fired by the app-wide watch notifier when a watched pipeline's latest run
+// starts running or finishes. `webUrl` opens that run when the toast is clicked.
+export async function showPipelineWatchNotification(
+  input: {
+    transition: "started" | "finished";
+    definitionName: string;
+    projectName: string;
+    buildNumber: string | null;
+    sourceBranch: string | null;
+    resultLabel: string;
+    webUrl: string | null;
+  },
+  settings: AppSettings,
+): Promise<DesktopNotificationResult> {
+  if (!settings.desktopNotificationsEnabled) {
+    return "skipped";
+  }
+  const title =
+    input.transition === "started"
+      ? `Pipeline started: ${input.definitionName}`
+      : `Pipeline ${input.resultLabel.toLowerCase()}: ${input.definitionName}`;
+  const body = settings.notificationContentPreviewEnabled
+    ? pipelineWatchNotificationBody(input)
+    : "Open AzDoDeck to review this pipeline run.";
+  return sendDesktopNotification(title, {
+    body,
+    onClick: input.webUrl
+      ? () => {
+          void openExternalUrl(input.webUrl!);
+        }
+      : undefined,
+  });
+}
+
+function pipelineWatchNotificationBody(input: {
+  projectName: string;
+  buildNumber: string | null;
+  sourceBranch: string | null;
+}): string {
+  const detail = [input.buildNumber ? `#${input.buildNumber}` : null, input.sourceBranch]
+    .filter(Boolean)
+    .join(" · ");
+  return detail ? `${detail}\n${input.projectName}` : input.projectName;
+}
+
 export async function showWorkItemNotificationEvent(
   event: WorkItemNotificationEvent,
   settings: AppSettings,
