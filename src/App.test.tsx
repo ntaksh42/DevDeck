@@ -2554,21 +2554,15 @@ describe("App", () => {
         el.getAttribute("data-nav-entry"),
       );
 
-    expect(order()).toEqual([
-      "pullRequests",
-      "workItems",
-      "commits",
-      "pipelines",
-      "codeSearch",
-    ]);
+    expect(order()).toEqual(["pullRequests", "workItems", "pipelines", "codeSearch"]);
 
-    // Alt+ArrowUp on Commits swaps it above Work Items.
-    fireEvent.keyDown(within(nav).getByRole("button", { name: "Commits" }), {
+    // Alt+ArrowUp on Pipelines swaps it above Work Items.
+    fireEvent.keyDown(within(nav).getByRole("button", { name: "Pipelines" }), {
       key: "ArrowUp",
       altKey: true,
     });
 
-    const expected = ["pullRequests", "commits", "workItems", "pipelines", "codeSearch"];
+    const expected = ["pullRequests", "pipelines", "workItems", "codeSearch"];
     await waitFor(() => expect(order()).toEqual(expected));
     expect(
       JSON.parse(window.localStorage.getItem("azdodeck:layout:navOrder") ?? "null"),
@@ -2578,7 +2572,7 @@ describe("App", () => {
   it("restores a saved nav order from localStorage", async () => {
     window.localStorage.setItem(
       "azdodeck:layout:navOrder",
-      JSON.stringify(["codeSearch", "pipelines", "commits", "workItems", "pullRequests"]),
+      JSON.stringify(["codeSearch", "pipelines", "workItems", "pullRequests"]),
     );
     invokeMock.mockImplementation((command: string) => {
       if (command === "list_organizations") {
@@ -2601,6 +2595,6 @@ describe("App", () => {
       Array.from(nav.querySelectorAll("[data-nav-entry]")).map((el) =>
         el.getAttribute("data-nav-entry"),
       ),
-    ).toEqual(["codeSearch", "pipelines", "commits", "workItems", "pullRequests"]);
+    ).toEqual(["codeSearch", "pipelines", "workItems", "pullRequests"]);
   });
 });

@@ -22,7 +22,6 @@ import {
   BookOpen,
   Code,
   GitBranch,
-  GitCommitHorizontal,
   GitPullRequest,
   ListChecks,
   Settings,
@@ -100,8 +99,8 @@ const CommitSearch = lazy(() =>
 const PipelinesView = lazy(() =>
   import("@/features/pipelines/PipelinesView").then((m) => ({ default: m.PipelinesView })),
 );
-const CodeSearchView = lazy(() =>
-  import("@/features/code/CodeSearchView").then((m) => ({ default: m.CodeSearchView })),
+const CodeBrowseView = lazy(() =>
+  import("@/features/code/CodeBrowseView").then((m) => ({ default: m.CodeBrowseView })),
 );
 const WorkItemSearch = lazy(() =>
   import("@/features/work-items/WorkItemSearch").then((m) => ({ default: m.WorkItemSearch })),
@@ -172,7 +171,7 @@ type View =
   | "codeSearch"
   | "settings";
 
-type NavSectionId = "pullRequests" | "workItems";
+type NavSectionId = "pullRequests" | "workItems" | "code";
 
 const DEFAULT_SIDEBAR_WIDTH = 232;
 const SIDEBAR_WIDTH_STORAGE_KEY = "azdodeck:layout:sidebarWidth";
@@ -338,6 +337,7 @@ function AppShell() {
   const [navExpanded, setNavExpanded] = useState<Record<NavSectionId, boolean>>({
     pullRequests: true,
     workItems: true,
+    code: true,
   });
   const [pinnedViewsExpanded, setPinnedViewsExpanded] = useState(true);
   const [workItemNavViews, setWorkItemNavViews] = useState<WorkItemQueryView[]>(() =>
@@ -991,8 +991,8 @@ function AppShell() {
       disabled: organizations.length === 0,
       group: "Navigation",
       id: "nav.codeSearch",
-      keywords: ["code", "search", "grep", "files"],
-      label: "Go to Code Search",
+      keywords: ["code", "files", "browse", "repository", "search", "grep"],
+      label: "Go to Code Files",
       run: () => setView("codeSearch"),
     },
     {
@@ -1648,16 +1648,6 @@ function AppShell() {
         />
       </NavSection>
     ),
-    commits: (
-      <NavButton
-        key="commits"
-        active={activeView === "commits"}
-        disabled={organizations.length === 0}
-        icon={<GitCommitHorizontal className="h-4 w-4" aria-hidden="true" />}
-        label="Commits"
-        onClick={() => setView("commits")}
-      />
-    ),
     pipelines: (
       <NavButton
         key="pipelines"
@@ -1669,14 +1659,28 @@ function AppShell() {
       />
     ),
     codeSearch: (
-      <NavButton
+      <NavSection
         key="codeSearch"
-        active={activeView === "codeSearch"}
-        disabled={organizations.length === 0}
+        id="code"
         icon={<Code className="h-4 w-4" aria-hidden="true" />}
         label="Code"
-        onClick={() => setView("codeSearch")}
-      />
+        disabled={organizations.length === 0}
+        expanded={navExpanded.code}
+        onExpandedChange={(expanded) => setNavSectionExpanded("code", expanded)}
+      >
+        <NavSubItem
+          active={activeView === "codeSearch"}
+          disabled={organizations.length === 0}
+          label="Files"
+          onClick={() => setView("codeSearch")}
+        />
+        <NavSubItem
+          active={activeView === "commits"}
+          disabled={organizations.length === 0}
+          label="Commits"
+          onClick={() => setView("commits")}
+        />
+      </NavSection>
     ),
   };
 
@@ -1767,7 +1771,7 @@ function AppShell() {
                           : activeView === "pipelines"
                             ? "Pipelines"
                             : activeView === "codeSearch"
-                              ? "Code Search"
+                              ? "Code"
                               : "Settings"}
             </h1>
             <p className="text-sm text-muted-foreground">
@@ -1788,7 +1792,7 @@ function AppShell() {
                           : activeView === "pipelines"
                             ? "Azure DevOps build runs by project"
                             : activeView === "codeSearch"
-                              ? "Search code across Azure DevOps repositories"
+                              ? "Browse repository files and search code"
                               : "Local Azure DevOps organization setup"}
             </p>
           </div>
@@ -1860,7 +1864,7 @@ function AppShell() {
           ) : activeView === "pipelines" ? (
             <PipelinesView organizations={organizations} />
           ) : activeView === "codeSearch" ? (
-            <CodeSearchView organizations={organizations} />
+            <CodeBrowseView organizations={organizations} />
           ) : organizations.length === 0 ? (
             <SetupPanel />
           ) : (

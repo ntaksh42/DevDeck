@@ -643,6 +643,89 @@ export async function getCodeSearchContext(input: {
   return codeContextResultSchema.parse(result);
 }
 
+const repoBranchSchema = z.object({
+  name: z.string(),
+  isDefault: z.boolean(),
+});
+export type RepoBranch = z.infer<typeof repoBranchSchema>;
+
+// Lists a repository's branches (default branch first).
+export async function listRepoBranches(input: {
+  organizationId?: string;
+  project: string;
+  repository: string;
+}): Promise<RepoBranch[]> {
+  const result = await invokeCommand("list_repo_branches", { input });
+  return z.array(repoBranchSchema).parse(result);
+}
+
+const repoCommitInfoSchema = z.object({
+  shortId: z.string(),
+  commitId: z.string(),
+  message: z.string(),
+  author: z.string().nullable(),
+  date: z.string().nullable(),
+});
+export type RepoCommitInfo = z.infer<typeof repoCommitInfoSchema>;
+
+const repoTreeItemSchema = z.object({
+  name: z.string(),
+  path: z.string(),
+  isFolder: z.boolean(),
+  lastCommit: repoCommitInfoSchema.nullable(),
+});
+export type RepoTreeItem = z.infer<typeof repoTreeItemSchema>;
+
+// Lists the direct children of a folder at the tip of a branch (folders first).
+// Pass `includeLastCommit` for the folder table (each item's latest commit);
+// the lightweight tree omits it.
+export async function listRepoTree(input: {
+  organizationId?: string;
+  project: string;
+  repository: string;
+  branch: string;
+  path?: string;
+  includeLastCommit?: boolean;
+  operationId?: string;
+}): Promise<RepoTreeItem[]> {
+  const result = await invokeCommand("list_repo_tree", { input });
+  return z.array(repoTreeItemSchema).parse(result);
+}
+
+const repoFileSchema = z.object({
+  path: z.string(),
+  content: z.string(),
+  isBinary: z.boolean(),
+  tooLarge: z.boolean(),
+});
+export type RepoFile = z.infer<typeof repoFileSchema>;
+
+// Fetches a file's text content at the tip of a branch.
+export async function getRepoFile(input: {
+  organizationId?: string;
+  project: string;
+  repository: string;
+  branch: string;
+  path: string;
+  operationId?: string;
+}): Promise<RepoFile> {
+  const result = await invokeCommand("get_repo_file", { input });
+  return repoFileSchema.parse(result);
+}
+
+// Lists the commit history for a path at a branch (the Files > History tab).
+export async function listRepoHistory(input: {
+  organizationId?: string;
+  project: string;
+  repository: string;
+  branch: string;
+  path: string;
+  operationId?: string;
+}): Promise<RepoCommitInfo[]> {
+  const result = await invokeCommand("list_repo_history", { input });
+  return z.array(repoCommitInfoSchema).parse(result);
+}
+
 // Signals a cancellable command (e.g. code search) to stop, by the id passed as
 // its operationId. Best-effort — the command returns promptly once cancelled.
 export async function cancelOperation(operationId: string): Promise<void> {
