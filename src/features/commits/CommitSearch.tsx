@@ -41,6 +41,7 @@ import { ActiveFilters } from "@/components/ActiveFilters";
 import { MultiSelectFilter } from "@/components/MultiSelectFilter";
 import { CommitFilesPanel } from "./CommitFilesPanel";
 import { CommitActivityHeatmap } from "./CommitActivityHeatmap";
+import { extractCommitQuery } from "./commitQuery";
 
 const DEFAULT_COMMIT_PREVIEW_WIDTH = 460;
 const MIN_COMMIT_PREVIEW_WIDTH = 320;
@@ -300,16 +301,22 @@ export function CommitSearch({
       setValidationError("From date must be before or equal to To date.");
       return;
     }
-    if (branch.trim() && repositoryIds.length !== 1) {
-      setValidationError("Select a single repository to search a specific branch.");
+    const { keyword, itemPath } = extractCommitQuery(query);
+    if ((branch.trim() || itemPath) && repositoryIds.length !== 1) {
+      setValidationError(
+        itemPath
+          ? "Select a single repository to filter commits by path (path: is applied on the server)."
+          : "Select a single repository to search a specific branch.",
+      );
       return;
     }
     setValidationError(null);
     mutation.mutate({
       organizationId: selectedOrganizationId,
-      query,
+      query: keyword,
       author,
       branch,
+      itemPath: itemPath ?? undefined,
       fromDate,
       toDate,
       projectIds: projectIds.length > 0 ? projectIds : undefined,
@@ -352,7 +359,7 @@ export function CommitSearch({
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="message, author, repository, SHA"
+                  placeholder="message, author, SHA — or path:src/auth"
                   aria-label="Filter"
                   autoFocus
                   className="min-w-0 flex-1 bg-transparent text-sm outline-none"
@@ -511,6 +518,12 @@ export function CommitSearch({
               {validationError}
             </p>
           ) : null}
+
+          <p className="text-xs text-muted-foreground">
+            Tip: add{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono">path:src/auth</code> to filter
+            by changed path. Path filtering runs on the server, so select a repository first.
+          </p>
         </form>
       </div>
 
@@ -954,7 +967,7 @@ function CommitPreviewPanel({
       <div
         className="min-h-0 flex-1 overflow-y-auto outline-none"
         data-primary-preview="true"
-        aria-keyshortcuts="Alt+P"
+        aria-keyshortcuts="Control+P"
         tabIndex={-1}
       >
         {commit ? (

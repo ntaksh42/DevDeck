@@ -1188,12 +1188,12 @@ describe("App", () => {
     let commentBox = screen.getByLabelText("Comment");
     expect(document.activeElement).toBe(commentBox);
     (commentBox as HTMLTextAreaElement).blur();
-    fireEvent.keyDown(window, { key: "m", altKey: true });
+    fireEvent.keyDown(window, { key: "m", ctrlKey: true });
     expect(document.activeElement).toBe(commentBox);
-    fireEvent.keyDown(window, { key: "g", altKey: true });
+    fireEvent.keyDown(window, { key: "g", ctrlKey: true });
     expect(document.activeElement?.getAttribute("role")).toBe("row");
     expect(document.activeElement?.getAttribute("aria-selected")).toBe("true");
-    fireEvent.keyDown(window, { key: "p", altKey: true });
+    fireEvent.keyDown(window, { key: "p", ctrlKey: true });
     expect(document.activeElement).toBe(screen.getByLabelText("Work item preview"));
     fireEvent.keyDown(document.activeElement ?? workItemsGrid, { key: "ArrowDown" });
     expect(document.activeElement).toBe(screen.getByLabelText("Work item preview"));
@@ -1210,10 +1210,10 @@ describe("App", () => {
     await waitFor(() => {
       expect(screen.queryByPlaceholderText("Type a command or search…")).toBeNull();
     });
-    fireEvent.keyDown(window, { key: "g", altKey: true });
+    fireEvent.keyDown(window, { key: "g", ctrlKey: true });
     expect(document.activeElement?.getAttribute("role")).toBe("row");
     fireEvent.keyDown(document.activeElement ?? workItemsGrid, { key: "ArrowUp" });
-    fireEvent.keyDown(window, { key: "m", altKey: true });
+    fireEvent.keyDown(window, { key: "m", ctrlKey: true });
     commentBox = screen.getByLabelText("Comment");
     expect(document.activeElement).toBe(commentBox);
     fireEvent.change(commentBox, { target: { value: "@" } });
@@ -1662,7 +1662,7 @@ describe("App", () => {
     await screen.findByText("No pull requests assigned to you.");
     fireEvent.click(screen.getByRole("button", { name: "Commits" }));
     fireEvent.change(
-      await main.findByPlaceholderText("message, author, repository, SHA"),
+      await main.findByPlaceholderText("message, author, SHA — or path:src/auth"),
       {
         target: { value: "commit" },
       },
@@ -1998,7 +1998,7 @@ describe("App", () => {
     fireEvent.click(nav.getByRole("button", { name: "Commits" }));
     expect(await main.findByRole("heading", { name: "Commits" })).toBeTruthy();
 
-    fireEvent.keyDown(window, { key: ",", altKey: true });
+    fireEvent.keyDown(window, { key: ",", ctrlKey: true });
     expect(await main.findByRole("heading", { name: "Organizations" })).toBeTruthy();
   });
 

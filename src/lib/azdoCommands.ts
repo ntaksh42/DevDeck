@@ -46,6 +46,9 @@ const notificationRuleSchema = z.object({
   types: z.array(z.string()).default([]),
   projects: z.array(z.string()).default([]),
   repositories: z.array(z.string()).default([]),
+  // When true, matching notifications are muted (suppressed) instead of allowed.
+  // Mute rules take precedence over allow rules.
+  mute: z.boolean().default(false),
 });
 
 export type NotificationRule = z.infer<typeof notificationRuleSchema>;
@@ -195,6 +198,7 @@ const pullRequestReviewSchema = z.object({
   createdBy: z.string().nullable(),
   creationDate: z.string().nullable(),
   isDraft: z.boolean(),
+  autoComplete: z.boolean().default(false),
   reviewers: z.array(prReviewerSchema),
   threads: z.array(prThreadSchema),
 });
@@ -950,6 +954,8 @@ export type SearchCommitsInput = {
   query?: string;
   author?: string;
   branch?: string;
+  /** Server-relative path (e.g. src/auth) parsed from a `path:` token. */
+  itemPath?: string;
   fromDate?: string;
   toDate?: string;
   /** Projects to include. Empty/omitted means all projects. */
@@ -1094,7 +1100,13 @@ const prStatusResultSchema = z.object({
 });
 export type PrStatusResult = z.infer<typeof prStatusResultSchema>;
 
-export type PullRequestAction = "abandon" | "reactivate" | "publish" | "complete";
+export type PullRequestAction =
+  | "abandon"
+  | "reactivate"
+  | "publish"
+  | "complete"
+  | "enableAutoComplete"
+  | "cancelAutoComplete";
 
 export async function updatePullRequest(input: {
   organizationId?: string;
@@ -1376,6 +1388,18 @@ const pipelineRunSummarySchema = z.object({
 const pipelineRunSummariesSchema = z.array(pipelineRunSummarySchema);
 export type PipelineRunSummary = z.infer<typeof pipelineRunSummarySchema>;
 
+const pipelineApprovalSummarySchema = z.object({
+  id: z.string(),
+  status: z.string(),
+  instructions: z.string().nullable(),
+  minRequiredApprovers: z.number(),
+  executionOrder: z.string().nullable(),
+  createdOn: z.string().nullable(),
+  assignedApprovers: z.array(z.string()),
+});
+const pipelineApprovalSummariesSchema = z.array(pipelineApprovalSummarySchema);
+export type PipelineApprovalSummary = z.infer<typeof pipelineApprovalSummarySchema>;
+
 const timelineNodeSchema = z.object({
   id: z.string(),
   parentId: z.string().nullable(),
@@ -1500,6 +1524,17 @@ export async function rerunPipelineRun(input: {
   return pipelineRunSummarySchema.parse(result);
 }
 
+export async function queuePipelineRun(input: {
+  organizationId?: string;
+  projectId: string;
+  definitionId: number;
+  sourceBranch: string;
+  parameters?: Record<string, string>;
+}): Promise<PipelineRunSummary> {
+  const result = await invokeCommand("queue_pipeline_run", { input });
+  return pipelineRunSummarySchema.parse(result);
+}
+
 export async function cancelPipelineRun(input: {
   organizationId?: string;
   projectId: string;
@@ -1507,6 +1542,25 @@ export async function cancelPipelineRun(input: {
 }): Promise<PipelineRunSummary> {
   const result = await invokeCommand("cancel_pipeline_run", { input });
   return pipelineRunSummarySchema.parse(result);
+}
+
+export async function listPipelineApprovals(input: {
+  organizationId?: string;
+  projectId: string;
+}): Promise<PipelineApprovalSummary[]> {
+  const result = await invokeCommand("list_pipeline_approvals", { input });
+  return pipelineApprovalSummariesSchema.parse(result);
+}
+
+export async function updatePipelineApproval(input: {
+  organizationId?: string;
+  projectId: string;
+  approvalId: string;
+  status: "approved" | "rejected";
+  comment?: string;
+}): Promise<PipelineApprovalSummary[]> {
+  const result = await invokeCommand("update_pipeline_approval", { input });
+  return pipelineApprovalSummariesSchema.parse(result);
 }
 
 export async function searchCommits(

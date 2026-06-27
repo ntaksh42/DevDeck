@@ -39,7 +39,7 @@ describe("keybindings registry", () => {
     saveKeybindingOverrides({ commandPalette: "Ctrl+J" });
     const map = resolveKeybindings();
     expect(map.commandPalette).toBe("Ctrl+J");
-    expect(map.focusGrid).toBe("Alt+G"); // unchanged default
+    expect(map.focusGrid).toBe("Ctrl+G"); // unchanged default
   });
 
   it("does not persist values equal to the default", () => {
@@ -50,7 +50,7 @@ describe("keybindings registry", () => {
 
   it("clears storage when all overrides match defaults", () => {
     saveKeybindingOverrides({ focusGrid: "Alt+X" });
-    saveKeybindingOverrides({ focusGrid: "Alt+G" });
+    saveKeybindingOverrides({ focusGrid: "Ctrl+G" });
     expect(window.localStorage.getItem(KEYBINDINGS_STORAGE_KEY)).toBeNull();
   });
 
@@ -86,7 +86,7 @@ describe("matchesCombo", () => {
   });
 
   it("matches the comma settings binding", () => {
-    expect(matchesCombo("Alt+,", evt(",", { altKey: true }))).toBe(true);
+    expect(matchesCombo("Ctrl+,", evt(",", { ctrlKey: true }))).toBe(true);
   });
 });
 
@@ -116,7 +116,8 @@ describe("findConflicts", () => {
 
   it("does not flag identical keys in different scopes", () => {
     const map = defaultKeybindingMap();
-    // global syncNow is Alt+S; goto "S" is a different scope -> no conflict.
+    // global gotoSettings "S" lives in the goto scope; no global binding
+    // collides with another global binding -> no conflict.
     expect(findConflicts(map).size).toBe(0);
   });
 

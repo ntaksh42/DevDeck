@@ -44,6 +44,12 @@ import { readStoredJson, writeStoredJson, storageKey } from '@/lib/storage';
 import { recordRecentWorkItem } from '@/lib/recentItems';
 import { isTauriRuntime } from '@/lib/runtime';
 import {
+  matchRowColorClass,
+  loadRowColorRules,
+  ROW_COLOR_RULES_CHANGED_EVENT,
+  type RowColorRule,
+} from '@/lib/rowColorRules';
+import {
   markWorkItemRead,
   reconcileUnread,
   seedDemoUnread,
@@ -398,10 +404,11 @@ const WorkItemGridRow = forwardRef<
     visibleColumns: WiSortKey[];
     extraColumns: string[];
     staleThresholdDays: number;
+    rowColorClass: string | null;
     onSelect: () => void;
     onCheckedChange: (checked: boolean, shiftKey: boolean) => void;
   }
->(({ item, selected, checked, unread, columnTemplate, visibleColumns, extraColumns, staleThresholdDays, onSelect, onCheckedChange }, ref) => {
+>(({ item, selected, checked, unread, columnTemplate, visibleColumns, extraColumns, staleThresholdDays, rowColorClass, onSelect, onCheckedChange }, ref) => {
   const staleDays = workItemStaleDays(item, Date.now());
   const isStale = staleDays !== null && staleDays >= staleThresholdDays;
   return (
@@ -429,9 +436,11 @@ const WorkItemGridRow = forwardRef<
           ? "bg-orange-100 dark:bg-orange-900/30"
           : selected
             ? "bg-secondary"
-            : isStale
-              ? "bg-orange-50 dark:bg-orange-950/20 hover:bg-orange-100/70"
-              : "hover:bg-muted/50"
+            : rowColorClass
+              ? rowColorClass
+              : isStale
+                ? "bg-orange-50 dark:bg-orange-950/20 hover:bg-orange-100/70"
+                : "hover:bg-muted/50"
     }`}
     style={{ gridTemplateColumns: columnTemplate }}
   >
@@ -501,6 +510,22 @@ const WorkItemGridRow = forwardRef<
   );
 });
 WorkItemGridRow.displayName = "WorkItemGridRow";
+
+// Reactively reads the row color rules and refreshes when they change in
+// Settings or another tab (mirrors useKeybindings in App.tsx).
+function useRowColorRules(): RowColorRule[] {
+  const [rules, setRules] = useState<RowColorRule[]>(loadRowColorRules);
+  useEffect(() => {
+    const refresh = () => setRules(loadRowColorRules());
+    window.addEventListener(ROW_COLOR_RULES_CHANGED_EVENT, refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener(ROW_COLOR_RULES_CHANGED_EVENT, refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+  return rules;
+}
 
 export function WorkItemsGrid({
   results,
@@ -729,6 +754,7 @@ export function WorkItemsGrid({
   const staleThresholdDays =
     settingsQuery.data?.workItemStaleThresholdDays ??
     DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS;
+  const rowColorRules = useRowColorRules();
   const staleCount = useMemo(() => {
     const now = Date.now();
     return sorted.filter((item) => isWorkItemStale(item, staleThresholdDays, now))
@@ -1706,6 +1732,15 @@ export function WorkItemsGrid({
                         visibleColumns={visibleColumns}
                         extraColumns={extraColumns}
                         staleThresholdDays={staleThresholdDays}
+                        rowColorClass={matchRowColorClass(
+                          {
+                            state: item.state,
+                            type: item.workItemType,
+                            assignedTo: item.assignedTo,
+                            title: item.title,
+                          },
+                          rowColorRules,
+                        )}
                         onSelect={() => setSelectedIndex(i)}
                         onCheckedChange={(checked, shiftKey) => handleCheckboxChange(i, checked, shiftKey)}
                       />

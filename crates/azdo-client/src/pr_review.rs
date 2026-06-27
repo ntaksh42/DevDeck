@@ -19,6 +19,8 @@ pub struct GitPullRequestDetail {
     pub reviewers: Option<Vec<IdentityRefWithVote>>,
     pub is_draft: Option<bool>,
     pub status: Option<String>,
+    /// Set when auto-complete is enabled (the identity that turned it on).
+    pub auto_complete_set_by: Option<IdentityRef>,
     /// Tip of the source branch; required when completing a PR to guard against
     /// merging a stale revision.
     pub last_merge_source_commit: Option<GitCommitRefId>,

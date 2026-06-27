@@ -350,11 +350,13 @@ function ReviewTab({
     updateMutation.mutate({
       ...prLocator(pr),
       action,
-      ...(action === "complete" ? { mergeStrategy, deleteSourceBranch } : {}),
+      ...(action === "complete" || action === "enableAutoComplete"
+        ? { mergeStrategy, deleteSourceBranch }
+        : {}),
     });
   }
 
-  // Keep a focus target (Alt+P) present even on loading/error states.
+  // Keep a focus target (Ctrl+P) present even on loading/error states.
   if (loading) {
     return (
       <div data-primary-preview="true" tabIndex={-1} className="min-h-0 flex-1 outline-none">
@@ -466,6 +468,34 @@ function ReviewTab({
         >
           Complete
         </button>
+        {review.autoComplete ? (
+          <button
+            type="button"
+            disabled={readOnly || updateMutation.isPending}
+            title={readOnly ? "Read-only validation mode is enabled" : "Auto-complete is on"}
+            aria-pressed
+            onClick={() => runPrAction("cancelAutoComplete", "Turn off auto-complete for this pull request?")}
+            className="rounded border border-emerald-500 bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800 hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-700 dark:bg-emerald-900 dark:text-emerald-200"
+          >
+            Auto-complete on
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={readOnly || updateMutation.isPending}
+            title={readOnly ? "Read-only validation mode is enabled" : undefined}
+            aria-pressed={false}
+            onClick={() =>
+              runPrAction(
+                "enableAutoComplete",
+                `Enable auto-complete (merge with ${mergeStrategy} once policies pass)?`,
+              )
+            }
+            className="rounded border border-border bg-card px-2 py-0.5 font-medium text-muted-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Auto-complete
+          </button>
+        )}
         <button
           type="button"
           disabled={readOnly || updateMutation.isPending}
@@ -489,7 +519,7 @@ function ReviewTab({
       <div
         className="min-h-0 flex-1 overflow-y-auto outline-none"
         data-primary-preview="true"
-        aria-keyshortcuts="Alt+P"
+        aria-keyshortcuts="Control+P"
         tabIndex={-1}
       >
         {/* Meta + description (title shown in the persistent header above) */}
@@ -754,7 +784,7 @@ function CommitsTab({ pr }: { pr: ReviewPullRequestSummary }) {
     <div
       className="min-h-0 flex-1 overflow-y-auto outline-none"
       data-primary-preview="true"
-      aria-keyshortcuts="Alt+P"
+      aria-keyshortcuts="Control+P"
       tabIndex={-1}
     >
       {commits.map((commit) => {
@@ -857,7 +887,7 @@ function ResultTab({ selectedPr }: { selectedPr: ReviewPullRequestSummary }) {
     <div
       className="flex min-h-0 flex-1 flex-col outline-none"
       data-primary-preview="true"
-      aria-keyshortcuts="Alt+P"
+      aria-keyshortcuts="Control+P"
       tabIndex={-1}
       onKeyDown={handleResultKeyDown}
     >

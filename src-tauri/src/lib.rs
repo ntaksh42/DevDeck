@@ -35,10 +35,11 @@ use error::{AppError, Result};
 use orgs::{AddAzureCliOrganizationInput, AddPatOrganizationInput, OrganizationService};
 use pipelines::{
     CancelPipelineRunInput, GetPipelineDefinitionInput, GetPipelineRunInput,
-    GetPipelineRunLogTailInput, ListPipelineDefinitionsInput, ListPipelineProjectsInput,
-    ListPipelineRunsInput, PipelineDefinitionDetail, PipelineDefinitionOption, PipelineLogTail,
-    PipelineProjectOption, PipelineRunDetail, PipelineRunSummary, PipelineService,
-    RerunPipelineRunInput,
+    GetPipelineRunLogTailInput, ListPipelineApprovalsInput, ListPipelineDefinitionsInput,
+    ListPipelineProjectsInput, ListPipelineRunsInput, PipelineApprovalSummary,
+    PipelineDefinitionDetail, PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption,
+    PipelineRunDetail, PipelineRunSummary, PipelineService, QueuePipelineRunInput,
+    RerunPipelineRunInput, UpdatePipelineApprovalInput,
 };
 use pr_review::{
     DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
@@ -764,12 +765,41 @@ async fn rerun_pipeline_run(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn queue_pipeline_run(
+    input: QueuePipelineRunInput,
+    state: State<'_, AppState>,
+) -> Result<PipelineRunSummary> {
+    ensure_write_enabled(&state).await?;
+    state.pipelines.queue_run(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn cancel_pipeline_run(
     input: CancelPipelineRunInput,
     state: State<'_, AppState>,
 ) -> Result<PipelineRunSummary> {
     ensure_write_enabled(&state).await?;
     state.pipelines.cancel_run(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn list_pipeline_approvals(
+    input: ListPipelineApprovalsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<PipelineApprovalSummary>> {
+    state.pipelines.list_approvals(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn update_pipeline_approval(
+    input: UpdatePipelineApprovalInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<PipelineApprovalSummary>> {
+    ensure_write_enabled(&state).await?;
+    state.pipelines.update_approval(input).await
 }
 
 #[tauri::command]
@@ -955,7 +985,10 @@ pub fn run() {
             get_pipeline_definition,
             get_pipeline_run_log_tail,
             rerun_pipeline_run,
+            queue_pipeline_run,
             cancel_pipeline_run,
+            list_pipeline_approvals,
+            update_pipeline_approval,
             trigger_sync
         ])
         .run(tauri::generate_context!())
