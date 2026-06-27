@@ -23,6 +23,7 @@ import type {
   ListWorkItemFieldsInput,
   MentionCandidate,
   Organization,
+  PipelineApprovalSummary,
   PostPullRequestCommentInput,
   PrChangedFile,
   PrCommit,
@@ -144,6 +145,7 @@ const writeCommands = new Set([
   "rerun_pipeline_run",
   "queue_pipeline_run",
   "cancel_pipeline_run",
+  "update_pipeline_approval",
 ]);
 
 let demoPrThreadSeq = 100;
@@ -414,6 +416,29 @@ function demoPipelineDefinitions() {
   return [
     { id: 1, name: "CI" },
     { id: 2, name: "Nightly" },
+  ];
+}
+
+function demoPipelineApprovals(): PipelineApprovalSummary[] {
+  return [
+    {
+      id: "demo-approval-1",
+      status: "pending",
+      instructions: "Approve to deploy to Production.",
+      minRequiredApprovers: 1,
+      executionOrder: "anyOrder",
+      createdOn: "2026-05-27T07:30:00Z",
+      assignedApprovers: ["Demo User"],
+    },
+    {
+      id: "demo-approval-2",
+      status: "pending",
+      instructions: null,
+      minRequiredApprovers: 2,
+      executionOrder: "inSequence",
+      createdOn: "2026-05-27T06:10:00Z",
+      assignedApprovers: ["Demo User", "Grace Chen"],
+    },
   ];
 }
 
@@ -702,6 +727,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         createdBy: summary?.createdBy ?? "Avery Author",
         creationDate: summary?.creationDate ?? "2026-05-20T08:00:00Z",
         isDraft: summary?.isDraft ?? false,
+        autoComplete: false,
         reviewers: [
           {
             displayName: "Demo User",
@@ -1164,6 +1190,17 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         demoPipelineRuns().find((r) => r.buildId === input?.buildId) ??
         demoPipelineRuns()[2];
       return { ...run, status: "cancelling" };
+    }
+    case "list_pipeline_approvals":
+      return demoPipelineApprovals();
+    case "update_pipeline_approval": {
+      const input = (
+        args as { input?: { approvalId?: string; status?: string } } | undefined
+      )?.input;
+      const approval =
+        demoPipelineApprovals().find((a) => a.id === input?.approvalId) ??
+        demoPipelineApprovals()[0];
+      return [{ ...approval, status: input?.status ?? "approved" }];
     }
     case "list_sync_states":
       return demoSyncStates;
