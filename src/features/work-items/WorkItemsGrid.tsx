@@ -985,6 +985,10 @@ export function WorkItemsGrid({
         groups.get(key)!.push(item);
       }
       const allResults: BulkWorkItemResult[] = [];
+      // BulkWorkItemResult carries only the work item id, which collides across
+      // organizations/projects. Track succeeded items by their fully-qualified
+      // summary key so optimistic overrides land on the right rows.
+      const succeededKeys = new Set<string>();
       for (const [, items] of groups) {
         const r = await setWorkItemsState({
           organizationId: items[0].organizationId,
@@ -993,17 +997,21 @@ export function WorkItemsGrid({
           state,
         });
         allResults.push(...r);
+        const failedIds = new Set(r.filter((result) => result.error).map((result) => result.id));
+        for (const item of items) {
+          if (failedIds.has(item.id)) continue;
+          succeededKeys.add(workItemSummaryKey(item));
+        }
       }
-      return allResults;
+      return { results: allResults, succeededKeys };
     },
-    onSuccess: (results, state) => {
-      const succeededIds = new Set(results.filter((result) => !result.error).map((result) => result.id));
-      if (succeededIds.size > 0) {
+    onSuccess: ({ results, succeededKeys }, state) => {
+      if (succeededKeys.size > 0) {
         setItemOverrides((current) => {
           const next = new Map(current);
           for (const item of checkedItems) {
-            if (!succeededIds.has(item.id)) continue;
             const key = workItemSummaryKey(item);
+            if (!succeededKeys.has(key)) continue;
             next.set(key, {
               ...(next.get(key) ?? {}),
               state,
@@ -1104,6 +1112,10 @@ export function WorkItemsGrid({
         groups.get(key)!.push(item);
       }
       const allResults: BulkWorkItemResult[] = [];
+      // BulkWorkItemResult carries only the work item id, which collides across
+      // organizations/projects. Track succeeded items by their fully-qualified
+      // summary key so optimistic overrides land on the right rows.
+      const succeededKeys = new Set<string>();
       for (const [, items] of groups) {
         const r = await setWorkItemsPriority({
           organizationId: items[0].organizationId,
@@ -1112,17 +1124,21 @@ export function WorkItemsGrid({
           priority,
         });
         allResults.push(...r);
+        const failedIds = new Set(r.filter((result) => result.error).map((result) => result.id));
+        for (const item of items) {
+          if (failedIds.has(item.id)) continue;
+          succeededKeys.add(workItemSummaryKey(item));
+        }
       }
-      return allResults;
+      return { results: allResults, succeededKeys };
     },
-    onSuccess: (results, priority) => {
-      const succeededIds = new Set(results.filter((result) => !result.error).map((result) => result.id));
-      if (succeededIds.size > 0) {
+    onSuccess: ({ results, succeededKeys }, priority) => {
+      if (succeededKeys.size > 0) {
         setItemOverrides((current) => {
           const next = new Map(current);
           for (const item of checkedItems) {
-            if (!succeededIds.has(item.id)) continue;
             const key = workItemSummaryKey(item);
+            if (!succeededKeys.has(key)) continue;
             const override = next.get(key) ?? {};
             const baseFields = override.extraFields ?? item.extraFields;
             const extraFields = setPriorityExtraField(baseFields, priority);
