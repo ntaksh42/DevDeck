@@ -954,6 +954,8 @@ export type SearchCommitsInput = {
   query?: string;
   author?: string;
   branch?: string;
+  /** Server-relative path (e.g. src/auth) parsed from a `path:` token. */
+  itemPath?: string;
   fromDate?: string;
   toDate?: string;
   /** Projects to include. Empty/omitted means all projects. */
