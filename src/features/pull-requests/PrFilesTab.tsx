@@ -34,7 +34,7 @@ import {
 } from "@/lib/diffView";
 import { DiffLineText } from "@/components/DiffLineText";
 import { openExternalUrl } from "@/lib/openExternal";
-import { isEditableTarget } from "@/lib/utils";
+import { focusPrimaryPreview, isEditableTarget } from "@/lib/utils";
 import { LoadingState, ErrorState, PreviewEmptyState } from "@/components/StateDisplay";
 import { CommentComposer } from "./CommentComposer";
 import { PrThreadCard } from "./PrThreadCard";
@@ -553,8 +553,14 @@ export function PrFilesTab({
             busy={commentMutation.isPending}
             mentionSearch={mentionSearch}
             onSubmit={postInlineComment}
-            onCancel={() => setCommentDraft(null)}
-            onSubmitted={() => setCommentDraft(null)}
+            onCancel={() => {
+              setCommentDraft(null);
+              focusPrimaryPreview();
+            }}
+            onSubmitted={() => {
+              setCommentDraft(null);
+              focusPrimaryPreview();
+            }}
           />
         ) : null}
       </div>

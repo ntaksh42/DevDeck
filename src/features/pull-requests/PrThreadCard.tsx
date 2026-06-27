@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { type MentionCandidate, type PrThread } from "@/lib/azdoCommands";
-import { formatDate, formatRelativeDate } from "@/lib/utils";
+import { focusPrimaryPreview, formatDate, formatRelativeDate } from "@/lib/utils";
 import { MarkdownView } from "@/lib/markdown";
 import { CommentComposer } from "./CommentComposer";
 
@@ -125,8 +125,14 @@ export function PrThreadCard({
                     busy={busy}
                     mentionSearch={mentionSearch}
                     onSubmit={(content) => onEditComment(comment.id, content)}
-                    onCancel={() => setEditingId(null)}
-                    onSubmitted={() => setEditingId(null)}
+                    onCancel={() => {
+                      setEditingId(null);
+                      focusPrimaryPreview();
+                    }}
+                    onSubmitted={() => {
+                      setEditingId(null);
+                      focusPrimaryPreview();
+                    }}
                   />
                 </div>
               ) : (
@@ -144,8 +150,14 @@ export function PrThreadCard({
             busy={busy}
             mentionSearch={mentionSearch}
             onSubmit={onReply}
-            onCancel={() => setReplying(false)}
-            onSubmitted={() => setReplying(false)}
+            onCancel={() => {
+              setReplying(false);
+              focusPrimaryPreview();
+            }}
+            onSubmitted={() => {
+              setReplying(false);
+              focusPrimaryPreview();
+            }}
           />
         </div>
       ) : (
