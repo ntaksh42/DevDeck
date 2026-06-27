@@ -523,6 +523,18 @@ export function WorkItemPreviewPanel({
     });
   }
 
+  // The title is edited inline in the preview header and applied immediately
+  // (it is not part of the Ctrl+S staged batch).
+  function applyTitle(title: string) {
+    if (!selectedItem) return;
+    updateFieldsMutation.mutate({
+      organizationId: selectedItem.organizationId,
+      projectId: selectedItem.projectId,
+      workItemId: selectedItem.id,
+      fields: [{ referenceName: "System.Title", value: title }],
+    });
+  }
+
   // Area/iteration are picked from the classification tree and applied
   // immediately (they are not part of the Ctrl+S staged batch).
   function applyClassification(referenceName: string, path: string) {
@@ -1102,6 +1114,8 @@ export function WorkItemPreviewPanel({
                 onSelectedFieldKeysChange={setSelectedPreviewFieldKeys}
                 tagsPending={applying}
                 onTagsChange={stageTags}
+                titlePending={updateFieldsMutation.isPending}
+                onTitleChange={applyTitle}
                 reasonControl={
                   <ReasonEditor
                     current={staged.reason ?? preview.reason}

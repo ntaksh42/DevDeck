@@ -1008,6 +1008,18 @@ fn validate_editable_field_reference_name_rules() {
     assert!(validate_editable_field_reference_name("Custom.bad name").is_err());
 }
 
+#[test]
+fn validate_update_field_reference_name_allows_title() {
+    assert_eq!(
+        validate_update_field_reference_name(" system.title ").unwrap(),
+        "System.Title"
+    );
+    assert_eq!(
+        validate_update_field_reference_name("System.State").unwrap(),
+        "System.State"
+    );
+}
+
 // ---- push_unique_mention_candidate dedup tests ----
 
 fn mc(id: &str, display_name: &str, unique_name: Option<&str>) -> MentionCandidate {

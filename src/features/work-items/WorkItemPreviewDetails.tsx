@@ -43,7 +43,7 @@ import {
   hydrateAuthenticatedImages,
   richFieldHtml,
 } from "./workItemHtml";
-import { useCloseOnOutsidePointer } from "./PreviewEditors";
+import { TitleEditor, useCloseOnOutsidePointer } from "./PreviewEditors";
 
 type PreviewFieldDefinition = {
   editable?: "state" | "assignee" | "priority" | "reason";
@@ -142,6 +142,8 @@ export function WorkItemPreviewDetails({
   statusChip,
   tagsPending,
   onTagsChange,
+  onTitleChange,
+  titlePending,
 }: {
   customPreviewFields: CustomPreviewField[];
   preview: WorkItemPreview;
@@ -172,6 +174,8 @@ export function WorkItemPreviewDetails({
   statusChip?: ReactNode;
   tagsPending: boolean;
   onTagsChange: (tags: string[]) => void;
+  onTitleChange: (title: string) => void;
+  titlePending: boolean;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
@@ -560,12 +564,7 @@ export function WorkItemPreviewDetails({
             </div>
           </div>
         </div>
-        <h2
-          className="mt-0.5 line-clamp-2 text-sm font-semibold leading-5 text-foreground"
-          title={preview.title}
-        >
-          {preview.title}
-        </h2>
+        <TitleEditor current={preview.title} onSubmit={onTitleChange} pending={titlePending} />
         <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-x-2 gap-y-0.5 pt-1">
           {selectedFieldDefinitions.map((field) =>
             field.editable === "state" ? (

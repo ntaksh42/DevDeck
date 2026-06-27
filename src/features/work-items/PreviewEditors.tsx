@@ -40,6 +40,87 @@ export function useCloseOnOutsidePointer<T extends HTMLElement>(
   return ref;
 }
 
+// Inline editor for the work item title shown in the preview header. Click (or
+// keyboard-activate) the title to swap it for a single-line input; Enter saves,
+// Escape cancels, and focus returns to the title button on close.
+export function TitleEditor({
+  current,
+  onSubmit,
+  pending,
+}: {
+  current: string;
+  onSubmit: (title: string) => void;
+  pending: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(current);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  function open() {
+    setDraft(current);
+    setEditing(true);
+  }
+
+  function close() {
+    setEditing(false);
+    buttonRef.current?.focus();
+  }
+
+  function save() {
+    const title = draft.trim();
+    if (!title || title === current.trim() || pending) {
+      close();
+      return;
+    }
+    onSubmit(title);
+    setEditing(false);
+    buttonRef.current?.focus();
+  }
+
+  useEffect(() => {
+    if (editing) inputRef.current?.select();
+  }, [editing]);
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        value={draft}
+        disabled={pending}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={close}
+        onKeyDown={(event) => {
+          // Keep title editing keys from reaching the grid navigation handler.
+          event.stopPropagation();
+          if (event.key === "Enter") {
+            event.preventDefault();
+            save();
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            close();
+          }
+        }}
+        aria-label="Edit title"
+        className="mt-0.5 w-full rounded border border-input bg-background px-1 py-0.5 text-sm font-semibold leading-5 text-foreground outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+      />
+    );
+  }
+
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      onClick={open}
+      aria-label="Edit title"
+      title={current}
+      className="mt-0.5 line-clamp-2 w-full rounded px-1 text-left text-sm font-semibold leading-5 text-foreground hover:bg-secondary"
+    >
+      {current}
+    </button>
+  );
+}
+
 export function ReasonEditor({
   current,
   error,
