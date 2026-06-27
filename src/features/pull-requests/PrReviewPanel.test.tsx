@@ -42,13 +42,15 @@ function renderPanel(selectedPr: ReviewPullRequestSummary = pr) {
 
 describe("PrReviewPanel status actions", () => {
   it(
-    "renders Complete and Abandon actions for an active PR",
+    "renders Complete inline and Abandon in the overflow menu for an active PR",
     async () => {
       renderPanel();
       expect(
         await screen.findByRole("button", { name: "Complete" }, { timeout: 8000 }),
       ).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Abandon" })).toBeTruthy();
+      // Secondary actions (incl. Abandon) now live behind the "⋯" overflow menu.
+      fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+      expect(await screen.findByRole("menuitem", { name: "Abandon" })).toBeTruthy();
     },
     15000,
   );
