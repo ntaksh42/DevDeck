@@ -40,6 +40,87 @@ export function useCloseOnOutsidePointer<T extends HTMLElement>(
   return ref;
 }
 
+// Inline editor for the work item title shown in the preview header. Click (or
+// keyboard-activate) the title to swap it for a single-line input; Enter saves,
+// Escape cancels, and focus returns to the title button on close.
+export function TitleEditor({
+  current,
+  onSubmit,
+  pending,
+}: {
+  current: string;
+  onSubmit: (title: string) => void;
+  pending: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(current);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  function open() {
+    setDraft(current);
+    setEditing(true);
+  }
+
+  function close() {
+    setEditing(false);
+    buttonRef.current?.focus();
+  }
+
+  function save() {
+    const title = draft.trim();
+    if (!title || title === current.trim() || pending) {
+      close();
+      return;
+    }
+    onSubmit(title);
+    setEditing(false);
+    buttonRef.current?.focus();
+  }
+
+  useEffect(() => {
+    if (editing) inputRef.current?.select();
+  }, [editing]);
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        value={draft}
+        disabled={pending}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={close}
+        onKeyDown={(event) => {
+          // Keep title editing keys from reaching the grid navigation handler.
+          event.stopPropagation();
+          if (event.key === "Enter") {
+            event.preventDefault();
+            save();
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            close();
+          }
+        }}
+        aria-label="Edit title"
+        className="mt-0.5 w-full rounded border border-input bg-background px-1 py-0.5 text-sm font-semibold leading-5 text-foreground outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+      />
+    );
+  }
+
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      onClick={open}
+      aria-label="Edit title"
+      title={current}
+      className="mt-0.5 line-clamp-2 w-full rounded px-1 text-left text-sm font-semibold leading-5 text-foreground hover:bg-secondary"
+    >
+      {current}
+    </button>
+  );
+}
+
 export function ReasonEditor({
   current,
   error,
@@ -395,9 +476,14 @@ export function ClassificationPicker({
     wasOpenRef.current = open;
   }, [open]);
 
-  // The current value is the full backslash path; show only its leaf for the
-  // trigger but keep the full path as the title for disambiguation.
-  const leaf = current ? current.split("\\").pop() || current : null;
+  // The current value is the full backslash path that always starts with the
+  // project name. Drop that redundant root and join the rest with " › " so the
+  // trigger shows the full classification path compactly; keep the complete
+  // backslash path as the title for disambiguation.
+  const segments = current?.split("\\").filter(Boolean) ?? [];
+  const display = segments.length
+    ? (segments.length > 1 ? segments.slice(1) : segments).join(" › ")
+    : null;
   const selectedIndex = options.findIndex((option) => option.path === current);
   const autoFocusIndex = selectedIndex >= 0 ? selectedIndex : 0;
 
@@ -412,7 +498,7 @@ export function ClassificationPicker({
         className="max-w-full truncate rounded px-1 text-left text-xs leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
         title={current ?? "—"}
       >
-        {pending ? "Updating..." : (leaf ?? "—")}
+        {pending ? "Updating..." : (display ?? "—")}
       </button>
       {error && <p className="mt-0.5 text-[10px] text-destructive">{error}</p>}
       {open ? (

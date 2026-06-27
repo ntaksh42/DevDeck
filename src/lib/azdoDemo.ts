@@ -1912,7 +1912,8 @@ function demoUpdateWorkItemFields(input?: UpdateWorkItemFieldsInput): WorkItemPr
   for (const field of input?.fields ?? []) {
     const referenceName = field.referenceName.trim();
     const value = field.value.trim();
-    if (referenceName === "System.State" && value) preview = { ...preview, state: value };
+    if (referenceName === "System.Title" && value) preview = { ...preview, title: value };
+    else if (referenceName === "System.State" && value) preview = { ...preview, state: value };
     else if (referenceName === "System.Reason" && value) preview = { ...preview, reason: value };
     else if (referenceName === "System.AssignedTo") preview = { ...preview, assignedTo: value || null };
     else if (referenceName === "System.Tags") preview = { ...preview, tags: value || null };

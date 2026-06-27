@@ -43,7 +43,7 @@ import {
   hydrateAuthenticatedImages,
   richFieldHtml,
 } from "./workItemHtml";
-import { useCloseOnOutsidePointer } from "./PreviewEditors";
+import { TitleEditor, useCloseOnOutsidePointer } from "./PreviewEditors";
 
 type PreviewFieldDefinition = {
   editable?: "state" | "assignee" | "priority" | "reason";
@@ -142,6 +142,8 @@ export function WorkItemPreviewDetails({
   statusChip,
   tagsPending,
   onTagsChange,
+  onTitleChange,
+  titlePending,
 }: {
   customPreviewFields: CustomPreviewField[];
   preview: WorkItemPreview;
@@ -172,6 +174,8 @@ export function WorkItemPreviewDetails({
   statusChip?: ReactNode;
   tagsPending: boolean;
   onTagsChange: (tags: string[]) => void;
+  onTitleChange: (title: string) => void;
+  titlePending: boolean;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
@@ -560,12 +564,7 @@ export function WorkItemPreviewDetails({
             </div>
           </div>
         </div>
-        <h2
-          className="mt-0.5 line-clamp-2 text-sm font-semibold leading-5 text-foreground"
-          title={preview.title}
-        >
-          {preview.title}
-        </h2>
+        <TitleEditor current={preview.title} onSubmit={onTitleChange} pending={titlePending} />
         <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-x-2 gap-y-0.5 pt-1">
           {selectedFieldDefinitions.map((field) =>
             field.editable === "state" ? (
@@ -643,6 +642,68 @@ export function WorkItemPreviewDetails({
           ) : null}
         </div>
       )}
+
+      {preview.comments.length > 0 ? (
+        <PreviewSection className="mt-2" collapseId="comments" title={`Comments (${preview.comments.length})`}>
+          {deleteCommentError ? (
+            <p className="mb-1 text-[11px] leading-4 text-destructive">
+              {deleteCommentError}
+            </p>
+          ) : null}
+          {editCommentError ? (
+            <p className="mb-1 text-[11px] leading-4 text-destructive">
+              {editCommentError}
+            </p>
+          ) : null}
+          <div className="space-y-1">
+            {visibleComments.map((comment) => {
+              const deleting = deletingCommentId === comment.id;
+              const editing = editingCommentId === comment.id;
+              return (
+                <CollapsibleComment
+                  baseUrl={preview.webUrl}
+                  commentHtml={commentRichHtml(
+                    comment.renderedText,
+                    comment.text,
+                    mentionDisplayNames,
+                  )}
+                  commentText={comment.text}
+                  createdBy={comment.createdBy}
+                  createdDate={comment.createdDate}
+                  deleting={deleting}
+                  deletePending={deletePending}
+                  editing={editing}
+                  editPending={editPending}
+                  id={comment.id}
+                  key={comment.id}
+                  onDelete={onDeleteComment}
+                  onEdit={onEditComment}
+                  onImageOpen={setLightboxSrc}
+                  reactions={comment.reactions ?? []}
+                  onToggleReaction={onToggleCommentReaction}
+                  reactionPending={reactionPendingCommentId === comment.id}
+                  resolveImageSource={resolveImageSource}
+                />
+              );
+            })}
+            {hiddenCommentCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => setShowAllComments(true)}
+                className="w-full rounded border border-dashed border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+              >
+                Show {hiddenCommentCount} older comment{hiddenCommentCount === 1 ? "" : "s"}
+              </button>
+            ) : null}
+          </div>
+        </PreviewSection>
+      ) : preview.commentsUnavailable ? (
+        <PreviewSection className="mt-2" collapseId="comments" title="Comments">
+          <p className="text-[11px] leading-4 text-destructive">
+            Comments could not be loaded. Try refreshing.
+          </p>
+        </PreviewSection>
+      ) : null}
 
       <PreviewSection className="mt-2" collapseId="links" title={`Links (${preview.relations.length})`}>
         <div className="space-y-1">
@@ -818,67 +879,6 @@ export function WorkItemPreviewDetails({
         </PreviewSection>
       ) : null}
 
-      {preview.comments.length > 0 ? (
-        <PreviewSection className="mt-2" collapseId="comments" title={`Comments (${preview.comments.length})`}>
-          {deleteCommentError ? (
-            <p className="mb-1 text-[11px] leading-4 text-destructive">
-              {deleteCommentError}
-            </p>
-          ) : null}
-          {editCommentError ? (
-            <p className="mb-1 text-[11px] leading-4 text-destructive">
-              {editCommentError}
-            </p>
-          ) : null}
-          <div className="space-y-1">
-            {visibleComments.map((comment) => {
-              const deleting = deletingCommentId === comment.id;
-              const editing = editingCommentId === comment.id;
-              return (
-                <CollapsibleComment
-                  baseUrl={preview.webUrl}
-                  commentHtml={commentRichHtml(
-                    comment.renderedText,
-                    comment.text,
-                    mentionDisplayNames,
-                  )}
-                  commentText={comment.text}
-                  createdBy={comment.createdBy}
-                  createdDate={comment.createdDate}
-                  deleting={deleting}
-                  deletePending={deletePending}
-                  editing={editing}
-                  editPending={editPending}
-                  id={comment.id}
-                  key={comment.id}
-                  onDelete={onDeleteComment}
-                  onEdit={onEditComment}
-                  onImageOpen={setLightboxSrc}
-                  reactions={comment.reactions ?? []}
-                  onToggleReaction={onToggleCommentReaction}
-                  reactionPending={reactionPendingCommentId === comment.id}
-                  resolveImageSource={resolveImageSource}
-                />
-              );
-            })}
-            {hiddenCommentCount > 0 ? (
-              <button
-                type="button"
-                onClick={() => setShowAllComments(true)}
-                className="w-full rounded border border-dashed border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
-              >
-                Show {hiddenCommentCount} older comment{hiddenCommentCount === 1 ? "" : "s"}
-              </button>
-            ) : null}
-          </div>
-        </PreviewSection>
-      ) : preview.commentsUnavailable ? (
-        <PreviewSection className="mt-2" collapseId="comments" title="Comments">
-          <p className="text-[11px] leading-4 text-destructive">
-            Comments could not be loaded. Try refreshing.
-          </p>
-        </PreviewSection>
-      ) : null}
       <WorkItemHistorySection preview={preview} />
       {lightboxSrc ? (
         <button

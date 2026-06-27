@@ -392,6 +392,7 @@ pub(super) fn custom_work_item_fields(work_item: &WorkItem) -> Vec<WorkItemCusto
 // anything `validate_editable_field_reference_name` allows for custom fields.
 pub(super) fn validate_update_field_reference_name(value: &str) -> Result<&str> {
     const ALLOWED_SYSTEM_FIELDS: &[&str] = &[
+        "System.Title",
         "System.State",
         "System.Reason",
         "System.AssignedTo",
