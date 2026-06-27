@@ -13,6 +13,7 @@ import {
   setWorkItemsState,
   assignWorkItems,
   setWorkItemsPriority,
+  setWorkItemsTags,
   listWorkItemTypeStates,
   recordAssigneeInteraction,
   searchWorkItemAssignees,
@@ -29,15 +30,14 @@ import {
 import { SnoozeMenu } from '@/components/SnoozeMenu';
 import { SnoozedItemsPanel } from '@/components/SnoozedItemsPanel';
 import {
-  storedNumbers,
   storedNumber,
-  gridColumnTemplate,
   isEditableTarget,
   focusFilterInput,
   focusPrimaryPreview,
   formatRelativeDate,
   type SortDirection,
 } from '@/lib/utils';
+import { useGridColumns } from '@/lib/useGridColumns';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import { useGridFocusRestoration } from '@/lib/useGridFocusRestoration';
 import { readStoredJson, writeStoredJson, storageKey } from '@/lib/storage';
@@ -558,12 +558,25 @@ export function WorkItemsGrid({
   const [sort, setWiSort] = useState<WiSortState>(
     initialSort ?? loadWorkItemSort(sortStorageKey, defaultWorkItemSort()),
   );
-  const [columnWidths, setColumnWidths] = useState(() =>
-    storedNumbers(columnWidthsStorageKey, DEFAULT_WI_COLUMN_WIDTHS, WI_COLUMN_MIN_WIDTHS, WI_COLUMN_MAX_WIDTHS),
-  );
   const [visibleColumns, setVisibleColumns] = useState<WiSortKey[]>(() =>
     loadVisibleWorkItemColumns(visibleColumnsStorageKey),
   );
+  const {
+    template: wiColTemplate,
+    minWidth: gridMinWidth,
+    resetWidths: resetColumnWidths,
+    resizeProps: columnResizeProps,
+  } = useGridColumns({
+    keys: WI_GRID_KEYS,
+    visibleColumns,
+    flexibleKey: "title",
+    defaults: DEFAULT_WI_COLUMN_WIDTHS,
+    min: WI_COLUMN_MIN_WIDTHS,
+    max: WI_COLUMN_MAX_WIDTHS,
+    storageKey: columnWidthsStorageKey,
+    prefixColumns: ["28px"],
+    suffixColumns: extraColumns.map(() => "120px"),
+  });
   const [previewWidth, setPreviewWidth] = useState(() =>
     storedNumber(
       previewWidthStorageKey,
@@ -627,9 +640,6 @@ export function WorkItemsGrid({
   }, [initialSort?.direction, initialSort?.key, sortStorageKey]);
 
   useEffect(() => {
-    setColumnWidths(
-      storedNumbers(columnWidthsStorageKey, DEFAULT_WI_COLUMN_WIDTHS, WI_COLUMN_MIN_WIDTHS, WI_COLUMN_MAX_WIDTHS),
-    );
     setVisibleColumns(loadVisibleWorkItemColumns(visibleColumnsStorageKey));
     setColumnFilters(loadWorkItemColumnFilters(columnFiltersStorageKey));
     setPreviewWidth(
@@ -640,11 +650,7 @@ export function WorkItemsGrid({
         MAX_WORK_ITEM_PREVIEW_WIDTH,
       ),
     );
-  }, [columnFiltersStorageKey, columnWidthsStorageKey, previewWidthStorageKey, visibleColumnsStorageKey]);
-
-  useEffect(() => {
-    localStorage.setItem(columnWidthsStorageKey, JSON.stringify(columnWidths));
-  }, [columnWidths, columnWidthsStorageKey]);
+  }, [columnFiltersStorageKey, previewWidthStorageKey, visibleColumnsStorageKey]);
 
   useEffect(() => {
     localStorage.setItem(visibleColumnsStorageKey, JSON.stringify(visibleColumns));
@@ -1114,6 +1120,41 @@ export function WorkItemsGrid({
     },
   });
 
+  const bulkTagsMutation = useMutation({
+    mutationFn: async (change: { tag: string; mode: "add" | "remove" }) => {
+      const groups = new Map<string, typeof checkedItems>();
+      for (const item of checkedItems) {
+        const key = `${item.organizationId}:${item.projectId}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(item);
+      }
+      const allResults: BulkWorkItemResult[] = [];
+      for (const [, items] of groups) {
+        const r = await setWorkItemsTags({
+          organizationId: items[0].organizationId,
+          projectId: items[0].projectId,
+          workItemIds: items.map((i) => i.id),
+          addTags: change.mode === "add" ? [change.tag] : [],
+          removeTags: change.mode === "remove" ? [change.tag] : [],
+        });
+        allResults.push(...r);
+      }
+      return allResults;
+    },
+    onSuccess: (results) => {
+      setCheckedIds(new Set());
+      setLastCheckedIndex(null);
+      showBulkToast(results);
+      // Tag changes are a server-side merge; refetch rather than guessing the
+      // new per-item tag set locally.
+      invalidateWorkItemMutationCaches(queryClient);
+    },
+    onError: (e) => {
+      setBulkToast(commandErrorMessage(e));
+      window.setTimeout(() => setBulkToast(null), 3000);
+    },
+  });
+
   useEffect(() => {
     if (autoFocus) containerRef.current?.focus();
   }, [autoFocus]);
@@ -1451,17 +1492,9 @@ export function WorkItemsGrid({
 
   function resetColumnVisibility() {
     setVisibleColumns([...WI_GRID_KEYS]);
-    setColumnWidths([...DEFAULT_WI_COLUMN_WIDTHS]);
+    resetColumnWidths();
   }
 
-  const visibleColumnWidths = visibleColumns.map(
-    (column) => columnWidths[WI_GRID_KEYS.indexOf(column)],
-  );
-  const wiFlexibleIndex = Math.max(0, visibleColumns.indexOf("title"));
-  const wiColTemplate = [
-    gridColumnTemplate(visibleColumnWidths, wiFlexibleIndex, ["28px"]),
-    ...extraColumns.map(() => "120px"),
-  ].join(" ");
   const columnFilterCount = activeColumnFilterCount(columnFilters);
   const activeFilterCount = Math.max(0, activeExternalFilterCount) + columnFilterCount;
   const hasActiveColumnFilters = columnFilterCount > 0;
@@ -1539,6 +1572,8 @@ export function WorkItemsGrid({
           }}
           priorityPending={bulkPriorityMutation.isPending}
           onPrioritySelect={(priority) => bulkPriorityMutation.mutate(priority)}
+          tagsPending={bulkTagsMutation.isPending}
+          onTagsApply={(tag, mode) => bulkTagsMutation.mutate({ tag, mode })}
         />
       ) : null}
       {bulkFailures.length > 0 ? (
@@ -1567,8 +1602,8 @@ export function WorkItemsGrid({
               }
             />
           ) : (
-          <div ref={gridScrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-            <div className="min-w-[520px]">
+          <div ref={gridScrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
+            <div style={{ minWidth: gridMinWidth }}>
               <div
                 role="row"
                 className="grid items-center gap-2 border-b border-border bg-muted px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
@@ -1607,14 +1642,7 @@ export function WorkItemsGrid({
                     onFilterOpen={isFilterableColumn(col) ? (el) => openFilter(col, el) : undefined}
                     resizeHandle={
                       i < visibleColumns.length - 1 ? (
-                        <ColumnResizeHandle
-                          columnIndex={WI_GRID_KEYS.indexOf(col)}
-                          widths={columnWidths}
-                          setWidths={setColumnWidths}
-                          min={WI_COLUMN_MIN_WIDTHS[WI_GRID_KEYS.indexOf(col)]}
-                          max={WI_COLUMN_MAX_WIDTHS[WI_GRID_KEYS.indexOf(col)]}
-                          defaultWidth={DEFAULT_WI_COLUMN_WIDTHS[WI_GRID_KEYS.indexOf(col)]}
-                        />
+                        <ColumnResizeHandle {...columnResizeProps(col)} />
                       ) : undefined
                     }
                   />
@@ -2068,6 +2096,8 @@ function BulkActionBar({
   onPriorityOpenChange,
   priorityPending,
   onPrioritySelect,
+  tagsPending,
+  onTagsApply,
 }: {
   count: number;
   typeBreakdown: { label: string; count: number }[];
@@ -2091,11 +2121,21 @@ function BulkActionBar({
   onPriorityOpenChange: (open: boolean) => void;
   priorityPending: boolean;
   onPrioritySelect: (priority: number) => void;
+  tagsPending: boolean;
+  onTagsApply: (tag: string, mode: "add" | "remove") => void;
 }) {
   const stateListRef = useRef<HTMLDivElement>(null);
   const priorityListRef = useRef<HTMLDivElement>(null);
   const assignInputRef = useRef<HTMLInputElement>(null);
   const assignListRef = useRef<HTMLDivElement>(null);
+  const [tagDraft, setTagDraft] = useState("");
+
+  function applyTag(mode: "add" | "remove") {
+    const tag = tagDraft.trim();
+    if (!tag) return;
+    onTagsApply(tag, mode);
+    setTagDraft("");
+  }
 
   return (
     <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-1.5">
@@ -2266,6 +2306,41 @@ function BulkActionBar({
               ))}
             </div>
           ) : null}
+        </div>
+        {/* Tags add/remove across the selection */}
+        <div className="flex items-center gap-1">
+          <input
+            type="text"
+            value={tagDraft}
+            onChange={(event) => setTagDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                applyTag("add");
+              }
+            }}
+            disabled={tagsPending}
+            placeholder="Tag…"
+            aria-label="Tag to add or remove"
+            className="h-7 w-24 rounded-md border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+          />
+          <button
+            type="button"
+            disabled={tagsPending || !tagDraft.trim()}
+            onClick={() => applyTag("add")}
+            className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2 text-xs font-medium hover:bg-secondary disabled:opacity-60"
+          >
+            {tagsPending ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : null}
+            Add tag
+          </button>
+          <button
+            type="button"
+            disabled={tagsPending || !tagDraft.trim()}
+            onClick={() => applyTag("remove")}
+            className="inline-flex h-7 items-center rounded-md border border-border bg-card px-2 text-xs font-medium hover:bg-secondary disabled:opacity-60"
+          >
+            Remove
+          </button>
         </div>
       </div>
       <button

@@ -482,10 +482,11 @@ function ReviewTab({
               </span>
             ))}
           </div>
+          <SectionBand className="mt-2">Description</SectionBand>
           {review.description ? (
-            <MarkdownView text={review.description} className="mt-2 text-xs text-foreground" />
+            <MarkdownView text={review.description} className="mt-1.5 text-xs text-foreground" />
           ) : (
-            <p className="mt-2 text-xs italic text-muted-foreground">No description.</p>
+            <p className="mt-1.5 text-xs italic text-muted-foreground">No description.</p>
           )}
         </div>
 
@@ -600,6 +601,25 @@ function VoteDot({ vote }: { vote: number }) {
       className={`inline-block h-1.5 w-1.5 rounded-full ${VOTE_DOT_CLASSES[voteTone(vote)]}`}
       aria-hidden="true"
     />
+  );
+}
+
+// Muted banded section label so Description / Work Items / Comments read as
+// distinct groups, matching the work item preview's section bands. Light mode
+// uses a darker slate so the band is visible on the white card.
+function SectionBand({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <h3
+      className={`rounded bg-slate-200 px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wide leading-4 text-muted-foreground dark:bg-muted ${className}`}
+    >
+      {children}
+    </h3>
   );
 }
 

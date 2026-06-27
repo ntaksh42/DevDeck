@@ -338,7 +338,13 @@ export function PipelineRunDetailPanel({
 
             <div className="border-b border-border">
               {tree.length === 0 ? (
-                <p className="px-3 py-3 text-xs text-muted-foreground">No timeline available.</p>
+                detail?.timelineUnavailable ? (
+                  <p className="px-3 py-3 text-xs text-amber-700 dark:text-amber-400">
+                    Failed to load the timeline. It may be a transient error — try refreshing.
+                  </p>
+                ) : (
+                  <p className="px-3 py-3 text-xs text-muted-foreground">No timeline available.</p>
+                )
               ) : (
                 tree.map((node) => (
                   <TimelineRow

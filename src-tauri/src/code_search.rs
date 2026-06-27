@@ -19,8 +19,11 @@ const CODE_CONTEXT_MAX_LINES: usize = 8;
 pub struct SearchCodeInput {
     pub organization_id: Option<String>,
     pub query: String,
-    pub project: Option<String>,
-    pub repository: Option<String>,
+    /// Project names to include. Empty/omitted means all projects. The Code
+    /// Search API filters by name, so these are names, not ids.
+    pub projects: Option<Vec<String>>,
+    /// Repository names to include. Empty/omitted means all repositories.
+    pub repositories: Option<Vec<String>>,
     pub branch: Option<String>,
     pub path: Option<String>,
     /// Optional id for cooperative cancellation via `cancel_operation`.
@@ -116,8 +119,8 @@ impl CodeSearchService {
                 search_text: query.to_string(),
                 top: CODE_SEARCH_TOP,
                 skip: 0,
-                project: normalize(input.project),
-                repository: normalize(input.repository),
+                project: normalize_values(input.projects),
+                repository: normalize_values(input.repositories),
                 branch: normalize(input.branch),
                 path: normalize(input.path),
             })
@@ -245,6 +248,17 @@ fn normalize(value: Option<String>) -> Option<String> {
     value
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
+}
+
+/// Trims and drops blank entries from a multi-value filter so empty selections
+/// become an empty list (which the search request omits entirely).
+fn normalize_values(values: Option<Vec<String>>) -> Vec<String> {
+    values
+        .unwrap_or_default()
+        .into_iter()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .collect()
 }
 
 /// Maps a non-zero Code Search `infoCode` to a user-facing notice. The common
