@@ -268,12 +268,18 @@ impl AdoClient {
         project_id: &str,
         definition_id: i64,
         source_branch: &str,
+        parameters: Option<&serde_json::Value>,
     ) -> Result<Build> {
         let path = format!("{project_id}/_apis/build/builds");
-        let body = json!({
+        let mut body = json!({
             "definition": { "id": definition_id },
             "sourceBranch": source_branch,
         });
+        // `parameters` is a JSON string of build/runtime parameter values, which
+        // is how the Builds API accepts them.
+        if let Some(parameters) = parameters {
+            body["parameters"] = json!(parameters.to_string());
+        }
         self.post_json(&path, &[("api-version", "7.1")], &body)
             .await
     }
@@ -580,10 +586,39 @@ mod tests {
 
         let build = test_client(&server)
             .await
-            .queue_build("project-1", 12, "refs/heads/main")
+            .queue_build("project-1", 12, "refs/heads/main", None)
             .await
             .unwrap();
         assert_eq!(build.id, 202);
+    }
+
+    #[tokio::test]
+    async fn queue_build_includes_parameters_when_present() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/project-1/_apis/build/builds"))
+            .and(body_json(serde_json::json!({
+                "definition": { "id": 12 },
+                "sourceBranch": "refs/heads/main",
+                "parameters": "{\"env\":\"prod\"}"
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 203, "status": "notStarted"
+            })))
+            .mount(&server)
+            .await;
+
+        let build = test_client(&server)
+            .await
+            .queue_build(
+                "project-1",
+                12,
+                "refs/heads/main",
+                Some(&serde_json::json!({ "env": "prod" })),
+            )
+            .await
+            .unwrap();
+        assert_eq!(build.id, 203);
     }
 
     #[tokio::test]

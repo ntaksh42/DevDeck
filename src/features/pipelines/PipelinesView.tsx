@@ -1,11 +1,12 @@
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Loader2, Plus, X } from "lucide-react";
+import { Check, Loader2, Play, Plus, X } from "lucide-react";
 import {
   commandErrorMessage,
   listPipelineApprovals,
   listPipelineDefinitions,
   listPipelineProjects,
+  queuePipelineRun,
   updatePipelineApproval,
   type Organization,
   type PipelineApprovalSummary,
@@ -165,6 +166,53 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
     persistSubscriptions(result.subscriptions);
   }
 
+  // Queue a new pipeline run (#397): pick the selected definition, a branch, and
+  // optional runtime parameters.
+  const [queueOpen, setQueueOpen] = useState(false);
+  const [queueBranch, setQueueBranch] = useState("main");
+  const [queueParams, setQueueParams] = useState("");
+  const [queueError, setQueueError] = useState<string | null>(null);
+  const [queueNotice, setQueueNotice] = useState<string | null>(null);
+  const canQueue = definitionId != null && !!selectedProject && !!selectedDefinition;
+  const queueMutation = useMutation({
+    mutationFn: queuePipelineRun,
+    onSuccess: (run) => {
+      setQueueError(null);
+      setQueueOpen(false);
+      setQueueNotice(`Queued ${selectedDefinition?.name ?? "pipeline"} #${run.buildId}.`);
+      window.setTimeout(() => setQueueNotice(null), 4000);
+      void queryClient.invalidateQueries({ queryKey: ["pipelineSubscriptionHistory"] });
+    },
+    onError: (error) => setQueueError(commandErrorMessage(error)),
+  });
+
+  function submitQueue() {
+    if (!canQueue || definitionId == null) return;
+    const branch = queueBranch.trim();
+    if (!branch) {
+      setQueueError("Enter a branch.");
+      return;
+    }
+    const parameters: Record<string, string> = {};
+    for (const line of queueParams.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      const eq = trimmed.indexOf("=");
+      if (eq <= 0) {
+        setQueueError(`Parameters must be name=value (got "${trimmed}").`);
+        return;
+      }
+      parameters[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1).trim();
+    }
+    queueMutation.mutate({
+      organizationId: selectedOrganizationId,
+      projectId,
+      definitionId,
+      sourceBranch: branch,
+      parameters: Object.keys(parameters).length > 0 ? parameters : undefined,
+    });
+  }
+
   const selectClasses =
     "h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60";
 
@@ -221,7 +269,7 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
             />
           </label>
 
-          <div className="flex items-end">
+          <div className="flex items-end gap-2">
             <button
               type="button"
               onClick={handleSubscribe}
@@ -243,8 +291,77 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
               <Plus className="h-4 w-4" aria-hidden="true" />
               {selectedIsSubscribed ? "Watching" : "Watch"}
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setQueueError(null);
+                setQueueOpen((open) => !open);
+              }}
+              disabled={!canQueue}
+              aria-expanded={queueOpen}
+              title={canQueue ? "Queue a new run of this pipeline" : "Select a pipeline to queue a run"}
+              className="flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Play className="h-4 w-4" aria-hidden="true" />
+              Queue run
+            </button>
           </div>
         </div>
+
+        {queueOpen && canQueue ? (
+          <div className="mt-3 grid gap-2 rounded-md border border-border bg-background p-3">
+            <p className="text-sm font-medium">
+              Queue {selectedDefinition?.name}
+            </p>
+            <label className="grid gap-1">
+              <span className="text-xs text-muted-foreground">Branch</span>
+              <input
+                value={queueBranch}
+                onChange={(event) => setQueueBranch(event.target.value)}
+                placeholder="main"
+                aria-label="Branch"
+                className="h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className="text-xs text-muted-foreground">Parameters (one name=value per line, optional)</span>
+              <textarea
+                value={queueParams}
+                onChange={(event) => setQueueParams(event.target.value)}
+                rows={3}
+                placeholder={"environment=prod\nrunTests=true"}
+                aria-label="Parameters"
+                className="resize-y rounded-md border border-input bg-background px-2 py-1 font-mono text-xs outline-none focus:ring-2 focus:ring-ring"
+              />
+            </label>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={submitQueue}
+                disabled={queueMutation.isPending || !queueBranch.trim()}
+                className="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Play className="h-4 w-4" aria-hidden="true" />
+                Queue
+              </button>
+              <button
+                type="button"
+                onClick={() => setQueueOpen(false)}
+                className="inline-flex h-8 items-center rounded-md border border-border px-3 text-sm hover:bg-accent"
+              >
+                Cancel
+              </button>
+            </div>
+            {queueError ? (
+              <p role="alert" className="text-xs text-destructive">
+                {queueError}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        {queueNotice ? (
+          <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-400">{queueNotice}</p>
+        ) : null}
       </div>
 
       {projectId && (approvalsQuery.data?.length || approvalMutation.isError) ? (

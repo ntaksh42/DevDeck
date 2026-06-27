@@ -38,8 +38,8 @@ use pipelines::{
     GetPipelineRunLogTailInput, ListPipelineApprovalsInput, ListPipelineDefinitionsInput,
     ListPipelineProjectsInput, ListPipelineRunsInput, PipelineApprovalSummary,
     PipelineDefinitionDetail, PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption,
-    PipelineRunDetail, PipelineRunSummary, PipelineService, RerunPipelineRunInput,
-    UpdatePipelineApprovalInput,
+    PipelineRunDetail, PipelineRunSummary, PipelineService, QueuePipelineRunInput,
+    RerunPipelineRunInput, UpdatePipelineApprovalInput,
 };
 use pr_review::{
     DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
@@ -755,6 +755,16 @@ async fn rerun_pipeline_run(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn queue_pipeline_run(
+    input: QueuePipelineRunInput,
+    state: State<'_, AppState>,
+) -> Result<PipelineRunSummary> {
+    ensure_write_enabled(&state).await?;
+    state.pipelines.queue_run(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn cancel_pipeline_run(
     input: CancelPipelineRunInput,
     state: State<'_, AppState>,
@@ -964,6 +974,7 @@ pub fn run() {
             get_pipeline_definition,
             get_pipeline_run_log_tail,
             rerun_pipeline_run,
+            queue_pipeline_run,
             cancel_pipeline_run,
             list_pipeline_approvals,
             update_pipeline_approval,
