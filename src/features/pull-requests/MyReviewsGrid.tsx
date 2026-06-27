@@ -18,7 +18,6 @@ import {
   CircleDashed,
   Filter,
   Loader,
-  Search,
   X,
   XCircle,
 } from 'lucide-react';
@@ -61,6 +60,7 @@ import {
 import { activeArchivedKeys, toggleTriageArchived } from '@/lib/triage';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
+import { FilterAutocomplete } from '@/components/FilterAutocomplete';
 import { LoadingState, ErrorState } from '@/components/StateDisplay';
 import { ActiveFilters } from '@/components/ActiveFilters';
 
@@ -800,6 +800,17 @@ export function MyReviewsGrid({
 
   const allPrs = query.data ?? [];
 
+  // Repo / author values present in the loaded reviews, offered as filter
+  // autocomplete suggestions (#310).
+  const filterSuggestionPool = useMemo(() => {
+    const values = new Set<string>();
+    for (const pr of allPrs) {
+      if (pr.repositoryName) values.add(pr.repositoryName);
+      if (pr.createdBy) values.add(pr.createdBy);
+    }
+    return [...values];
+  }, [allPrs]);
+
   // "Returned to me": PRs whose vote was reset (author pushed) after I reviewed.
   // Tracked locally by diffing successive vote snapshots.
   const [returnedKeys, setReturnedKeys] = useState<Set<string>>(new Set());
@@ -1511,31 +1522,18 @@ export function MyReviewsGrid({
             ))}
           </select>
         )}
-        {/* Text search */}
-        <div className="flex h-8 flex-1 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
-          <Search className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <input
-            ref={filterInputRef}
-            type="text"
-            placeholder="Filter by repo, title, author…"
-            value={textFilter}
-            onChange={(e) => {
-              setTextFilter(e.target.value);
-              setSelectedIndex(0);
-            }}
-            className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-          />
-          {textFilter && (
-            <button
-              type="button"
-              onClick={() => setTextFilter("")}
-              className="ml-1 rounded text-muted-foreground hover:text-foreground"
-              aria-label="Clear filter"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
+        {/* Text search with value autocomplete (#310) */}
+        <FilterAutocomplete
+          value={textFilter}
+          onChange={(value) => {
+            setTextFilter(value);
+            setSelectedIndex(0);
+          }}
+          onClear={() => setTextFilter("")}
+          placeholder="Filter by repo, title, author…"
+          suggestionPool={filterSuggestionPool}
+          inputRef={filterInputRef}
+        />
 
         {/* Draft checkbox */}
         <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
