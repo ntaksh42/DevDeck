@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   Loader,
   Maximize2,
+  MessageSquare,
   Minimize2,
   X,
   XCircle,
@@ -25,7 +26,9 @@ function shortRef(refName: string): string {
 function StateBadge({ isDraft }: { isDraft: boolean }) {
   if (isDraft) {
     return (
-      <span className={`${BADGE_BASE} border-input bg-muted text-muted-foreground`}>
+      <span
+        className={`${BADGE_BASE} border-input bg-muted text-muted-foreground`}
+      >
         Draft
       </span>
     );
@@ -34,7 +37,10 @@ function StateBadge({ isDraft }: { isDraft: boolean }) {
     <span
       className={`${BADGE_BASE} border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300`}
     >
-      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+      <span
+        className="h-1.5 w-1.5 rounded-full bg-emerald-500"
+        aria-hidden="true"
+      />
       Active
     </span>
   );
@@ -98,7 +104,9 @@ function conflictsBadge(pr: ReviewPullRequestSummary) {
 function approvedBadge(review: PullRequestReview | null) {
   if (!review || review.reviewers.length === 0) return null;
   const total = review.reviewers.length;
-  const approved = review.reviewers.filter((reviewer) => reviewer.vote === 10).length;
+  const approved = review.reviewers.filter(
+    (reviewer) => reviewer.vote === 10,
+  ).length;
   const complete = approved >= total;
   return (
     <span
@@ -115,6 +123,40 @@ function approvedBadge(review: PullRequestReview | null) {
         aria-hidden="true"
       />
       {approved} / {total} approved
+    </span>
+  );
+}
+
+// Comment activity badge. Counts only threads that carry a human comment
+// (mirrors the user-thread filter in PrReviewPanel) so auto-generated system
+// threads such as votes and ref updates do not inflate the number. Highlights
+// when any thread is still unresolved; renders nothing when there are no
+// comment threads so an empty PR does not show a "0".
+function commentsBadge(review: PullRequestReview | null) {
+  if (!review) return null;
+  const commentThreads = review.threads.filter((thread) =>
+    thread.comments.some((comment) => !comment.isSystem),
+  );
+  if (commentThreads.length === 0) return null;
+  const unresolved = commentThreads.filter(
+    (thread) => !thread.isResolved,
+  ).length;
+  const hasUnresolved = unresolved > 0;
+  return (
+    <span
+      key="comments"
+      className={`${BADGE_BASE} ${
+        hasUnresolved
+          ? "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
+          : "border-border bg-muted text-muted-foreground"
+      }`}
+      title={`${commentThreads.length} comment thread${
+        commentThreads.length === 1 ? "" : "s"
+      }, ${unresolved} unresolved`}
+    >
+      <MessageSquare className="h-3 w-3" aria-hidden="true" />
+      {commentThreads.length}
+      {hasUnresolved ? ` / ${unresolved} unresolved` : ""}
     </span>
   );
 }
@@ -172,14 +214,19 @@ export function PrReviewHeader({
   const creationDate = review?.creationDate ?? selectedPr.creationDate;
   const sourceRef = review?.sourceRefName ?? null;
   const targetRef = review?.targetRefName ?? selectedPr.targetRefName;
-  const branchLabel = sourceRef ? shortRef(sourceRef) : `→ ${shortRef(targetRef)}`;
+  const branchLabel = sourceRef
+    ? shortRef(sourceRef)
+    : `→ ${shortRef(targetRef)}`;
   const branchTitle = sourceRef
     ? `${shortRef(sourceRef)} → ${shortRef(targetRef)}`
     : `into ${shortRef(targetRef)}`;
 
-  const badges = [ciBadge(selectedPr), conflictsBadge(selectedPr), approvedBadge(review)].filter(
-    Boolean,
-  );
+  const badges = [
+    ciBadge(selectedPr),
+    conflictsBadge(selectedPr),
+    approvedBadge(review),
+    commentsBadge(review),
+  ].filter(Boolean);
 
   return (
     <div className="flex shrink-0 flex-col gap-1 border-b border-border px-3 py-1.5">
@@ -199,7 +246,10 @@ export function PrReviewHeader({
       {/* The grid already shows the title in split view, so only repeat it in the
           header when maximized (grid hidden) to avoid a duplicate on screen. */}
       {maximized ? (
-        <span className="truncate text-sm font-semibold text-foreground" title={title}>
+        <span
+          className="truncate text-sm font-semibold text-foreground"
+          title={title}
+        >
           {title}
         </span>
       ) : null}
@@ -230,7 +280,9 @@ export function PrReviewHeader({
                     type="button"
                     disabled={reviewerActionsBusy}
                     onClick={() => onToggleReviewerRequired(reviewer)}
-                    title={reviewer.isRequired ? "Make optional" : "Make required"}
+                    title={
+                      reviewer.isRequired ? "Make optional" : "Make required"
+                    }
                     aria-label={`${reviewer.isRequired ? "Make optional" : "Make required"}: ${reviewer.displayName}`}
                     className="rounded px-1 text-[10px] font-medium uppercase tracking-wide hover:bg-background disabled:opacity-50"
                   >
