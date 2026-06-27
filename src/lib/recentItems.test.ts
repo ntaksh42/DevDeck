@@ -38,9 +38,11 @@ function pullRequest(id: number, title: string): PullRequestSummary {
     status: "active",
     createdBy: "Test User",
     creationDate: "2026-05-24T00:00:00Z",
+    closedDate: null,
     sourceRefName: "refs/heads/feature",
     targetRefName: "refs/heads/main",
     webUrl: `https://dev.azure.com/contoso/_git/core/pullrequest/${id}`,
+    isDraft: false,
   };
 }
 

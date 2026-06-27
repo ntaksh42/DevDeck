@@ -19,6 +19,7 @@ vi.mock("@/lib/openExternal", () => ({
 }));
 
 import {
+  showPipelineWatchNotification,
   showSyncFailedNotificationEvent,
   showWorkItemNotificationEvent,
 } from "./desktopNotifications";
@@ -175,6 +176,66 @@ describe("showSyncFailedNotificationEvent", () => {
       { consecutiveFailures: 5, retryInSecs: 1800, lastError: null },
       { ...settings, desktopNotificationsEnabled: false } as AppSettings,
     );
+
+    expect(result).toBe("skipped");
+    expect(sendNotification).not.toHaveBeenCalled();
+  });
+});
+
+describe("showPipelineWatchNotification", () => {
+  const baseInput = {
+    transition: "finished" as const,
+    definitionName: "CI",
+    projectName: "Demo Project",
+    buildNumber: "20240101.1",
+    sourceBranch: "main",
+    resultLabel: "Succeeded",
+    webUrl: "https://dev.azure.com/org/demo/_build/results?buildId=7",
+  };
+
+  beforeEach(() => {
+    isPermissionGranted.mockReset().mockResolvedValue(true);
+    requestPermission.mockReset();
+    sendNotification.mockReset();
+    isTauriRuntime.mockReset().mockReturnValue(true);
+    openExternalUrl.mockReset();
+    onAction.mockReset().mockResolvedValue({});
+  });
+
+  it("titles a started transition with the pipeline name", async () => {
+    const result = await showPipelineWatchNotification(
+      { ...baseInput, transition: "started" },
+      settings,
+    );
+
+    expect(result).toBe("sent");
+    const sent = sendNotification.mock.calls[0][0] as { title: string; body: string };
+    expect(sent.title).toBe("Pipeline started: CI");
+    expect(sent.body).toContain("#20240101.1");
+    expect(sent.body).toContain("main");
+  });
+
+  it("titles a finished transition with the run result", async () => {
+    await showPipelineWatchNotification(baseInput, settings);
+    const sent = sendNotification.mock.calls[0][0] as { title: string };
+    expect(sent.title).toBe("Pipeline succeeded: CI");
+  });
+
+  it("hides run detail when content preview is disabled", async () => {
+    await showPipelineWatchNotification(baseInput, {
+      ...settings,
+      notificationContentPreviewEnabled: false,
+    } as AppSettings);
+    const sent = sendNotification.mock.calls[0][0] as { body: string };
+    expect(sent.body).not.toContain("main");
+    expect(sent.body).not.toContain("#20240101.1");
+  });
+
+  it("skips when desktop notifications are disabled", async () => {
+    const result = await showPipelineWatchNotification(baseInput, {
+      ...settings,
+      desktopNotificationsEnabled: false,
+    } as AppSettings);
 
     expect(result).toBe("skipped");
     expect(sendNotification).not.toHaveBeenCalled();

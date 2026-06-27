@@ -34,10 +34,11 @@ use db::{AppDatabase, AppSettings, Organization, SyncState};
 use error::{AppError, Result};
 use orgs::{AddAzureCliOrganizationInput, AddPatOrganizationInput, OrganizationService};
 use pipelines::{
-    CancelPipelineRunInput, GetPipelineRunInput, GetPipelineRunLogTailInput,
-    ListPipelineDefinitionsInput, ListPipelineProjectsInput, ListPipelineRunsInput,
-    PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption, PipelineRunDetail,
-    PipelineRunSummary, PipelineService, RerunPipelineRunInput,
+    CancelPipelineRunInput, GetPipelineDefinitionInput, GetPipelineRunInput,
+    GetPipelineRunLogTailInput, ListPipelineDefinitionsInput, ListPipelineProjectsInput,
+    ListPipelineRunsInput, PipelineDefinitionDetail, PipelineDefinitionOption, PipelineLogTail,
+    PipelineProjectOption, PipelineRunDetail, PipelineRunSummary, PipelineService,
+    RerunPipelineRunInput,
 };
 use pr_review::{
     DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
@@ -47,7 +48,7 @@ use pr_review::{
     UpdatePullRequestInput,
 };
 use prs::{
-    ListMyReviewPullRequestsInput, PullRequestService, PullRequestSummary,
+    ListMyReviewPullRequestsInput, PullRequestSearchResult, PullRequestService,
     ReviewPullRequestSummary, SearchPullRequestsInput,
 };
 use search::{SearchAllInput, SearchAllResult};
@@ -72,9 +73,9 @@ use work_items::{
     RecordAssigneeInteractionInput, RecordMentionInteractionInput, RunWorkItemQueryInput,
     SavedQueryResult, SearchWorkItemAssigneesInput, SearchWorkItemMentionsInput,
     SearchWorkItemsInput, SetWorkItemCommentReactionInput, SetWorkItemsPriorityInput,
-    SetWorkItemsStateInput, UpdateWorkItemCommentInput, UpdateWorkItemFieldsInput,
-    WorkItemAssigneeCandidate, WorkItemComment, WorkItemFieldOption, WorkItemImage,
-    WorkItemPreview, WorkItemProjectOption, WorkItemService, WorkItemSummary,
+    SetWorkItemsStateInput, SetWorkItemsTagsInput, UpdateWorkItemCommentInput,
+    UpdateWorkItemFieldsInput, WorkItemAssigneeCandidate, WorkItemComment, WorkItemFieldOption,
+    WorkItemImage, WorkItemPreview, WorkItemProjectOption, WorkItemService, WorkItemSummary,
     WorkItemUpdateSummary,
 };
 
@@ -222,9 +223,9 @@ async fn add_azure_cli_organization(
 async fn search_pull_requests(
     input: SearchPullRequestsInput,
     state: State<'_, AppState>,
-) -> Result<Vec<PullRequestSummary>> {
+) -> Result<PullRequestSearchResult> {
     let service = state.pull_requests.clone();
-    run_blocking(move || service.search(input)).await
+    service.search(input).await
 }
 
 #[tauri::command]
@@ -536,6 +537,16 @@ async fn set_work_items_priority(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn set_work_items_tags(
+    input: SetWorkItemsTagsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<BulkWorkItemResult>> {
+    ensure_write_enabled(&state).await?;
+    state.work_items.set_items_tags(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn update_work_item_fields(
     input: UpdateWorkItemFieldsInput,
     state: State<'_, AppState>,
@@ -711,6 +722,15 @@ async fn get_pipeline_run(
     state: State<'_, AppState>,
 ) -> Result<PipelineRunDetail> {
     state.pipelines.get_run(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn get_pipeline_definition(
+    input: GetPipelineDefinitionInput,
+    state: State<'_, AppState>,
+) -> Result<PipelineDefinitionDetail> {
+    state.pipelines.get_definition(input).await
 }
 
 #[tauri::command]
@@ -907,6 +927,7 @@ pub fn run() {
             set_work_items_state,
             assign_work_items,
             set_work_items_priority,
+            set_work_items_tags,
             search_commits,
             list_commit_repositories,
             commit_activity,
@@ -920,6 +941,7 @@ pub fn run() {
             list_pipeline_runs,
             list_pipeline_definitions,
             get_pipeline_run,
+            get_pipeline_definition,
             get_pipeline_run_log_tail,
             rerun_pipeline_run,
             cancel_pipeline_run,

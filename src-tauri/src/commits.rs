@@ -43,8 +43,10 @@ pub struct SearchCommitsInput {
     pub branch: Option<String>,
     pub from_date: Option<String>,
     pub to_date: Option<String>,
-    pub project_id: Option<String>,
-    pub repository_id: Option<String>,
+    /// Projects to include. Empty/omitted means all projects.
+    pub project_ids: Option<Vec<String>>,
+    /// Repositories to include. Empty/omitted means all repositories.
+    pub repository_ids: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -201,8 +203,8 @@ impl CommitService {
                 ));
             }
         }
-        let project_filter = normalize_optional(input.project_id);
-        let repository_filter = normalize_optional(input.repository_id);
+        let project_set = normalize_set(input.project_ids);
+        let repository_set = normalize_set(input.repository_ids);
 
         let from_rfc = from_date.as_ref().map(DateTime::to_rfc3339);
         let to_rfc = to_date.as_ref().map(DateTime::to_rfc3339);
@@ -212,10 +214,15 @@ impl CommitService {
         // SQLite. Query Azure DevOps live for the requested branch instead.
         let is_branch_search = branch.is_some();
         let cached = if let Some(branch) = branch {
-            let Some(repository_id) = repository_filter.as_deref() else {
-                return Err(AppError::InvalidInput(
-                    "select a repository to search a specific branch".to_string(),
-                ));
+            // A branch lives in exactly one repository, so the live query needs
+            // a single repository to scope to.
+            let repository_id = match repository_set.as_deref() {
+                Some([repository_id]) => repository_id.as_str(),
+                _ => {
+                    return Err(AppError::InvalidInput(
+                        "select a single repository to search a specific branch".to_string(),
+                    ));
+                }
             };
             self.fetch_branch_commits(
                 &organization,
@@ -230,18 +237,16 @@ impl CommitService {
             // メモリ内で絞ると、LIMIT 500 の外にある一致コミットを取りこぼすため。
             self.db.search_commits(
                 &organization.id,
-                repository_filter.as_deref(),
+                repository_set.as_deref(),
                 author.as_deref(),
                 from_rfc.as_deref(),
                 to_rfc.as_deref(),
             )?
         } else {
             // FTS は日付絞り込み非対応なので in-memory でフィルタする
-            let mut rows = self.db.search_commits_fts(
-                &organization.id,
-                &query,
-                repository_filter.as_deref(),
-            )?;
+            let mut rows =
+                self.db
+                    .search_commits_fts(&organization.id, &query, repository_set.as_deref())?;
             rows.retain(|c| {
                 from_rfc
                     .as_deref()
@@ -262,7 +267,9 @@ impl CommitService {
                 (!is_branch_search
                     || query.is_empty()
                     || c.comment.to_ascii_lowercase().contains(&query))
-                    && project_filter.as_deref().is_none_or(|p| c.project_id == p)
+                    && project_set
+                        .as_ref()
+                        .is_none_or(|set| set.contains(&c.project_id))
                     && author.as_deref().is_none_or(|a| {
                         let al = a.to_ascii_lowercase();
                         c.author_name
@@ -644,6 +651,18 @@ fn normalize_optional(value: Option<String>) -> Option<String> {
     value
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
+}
+
+/// Trims and drops blank entries from a multi-value filter, returning `None`
+/// when nothing is left so callers can treat "no values" as "no filter".
+fn normalize_set(values: Option<Vec<String>>) -> Option<Vec<String>> {
+    let cleaned: Vec<String> = values
+        .unwrap_or_default()
+        .into_iter()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .collect();
+    (!cleaned.is_empty()).then_some(cleaned)
 }
 
 fn normalize_date(value: Option<&str>, end_of_day: bool) -> Result<Option<DateTime<Utc>>> {

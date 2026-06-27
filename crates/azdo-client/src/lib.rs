@@ -19,8 +19,8 @@ pub use git::{
 };
 pub use identity::{AuthenticatedUser, ConnectionData, Identity, IdentityPickerIdentity};
 pub use pipelines::{
-    Build, BuildDefinitionRef, BuildIdentityRef, BuildListCriteria, BuildLogTail, Timeline,
-    TimelineLogRef, TimelineRecord,
+    Build, BuildDefinitionDetail, BuildDefinitionRef, BuildIdentityRef, BuildListCriteria,
+    BuildLogTail, DefinitionTrigger, DefinitionVariable, Timeline, TimelineLogRef, TimelineRecord,
 };
 pub use pr_review::{
     GitChangeEntry, GitChangeItem, GitCommitRefId, GitContentMetadata, GitFilePosition,
@@ -30,5 +30,6 @@ pub use pr_review::{
 pub use pr_status::{summarize_pr_ci, PrCiState, PrCiSummary, PrStatusCheck, PrStatusContext};
 pub use work_items::{
     ClassificationNode, ClassificationNodeAttributes, CommentReaction, WorkItem, WorkItemComment,
-    WorkItemFieldDefinition, WorkItemLink, WorkItemReference, WorkItemRelation, WorkItemUpdate,
+    WorkItemFieldDefinition, WorkItemLink, WorkItemReference, WorkItemRelation,
+    WorkItemRelationAttributes, WorkItemUpdate,
 };
