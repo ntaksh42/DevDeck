@@ -98,28 +98,24 @@ impl WorkItemService {
     pub fn search(&self, input: SearchWorkItemsInput) -> Result<Vec<WorkItemSummary>> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let query = input.query.unwrap_or_default().trim().to_ascii_lowercase();
-        let state = normalize_optional_filter(input.state);
-        let work_item_type = normalize_optional_filter(input.work_item_type);
-        let project_id = normalize_optional_filter(input.project_id);
+        let states = normalize_filter_set(input.states);
+        let work_item_types = normalize_filter_set(input.work_item_types);
+        let project_ids = normalize_filter_set(input.project_ids);
 
         let cached = if query.is_empty() {
             self.db.search_work_items(
                 &organization.id,
-                project_id.as_deref(),
-                state.as_deref(),
-                work_item_type.as_deref(),
+                project_ids.as_deref(),
+                states.as_deref(),
+                work_item_types.as_deref(),
                 None,
             )?
         } else {
             let mut results = self.db.search_work_items_fts(&organization.id, &query)?;
             results.retain(|item| {
-                project_id.as_deref().is_none_or(|p| item.project_id == p)
-                    && state
-                        .as_deref()
-                        .is_none_or(|s| item.state.as_deref() == Some(s))
-                    && work_item_type
-                        .as_deref()
-                        .is_none_or(|t| item.work_item_type.as_deref() == Some(t))
+                filter_matches(&project_ids, Some(item.project_id.as_str()))
+                    && filter_matches(&states, item.state.as_deref())
+                    && filter_matches(&work_item_types, item.work_item_type.as_deref())
             });
             results
         };
@@ -289,6 +285,7 @@ impl WorkItemService {
         );
         preview.comments_unavailable = comments_unavailable;
         preview.pull_requests = self.resolve_pull_request_links(&organization, &raw_relations);
+        preview.attachments = extract_attachments(&raw_relations);
         preview.relations = self
             .resolve_preview_relations(
                 &client,

@@ -14,6 +14,7 @@ import {
 } from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
 import { ErrorState } from "@/components/StateDisplay";
+import { MultiSelectFilter } from "@/components/MultiSelectFilter";
 
 const SELECT_CLASS =
   "h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60";
@@ -23,8 +24,8 @@ const INPUT_CLASS =
 export function CodeSearchView({ organizations }: { organizations: Organization[] }) {
   const [organizationId, setOrganizationId] = useState(() => organizations[0]?.id ?? "");
   const [query, setQuery] = useState("");
-  const [projectId, setProjectId] = useState("");
-  const [repositoryId, setRepositoryId] = useState("");
+  const [projectIds, setProjectIds] = useState<string[]>([]);
+  const [repositoryIds, setRepositoryIds] = useState<string[]>([]);
   const [branch, setBranch] = useState("");
   const [path, setPath] = useState("");
 
@@ -67,35 +68,44 @@ export function CodeSearchView({ organizations }: { organizations: Organization[
 
   const filteredRepositories = useMemo(
     () =>
-      projectId
-        ? repositoryOptions.filter((repo) => repo.projectId === projectId)
+      projectIds.length > 0
+        ? repositoryOptions.filter((repo) => projectIds.includes(repo.projectId))
         : repositoryOptions,
-    [projectId, repositoryOptions],
+    [projectIds, repositoryOptions],
   );
 
+  // Drop repository selections that no longer belong to the selected projects.
   useEffect(() => {
-    if (
-      repositoryId &&
-      !filteredRepositories.some((repo) => repo.repositoryId === repositoryId)
-    ) {
-      setRepositoryId("");
-    }
-  }, [filteredRepositories, repositoryId]);
+    const allowed = new Set(filteredRepositories.map((repo) => repo.repositoryId));
+    setRepositoryIds((prev) => {
+      const next = prev.filter((id) => allowed.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [filteredRepositories]);
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!query.trim()) return;
-    const repo = repositoryOptions.find((option) => option.repositoryId === repositoryId);
-    const project = projectOptions.find((option) => option.projectId === projectId);
+    const selectedRepos = repositoryOptions.filter((option) =>
+      repositoryIds.includes(option.repositoryId),
+    );
+    const selectedProjectNames = projectOptions
+      .filter((option) => projectIds.includes(option.projectId))
+      .map((option) => option.projectName);
+    // The Code Search API filters by name and ANDs project with repository, so
+    // scope to the selected projects plus the projects owning selected repos.
+    const projectNames = [
+      ...new Set([...selectedProjectNames, ...selectedRepos.map((repo) => repo.projectName)]),
+    ];
+    const repositoryNames = selectedRepos.map((repo) => repo.repositoryName);
     const operationId = newOperationId();
     operationIdRef.current = operationId;
     cancelledRef.current = false;
     mutation.mutate({
       organizationId: selectedOrganizationId,
       query: query.trim(),
-      // A selected repository carries its own project, so prefer that.
-      project: repo?.projectName ?? project?.projectName ?? undefined,
-      repository: repo?.repositoryName ?? undefined,
+      projects: projectNames.length > 0 ? projectNames : undefined,
+      repositories: repositoryNames.length > 0 ? repositoryNames : undefined,
       branch: branch.trim() || undefined,
       path: path.trim() || undefined,
       operationId,
@@ -128,8 +138,8 @@ export function CodeSearchView({ organizations }: { organizations: Organization[
                   value={selectedOrganizationId}
                   onChange={(event) => {
                     setOrganizationId(event.target.value);
-                    setProjectId("");
-                    setRepositoryId("");
+                    setProjectIds([]);
+                    setRepositoryIds([]);
                   }}
                   className={SELECT_CLASS}
                 >
@@ -169,47 +179,40 @@ export function CodeSearchView({ organizations }: { organizations: Organization[
           </div>
 
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <label className="grid gap-2">
+            <div className="grid gap-2">
               <span className="text-sm font-medium">Project</span>
-              <select
-                value={projectId}
+              <MultiSelectFilter
+                options={projectOptions.map((project) => ({
+                  value: project.projectId,
+                  label: project.projectName,
+                }))}
+                selected={projectIds}
+                onChange={setProjectIds}
+                placeholder="All projects"
+                ariaLabel="Filter by project"
+                searchable
                 disabled={repositoriesQuery.isLoading || projectOptions.length === 0}
-                onChange={(event) => {
-                  setProjectId(event.target.value);
-                  setRepositoryId("");
-                }}
-                className={SELECT_CLASS}
-              >
-                <option value="">All projects</option>
-                {projectOptions.map((project) => (
-                  <option key={project.projectId} value={project.projectId}>
-                    {project.projectName}
-                  </option>
-                ))}
-              </select>
-            </label>
+              />
+            </div>
 
-            <label className="grid gap-2">
+            <div className="grid gap-2">
               <span className="text-sm font-medium">Repository</span>
-              <select
-                value={repositoryId}
-                disabled={repositoriesQuery.isLoading || filteredRepositories.length === 0}
-                onChange={(event) => setRepositoryId(event.target.value)}
-                className={SELECT_CLASS}
-              >
-                <option value="">All repositories</option>
-                {filteredRepositories.map((repo) => (
-                  <option
-                    key={`${repo.projectId}:${repo.repositoryId}`}
-                    value={repo.repositoryId}
-                  >
-                    {projectId
+              <MultiSelectFilter
+                options={filteredRepositories.map((repo) => ({
+                  value: repo.repositoryId,
+                  label:
+                    projectIds.length > 0
                       ? repo.repositoryName
-                      : `${repo.projectName} / ${repo.repositoryName}`}
-                  </option>
-                ))}
-              </select>
-            </label>
+                      : `${repo.projectName} / ${repo.repositoryName}`,
+                }))}
+                selected={repositoryIds}
+                onChange={setRepositoryIds}
+                placeholder="All repositories"
+                ariaLabel="Filter by repository"
+                searchable
+                disabled={repositoriesQuery.isLoading || filteredRepositories.length === 0}
+              />
+            </div>
 
             <label className="grid gap-2">
               <span className="text-sm font-medium">Branch</span>

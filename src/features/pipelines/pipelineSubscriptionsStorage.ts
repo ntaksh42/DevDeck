@@ -2,6 +2,11 @@ import { isTauriRuntime } from "@/lib/runtime";
 
 const PIPELINE_SUBSCRIPTIONS_STORAGE_KEY = "azdodeck:pipelineSubscriptions";
 
+// Dispatched on `window` after the watch list is saved so same-tab listeners
+// (the app-wide watch notifier) can react; the native `storage` event only
+// fires in other tabs.
+export const PIPELINE_SUBSCRIPTIONS_CHANGED_EVENT = "azdodeck:pipeline-subscriptions-changed";
+
 export const MAX_SUBSCRIPTIONS = 100;
 
 const DEMO_SUBSCRIPTIONS: PipelineSubscription[] = [
@@ -99,6 +104,7 @@ export function savePipelineSubscriptions(subscriptions: PipelineSubscription[])
     PIPELINE_SUBSCRIPTIONS_STORAGE_KEY,
     JSON.stringify(subscriptions.slice(0, MAX_SUBSCRIPTIONS)),
   );
+  window.dispatchEvent(new Event(PIPELINE_SUBSCRIPTIONS_CHANGED_EVENT));
 }
 
 export function isSubscribed(

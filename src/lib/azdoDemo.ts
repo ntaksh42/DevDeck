@@ -30,6 +30,7 @@ import type {
   PrThread,
   PullRequestChanges,
   PullRequestReview,
+  PullRequestSearchResult,
   PullRequestSummary,
   ReviewPullRequestSummary,
   ReviewResultPreview,
@@ -133,6 +134,7 @@ const writeCommands = new Set([
   "set_work_items_state",
   "assign_work_items",
   "set_work_items_priority",
+  "set_work_items_tags",
   "post_pull_request_comment",
   "set_pull_request_thread_status",
   "submit_pull_request_vote",
@@ -478,6 +480,7 @@ function demoPipelineRunDetail(buildId: number) {
   const run = runs.find((r) => r.buildId === buildId) ?? runs[0];
   return {
     run,
+    timelineUnavailable: false,
     timeline: [
       {
         id: "stage-1",
@@ -506,6 +509,60 @@ function demoPipelineRunDetail(buildId: number) {
         errorCount: run.result === "failed" ? 1 : 0,
         warningCount: 0,
         order: 1,
+      },
+    ],
+  };
+}
+
+function demoPipelineDefinitionDetail(definitionId: number) {
+  if (definitionId === 2) {
+    return {
+      definitionId: 2,
+      name: "Nightly",
+      triggers: [
+        {
+          triggerType: "schedule",
+          branchFilters: ["+refs/heads/main"],
+          pathFilters: [],
+        },
+      ],
+      variables: [
+        {
+          name: "BuildConfiguration",
+          value: "Release",
+          isSecret: false,
+          allowOverride: true,
+        },
+      ],
+    };
+  }
+  return {
+    definitionId: 1,
+    name: "CI",
+    triggers: [
+      {
+        triggerType: "continuousIntegration",
+        branchFilters: ["+refs/heads/main"],
+        pathFilters: ["-/docs"],
+      },
+      {
+        triggerType: "pullRequest",
+        branchFilters: ["+refs/heads/main"],
+        pathFilters: [],
+      },
+    ],
+    variables: [
+      {
+        name: "BuildConfiguration",
+        value: "Debug",
+        isSecret: false,
+        allowOverride: true,
+      },
+      {
+        name: "DeployApiKey",
+        value: null,
+        isSecret: true,
+        allowOverride: false,
       },
     ],
   };
@@ -819,7 +876,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         } satisfies SearchAllResult;
       }
       const workItems = demoWorkItems({ query });
-      const pullRequests = demoPullRequests({ query });
+      const pullRequests = demoPullRequests({ query }).pullRequests;
       const commits = demoCommits({ query });
       return {
         workItems: workItems.slice(0, limit),
@@ -938,6 +995,10 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     }
     case "set_work_items_priority": {
       const input = (args as { input?: SetWorkItemsPriorityInput } | undefined)?.input;
+      return (input?.workItemIds ?? []).map((id) => ({ id, error: null }));
+    }
+    case "set_work_items_tags": {
+      const input = (args as { input?: { workItemIds?: number[] } } | undefined)?.input;
       return (input?.workItemIds ?? []).map((id) => ({ id, error: null }));
     }
     case "search_commits": {
@@ -1068,6 +1129,10 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       const input = (args as { input?: { buildId?: number } } | undefined)?.input;
       return demoPipelineRunDetail(input?.buildId ?? 1001);
     }
+    case "get_pipeline_definition": {
+      const input = (args as { input?: { definitionId?: number } } | undefined)?.input;
+      return demoPipelineDefinitionDetail(input?.definitionId ?? 1);
+    }
     case "get_pipeline_run_log_tail":
       return {
         lines: ["[command] npm run build", "ERROR: build failed (exit 1)"],
@@ -1186,7 +1251,7 @@ function demoReviewResultPreview(
   };
 }
 
-function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[] {
+function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSearchResult {
   const now = new Date("2026-05-27T08:00:00Z");
   const ago = (ms: number) => new Date(now.getTime() - ms).toISOString();
   const hr = 3_600_000;
@@ -1206,6 +1271,8 @@ function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[]
       creationDate: ago(2 * hr),
       sourceRefName: "feature/pr-search",
       targetRefName: "main",
+      closedDate: null,
+      isDraft: false,
       webUrl: "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/pullrequest/42",
     },
     {
@@ -1221,6 +1288,8 @@ function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[]
       creationDate: ago(1 * day),
       sourceRefName: "feature/oauth-pkce",
       targetRefName: "main",
+      closedDate: null,
+      isDraft: false,
       webUrl: "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/103",
     },
     {
@@ -1236,6 +1305,8 @@ function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[]
       creationDate: ago(5 * day),
       sourceRefName: "feature/otel-tracing",
       targetRefName: "main",
+      closedDate: ago(3 * day),
+      isDraft: false,
       webUrl: "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/99",
     },
     {
@@ -1251,7 +1322,26 @@ function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[]
       creationDate: ago(3 * hr),
       sourceRefName: "fix/payment-back-crash",
       targetRefName: "main",
+      closedDate: null,
+      isDraft: false,
       webUrl: "https://dev.azure.com/contoso/Mobile/_git/android-app/pullrequest/189",
+    },
+    {
+      organizationId: "contoso",
+      projectId: "platform",
+      projectName: "Platform",
+      repositoryId: "azdo-dashboard",
+      repositoryName: "azdo-dashboard",
+      pullRequestId: 88,
+      title: "Prototype offline-first sync engine",
+      status: "abandoned",
+      createdBy: "Heidi Park",
+      creationDate: ago(12 * day),
+      sourceRefName: "spike/offline-sync",
+      targetRefName: "main",
+      closedDate: ago(9 * day),
+      isDraft: false,
+      webUrl: "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/pullrequest/88",
     },
     {
       organizationId: "contoso",
@@ -1266,6 +1356,8 @@ function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[]
       creationDate: ago(2 * day),
       sourceRefName: "feature/biometric-auth",
       targetRefName: "develop",
+      closedDate: null,
+      isDraft: true,
       webUrl: "https://dev.azure.com/contoso/Mobile/_git/android-app/pullrequest/180",
     },
     {
@@ -1281,17 +1373,47 @@ function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[]
       creationDate: ago(8 * day),
       sourceRefName: "infra/eks-1.29",
       targetRefName: "main",
+      closedDate: null,
+      isDraft: false,
       webUrl: "https://dev.azure.com/contoso/Infrastructure/_git/terraform-aws/pullrequest/55",
     },
   ];
 
   const query = input?.query?.trim().toLowerCase();
-  const statusFilter = input?.status ?? "active";
+  // Empty/omitted statuses default to active, mirroring the backend.
+  const statusFilter = new Set(
+    input?.statuses && input.statuses.length > 0 ? input.statuses : ["active"],
+  );
+  const projectFilter = new Set((input?.projectIds ?? []).filter(Boolean));
+  const repositoryFilter = new Set((input?.repositoryIds ?? []).filter(Boolean));
+  const targetBranch = input?.targetBranch
+    ?.trim()
+    .replace(/^refs\/heads\//, "")
+    .toLowerCase();
+  const fromDate = input?.fromDate?.trim() || undefined;
+  const toDate = input?.toDate?.trim() || undefined;
+  // The close-date basis only applies when no active rows are in scope, since
+  // active PRs have no close date — mirroring the backend's cache path.
+  const useClosedBasis = !statusFilter.has("active") && input?.dateBasis === "closed";
+  const excludeDrafts = input?.excludeDrafts ?? false;
+  const sortBy = input?.sortBy ?? "created";
 
-  return applyPullRequestScenario(all).filter((pr) => {
-    if (input?.projectId && pr.projectId !== input.projectId) return false;
-    if (input?.repositoryId && pr.repositoryId !== input.repositoryId) return false;
-    if (statusFilter !== "all" && pr.status !== statusFilter) return false;
+  const inWindow = (iso: string | null) => {
+    if (!fromDate && !toDate) return true;
+    if (!iso) return false;
+    const day = iso.slice(0, 10);
+    if (fromDate && day < fromDate) return false;
+    if (toDate && day > toDate) return false;
+    return true;
+  };
+
+  const matched = applyPullRequestScenario(all).filter((pr) => {
+    if (projectFilter.size > 0 && !projectFilter.has(pr.projectId)) return false;
+    if (repositoryFilter.size > 0 && !repositoryFilter.has(pr.repositoryId)) return false;
+    if (!statusFilter.has(pr.status)) return false;
+    if (targetBranch && pr.targetRefName.toLowerCase() !== targetBranch) return false;
+    if (!inWindow(useClosedBasis ? pr.closedDate : pr.creationDate)) return false;
+    if (excludeDrafts && pr.isDraft) return false;
     if (query) {
       const textMatch = [pr.title, pr.projectName, pr.repositoryName, pr.createdBy ?? "", pr.sourceRefName, pr.targetRefName].some(
         (v) => v.toLowerCase().includes(query),
@@ -1301,6 +1423,24 @@ function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSummary[]
     }
     return true;
   });
+
+  const sorted = matched.slice().sort((a, b) => {
+    if (sortBy === "title") {
+      return a.title.toLowerCase().localeCompare(b.title.toLowerCase());
+    }
+    if (sortBy === "closed") {
+      const cmp = (b.closedDate ?? "").localeCompare(a.closedDate ?? "");
+      return cmp !== 0 ? cmp : b.creationDate.localeCompare(a.creationDate);
+    }
+    return b.creationDate.localeCompare(a.creationDate);
+  });
+
+  const limit = 100;
+  return {
+    pullRequests: sorted.slice(0, limit),
+    total: sorted.length,
+    truncated: sorted.length > limit,
+  };
 }
 
 function withEmptyExtraFields(
@@ -1422,13 +1562,14 @@ function demoWorkItems(input?: SearchWorkItemsInput): WorkItemSummary[] {
   ];
 
   const query = input?.query?.trim().toLowerCase();
-  const stateFilter = input?.state && input.state !== "all" ? input.state : undefined;
-  const typeFilter = input?.workItemType?.trim() || undefined;
+  const stateFilter = new Set((input?.states ?? []).filter(Boolean));
+  const typeFilter = new Set((input?.workItemTypes ?? []).filter(Boolean));
+  const projectFilter = new Set((input?.projectIds ?? []).filter(Boolean));
 
   return applyWorkItemScenario(withEmptyExtraFields(all)).filter((item) => {
-    if (input?.projectId && item.projectId !== input.projectId) return false;
-    if (stateFilter && item.state !== stateFilter) return false;
-    if (typeFilter && item.workItemType !== typeFilter) return false;
+    if (projectFilter.size > 0 && !projectFilter.has(item.projectId)) return false;
+    if (stateFilter.size > 0 && !(item.state && stateFilter.has(item.state))) return false;
+    if (typeFilter.size > 0 && !(item.workItemType && typeFilter.has(item.workItemType))) return false;
     if (query) {
       const textMatch = [item.title, item.projectName, item.workItemType ?? "", item.state ?? "", item.assignedTo ?? ""].some(
         (v) => v.toLowerCase().includes(query),
@@ -1517,7 +1658,7 @@ function demoWorkItemProjects(): WorkItemProjectOption[] {
 
 function demoRunWorkItemQuery(input?: RunWorkItemQueryInput): WorkItemSummary[] {
   const wiql = input?.wiql.toLowerCase() ?? "";
-  let results = demoWorkItems({ projectId: input?.projectId });
+  let results = demoWorkItems({ projectIds: input?.projectId ? [input.projectId] : undefined });
 
   const stateMatch = /\[system\.state\]\s*=\s*'([^']+)'/.exec(wiql);
   if (stateMatch) {
@@ -1669,6 +1810,16 @@ function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {
         status: null,
         myVoteLabel: null,
         webUrl: null,
+      },
+    ],
+    attachments: [
+      {
+        name: "repro-steps.png",
+        url: "https://dev.azure.com/contoso/_apis/wit/attachments/demo-attachment-1",
+      },
+      {
+        name: "diagnostics.log",
+        url: "https://dev.azure.com/contoso/_apis/wit/attachments/demo-attachment-2",
       },
     ],
   });
@@ -2287,14 +2438,14 @@ function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
     },
   ];
 
-  // Mirror the backend contract: branch- or path-scoped search needs a
-  // repository because it queries Azure DevOps live instead of the cache.
-  if (input?.branch?.trim() && !input?.repositoryId) {
-    throw new Error("select a repository to search a specific branch");
-  }
+  const projectFilter = new Set((input?.projectIds ?? []).filter(Boolean));
+  const repositoryFilter = new Set((input?.repositoryIds ?? []).filter(Boolean));
+
   const itemPath = input?.itemPath?.trim();
-  if (itemPath && !input?.repositoryId) {
-    throw new Error("select a repository to search a specific branch or path");
+  // Mirror the backend contract: branch- or path-scoped search needs exactly
+  // one repository because it queries Azure DevOps live instead of the cache.
+  if ((input?.branch?.trim() || itemPath) && repositoryFilter.size !== 1) {
+    throw new Error("select a single repository to search a specific branch or path");
   }
   const normalizedPath = itemPath ? normalizeDemoPath(itemPath) : null;
 
@@ -2304,10 +2455,10 @@ function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
   const toDate = input?.toDate ? new Date(`${input.toDate}T23:59:59Z`) : null;
 
   return commits.filter((commit) => {
-    if (input?.projectId && commit.projectId !== input.projectId) {
+    if (projectFilter.size > 0 && !projectFilter.has(commit.projectId)) {
       return false;
     }
-    if (input?.repositoryId && commit.repositoryId !== input.repositoryId) {
+    if (repositoryFilter.size > 0 && !repositoryFilter.has(commit.repositoryId)) {
       return false;
     }
     if (normalizedPath && !demoCommitMatchesPath(commit.commitId, normalizedPath)) {
