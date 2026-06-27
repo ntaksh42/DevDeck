@@ -74,6 +74,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Settings</span><kbd className={kbd}>{combo("openSettings")}</kbd></div>
           <div className={row}><span>Focus left navigation</span><kbd className={kbd}>{combo("focusNavigation")}</kbd></div>
           <div className={row}><span>Move in left navigation</span><kbd className={kbd}>↑ ↓ Home End</kbd></div>
+          <div className={row}><span>Reorder navigation entry</span><kbd className={kbd}>Alt+↑ / Alt+↓</kbd></div>
           <div className={row}><span>Expand / collapse section</span><kbd className={kbd}>← →</kbd></div>
           <div className={row}><span>Open focused navigation item</span><kbd className={kbd}>Enter</kbd></div>
           <div className={row}><span>Typeahead in navigation</span><kbd className={kbd}>A–Z</kbd></div>

@@ -1,7 +1,9 @@
 import {
   CSSProperties,
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   lazy,
+  type ReactNode,
   Suspense,
   useCallback,
   useEffect,
@@ -47,6 +49,7 @@ import {
 import { QUICK_PIPELINES_CHANGED_EVENT } from "@/features/pipelines/quickPipelinesEvents";
 import { openExternalUrl } from "@/lib/openExternal";
 import { writeStoredString } from "@/lib/storage";
+import { type NavEntryId, loadNavOrder, reorderNav, saveNavOrder } from "@/lib/navOrder";
 import { loadRecentPaletteEntries } from "@/lib/recentItems";
 import {
   applyTheme,
@@ -287,6 +290,45 @@ function AppShell() {
   // focus there (falling back to the grid) instead of stranding it on <body>.
   const paletteReturnRef = useRef<HTMLElement | null>(null);
   const helpReturnRef = useRef<HTMLElement | null>(null);
+  // Order of the top-level nav entries, restored from localStorage and persisted
+  // whenever it changes (via drag or keyboard reordering).
+  const [navOrder, setNavOrder] = useState<NavEntryId[]>(() => loadNavOrder());
+  useEffect(() => {
+    saveNavOrder(navOrder);
+  }, [navOrder]);
+  // The entry currently being dragged, and the entry it is hovering over. Both
+  // drive only the drag visuals; the actual reorder happens on drop.
+  const [draggedNavId, setDraggedNavId] = useState<NavEntryId | null>(null);
+  const [dragOverNavId, setDragOverNavId] = useState<NavEntryId | null>(null);
+
+  function handleNavDragStart(event: ReactDragEvent<HTMLDivElement>, id: NavEntryId): void {
+    setDraggedNavId(id);
+    // Mark this as a "move" drag and stash the id; some browsers refuse to start
+    // a drag unless some data is set.
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", id);
+  }
+
+  function handleNavDragOver(event: ReactDragEvent<HTMLDivElement>, id: NavEntryId): void {
+    // Required: without preventDefault the browser never fires a drop event.
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    if (id !== dragOverNavId) setDragOverNavId(id);
+  }
+
+  function handleNavDrop(event: ReactDragEvent<HTMLDivElement>, targetId: NavEntryId): void {
+    event.preventDefault();
+    if (draggedNavId) {
+      setNavOrder((order) => reorderNav(order, draggedNavId, targetId));
+    }
+    setDraggedNavId(null);
+    setDragOverNavId(null);
+  }
+
+  function handleNavDragEnd(): void {
+    setDraggedNavId(null);
+    setDragOverNavId(null);
+  }
   const [navExpanded, setNavExpanded] = useState<Record<NavSectionId, boolean>>({
     pullRequests: true,
     workItems: true,
@@ -1116,6 +1158,21 @@ function AppShell() {
     );
     if (!current) return;
 
+    // Alt+Arrow reorders the top-level entry the focus currently sits in. Checked
+    // before the plain Arrow handlers so it wins over focus movement.
+    if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+      event.preventDefault();
+      const entryId = current.closest<HTMLElement>("[data-nav-entry]")?.dataset
+        .navEntry as NavEntryId | undefined;
+      if (!entryId) return;
+      const from = navOrder.indexOf(entryId);
+      const to = event.key === "ArrowDown" ? from + 1 : from - 1;
+      if (to < 0 || to >= navOrder.length) return;
+      const targetId = navOrder[to];
+      setNavOrder((order) => reorderNav(order, entryId, targetId));
+      return;
+    }
+
     if (event.key === "ArrowDown") {
       event.preventDefault();
       focusNavItem(current, 1);
@@ -1496,6 +1553,121 @@ function AppShell() {
     return () => window.removeEventListener("keydown", onGlobalKeyDown);
   }, [activeView, organizations.length, syncMutation.isPending, syncMutation.mutate, keybindings, navigateHistory]);
 
+  // Maps each top-level nav id to its rendered UI. Rendering order is driven by
+  // a separate ordered id list (DEFAULT_NAV_ORDER for now), so the same entries
+  // can later be reordered just by reordering the list.
+  const navEntries: Record<NavEntryId, ReactNode> = {
+    pullRequests: (
+      <NavSection
+        key="pullRequests"
+        id="pullRequests"
+        icon={<GitPullRequest className="h-4 w-4" aria-hidden="true" />}
+        label="Pull Requests"
+        disabled={organizations.length === 0}
+        expanded={navExpanded.pullRequests}
+        onExpandedChange={(expanded) => setNavSectionExpanded("pullRequests", expanded)}
+      >
+        <NavSubItem
+          active={activeView === "myReviews"}
+          disabled={organizations.length === 0}
+          label="My Reviews"
+          badge={myReviewsBadge}
+          onClick={() => setView("myReviews")}
+        />
+        <NavSubItem
+          active={activeView === "pullRequestSearch"}
+          disabled={organizations.length === 0}
+          label="Search"
+          onClick={() => setView("pullRequestSearch")}
+        />
+      </NavSection>
+    ),
+    workItems: (
+      <NavSection
+        key="workItems"
+        id="workItems"
+        icon={<ListChecks className="h-4 w-4" aria-hidden="true" />}
+        label="Work Items"
+        disabled={organizations.length === 0}
+        expanded={navExpanded.workItems}
+        onExpandedChange={(expanded) => setNavSectionExpanded("workItems", expanded)}
+      >
+        <NavSubItem
+          active={activeView === "myWorkItems"}
+          disabled={organizations.length === 0}
+          label="My Items"
+          badge={myWorkItemsBadge}
+          onClick={() => setView("myWorkItems")}
+        />
+        <NavSubGroup
+          id="workItemViews"
+          active={activeView === "workItemViews" && !activePinnedWorkItemView}
+          disabled={organizations.length === 0}
+          label="Views"
+          expandable={pinnedWorkItemViews.length > 0}
+          expanded={pinnedViewsExpanded}
+          onToggle={() => setPinnedViewsExpanded((value) => !value)}
+          onClick={() => {
+            setActiveWorkItemViewId(null);
+            setSelectedWorkItemViewRequestId(null);
+            setView("workItemViews");
+          }}
+        >
+          {pinnedWorkItemViews.map((item) => (
+            <NavSubItem
+              key={item.id}
+              active={activeView === "workItemViews" && activeWorkItemViewId === item.id}
+              disabled={organizations.length === 0}
+              label={item.name}
+              badge={viewCountBaseline(item.id)}
+              onClick={() => {
+                setActiveWorkItemViewId(item.id);
+                setSelectedWorkItemViewRequestId(item.id);
+                setView("workItemViews");
+              }}
+            />
+          ))}
+        </NavSubGroup>
+        <NavSubItem
+          active={activeView === "workItems"}
+          disabled={organizations.length === 0}
+          label="Search"
+          onClick={() => setView("workItems")}
+        />
+      </NavSection>
+    ),
+    commits: (
+      <NavButton
+        key="commits"
+        active={activeView === "commits"}
+        disabled={organizations.length === 0}
+        icon={<GitCommitHorizontal className="h-4 w-4" aria-hidden="true" />}
+        label="Commits"
+        onClick={() => setView("commits")}
+      />
+    ),
+    pipelines: (
+      <NavButton
+        key="pipelines"
+        active={activeView === "pipelines"}
+        disabled={organizations.length === 0}
+        icon={<GitBranch className="h-4 w-4" aria-hidden="true" />}
+        label="Pipelines"
+        onClick={() => setView("pipelines")}
+      />
+    ),
+    codeSearch: (
+      <NavButton
+        key="codeSearch"
+        active={activeView === "codeSearch"}
+        disabled={organizations.length === 0}
+        icon={<Code className="h-4 w-4" aria-hidden="true" />}
+        label="Code"
+        onClick={() => setView("codeSearch")}
+      />
+    ),
+  };
+
   return (
     <div className="h-screen overflow-hidden bg-background text-foreground">
       <aside
@@ -1509,101 +1681,26 @@ function AppShell() {
           onKeyDown={handleNavKeyDown}
         >
           <div className="space-y-1">
-            {/* Pull Requests section */}
-            <NavSection
-              id="pullRequests"
-              icon={<GitPullRequest className="h-4 w-4" aria-hidden="true" />}
-              label="Pull Requests"
-              disabled={organizations.length === 0}
-              expanded={navExpanded.pullRequests}
-              onExpandedChange={(expanded) => setNavSectionExpanded("pullRequests", expanded)}
-            >
-              <NavSubItem
-                active={activeView === "myReviews"}
-                disabled={organizations.length === 0}
-                label="My Reviews"
-                badge={myReviewsBadge}
-                onClick={() => setView("myReviews")}
-              />
-              <NavSubItem
-                active={activeView === "pullRequestSearch"}
-                disabled={organizations.length === 0}
-                label="Search"
-                onClick={() => setView("pullRequestSearch")}
-              />
-            </NavSection>
-            <NavSection
-              id="workItems"
-              icon={<ListChecks className="h-4 w-4" aria-hidden="true" />}
-              label="Work Items"
-              disabled={organizations.length === 0}
-              expanded={navExpanded.workItems}
-              onExpandedChange={(expanded) => setNavSectionExpanded("workItems", expanded)}
-            >
-              <NavSubItem
-                active={activeView === "myWorkItems"}
-                disabled={organizations.length === 0}
-                label="My Items"
-                badge={myWorkItemsBadge}
-                onClick={() => setView("myWorkItems")}
-              />
-              <NavSubGroup
-                id="workItemViews"
-                active={activeView === "workItemViews" && !activePinnedWorkItemView}
-                disabled={organizations.length === 0}
-                label="Views"
-                expandable={pinnedWorkItemViews.length > 0}
-                expanded={pinnedViewsExpanded}
-                onToggle={() => setPinnedViewsExpanded((value) => !value)}
-                onClick={() => {
-                  setActiveWorkItemViewId(null);
-                  setSelectedWorkItemViewRequestId(null);
-                  setView("workItemViews");
-                }}
+            {navOrder.map((id) => (
+              <div
+                key={id}
+                data-nav-entry={id}
+                draggable
+                onDragStart={(event) => handleNavDragStart(event, id)}
+                onDragOver={(event) => handleNavDragOver(event, id)}
+                onDrop={(event) => handleNavDrop(event, id)}
+                onDragEnd={handleNavDragEnd}
+                className={`rounded-md transition-opacity ${
+                  draggedNavId === id ? "opacity-40" : ""
+                } ${
+                  dragOverNavId === id && draggedNavId !== id
+                    ? "ring-2 ring-inset ring-ring"
+                    : ""
+                }`}
               >
-                {pinnedWorkItemViews.map((item) => (
-                  <NavSubItem
-                    key={item.id}
-                    active={activeView === "workItemViews" && activeWorkItemViewId === item.id}
-                    disabled={organizations.length === 0}
-                    label={item.name}
-                    badge={viewCountBaseline(item.id)}
-                    onClick={() => {
-                      setActiveWorkItemViewId(item.id);
-                      setSelectedWorkItemViewRequestId(item.id);
-                      setView("workItemViews");
-                    }}
-                  />
-                ))}
-              </NavSubGroup>
-              <NavSubItem
-                active={activeView === "workItems"}
-                disabled={organizations.length === 0}
-                label="Search"
-                onClick={() => setView("workItems")}
-              />
-            </NavSection>
-            <NavButton
-              active={activeView === "commits"}
-              disabled={organizations.length === 0}
-              icon={<GitCommitHorizontal className="h-4 w-4" aria-hidden="true" />}
-              label="Commits"
-              onClick={() => setView("commits")}
-            />
-            <NavButton
-              active={activeView === "pipelines"}
-              disabled={organizations.length === 0}
-              icon={<GitBranch className="h-4 w-4" aria-hidden="true" />}
-              label="Pipelines"
-              onClick={() => setView("pipelines")}
-            />
-            <NavButton
-              active={activeView === "codeSearch"}
-              disabled={organizations.length === 0}
-              icon={<Code className="h-4 w-4" aria-hidden="true" />}
-              label="Code"
-              onClick={() => setView("codeSearch")}
-            />
+                {navEntries[id]}
+              </div>
+            ))}
           </div>
           <div className="mt-auto space-y-1 border-t border-border pt-2">
             <NavButton
