@@ -13,6 +13,7 @@ import {
 import { ResizeHandle } from "@/components/ResizeHandle";
 import { storedNumber } from "@/lib/utils";
 import { FilterableSelect } from "./FilterableSelect";
+import { PipelineDefinitionPanel } from "./PipelineDefinitionPanel";
 import { PipelineRunDetailPanel } from "./PipelineRunDetailPanel";
 import { PipelineSubscriptionsBoard } from "./PipelineSubscriptionsBoard";
 import {
@@ -305,11 +306,20 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
           value={previewWidth}
         />
 
-        <PipelineRunDetailPanel
-          organizationId={detailTarget?.organizationId ?? selectedOrganizationId}
-          projectId={detailTarget?.projectId ?? projectId}
-          buildId={detailTarget?.buildId ?? null}
-        />
+        {detailTarget == null && definitionId != null && selectedDefinition ? (
+          <PipelineDefinitionPanel
+            organizationId={selectedOrganizationId}
+            projectId={projectId}
+            definitionId={definitionId}
+            definitionName={selectedDefinition.name}
+          />
+        ) : (
+          <PipelineRunDetailPanel
+            organizationId={detailTarget?.organizationId ?? selectedOrganizationId}
+            projectId={detailTarget?.projectId ?? projectId}
+            buildId={detailTarget?.buildId ?? null}
+          />
+        )}
       </div>
 
       {watchToast && (

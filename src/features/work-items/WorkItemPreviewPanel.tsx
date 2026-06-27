@@ -1300,10 +1300,34 @@ function PresetMenu({
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const menuRef = useCloseOnOutsidePointer<HTMLDivElement>(open, () => setOpen(false));
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const wasOpenRef = useRef(false);
+  // Open onto the first control; on close return focus to the trigger so
+  // keyboard users resume from the preview header, not <body>.
+  useEffect(() => {
+    if (open && !wasOpenRef.current) {
+      popoverRef.current?.querySelector<HTMLElement>("button, input")?.focus();
+    } else if (!open && wasOpenRef.current) {
+      triggerRef.current?.focus();
+    }
+    wasOpenRef.current = open;
+  }, [open]);
 
   return (
-    <div ref={menuRef} className="relative">
+    <div
+      ref={menuRef}
+      className="relative"
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && open) {
+          event.preventDefault();
+          event.stopPropagation();
+          setOpen(false);
+        }
+      }}
+    >
       <button
+        ref={triggerRef}
         type="button"
         aria-expanded={open}
         aria-label="Field presets"
@@ -1314,7 +1338,10 @@ function PresetMenu({
         <Zap className="h-3 w-3" aria-hidden="true" />
       </button>
       {open ? (
-        <div className="absolute right-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-popover p-1 shadow-lg">
+        <div
+          ref={popoverRef}
+          className="absolute right-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-popover p-1 shadow-lg"
+        >
           <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground">
             Field presets
           </div>

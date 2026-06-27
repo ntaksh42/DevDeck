@@ -95,6 +95,34 @@ fn pull_request_id_from_artifact_parses_git_links() {
 }
 
 #[test]
+fn extract_attachments_keeps_only_attached_files() {
+    let relations = vec![
+        WorkItemRelation {
+            rel: "AttachedFile".to_string(),
+            url: "https://dev.azure.com/org/_apis/wit/attachments/guid-1".to_string(),
+            attributes: Some(azdo_client::WorkItemRelationAttributes {
+                name: Some("repro.png".to_string()),
+            }),
+        },
+        WorkItemRelation {
+            rel: "System.LinkTypes.Related".to_string(),
+            url: "https://dev.azure.com/org/_apis/wit/workItems/5".to_string(),
+            attributes: None,
+        },
+        // Missing attribute name falls back to the URL's last segment.
+        WorkItemRelation {
+            rel: "AttachedFile".to_string(),
+            url: "https://dev.azure.com/org/_apis/wit/attachments/guid-2".to_string(),
+            attributes: None,
+        },
+    ];
+    let attachments = extract_attachments(&relations);
+    assert_eq!(attachments.len(), 2);
+    assert_eq!(attachments[0].name, "repro.png");
+    assert_eq!(attachments[1].name, "guid-2");
+}
+
+#[test]
 fn summarize_maps_identity_object() {
     let organization = Organization {
         id: "contoso".to_string(),
