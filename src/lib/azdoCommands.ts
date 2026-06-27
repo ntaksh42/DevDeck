@@ -1121,6 +1121,24 @@ export async function updatePullRequest(input: {
   return prStatusResultSchema.parse(result);
 }
 
+const prDetailsResultSchema = z.object({
+  title: z.string(),
+  description: z.string().nullable(),
+});
+export type PrDetailsResult = z.infer<typeof prDetailsResultSchema>;
+
+export async function updatePullRequestDetails(input: {
+  organizationId?: string;
+  projectId: string;
+  repositoryId: string;
+  pullRequestId: number;
+  title: string;
+  description?: string;
+}): Promise<PrDetailsResult> {
+  const result = await invokeCommand("update_pull_request_details", { input });
+  return prDetailsResultSchema.parse(result);
+}
+
 export async function searchPullRequestMentions(
   input: SearchPullRequestMentionsInput,
 ): Promise<MentionCandidate[]> {
