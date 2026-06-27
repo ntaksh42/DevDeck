@@ -319,7 +319,9 @@ function ReviewTab({
     updateMutation.mutate({
       ...prLocator(pr),
       action,
-      ...(action === "complete" ? { mergeStrategy, deleteSourceBranch } : {}),
+      ...(action === "complete" || action === "enableAutoComplete"
+        ? { mergeStrategy, deleteSourceBranch }
+        : {}),
     });
   }
 
@@ -435,6 +437,34 @@ function ReviewTab({
         >
           Complete
         </button>
+        {review.autoComplete ? (
+          <button
+            type="button"
+            disabled={readOnly || updateMutation.isPending}
+            title={readOnly ? "Read-only validation mode is enabled" : "Auto-complete is on"}
+            aria-pressed
+            onClick={() => runPrAction("cancelAutoComplete", "Turn off auto-complete for this pull request?")}
+            className="rounded border border-emerald-500 bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800 hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-700 dark:bg-emerald-900 dark:text-emerald-200"
+          >
+            Auto-complete on
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={readOnly || updateMutation.isPending}
+            title={readOnly ? "Read-only validation mode is enabled" : undefined}
+            aria-pressed={false}
+            onClick={() =>
+              runPrAction(
+                "enableAutoComplete",
+                `Enable auto-complete (merge with ${mergeStrategy} once policies pass)?`,
+              )
+            }
+            className="rounded border border-border bg-card px-2 py-0.5 font-medium text-muted-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Auto-complete
+          </button>
+        )}
         <button
           type="button"
           disabled={readOnly || updateMutation.isPending}

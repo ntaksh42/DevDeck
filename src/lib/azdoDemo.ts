@@ -701,6 +701,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         createdBy: summary?.createdBy ?? "Avery Author",
         creationDate: summary?.creationDate ?? "2026-05-20T08:00:00Z",
         isDraft: summary?.isDraft ?? false,
+        autoComplete: false,
         reviewers: [
           {
             displayName: "Demo User",
