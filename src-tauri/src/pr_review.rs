@@ -75,6 +75,41 @@ pub struct UpdatePullRequestInput {
     /// Required for "complete": noFastForward | squash | rebase | rebaseMerge
     pub merge_strategy: Option<String>,
     pub delete_source_branch: Option<bool>,
+    /// When completing, transition linked work items to their next state.
+    pub transition_work_items: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetPullRequestReviewerRequiredInput {
+    #[serde(flatten)]
+    pub pr: PrLocator,
+    pub reviewer_id: String,
+    pub is_required: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemovePullRequestReviewerInput {
+    #[serde(flatten)]
+    pub pr: PrLocator,
+    pub reviewer_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdatePullRequestDetailsInput {
+    #[serde(flatten)]
+    pub pr: PrLocator,
+    pub title: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrDetailsResult {
+    pub title: String,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -132,6 +167,7 @@ pub struct PullRequestReview {
     pub created_by: Option<String>,
     pub creation_date: Option<String>,
     pub is_draft: bool,
+    pub auto_complete: bool,
     pub reviewers: Vec<PrReviewer>,
     pub threads: Vec<PrThread>,
 }
@@ -139,6 +175,8 @@ pub struct PullRequestReview {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PrReviewer {
+    /// Azure DevOps identity id, used to target reviewer mutations.
+    pub id: Option<String>,
     pub display_name: String,
     pub vote: i32,
     pub vote_label: String,
@@ -228,12 +266,14 @@ impl PrReviewService {
             created_by: detail.created_by.and_then(|id| id.display_name),
             creation_date: detail.creation_date.map(|date| date.to_rfc3339()),
             is_draft: detail.is_draft.unwrap_or(false),
+            auto_complete: detail.auto_complete_set_by.is_some(),
             reviewers: detail
                 .reviewers
                 .unwrap_or_default()
                 .into_iter()
                 .map(|reviewer| PrReviewer {
                     is_me: me.is_some() && reviewer.id.as_deref() == me,
+                    id: reviewer.id.clone(),
                     display_name: reviewer.display_name.unwrap_or_default(),
                     vote: reviewer.vote,
                     vote_label: vote_label(reviewer.vote).to_string(),
@@ -472,9 +512,40 @@ impl PrReviewService {
                     "completionOptions": {
                         "mergeStrategy": merge_strategy,
                         "deleteSourceBranch": input.delete_source_branch.unwrap_or(false),
+                        "transitionWorkItems": input.transition_work_items.unwrap_or(false),
                     }
                 })
             }
+            "enableAutoComplete" => {
+                let me = organization
+                    .authenticated_user_id
+                    .as_deref()
+                    .ok_or_else(|| {
+                        AppError::InvalidInput(
+                            "the signed-in user id is unknown; cannot set auto-complete"
+                                .to_string(),
+                        )
+                    })?;
+                let merge_strategy = input
+                    .merge_strategy
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .ok_or_else(|| {
+                        AppError::InvalidInput(
+                            "merge strategy is required to enable auto-complete".to_string(),
+                        )
+                    })?;
+                validate_merge_strategy(merge_strategy)?;
+                serde_json::json!({
+                    "autoCompleteSetBy": { "id": me },
+                    "completionOptions": {
+                        "mergeStrategy": merge_strategy,
+                        "deleteSourceBranch": input.delete_source_branch.unwrap_or(false),
+                    }
+                })
+            }
+            "cancelAutoComplete" => serde_json::json!({ "autoCompleteSetBy": null }),
             other => {
                 return Err(AppError::InvalidInput(format!(
                     "unknown pull request action: {other}"
@@ -492,6 +563,78 @@ impl PrReviewService {
         Ok(PrStatusResult {
             status: updated.status,
             is_draft: updated.is_draft.unwrap_or(false),
+        })
+    }
+
+    /// Marks an existing reviewer as required or optional (issue #384).
+    pub async fn set_reviewer_required(
+        &self,
+        input: SetPullRequestReviewerRequiredInput,
+    ) -> Result<()> {
+        let organization = self
+            .db
+            .resolve_organization(input.pr.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        client
+            .set_pull_request_reviewer_required(
+                &input.pr.project_id,
+                &input.pr.repository_id,
+                input.pr.pull_request_id,
+                &input.reviewer_id,
+                input.is_required,
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// Removes a reviewer from a pull request (issue #384).
+    pub async fn remove_reviewer(&self, input: RemovePullRequestReviewerInput) -> Result<()> {
+        let organization = self
+            .db
+            .resolve_organization(input.pr.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        client
+            .remove_pull_request_reviewer(
+                &input.pr.project_id,
+                &input.pr.repository_id,
+                input.pr.pull_request_id,
+                &input.reviewer_id,
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// Edits a pull request's title and description (issue #388). Sends a PATCH
+    /// with the new values and returns what Azure DevOps persisted.
+    pub async fn update_pull_request_details(
+        &self,
+        input: UpdatePullRequestDetailsInput,
+    ) -> Result<PrDetailsResult> {
+        let title = input.title.trim();
+        if title.is_empty() {
+            return Err(AppError::InvalidInput(
+                "pull request title cannot be empty".to_string(),
+            ));
+        }
+        let organization = self
+            .db
+            .resolve_organization(input.pr.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let body = serde_json::json!({
+            "title": title,
+            "description": input.description.as_deref().unwrap_or("").trim(),
+        });
+        let updated = client
+            .update_pull_request(
+                &input.pr.project_id,
+                &input.pr.repository_id,
+                input.pr.pull_request_id,
+                &body,
+            )
+            .await?;
+        Ok(PrDetailsResult {
+            title: updated.title,
+            description: updated.description,
         })
     }
 
@@ -658,6 +801,7 @@ impl PrReviewService {
             }
         }
         Ok(PrReviewer {
+            id: reviewer.id.clone(),
             is_me: true,
             display_name: reviewer.display_name.unwrap_or_default(),
             vote: reviewer.vote,

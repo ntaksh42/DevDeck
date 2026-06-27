@@ -118,6 +118,27 @@ pub struct DeleteWorkItemCommentInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AddWorkItemLinkInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_id: i64,
+    pub target_id: i64,
+    /// Friendly link type: Parent | Child | Related | Predecessor | Successor.
+    pub link_type: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoveWorkItemLinkInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub work_item_id: i64,
+    pub target_id: i64,
+    pub link_type: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateWorkItemCommentInput {
     pub organization_id: Option<String>,
     pub project_id: String,

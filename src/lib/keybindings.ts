@@ -60,16 +60,16 @@ export type Keybinding = {
 export const KEYBINDINGS: readonly Keybinding[] = [
   { id: "commandPalette", label: "Command palette", group: "General", defaultCombo: "Ctrl+K", scope: "global" },
   { id: "help", label: "Show keyboard shortcuts", group: "General", defaultCombo: "?", scope: "global" },
-  { id: "syncNow", label: "Sync now", group: "General", defaultCombo: "Alt+S", scope: "global" },
+  { id: "syncNow", label: "Sync now", group: "General", defaultCombo: "Ctrl+E", scope: "global" },
   { id: "refreshCurrentView", label: "Refresh current view", group: "General", defaultCombo: "Ctrl+R", scope: "global" },
   { id: "applyStaged", label: "Apply pending work item changes", group: "General", defaultCombo: "Ctrl+S", scope: "global" },
 
-  { id: "openSettings", label: "Go to Settings", group: "Focus & navigation", defaultCombo: "Alt+,", scope: "global" },
-  { id: "focusNavigation", label: "Focus left navigation", group: "Focus & navigation", defaultCombo: "Alt+N", scope: "global" },
-  { id: "focusGrid", label: "Focus grid", group: "Focus & navigation", defaultCombo: "Alt+G", scope: "global" },
-  { id: "focusPreview", label: "Focus preview", group: "Focus & navigation", defaultCombo: "Alt+P", scope: "global" },
-  { id: "focusViewsPanel", label: "Focus views panel", group: "Focus & navigation", defaultCombo: "Alt+V", scope: "global" },
-  { id: "focusComment", label: "Focus work item comment", group: "Focus & navigation", defaultCombo: "Alt+M", scope: "global" },
+  { id: "openSettings", label: "Go to Settings", group: "Focus & navigation", defaultCombo: "Ctrl+,", scope: "global" },
+  { id: "focusNavigation", label: "Focus left navigation", group: "Focus & navigation", defaultCombo: "Ctrl+N", scope: "global" },
+  { id: "focusGrid", label: "Focus grid", group: "Focus & navigation", defaultCombo: "Ctrl+G", scope: "global" },
+  { id: "focusPreview", label: "Focus preview", group: "Focus & navigation", defaultCombo: "Ctrl+P", scope: "global" },
+  { id: "focusViewsPanel", label: "Focus views panel", group: "Focus & navigation", defaultCombo: "Ctrl+B", scope: "global" },
+  { id: "focusComment", label: "Focus work item comment", group: "Focus & navigation", defaultCombo: "Ctrl+M", scope: "global" },
   { id: "focusFilter", label: "Focus filter", group: "Focus & navigation", defaultCombo: "Ctrl+F", scope: "global" },
 
   { id: "gotoLeader", label: "Go to view (leader key, then a letter below)", group: "Go to view", defaultCombo: "G", scope: "global", reserved: true },
