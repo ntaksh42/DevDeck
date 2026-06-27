@@ -2530,4 +2530,77 @@ describe("App", () => {
     expect(fireEvent.keyDown(input, { key: "p", ctrlKey: true })).toBe(true);
     input.remove();
   });
+
+  it("reorders the top-level nav with Alt+ArrowUp and persists the order", async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve({ reviewResultFolderPath: null });
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+    await screen.findByText("No pull requests assigned to you.");
+
+    const nav = screen.getByRole("navigation", { name: "Primary navigation" });
+    const order = () =>
+      Array.from(nav.querySelectorAll("[data-nav-entry]")).map((el) =>
+        el.getAttribute("data-nav-entry"),
+      );
+
+    expect(order()).toEqual([
+      "pullRequests",
+      "workItems",
+      "commits",
+      "pipelines",
+      "codeSearch",
+    ]);
+
+    // Alt+ArrowUp on Commits swaps it above Work Items.
+    fireEvent.keyDown(within(nav).getByRole("button", { name: "Commits" }), {
+      key: "ArrowUp",
+      altKey: true,
+    });
+
+    const expected = ["pullRequests", "commits", "workItems", "pipelines", "codeSearch"];
+    await waitFor(() => expect(order()).toEqual(expected));
+    expect(
+      JSON.parse(window.localStorage.getItem("azdodeck:layout:navOrder") ?? "null"),
+    ).toEqual(expected);
+  });
+
+  it("restores a saved nav order from localStorage", async () => {
+    window.localStorage.setItem(
+      "azdodeck:layout:navOrder",
+      JSON.stringify(["codeSearch", "pipelines", "commits", "workItems", "pullRequests"]),
+    );
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve({ reviewResultFolderPath: null });
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+    await screen.findByText("No pull requests assigned to you.");
+
+    const nav = screen.getByRole("navigation", { name: "Primary navigation" });
+    expect(
+      Array.from(nav.querySelectorAll("[data-nav-entry]")).map((el) =>
+        el.getAttribute("data-nav-entry"),
+      ),
+    ).toEqual(["codeSearch", "pipelines", "commits", "workItems", "pullRequests"]);
+  });
 });

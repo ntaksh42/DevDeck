@@ -64,6 +64,10 @@ crates/azdo-client/                            — Tauri 非依存の独立 ADO 
 サイドバーのナビには件数バッジを表示する: My Reviews (未投票=要レビューの件数)、
 My Items (割当件数)、ピン留めした Work Item View (最後に取得した件数)。0/未取得時は非表示。
 
+最上位ナビ項目 (Pull Requests / Work Items / Commits / Pipelines / Code) はドラッグ&ドロップ
+またはキーボード (`Alt+↑` / `Alt+↓`) で並べ替えできる。順序は localStorage
+(`azdodeck:layout:navOrder`) に永続化される。Help / Settings は下部固定で対象外。
+
 | ビュー | 用途 |
 |---|---|
 | **My Reviews** | 自分がレビュアーの PR。投票状態・マージコンフリクト/CI バッジ・stale 強調・ローカルの done/archive トリアージ・ローカルのレビュー結果プレビュー。自分のレビュー後に author の push で投票がリセットされた PR を「Returned」バッジで強調（投票スナップショットの差分でローカル検出、開く/再投票で解除）。ソート可能な「Review age」列 (作成からの経過日数、stale 閾値超過で強調)。テキストフィルタは読み込み済みデータの値 (リポジトリ/作者) をキーボード操作可能なオートコンプリートで候補表示 (`FilterAutocomplete`)。 |
