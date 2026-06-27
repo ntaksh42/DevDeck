@@ -49,6 +49,34 @@ pub struct ReviewPullRequestSummary {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ListMyCreatedPullRequestsInput {
+    pub organization_id: Option<String>,
+}
+
+// Summary for PRs the authenticated user authored. Unlike a review summary the
+// user's own vote is meaningless here, so it carries an approvals aggregate
+// (how many reviewers approved) instead of a personal vote.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MyCreatedPullRequestSummary {
+    pub organization_id: String,
+    pub project_id: String,
+    pub project_name: String,
+    pub repository_id: String,
+    pub repository_name: String,
+    pub pull_request_id: i64,
+    pub title: String,
+    pub creation_date: String,
+    pub source_ref_name: String,
+    pub target_ref_name: String,
+    pub web_url: Option<String>,
+    pub is_draft: bool,
+    pub approvals: i64,
+    pub reviewer_count: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchPullRequestsInput {
     pub organization_id: Option<String>,
     pub query: Option<String>,
@@ -153,6 +181,42 @@ impl PullRequestService {
                 ci_check_count: pr.ci_check_count,
             })
             .collect();
+        results.sort_by(|a, b| b.creation_date.cmp(&a.creation_date));
+        Ok(results)
+    }
+
+    // PRs the user authored are fetched live from Azure DevOps (not cached),
+    // mirroring how PR search hits the API on demand. The server filters by
+    // `searchCriteria.creatorId`, so we fan out one query per project and merge.
+    pub async fn list_my_created_pull_requests(
+        &self,
+        input: ListMyCreatedPullRequestsInput,
+    ) -> Result<Vec<MyCreatedPullRequestSummary>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        // Without an authenticated user id we cannot identify "my" PRs.
+        let Some(user_id) = organization.authenticated_user_id.clone() else {
+            return Ok(Vec::new());
+        };
+
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let projects = project_id_name_pairs(&client).await?;
+
+        let mut tasks: JoinSet<Result<Vec<MyCreatedPullRequestSummary>>> = JoinSet::new();
+        for (project_id, _project_name) in projects {
+            let client = client.clone();
+            let org = organization.clone();
+            let user_id = user_id.clone();
+            tasks.spawn(async move {
+                fetch_created_prs_for_project(&client, &org, &project_id, &user_id).await
+            });
+        }
+
+        let mut results = Vec::new();
+        while let Some(joined) = tasks.join_next().await {
+            let fetched = joined
+                .map_err(|e| AppError::AzureDevOps(format!("created PR task failed: {e}")))?;
+            results.extend(fetched?);
+        }
         results.sort_by(|a, b| b.creation_date.cmp(&a.creation_date));
         Ok(results)
     }
@@ -1182,6 +1246,71 @@ async fn fetch_review_prs_for_project(
         });
     }
     (project_name, Ok(cached_reviews))
+}
+
+async fn fetch_created_prs_for_project(
+    client: &AdoClient,
+    org: &Organization,
+    project_id: &str,
+    user_id: &str,
+) -> Result<Vec<MyCreatedPullRequestSummary>> {
+    let prs = match client
+        .list_pull_requests_by_creator(project_id, user_id, 200)
+        .await
+    {
+        Ok(prs) => prs,
+        Err(e) if is_ado_not_found(&e) => {
+            tracing::warn!(
+                org = %org.name,
+                project = %project_id,
+                error = %e,
+                "created pull request list returned 404, skipping project"
+            );
+            return Ok(Vec::new());
+        }
+        Err(e) => return Err(e.into()),
+    };
+
+    let mut summaries = Vec::new();
+    for pr in prs {
+        let Some(repo) = &pr.repository else {
+            continue;
+        };
+        let repo_name = repo.name.clone();
+        let (proj_id, proj_name) = repo
+            .project
+            .as_ref()
+            .map(|p| (p.id.clone(), p.name.clone()))
+            .unwrap_or_else(|| (project_id.to_string(), project_id.to_string()));
+
+        let reviewers = pr.reviewers.as_deref().unwrap_or(&[]);
+        let approvals = reviewers.iter().filter(|r| r.vote == 10).count() as i64;
+
+        let web_url = format!(
+            "{}/{}/_git/{}/pullrequest/{}",
+            org.base_url,
+            encode_path_segment(&proj_name),
+            encode_path_segment(&repo_name),
+            pr.pull_request_id
+        );
+        summaries.push(MyCreatedPullRequestSummary {
+            organization_id: org.id.clone(),
+            project_id: proj_id,
+            project_name: proj_name,
+            repository_id: repo.id.clone(),
+            repository_name: repo_name,
+            pull_request_id: pr.pull_request_id,
+            title: pr.title.clone(),
+            creation_date: pr.creation_date.to_rfc3339(),
+            source_ref_name: short_ref(&pr.source_ref_name),
+            target_ref_name: short_ref(&pr.target_ref_name),
+            web_url: Some(web_url),
+            is_draft: pr.is_draft.unwrap_or(false),
+            approvals,
+            reviewer_count: reviewers.len() as i64,
+        });
+    }
+    Ok(summaries)
 }
 
 // Threads are only fetched for the most recently created review PRs each sync.
