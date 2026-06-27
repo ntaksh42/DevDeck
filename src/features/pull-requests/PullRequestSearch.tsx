@@ -36,6 +36,7 @@ import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { ErrorState, LoadingState } from '@/components/StateDisplay';
 import { ActiveFilters } from '@/components/ActiveFilters';
+import { MultiSelectFilter } from '@/components/MultiSelectFilter';
 import { PrReviewPanel } from './PrReviewPanel';
 
 const DEFAULT_PR_SEARCH_PREVIEW_WIDTH = 460;
@@ -68,7 +69,7 @@ const PR_SEARCH_ROW_HEIGHT = 29;
 const PR_SEARCH_OVERSCAN = 8;
 type PrSearchFilterableColumn = "status" | "repository" | "createdBy" | "branch";
 
-type PrSearchStatus = NonNullable<SearchPullRequestsInput["status"]>;
+type PrSearchStatus = NonNullable<SearchPullRequestsInput["statuses"]>[number];
 
 // Active PRs come from the local cache; the other statuses are fetched live from
 // Azure DevOps by prs.rs search() because completed/abandoned history is too
@@ -77,15 +78,23 @@ const PR_SEARCH_STATUS_OPTIONS: { value: PrSearchStatus; label: string }[] = [
   { value: "active", label: "Active" },
   { value: "completed", label: "Completed" },
   { value: "abandoned", label: "Abandoned" },
-  { value: "all", label: "All" },
 ];
-const PR_SEARCH_STATUS_STORAGE_KEY = "azdodeck:view:prSearchStatus";
+const PR_SEARCH_STATUS_STORAGE_KEY = "azdodeck:view:prSearchStatuses";
 
-function loadPrSearchStatus(): PrSearchStatus {
-  const stored = window.localStorage.getItem(PR_SEARCH_STATUS_STORAGE_KEY);
-  return PR_SEARCH_STATUS_OPTIONS.some((option) => option.value === stored)
-    ? (stored as PrSearchStatus)
-    : "active";
+function loadPrSearchStatuses(): PrSearchStatus[] {
+  const valid = new Set(PR_SEARCH_STATUS_OPTIONS.map((option) => option.value));
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(PR_SEARCH_STATUS_STORAGE_KEY) ?? "null",
+    );
+    if (Array.isArray(parsed)) {
+      const kept = parsed.filter((value): value is PrSearchStatus => valid.has(value));
+      if (kept.length > 0) return kept;
+    }
+  } catch {
+    // Ignore malformed storage and fall back to the default below.
+  }
+  return ["active"];
 }
 
 type PrSearchDateBasis = NonNullable<SearchPullRequestsInput["dateBasis"]>;
@@ -138,9 +147,9 @@ export function PullRequestSearch({
   const [query, setQuery] = useState(
     () => window.localStorage.getItem(PR_SEARCH_QUERY_STORAGE_KEY) ?? "",
   );
-  const [status, setStatus] = useState<PrSearchStatus>(loadPrSearchStatus);
-  const [projectId, setProjectId] = useState("");
-  const [repositoryId, setRepositoryId] = useState("");
+  const [statuses, setStatuses] = useState<PrSearchStatus[]>(loadPrSearchStatuses);
+  const [projectIds, setProjectIds] = useState<string[]>([]);
+  const [repositoryIds, setRepositoryIds] = useState<string[]>([]);
   const [targetBranch, setTargetBranch] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -163,13 +172,25 @@ export function PullRequestSearch({
   }, [allRepositories]);
 
   const filteredRepositories = useMemo(
-    () => (projectId ? allRepositories.filter((r) => r.projectId === projectId) : allRepositories),
-    [allRepositories, projectId],
+    () =>
+      projectIds.length > 0
+        ? allRepositories.filter((r) => projectIds.includes(r.projectId))
+        : allRepositories,
+    [allRepositories, projectIds],
   );
 
-  function onProjectChange(newProjectId: string) {
-    setProjectId(newProjectId);
-    setRepositoryId("");
+  // Changing the project scope drops repository selections that no longer
+  // belong to any selected project, so the two filters stay consistent.
+  function onProjectsChange(nextProjectIds: string[]) {
+    setProjectIds(nextProjectIds);
+    if (nextProjectIds.length > 0) {
+      const allowed = new Set(
+        allRepositories
+          .filter((r) => nextProjectIds.includes(r.projectId))
+          .map((r) => r.repositoryId),
+      );
+      setRepositoryIds((prev) => prev.filter((id) => allowed.has(id)));
+    }
   }
 
   const mutation = useMutation({ mutationFn: searchPullRequests });
@@ -178,8 +199,8 @@ export function PullRequestSearch({
   const total = mutation.data?.total ?? 0;
   const activeSearchFilterCount =
     (query.trim() ? 1 : 0) +
-    (projectId ? 1 : 0) +
-    (repositoryId ? 1 : 0) +
+    (projectIds.length > 0 ? 1 : 0) +
+    (repositoryIds.length > 0 ? 1 : 0) +
     (targetBranch.trim() ? 1 : 0) +
     (fromDate ? 1 : 0) +
     (toDate ? 1 : 0) +
@@ -202,8 +223,8 @@ export function PullRequestSearch({
   }, [query]);
 
   useEffect(() => {
-    window.localStorage.setItem(PR_SEARCH_STATUS_STORAGE_KEY, status);
-  }, [status]);
+    window.localStorage.setItem(PR_SEARCH_STATUS_STORAGE_KEY, JSON.stringify(statuses));
+  }, [statuses]);
 
   useEffect(() => {
     window.localStorage.setItem(PR_SEARCH_DATE_BASIS_STORAGE_KEY, dateBasis);
@@ -219,9 +240,9 @@ export function PullRequestSearch({
     setOrganizationId(targetOrganizationId);
     setQuery(externalSearch.query);
     // The palette looks up active PRs, so reset the status and scope filters.
-    setStatus("active");
-    setProjectId("");
-    setRepositoryId("");
+    setStatuses(["active"]);
+    setProjectIds([]);
+    setRepositoryIds([]);
     setTargetBranch("");
     setFromDate("");
     setToDate("");
@@ -229,9 +250,9 @@ export function PullRequestSearch({
     mutation.mutate({
       organizationId: targetOrganizationId,
       query: externalSearch.query,
-      status: "active",
-      projectId: undefined,
-      repositoryId: undefined,
+      statuses: ["active"],
+      projectIds: undefined,
+      repositoryIds: undefined,
     });
     onExternalSearchHandled?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -242,17 +263,17 @@ export function PullRequestSearch({
     mutation.mutate({
       organizationId,
       query,
-      status,
-      projectId: projectId || undefined,
-      repositoryId: repositoryId || undefined,
+      statuses: statuses.length > 0 ? statuses : undefined,
+      projectIds: projectIds.length > 0 ? projectIds : undefined,
+      repositoryIds: repositoryIds.length > 0 ? repositoryIds : undefined,
       ...advancedFilters(),
     });
   }
 
   function clearSearchFilters() {
     setQuery("");
-    setProjectId("");
-    setRepositoryId("");
+    setProjectIds([]);
+    setRepositoryIds([]);
     setTargetBranch("");
     setFromDate("");
     setToDate("");
@@ -261,9 +282,9 @@ export function PullRequestSearch({
       mutation.mutate({
         organizationId,
         query: "",
-        status,
-        projectId: undefined,
-        repositoryId: undefined,
+        statuses: statuses.length > 0 ? statuses : undefined,
+        projectIds: undefined,
+        repositoryIds: undefined,
         dateBasis,
         sortBy,
       });
@@ -279,7 +300,7 @@ export function PullRequestSearch({
               <span className="text-sm font-medium">Organization</span>
               <select
                 value={organizationId}
-                onChange={(e) => { setOrganizationId(e.target.value); setProjectId(""); setRepositoryId(""); }}
+                onChange={(e) => { setOrganizationId(e.target.value); setProjectIds([]); setRepositoryIds([]); }}
                 className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               >
                 {organizations.map((o) => (
@@ -303,49 +324,46 @@ export function PullRequestSearch({
               </div>
             </label>
 
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Status</span>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as PrSearchStatus)}
-                aria-describedby="pr-search-status-note"
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm capitalize outline-none focus:ring-2 focus:ring-ring"
-              >
-                {PR_SEARCH_STATUS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </label>
+            <div className="grid gap-2">
+              <span className="text-sm font-medium" id="pr-search-status-label">Status</span>
+              <MultiSelectFilter
+                options={PR_SEARCH_STATUS_OPTIONS}
+                selected={statuses}
+                onChange={(next) => setStatuses(next as PrSearchStatus[])}
+                placeholder="Active"
+                ariaLabel="Filter by status"
+                capitalize
+              />
+            </div>
 
-            <label className="grid gap-2">
+            <div className="grid gap-2">
               <span className="text-sm font-medium">Project</span>
-              <select
-                value={projectId}
-                onChange={(e) => onProjectChange(e.target.value)}
+              <MultiSelectFilter
+                options={projects.map((p) => ({ value: p.id, label: p.name }))}
+                selected={projectIds}
+                onChange={onProjectsChange}
+                placeholder="All projects"
+                ariaLabel="Filter by project"
+                searchable
                 disabled={repositoriesQuery.isLoading}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
-              >
-                <option value="">All projects</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </label>
+              />
+            </div>
 
-            <label className="grid gap-2">
+            <div className="grid gap-2">
               <span className="text-sm font-medium">Repository</span>
-              <select
-                value={repositoryId}
-                onChange={(e) => setRepositoryId(e.target.value)}
+              <MultiSelectFilter
+                options={filteredRepositories.map((r) => ({
+                  value: r.repositoryId,
+                  label: r.repositoryName,
+                }))}
+                selected={repositoryIds}
+                onChange={setRepositoryIds}
+                placeholder="All repositories"
+                ariaLabel="Filter by repository"
+                searchable
                 disabled={repositoriesQuery.isLoading}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
-              >
-                <option value="">All repositories</option>
-                {filteredRepositories.map((r) => (
-                  <option key={r.repositoryId} value={r.repositoryId}>{r.repositoryName}</option>
-                ))}
-              </select>
-            </label>
+              />
+            </div>
 
             <div className="flex items-end">
               <button
@@ -401,8 +419,8 @@ export function PullRequestSearch({
               <select
                 value={dateBasis}
                 onChange={(e) => setDateBasis(e.target.value as PrSearchDateBasis)}
-                title={status === "active"
-                  ? "Active PRs have no close date, so the window always uses the created date."
+                title={statuses.length === 0 || statuses.includes("active")
+                  ? "Active PRs have no close date, so the window uses the created date for them."
                   : "Whether the date window filters by created or closed date."}
                 className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               >
@@ -437,10 +455,10 @@ export function PullRequestSearch({
           </div>
 
           <p id="pr-search-status-note" className="text-xs text-muted-foreground">
-            Active pull requests are served from the local cache. Completed,
-            abandoned, and all-status searches are fetched live from Azure
-            DevOps, so they may take a moment. Target branch and the date window
-            narrow the live query server-side.
+            Active pull requests are served from the local cache. Completed and
+            abandoned pull requests are fetched live from Azure DevOps, so those
+            statuses may take a moment. Target branch and the date window narrow
+            the live query server-side.
           </p>
         </form>
       </div>

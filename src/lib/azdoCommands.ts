@@ -579,8 +579,10 @@ export type CodeSearchResults = z.infer<typeof codeSearchResultsSchema>;
 export async function searchCode(input: {
   organizationId?: string;
   query: string;
-  project?: string;
-  repository?: string;
+  /** Project names to include. Empty/omitted means all projects. */
+  projects?: string[];
+  /** Repository names to include. Empty/omitted means all repositories. */
+  repositories?: string[];
   branch?: string;
   path?: string;
   operationId?: string;
@@ -683,9 +685,12 @@ export type GetReviewResultPreviewInput = {
 export type SearchPullRequestsInput = {
   organizationId?: string;
   query?: string;
-  status?: "active" | "completed" | "abandoned" | "all";
-  projectId?: string;
-  repositoryId?: string;
+  /** Statuses to include. Empty/omitted defaults to active only. */
+  statuses?: ("active" | "completed" | "abandoned")[];
+  /** Projects to include. Empty/omitted means all projects. */
+  projectIds?: string[];
+  /** Repositories to include. Empty/omitted means all repositories. */
+  repositoryIds?: string[];
   /** Branch name, e.g. "main" or "refs/heads/main". */
   targetBranch?: string;
   /** Inclusive date window as "YYYY-MM-DD". */
@@ -778,9 +783,12 @@ export type SearchAllInput = {
 export type SearchWorkItemsInput = {
   organizationId?: string;
   query?: string;
-  state?: string;
-  workItemType?: string;
-  projectId?: string;
+  /** States to include. Empty/omitted means all states. */
+  states?: string[];
+  /** Work item types to include. Empty/omitted means any type. */
+  workItemTypes?: string[];
+  /** Projects to include. Empty/omitted means all projects. */
+  projectIds?: string[];
 };
 
 export type RunWorkItemQueryInput = {
@@ -944,8 +952,10 @@ export type SearchCommitsInput = {
   branch?: string;
   fromDate?: string;
   toDate?: string;
-  projectId?: string;
-  repositoryId?: string;
+  /** Projects to include. Empty/omitted means all projects. */
+  projectIds?: string[];
+  /** Repositories to include. Empty/omitted means all repositories. */
+  repositoryIds?: string[];
 };
 
 export type GetSavedQueryInput = {

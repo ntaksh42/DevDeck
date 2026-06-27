@@ -1379,16 +1379,21 @@ function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSearchRes
   ];
 
   const query = input?.query?.trim().toLowerCase();
-  const statusFilter = input?.status ?? "active";
+  // Empty/omitted statuses default to active, mirroring the backend.
+  const statusFilter = new Set(
+    input?.statuses && input.statuses.length > 0 ? input.statuses : ["active"],
+  );
+  const projectFilter = new Set((input?.projectIds ?? []).filter(Boolean));
+  const repositoryFilter = new Set((input?.repositoryIds ?? []).filter(Boolean));
   const targetBranch = input?.targetBranch
     ?.trim()
     .replace(/^refs\/heads\//, "")
     .toLowerCase();
   const fromDate = input?.fromDate?.trim() || undefined;
   const toDate = input?.toDate?.trim() || undefined;
-  // Active rows have no close date, so they always filter on creation date —
-  // mirroring the backend's cache path.
-  const useClosedBasis = statusFilter !== "active" && input?.dateBasis === "closed";
+  // The close-date basis only applies when no active rows are in scope, since
+  // active PRs have no close date — mirroring the backend's cache path.
+  const useClosedBasis = !statusFilter.has("active") && input?.dateBasis === "closed";
   const excludeDrafts = input?.excludeDrafts ?? false;
   const sortBy = input?.sortBy ?? "created";
 
@@ -1402,9 +1407,9 @@ function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSearchRes
   };
 
   const matched = applyPullRequestScenario(all).filter((pr) => {
-    if (input?.projectId && pr.projectId !== input.projectId) return false;
-    if (input?.repositoryId && pr.repositoryId !== input.repositoryId) return false;
-    if (statusFilter !== "all" && pr.status !== statusFilter) return false;
+    if (projectFilter.size > 0 && !projectFilter.has(pr.projectId)) return false;
+    if (repositoryFilter.size > 0 && !repositoryFilter.has(pr.repositoryId)) return false;
+    if (!statusFilter.has(pr.status)) return false;
     if (targetBranch && pr.targetRefName.toLowerCase() !== targetBranch) return false;
     if (!inWindow(useClosedBasis ? pr.closedDate : pr.creationDate)) return false;
     if (excludeDrafts && pr.isDraft) return false;
@@ -1556,13 +1561,14 @@ function demoWorkItems(input?: SearchWorkItemsInput): WorkItemSummary[] {
   ];
 
   const query = input?.query?.trim().toLowerCase();
-  const stateFilter = input?.state && input.state !== "all" ? input.state : undefined;
-  const typeFilter = input?.workItemType?.trim() || undefined;
+  const stateFilter = new Set((input?.states ?? []).filter(Boolean));
+  const typeFilter = new Set((input?.workItemTypes ?? []).filter(Boolean));
+  const projectFilter = new Set((input?.projectIds ?? []).filter(Boolean));
 
   return applyWorkItemScenario(withEmptyExtraFields(all)).filter((item) => {
-    if (input?.projectId && item.projectId !== input.projectId) return false;
-    if (stateFilter && item.state !== stateFilter) return false;
-    if (typeFilter && item.workItemType !== typeFilter) return false;
+    if (projectFilter.size > 0 && !projectFilter.has(item.projectId)) return false;
+    if (stateFilter.size > 0 && !(item.state && stateFilter.has(item.state))) return false;
+    if (typeFilter.size > 0 && !(item.workItemType && typeFilter.has(item.workItemType))) return false;
     if (query) {
       const textMatch = [item.title, item.projectName, item.workItemType ?? "", item.state ?? "", item.assignedTo ?? ""].some(
         (v) => v.toLowerCase().includes(query),
@@ -1651,7 +1657,7 @@ function demoWorkItemProjects(): WorkItemProjectOption[] {
 
 function demoRunWorkItemQuery(input?: RunWorkItemQueryInput): WorkItemSummary[] {
   const wiql = input?.wiql.toLowerCase() ?? "";
-  let results = demoWorkItems({ projectId: input?.projectId });
+  let results = demoWorkItems({ projectIds: input?.projectId ? [input.projectId] : undefined });
 
   const stateMatch = /\[system\.state\]\s*=\s*'([^']+)'/.exec(wiql);
   if (stateMatch) {
@@ -2407,10 +2413,13 @@ function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
     },
   ];
 
-  // Mirror the backend contract: branch-scoped search needs a repository
-  // because it queries that repository's branch live instead of the cache.
-  if (input?.branch?.trim() && !input?.repositoryId) {
-    throw new Error("select a repository to search a specific branch");
+  const projectFilter = new Set((input?.projectIds ?? []).filter(Boolean));
+  const repositoryFilter = new Set((input?.repositoryIds ?? []).filter(Boolean));
+
+  // Mirror the backend contract: branch-scoped search needs exactly one
+  // repository because it queries that repository's branch live, not the cache.
+  if (input?.branch?.trim() && repositoryFilter.size !== 1) {
+    throw new Error("select a single repository to search a specific branch");
   }
 
   const query = input?.query?.trim().toLowerCase();
@@ -2419,10 +2428,10 @@ function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
   const toDate = input?.toDate ? new Date(`${input.toDate}T23:59:59Z`) : null;
 
   return commits.filter((commit) => {
-    if (input?.projectId && commit.projectId !== input.projectId) {
+    if (projectFilter.size > 0 && !projectFilter.has(commit.projectId)) {
       return false;
     }
-    if (input?.repositoryId && commit.repositoryId !== input.repositoryId) {
+    if (repositoryFilter.size > 0 && !repositoryFilter.has(commit.repositoryId)) {
       return false;
     }
     if (

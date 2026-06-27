@@ -78,18 +78,18 @@ pub async fn search_all(
         work_item_results.extend(work_items.search(SearchWorkItemsInput {
             organization_id: Some(org_id.clone()),
             query: Some(query.clone()),
-            state: None,
-            work_item_type: None,
-            project_id: None,
+            states: None,
+            work_item_types: None,
+            project_ids: None,
         })?);
         pull_request_results.extend(
             pull_requests
                 .search(SearchPullRequestsInput {
                     organization_id: Some(org_id.clone()),
                     query: Some(query.clone()),
-                    status: None,
-                    project_id: None,
-                    repository_id: None,
+                    statuses: None,
+                    project_ids: None,
+                    repository_ids: None,
                     target_branch: None,
                     from_date: None,
                     to_date: None,
@@ -109,8 +109,8 @@ pub async fn search_all(
                     branch: None,
                     from_date: None,
                     to_date: None,
-                    project_id: None,
-                    repository_id: None,
+                    project_ids: None,
+                    repository_ids: None,
                 })
                 .await?
                 .commits,
