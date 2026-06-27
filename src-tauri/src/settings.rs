@@ -108,6 +108,7 @@ fn normalize_notification_rule(rule: NotificationRule) -> NotificationRule {
         types: clean(rule.types),
         projects: clean(rule.projects),
         repositories: clean(rule.repositories),
+        mute: rule.mute,
     }
 }
 

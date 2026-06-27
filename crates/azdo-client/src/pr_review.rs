@@ -19,6 +19,8 @@ pub struct GitPullRequestDetail {
     pub reviewers: Option<Vec<IdentityRefWithVote>>,
     pub is_draft: Option<bool>,
     pub status: Option<String>,
+    /// Set when auto-complete is enabled (the identity that turned it on).
+    pub auto_complete_set_by: Option<IdentityRef>,
     /// Tip of the source branch; required when completing a PR to guard against
     /// merging a stale revision.
     pub last_merge_source_commit: Option<GitCommitRefId>,
@@ -308,6 +310,38 @@ impl AdoClient {
         let body = json!({ "vote": vote, "id": reviewer_id });
         self.put_json(&path, &[("api-version", "7.1-preview")], &body)
             .await
+    }
+
+    /// Marks an existing reviewer as required or optional (PUT on the same
+    /// reviewers endpoint as voting).
+    pub async fn set_pull_request_reviewer_required(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        pull_request_id: i64,
+        reviewer_id: &str,
+        is_required: bool,
+    ) -> Result<IdentityRefWithVote> {
+        let path = format!(
+            "{project_id}/_apis/git/repositories/{repository_id}/pullRequests/{pull_request_id}/reviewers/{reviewer_id}"
+        );
+        let body = json!({ "id": reviewer_id, "isRequired": is_required });
+        self.put_json(&path, &[("api-version", "7.1-preview")], &body)
+            .await
+    }
+
+    /// Removes a reviewer from a pull request.
+    pub async fn remove_pull_request_reviewer(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        pull_request_id: i64,
+        reviewer_id: &str,
+    ) -> Result<()> {
+        let path = format!(
+            "{project_id}/_apis/git/repositories/{repository_id}/pullRequests/{pull_request_id}/reviewers/{reviewer_id}"
+        );
+        self.delete(&path, &[("api-version", "7.1-preview")]).await
     }
 
     pub async fn list_pull_request_iterations(
@@ -753,6 +787,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn update_pull_request_patches_title_and_description() {
+        let server = MockServer::start().await;
+        Mock::given(method("PATCH"))
+            .and(path(
+                "/project-1/_apis/git/repositories/repo-1/pullrequests/42",
+            ))
+            .and(body_partial_json(serde_json::json!({
+                "title": "New title",
+                "description": "New description"
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "pullRequestId": 42,
+                "title": "New title",
+                "description": "New description",
+                "sourceRefName": "refs/heads/feature",
+                "targetRefName": "refs/heads/main"
+            })))
+            .mount(&server)
+            .await;
+
+        let detail = test_client(&server)
+            .await
+            .update_pull_request(
+                "project-1",
+                "repo-1",
+                42,
+                &serde_json::json!({ "title": "New title", "description": "New description" }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(detail.title, "New title");
+        assert_eq!(detail.description.as_deref(), Some("New description"));
+    }
+
+    #[tokio::test]
     async fn submit_pull_request_vote_puts_vote_for_reviewer() {
         let server = MockServer::start().await;
         Mock::given(method("PUT"))
@@ -775,6 +844,49 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(reviewer.vote, 10);
+    }
+
+    #[tokio::test]
+    async fn set_pull_request_reviewer_required_puts_is_required() {
+        let server = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path(
+                "/project-1/_apis/git/repositories/repo-1/pullRequests/42/reviewers/user-42",
+            ))
+            .and(body_partial_json(serde_json::json!({ "isRequired": true })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": "user-42",
+                "displayName": "Me",
+                "vote": 0,
+                "isRequired": true
+            })))
+            .mount(&server)
+            .await;
+
+        let reviewer = test_client(&server)
+            .await
+            .set_pull_request_reviewer_required("project-1", "repo-1", 42, "user-42", true)
+            .await
+            .unwrap();
+        assert!(reviewer.is_required);
+    }
+
+    #[tokio::test]
+    async fn remove_pull_request_reviewer_issues_delete() {
+        let server = MockServer::start().await;
+        Mock::given(method("DELETE"))
+            .and(path(
+                "/project-1/_apis/git/repositories/repo-1/pullRequests/42/reviewers/user-42",
+            ))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(&server)
+            .await;
+
+        test_client(&server)
+            .await
+            .remove_pull_request_reviewer("project-1", "repo-1", 42, "user-42")
+            .await
+            .unwrap();
     }
 
     #[tokio::test]

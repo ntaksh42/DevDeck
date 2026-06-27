@@ -237,7 +237,7 @@ export function PipelineRunDetailPanel({
       <div
         className="min-h-0 flex-1 overflow-y-auto outline-none"
         data-primary-preview="true"
-        aria-keyshortcuts="Alt+P"
+        aria-keyshortcuts="Control+P"
         tabIndex={-1}
       >
         {buildId == null ? (

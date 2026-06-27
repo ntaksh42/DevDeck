@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+
 use azdo_client::{
-    Build, BuildDefinitionDetail, BuildListCriteria, DefinitionTrigger, DefinitionVariable,
-    Timeline,
+    Approval, Build, BuildDefinitionDetail, BuildListCriteria, DefinitionTrigger,
+    DefinitionVariable, Timeline,
 };
 use serde::{Deserialize, Serialize};
 
@@ -78,10 +80,51 @@ pub struct RerunPipelineRunInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct QueuePipelineRunInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub definition_id: i64,
+    pub source_branch: String,
+    /// Optional runtime/build parameter values (name -> value).
+    pub parameters: Option<HashMap<String, String>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CancelPipelineRunInput {
     pub organization_id: Option<String>,
     pub project_id: String,
     pub build_id: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListPipelineApprovalsInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdatePipelineApprovalInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub approval_id: String,
+    /// `"approved"` or `"rejected"`.
+    pub status: String,
+    pub comment: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PipelineApprovalSummary {
+    pub id: String,
+    pub status: String,
+    pub instructions: Option<String>,
+    pub min_required_approvers: i64,
+    pub execution_order: Option<String>,
+    pub created_on: Option<String>,
+    pub assigned_approvers: Vec<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -344,7 +387,42 @@ impl PipelineService {
             .project(&client, &organization.id, &input.project_id)
             .await?;
         let build = client
-            .queue_build(&project.id, input.definition_id, &input.source_branch)
+            .queue_build(&project.id, input.definition_id, &input.source_branch, None)
+            .await?;
+        Ok(build_to_summary(
+            &organization,
+            &project.id,
+            &project.name,
+            build,
+        ))
+    }
+
+    /// Queues a new run of a pipeline definition on a branch, optionally passing
+    /// runtime parameter values (issue #397).
+    pub async fn queue_run(&self, input: QueuePipelineRunInput) -> Result<PipelineRunSummary> {
+        let branch = input.source_branch.trim();
+        if branch.is_empty() {
+            return Err(AppError::InvalidInput("a branch is required".to_string()));
+        }
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
+        let parameters = input
+            .parameters
+            .filter(|map| !map.is_empty())
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(|error| AppError::InvalidInput(format!("invalid parameters: {error}")))?;
+        let build = client
+            .queue_build(
+                &project.id,
+                input.definition_id,
+                branch,
+                parameters.as_ref(),
+            )
             .await?;
         Ok(build_to_summary(
             &organization,
@@ -368,6 +446,79 @@ impl PipelineService {
             &project.name,
             build,
         ))
+    }
+
+    /// Lists the pending pipeline approvals assigned to the authenticated user
+    /// in a project.
+    pub async fn list_approvals(
+        &self,
+        input: ListPipelineApprovalsInput,
+    ) -> Result<Vec<PipelineApprovalSummary>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
+        let user_ids: Vec<String> = organization
+            .authenticated_user_id
+            .as_deref()
+            .map(|id| vec![id.to_string()])
+            .unwrap_or_default();
+        let approvals = client
+            .list_pipeline_approvals(&project.id, &user_ids, "pending")
+            .await?;
+        Ok(approvals.into_iter().map(approval_to_summary).collect())
+    }
+
+    /// Approves or rejects a single pipeline approval.
+    pub async fn update_approval(
+        &self,
+        input: UpdatePipelineApprovalInput,
+    ) -> Result<Vec<PipelineApprovalSummary>> {
+        let status = match input.status.trim().to_ascii_lowercase().as_str() {
+            "approved" | "approve" => "approved",
+            "rejected" | "reject" => "rejected",
+            other => {
+                return Err(AppError::InvalidInput(format!(
+                    "invalid approval status: {other}"
+                )))
+            }
+        };
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
+        let comment = input.comment.unwrap_or_default();
+        let updated = client
+            .update_pipeline_approval(&project.id, &input.approval_id, status, &comment)
+            .await?;
+        Ok(updated.into_iter().map(approval_to_summary).collect())
+    }
+}
+
+fn approval_to_summary(approval: Approval) -> PipelineApprovalSummary {
+    let assigned_approvers = approval
+        .steps
+        .iter()
+        .filter_map(|step| step.assigned_approver.as_ref())
+        .filter_map(|approver| {
+            approver
+                .display_name
+                .clone()
+                .or_else(|| approver.unique_name.clone())
+        })
+        .collect();
+    PipelineApprovalSummary {
+        id: approval.id,
+        status: approval.status.unwrap_or_default(),
+        instructions: approval.instructions,
+        min_required_approvers: approval.min_required_approvers,
+        execution_order: approval.execution_order,
+        created_on: approval.created_on.map(|date| date.to_rfc3339()),
+        assigned_approvers,
     }
 }
 

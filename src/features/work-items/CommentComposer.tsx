@@ -314,7 +314,7 @@ export function CommentComposer({
             }}
             onKeyDown={handleCommentKeyDown}
             aria-label="Comment"
-            aria-keyshortcuts="M Alt+M Control+Enter Meta+Enter"
+            aria-keyshortcuts="M Control+M Control+Enter Meta+Enter"
             placeholder="Add a comment..."
             rows={2}
             className="min-h-[36px] w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none transition-[border-color,box-shadow,min-height] focus:min-h-[64px] focus:border-primary focus:ring-4 focus:ring-primary/20"

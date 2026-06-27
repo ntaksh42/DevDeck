@@ -1,10 +1,15 @@
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Check, Loader2, Play, Plus, X } from "lucide-react";
 import {
+  commandErrorMessage,
+  listPipelineApprovals,
   listPipelineDefinitions,
   listPipelineProjects,
+  queuePipelineRun,
+  updatePipelineApproval,
   type Organization,
+  type PipelineApprovalSummary,
 } from "@/lib/azdoCommands";
 import { ResizeHandle } from "@/components/ResizeHandle";
 import { storedNumber } from "@/lib/utils";
@@ -88,6 +93,26 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
   });
   const definitionOptions = definitionsQuery.data ?? [];
 
+  const queryClient = useQueryClient();
+  const approvalsQuery = useQuery({
+    queryKey: ["pipelineApprovals", selectedOrganizationId, projectId],
+    queryFn: () =>
+      listPipelineApprovals({ organizationId: selectedOrganizationId, projectId }),
+    enabled: !!selectedOrganizationId && !!projectId,
+    staleTime: 30_000,
+  });
+  const approvalMutation = useMutation({
+    mutationFn: updatePipelineApproval,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["pipelineApprovals", selectedOrganizationId, projectId],
+      });
+    },
+  });
+  const pendingApprovalId = approvalMutation.isPending
+    ? (approvalMutation.variables?.approvalId ?? null)
+    : null;
+
   const selectedProject = projectOptions.find((project) => project.id === projectId);
   const selectedDefinition =
     definitionId != null
@@ -139,6 +164,53 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
       return;
     }
     persistSubscriptions(result.subscriptions);
+  }
+
+  // Queue a new pipeline run (#397): pick the selected definition, a branch, and
+  // optional runtime parameters.
+  const [queueOpen, setQueueOpen] = useState(false);
+  const [queueBranch, setQueueBranch] = useState("main");
+  const [queueParams, setQueueParams] = useState("");
+  const [queueError, setQueueError] = useState<string | null>(null);
+  const [queueNotice, setQueueNotice] = useState<string | null>(null);
+  const canQueue = definitionId != null && !!selectedProject && !!selectedDefinition;
+  const queueMutation = useMutation({
+    mutationFn: queuePipelineRun,
+    onSuccess: (run) => {
+      setQueueError(null);
+      setQueueOpen(false);
+      setQueueNotice(`Queued ${selectedDefinition?.name ?? "pipeline"} #${run.buildId}.`);
+      window.setTimeout(() => setQueueNotice(null), 4000);
+      void queryClient.invalidateQueries({ queryKey: ["pipelineSubscriptionHistory"] });
+    },
+    onError: (error) => setQueueError(commandErrorMessage(error)),
+  });
+
+  function submitQueue() {
+    if (!canQueue || definitionId == null) return;
+    const branch = queueBranch.trim();
+    if (!branch) {
+      setQueueError("Enter a branch.");
+      return;
+    }
+    const parameters: Record<string, string> = {};
+    for (const line of queueParams.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      const eq = trimmed.indexOf("=");
+      if (eq <= 0) {
+        setQueueError(`Parameters must be name=value (got "${trimmed}").`);
+        return;
+      }
+      parameters[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1).trim();
+    }
+    queueMutation.mutate({
+      organizationId: selectedOrganizationId,
+      projectId,
+      definitionId,
+      sourceBranch: branch,
+      parameters: Object.keys(parameters).length > 0 ? parameters : undefined,
+    });
   }
 
   const selectClasses =
@@ -197,7 +269,7 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
             />
           </label>
 
-          <div className="flex items-end">
+          <div className="flex items-end gap-2">
             <button
               type="button"
               onClick={handleSubscribe}
@@ -219,9 +291,96 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
               <Plus className="h-4 w-4" aria-hidden="true" />
               {selectedIsSubscribed ? "Watching" : "Watch"}
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setQueueError(null);
+                setQueueOpen((open) => !open);
+              }}
+              disabled={!canQueue}
+              aria-expanded={queueOpen}
+              title={canQueue ? "Queue a new run of this pipeline" : "Select a pipeline to queue a run"}
+              className="flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Play className="h-4 w-4" aria-hidden="true" />
+              Queue run
+            </button>
           </div>
         </div>
+
+        {queueOpen && canQueue ? (
+          <div className="mt-3 grid gap-2 rounded-md border border-border bg-background p-3">
+            <p className="text-sm font-medium">
+              Queue {selectedDefinition?.name}
+            </p>
+            <label className="grid gap-1">
+              <span className="text-xs text-muted-foreground">Branch</span>
+              <input
+                value={queueBranch}
+                onChange={(event) => setQueueBranch(event.target.value)}
+                placeholder="main"
+                aria-label="Branch"
+                className="h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className="text-xs text-muted-foreground">Parameters (one name=value per line, optional)</span>
+              <textarea
+                value={queueParams}
+                onChange={(event) => setQueueParams(event.target.value)}
+                rows={3}
+                placeholder={"environment=prod\nrunTests=true"}
+                aria-label="Parameters"
+                className="resize-y rounded-md border border-input bg-background px-2 py-1 font-mono text-xs outline-none focus:ring-2 focus:ring-ring"
+              />
+            </label>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={submitQueue}
+                disabled={queueMutation.isPending || !queueBranch.trim()}
+                className="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Play className="h-4 w-4" aria-hidden="true" />
+                Queue
+              </button>
+              <button
+                type="button"
+                onClick={() => setQueueOpen(false)}
+                className="inline-flex h-8 items-center rounded-md border border-border px-3 text-sm hover:bg-accent"
+              >
+                Cancel
+              </button>
+            </div>
+            {queueError ? (
+              <p role="alert" className="text-xs text-destructive">
+                {queueError}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        {queueNotice ? (
+          <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-400">{queueNotice}</p>
+        ) : null}
       </div>
+
+      {projectId && (approvalsQuery.data?.length || approvalMutation.isError) ? (
+        <PipelineApprovalsPanel
+          approvals={approvalsQuery.data ?? []}
+          pendingApprovalId={pendingApprovalId}
+          error={
+            approvalMutation.isError ? commandErrorMessage(approvalMutation.error) : null
+          }
+          onAct={(approvalId, status) =>
+            approvalMutation.mutate({
+              organizationId: selectedOrganizationId,
+              projectId,
+              approvalId,
+              status,
+            })
+          }
+        />
+      ) : null}
 
       <div
         className="grid min-h-0 flex-1 items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_8px_minmax(320px,var(--pipeline-preview-width))]"
@@ -288,6 +447,78 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
           {watchToast}
         </div>
       )}
+    </div>
+  );
+}
+
+function PipelineApprovalsPanel({
+  approvals,
+  pendingApprovalId,
+  error,
+  onAct,
+}: {
+  approvals: PipelineApprovalSummary[];
+  pendingApprovalId: string | null;
+  error: string | null;
+  onAct: (approvalId: string, status: "approved" | "rejected") => void;
+}) {
+  return (
+    <div className="shrink-0 rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700/60 dark:bg-amber-950/30">
+      <div className="border-b border-amber-200 px-3 py-2 text-sm font-medium text-amber-800 dark:border-amber-800/60 dark:text-amber-200">
+        Pending approvals ({approvals.length})
+      </div>
+      {error ? (
+        <p role="alert" className="px-3 py-2 text-xs text-destructive">
+          {error}
+        </p>
+      ) : null}
+      <ul className="divide-y divide-amber-200/70 dark:divide-amber-800/40">
+        {approvals.map((approval) => {
+          const busy = pendingApprovalId === approval.id;
+          return (
+            <li
+              key={approval.id}
+              className="flex items-center gap-3 px-3 py-2 text-sm"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-foreground">
+                  {approval.instructions?.trim() || "Approval required to continue"}
+                </p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {approval.assignedApprovers.join(", ") || "Assigned to you"}
+                  {approval.minRequiredApprovers > 1
+                    ? ` · ${approval.minRequiredApprovers} approvers required`
+                    : ""}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onAct(approval.id, "approved")}
+                  className="inline-flex h-7 items-center gap-1 rounded-md bg-emerald-600 px-2 text-xs font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {busy ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                  )}
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onAct(approval.id, "rejected")}
+                  className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-background px-2 text-xs font-medium text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                  Reject
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

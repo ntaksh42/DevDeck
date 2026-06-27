@@ -107,6 +107,7 @@ pub async fn search_all(
                     query: Some(query.clone()),
                     author: None,
                     branch: None,
+                    item_path: None,
                     from_date: None,
                     to_date: None,
                     project_ids: None,
