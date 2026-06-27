@@ -8,13 +8,20 @@ import {
   useRef,
   useState,
 } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronRight, Loader2, Pencil, Plus, SlidersHorizontal, SmilePlus, Trash2, X } from "lucide-react";
 import type {
   WorkItemFieldOption,
+  WorkItemLinkType,
   WorkItemPreview,
 } from "@/lib/azdoCommands";
-import { commandErrorMessage, listWorkItemFields, listWorkItemUpdates } from "@/lib/azdoCommands";
+import {
+  addWorkItemLink,
+  commandErrorMessage,
+  listWorkItemFields,
+  listWorkItemUpdates,
+  removeWorkItemLink,
+} from "@/lib/azdoCommands";
 import { focusPrimaryGrid, formatRelativeDate, isEditableTarget } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
 import { navigateToPullRequest } from "@/lib/crossLinks";
@@ -94,6 +101,17 @@ function stopPreviewNavigationKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
   }
 }
 
+const WORK_ITEM_LINK_TYPES: WorkItemLinkType[] = [
+  "Related",
+  "Parent",
+  "Child",
+  "Predecessor",
+  "Successor",
+];
+// Link types the app knows how to remove (their reference name is mapped on the
+// backend). Other relation kinds are shown read-only.
+const REMOVABLE_LINK_TYPES = new Set<string>(WORK_ITEM_LINK_TYPES);
+
 export function WorkItemPreviewDetails({
   customPreviewFields,
   preview,
@@ -157,6 +175,47 @@ export function WorkItemPreviewDetails({
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+
+  // Work item link management (#390): add by id + type, remove existing links.
+  const linkQueryClient = useQueryClient();
+  const [newLinkType, setNewLinkType] = useState<WorkItemLinkType>("Related");
+  const [newLinkTargetId, setNewLinkTargetId] = useState("");
+  const [linkError, setLinkError] = useState<string | null>(null);
+  function invalidatePreview() {
+    void linkQueryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
+  }
+  const addLinkMutation = useMutation({
+    mutationFn: addWorkItemLink,
+    onSuccess: () => {
+      setLinkError(null);
+      setNewLinkTargetId("");
+      invalidatePreview();
+    },
+    onError: (mutationError) => setLinkError(commandErrorMessage(mutationError)),
+  });
+  const removeLinkMutation = useMutation({
+    mutationFn: removeWorkItemLink,
+    onSuccess: () => {
+      setLinkError(null);
+      invalidatePreview();
+    },
+    onError: (mutationError) => setLinkError(commandErrorMessage(mutationError)),
+  });
+  const linkMutationPending = addLinkMutation.isPending || removeLinkMutation.isPending;
+  function submitNewLink() {
+    const targetId = Number.parseInt(newLinkTargetId.trim(), 10);
+    if (!Number.isFinite(targetId) || targetId <= 0) {
+      setLinkError("Enter a valid work item id.");
+      return;
+    }
+    addLinkMutation.mutate({
+      organizationId: preview.organizationId,
+      projectId: preview.projectId,
+      workItemId: preview.id,
+      targetId,
+      linkType: newLinkType,
+    });
+  }
   // Comments arrive newest first; the list shows only the most recent
   // VISIBLE_COMMENT_LIMIT, and each of those mounts its sandboxed-iframe body
   // lazily as it scrolls into view.
@@ -585,17 +644,16 @@ export function WorkItemPreviewDetails({
         </div>
       )}
 
-      {preview.relations.length > 0 ? (
-        <PreviewSection className="mt-2" collapseId="links" title={`Links (${preview.relations.length})`}>
-          <div className="space-y-1">
-            {preview.relations.map((relation) => (
+      <PreviewSection className="mt-2" collapseId="links" title={`Links (${preview.relations.length})`}>
+        <div className="space-y-1">
+          {preview.relations.map((relation) => (
+            <div key={`${relation.relationType}:${relation.id}`} className="flex items-center gap-1">
               <button
-                key={`${relation.relationType}:${relation.id}`}
                 type="button"
                 onClick={() => {
                   if (relation.webUrl) openExternalUrl(relation.webUrl);
                 }}
-                className="flex w-full min-w-0 items-center gap-1.5 rounded border border-border bg-card px-1.5 py-1 text-left text-xs hover:bg-secondary"
+                className="flex min-w-0 flex-1 items-center gap-1.5 rounded border border-border bg-card px-1.5 py-1 text-left text-xs hover:bg-secondary"
                 title={relation.webUrl ?? undefined}
               >
                 <span className="w-16 shrink-0 truncate text-[11px] text-muted-foreground">
@@ -612,10 +670,75 @@ export function WorkItemPreviewDetails({
                 </span>
                 {relation.state ? <WorkItemStatePill state={relation.state} /> : null}
               </button>
+              {REMOVABLE_LINK_TYPES.has(relation.relationType) ? (
+                <button
+                  type="button"
+                  disabled={linkMutationPending}
+                  onClick={() =>
+                    removeLinkMutation.mutate({
+                      organizationId: preview.organizationId,
+                      projectId: preview.projectId,
+                      workItemId: preview.id,
+                      targetId: relation.id,
+                      linkType: relation.relationType as WorkItemLinkType,
+                    })
+                  }
+                  aria-label={`Remove ${relation.relationType} link to #${relation.id}`}
+                  title="Remove link"
+                  className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive disabled:opacity-50"
+                >
+                  <X className="h-3 w-3" aria-hidden="true" />
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+        <div className="mt-1.5 flex items-center gap-1">
+          <label className="sr-only" htmlFor="add-link-type">
+            Link type
+          </label>
+          <select
+            id="add-link-type"
+            value={newLinkType}
+            onChange={(event) => setNewLinkType(event.target.value as WorkItemLinkType)}
+            className="h-7 rounded border border-input bg-background px-1 text-[11px] outline-none focus:ring-2 focus:ring-ring"
+          >
+            {WORK_ITEM_LINK_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {type}
+              </option>
             ))}
-          </div>
-        </PreviewSection>
-      ) : null}
+          </select>
+          <input
+            value={newLinkTargetId}
+            onChange={(event) => setNewLinkTargetId(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                event.stopPropagation();
+                submitNewLink();
+              }
+            }}
+            inputMode="numeric"
+            placeholder="Work item #"
+            aria-label="Link target work item id"
+            className="h-7 w-24 rounded border border-input bg-background px-1.5 text-[11px] outline-none focus:ring-2 focus:ring-ring"
+          />
+          <button
+            type="button"
+            disabled={linkMutationPending || !newLinkTargetId.trim()}
+            onClick={submitNewLink}
+            className="inline-flex items-center gap-0.5 rounded border border-border px-1.5 py-0.5 text-[11px] hover:bg-accent disabled:opacity-50"
+          >
+            <Plus className="h-3 w-3" aria-hidden="true" /> Add
+          </button>
+        </div>
+        {linkError ? (
+          <p role="alert" className="mt-1 text-[11px] text-destructive">
+            {linkError}
+          </p>
+        ) : null}
+      </PreviewSection>
 
       {preview.pullRequests.length > 0 ? (
         <PreviewSection

@@ -128,6 +128,8 @@ let demoSyncStates: SyncState[] = [
 ];
 const writeCommands = new Set([
   "add_work_item_comment",
+  "add_work_item_link",
+  "remove_work_item_link",
   "delete_work_item_comment",
   "update_work_item_comment",
   "set_work_item_comment_reaction",
@@ -982,6 +984,9 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         ?.input;
       return demoWorkItemComment(input?.markdown);
     }
+    case "add_work_item_link":
+    case "remove_work_item_link":
+      return null;
     case "delete_work_item_comment": {
       const input = (args as { input?: DeleteWorkItemCommentInput } | undefined)
         ?.input;
