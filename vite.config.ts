@@ -41,12 +41,14 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
-      // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      // 3. tell Vite to ignore watching `src-tauri`, and `.claude` so sibling
+      //    agent worktrees building under `.claude/worktrees/**` don't trigger
+      //    endless HMR full-page reloads in this dev server.
+      ignored: ["**/src-tauri/**", "**/.claude/**"],
     },
   },
   test: {
     environment: "jsdom",
-    exclude: ["tests/e2e/**", "node_modules/**", "dist/**", "src-tauri/**"],
+    exclude: ["tests/e2e/**", "node_modules/**", "dist/**", "src-tauri/**", ".claude/**"],
   },
 }));

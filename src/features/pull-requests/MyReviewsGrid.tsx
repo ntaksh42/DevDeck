@@ -41,15 +41,14 @@ import {
 
   matchesAllSearchTerms,
   splitSearchTerms,
-  storedNumbers,
   storedNumber,
-  gridColumnTemplate,
   isEditableTarget,
   formatDate,
   formatRelativeDate,
   focusPrimaryPreview,
   type SortDirection,
 } from '@/lib/utils';
+import { useGridColumns } from '@/lib/useGridColumns';
 import { openExternalUrl } from '@/lib/openExternal';
 import { useGridFocusRestoration } from '@/lib/useGridFocusRestoration';
 import { recordRecentPullRequest } from '@/lib/recentItems';
@@ -747,14 +746,19 @@ export function MyReviewsGrid({
     initialViewState.visibleColumns,
   );
   const [columnMenuRect, setColumnMenuRect] = useState<DOMRect | null>(null);
-  const [columnWidths, setColumnWidths] = useState(() =>
-    storedNumbers(
-      PR_GRID_COLUMN_WIDTHS_STORAGE_KEY,
-      DEFAULT_PR_GRID_COLUMN_WIDTHS,
-      PR_GRID_COLUMN_MIN_WIDTHS,
-      PR_GRID_COLUMN_MAX_WIDTHS,
-    ),
-  );
+  const {
+    template: COLS,
+    minWidth: gridMinWidth,
+    resizeProps: columnResizeProps,
+  } = useGridColumns({
+    keys: PR_GRID_KEYS,
+    visibleColumns,
+    flexibleKey: "title",
+    defaults: DEFAULT_PR_GRID_COLUMN_WIDTHS,
+    min: PR_GRID_COLUMN_MIN_WIDTHS,
+    max: PR_GRID_COLUMN_MAX_WIDTHS,
+    storageKey: PR_GRID_COLUMN_WIDTHS_STORAGE_KEY,
+  });
   const [previewWidth, setPreviewWidth] = useState(() =>
     storedNumber(
       REVIEW_PREVIEW_WIDTH_STORAGE_KEY,
@@ -773,10 +777,6 @@ export function MyReviewsGrid({
   // the sorted/visible rows (e.g. after switching org or loading data).
   const pendingSelectRef = useRef<MyReviewsSelectRequest | null>(null);
   const [gridViewport, setGridViewport] = useState({ height: 0, scrollTop: 0 });
-
-  useEffect(() => {
-    localStorage.setItem(PR_GRID_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
-  }, [columnWidths]);
 
   useEffect(() => {
     if (!organizationId && organizations[0]) {
@@ -1460,11 +1460,6 @@ export function MyReviewsGrid({
     setVisibleColumns([...PR_GRID_KEYS]);
   }
 
-  const visibleColumnWidths = visibleColumns.map(
-    (column) => columnWidths[PR_GRID_KEYS.indexOf(column)],
-  );
-  const titleFlexIndex = Math.max(0, visibleColumns.indexOf("title"));
-  const COLS = gridColumnTemplate(visibleColumnWidths, titleFlexIndex);
   const firstVirtualRow = Math.max(
     0,
     Math.floor(gridViewport.scrollTop / PR_GRID_ROW_HEIGHT) - PR_GRID_OVERSCAN,
@@ -1578,8 +1573,8 @@ export function MyReviewsGrid({
               }
             />
           ) : (
-          <div ref={gridScrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-            <div className="min-w-[720px]">
+          <div ref={gridScrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
+            <div style={{ minWidth: gridMinWidth }}>
               {/* Column headers */}
               <div
                 role="row"
@@ -1587,7 +1582,6 @@ export function MyReviewsGrid({
                 style={{ gridTemplateColumns: COLS }}
               >
                 {visibleColumns.map((col, i) => {
-                  const fullIndex = PR_GRID_KEYS.indexOf(col);
                   const isLast = i === visibleColumns.length - 1;
                   return (
                     <SortHeaderButton
@@ -1599,14 +1593,7 @@ export function MyReviewsGrid({
                       onFilterOpen={isFilterableColumn(col) ? (el) => openFilter(col, el) : undefined}
                       resizeHandle={
                         isLast ? undefined : (
-                          <ColumnResizeHandle
-                            columnIndex={fullIndex}
-                            widths={columnWidths}
-                            setWidths={setColumnWidths}
-                            min={PR_GRID_COLUMN_MIN_WIDTHS[fullIndex]}
-                            max={PR_GRID_COLUMN_MAX_WIDTHS[fullIndex]}
-                            defaultWidth={DEFAULT_PR_GRID_COLUMN_WIDTHS[fullIndex]}
-                          />
+                          <ColumnResizeHandle {...columnResizeProps(col)} />
                         )
                       }
                     />

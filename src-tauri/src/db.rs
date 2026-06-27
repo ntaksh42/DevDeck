@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, Result};
 
-const SCHEMA_VERSION: i64 = 15;
+const SCHEMA_VERSION: i64 = 16;
 
 /// Max rows kept in the my_work_items snapshot queries; sync notification
 /// diffing must know this cap to avoid treating re-entering rows as new.
@@ -128,6 +128,7 @@ pub struct CachedPr {
     pub source_ref_name: String,
     pub target_ref_name: String,
     pub web_url: Option<String>,
+    pub is_draft: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -473,18 +474,18 @@ impl AppDatabase {
     pub fn search_work_items(
         &self,
         org_id: &str,
-        project_id: Option<&str>,
-        state: Option<&str>,
-        work_item_type: Option<&str>,
+        project_ids: Option<&[String]>,
+        states: Option<&[String]>,
+        work_item_types: Option<&[String]>,
         assigned_to: Option<&str>,
     ) -> Result<Vec<CachedWorkItem>> {
         let conn = self.open()?;
         search_work_items(
             &conn,
             org_id,
-            project_id,
-            state,
-            work_item_type,
+            project_ids,
+            states,
+            work_item_types,
             assigned_to,
         )
     }
@@ -618,23 +619,23 @@ impl AppDatabase {
     pub fn search_commits(
         &self,
         org_id: &str,
-        repository_id: Option<&str>,
+        repository_ids: Option<&[String]>,
         author: Option<&str>,
         from_date: Option<&str>,
         to_date: Option<&str>,
     ) -> Result<Vec<CachedCommit>> {
         let conn = self.open()?;
-        search_commits(&conn, org_id, repository_id, author, from_date, to_date)
+        search_commits(&conn, org_id, repository_ids, author, from_date, to_date)
     }
 
     pub fn search_commits_fts(
         &self,
         org_id: &str,
         query: &str,
-        repository_id: Option<&str>,
+        repository_ids: Option<&[String]>,
     ) -> Result<Vec<CachedCommit>> {
         let conn = self.open()?;
-        search_commits_fts(&conn, org_id, query, repository_id)
+        search_commits_fts(&conn, org_id, query, repository_ids)
     }
 
     pub fn list_commit_repositories(&self, org_id: &str) -> Result<Vec<CachedRepository>> {
@@ -1435,7 +1436,31 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             "#,
         )?;
     }
+    if current < 16 {
+        // PR search can now exclude draft PRs, so the active-PR cache needs to
+        // remember which rows are drafts. Existing rows default to non-draft and
+        // are corrected on the next sync. The table-exists guard keeps partial
+        // historical databases (e.g. migration tests that start past step 2)
+        // from tripping over a not-yet-created pull_requests table.
+        if table_exists(conn, "pull_requests")?
+            && !table_column_exists(conn, "pull_requests", "is_draft")?
+        {
+            conn.execute_batch(
+                "ALTER TABLE pull_requests ADD COLUMN is_draft INTEGER NOT NULL DEFAULT 0;",
+            )?;
+        }
+        conn.execute_batch("PRAGMA user_version = 16;")?;
+    }
     Ok(())
+}
+
+fn table_exists(conn: &Connection, table: &str) -> Result<bool> {
+    let count: i64 = conn.query_row(
+        "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+        [table],
+        |row| row.get(0),
+    )?;
+    Ok(count > 0)
 }
 
 fn table_column_exists(conn: &Connection, table: &str, column: &str) -> Result<bool> {
@@ -1826,8 +1851,8 @@ fn upsert_pull_requests(conn: &Connection, prs: &[CachedPr]) -> Result<()> {
         INSERT INTO pull_requests(
             org_id, project_id, project_name, repository_id, repository_name,
             pull_request_id, title, status, created_by, creation_date,
-            source_ref_name, target_ref_name, web_url
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+            source_ref_name, target_ref_name, web_url, is_draft
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
         ON CONFLICT(org_id, repository_id, pull_request_id) DO UPDATE SET
             project_id = excluded.project_id,
             project_name = excluded.project_name,
@@ -1838,7 +1863,8 @@ fn upsert_pull_requests(conn: &Connection, prs: &[CachedPr]) -> Result<()> {
             creation_date = excluded.creation_date,
             source_ref_name = excluded.source_ref_name,
             target_ref_name = excluded.target_ref_name,
-            web_url = excluded.web_url
+            web_url = excluded.web_url,
+            is_draft = excluded.is_draft
         "#,
     )?;
     for pr in prs {
@@ -1855,7 +1881,8 @@ fn upsert_pull_requests(conn: &Connection, prs: &[CachedPr]) -> Result<()> {
             pr.creation_date,
             pr.source_ref_name,
             pr.target_ref_name,
-            pr.web_url
+            pr.web_url,
+            pr.is_draft
         ])?;
     }
     Ok(())
@@ -1872,7 +1899,7 @@ fn search_pull_requests(
         r#"
         SELECT org_id, project_id, project_name, repository_id, repository_name,
                pull_request_id, title, status, created_by, creation_date,
-               source_ref_name, target_ref_name, web_url
+               source_ref_name, target_ref_name, web_url, is_draft
         FROM pull_requests
         WHERE org_id = ?1
           AND (?2 IS NULL OR project_id = ?2)
@@ -2064,33 +2091,59 @@ fn update_my_work_item_if_present(
     Ok(())
 }
 
+/// Appends ` AND {column} IN (?, ?, ...)` for a non-empty value list, binding
+/// each value. A `None`/empty list is a no-op so callers can pass an absent
+/// filter unconditionally.
+fn push_in_clause(
+    sql: &mut String,
+    bind: &mut Vec<Box<dyn rusqlite::ToSql>>,
+    column: &str,
+    values: Option<&[String]>,
+) {
+    let Some(values) = values.filter(|values| !values.is_empty()) else {
+        return;
+    };
+    let start = bind.len() + 1;
+    let placeholders: Vec<String> = (0..values.len())
+        .map(|offset| format!("?{}", start + offset))
+        .collect();
+    sql.push_str(&format!(" AND {column} IN ({})", placeholders.join(", ")));
+    for value in values {
+        bind.push(Box::new(value.clone()));
+    }
+}
+
 fn search_work_items(
     conn: &Connection,
     org_id: &str,
-    project_id: Option<&str>,
-    state: Option<&str>,
-    work_item_type: Option<&str>,
+    project_ids: Option<&[String]>,
+    states: Option<&[String]>,
+    work_item_types: Option<&[String]>,
     assigned_to: Option<&str>,
 ) -> Result<Vec<CachedWorkItem>> {
-    let mut stmt = conn.prepare(
-        r#"
-        SELECT org_id, project_id, project_name, id, title,
-               work_item_type, state, assigned_to, changed_date, web_url,
-               assigned_to_unique_name
-        FROM work_items
-        WHERE org_id = ?1
-          AND (?2 IS NULL OR project_id = ?2)
-          AND (?3 IS NULL OR state = ?3)
-          AND (?4 IS NULL OR work_item_type = ?4)
-          AND (?5 IS NULL OR assigned_to = ?5)
-        ORDER BY changed_date DESC
-        LIMIT 500
-        "#,
-    )?;
-    let rows = stmt.query_map(
-        params![org_id, project_id, state, work_item_type, assigned_to],
-        map_cached_work_item,
-    )?;
+    // Build the WHERE clause dynamically so each multi-value filter expands to
+    // an `IN (...)` list, keeping the filtering server-side (before the LIMIT).
+    let mut sql = String::from(
+        "SELECT org_id, project_id, project_name, id, title, \
+                work_item_type, state, assigned_to, changed_date, web_url, \
+                assigned_to_unique_name \
+         FROM work_items \
+         WHERE org_id = ?1",
+    );
+    let mut bind: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(org_id.to_string())];
+
+    push_in_clause(&mut sql, &mut bind, "project_id", project_ids);
+    push_in_clause(&mut sql, &mut bind, "state", states);
+    push_in_clause(&mut sql, &mut bind, "work_item_type", work_item_types);
+    if let Some(assigned_to) = assigned_to {
+        sql.push_str(&format!(" AND assigned_to = ?{}", bind.len() + 1));
+        bind.push(Box::new(assigned_to.to_string()));
+    }
+    sql.push_str(" ORDER BY changed_date DESC LIMIT 500");
+
+    let mut stmt = conn.prepare(&sql)?;
+    let params: Vec<&dyn rusqlite::ToSql> = bind.iter().map(|value| value.as_ref()).collect();
+    let rows = stmt.query_map(params.as_slice(), map_cached_work_item)?;
     let mut result = Vec::new();
     for row in rows {
         result.push(row?);
@@ -2311,7 +2364,7 @@ fn upsert_commits(conn: &Connection, commits: &[CachedCommit]) -> Result<()> {
 fn search_commits(
     conn: &Connection,
     org_id: &str,
-    repository_id: Option<&str>,
+    repository_ids: Option<&[String]>,
     author: Option<&str>,
     from_date: Option<&str>,
     to_date: Option<&str>,
@@ -2320,26 +2373,35 @@ fn search_commits(
     // substring against author name OR email. Applying it in SQL keeps the
     // LIMIT 500 cap from dropping matching commits that sort after the cap.
     let author_pattern = author.map(|a| format!("%{}%", escape_like_pattern(&a.to_lowercase())));
-    let mut stmt = conn.prepare(
-        r#"
-        SELECT org_id, project_id, project_name, repository_id, repository_name,
-               commit_id, comment, author_name, author_email, author_date, web_url
-        FROM commits
-        WHERE org_id = ?1
-          AND (?2 IS NULL OR repository_id = ?2)
-          AND (?3 IS NULL
-               OR lower(author_name) LIKE ?3 ESCAPE '\'
-               OR lower(author_email) LIKE ?3 ESCAPE '\')
-          AND (?4 IS NULL OR author_date >= ?4)
-          AND (?5 IS NULL OR author_date <= ?5)
-        ORDER BY author_date DESC
-        LIMIT 500
-        "#,
-    )?;
-    let rows = stmt.query_map(
-        params![org_id, repository_id, author_pattern, from_date, to_date],
-        map_cached_commit,
-    )?;
+    let mut sql = String::from(
+        "SELECT org_id, project_id, project_name, repository_id, repository_name, \
+                commit_id, comment, author_name, author_email, author_date, web_url \
+         FROM commits \
+         WHERE org_id = ?1",
+    );
+    let mut bind: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(org_id.to_string())];
+    push_in_clause(&mut sql, &mut bind, "repository_id", repository_ids);
+    if let Some(pattern) = author_pattern.as_ref() {
+        let idx = bind.len() + 1;
+        sql.push_str(&format!(
+            " AND (lower(author_name) LIKE ?{idx} ESCAPE '\\' \
+               OR lower(author_email) LIKE ?{idx} ESCAPE '\\')"
+        ));
+        bind.push(Box::new(pattern.clone()));
+    }
+    if let Some(from_date) = from_date {
+        sql.push_str(&format!(" AND author_date >= ?{}", bind.len() + 1));
+        bind.push(Box::new(from_date.to_string()));
+    }
+    if let Some(to_date) = to_date {
+        sql.push_str(&format!(" AND author_date <= ?{}", bind.len() + 1));
+        bind.push(Box::new(to_date.to_string()));
+    }
+    sql.push_str(" ORDER BY author_date DESC LIMIT 500");
+
+    let mut stmt = conn.prepare(&sql)?;
+    let params: Vec<&dyn rusqlite::ToSql> = bind.iter().map(|value| value.as_ref()).collect();
+    let rows = stmt.query_map(params.as_slice(), map_cached_commit)?;
     let mut result = Vec::new();
     for row in rows {
         result.push(row?);
@@ -2351,30 +2413,57 @@ fn search_commits_fts(
     conn: &Connection,
     org_id: &str,
     query: &str,
-    repository_id: Option<&str>,
+    repository_ids: Option<&[String]>,
 ) -> Result<Vec<CachedCommit>> {
     let fts_query = fts5_query(query);
     if fts_query.is_empty() {
         return Ok(Vec::new());
     }
-    let mut stmt = conn.prepare(
-        r#"
-        SELECT c.org_id, c.project_id, c.project_name, c.repository_id, c.repository_name,
-               c.commit_id, c.comment, c.author_name, c.author_email, c.author_date, c.web_url
-        FROM commits c
-        WHERE c.org_id = ?2
-          AND (?3 IS NULL OR c.repository_id = ?3)
-          AND c.commit_id IN (
-              SELECT commit_id FROM commits_fts
-              WHERE commits_fts MATCH ?1
-                AND org_id = ?2
-                AND (?3 IS NULL OR repository_id = ?3)
-          )
-        ORDER BY c.author_date DESC
-        LIMIT 200
-        "#,
-    )?;
-    let rows = stmt.query_map(params![fts_query, org_id, repository_id], map_cached_commit)?;
+    // ?1 = fts_query, ?2 = org_id, then one bind per repository id. The repo
+    // filter is referenced twice (outer query and FTS subquery), so the same
+    // placeholders are reused with the right table prefix in each spot.
+    let mut bind: Vec<Box<dyn rusqlite::ToSql>> =
+        vec![Box::new(fts_query), Box::new(org_id.to_string())];
+    let placeholders: Vec<String> = match repository_ids.filter(|values| !values.is_empty()) {
+        Some(values) => {
+            let start = bind.len() + 1;
+            let placeholders = (0..values.len())
+                .map(|offset| format!("?{}", start + offset))
+                .collect::<Vec<_>>();
+            for value in values {
+                bind.push(Box::new(value.clone()));
+            }
+            placeholders
+        }
+        None => Vec::new(),
+    };
+    let repo_clause = |prefix: &str| {
+        if placeholders.is_empty() {
+            String::new()
+        } else {
+            format!(
+                " AND {prefix}repository_id IN ({})",
+                placeholders.join(", ")
+            )
+        }
+    };
+    let sql = format!(
+        "SELECT c.org_id, c.project_id, c.project_name, c.repository_id, c.repository_name, \
+                c.commit_id, c.comment, c.author_name, c.author_email, c.author_date, c.web_url \
+         FROM commits c \
+         WHERE c.org_id = ?2{outer} \
+           AND c.commit_id IN ( \
+               SELECT commit_id FROM commits_fts \
+               WHERE commits_fts MATCH ?1 AND org_id = ?2{inner} \
+           ) \
+         ORDER BY c.author_date DESC \
+         LIMIT 200",
+        outer = repo_clause("c."),
+        inner = repo_clause(""),
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let params: Vec<&dyn rusqlite::ToSql> = bind.iter().map(|value| value.as_ref()).collect();
+    let rows = stmt.query_map(params.as_slice(), map_cached_commit)?;
     let mut result = Vec::new();
     for row in rows {
         result.push(row?);
@@ -2497,6 +2586,7 @@ fn map_cached_pr(row: &rusqlite::Row<'_>) -> rusqlite::Result<CachedPr> {
         source_ref_name: row.get(10)?,
         target_ref_name: row.get(11)?,
         web_url: row.get(12)?,
+        is_draft: row.get(13)?,
     })
 }
 
@@ -3319,6 +3409,7 @@ mod tests {
             source_ref_name: "refs/heads/feature".to_string(),
             target_ref_name: "refs/heads/main".to_string(),
             web_url: None,
+            is_draft: false,
         };
         db.replace_pull_requests_for_projects("org1", &["p1"], &[pr])
             .unwrap();
@@ -3926,13 +4017,13 @@ mod tests {
             .unwrap();
 
         let a = db
-            .search_commits("org1", Some("repoA"), None, None, None)
+            .search_commits("org1", Some(&["repoA".to_string()]), None, None, None)
             .unwrap();
         assert_eq!(a.len(), 1);
         assert_eq!(a[0].commit_id, "a2", "repoA should contain only a2");
 
         let b = db
-            .search_commits("org1", Some("repoB"), None, None, None)
+            .search_commits("org1", Some(&["repoB".to_string()]), None, None, None)
             .unwrap();
         assert_eq!(b.len(), 1);
         assert_eq!(b[0].commit_id, "b1", "repoB should be untouched");

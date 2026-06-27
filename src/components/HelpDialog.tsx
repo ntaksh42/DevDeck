@@ -1,7 +1,28 @@
+import { useEffect, useRef } from "react";
 import { Keyboard, X } from "lucide-react";
 import { resolveKeybindings, type KeybindingId } from "@/lib/keybindings";
 
 export function HelpDialog({ onClose }: { onClose: () => void }) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Focus the close button on open so the dialog is keyboard-operable from the
+  // start; Escape closes (App returns focus to the opener). (#443)
+  useEffect(() => {
+    closeButtonRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+      }
+    }
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [onClose]);
+
   const section = "text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 mt-4 first:mt-0";
   const row = "flex items-center justify-between gap-8 py-0.5";
   const kbd = "rounded bg-muted px-1.5 py-0.5 text-xs font-mono";
@@ -39,8 +60,9 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
             Keyboard Shortcuts
           </h2>
           <button
+            ref={closeButtonRef}
             aria-label="Close keyboard shortcuts"
-            className="rounded p-1 text-muted-foreground hover:bg-muted"
+            className="rounded p-1 text-muted-foreground hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
             onClick={onClose}
           >
             <X className="h-4 w-4" aria-hidden="true" />
