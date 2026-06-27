@@ -44,6 +44,28 @@ export function gridColumnTemplate(
   return [...prefixColumns, ...columns].join(" ");
 }
 
+/**
+ * Total intrinsic width (px) of a grid's columns including fixed prefix/suffix
+ * tracks and the gaps between them. Applied as the row wrapper's `min-width`
+ * so the table can grow past the viewport (with horizontal scroll) instead of
+ * being locked to the container — which is what makes the flexible column
+ * actually resizable.
+ */
+export function gridColumnsMinWidth(
+  widths: number[],
+  prefixColumns: string[] = [],
+  suffixColumns: string[] = [],
+  gap = 8,
+): number {
+  const fixed = [...prefixColumns, ...suffixColumns].reduce(
+    (sum, track) => sum + (parseFloat(track) || 0),
+    0,
+  );
+  const flexible = widths.reduce((sum, width) => sum + width, 0);
+  const trackCount = prefixColumns.length + widths.length + suffixColumns.length;
+  return fixed + flexible + Math.max(0, trackCount - 1) * gap;
+}
+
 export function isEditableTarget(target: EventTarget | null): boolean {
   const element = target instanceof HTMLElement ? target : null;
   return !!element?.closest("input, textarea, select, [contenteditable='true']");

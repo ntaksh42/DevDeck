@@ -24,9 +24,7 @@ import {
 } from "@/lib/azdoCommands";
 import {
   clamp,
-  storedNumbers,
   storedNumber,
-  gridColumnTemplate,
   isEditableTarget,
   focusFilterInput,
   focusPrimaryGrid,
@@ -34,11 +32,13 @@ import {
   formatDate,
   formatRelativeDate,
 } from "@/lib/utils";
+import { useGridColumns } from "@/lib/useGridColumns";
 import { openExternalUrl } from "@/lib/openExternal";
 import { ColumnResizeHandle, ResizeHandle } from "@/components/ResizeHandle";
 import { ColumnVisibilityMenu } from "@/components/ColumnVisibilityMenu";
 import { ErrorState, LoadingState } from "@/components/StateDisplay";
 import { ActiveFilters } from "@/components/ActiveFilters";
+import { MultiSelectFilter } from "@/components/MultiSelectFilter";
 import { CommitFilesPanel } from "./CommitFilesPanel";
 import { CommitActivityHeatmap } from "./CommitActivityHeatmap";
 
@@ -124,11 +124,15 @@ type CommitSearchViewState = {
   branch: string;
   fromDate: string;
   organizationId: string;
-  projectId: string;
+  projectIds: string[];
   query: string;
-  repositoryId: string;
+  repositoryIds: string[];
   toDate: string;
 };
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
 
 function loadCommitSearchViewState(): CommitSearchViewState {
   const fallback: CommitSearchViewState = {
@@ -136,9 +140,9 @@ function loadCommitSearchViewState(): CommitSearchViewState {
     branch: "",
     fromDate: "",
     organizationId: "",
-    projectId: "",
+    projectIds: [],
     query: "",
-    repositoryId: "",
+    repositoryIds: [],
     toDate: "",
   };
   try {
@@ -149,9 +153,9 @@ function loadCommitSearchViewState(): CommitSearchViewState {
       branch: typeof parsed.branch === "string" ? parsed.branch : "",
       fromDate: typeof parsed.fromDate === "string" ? parsed.fromDate : "",
       organizationId: typeof parsed.organizationId === "string" ? parsed.organizationId : "",
-      projectId: typeof parsed.projectId === "string" ? parsed.projectId : "",
+      projectIds: stringArray(parsed.projectIds),
       query: typeof parsed.query === "string" ? parsed.query : "",
-      repositoryId: typeof parsed.repositoryId === "string" ? parsed.repositoryId : "",
+      repositoryIds: stringArray(parsed.repositoryIds),
       toDate: typeof parsed.toDate === "string" ? parsed.toDate : "",
     };
   } catch {
@@ -193,8 +197,8 @@ export function CommitSearch({
   const [branch, setBranch] = useState(initialViewState.branch);
   const [fromDate, setFromDate] = useState(initialViewState.fromDate);
   const [toDate, setToDate] = useState(initialViewState.toDate);
-  const [projectId, setProjectId] = useState(initialViewState.projectId);
-  const [repositoryId, setRepositoryId] = useState(initialViewState.repositoryId);
+  const [projectIds, setProjectIds] = useState<string[]>(initialViewState.projectIds);
+  const [repositoryIds, setRepositoryIds] = useState<string[]>(initialViewState.repositoryIds);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<CommitViewMode>(() => loadCommitViewMode());
 
@@ -213,10 +217,10 @@ export function CommitSearch({
   const projectOptions = useMemo(() => uniqueCommitProjects(repositoryOptions), [repositoryOptions]);
   const filteredRepositoryOptions = useMemo(
     () =>
-      projectId
-        ? repositoryOptions.filter((repository) => repository.projectId === projectId)
+      projectIds.length > 0
+        ? repositoryOptions.filter((repository) => projectIds.includes(repository.projectId))
         : repositoryOptions,
-    [projectId, repositoryOptions],
+    [projectIds, repositoryOptions],
   );
   const results = mutation.data?.commits ?? [];
   const totalMatches = mutation.data?.total ?? results.length;
@@ -227,8 +231,8 @@ export function CommitSearch({
     (branch.trim() ? 1 : 0) +
     (fromDate ? 1 : 0) +
     (toDate ? 1 : 0) +
-    (projectId ? 1 : 0) +
-    (repositoryId ? 1 : 0);
+    (projectIds.length > 0 ? 1 : 0) +
+    (repositoryIds.length > 0 ? 1 : 0);
 
   useEffect(() => {
     if (!organizationId && organizations[0]) {
@@ -242,25 +246,25 @@ export function CommitSearch({
       branch,
       fromDate,
       organizationId: selectedOrganizationId,
-      projectId,
+      projectIds,
       query,
-      repositoryId,
+      repositoryIds,
       toDate,
     });
-  }, [author, branch, fromDate, projectId, query, repositoryId, selectedOrganizationId, toDate]);
+  }, [author, branch, fromDate, projectIds, query, repositoryIds, selectedOrganizationId, toDate]);
 
   useEffect(() => {
     window.localStorage.setItem(COMMIT_VIEW_MODE_STORAGE_KEY, viewMode);
   }, [viewMode]);
 
+  // Drop repository selections that no longer belong to the selected projects.
   useEffect(() => {
-    if (
-      repositoryId &&
-      !filteredRepositoryOptions.some((repository) => repository.repositoryId === repositoryId)
-    ) {
-      setRepositoryId("");
-    }
-  }, [filteredRepositoryOptions, repositoryId]);
+    const allowed = new Set(filteredRepositoryOptions.map((repository) => repository.repositoryId));
+    setRepositoryIds((prev) => {
+      const next = prev.filter((id) => allowed.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [filteredRepositoryOptions]);
 
   useEffect(() => {
     if (!externalSearch) return;
@@ -272,8 +276,8 @@ export function CommitSearch({
     setBranch("");
     setFromDate("");
     setToDate("");
-    setProjectId("");
-    setRepositoryId("");
+    setProjectIds([]);
+    setRepositoryIds([]);
     setValidationError(null);
     mutation.mutate({
       organizationId: targetOrganizationId,
@@ -282,8 +286,8 @@ export function CommitSearch({
       branch: "",
       fromDate: "",
       toDate: "",
-      projectId: "",
-      repositoryId: "",
+      projectIds: undefined,
+      repositoryIds: undefined,
     });
     onExternalSearchHandled?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -296,8 +300,8 @@ export function CommitSearch({
       setValidationError("From date must be before or equal to To date.");
       return;
     }
-    if (branch.trim() && !repositoryId) {
-      setValidationError("Select a repository to search a specific branch.");
+    if (branch.trim() && repositoryIds.length !== 1) {
+      setValidationError("Select a single repository to search a specific branch.");
       return;
     }
     setValidationError(null);
@@ -308,8 +312,8 @@ export function CommitSearch({
       branch,
       fromDate,
       toDate,
-      projectId,
-      repositoryId,
+      projectIds: projectIds.length > 0 ? projectIds : undefined,
+      repositoryIds: repositoryIds.length > 0 ? repositoryIds : undefined,
     });
   }
 
@@ -319,8 +323,8 @@ export function CommitSearch({
     setBranch("");
     setFromDate("");
     setToDate("");
-    setProjectId("");
-    setRepositoryId("");
+    setProjectIds([]);
+    setRepositoryIds([]);
     setValidationError(null);
     if (mutation.isSuccess) {
       mutation.mutate({
@@ -330,8 +334,8 @@ export function CommitSearch({
         branch: "",
         fromDate: "",
         toDate: "",
-        projectId: "",
-        repositoryId: "",
+        projectIds: undefined,
+        repositoryIds: undefined,
       });
     }
   }
@@ -362,8 +366,8 @@ export function CommitSearch({
                 value={selectedOrganizationId}
                 onChange={(event) => {
                   setOrganizationId(event.target.value);
-                  setProjectId("");
-                  setRepositoryId("");
+                  setProjectIds([]);
+                  setRepositoryIds([]);
                 }}
                 className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               >
@@ -456,47 +460,40 @@ export function CommitSearch({
               </div>
             </div>
 
-            <label className="grid gap-2">
+            <div className="grid gap-2">
               <span className="text-sm font-medium">Project</span>
-              <select
-                value={projectId}
+              <MultiSelectFilter
+                options={projectOptions.map((project) => ({
+                  value: project.projectId,
+                  label: project.projectName,
+                }))}
+                selected={projectIds}
+                onChange={setProjectIds}
+                placeholder="All projects"
+                ariaLabel="Filter by project"
+                searchable
                 disabled={repositoriesQuery.isLoading || repositoryOptions.length === 0}
-                onChange={(event) => {
-                  setProjectId(event.target.value);
-                  setRepositoryId("");
-                }}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <option value="">All projects</option>
-                {projectOptions.map((project) => (
-                  <option key={project.projectId} value={project.projectId}>
-                    {project.projectName}
-                  </option>
-                ))}
-              </select>
-            </label>
+              />
+            </div>
 
-            <label className="grid gap-2">
+            <div className="grid gap-2">
               <span className="text-sm font-medium">Repository</span>
-              <select
-                value={repositoryId}
-                disabled={repositoriesQuery.isLoading || filteredRepositoryOptions.length === 0}
-                onChange={(event) => setRepositoryId(event.target.value)}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <option value="">All repositories</option>
-                {filteredRepositoryOptions.map((repository) => (
-                  <option
-                    key={`${repository.projectId}:${repository.repositoryId}`}
-                    value={repository.repositoryId}
-                  >
-                    {projectId
+              <MultiSelectFilter
+                options={filteredRepositoryOptions.map((repository) => ({
+                  value: repository.repositoryId,
+                  label:
+                    projectIds.length > 0
                       ? repository.repositoryName
-                      : `${repository.projectName} / ${repository.repositoryName}`}
-                  </option>
-                ))}
-              </select>
-            </label>
+                      : `${repository.projectName} / ${repository.repositoryName}`,
+                }))}
+                selected={repositoryIds}
+                onChange={setRepositoryIds}
+                placeholder="All repositories"
+                ariaLabel="Filter by repository"
+                searchable
+                disabled={repositoriesQuery.isLoading || filteredRepositoryOptions.length === 0}
+              />
+            </div>
 
             <div className="flex items-end">
               <p className="pb-2 text-xs text-muted-foreground">
@@ -535,8 +532,8 @@ export function CommitSearch({
           author={author}
           fromDate={fromDate}
           toDate={toDate}
-          projectId={projectId}
-          repositoryId={repositoryId}
+          projectId={projectIds.length === 1 ? projectIds[0] : ""}
+          repositoryId={repositoryIds.length === 1 ? repositoryIds[0] : ""}
         />
       ) : (
         <CommitResults
@@ -1025,12 +1022,22 @@ function CommitResults({
 }) {
   const [sort, setCommitSort] = useState<CommitSortState>(() => loadCommitSort());
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [columnWidths, setColumnWidths] = useState(() =>
-    storedNumbers(COMMIT_COLUMN_WIDTHS_STORAGE_KEY, DEFAULT_COMMIT_COLUMN_WIDTHS, COMMIT_COLUMN_MIN_WIDTHS, COMMIT_COLUMN_MAX_WIDTHS),
-  );
   const [visibleColumns, setVisibleColumns] = useState<CommitColumnKey[]>(
     loadCommitVisibleColumns,
   );
+  const {
+    template: commitColTemplate,
+    minWidth: gridMinWidth,
+    resizeProps: columnResizeProps,
+  } = useGridColumns({
+    keys: COMMIT_COLUMN_KEYS,
+    visibleColumns,
+    flexibleKey: "comment",
+    defaults: DEFAULT_COMMIT_COLUMN_WIDTHS,
+    min: COMMIT_COLUMN_MIN_WIDTHS,
+    max: COMMIT_COLUMN_MAX_WIDTHS,
+    storageKey: COMMIT_COLUMN_WIDTHS_STORAGE_KEY,
+  });
   const [columnMenuRect, setColumnMenuRect] = useState<DOMRect | null>(null);
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const [maximized, setMaximized] = useState(false);
@@ -1046,10 +1053,6 @@ function CommitResults({
   const restoreFocusRef = useRef(false);
   const [scrollerEl, setScrollerEl] = useState<HTMLDivElement | null>(null);
   const [gridViewport, setGridViewport] = useState({ height: 0, scrollTop: 0 });
-
-  useEffect(() => {
-    localStorage.setItem(COMMIT_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
-  }, [columnWidths]);
 
   useEffect(() => {
     localStorage.setItem(COMMIT_PREVIEW_WIDTH_STORAGE_KEY, String(Math.round(previewWidth)));
@@ -1096,14 +1099,6 @@ function CommitResults({
   function resetColumnVisibility() {
     setVisibleColumns([...COMMIT_COLUMN_KEYS]);
   }
-
-  // Width array is indexed by the full column order; pick out the visible ones
-  // and keep the message column as the flexible one.
-  const visibleColumnWidths = visibleColumns.map(
-    (column) => columnWidths[COMMIT_COLUMN_KEYS.indexOf(column)],
-  );
-  const messageFlexIndex = Math.max(0, visibleColumns.indexOf("comment"));
-  const commitColTemplate = gridColumnTemplate(visibleColumnWidths, messageFlexIndex);
 
   const sorted = useMemo(() => {
     const dir = sort.direction === "asc" ? 1 : -1;
@@ -1267,25 +1262,17 @@ function CommitResults({
           className="flex min-h-0 flex-1 flex-col outline-none"
           onKeyDown={handleKeyDown}
         >
-          <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-          <div className="min-w-[724px]">
+          <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
+          <div style={{ minWidth: gridMinWidth }}>
             <div
               role="row"
               className="grid items-center gap-2 border-b border-border bg-muted px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
               style={{ gridTemplateColumns: commitColTemplate }}
             >
               {visibleColumns.map((col, i) => {
-                const fullIndex = COMMIT_COLUMN_KEYS.indexOf(col);
                 const isLast = i === visibleColumns.length - 1;
                 const resizeHandle = isLast ? undefined : (
-                  <ColumnResizeHandle
-                    columnIndex={fullIndex}
-                    widths={columnWidths}
-                    setWidths={setColumnWidths}
-                    min={COMMIT_COLUMN_MIN_WIDTHS[fullIndex]}
-                    max={COMMIT_COLUMN_MAX_WIDTHS[fullIndex]}
-                    defaultWidth={DEFAULT_COMMIT_COLUMN_WIDTHS[fullIndex]}
-                  />
+                  <ColumnResizeHandle {...columnResizeProps(col)} />
                 );
                 if (col === "sha") {
                   return (

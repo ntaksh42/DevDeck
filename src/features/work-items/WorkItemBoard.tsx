@@ -6,16 +6,24 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useQueries, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import {
+  getWorkItemPreview,
   listWorkItemTypeStates,
   setWorkItemsState,
   commandErrorMessage,
+  type WorkItemPreview,
   type WorkItemSummary,
 } from '@/lib/azdoCommands';
-import { isEditableTarget } from '@/lib/utils';
+import { focusPrimaryPreview, isEditableTarget } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
+import { WorkItemPreviewPanel } from './WorkItemPreviewPanel';
+import {
+  loadCustomPreviewFields,
+  storeCustomPreviewFields,
+  type CustomPreviewField,
+} from './previewFieldsStorage';
 import { invalidateWorkItemMutationCaches, workItemQueryKeys } from './queryKeys';
 
 const PRIORITY_REFERENCE_NAME = 'Microsoft.VSTS.Common.Priority';
@@ -345,6 +353,47 @@ export function WorkItemBoard({
   const selectedItem = columns[selected.column]?.items[selected.card] ?? null;
   const selectedKey = selectedItem ? workItemKey(selectedItem) : null;
 
+  // Side preview so the board reaches feature parity with the list view
+  // (edit fields / comment), reusing the same WorkItemPreviewPanel (#450).
+  const [customPreviewFields, setCustomPreviewFields] = useState<CustomPreviewField[]>(
+    () => loadCustomPreviewFields(),
+  );
+  const customPreviewFieldRefs = useMemo(
+    () => customPreviewFields.map((field) => field.referenceName),
+    [customPreviewFields],
+  );
+  const customPreviewFieldSignature = customPreviewFieldRefs.join(",");
+  const previewQuery = useQuery({
+    queryKey: workItemQueryKeys.preview(
+      selectedItem?.organizationId,
+      selectedItem?.projectId,
+      selectedItem?.id,
+      customPreviewFieldSignature,
+    ),
+    queryFn: () =>
+      getWorkItemPreview({
+        organizationId: selectedItem?.organizationId,
+        projectId: selectedItem?.projectId ?? "",
+        workItemId: selectedItem?.id ?? 0,
+        customFields: customPreviewFieldRefs,
+      }),
+    enabled: !!selectedItem,
+    staleTime: 30_000,
+  });
+
+  function handlePreviewUpdated(preview: WorkItemPreview) {
+    queryClient.setQueryData(
+      workItemQueryKeys.preview(
+        preview.organizationId,
+        preview.projectId,
+        preview.id,
+        customPreviewFieldSignature,
+      ),
+      preview,
+    );
+    invalidateWorkItemMutationCaches(queryClient);
+  }
+
   // After a keyboard move, focus the newly selected card so navigation keeps
   // working from the new state column.
   useEffect(() => {
@@ -473,8 +522,10 @@ export function WorkItemBoard({
       event.preventDefault();
       if (selectedItem?.webUrl) openExternalUrl(selectedItem.webUrl);
     } else if (event.key === 'Enter') {
+      // Move focus into the side preview so its fields/comment are editable from
+      // the keyboard, matching the list view (#450).
       event.preventDefault();
-      if (event.ctrlKey && selectedItem?.webUrl) openExternalUrl(selectedItem.webUrl);
+      focusPrimaryPreview();
     }
   }
 
@@ -496,39 +547,55 @@ export function WorkItemBoard({
   }
 
   return (
-    <div
-      ref={containerRef}
-      tabIndex={-1}
-      role="group"
-      aria-label="Work item board. Use arrow keys to move between cards, Shift+Arrow to change a card's state."
-      onKeyDown={handleKeyDown}
-      className="flex min-h-0 flex-1 gap-3 overflow-x-auto outline-none"
-    >
-      {toast ? (
-        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1 text-xs text-background shadow-lg">
-          {toast}
-        </div>
-      ) : null}
-      {columns.map((column, columnIndex) => (
-        <BoardColumnView
-          key={column.state}
-          column={column}
-          columnIndex={columnIndex}
-          selectedKey={columnIndex === selected.column ? selectedKey : null}
-          draggingKey={draggingKey}
-          dropActive={dropColumn === columnIndex}
-          registerCard={registerCard}
-          onSelectCard={(c, card) => selectCard(c, card)}
-          onDragStartCard={(key) => setDraggingKey(key)}
-          onDragEndCard={() => {
-            setDraggingKey(null);
-            setDropColumn(null);
+    <div className="flex min-h-0 flex-1 gap-3">
+      <div
+        ref={containerRef}
+        tabIndex={-1}
+        role="group"
+        aria-label="Work item board. Use arrow keys to move between cards, Shift+Arrow to change a card's state, Enter to open the preview."
+        onKeyDown={handleKeyDown}
+        className="flex min-h-0 flex-1 gap-3 overflow-x-auto outline-none"
+      >
+        {toast ? (
+          <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1 text-xs text-background shadow-lg">
+            {toast}
+          </div>
+        ) : null}
+        {columns.map((column, columnIndex) => (
+          <BoardColumnView
+            key={column.state}
+            column={column}
+            columnIndex={columnIndex}
+            selectedKey={columnIndex === selected.column ? selectedKey : null}
+            draggingKey={draggingKey}
+            dropActive={dropColumn === columnIndex}
+            registerCard={registerCard}
+            onSelectCard={(c, card) => selectCard(c, card)}
+            onDragStartCard={(key) => setDraggingKey(key)}
+            onDragEndCard={() => {
+              setDraggingKey(null);
+              setDropColumn(null);
+            }}
+            onDragOverColumn={handleDragOverColumn}
+            onDragLeaveColumn={() => setDropColumn(null)}
+            onDropColumn={handleDropColumn}
+          />
+        ))}
+      </div>
+      <div className="hidden w-[380px] shrink-0 lg:flex lg:flex-col">
+        <WorkItemPreviewPanel
+          customPreviewFields={customPreviewFields}
+          onCustomPreviewFieldsChange={(fields) => {
+            storeCustomPreviewFields(fields);
+            setCustomPreviewFields(fields);
           }}
-          onDragOverColumn={handleDragOverColumn}
-          onDragLeaveColumn={() => setDropColumn(null)}
-          onDropColumn={handleDropColumn}
+          preview={previewQuery.data ?? null}
+          previewError={previewQuery.isError ? commandErrorMessage(previewQuery.error) : null}
+          previewLoading={previewQuery.isFetching}
+          selectedItem={selectedItem}
+          onPreviewUpdated={handlePreviewUpdated}
         />
-      ))}
+      </div>
     </div>
   );
 }
