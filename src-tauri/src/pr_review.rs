@@ -75,6 +75,8 @@ pub struct UpdatePullRequestInput {
     /// Required for "complete": noFastForward | squash | rebase | rebaseMerge
     pub merge_strategy: Option<String>,
     pub delete_source_branch: Option<bool>,
+    /// When completing, transition linked work items to their next state.
+    pub transition_work_items: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -510,6 +512,7 @@ impl PrReviewService {
                     "completionOptions": {
                         "mergeStrategy": merge_strategy,
                         "deleteSourceBranch": input.delete_source_branch.unwrap_or(false),
+                        "transitionWorkItems": input.transition_work_items.unwrap_or(false),
                     }
                 })
             }
