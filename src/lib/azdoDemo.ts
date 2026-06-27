@@ -434,7 +434,8 @@ function demoPipelineRuns() {
       queueTime: "2026-06-13T09:00:00Z",
       startTime: "2026-06-13T09:00:05Z",
       finishTime: "2026-06-13T09:04:00Z",
-      webUrl: "https://dev.azure.com/demo/demo/_build/results?buildId=1001",
+      webUrl:
+        "https://dev.azure.com/contoso/Demo%20Project/_build/results?buildId=1001",
     },
     {
       organizationId: "contoso",
@@ -452,7 +453,8 @@ function demoPipelineRuns() {
       queueTime: "2026-06-13T10:00:00Z",
       startTime: "2026-06-13T10:00:05Z",
       finishTime: "2026-06-13T10:02:30Z",
-      webUrl: "https://dev.azure.com/demo/demo/_build/results?buildId=1002",
+      webUrl:
+        "https://dev.azure.com/contoso/Demo%20Project/_build/results?buildId=1002",
     },
     {
       organizationId: "contoso",
@@ -470,7 +472,8 @@ function demoPipelineRuns() {
       queueTime: "2026-06-13T11:00:00Z",
       startTime: "2026-06-13T11:00:05Z",
       finishTime: null,
-      webUrl: "https://dev.azure.com/demo/demo/_build/results?buildId=1003",
+      webUrl:
+        "https://dev.azure.com/contoso/Demo%20Project/_build/results?buildId=1003",
     },
   ];
 }
@@ -1058,7 +1061,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
             repositoryName: "azdo-dashboard",
             branch: "main",
             webUrl:
-              "https://dev.azure.com/demo/Demo%20Project/_git/azdo-dashboard?path=/src/lib/azdoCommands.ts&_a=contents&version=GBmain",
+              "https://dev.azure.com/contoso/Demo%20Project/_git/azdo-dashboard?path=/src/lib/azdoCommands.ts&_a=contents&version=GBmain",
           },
           {
             fileName: "App.tsx",
@@ -1067,7 +1070,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
             repositoryName: "azdo-dashboard",
             branch: "main",
             webUrl:
-              "https://dev.azure.com/demo/Demo%20Project/_git/azdo-dashboard?path=/src/App.tsx&_a=contents&version=GBmain",
+              "https://dev.azure.com/contoso/Demo%20Project/_git/azdo-dashboard?path=/src/App.tsx&_a=contents&version=GBmain",
           },
         ],
       };
