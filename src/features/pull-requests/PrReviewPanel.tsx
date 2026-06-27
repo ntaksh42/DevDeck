@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ExternalLink, Loader2, Maximize2, Minimize2, Pencil, X } from "lucide-react";
+import { Check, ExternalLink, Loader2, Pencil, X } from "lucide-react";
 import {
   commandErrorMessage,
   deletePullRequestComment,
@@ -35,7 +35,10 @@ const PrFilesTab = lazy(() =>
   import("./PrFilesTab").then((m) => ({ default: m.PrFilesTab })),
 );
 import { PrThreadCard } from "./PrThreadCard";
-import { VOTE_BADGE_CLASSES, VOTE_DOT_CLASSES, voteTone } from "./voteVisual";
+import { PrReviewHeader } from "./PrReviewHeader";
+import { PrPreviewSection } from "./PrPreviewSection";
+import { PrOverflowMenu } from "./PrOverflowMenu";
+import { VOTE_BADGE_CLASSES, voteTone } from "./voteVisual";
 
 function usePrMentionSearch(organizationId: string) {
   return useCallback(
@@ -104,6 +107,35 @@ export function PrReviewPanel({
     if (!hasReviewResultFolder && tab === "result") setTab("review");
   }, [hasReviewResultFolder, tab]);
 
+  // Reviewer management lives in the header now, but the mutations belong to the
+  // panel (which owns the review query) so the header can stay presentational.
+  const queryClient = useQueryClient();
+  const [reviewerError, setReviewerError] = useState<string | null>(null);
+  function invalidateReviewerData() {
+    if (!selectedPr) return;
+    void queryClient.invalidateQueries({
+      queryKey: ["prReview", selectedPr.organizationId, selectedPr.repositoryId, selectedPr.pullRequestId],
+    });
+    void queryClient.invalidateQueries({ queryKey: ["myReviews", selectedPr.organizationId] });
+  }
+  const reviewerRequiredMutation = useMutation({
+    mutationFn: setPullRequestReviewerRequired,
+    onSuccess: () => {
+      setReviewerError(null);
+      invalidateReviewerData();
+    },
+    onError: (error) => setReviewerError(commandErrorMessage(error)),
+  });
+  const removeReviewerMutation = useMutation({
+    mutationFn: removePullRequestReviewer,
+    onSuccess: () => {
+      setReviewerError(null);
+      invalidateReviewerData();
+    },
+    onError: (error) => setReviewerError(commandErrorMessage(error)),
+  });
+  const reviewerActionsBusy = reviewerRequiredMutation.isPending || removeReviewerMutation.isPending;
+
   // Esc / ← step back to the grid from anywhere in the preview that is not a
   // text field (composer Esc is handled locally and stops propagation first).
   function handlePreviewKeyDown(event: React.KeyboardEvent) {
@@ -119,49 +151,34 @@ export function PrReviewPanel({
       onKeyDown={handlePreviewKeyDown}
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card focus-within:ring-2 focus-within:ring-ring"
     >
-      {/* Persistent PR header (visible on every tab), GitHub-style. */}
-      <div className="flex shrink-0 items-baseline gap-2 border-b border-border px-3 py-1.5">
-        {selectedPr ? (
-          <>
-            {/* The grid already shows titles in split view, so only repeat the
-                title in the header when maximized (grid hidden). */}
-            {maximized ? (
-              <span className="truncate text-sm font-semibold" title={selectedPr.title}>
-                {selectedPr.title}
-              </span>
-            ) : null}
-            <span className="shrink-0 font-mono text-xs font-semibold text-muted-foreground">
-              #{selectedPr.pullRequestId}
-            </span>
-            <span
-              className="ml-auto shrink-0 truncate font-mono text-[11px] text-muted-foreground"
-              title={`into ${selectedPr.targetRefName}`}
-            >
-              → {selectedPr.targetRefName}
-            </span>
-          </>
-        ) : (
-          <span className="text-sm text-muted-foreground">No PR selected</span>
-        )}
-        {onToggleMaximize ? (
-          <button
-            type="button"
-            onClick={onToggleMaximize}
-            aria-label={maximized ? "Restore split view" : "Maximize review panel"}
-            aria-pressed={maximized}
-            title={`${maximized ? "Restore split view" : "Maximize review panel"} (\\)`}
-            className={`shrink-0 rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${
-              selectedPr ? "" : "ml-auto"
-            }`}
-          >
-            {maximized ? (
-              <Minimize2 className="h-3.5 w-3.5" aria-hidden="true" />
-            ) : (
-              <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
-            )}
-          </button>
-        ) : null}
-      </div>
+      {/* Persistent PR header (visible on every tab), GitHub-style. Reviewers
+          (with required/optional + remove controls) render here too. */}
+      <PrReviewHeader
+        selectedPr={selectedPr}
+        review={reviewQuery.data ?? null}
+        maximized={maximized}
+        onToggleMaximize={onToggleMaximize}
+        reviewerActionsBusy={reviewerActionsBusy}
+        onToggleReviewerRequired={(reviewer) => {
+          if (!selectedPr || !reviewer.id) return;
+          reviewerRequiredMutation.mutate({
+            ...prLocator(selectedPr),
+            reviewerId: reviewer.id,
+            isRequired: !reviewer.isRequired,
+          });
+        }}
+        onRemoveReviewer={(reviewer) => {
+          if (!selectedPr || !reviewer.id) return;
+          if (window.confirm(`Remove ${reviewer.displayName} as a reviewer?`)) {
+            removeReviewerMutation.mutate({ ...prLocator(selectedPr), reviewerId: reviewer.id });
+          }
+        }}
+      />
+      {reviewerError ? (
+        <div className="shrink-0 border-b border-border bg-red-50 px-3 py-1 text-xs text-destructive dark:bg-red-950/40">
+          {reviewerError}
+        </div>
+      ) : null}
 
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-2 py-1.5">
         <div className="flex items-center gap-0.5 rounded-md border border-border bg-muted p-0.5" role="tablist" aria-label="PR review tabs">
@@ -363,27 +380,6 @@ function ReviewTab({
     });
   }
 
-  // Reviewer management (#384): toggle required/optional and remove existing
-  // reviewers. Adding new reviewers is a follow-up (needs identity resolution).
-  const reviewerRequiredMutation = useMutation({
-    mutationFn: setPullRequestReviewerRequired,
-    onSuccess: () => {
-      setActionError(null);
-      invalidateReview();
-    },
-    onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
-  });
-  const removeReviewerMutation = useMutation({
-    mutationFn: removePullRequestReviewer,
-    onSuccess: () => {
-      setActionError(null);
-      invalidateReview();
-    },
-    onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
-  });
-  const reviewerMutationPending =
-    reviewerRequiredMutation.isPending || removeReviewerMutation.isPending;
-
   // Keep a focus target (Ctrl+P) present even on loading/error states.
   if (loading) {
     return (
@@ -417,9 +413,11 @@ function ReviewTab({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Vote control: a single dropdown that shows and sets the current vote. */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-border px-2 py-1.5">
-        <label htmlFor="pr-vote-select" className="text-xs font-medium text-muted-foreground">
+      {/* Vote + primary merge action in one row; secondary actions (publish,
+          auto-complete, branch / work-item toggles, abandon) live in the ⋯ menu
+          so the row stays compact, matching the reference layout. */}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-2 py-1.5 text-xs">
+        <label htmlFor="pr-vote-select" className="font-medium text-muted-foreground">
           Your vote
         </label>
         <select
@@ -433,7 +431,7 @@ function ReviewTab({
             })
           }
           aria-label="Your vote"
-          className={`h-7 rounded-md border px-2 text-xs font-medium outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 ${VOTE_BADGE_CLASSES[voteTone(myVote)]}`}
+          className={`h-7 rounded-md border px-2 font-medium outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 ${VOTE_BADGE_CLASSES[voteTone(myVote)]}`}
         >
           {VOTE_OPTIONS.map((option) => (
             <option key={option.vote} value={option.vote}>
@@ -444,110 +442,47 @@ function ReviewTab({
         {voteMutation.isPending ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden="true" />
         ) : null}
-      </div>
 
-      {/* PR status actions. My Reviews syncs active PRs only, so the visible PR
-          is active; reactivate is reachable through the backend but not here. */}
-      <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-border px-2 py-1.5 text-xs">
-        <span className="font-medium text-muted-foreground">PR</span>
-        {review.isDraft ? (
+        <div className="ml-auto flex items-center gap-1.5">
+          <select
+            aria-label="Merge strategy"
+            value={mergeStrategy}
+            disabled={readOnly || updateMutation.isPending}
+            onChange={(event) => setMergeStrategy(event.target.value)}
+            className="h-6 rounded border border-input bg-background px-1 outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+          >
+            <option value="squash">Squash</option>
+            <option value="noFastForward">Merge</option>
+            <option value="rebase">Rebase</option>
+            <option value="rebaseMerge">Rebase + merge</option>
+          </select>
           <button
             type="button"
             disabled={readOnly || updateMutation.isPending}
             title={readOnly ? "Read-only validation mode is enabled" : undefined}
-            onClick={() => runPrAction("publish", "Publish this draft pull request?")}
-            className="rounded border border-border bg-card px-2 py-0.5 font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Publish
-          </button>
-        ) : null}
-        <select
-          aria-label="Merge strategy"
-          value={mergeStrategy}
-          disabled={readOnly || updateMutation.isPending}
-          onChange={(event) => setMergeStrategy(event.target.value)}
-          className="h-6 rounded border border-input bg-background px-1 outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-        >
-          <option value="squash">Squash</option>
-          <option value="noFastForward">Merge</option>
-          <option value="rebase">Rebase</option>
-          <option value="rebaseMerge">Rebase + merge</option>
-        </select>
-        <label className="flex items-center gap-1 text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={deleteSourceBranch}
-            disabled={readOnly || updateMutation.isPending}
-            onChange={(event) => setDeleteSourceBranch(event.target.checked)}
-          />
-          Delete branch
-        </label>
-        <label
-          className="flex items-center gap-1 text-muted-foreground"
-          title="Transition linked work items to their next state on completion"
-        >
-          <input
-            type="checkbox"
-            checked={transitionWorkItems}
-            disabled={readOnly || updateMutation.isPending}
-            onChange={(event) => setTransitionWorkItems(event.target.checked)}
-          />
-          Transition work items
-        </label>
-        <button
-          type="button"
-          disabled={readOnly || updateMutation.isPending}
-          title={readOnly ? "Read-only validation mode is enabled" : undefined}
-          onClick={() =>
-            runPrAction(
-              "complete",
-              `Complete (merge) this pull request using ${mergeStrategy}?`,
-            )
-          }
-          className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 font-medium text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 dark:hover:bg-emerald-900"
-        >
-          Complete
-        </button>
-        {review.autoComplete ? (
-          <button
-            type="button"
-            disabled={readOnly || updateMutation.isPending}
-            title={readOnly ? "Read-only validation mode is enabled" : "Auto-complete is on"}
-            aria-pressed
-            onClick={() => runPrAction("cancelAutoComplete", "Turn off auto-complete for this pull request?")}
-            className="rounded border border-emerald-500 bg-emerald-100 px-2 py-0.5 font-medium text-emerald-800 hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-700 dark:bg-emerald-900 dark:text-emerald-200"
-          >
-            Auto-complete on
-          </button>
-        ) : (
-          <button
-            type="button"
-            disabled={readOnly || updateMutation.isPending}
-            title={readOnly ? "Read-only validation mode is enabled" : undefined}
-            aria-pressed={false}
             onClick={() =>
-              runPrAction(
-                "enableAutoComplete",
-                `Enable auto-complete (merge with ${mergeStrategy} once policies pass)?`,
-              )
+              runPrAction("complete", `Complete (merge) this pull request using ${mergeStrategy}?`)
             }
-            className="rounded border border-border bg-card px-2 py-0.5 font-medium text-muted-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 font-medium text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 dark:hover:bg-emerald-900"
           >
-            Auto-complete
+            Complete
           </button>
-        )}
-        <button
-          type="button"
-          disabled={readOnly || updateMutation.isPending}
-          title={readOnly ? "Read-only validation mode is enabled" : undefined}
-          onClick={() => runPrAction("abandon", "Abandon this pull request?")}
-          className="rounded border border-border bg-card px-2 py-0.5 font-medium text-muted-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Abandon
-        </button>
-        {updateMutation.isPending ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden="true" />
-        ) : null}
+          {updateMutation.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden="true" />
+          ) : null}
+          <PrOverflowMenu
+            isDraft={review.isDraft}
+            autoComplete={review.autoComplete}
+            readOnly={readOnly}
+            pending={updateMutation.isPending}
+            mergeStrategy={mergeStrategy}
+            deleteSourceBranch={deleteSourceBranch}
+            transitionWorkItems={transitionWorkItems}
+            onToggleDeleteSourceBranch={() => setDeleteSourceBranch((value) => !value)}
+            onToggleTransitionWorkItems={() => setTransitionWorkItems((value) => !value)}
+            onAction={runPrAction}
+          />
+        </div>
       </div>
 
       {actionError ? (
@@ -562,67 +497,27 @@ function ReviewTab({
         aria-keyshortcuts="Control+P"
         tabIndex={-1}
       >
-        {/* Meta + description (title shown in the persistent header above) */}
-        <div className="border-b border-border px-3 py-2">
-          <p className="text-xs text-muted-foreground">
-            {review.createdBy ?? "Unknown"}
-            {review.creationDate ? ` · ${formatRelativeDate(review.creationDate)}` : ""}
-            {" · "}
-            {review.sourceRefName} → {review.targetRefName}
-          </p>
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {review.reviewers.map((reviewer) => (
-              <span
-                key={reviewer.id ?? `${reviewer.displayName}-${reviewer.isMe}`}
-                className="inline-flex items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
-                title={`${reviewer.voteLabel}${reviewer.isRequired ? " (Required)" : ""}`}
+        {/* Description (title and author/branch are shown in the header above). */}
+        <PrPreviewSection
+          title="Description"
+          collapseId="description"
+          className="px-3"
+          headerAction={
+            !editingDetails ? (
+              <button
+                type="button"
+                onClick={startEditingDetails}
+                aria-label="Edit title and description"
+                title="Edit title and description"
+                className="rounded p-0.5 text-muted-foreground hover:bg-background hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               >
-                {reviewer.displayName}
-                {reviewer.isMe ? " (you)" : ""}
-                <VoteDot vote={reviewer.vote} />
-                {reviewer.id ? (
-                  <>
-                    <button
-                      type="button"
-                      disabled={reviewerMutationPending}
-                      onClick={() =>
-                        reviewerRequiredMutation.mutate({
-                          ...prLocator(pr),
-                          reviewerId: reviewer.id!,
-                          isRequired: !reviewer.isRequired,
-                        })
-                      }
-                      title={reviewer.isRequired ? "Make optional" : "Make required"}
-                      aria-label={`${reviewer.isRequired ? "Make optional" : "Make required"}: ${reviewer.displayName}`}
-                      className="rounded px-1 text-[10px] font-medium uppercase tracking-wide hover:bg-background disabled:opacity-50"
-                    >
-                      {reviewer.isRequired ? "Req" : "Opt"}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={reviewerMutationPending}
-                      onClick={() => {
-                        if (window.confirm(`Remove ${reviewer.displayName} as a reviewer?`)) {
-                          removeReviewerMutation.mutate({
-                            ...prLocator(pr),
-                            reviewerId: reviewer.id!,
-                          });
-                        }
-                      }}
-                      aria-label={`Remove reviewer ${reviewer.displayName}`}
-                      title="Remove reviewer"
-                      className="rounded p-0.5 hover:bg-background hover:text-destructive disabled:opacity-50"
-                    >
-                      <X className="h-3 w-3" aria-hidden="true" />
-                    </button>
-                  </>
-                ) : null}
-              </span>
-            ))}
-          </div>
-          <SectionBand className="mt-2">Description</SectionBand>
+                <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            ) : null
+          }
+        >
           {editingDetails ? (
-            <div className="mt-2 grid gap-2">
+            <div className="grid gap-2 pb-2">
               <label className="grid gap-1">
                 <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                   Title
@@ -687,34 +582,24 @@ function ReviewTab({
               </div>
             </div>
           ) : (
-            <div className="mt-2 flex items-start gap-2">
-              <div className="min-w-0 flex-1">
-                {review.description ? (
-                  <MarkdownView text={review.description} className="text-xs text-foreground" />
-                ) : (
-                  <p className="text-xs italic text-muted-foreground">No description.</p>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={startEditingDetails}
-                aria-label="Edit title and description"
-                title="Edit title and description"
-                className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-              </button>
+            <div className="pb-2">
+              {review.description ? (
+                <MarkdownView text={review.description} className="text-xs text-foreground" />
+              ) : (
+                <p className="text-xs italic text-muted-foreground">No description.</p>
+              )}
             </div>
           )}
-        </div>
+        </PrPreviewSection>
 
         {/* Linked work items (AB#NNN found in the description or commits). */}
         {linkedWorkItemIds.length > 0 ? (
-          <div className="border-b border-border px-3 py-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Work Items ({linkedWorkItemIds.length})
-            </p>
-            <div className="mt-1 flex flex-wrap gap-1">
+          <PrPreviewSection
+            title={`Work Items (${linkedWorkItemIds.length})`}
+            collapseId="workItems"
+            className="px-3"
+          >
+            <div className="flex flex-wrap gap-1 pb-2">
               {linkedWorkItemIds.map((id) => (
                 <button
                   key={id}
@@ -729,73 +614,79 @@ function ReviewTab({
                 </button>
               ))}
             </div>
-          </div>
+          </PrPreviewSection>
         ) : null}
 
-        {/* Threads */}
-        <div className="flex flex-col gap-2 px-3 py-2">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Comments ({userThreads.length})
-          </p>
-          {userThreads.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No comments yet.</p>
-          ) : (
-            userThreads.map((thread) => (
-              <PrThreadCard
-                key={thread.id}
-                thread={thread}
-                busy={commentMutation.isPending || statusMutation.isPending}
-                mentionSearch={mentionSearch}
-                onReply={(content) =>
-                  commentMutation.mutateAsync({
-                    ...prLocator(pr),
-                    threadId: thread.id,
-                    content,
-                  }).then(() => undefined)
-                }
-                onToggleStatus={() => {
-                  statusMutation.mutate({
-                    ...prLocator(pr),
-                    threadId: thread.id,
-                    status: thread.isResolved ? "active" : "closed",
-                  });
-                }}
-                onEditComment={(commentId, content) =>
-                  editMutation.mutateAsync({
-                    ...prLocator(pr),
-                    threadId: thread.id,
-                    commentId,
-                    content,
-                  }).then(() => undefined)
-                }
-                onDeleteComment={(commentId) =>
-                  deleteMutation.mutateAsync({
-                    ...prLocator(pr),
-                    threadId: thread.id,
-                    commentId,
-                  })
-                }
-              />
-            ))
-          )}
-          {systemThreads.length > 0 ? (
-            <details className="text-xs text-muted-foreground">
-              <summary className="cursor-pointer select-none">
-                System events ({systemThreads.length})
-              </summary>
-              <ul className="mt-1 space-y-0.5 pl-3">
-                {systemThreads.map((thread) => (
-                  <li key={thread.id}>
-                    {thread.comments[0]?.content ?? ""}
-                    {thread.comments[0]?.publishedDate
-                      ? ` · ${formatRelativeDate(thread.comments[0].publishedDate)}`
-                      : ""}
-                  </li>
-                ))}
-              </ul>
-            </details>
-          ) : null}
-        </div>
+        {/* Comment threads */}
+        <PrPreviewSection
+          title={`Comments (${userThreads.length})`}
+          collapseId="comments"
+          className="px-3"
+        >
+          <div className="flex flex-col gap-2 pb-2">
+            {userThreads.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No comments yet.</p>
+            ) : (
+              userThreads.map((thread) => (
+                <PrThreadCard
+                  key={thread.id}
+                  thread={thread}
+                  busy={commentMutation.isPending || statusMutation.isPending}
+                  mentionSearch={mentionSearch}
+                  onReply={(content) =>
+                    commentMutation.mutateAsync({
+                      ...prLocator(pr),
+                      threadId: thread.id,
+                      content,
+                    }).then(() => undefined)
+                  }
+                  onToggleStatus={() => {
+                    statusMutation.mutate({
+                      ...prLocator(pr),
+                      threadId: thread.id,
+                      status: thread.isResolved ? "active" : "closed",
+                    });
+                  }}
+                  onEditComment={(commentId, content) =>
+                    editMutation.mutateAsync({
+                      ...prLocator(pr),
+                      threadId: thread.id,
+                      commentId,
+                      content,
+                    }).then(() => undefined)
+                  }
+                  onDeleteComment={(commentId) =>
+                    deleteMutation.mutateAsync({
+                      ...prLocator(pr),
+                      threadId: thread.id,
+                      commentId,
+                    })
+                  }
+                />
+              ))
+            )}
+          </div>
+        </PrPreviewSection>
+
+        {/* System events (auto-generated threads) */}
+        {systemThreads.length > 0 ? (
+          <PrPreviewSection
+            title={`System Events (${systemThreads.length})`}
+            collapseId="systemEvents"
+            className="px-3"
+          >
+            <ul className="space-y-0.5 pb-2 pl-3 text-xs text-muted-foreground">
+              {systemThreads.map((thread) => (
+                <li key={thread.id}>
+                  {thread.comments[0]?.content ?? ""}
+                  {thread.comments[0]?.publishedDate
+                    ? ` · ${formatRelativeDate(thread.comments[0].publishedDate)}`
+                    : ""}
+                </li>
+              ))}
+            </ul>
+          </PrPreviewSection>
+        ) : null}
       </div>
 
       {/* New comment */}
@@ -810,34 +701,6 @@ function ReviewTab({
         />
       </div>
     </div>
-  );
-}
-
-function VoteDot({ vote }: { vote: number }) {
-  return (
-    <span
-      className={`inline-block h-1.5 w-1.5 rounded-full ${VOTE_DOT_CLASSES[voteTone(vote)]}`}
-      aria-hidden="true"
-    />
-  );
-}
-
-// Muted banded section label so Description / Work Items / Comments read as
-// distinct groups, matching the work item preview's section bands. Light mode
-// uses a darker slate so the band is visible on the white card.
-function SectionBand({
-  children,
-  className = "",
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <h3
-      className={`rounded bg-slate-200 px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wide leading-4 text-muted-foreground dark:bg-muted ${className}`}
-    >
-      {children}
-    </h3>
   );
 }
 
