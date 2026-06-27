@@ -19,6 +19,8 @@ pub struct GitPullRequestDetail {
     pub reviewers: Option<Vec<IdentityRefWithVote>>,
     pub is_draft: Option<bool>,
     pub status: Option<String>,
+    /// Set when auto-complete is enabled (the identity that turned it on).
+    pub auto_complete_set_by: Option<IdentityRef>,
     /// Tip of the source branch; required when completing a PR to guard against
     /// merging a stale revision.
     pub last_merge_source_commit: Option<GitCommitRefId>,
@@ -782,6 +784,41 @@ mod tests {
             .unwrap();
         assert_eq!(detail.status.as_deref(), Some("completed"));
         assert_eq!(detail.is_draft, Some(false));
+    }
+
+    #[tokio::test]
+    async fn update_pull_request_patches_title_and_description() {
+        let server = MockServer::start().await;
+        Mock::given(method("PATCH"))
+            .and(path(
+                "/project-1/_apis/git/repositories/repo-1/pullrequests/42",
+            ))
+            .and(body_partial_json(serde_json::json!({
+                "title": "New title",
+                "description": "New description"
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "pullRequestId": 42,
+                "title": "New title",
+                "description": "New description",
+                "sourceRefName": "refs/heads/feature",
+                "targetRefName": "refs/heads/main"
+            })))
+            .mount(&server)
+            .await;
+
+        let detail = test_client(&server)
+            .await
+            .update_pull_request(
+                "project-1",
+                "repo-1",
+                42,
+                &serde_json::json!({ "title": "New title", "description": "New description" }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(detail.title, "New title");
+        assert_eq!(detail.description.as_deref(), Some("New description"));
     }
 
     #[tokio::test]

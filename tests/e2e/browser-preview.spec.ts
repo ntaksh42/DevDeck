@@ -76,7 +76,7 @@ test.describe("browser preview", () => {
     await expect(main.getByText("Comment posted")).toBeVisible();
 
     await page.getByRole("button", { name: "Commits" }).click();
-    await main.getByPlaceholder("message, author, repository, SHA").fill("dashboard");
+    await main.getByPlaceholder("message, author, SHA — or path:src/auth").fill("dashboard");
     await expect(main.getByLabel("Project")).toBeVisible();
     await expect(main.getByLabel("Repository")).toBeVisible();
     await main.getByLabel("From", { exact: true }).fill("2026-05-01");

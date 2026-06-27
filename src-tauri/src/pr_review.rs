@@ -94,6 +94,22 @@ pub struct RemovePullRequestReviewerInput {
     pub reviewer_id: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdatePullRequestDetailsInput {
+    #[serde(flatten)]
+    pub pr: PrLocator,
+    pub title: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrDetailsResult {
+    pub title: String,
+    pub description: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PrStatusResult {
@@ -149,6 +165,7 @@ pub struct PullRequestReview {
     pub created_by: Option<String>,
     pub creation_date: Option<String>,
     pub is_draft: bool,
+    pub auto_complete: bool,
     pub reviewers: Vec<PrReviewer>,
     pub threads: Vec<PrThread>,
 }
@@ -247,6 +264,7 @@ impl PrReviewService {
             created_by: detail.created_by.and_then(|id| id.display_name),
             creation_date: detail.creation_date.map(|date| date.to_rfc3339()),
             is_draft: detail.is_draft.unwrap_or(false),
+            auto_complete: detail.auto_complete_set_by.is_some(),
             reviewers: detail
                 .reviewers
                 .unwrap_or_default()
@@ -495,6 +513,36 @@ impl PrReviewService {
                     }
                 })
             }
+            "enableAutoComplete" => {
+                let me = organization
+                    .authenticated_user_id
+                    .as_deref()
+                    .ok_or_else(|| {
+                        AppError::InvalidInput(
+                            "the signed-in user id is unknown; cannot set auto-complete"
+                                .to_string(),
+                        )
+                    })?;
+                let merge_strategy = input
+                    .merge_strategy
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .ok_or_else(|| {
+                        AppError::InvalidInput(
+                            "merge strategy is required to enable auto-complete".to_string(),
+                        )
+                    })?;
+                validate_merge_strategy(merge_strategy)?;
+                serde_json::json!({
+                    "autoCompleteSetBy": { "id": me },
+                    "completionOptions": {
+                        "mergeStrategy": merge_strategy,
+                        "deleteSourceBranch": input.delete_source_branch.unwrap_or(false),
+                    }
+                })
+            }
+            "cancelAutoComplete" => serde_json::json!({ "autoCompleteSetBy": null }),
             other => {
                 return Err(AppError::InvalidInput(format!(
                     "unknown pull request action: {other}"
@@ -551,6 +599,40 @@ impl PrReviewService {
             )
             .await?;
         Ok(())
+    }
+
+    /// Edits a pull request's title and description (issue #388). Sends a PATCH
+    /// with the new values and returns what Azure DevOps persisted.
+    pub async fn update_pull_request_details(
+        &self,
+        input: UpdatePullRequestDetailsInput,
+    ) -> Result<PrDetailsResult> {
+        let title = input.title.trim();
+        if title.is_empty() {
+            return Err(AppError::InvalidInput(
+                "pull request title cannot be empty".to_string(),
+            ));
+        }
+        let organization = self
+            .db
+            .resolve_organization(input.pr.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let body = serde_json::json!({
+            "title": title,
+            "description": input.description.as_deref().unwrap_or("").trim(),
+        });
+        let updated = client
+            .update_pull_request(
+                &input.pr.project_id,
+                &input.pr.repository_id,
+                input.pr.pull_request_id,
+                &body,
+            )
+            .await?;
+        Ok(PrDetailsResult {
+            title: updated.title,
+            description: updated.description,
+        })
     }
 
     pub async fn edit_comment(&self, input: EditPullRequestCommentInput) -> Result<PrThread> {

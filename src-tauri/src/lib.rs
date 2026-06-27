@@ -35,18 +35,19 @@ use error::{AppError, Result};
 use orgs::{AddAzureCliOrganizationInput, AddPatOrganizationInput, OrganizationService};
 use pipelines::{
     CancelPipelineRunInput, GetPipelineDefinitionInput, GetPipelineRunInput,
-    GetPipelineRunLogTailInput, ListPipelineDefinitionsInput, ListPipelineProjectsInput,
-    ListPipelineRunsInput, PipelineDefinitionDetail, PipelineDefinitionOption, PipelineLogTail,
-    PipelineProjectOption, PipelineRunDetail, PipelineRunSummary, PipelineService,
-    RerunPipelineRunInput,
+    GetPipelineRunLogTailInput, ListPipelineApprovalsInput, ListPipelineDefinitionsInput,
+    ListPipelineProjectsInput, ListPipelineRunsInput, PipelineApprovalSummary,
+    PipelineDefinitionDetail, PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption,
+    PipelineRunDetail, PipelineRunSummary, PipelineService, QueuePipelineRunInput,
+    RerunPipelineRunInput, UpdatePipelineApprovalInput,
 };
 use pr_review::{
     DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
-    PostPullRequestCommentInput, PrCommit, PrFileDiff, PrLocator, PrReviewService, PrReviewer,
-    PrStatusResult, PrThread, PullRequestChanges, PullRequestReview,
+    PostPullRequestCommentInput, PrCommit, PrDetailsResult, PrFileDiff, PrLocator, PrReviewService,
+    PrReviewer, PrStatusResult, PrThread, PullRequestChanges, PullRequestReview,
     RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
     SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
-    SubmitPullRequestVoteInput, UpdatePullRequestInput,
+    SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
 };
 use prs::{
     ListMyReviewPullRequestsInput, PullRequestSearchResult, PullRequestService,
@@ -333,6 +334,16 @@ async fn remove_pull_request_reviewer(
 ) -> Result<()> {
     ensure_write_enabled(&state).await?;
     state.pr_review.remove_reviewer(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn update_pull_request_details(
+    input: UpdatePullRequestDetailsInput,
+    state: State<'_, AppState>,
+) -> Result<PrDetailsResult> {
+    ensure_write_enabled(&state).await?;
+    state.pr_review.update_pull_request_details(input).await
 }
 
 #[tauri::command]
@@ -775,12 +786,41 @@ async fn rerun_pipeline_run(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn queue_pipeline_run(
+    input: QueuePipelineRunInput,
+    state: State<'_, AppState>,
+) -> Result<PipelineRunSummary> {
+    ensure_write_enabled(&state).await?;
+    state.pipelines.queue_run(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn cancel_pipeline_run(
     input: CancelPipelineRunInput,
     state: State<'_, AppState>,
 ) -> Result<PipelineRunSummary> {
     ensure_write_enabled(&state).await?;
     state.pipelines.cancel_run(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn list_pipeline_approvals(
+    input: ListPipelineApprovalsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<PipelineApprovalSummary>> {
+    state.pipelines.list_approvals(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn update_pipeline_approval(
+    input: UpdatePipelineApprovalInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<PipelineApprovalSummary>> {
+    ensure_write_enabled(&state).await?;
+    state.pipelines.update_approval(input).await
 }
 
 #[tauri::command]
@@ -921,6 +961,7 @@ pub fn run() {
             update_pull_request,
             set_pull_request_reviewer_required,
             remove_pull_request_reviewer,
+            update_pull_request_details,
             search_pull_request_mentions,
             edit_pull_request_comment,
             delete_pull_request_comment,
@@ -967,7 +1008,10 @@ pub fn run() {
             get_pipeline_definition,
             get_pipeline_run_log_tail,
             rerun_pipeline_run,
+            queue_pipeline_run,
             cancel_pipeline_run,
+            list_pipeline_approvals,
+            update_pipeline_approval,
             trigger_sync
         ])
         .run(tauri::generate_context!())
