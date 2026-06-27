@@ -45,12 +45,18 @@ pub struct NotificationRule {
     pub projects: Vec<String>,
     #[serde(default)]
     pub repositories: Vec<String>,
+    /// When true this rule mutes (suppresses) matching notifications instead of
+    /// allowing them. Mute rules take precedence over allow rules, so a noisy
+    /// repository/project can be silenced without having to allow-list every
+    /// other scope.
+    #[serde(default)]
+    pub mute: bool,
 }
 
 impl NotificationRule {
     /// A rule with no conditions at all would match every notification; treat it
     /// as a blank row so it can be dropped rather than silently disabling all
-    /// other rules.
+    /// other rules (or, for a mute rule, silencing everything).
     pub fn is_empty(&self) -> bool {
         self.types.is_empty() && self.projects.is_empty() && self.repositories.is_empty()
     }
@@ -3008,6 +3014,7 @@ mod tests {
                     types: vec!["reviewRequested".to_string()],
                     projects: vec!["Platform".to_string()],
                     repositories: Vec::new(),
+                    mute: false,
                 }],
             },
         )
