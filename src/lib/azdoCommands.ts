@@ -46,6 +46,9 @@ const notificationRuleSchema = z.object({
   types: z.array(z.string()).default([]),
   projects: z.array(z.string()).default([]),
   repositories: z.array(z.string()).default([]),
+  // When true, matching notifications are muted (suppressed) instead of allowed.
+  // Mute rules take precedence over allow rules.
+  mute: z.boolean().default(false),
 });
 
 export type NotificationRule = z.infer<typeof notificationRuleSchema>;
