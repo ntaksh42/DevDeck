@@ -39,6 +39,7 @@ function makePreview(overrides: Partial<WorkItemPreview> = {}): WorkItemPreview 
     commentsUnavailable: false,
     relations: [],
     pullRequests: [],
+    attachments: [],
     ...overrides,
   };
 }
