@@ -141,6 +141,9 @@ pub struct TimelineNode {
 pub struct PipelineRunDetail {
     pub run: PipelineRunSummary,
     pub timeline: Vec<TimelineNode>,
+    /// True when the timeline request itself failed (vs. a run that genuinely
+    /// has no timeline yet), so the UI can distinguish a fetch error from empty.
+    pub timeline_unavailable: bool,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -278,13 +281,23 @@ impl PipelineService {
             .project(&client, &organization.id, &input.project_id)
             .await?;
         let build = client.get_build(&project.id, input.build_id).await?;
-        let timeline = client
-            .get_build_timeline(&project.id, input.build_id)
-            .await
-            .unwrap_or(Timeline { records: vec![] });
+        let (timeline, timeline_unavailable) =
+            match client.get_build_timeline(&project.id, input.build_id).await {
+                Ok(timeline) => (timeline, false),
+                Err(error) => {
+                    tracing::warn!(
+                        project = %project.id,
+                        build_id = input.build_id,
+                        %error,
+                        "failed to fetch pipeline timeline"
+                    );
+                    (Timeline { records: vec![] }, true)
+                }
+            };
         Ok(PipelineRunDetail {
             run: build_to_summary(&organization, &project.id, &project.name, build),
             timeline: timeline_to_nodes(timeline),
+            timeline_unavailable,
         })
     }
 

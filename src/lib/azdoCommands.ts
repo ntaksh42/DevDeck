@@ -1377,6 +1377,7 @@ export type TimelineNode = z.infer<typeof timelineNodeSchema>;
 const pipelineRunDetailSchema = z.object({
   run: pipelineRunSummarySchema,
   timeline: z.array(timelineNodeSchema),
+  timelineUnavailable: z.boolean().default(false),
 });
 export type PipelineRunDetail = z.infer<typeof pipelineRunDetailSchema>;
 
