@@ -395,9 +395,14 @@ export function ClassificationPicker({
     wasOpenRef.current = open;
   }, [open]);
 
-  // The current value is the full backslash path; show only its leaf for the
-  // trigger but keep the full path as the title for disambiguation.
-  const leaf = current ? current.split("\\").pop() || current : null;
+  // The current value is the full backslash path that always starts with the
+  // project name. Drop that redundant root and join the rest with " › " so the
+  // trigger shows the full classification path compactly; keep the complete
+  // backslash path as the title for disambiguation.
+  const segments = current?.split("\\").filter(Boolean) ?? [];
+  const display = segments.length
+    ? (segments.length > 1 ? segments.slice(1) : segments).join(" › ")
+    : null;
   const selectedIndex = options.findIndex((option) => option.path === current);
   const autoFocusIndex = selectedIndex >= 0 ? selectedIndex : 0;
 
@@ -412,7 +417,7 @@ export function ClassificationPicker({
         className="max-w-full truncate rounded px-1 text-left text-xs leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
         title={current ?? "—"}
       >
-        {pending ? "Updating..." : (leaf ?? "—")}
+        {pending ? "Updating..." : (display ?? "—")}
       </button>
       {error && <p className="mt-0.5 text-[10px] text-destructive">{error}</p>}
       {open ? (
