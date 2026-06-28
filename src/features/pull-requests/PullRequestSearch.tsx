@@ -30,12 +30,21 @@ import {
   formatRelativeDate,
 } from '@/lib/utils';
 import { useGridColumns } from '@/lib/useGridColumns';
+import { useColumnVisibility } from '@/lib/useColumnVisibility';
+import { useGridVirtualizer } from '@/lib/useGridVirtualizer';
 import { openExternalUrl } from '@/lib/openExternal';
 import { recordRecentPullRequest } from '@/lib/recentItems';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { ErrorState, LoadingState } from '@/components/StateDisplay';
 import { ActiveFilters } from '@/components/ActiveFilters';
+import { ColumnFilterDropdown } from '@/components/ColumnFilterDropdown';
+import {
+  activeColumnFilterCount,
+  applyColumnFilters,
+  columnFilterUniqueValues,
+  toggleColumnFilterValue,
+} from '@/lib/columnFilters';
 import { MultiSelectFilter } from '@/components/MultiSelectFilter';
 import { PrReviewPanel } from './PrReviewPanel';
 
@@ -478,16 +487,6 @@ export function PullRequestSearch({
   );
 }
 
-function activeColumnFilterCount(
-  filters: Partial<Record<PrSearchFilterableColumn, Set<string>>>,
-): number {
-  // An absent key means "(All)"; an empty set means "uncheck all" (an explicit
-  // selection of nothing), so both are counted as an active column filter.
-  return (Object.values(filters) as (Set<string> | undefined)[]).filter(
-    (values) => values !== undefined,
-  ).length;
-}
-
 type PrSearchColumnKey =
   | "pullRequestId"
   | "status"
@@ -522,23 +521,6 @@ const PR_SEARCH_COLUMN_FILTER_KEY: Partial<Record<PrSearchColumnKey, PrSearchFil
   branch: "branch",
 };
 const PR_SEARCH_VISIBLE_COLUMNS_STORAGE_KEY = "azdodeck:layout:prSearchVisibleColumns:v1";
-
-function loadPrSearchVisibleColumns(): PrSearchColumnKey[] {
-  try {
-    const parsed = JSON.parse(
-      window.localStorage.getItem(PR_SEARCH_VISIBLE_COLUMNS_STORAGE_KEY) ?? "null",
-    );
-    if (!Array.isArray(parsed)) return [...PR_SEARCH_KEYS];
-    const set = new Set(
-      parsed.filter((v): v is PrSearchColumnKey => PR_SEARCH_KEYS.includes(v as PrSearchColumnKey)),
-    );
-    for (const required of PR_SEARCH_REQUIRED_COLUMNS) set.add(required);
-    const ordered = PR_SEARCH_KEYS.filter((key) => set.has(key));
-    return ordered.length > 0 ? ordered : [...PR_SEARCH_KEYS];
-  } catch {
-    return [...PR_SEARCH_KEYS];
-  }
-}
 
 // Cells stay direct grid items (keyed Fragment) so the column template lines up.
 function renderPrSearchCell(key: PrSearchColumnKey, pr: PullRequestSummary): ReactNode {
@@ -618,9 +600,11 @@ function PullRequestResults({
   const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
   // The filter button that opened the dropdown, so focus can return to it on close.
   const filterButtonRef = useRef<HTMLElement | null>(null);
-  const [visibleColumns, setVisibleColumns] = useState<PrSearchColumnKey[]>(
-    loadPrSearchVisibleColumns,
-  );
+  const { visibleColumns, toggleColumn, resetColumns } = useColumnVisibility({
+    keys: PR_SEARCH_KEYS,
+    requiredColumns: PR_SEARCH_REQUIRED_COLUMNS,
+    storageKey: PR_SEARCH_VISIBLE_COLUMNS_STORAGE_KEY,
+  });
   const {
     template: columnTemplate,
     minWidth: gridMinWidth,
@@ -647,76 +631,33 @@ function PullRequestResults({
   );
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
   const restoreFocusRef = useRef(false);
-  const [scrollerEl, setScrollerEl] = useState<HTMLDivElement | null>(null);
-  const [gridViewport, setGridViewport] = useState({ height: 0, scrollTop: 0 });
-
   useEffect(() => {
     localStorage.setItem(PR_SEARCH_PREVIEW_WIDTH_STORAGE_KEY, String(Math.round(previewWidth)));
   }, [previewWidth]);
 
-  useEffect(() => {
-    localStorage.setItem(PR_SEARCH_VISIBLE_COLUMNS_STORAGE_KEY, JSON.stringify(visibleColumns));
-  }, [visibleColumns]);
+  const columnUniqueValues = useMemo(
+    () => columnFilterUniqueValues(results, PR_SEARCH_FILTERABLE_COLUMNS),
+    [results],
+  );
 
-  useEffect(() => {
-    if (!scrollerEl) return;
+  const filteredResults = useMemo(
+    () => applyColumnFilters(results, columnFilters, PR_SEARCH_FILTERABLE_COLUMNS),
+    [columnFilters, results],
+  );
 
-    function updateViewport() {
-      setGridViewport({
-        height: scrollerEl!.clientHeight,
-        scrollTop: scrollerEl!.scrollTop,
-      });
-    }
-
-    updateViewport();
-    scrollerEl.addEventListener("scroll", updateViewport, { passive: true });
-    const resizeObserver =
-      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateViewport);
-    resizeObserver?.observe(scrollerEl);
-    return () => {
-      scrollerEl.removeEventListener("scroll", updateViewport);
-      resizeObserver?.disconnect();
-    };
-  }, [scrollerEl]);
-
-  function toggleColumnVisibility(column: PrSearchColumnKey) {
-    if (PR_SEARCH_REQUIRED_COLUMNS.includes(column)) return;
-    setVisibleColumns((current) =>
-      current.includes(column)
-        ? current.filter((value) => value !== column)
-        : PR_SEARCH_KEYS.filter((value) => value === column || current.includes(value)),
-    );
-  }
-
-  function resetColumnVisibility() {
-    setVisibleColumns([...PR_SEARCH_KEYS]);
-  }
-
-
-  const columnUniqueValues = useMemo(() => {
-    const map = {} as Record<PrSearchFilterableColumn, string[]>;
-    for (const col of Object.keys(PR_SEARCH_FILTERABLE_COLUMNS) as PrSearchFilterableColumn[]) {
-      map[col] = [...new Set(results.map(PR_SEARCH_FILTERABLE_COLUMNS[col]))].sort((a, b) =>
-        a.localeCompare(b, undefined, { sensitivity: "base" }),
-      );
-    }
-    return map;
-  }, [results]);
-
-  const filteredResults = useMemo(() => {
-    const hasFilters = (Object.values(columnFilters) as (Set<string> | undefined)[]).some(
-      (values) => values !== undefined,
-    );
-    if (!hasFilters) return results;
-    return results.filter((pr) => {
-      for (const col of Object.keys(columnFilters) as PrSearchFilterableColumn[]) {
-        const activeValues = columnFilters[col];
-        if (!activeValues) continue;
-        if (!activeValues.has(PR_SEARCH_FILTERABLE_COLUMNS[col](pr))) return false;
-      }
-      return true;
-    });
-  }, [columnFilters, results]);
+  const {
+    scrollerRef,
+    firstRow: firstVirtualRow,
+    lastRow: lastVirtualRow,
+    topPadding: virtualTopPadding,
+    bottomPadding: virtualBottomPadding,
+    scrollRowIntoView,
+  } = useGridVirtualizer({
+    rowCount: filteredResults.length,
+    rowHeight: PR_SEARCH_ROW_HEIGHT,
+    overscan: PR_SEARCH_OVERSCAN,
+  });
+  const virtualRows = filteredResults.slice(firstVirtualRow, lastVirtualRow);
 
   const columnFilterCount = activeColumnFilterCount(columnFilters);
   const hasActiveColumnFilters = columnFilterCount > 0;
@@ -738,17 +679,6 @@ function PullRequestResults({
     const suffix = truncated ? ` (showing first ${results.length} of ${total}+)` : "";
     return `${shown} pull request${results.length === 1 ? "" : "s"}${suffix}`;
   }, [filteredResults.length, hasActiveColumnFilters, loading, results.length, searched, total, truncated]);
-
-  function scrollRowIntoView(index: number) {
-    if (!scrollerEl) return;
-    const rowTop = index * PR_SEARCH_ROW_HEIGHT;
-    const rowBottom = rowTop + PR_SEARCH_ROW_HEIGHT;
-    if (rowTop < scrollerEl.scrollTop) {
-      scrollerEl.scrollTop = rowTop;
-    } else if (rowBottom > scrollerEl.scrollTop + scrollerEl.clientHeight) {
-      scrollerEl.scrollTop = rowBottom - scrollerEl.clientHeight;
-    }
-  }
 
   function moveSelectionTo(index: number) {
     const next = clamp(index, 0, filteredResults.length - 1);
@@ -779,27 +709,7 @@ function PullRequestResults({
 
   function toggleFilter(col: PrSearchFilterableColumn, value: string) {
     const allValues = columnUniqueValues[col] ?? [];
-    setColumnFilters((prev) => {
-      const current = prev[col];
-      // No active filter (absent key) means every value is checked, so the
-      // first toggle deselects just the clicked value.
-      if (!current) {
-        const next = new Set(allValues.filter((candidate) => candidate !== value));
-        return { ...prev, [col]: next };
-      }
-      const next = new Set(current);
-      if (next.has(value)) {
-        next.delete(value);
-      } else {
-        next.add(value);
-        if (next.size === allValues.length) {
-          // Every value checked again collapses back to "(All)".
-          const { [col]: _, ...rest } = prev;
-          return rest;
-        }
-      }
-      return { ...prev, [col]: next };
-    });
+    setColumnFilters((prev) => toggleColumnFilterValue(prev, col, value, allValues));
     setSelectedIndex(0);
   }
 
@@ -880,22 +790,6 @@ function PullRequestResults({
     }
   }
 
-  const firstVirtualRow = Math.max(
-    0,
-    Math.floor(gridViewport.scrollTop / PR_SEARCH_ROW_HEIGHT) - PR_SEARCH_OVERSCAN,
-  );
-  const visibleRowCount = Math.ceil(
-    Math.max(gridViewport.height, PR_SEARCH_ROW_HEIGHT) / PR_SEARCH_ROW_HEIGHT,
-  );
-  const lastVirtualRow = Math.min(
-    filteredResults.length,
-    firstVirtualRow + visibleRowCount + PR_SEARCH_OVERSCAN * 2,
-  );
-  const virtualRows = filteredResults.slice(firstVirtualRow, lastVirtualRow);
-  const virtualTopPadding = firstVirtualRow * PR_SEARCH_ROW_HEIGHT;
-  const virtualBottomPadding =
-    Math.max(0, filteredResults.length - lastVirtualRow) * PR_SEARCH_ROW_HEIGHT;
-
   const selectedResult = filteredResults[selectedIndex] ?? null;
   const selectedPr = selectedResult ? toReviewSummary(selectedResult) : null;
 
@@ -948,7 +842,7 @@ function PullRequestResults({
           className="flex min-h-0 flex-1 flex-col outline-none"
           onKeyDown={handleKeyDown}
         >
-          <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
+          <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
           <div style={{ minWidth: gridMinWidth }}>
           <div
             role="row"
@@ -1066,165 +960,11 @@ function PullRequestResults({
           columns={PR_SEARCH_KEYS.map((key) => ({ key, label: PR_SEARCH_COLUMN_LABELS[key] }))}
           visibleColumns={visibleColumns}
           requiredColumns={PR_SEARCH_REQUIRED_COLUMNS}
-          onToggle={toggleColumnVisibility}
-          onReset={resetColumnVisibility}
+          onToggle={toggleColumn}
+          onReset={resetColumns}
           onClose={() => setColumnMenuRect(null)}
         />
       ) : null}
-    </div>
-  );
-}
-
-function ColumnFilterDropdown({
-  anchorRect,
-  allValues,
-  activeValues,
-  onToggle,
-  onClearAll,
-  onUncheckAll,
-  onClose,
-  restoreFocusRef,
-}: {
-  anchorRect: DOMRect;
-  allValues: string[];
-  activeValues: Set<string> | undefined;
-  onToggle: (value: string) => void;
-  onClearAll: () => void;
-  onUncheckAll: () => void;
-  onClose: () => void;
-  restoreFocusRef?: React.RefObject<HTMLElement | null>;
-}) {
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const [search, setSearch] = useState("");
-
-  useEffect(() => {
-    function onMouseDown(e: MouseEvent) {
-      if (!dropdownRef.current?.contains(e.target as Node)) onClose();
-    }
-    document.addEventListener("mousedown", onMouseDown);
-    return () => document.removeEventListener("mousedown", onMouseDown);
-  }, [onClose]);
-
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        onClose();
-      }
-    }
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [onClose]);
-
-  // On close, return focus to the filter button that opened the dropdown so
-  // keyboard navigation resumes there instead of being stranded on <body>.
-  // Deferred a frame so it wins over any post-close re-render focus.
-  useEffect(() => {
-    const restore = restoreFocusRef;
-    return () => {
-      window.setTimeout(() => restore?.current?.focus(), 0);
-    };
-  }, [restoreFocusRef]);
-
-  // Move focus between the dropdown's controls (search box, (All), value
-  // checkboxes), wrapping at the ends.
-  function moveFocus(delta: number) {
-    const items = Array.from(
-      dropdownRef.current?.querySelectorAll<HTMLElement>('[data-filter-item="true"]') ?? [],
-    ).filter((el) => !el.hasAttribute("disabled"));
-    if (items.length === 0) return;
-    const active = document.activeElement as HTMLElement | null;
-    const current = active ? items.indexOf(active) : -1;
-    const next = (current + delta + items.length) % items.length;
-    items[next]?.focus();
-  }
-
-  // Keep navigation/activation inside the dropdown; otherwise arrows reach the
-  // grid behind it (the editable branch of its onKeyDown moves the row
-  // selection) while the popup is open.
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      e.stopPropagation();
-      moveFocus(1);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      e.stopPropagation();
-      moveFocus(-1);
-    } else if (e.key === "Enter" || e.key === " ") {
-      e.stopPropagation();
-    }
-  }
-
-  const isAllChecked = activeValues === undefined;
-  const anyChecked = isAllChecked || (activeValues?.size ?? 0) > 0;
-  const filteredValues = search.trim()
-    ? allValues.filter((value) => value.toLowerCase().includes(search.trim().toLowerCase()))
-    : allValues;
-  const top = Math.min(anchorRect.bottom + 2, window.innerHeight - 280);
-  const left = Math.min(anchorRect.left, window.innerWidth - 208);
-
-  return (
-    <div
-      ref={dropdownRef}
-      onKeyDown={handleKeyDown}
-      className="fixed z-50 w-52 rounded-md border border-border bg-popover shadow-lg"
-      style={{ top, left }}
-    >
-      <div className="border-b border-border p-1.5">
-        <input
-          autoFocus
-          data-filter-item="true"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search…"
-          className="w-full rounded border border-input bg-background px-2 py-0.5 text-xs outline-none focus:ring-1 focus:ring-ring"
-        />
-      </div>
-      <div className="flex items-center gap-1 border-b border-border p-1">
-        <button
-          type="button"
-          data-filter-item="true"
-          onClick={onClearAll}
-          className={`flex-1 rounded px-2 py-0.5 text-left text-xs hover:bg-secondary ${
-            isAllChecked ? "font-medium text-foreground" : "text-muted-foreground"
-          }`}
-        >
-          (All)
-        </button>
-        <button
-          type="button"
-          onClick={onUncheckAll}
-          disabled={!anyChecked}
-          className="rounded px-2 py-0.5 text-xs text-muted-foreground hover:bg-secondary disabled:cursor-default disabled:opacity-40"
-        >
-          Uncheck all
-        </button>
-      </div>
-      <div className="max-h-44 overflow-auto p-1">
-        {filteredValues.length === 0 ? (
-          <p className="px-2 py-1 text-xs text-muted-foreground">No values</p>
-        ) : (
-          filteredValues.map((value) => {
-            const checked = isAllChecked || (activeValues?.has(value) ?? false);
-            return (
-              <label
-                key={value}
-                className="flex cursor-pointer select-none items-center gap-1.5 rounded px-2 py-0.5 text-xs hover:bg-secondary"
-              >
-                <input
-                  type="checkbox"
-                  data-filter-item="true"
-                  checked={checked}
-                  onChange={() => onToggle(value)}
-                  className="h-3 w-3"
-                />
-                <span className="truncate">{value || "(empty)"}</span>
-              </label>
-            );
-          })
-        )}
-      </div>
     </div>
   );
 }

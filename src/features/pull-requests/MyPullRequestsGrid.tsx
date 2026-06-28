@@ -27,6 +27,7 @@ import { FilterAutocomplete } from "@/components/FilterAutocomplete";
 import { ColumnResizeHandle } from "@/components/ResizeHandle";
 import { ColumnVisibilityMenu } from "@/components/ColumnVisibilityMenu";
 import { useGridColumns } from "@/lib/useGridColumns";
+import { useColumnVisibility } from "@/lib/useColumnVisibility";
 import { openExternalUrl } from "@/lib/openExternal";
 
 type SortKey =
@@ -63,19 +64,6 @@ const COLUMN_MIN_WIDTHS = [48, 96, 150, 72, 72, 60];
 const COLUMN_MAX_WIDTHS = [120, 520, 960, 160, 240, 160];
 const COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:myPullRequestsGridColumnWidths:v1";
 const VISIBLE_COLUMNS_STORAGE_KEY = "azdodeck:view:myPullRequestsGridColumns:v1";
-
-function loadVisibleColumns(): SortKey[] {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(VISIBLE_COLUMNS_STORAGE_KEY) ?? "null");
-    if (!Array.isArray(parsed)) return [...GRID_KEYS];
-    const set = new Set(parsed.filter((v): v is SortKey => GRID_KEYS.includes(v as SortKey)));
-    for (const required of REQUIRED_COLUMNS) set.add(required);
-    const ordered = GRID_KEYS.filter((key) => set.has(key));
-    return ordered.length > 0 ? ordered : [...GRID_KEYS];
-  } catch {
-    return [...GRID_KEYS];
-  }
-}
 
 function defaultSortDirection(key: SortKey): SortDirection {
   return key === "creationDate" ? "desc" : "asc";
@@ -263,7 +251,11 @@ export function MyPullRequestsGrid({ organizations }: { organizations: Organizat
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [sort, setSort] = useState<SortState>({ key: "creationDate", direction: "desc" });
   const [textFilter, setTextFilter] = useState("");
-  const [visibleColumns, setVisibleColumns] = useState<SortKey[]>(loadVisibleColumns);
+  const { visibleColumns, toggleColumn, resetColumns } = useColumnVisibility({
+    keys: GRID_KEYS,
+    requiredColumns: REQUIRED_COLUMNS,
+    storageKey: VISIBLE_COLUMNS_STORAGE_KEY,
+  });
   const [columnMenuRect, setColumnMenuRect] = useState<DOMRect | null>(null);
   const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
 
@@ -281,10 +273,6 @@ export function MyPullRequestsGrid({ organizations }: { organizations: Organizat
     max: COLUMN_MAX_WIDTHS,
     storageKey: COLUMN_WIDTHS_STORAGE_KEY,
   });
-
-  useEffect(() => {
-    localStorage.setItem(VISIBLE_COLUMNS_STORAGE_KEY, JSON.stringify(visibleColumns));
-  }, [visibleColumns]);
 
   const query = useQuery({
     queryKey: ["myCreatedPullRequests", organizationId],
@@ -331,20 +319,6 @@ export function MyPullRequestsGrid({ organizations }: { organizations: Organizat
         ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
         : { key, direction: defaultSortDirection(key) },
     );
-  };
-
-  const toggleColumnVisibility = (column: SortKey) => {
-    if (REQUIRED_COLUMNS.includes(column)) return;
-    setVisibleColumns((current) =>
-      current.includes(column)
-        ? current.filter((key) => key !== column)
-        : GRID_KEYS.filter((key) => current.includes(key) || key === column),
-    );
-  };
-
-  const resetColumnVisibility = () => {
-    setVisibleColumns([...GRID_KEYS]);
-    resetWidths();
   };
 
   const moveSelection = (next: number) => {
@@ -490,8 +464,11 @@ export function MyPullRequestsGrid({ organizations }: { organizations: Organizat
           columns={GRID_KEYS.map((key) => ({ key, label: sortLabels[key] }))}
           visibleColumns={visibleColumns}
           requiredColumns={REQUIRED_COLUMNS}
-          onToggle={toggleColumnVisibility}
-          onReset={resetColumnVisibility}
+          onToggle={toggleColumn}
+          onReset={() => {
+            resetColumns();
+            resetWidths();
+          }}
           onClose={() => setColumnMenuRect(null)}
         />
       ) : null}
