@@ -64,7 +64,12 @@ import { LoadingState, ErrorState } from '@/components/StateDisplay';
 import { ActiveFilters } from '@/components/ActiveFilters';
 import { ColumnFilterDropdown } from '@/components/ColumnFilterDropdown';
 import { SortHeaderButton } from '@/components/SortHeaderButton';
-import { activeColumnFilterCount } from '@/lib/columnFilters';
+import {
+  activeColumnFilterCount,
+  applyColumnFilters,
+  columnFilterUniqueValues,
+  toggleColumnFilterValue,
+} from '@/lib/columnFilters';
 
 import { PrReviewPanel } from './PrReviewPanel';
 import { VOTE_BADGE_CLASSES, voteTone } from './voteVisual';
@@ -787,30 +792,15 @@ export function MyReviewsGrid({
     });
   }, [allPrs, archivedKeys, showDone, textFilter, showDrafts]);
 
-  const columnUniqueValues = useMemo(() => {
-    const map = {} as Record<FilterableColumn, string[]>;
-    for (const col of Object.keys(FILTERABLE_COLUMNS) as FilterableColumn[]) {
-      map[col] = [...new Set(baseFiltered.map(FILTERABLE_COLUMNS[col]))].sort((a, b) =>
-        a.localeCompare(b, undefined, { sensitivity: "base" }),
-      );
-    }
-    return map;
-  }, [baseFiltered]);
+  const columnUniqueValues = useMemo(
+    () => columnFilterUniqueValues(baseFiltered, FILTERABLE_COLUMNS),
+    [baseFiltered],
+  );
 
-  const filtered = useMemo(() => {
-    const hasFilters = (Object.values(columnFilters) as (Set<string> | undefined)[]).some(
-      (values) => values !== undefined,
-    );
-    if (!hasFilters) return baseFiltered;
-    return baseFiltered.filter((pr) => {
-      for (const col of Object.keys(columnFilters) as FilterableColumn[]) {
-        const activeValues = columnFilters[col];
-        if (!activeValues) continue;
-        if (!activeValues.has(FILTERABLE_COLUMNS[col](pr))) return false;
-      }
-      return true;
-    });
-  }, [baseFiltered, columnFilters]);
+  const filtered = useMemo(
+    () => applyColumnFilters(baseFiltered, columnFilters, FILTERABLE_COLUMNS),
+    [baseFiltered, columnFilters],
+  );
 
   const sortedPrs = useMemo(() => {
     return filtered
@@ -1150,28 +1140,7 @@ export function MyReviewsGrid({
 
   function toggleFilter(col: FilterableColumn, value: string) {
     const allValues = columnUniqueValues[col] ?? [];
-    setColumnFilters((prev) => {
-      const current = prev[col];
-      // No active filter (absent key) means every value is checked, so the
-      // first toggle deselects just the clicked value.
-      if (!current) {
-        const next = new Set(allValues.filter((candidate) => candidate !== value));
-        return { ...prev, [col]: next };
-      }
-
-      const next = new Set(current);
-      if (next.has(value)) {
-        next.delete(value);
-      } else {
-        next.add(value);
-        if (next.size === allValues.length) {
-          // Every value checked again collapses back to "(All)".
-          const { [col]: _, ...rest } = prev;
-          return rest;
-        }
-      }
-      return { ...prev, [col]: next };
-    });
+    setColumnFilters((prev) => toggleColumnFilterValue(prev, col, value, allValues));
     setSelectedIndex(0);
   }
 

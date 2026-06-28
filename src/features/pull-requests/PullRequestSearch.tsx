@@ -38,7 +38,12 @@ import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { ErrorState, LoadingState } from '@/components/StateDisplay';
 import { ActiveFilters } from '@/components/ActiveFilters';
 import { ColumnFilterDropdown } from '@/components/ColumnFilterDropdown';
-import { activeColumnFilterCount } from '@/lib/columnFilters';
+import {
+  activeColumnFilterCount,
+  applyColumnFilters,
+  columnFilterUniqueValues,
+  toggleColumnFilterValue,
+} from '@/lib/columnFilters';
 import { MultiSelectFilter } from '@/components/MultiSelectFilter';
 import { PrReviewPanel } from './PrReviewPanel';
 
@@ -653,30 +658,15 @@ function PullRequestResults({
     };
   }, [scrollerEl]);
 
-  const columnUniqueValues = useMemo(() => {
-    const map = {} as Record<PrSearchFilterableColumn, string[]>;
-    for (const col of Object.keys(PR_SEARCH_FILTERABLE_COLUMNS) as PrSearchFilterableColumn[]) {
-      map[col] = [...new Set(results.map(PR_SEARCH_FILTERABLE_COLUMNS[col]))].sort((a, b) =>
-        a.localeCompare(b, undefined, { sensitivity: "base" }),
-      );
-    }
-    return map;
-  }, [results]);
+  const columnUniqueValues = useMemo(
+    () => columnFilterUniqueValues(results, PR_SEARCH_FILTERABLE_COLUMNS),
+    [results],
+  );
 
-  const filteredResults = useMemo(() => {
-    const hasFilters = (Object.values(columnFilters) as (Set<string> | undefined)[]).some(
-      (values) => values !== undefined,
-    );
-    if (!hasFilters) return results;
-    return results.filter((pr) => {
-      for (const col of Object.keys(columnFilters) as PrSearchFilterableColumn[]) {
-        const activeValues = columnFilters[col];
-        if (!activeValues) continue;
-        if (!activeValues.has(PR_SEARCH_FILTERABLE_COLUMNS[col](pr))) return false;
-      }
-      return true;
-    });
-  }, [columnFilters, results]);
+  const filteredResults = useMemo(
+    () => applyColumnFilters(results, columnFilters, PR_SEARCH_FILTERABLE_COLUMNS),
+    [columnFilters, results],
+  );
 
   const columnFilterCount = activeColumnFilterCount(columnFilters);
   const hasActiveColumnFilters = columnFilterCount > 0;
@@ -739,27 +729,7 @@ function PullRequestResults({
 
   function toggleFilter(col: PrSearchFilterableColumn, value: string) {
     const allValues = columnUniqueValues[col] ?? [];
-    setColumnFilters((prev) => {
-      const current = prev[col];
-      // No active filter (absent key) means every value is checked, so the
-      // first toggle deselects just the clicked value.
-      if (!current) {
-        const next = new Set(allValues.filter((candidate) => candidate !== value));
-        return { ...prev, [col]: next };
-      }
-      const next = new Set(current);
-      if (next.has(value)) {
-        next.delete(value);
-      } else {
-        next.add(value);
-        if (next.size === allValues.length) {
-          // Every value checked again collapses back to "(All)".
-          const { [col]: _, ...rest } = prev;
-          return rest;
-        }
-      }
-      return { ...prev, [col]: next };
-    });
+    setColumnFilters((prev) => toggleColumnFilterValue(prev, col, value, allValues));
     setSelectedIndex(0);
   }
 
