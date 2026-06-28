@@ -13,7 +13,7 @@ description: >-
 
 # review-loop
 
-Review the open pull requests in this repository (`ntaksh42/azdo-dashboard`)
+Review the open pull requests in this repository (`ntaksh42/DevDeck`)
 against the project's review guidelines, and leave the findings on each PR as a
 GitHub review.
 
@@ -95,7 +95,7 @@ Post as a single GitHub review so the inline comments are grouped, not as a
 scatter of loose comments. Build a review JSON and submit it via the API:
 
 ```bash
-gh api repos/ntaksh42/azdo-dashboard/pulls/<N>/reviews \
+gh api repos/ntaksh42/DevDeck/pulls/<N>/reviews \
   --method POST \
   --input review.json
 ```

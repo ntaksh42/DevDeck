@@ -29,7 +29,7 @@
     "category": "DeveloperTool",
     "shortDescription": "Developer desktop dashboard",
     "longDescription": "DevDeck is a local desktop dashboard for your development platforms. Browse pull requests assigned to you, search work items and commits across projects, and take quick actions — all from a single window backed by a local cache.",
-    "homepage": "https://github.com/ntaksh42/azdo-dashboard",
+    "homepage": "https://github.com/ntaksh42/DevDeck",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -51,7 +51,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/ntaksh42/azdo-dashboard/releases/latest/download/latest.json"
+        "https://github.com/ntaksh42/DevDeck/releases/latest/download/latest.json"
       ],
       "pubkey": "REPLACE_WITH_TAURI_SIGNING_PUBLIC_KEY"
     }
