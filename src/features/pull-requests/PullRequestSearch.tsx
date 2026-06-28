@@ -30,6 +30,7 @@ import {
   formatRelativeDate,
 } from '@/lib/utils';
 import { useGridColumns } from '@/lib/useGridColumns';
+import { useColumnVisibility } from '@/lib/useColumnVisibility';
 import { openExternalUrl } from '@/lib/openExternal';
 import { recordRecentPullRequest } from '@/lib/recentItems';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
@@ -515,23 +516,6 @@ const PR_SEARCH_COLUMN_FILTER_KEY: Partial<Record<PrSearchColumnKey, PrSearchFil
 };
 const PR_SEARCH_VISIBLE_COLUMNS_STORAGE_KEY = "azdodeck:layout:prSearchVisibleColumns:v1";
 
-function loadPrSearchVisibleColumns(): PrSearchColumnKey[] {
-  try {
-    const parsed = JSON.parse(
-      window.localStorage.getItem(PR_SEARCH_VISIBLE_COLUMNS_STORAGE_KEY) ?? "null",
-    );
-    if (!Array.isArray(parsed)) return [...PR_SEARCH_KEYS];
-    const set = new Set(
-      parsed.filter((v): v is PrSearchColumnKey => PR_SEARCH_KEYS.includes(v as PrSearchColumnKey)),
-    );
-    for (const required of PR_SEARCH_REQUIRED_COLUMNS) set.add(required);
-    const ordered = PR_SEARCH_KEYS.filter((key) => set.has(key));
-    return ordered.length > 0 ? ordered : [...PR_SEARCH_KEYS];
-  } catch {
-    return [...PR_SEARCH_KEYS];
-  }
-}
-
 // Cells stay direct grid items (keyed Fragment) so the column template lines up.
 function renderPrSearchCell(key: PrSearchColumnKey, pr: PullRequestSummary): ReactNode {
   switch (key) {
@@ -610,9 +594,11 @@ function PullRequestResults({
   const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
   // The filter button that opened the dropdown, so focus can return to it on close.
   const filterButtonRef = useRef<HTMLElement | null>(null);
-  const [visibleColumns, setVisibleColumns] = useState<PrSearchColumnKey[]>(
-    loadPrSearchVisibleColumns,
-  );
+  const { visibleColumns, toggleColumn, resetColumns } = useColumnVisibility({
+    keys: PR_SEARCH_KEYS,
+    requiredColumns: PR_SEARCH_REQUIRED_COLUMNS,
+    storageKey: PR_SEARCH_VISIBLE_COLUMNS_STORAGE_KEY,
+  });
   const {
     template: columnTemplate,
     minWidth: gridMinWidth,
@@ -647,10 +633,6 @@ function PullRequestResults({
   }, [previewWidth]);
 
   useEffect(() => {
-    localStorage.setItem(PR_SEARCH_VISIBLE_COLUMNS_STORAGE_KEY, JSON.stringify(visibleColumns));
-  }, [visibleColumns]);
-
-  useEffect(() => {
     if (!scrollerEl) return;
 
     function updateViewport() {
@@ -670,20 +652,6 @@ function PullRequestResults({
       resizeObserver?.disconnect();
     };
   }, [scrollerEl]);
-
-  function toggleColumnVisibility(column: PrSearchColumnKey) {
-    if (PR_SEARCH_REQUIRED_COLUMNS.includes(column)) return;
-    setVisibleColumns((current) =>
-      current.includes(column)
-        ? current.filter((value) => value !== column)
-        : PR_SEARCH_KEYS.filter((value) => value === column || current.includes(value)),
-    );
-  }
-
-  function resetColumnVisibility() {
-    setVisibleColumns([...PR_SEARCH_KEYS]);
-  }
-
 
   const columnUniqueValues = useMemo(() => {
     const map = {} as Record<PrSearchFilterableColumn, string[]>;
@@ -1058,8 +1026,8 @@ function PullRequestResults({
           columns={PR_SEARCH_KEYS.map((key) => ({ key, label: PR_SEARCH_COLUMN_LABELS[key] }))}
           visibleColumns={visibleColumns}
           requiredColumns={PR_SEARCH_REQUIRED_COLUMNS}
-          onToggle={toggleColumnVisibility}
-          onReset={resetColumnVisibility}
+          onToggle={toggleColumn}
+          onReset={resetColumns}
           onClose={() => setColumnMenuRect(null)}
         />
       ) : null}

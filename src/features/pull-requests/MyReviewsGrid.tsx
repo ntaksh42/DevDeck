@@ -46,6 +46,7 @@ import {
   type SortDirection,
 } from '@/lib/utils';
 import { useGridColumns } from '@/lib/useGridColumns';
+import { useColumnVisibility, normalizeVisibleColumns } from '@/lib/useColumnVisibility';
 import { openExternalUrl } from '@/lib/openExternal';
 import { useGridFocusRestoration } from '@/lib/useGridFocusRestoration';
 import { recordRecentPullRequest } from '@/lib/recentItems';
@@ -394,14 +395,6 @@ const PR_GRID_KEYS: SortKey[] = [
 ];
 const PR_GRID_REQUIRED_COLUMNS: SortKey[] = ["pullRequestId", "title"];
 
-function loadVisibleColumns(value: unknown): SortKey[] {
-  if (!Array.isArray(value)) return [...PR_GRID_KEYS];
-  const set = new Set(value.filter((v): v is SortKey => PR_GRID_KEYS.includes(v as SortKey)));
-  for (const required of PR_GRID_REQUIRED_COLUMNS) set.add(required);
-  const ordered = PR_GRID_KEYS.filter((key) => set.has(key));
-  return ordered.length > 0 ? ordered : [...PR_GRID_KEYS];
-}
-
 function defaultSortDirection(key: SortKey): SortDirection {
   // Created (newest first) and Review age (oldest/longest-waiting first) both
   // default to descending.
@@ -562,7 +555,7 @@ function loadMyReviewsGridViewState(): MyReviewsGridViewState {
       showDrafts: typeof parsed.showDrafts === "boolean" ? parsed.showDrafts : fallback.showDrafts,
       sort,
       textFilter: typeof parsed.textFilter === "string" ? parsed.textFilter : fallback.textFilter,
-      visibleColumns: loadVisibleColumns(parsed.visibleColumns),
+      visibleColumns: normalizeVisibleColumns(PR_GRID_KEYS, PR_GRID_REQUIRED_COLUMNS, parsed.visibleColumns),
     };
   } catch {
     return fallback;
@@ -671,9 +664,11 @@ export function MyReviewsGrid({
   const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
   // The filter button that opened the dropdown, so focus can return to it on close.
   const filterButtonRef = useRef<HTMLElement | null>(null);
-  const [visibleColumns, setVisibleColumns] = useState<SortKey[]>(
-    initialViewState.visibleColumns,
-  );
+  const { visibleColumns, toggleColumn, resetColumns } = useColumnVisibility({
+    keys: PR_GRID_KEYS,
+    requiredColumns: PR_GRID_REQUIRED_COLUMNS,
+    initialColumns: initialViewState.visibleColumns,
+  });
   const [columnMenuRect, setColumnMenuRect] = useState<DOMRect | null>(null);
   const {
     template: COLS,
@@ -1388,19 +1383,6 @@ export function MyReviewsGrid({
     setSelectedIndex(0);
   }
 
-  function toggleColumnVisibility(column: SortKey) {
-    if (PR_GRID_REQUIRED_COLUMNS.includes(column)) return;
-    setVisibleColumns((current) =>
-      current.includes(column)
-        ? current.filter((value) => value !== column)
-        : PR_GRID_KEYS.filter((value) => value === column || current.includes(value)),
-    );
-  }
-
-  function resetColumnVisibility() {
-    setVisibleColumns([...PR_GRID_KEYS]);
-  }
-
   const firstVirtualRow = Math.max(
     0,
     Math.floor(gridViewport.scrollTop / PR_GRID_ROW_HEIGHT) - PR_GRID_OVERSCAN,
@@ -1741,8 +1723,8 @@ export function MyReviewsGrid({
           columns={PR_GRID_KEYS.map((key) => ({ key, label: sortLabels[key] }))}
           visibleColumns={visibleColumns}
           requiredColumns={PR_GRID_REQUIRED_COLUMNS}
-          onToggle={toggleColumnVisibility}
-          onReset={resetColumnVisibility}
+          onToggle={toggleColumn}
+          onReset={resetColumns}
           onClose={() => setColumnMenuRect(null)}
         />
       ) : null}
