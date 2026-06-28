@@ -24,6 +24,8 @@ import {
   GitBranch,
   GitPullRequest,
   ListChecks,
+  PanelLeft,
+  PanelLeftClose,
   Settings,
 } from "lucide-react";
 import {
@@ -47,7 +49,7 @@ import {
 } from "@/features/pipelines/quickPipelinesStorage";
 import { QUICK_PIPELINES_CHANGED_EVENT } from "@/features/pipelines/quickPipelinesEvents";
 import { openExternalUrl } from "@/lib/openExternal";
-import { writeStoredString } from "@/lib/storage";
+import { readStoredJson, writeStoredJson, writeStoredString } from "@/lib/storage";
 import { type NavEntryId, loadNavOrder, reorderNav, saveNavOrder } from "@/lib/navOrder";
 import { loadRecentPaletteEntries } from "@/lib/recentItems";
 import {
@@ -175,6 +177,7 @@ type NavSectionId = "pullRequests" | "workItems" | "code";
 
 const DEFAULT_SIDEBAR_WIDTH = 232;
 const SIDEBAR_WIDTH_STORAGE_KEY = "azdodeck:layout:sidebarWidth";
+const SIDEBAR_COLLAPSED_STORAGE_KEY = "azdodeck:layout:sidebarCollapsed";
 const HOT_SYNC_FOCUS_MIN_INTERVAL_MS = 2 * 60_000;
 
 function invalidateSyncedDataQueries(
@@ -347,6 +350,13 @@ function AppShell() {
   const [selectedWorkItemViewRequestId, setSelectedWorkItemViewRequestId] = useState<string | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(() =>
     storedNumber(SIDEBAR_WIDTH_STORAGE_KEY, DEFAULT_SIDEBAR_WIDTH, 160, 420),
+  );
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() =>
+    readStoredJson(
+      SIDEBAR_COLLAPSED_STORAGE_KEY,
+      (raw) => (typeof raw === "boolean" ? raw : undefined),
+      false,
+    ),
   );
   const navRef = useRef<HTMLElement | null>(null);
   const appSettingsRef = useRef<Awaited<ReturnType<typeof getAppSettings>> | null>(null);
@@ -1341,6 +1351,10 @@ function AppShell() {
     writeStoredString(SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(sidebarWidth)));
   }, [sidebarWidth]);
 
+  useEffect(() => {
+    writeStoredJson(SIDEBAR_COLLAPSED_STORAGE_KEY, sidebarCollapsed);
+  }, [sidebarCollapsed]);
+
   // Follow the OS color scheme while the preference is "system". The watcher is
   // rebuilt whenever the preference changes (emitted from the settings panel).
   useEffect(() => {
@@ -1536,6 +1550,12 @@ function AppShell() {
         return;
       }
 
+      if (matchesCombo(keybindings.toggleSidebar, event)) {
+        event.preventDefault();
+        setSidebarCollapsed((collapsed) => !collapsed);
+        return;
+      }
+
       // Suppress WebView/browser default shortcuts the app does not bind so
       // they cannot leak through as native behavior (Ctrl+P print dialog,
       // Ctrl+G find-next). Reached only after every app keybinding above has
@@ -1687,7 +1707,9 @@ function AppShell() {
   return (
     <div className="h-screen overflow-hidden bg-background text-foreground">
       <aside
-        className="fixed inset-y-0 left-0 hidden flex-col border-r border-border bg-card lg:flex"
+        className={`fixed inset-y-0 left-0 flex-col border-r border-border bg-card ${
+          sidebarCollapsed ? "hidden" : "hidden lg:flex"
+        }`}
         style={{ width: sidebarWidth }}
       >
         <nav
@@ -1749,10 +1771,25 @@ function AppShell() {
 
       <main
         className="flex h-screen flex-col lg:pl-[var(--sidebar-width)]"
-        style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
+        style={{ "--sidebar-width": `${sidebarCollapsed ? 0 : sidebarWidth}px` } as CSSProperties}
       >
         <header className="flex h-12 items-center justify-between border-b border-border bg-card px-4 lg:px-5">
-          <div>
+          <div className="flex min-w-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+              aria-label={sidebarCollapsed ? "Expand left navigation" : "Collapse left navigation"}
+              aria-keyshortcuts={keybindings.toggleSidebar}
+              title={`${sidebarCollapsed ? "Expand" : "Collapse"} navigation (${keybindings.toggleSidebar})`}
+              className="hidden shrink-0 rounded-md p-1.5 text-muted-foreground outline-none hover:bg-secondary focus:ring-2 focus:ring-ring lg:flex"
+            >
+              {sidebarCollapsed ? (
+                <PanelLeft className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
+              )}
+            </button>
+          <div className="min-w-0">
             <h1 className="text-lg font-semibold">
               {activeView === "pullRequestSearch"
                 ? "Pull Requests"
@@ -1795,6 +1832,7 @@ function AppShell() {
                               ? "Browse repository files and search code"
                               : "Local Azure DevOps organization setup"}
             </p>
+          </div>
           </div>
           {organizations.length > 0 && (
             <div className="flex items-center gap-2">
