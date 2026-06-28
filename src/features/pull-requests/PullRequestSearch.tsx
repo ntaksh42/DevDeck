@@ -31,6 +31,7 @@ import {
 } from '@/lib/utils';
 import { useGridColumns } from '@/lib/useGridColumns';
 import { useColumnVisibility } from '@/lib/useColumnVisibility';
+import { useGridVirtualizer } from '@/lib/useGridVirtualizer';
 import { openExternalUrl } from '@/lib/openExternal';
 import { recordRecentPullRequest } from '@/lib/recentItems';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
@@ -630,33 +631,9 @@ function PullRequestResults({
   );
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
   const restoreFocusRef = useRef(false);
-  const [scrollerEl, setScrollerEl] = useState<HTMLDivElement | null>(null);
-  const [gridViewport, setGridViewport] = useState({ height: 0, scrollTop: 0 });
-
   useEffect(() => {
     localStorage.setItem(PR_SEARCH_PREVIEW_WIDTH_STORAGE_KEY, String(Math.round(previewWidth)));
   }, [previewWidth]);
-
-  useEffect(() => {
-    if (!scrollerEl) return;
-
-    function updateViewport() {
-      setGridViewport({
-        height: scrollerEl!.clientHeight,
-        scrollTop: scrollerEl!.scrollTop,
-      });
-    }
-
-    updateViewport();
-    scrollerEl.addEventListener("scroll", updateViewport, { passive: true });
-    const resizeObserver =
-      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateViewport);
-    resizeObserver?.observe(scrollerEl);
-    return () => {
-      scrollerEl.removeEventListener("scroll", updateViewport);
-      resizeObserver?.disconnect();
-    };
-  }, [scrollerEl]);
 
   const columnUniqueValues = useMemo(
     () => columnFilterUniqueValues(results, PR_SEARCH_FILTERABLE_COLUMNS),
@@ -667,6 +644,20 @@ function PullRequestResults({
     () => applyColumnFilters(results, columnFilters, PR_SEARCH_FILTERABLE_COLUMNS),
     [columnFilters, results],
   );
+
+  const {
+    scrollerRef,
+    firstRow: firstVirtualRow,
+    lastRow: lastVirtualRow,
+    topPadding: virtualTopPadding,
+    bottomPadding: virtualBottomPadding,
+    scrollRowIntoView,
+  } = useGridVirtualizer({
+    rowCount: filteredResults.length,
+    rowHeight: PR_SEARCH_ROW_HEIGHT,
+    overscan: PR_SEARCH_OVERSCAN,
+  });
+  const virtualRows = filteredResults.slice(firstVirtualRow, lastVirtualRow);
 
   const columnFilterCount = activeColumnFilterCount(columnFilters);
   const hasActiveColumnFilters = columnFilterCount > 0;
@@ -688,17 +679,6 @@ function PullRequestResults({
     const suffix = truncated ? ` (showing first ${results.length} of ${total}+)` : "";
     return `${shown} pull request${results.length === 1 ? "" : "s"}${suffix}`;
   }, [filteredResults.length, hasActiveColumnFilters, loading, results.length, searched, total, truncated]);
-
-  function scrollRowIntoView(index: number) {
-    if (!scrollerEl) return;
-    const rowTop = index * PR_SEARCH_ROW_HEIGHT;
-    const rowBottom = rowTop + PR_SEARCH_ROW_HEIGHT;
-    if (rowTop < scrollerEl.scrollTop) {
-      scrollerEl.scrollTop = rowTop;
-    } else if (rowBottom > scrollerEl.scrollTop + scrollerEl.clientHeight) {
-      scrollerEl.scrollTop = rowBottom - scrollerEl.clientHeight;
-    }
-  }
 
   function moveSelectionTo(index: number) {
     const next = clamp(index, 0, filteredResults.length - 1);
@@ -810,22 +790,6 @@ function PullRequestResults({
     }
   }
 
-  const firstVirtualRow = Math.max(
-    0,
-    Math.floor(gridViewport.scrollTop / PR_SEARCH_ROW_HEIGHT) - PR_SEARCH_OVERSCAN,
-  );
-  const visibleRowCount = Math.ceil(
-    Math.max(gridViewport.height, PR_SEARCH_ROW_HEIGHT) / PR_SEARCH_ROW_HEIGHT,
-  );
-  const lastVirtualRow = Math.min(
-    filteredResults.length,
-    firstVirtualRow + visibleRowCount + PR_SEARCH_OVERSCAN * 2,
-  );
-  const virtualRows = filteredResults.slice(firstVirtualRow, lastVirtualRow);
-  const virtualTopPadding = firstVirtualRow * PR_SEARCH_ROW_HEIGHT;
-  const virtualBottomPadding =
-    Math.max(0, filteredResults.length - lastVirtualRow) * PR_SEARCH_ROW_HEIGHT;
-
   const selectedResult = filteredResults[selectedIndex] ?? null;
   const selectedPr = selectedResult ? toReviewSummary(selectedResult) : null;
 
@@ -878,7 +842,7 @@ function PullRequestResults({
           className="flex min-h-0 flex-1 flex-col outline-none"
           onKeyDown={handleKeyDown}
         >
-          <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
+          <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
           <div style={{ minWidth: gridMinWidth }}>
           <div
             role="row"

@@ -47,6 +47,7 @@ import {
 } from '@/lib/utils';
 import { useGridColumns } from '@/lib/useGridColumns';
 import { useColumnVisibility, normalizeVisibleColumns } from '@/lib/useColumnVisibility';
+import { useGridVirtualizer } from '@/lib/useGridVirtualizer';
 import { openExternalUrl } from '@/lib/openExternal';
 import { useGridFocusRestoration } from '@/lib/useGridFocusRestoration';
 import { recordRecentPullRequest } from '@/lib/recentItems';
@@ -700,12 +701,10 @@ export function MyReviewsGrid({
   const [maximized, setMaximized] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const filterInputRef = useRef<HTMLInputElement | null>(null);
-  const gridScrollRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
   // A cross-link select request that is waiting for the target PR to appear in
   // the sorted/visible rows (e.g. after switching org or loading data).
   const pendingSelectRef = useRef<MyReviewsSelectRequest | null>(null);
-  const [gridViewport, setGridViewport] = useState({ height: 0, scrollTop: 0 });
 
   useEffect(() => {
     if (!organizationId && organizations[0]) {
@@ -846,6 +845,20 @@ export function MyReviewsGrid({
     });
     return { reviewRows: rows, prFlatIndexes: flatIndexes };
   }, [sortedPrs, collapsedSections]);
+
+  const {
+    scrollerRef,
+    scrollerEl,
+    firstRow: firstVirtualRow,
+    lastRow: lastVirtualRow,
+    topPadding: virtualTopPadding,
+    bottomPadding: virtualBottomPadding,
+  } = useGridVirtualizer({
+    rowCount: reviewRows.length,
+    rowHeight: PR_GRID_ROW_HEIGHT,
+    overscan: PR_GRID_OVERSCAN,
+  });
+  const virtualRows = reviewRows.slice(firstVirtualRow, lastVirtualRow);
 
   // Indexes into sortedPrs that are currently visible (in expanded sections),
   // in display order — the basis for keyboard navigation and selection clamping.
@@ -1016,35 +1029,12 @@ export function MyReviewsGrid({
     },
   });
 
-  useEffect(() => {
-    const scroller = gridScrollRef.current;
-    if (!scroller) return;
-    const scrollerElement = scroller;
-
-    function updateViewport() {
-      setGridViewport({
-        height: scrollerElement.clientHeight,
-        scrollTop: scrollerElement.scrollTop,
-      });
-    }
-
-    updateViewport();
-    scrollerElement.addEventListener("scroll", updateViewport, { passive: true });
-    const resizeObserver =
-      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateViewport);
-    resizeObserver?.observe(scrollerElement);
-    return () => {
-      scrollerElement.removeEventListener("scroll", updateViewport);
-      resizeObserver?.disconnect();
-    };
-  }, []);
-
   function focusRow(index: number) {
     rowRefs.current[index]?.focus();
   }
 
   function scrollPrIntoView(prIndex: number) {
-    const scroller = gridScrollRef.current;
+    const scroller = scrollerEl;
     if (!scroller) return;
     const flatIndex = prFlatIndexes[prIndex];
     if (flatIndex == null) return;
@@ -1352,22 +1342,6 @@ export function MyReviewsGrid({
     setSelectedIndex(0);
   }
 
-  const firstVirtualRow = Math.max(
-    0,
-    Math.floor(gridViewport.scrollTop / PR_GRID_ROW_HEIGHT) - PR_GRID_OVERSCAN,
-  );
-  const visibleRowCount = Math.ceil(
-    Math.max(gridViewport.height, PR_GRID_ROW_HEIGHT) / PR_GRID_ROW_HEIGHT,
-  );
-  const lastVirtualRow = Math.min(
-    reviewRows.length,
-    firstVirtualRow + visibleRowCount + PR_GRID_OVERSCAN * 2,
-  );
-  const virtualRows = reviewRows.slice(firstVirtualRow, lastVirtualRow);
-  const virtualTopPadding = firstVirtualRow * PR_GRID_ROW_HEIGHT;
-  const virtualBottomPadding =
-    Math.max(0, reviewRows.length - lastVirtualRow) * PR_GRID_ROW_HEIGHT;
-
   return (
     <div
       ref={containerRef}
@@ -1452,7 +1426,7 @@ export function MyReviewsGrid({
               }
             />
           ) : (
-          <div ref={gridScrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
+          <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
             <div style={{ minWidth: gridMinWidth }}>
               {/* Column headers */}
               <div
