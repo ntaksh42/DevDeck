@@ -70,6 +70,7 @@ fn commit_web_url_encodes_spaces_and_trims_trailing_slash() {
         authenticated_user_unique_name: None,
         created_at: "2026-05-24T00:00:00Z".to_string(),
         updated_at: "2026-05-24T00:00:00Z".to_string(),
+        provider_kind: "azdo".to_string(),
     };
     assert_eq!(
         commit_web_url(&org, "Platform Team", "azdo dashboard", "abcdef123456"),
@@ -136,6 +137,7 @@ async fn delta_commit_sync_merges_without_dropping_existing_commits() {
             authenticated_user_id: None,
             authenticated_user_display_name: None,
             authenticated_user_unique_name: None,
+            provider_kind: "azdo".to_string(),
         })
         .unwrap();
 

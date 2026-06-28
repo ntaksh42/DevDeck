@@ -64,6 +64,9 @@ describe("App — Navigation", () => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
       }
+      if (command === "get_active_organization") {
+        return Promise.resolve(organization);
+      }
       if (command === "list_my_review_pull_requests") {
         return Promise.resolve([]);
       }
@@ -87,13 +90,16 @@ describe("App — Navigation", () => {
     expect(await main.findByRole("heading", { name: "Commits" })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: ",", ctrlKey: true });
-    expect(await main.findByRole("heading", { name: "Organizations" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "Connections" })).toBeTruthy();
   });
 
   it("navigates view history with Alt+Left and Alt+Right", async () => {
     invokeMock.mockImplementation((command: string) => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
+      }
+      if (command === "get_active_organization") {
+        return Promise.resolve(organization);
       }
       if (command === "list_my_review_pull_requests") {
         return Promise.resolve([]);
@@ -126,6 +132,9 @@ describe("App — Navigation", () => {
     invokeMock.mockImplementation((command: string) => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
+      }
+      if (command === "get_active_organization") {
+        return Promise.resolve(organization);
       }
       if (command === "get_app_settings") {
         return Promise.resolve({ reviewResultFolderPath: null });
@@ -176,6 +185,9 @@ describe("App — Navigation", () => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
       }
+      if (command === "get_active_organization") {
+        return Promise.resolve(organization);
+      }
       if (command === "list_my_review_pull_requests") {
         return Promise.resolve([]);
       }
@@ -212,6 +224,9 @@ describe("App — Navigation", () => {
     invokeMock.mockImplementation((command: string) => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
+      }
+      if (command === "get_active_organization") {
+        return Promise.resolve(organization);
       }
       if (command === "get_app_settings") {
         return Promise.resolve({ reviewResultFolderPath: null });
@@ -254,6 +269,9 @@ describe("App — Navigation", () => {
     invokeMock.mockImplementation((command: string) => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
+      }
+      if (command === "get_active_organization") {
+        return Promise.resolve(organization);
       }
       if (command === "get_app_settings") {
         return Promise.resolve({ reviewResultFolderPath: null });

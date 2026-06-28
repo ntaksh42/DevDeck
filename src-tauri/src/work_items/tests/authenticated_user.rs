@@ -24,6 +24,7 @@ fn test_org_with_unique_name(
         authenticated_user_unique_name: authenticated_user_unique_name.map(ToString::to_string),
         created_at: "2026-05-24T00:00:00Z".to_string(),
         updated_at: "2026-05-24T00:00:00Z".to_string(),
+        provider_kind: "azdo".to_string(),
     }
 }
 

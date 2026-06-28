@@ -167,6 +167,7 @@ mod tests {
             authenticated_user_id: None,
             authenticated_user_display_name: None,
             authenticated_user_unique_name: None,
+            provider_kind: "azdo".to_string(),
         })
         .unwrap();
 
@@ -343,6 +344,7 @@ mod tests {
             authenticated_user_id: None,
             authenticated_user_display_name: None,
             authenticated_user_unique_name: None,
+            provider_kind: "azdo".to_string(),
         })
         .unwrap();
         db.upsert_work_items(&[CachedWorkItem {

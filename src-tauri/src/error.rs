@@ -8,12 +8,16 @@ pub enum AppError {
     Database(String),
     #[error("invalid input: {0}")]
     InvalidInput(String),
+    #[error("{0}")]
+    NotSupported(String),
     #[error("secret storage error: {0}")]
     Secret(String),
     #[error("Operation was cancelled.")]
     Cancelled,
     #[error("Azure DevOps error: {0}")]
     AzureDevOps(String),
+    #[error("GitHub error: {0}")]
+    GitHub(String),
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
@@ -41,6 +45,30 @@ impl serde::Serialize for AppError {
 impl From<azdo_client::AdoError> for AppError {
     fn from(value: azdo_client::AdoError) -> Self {
         Self::AzureDevOps(format_ado_error(value))
+    }
+}
+
+impl From<github_client::GitHubError> for AppError {
+    fn from(value: github_client::GitHubError) -> Self {
+        Self::GitHub(format_github_error(value))
+    }
+}
+
+fn format_github_error(error: github_client::GitHubError) -> String {
+    match error {
+        github_client::GitHubError::Api {
+            status,
+            body,
+            message,
+        } => {
+            let message = message.unwrap_or_else(|| body.trim().to_string());
+            if message.is_empty() {
+                format!("API request failed with status {status}")
+            } else {
+                format!("API request failed with status {status}: {message}")
+            }
+        }
+        other => other.to_string(),
     }
 }
 

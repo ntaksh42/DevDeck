@@ -16,6 +16,7 @@ import {
   ListChecks,
   Settings,
 } from "lucide-react";
+import type { ProviderCapabilities } from "@/lib/azdoCommands";
 import { type NavEntryId, loadNavOrder, reorderNav, saveNavOrder } from "@/lib/navOrder";
 import { isEditableTarget } from "@/lib/utils";
 import { ResizeHandle } from "@/components/ResizeHandle";
@@ -31,6 +32,10 @@ export interface AppSidebarHandle {
 export interface AppSidebarProps {
   activeView: View;
   organizationsLength: number;
+  /// Capabilities of the active connection's provider. When a feature is not
+  /// supported, its nav entry is hidden so the UI never offers it. `null` while
+  /// loading shows everything.
+  capabilities: ProviderCapabilities | null;
   sidebarCollapsed: boolean;
   sidebarWidth: number;
   setSidebarWidth: (w: number) => void;
@@ -48,6 +53,7 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
   {
     activeView,
     organizationsLength,
+    capabilities,
     sidebarCollapsed,
     sidebarWidth,
     setSidebarWidth,
@@ -366,12 +372,14 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
         expanded={navExpanded.code}
         onExpandedChange={(expanded) => setNavSectionExpanded("code", expanded)}
       >
-        <NavSubItem
-          active={activeView === "codeSearch"}
-          disabled={organizationsLength === 0}
-          label="Files"
-          onClick={() => onNavigate("codeSearch")}
-        />
+        {capabilities?.codeBrowse !== false ? (
+          <NavSubItem
+            active={activeView === "codeSearch"}
+            disabled={organizationsLength === 0}
+            label="Files"
+            onClick={() => onNavigate("codeSearch")}
+          />
+        ) : null}
         <NavSubItem
           active={activeView === "commits"}
           disabled={organizationsLength === 0}
@@ -396,7 +404,11 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
         onKeyDown={handleNavKeyDown}
       >
         <div className="space-y-1">
-          {navOrder.map((id) => (
+          {navOrder
+            .filter(
+              (id) => id !== "pipelines" || capabilities?.pipelines !== false,
+            )
+            .map((id) => (
             <div
               key={id}
               data-nav-entry={id}

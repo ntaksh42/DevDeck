@@ -5,8 +5,8 @@ import {
   searchWorkItems,
   listWorkItemProjects,
   commandErrorMessage,
-  type Organization,
 } from "@/lib/azdoCommands";
+import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { matchesWorkItemQuery, parseSearchQuery } from "@/lib/searchQuery";
 import { ErrorState } from "@/components/StateDisplay";
 import { MultiSelectFilter } from "@/components/MultiSelectFilter";
@@ -27,15 +27,13 @@ const WORK_ITEM_TYPE_OPTIONS = [
 ].map((value) => ({ value, label: value }));
 
 export function WorkItemSearch({
-  organizations,
   externalSearch,
   onExternalSearchHandled,
 }: {
-  organizations: Organization[];
   externalSearch?: { query: string; requestId: number; organizationId?: string } | null;
   onExternalSearchHandled?: () => void;
 }) {
-  const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
+  const organizationId = useActiveOrganizationId();
   const [query, setQuery] = useState("");
   const [states, setStates] = useState<string[]>([]);
   const [workItemTypes, setWorkItemTypes] = useState<string[]>([]);
@@ -63,8 +61,7 @@ export function WorkItemSearch({
 
   useEffect(() => {
     if (!externalSearch) return;
-    const targetOrganizationId = externalSearch.organizationId ?? organizationId;
-    setOrganizationId(targetOrganizationId);
+    const targetOrganizationId = organizationId;
     setQuery(externalSearch.query);
     setStates([]);
     setWorkItemTypes([]);
@@ -94,18 +91,6 @@ export function WorkItemSearch({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <form className="flex shrink-0 flex-wrap items-center gap-2" onSubmit={onSubmit}>
-        {organizations.length > 1 && (
-          <select
-            value={organizationId}
-            onChange={(e) => { setOrganizationId(e.target.value); setProjectIds([]); }}
-            aria-label="Organization"
-            className="h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-          >
-            {organizations.map((o) => (
-              <option key={o.id} value={o.id}>{o.name}</option>
-            ))}
-          </select>
-        )}
         <div className="flex h-8 min-w-[180px] flex-1 items-center rounded-md border border-input bg-background px-2 focus-within:ring-2 focus-within:ring-ring">
           <Search className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
           <input

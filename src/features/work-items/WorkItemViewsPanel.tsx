@@ -11,8 +11,8 @@ import {
   listWorkItemProjects,
   runWorkItemQuery,
   commandErrorMessage,
-  type Organization,
 } from '@/lib/azdoCommands';
+import { useActiveOrganizationId } from '@/lib/useActiveConnection';
 import { clamp, isEditableTarget } from '@/lib/utils';
 import { ErrorState } from '@/components/StateDisplay';
 import { WorkItemsGrid } from './WorkItemsGrid';
@@ -40,7 +40,6 @@ import { ViewEditorDialog } from './ViewEditorDialog';
 import { ViewsListPanel } from './ViewsListPanel';
 
 type WorkItemViewsPanelProps = {
-  organizations: Organization[];
   selectedViewRequestId?: string | null;
   onSelectedViewChange?: (viewId: string | null) => void;
   onSelectedViewRequestHandled?: () => void;
@@ -48,14 +47,13 @@ type WorkItemViewsPanelProps = {
 };
 
 export function WorkItemViewsPanel({
-  organizations,
   selectedViewRequestId,
   onSelectedViewChange,
   onSelectedViewRequestHandled,
   onViewsChange,
 }: WorkItemViewsPanelProps) {
   const queryClient = useQueryClient();
-  const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
+  const selectedOrganizationId = useActiveOrganizationId();
   const [views, setViews] = useState<WorkItemQueryView[]>(() => loadWorkItemQueryViews());
   const initialSelectedView = firstCustomView(views);
   const [selectedViewId, setSelectedViewId] = useState<string | null>(initialSelectedView?.id ?? null);
@@ -67,7 +65,6 @@ export function WorkItemViewsPanel({
   const restoreViewFocusIndexRef = useRef<number | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
-  const selectedOrganizationId = organizationId || organizations[0]?.id || "";
   const projectsQuery = useQuery({
     queryKey: workItemQueryKeys.projects(selectedOrganizationId),
     queryFn: () => listWorkItemProjects({ organizationId: selectedOrganizationId }),
@@ -77,9 +74,6 @@ export function WorkItemViewsPanel({
   const projectOptions = projectsQuery.data ?? [];
 
   const draft = useViewEditorDraft({
-    organizations,
-    organizationId,
-    setOrganizationId,
     selectedOrganizationId,
     views,
     setViews,
@@ -434,9 +428,6 @@ export function WorkItemViewsPanel({
       {draft.dialogOpen ? (
         <ViewEditorDialog
           editingViewId={draft.editingViewId}
-          organizations={organizations}
-          organizationId={selectedOrganizationId}
-          onOrganizationChange={draft.onOrganizationChange}
           draftUrl={draft.draftUrl}
           onUrlChange={draft.onUrlChange}
           urlStatus={draft.urlStatus}

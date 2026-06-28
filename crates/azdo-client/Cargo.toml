@@ -3,7 +3,7 @@ name = "azdo-client"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
-description = "Azure DevOps REST client for AzDoDeck"
+description = "Azure DevOps REST client for DevDeck"
 
 [dependencies]
 serde = { workspace = true }

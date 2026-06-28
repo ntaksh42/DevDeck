@@ -269,9 +269,11 @@ dependencies = [
 name = "azdo-dashboard"
 version = "0.1.16"
 dependencies = [
+ "async-trait",
  "azdo-client",
  "base64 0.22.1",
  "chrono",
+ "github-client",
  "keyring",
  "rusqlite",
  "serde",
@@ -1484,6 +1486,22 @@ dependencies = [
  "libc",
  "system-deps",
  "winapi",
+]
+
+[[package]]
+name = "github-client"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "url",
+ "wiremock",
 ]
 
 [[package]]

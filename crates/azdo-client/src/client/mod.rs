@@ -78,7 +78,7 @@ impl AdoClient {
         let http = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(10))
             .timeout(Duration::from_secs(30))
-            .user_agent(format!("AzDoDeck/{}", env!("CARGO_PKG_VERSION")))
+            .user_agent(format!("DevDeck/{}", env!("CARGO_PKG_VERSION")))
             .build()?;
         let base_url = Url::parse(&format!("https://dev.azure.com/{organization}/"))
             .map_err(|e| AdoError::Auth(format!("invalid organization: {e}")))?;

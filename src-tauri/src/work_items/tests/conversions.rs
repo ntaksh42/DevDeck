@@ -69,6 +69,7 @@ fn summarize_maps_identity_object() {
         authenticated_user_unique_name: None,
         created_at: "2026-05-24T00:00:00Z".to_string(),
         updated_at: "2026-05-24T00:00:00Z".to_string(),
+        provider_kind: "azdo".to_string(),
     };
     let mut fields = HashMap::new();
     fields.insert("System.Title".to_string(), json!("Fix save"));
@@ -112,6 +113,7 @@ fn summarize_preview_maps_rich_fields() {
         authenticated_user_unique_name: None,
         created_at: "2026-05-24T00:00:00Z".to_string(),
         updated_at: "2026-05-24T00:00:00Z".to_string(),
+        provider_kind: "azdo".to_string(),
     };
     let mut fields = HashMap::new();
     fields.insert("System.Title".to_string(), json!("Preview WIT"));
@@ -156,6 +158,7 @@ fn summarize_preview_uses_repro_steps_as_description_fallback() {
         authenticated_user_unique_name: None,
         created_at: "2026-05-24T00:00:00Z".to_string(),
         updated_at: "2026-05-24T00:00:00Z".to_string(),
+        provider_kind: "azdo".to_string(),
     };
     let mut fields = HashMap::new();
     fields.insert("System.Title".to_string(), json!("Bug preview"));

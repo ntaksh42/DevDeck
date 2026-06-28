@@ -4,8 +4,8 @@ import { Search, Star } from "lucide-react";
 import {
   listCommitRepositories,
   listRepoBranches,
-  type Organization,
 } from "@/lib/azdoCommands";
+import { useActiveOrganization } from "@/lib/useActiveConnection";
 import { openExternalUrl } from "@/lib/openExternal";
 import { FilterableSelect } from "@/features/pipelines/FilterableSelect";
 import { blameUrl, ROOT, webUrl, type RepoOption, type Selection } from "./codeBrowseShared";
@@ -31,8 +31,10 @@ const INPUT_CLASS =
 // the left, and the selected file/folder (Contents or History) on the right —
 // the Azure DevOps Repos > Files layout. Pressing Enter in the search box runs a
 // full-text code search scoped to the repository.
-export function CodeBrowseView({ organizations }: { organizations: Organization[] }) {
-  const organizationId = organizations[0]?.id ?? "";
+export function CodeBrowseView() {
+  // The app points at a single active connection chosen in Settings.
+  const organization = useActiveOrganization().data ?? undefined;
+  const organizationId = organization?.id ?? "";
 
   const repositoriesQuery = useQuery({
     queryKey: ["commitRepositories", organizationId],
@@ -339,7 +341,7 @@ export function CodeBrowseView({ organizations }: { organizations: Organization[
                   {!selected.isFolder ? (
                     <button
                       type="button"
-                      onClick={() => openExternalUrl(blameUrl(organizations[0], repo, selected.path, branch))}
+                      onClick={() => openExternalUrl(blameUrl(organization, repo, selected.path, branch))}
                       className="text-xs text-muted-foreground hover:text-foreground hover:underline"
                       title="Open Blame in Azure DevOps (no public REST blame API)"
                     >
@@ -348,7 +350,7 @@ export function CodeBrowseView({ organizations }: { organizations: Organization[
                   ) : null}
                   <button
                     type="button"
-                    onClick={() => openExternalUrl(webUrl(organizations[0], repo, selected.path, branch))}
+                    onClick={() => openExternalUrl(webUrl(organization, repo, selected.path, branch))}
                     className="text-xs text-muted-foreground hover:text-foreground hover:underline"
                     title="Open in Azure DevOps"
                   >
@@ -359,7 +361,7 @@ export function CodeBrowseView({ organizations }: { organizations: Organization[
               <div className="min-h-0 flex-1 overflow-auto">
                 {tab === "history" ? (
                   <CodeHistoryView
-                    organization={organizations[0]}
+                    organization={organization}
                     organizationId={organizationId}
                     repo={repo}
                     branch={branch}
@@ -377,7 +379,7 @@ export function CodeBrowseView({ organizations }: { organizations: Organization[
                   />
                 ) : selected.isFolder ? (
                   <CodeFolderView
-                    organization={organizations[0]}
+                    organization={organization}
                     organizationId={organizationId}
                     repo={repo}
                     branch={branch}

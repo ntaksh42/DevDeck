@@ -18,10 +18,11 @@ pub async fn search_code(
     state: State<'_, AppState>,
 ) -> Result<CodeSearchResults> {
     let operation_id = input.operation_id.clone();
+    let provider = state.provider().await?;
     run_cancellable(
         &state.cancellation,
         operation_id,
-        state.code_search.search(input),
+        provider.search_code(input),
     )
     .await
 }
@@ -32,7 +33,7 @@ pub async fn get_code_search_context(
     input: GetCodeContextInput,
     state: State<'_, AppState>,
 ) -> Result<CodeContextResult> {
-    state.code_search.get_context(input).await
+    state.provider().await?.get_code_search_context(input).await
 }
 
 #[tauri::command]
@@ -41,7 +42,7 @@ pub async fn list_repo_branches(
     input: ListBranchesInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<RepoBranch>> {
-    state.code_browse.list_branches(input).await
+    state.provider().await?.list_repo_branches(input).await
 }
 
 #[tauri::command]
@@ -51,10 +52,11 @@ pub async fn list_repo_tree(
     state: State<'_, AppState>,
 ) -> Result<Vec<RepoTreeItem>> {
     let operation_id = input.operation_id.clone();
+    let provider = state.provider().await?;
     run_cancellable(
         &state.cancellation,
         operation_id,
-        state.code_browse.list_tree(input),
+        provider.list_repo_tree(input),
     )
     .await
 }
@@ -63,10 +65,11 @@ pub async fn list_repo_tree(
 #[tracing::instrument(skip(state))]
 pub async fn get_repo_file(input: GetFileInput, state: State<'_, AppState>) -> Result<RepoFile> {
     let operation_id = input.operation_id.clone();
+    let provider = state.provider().await?;
     run_cancellable(
         &state.cancellation,
         operation_id,
-        state.code_browse.get_file(input),
+        provider.get_repo_file(input),
     )
     .await
 }
@@ -78,10 +81,11 @@ pub async fn list_repo_history(
     state: State<'_, AppState>,
 ) -> Result<Vec<RepoCommitInfo>> {
     let operation_id = input.operation_id.clone();
+    let provider = state.provider().await?;
     run_cancellable(
         &state.cancellation,
         operation_id,
-        state.code_browse.list_history(input),
+        provider.list_repo_history(input),
     )
     .await
 }

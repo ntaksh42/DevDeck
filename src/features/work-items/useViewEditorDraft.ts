@@ -4,7 +4,6 @@ import {
   getSavedQuery,
   listWorkItemFields,
   commandErrorMessage,
-  type Organization,
   type WorkItemProjectOption,
 } from '@/lib/azdoCommands';
 import { clamp } from '@/lib/utils';
@@ -26,9 +25,6 @@ import {
 } from './workItemViewsHelpers';
 
 type UseViewEditorDraftParams = {
-  organizations: Organization[];
-  organizationId: string;
-  setOrganizationId: (id: string) => void;
   selectedOrganizationId: string;
   views: WorkItemQueryView[];
   setViews: React.Dispatch<React.SetStateAction<WorkItemQueryView[]>>;
@@ -41,9 +37,6 @@ type UseViewEditorDraftParams = {
 export type ViewEditorDraftReturn = ReturnType<typeof useViewEditorDraft>;
 
 export function useViewEditorDraft({
-  organizations,
-  organizationId,
-  setOrganizationId,
   selectedOrganizationId,
   views,
   setViews,
@@ -227,18 +220,6 @@ export function useViewEditorDraft({
 
   function handleUrlChange(url: string) {
     setDraftUrl(url);
-    if (!url.trim()) return;
-    const parsed = parseAzdoQueryUrl(url);
-    if (parsed.orgName) {
-      const matchedOrg = organizations.find(
-        (o) => o.name.toLowerCase() === parsed.orgName!.toLowerCase(),
-      );
-      if (matchedOrg && matchedOrg.id !== organizationId) {
-        setOrganizationId(matchedOrg.id);
-        setDraftProjectId("");
-        draftProjectIdRef.current = "";
-      }
-    }
   }
 
   const urlStatus: { text: string; severity: "success" | "error" | "info" } | null =
@@ -383,11 +364,6 @@ export function useViewEditorDraft({
   const handleRefreshIntervalChange = (v: string) => { setDraftRefreshInterval(v); draftRefreshIntervalRef.current = v; };
   const handleAlertThresholdChange = (v: string) => { setDraftAlertThreshold(v); draftAlertThresholdRef.current = v; };
   const handleExtraColumnsChange = (cols: string[]) => { setDraftExtraColumns(cols); draftExtraColumnsRef.current = cols; };
-  const handleOrganizationChange = (id: string) => {
-    setOrganizationId(id);
-    setDraftProjectId("");
-    draftProjectIdRef.current = "";
-  };
 
   return {
     // Dialog open state
@@ -426,7 +402,6 @@ export function useViewEditorDraft({
     onRefreshIntervalChange: handleRefreshIntervalChange,
     onAlertThresholdChange: handleAlertThresholdChange,
     onExtraColumnsChange: handleExtraColumnsChange,
-    onOrganizationChange: handleOrganizationChange,
     setWiqlCursor,
     setWiqlCompletionsOpen,
     updateDraftWiql,

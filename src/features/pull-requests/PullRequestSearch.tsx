@@ -10,9 +10,9 @@ import {
   searchPullRequests,
   listCommitRepositories,
   commandErrorMessage,
-  type Organization,
   type SearchPullRequestsInput,
 } from '@/lib/azdoCommands';
+import { useActiveOrganizationId } from '@/lib/useActiveConnection';
 import { ErrorState } from '@/components/StateDisplay';
 import { MultiSelectFilter } from '@/components/MultiSelectFilter';
 import { PullRequestResults } from './PrSearchResults';
@@ -33,15 +33,13 @@ import {
 } from './PrSearchTypes';
 
 export function PullRequestSearch({
-  organizations,
   externalSearch,
   onExternalSearchHandled,
 }: {
-  organizations: Organization[];
   externalSearch?: { query: string; requestId: number; organizationId?: string } | null;
   onExternalSearchHandled?: () => void;
 }) {
-  const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
+  const organizationId = useActiveOrganizationId();
   // Keep the last query across view switches (the component remounts on nav).
   const [query, setQuery] = useState(
     () => window.localStorage.getItem(PR_SEARCH_QUERY_STORAGE_KEY) ?? "",
@@ -135,8 +133,7 @@ export function PullRequestSearch({
 
   useEffect(() => {
     if (!externalSearch) return;
-    const targetOrganizationId = externalSearch.organizationId ?? organizationId;
-    setOrganizationId(targetOrganizationId);
+    const targetOrganizationId = organizationId;
     setQuery(externalSearch.query);
     // The palette looks up active PRs, so reset the status and scope filters.
     setStatuses(["active"]);
@@ -194,20 +191,6 @@ export function PullRequestSearch({
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="shrink-0 rounded-md border border-border bg-card">
         <form className="grid gap-3 p-3" onSubmit={onSubmit}>
-          {organizations.length > 1 && (
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Organization</span>
-              <select
-                value={organizationId}
-                onChange={(e) => { setOrganizationId(e.target.value); setProjectIds([]); setRepositoryIds([]); }}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-              >
-                {organizations.map((o) => (
-                  <option key={o.id} value={o.id}>{o.name}</option>
-                ))}
-              </select>
-            </label>
-          )}
           <div className="grid gap-3 lg:grid-cols-[1fr_140px_160px_200px_auto]">
             <label className="grid gap-2">
               <span className="text-sm font-medium">Search</span>

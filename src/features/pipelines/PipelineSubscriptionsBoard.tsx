@@ -102,18 +102,6 @@ export function PipelineSubscriptionsBoard({
     }),
   });
 
-  if (orgSubscriptions.length === 0) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center rounded-md border border-dashed border-border bg-card px-6 py-10 text-center">
-        <p className="text-sm font-medium">No watched pipelines yet</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Pick a project and pipeline above, then press <span className="font-medium">Watch</span>{" "}
-          to track its run history here.
-        </p>
-      </div>
-    );
-  }
-
   function toggle(key: string) {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -198,6 +186,18 @@ export function PipelineSubscriptionsBoard({
     }
     return expandedSubs[0]?.key ?? null;
   }, [orgSubscriptions, queries, expanded, selectedBuildId]);
+
+  if (orgSubscriptions.length === 0) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center rounded-md border border-dashed border-border bg-card px-6 py-10 text-center">
+        <p className="text-sm font-medium">No watched pipelines yet</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Pick a project and pipeline above, then press <span className="font-medium">Watch</span>{" "}
+          to track its run history here.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-card">

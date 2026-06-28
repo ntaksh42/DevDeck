@@ -76,6 +76,7 @@ impl PullRequestService {
         input: ListMyCreatedPullRequestsInput,
     ) -> Result<Vec<MyCreatedPullRequestSummary>> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
+
         // Without an authenticated user id we cannot identify "my" PRs.
         let Some(user_id) = organization.authenticated_user_id.clone() else {
             return Ok(Vec::new());
@@ -112,6 +113,7 @@ impl PullRequestService {
     // on the live path and applied in memory on the cache path.
     pub async fn search(&self, input: SearchPullRequestsInput) -> Result<PullRequestSearchResult> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
+
         let query = input.query.unwrap_or_default().trim().to_ascii_lowercase();
         let project_set = normalize_set(input.project_ids);
         let repository_set = normalize_set(input.repository_ids);

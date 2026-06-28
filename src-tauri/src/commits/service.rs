@@ -37,6 +37,7 @@ impl CommitService {
 
     pub async fn search(&self, input: SearchCommitsInput) -> Result<CommitSearchResult> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
+
         let query = input.query.unwrap_or_default().trim().to_ascii_lowercase();
         let author = normalize_optional(input.author);
         let branch = normalize_optional(input.branch);

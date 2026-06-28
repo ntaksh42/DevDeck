@@ -64,6 +64,9 @@ describe("App — Commits", () => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
       }
+      if (command === "get_active_organization") {
+        return Promise.resolve(organization);
+      }
       if (command === "list_my_review_pull_requests") {
         return Promise.resolve([]);
       }
@@ -168,6 +171,9 @@ describe("App — Commits", () => {
     invokeMock.mockImplementation((command: string) => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
+      }
+      if (command === "get_active_organization") {
+        return Promise.resolve(organization);
       }
       if (command === "list_my_review_pull_requests") {
         return Promise.resolve([]);

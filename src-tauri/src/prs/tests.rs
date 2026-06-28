@@ -149,6 +149,7 @@ async fn pr_sync_skips_failing_project_and_preserves_its_cache() {
             authenticated_user_id: None,
             authenticated_user_display_name: None,
             authenticated_user_unique_name: None,
+            provider_kind: "azdo".to_string(),
         })
         .unwrap();
     // Pre-existing cached PRs: one in the project that is about to fail

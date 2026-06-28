@@ -75,11 +75,37 @@ const organizationSchema = z.object({
   authenticatedUserUniqueName: z.string().nullish(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  // Platform this connection targets. Defaults to "azdo" for connections that
+  // predate provider awareness.
+  providerKind: z.enum(["azdo", "github"]).default("azdo"),
 });
 
 const organizationsSchema = z.array(organizationSchema);
 
 export type Organization = z.infer<typeof organizationSchema>;
+
+// Capabilities of the active connection's provider. The UI reads these to hide
+// features the active platform does not support, so screens never branch on the
+// provider kind directly.
+const providerCapabilitiesSchema = z.object({
+  pullRequests: z.boolean(),
+  pullRequestReview: z.boolean(),
+  workItems: z.boolean(),
+  commits: z.boolean(),
+  codeSearch: z.boolean(),
+  codeBrowse: z.boolean(),
+  pipelines: z.boolean(),
+  workItemPriority: z.boolean(),
+  resolveReviewThreads: z.boolean(),
+});
+
+const providerInfoSchema = z.object({
+  kind: z.string(),
+  capabilities: providerCapabilitiesSchema,
+});
+
+export type ProviderCapabilities = z.infer<typeof providerCapabilitiesSchema>;
+export type ProviderInfo = z.infer<typeof providerInfoSchema>;
 
 const syncScopeSchema = z.enum(["all", "hot", "myReviews", "myWorkItems", "commits"]);
 
@@ -110,6 +136,10 @@ export type AddPatOrganizationInput = {
 
 export type AddAzureCliOrganizationInput = {
   organization: string;
+};
+
+export type AddGitHubOrganizationInput = {
+  pat: string;
 };
 
 export type DeleteOrganizationInput = {
@@ -178,10 +208,32 @@ export async function addAzureCliOrganization(
   return organizationSchema.parse(result);
 }
 
+export async function addGithubOrganization(
+  input: AddGitHubOrganizationInput,
+): Promise<Organization> {
+  const result = await invokeCommand("add_github_organization", { input });
+  return organizationSchema.parse(result);
+}
+
 export async function deleteOrganization(
   input: DeleteOrganizationInput,
 ): Promise<void> {
   await invokeCommand("delete_organization", { id: input.id });
+}
+
+export async function getActiveOrganization(): Promise<Organization | null> {
+  const result = await invokeCommand("get_active_organization");
+  return organizationSchema.nullable().parse(result);
+}
+
+export async function setActiveOrganization(id: string): Promise<Organization> {
+  const result = await invokeCommand("set_active_organization", { id });
+  return organizationSchema.parse(result);
+}
+
+export async function getProviderCapabilities(): Promise<ProviderInfo> {
+  const result = await invokeCommand("get_provider_capabilities");
+  return providerInfoSchema.parse(result);
 }
 
 export async function listSyncStates(): Promise<SyncState[]> {

@@ -87,6 +87,9 @@ describe("App — Setup", () => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
       }
+      if (command === "get_active_organization") {
+        return Promise.resolve(organization);
+      }
       if (command === "get_app_settings") {
         return Promise.resolve({ reviewResultFolderPath: "C:\\reports" });
       }
@@ -101,7 +104,7 @@ describe("App — Setup", () => {
     await screen.findByText("No pull requests assigned to you.");
     fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
 
-    expect(await screen.findByText("Organizations")).toBeTruthy();
+    expect(await screen.findByText("Connections")).toBeTruthy();
     expect(screen.getByText("https://dev.azure.com/contoso")).toBeTruthy();
     expect(screen.getByText("PAT")).toBeTruthy();
     expect(screen.getAllByText("Test User").length).toBeGreaterThan(0);

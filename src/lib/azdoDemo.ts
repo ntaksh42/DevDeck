@@ -112,6 +112,25 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
   switch (command) {
     case "list_organizations":
       return [demoOrganization];
+    case "get_active_organization":
+      return demoOrganization;
+    case "set_active_organization":
+      return demoOrganization;
+    case "get_provider_capabilities":
+      return {
+        kind: "azdo",
+        capabilities: {
+          pullRequests: true,
+          pullRequestReview: true,
+          workItems: true,
+          commits: true,
+          codeSearch: true,
+          codeBrowse: true,
+          pipelines: true,
+          workItemPriority: true,
+          resolveReviewThreads: true,
+        },
+      };
     case "get_app_settings":
       return demoSettings;
     case "update_app_settings": {
@@ -141,6 +160,20 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         baseUrl: `https://dev.azure.com/${input?.organization || demoOrganization.name}`,
         authProvider: "azure_cli",
         credentialKey: `azdodeck:org:${input?.organization || demoOrganization.name}:azure-cli`,
+      };
+    }
+    case "add_github_organization": {
+      return {
+        ...demoOrganization,
+        id: "github:octocat",
+        name: "github:octocat",
+        displayName: "octocat",
+        baseUrl: "https://api.github.com",
+        authProvider: "github_pat",
+        credentialKey: "azdodeck:github:octocat:pat",
+        authenticatedUserDisplayName: "The Octocat",
+        authenticatedUserUniqueName: "octocat@github.com",
+        providerKind: "github",
       };
     }
     case "search_pull_requests": {

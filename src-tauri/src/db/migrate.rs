@@ -484,5 +484,20 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         }
         conn.execute_batch("PRAGMA user_version = 16;")?;
     }
+    if current < 17 {
+        // Connections can now point at different platforms. `provider_kind`
+        // distinguishes Azure DevOps from GitHub; existing rows default to
+        // `azdo` so prior connections keep working unchanged. The table-exists
+        // guard keeps partial historical databases from tripping over a
+        // not-yet-created organizations table.
+        if table_exists(conn, "organizations")?
+            && !table_column_exists(conn, "organizations", "provider_kind")?
+        {
+            conn.execute_batch(
+                "ALTER TABLE organizations ADD COLUMN provider_kind TEXT NOT NULL DEFAULT 'azdo';",
+            )?;
+        }
+        conn.execute_batch("PRAGMA user_version = 17;")?;
+    }
     Ok(())
 }

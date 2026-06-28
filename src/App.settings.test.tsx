@@ -64,6 +64,9 @@ describe("App — Settings", () => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
       }
+      if (command === "get_active_organization") {
+        return Promise.resolve(organization);
+      }
       if (command === "get_app_settings") {
         return Promise.resolve({ reviewResultFolderPath: null, showWindowHotkey: null });
       }
@@ -119,6 +122,9 @@ describe("App — Settings", () => {
     invokeMock.mockImplementation((command: string, args?: unknown) => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
+      }
+      if (command === "get_active_organization") {
+        return Promise.resolve(organization);
       }
       if (command === "get_app_settings") {
         return Promise.resolve({
@@ -179,6 +185,9 @@ describe("App — Settings", () => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
       }
+      if (command === "get_active_organization") {
+        return Promise.resolve(organization);
+      }
       if (command === "get_app_settings") {
         return Promise.resolve({
           reviewResultFolderPath: null,
@@ -235,6 +244,9 @@ describe("App — Settings", () => {
     invokeMock.mockImplementation((command: string, args?: unknown) => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
+      }
+      if (command === "get_active_organization") {
+        return Promise.resolve(organization);
       }
       if (command === "get_app_settings") {
         return Promise.resolve({

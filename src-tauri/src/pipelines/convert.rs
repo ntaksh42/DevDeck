@@ -170,6 +170,7 @@ mod tests {
             authenticated_user_unique_name: None,
             created_at: "2026-06-13T00:00:00Z".to_string(),
             updated_at: "2026-06-13T00:00:00Z".to_string(),
+            provider_kind: "azdo".to_string(),
         }
     }
 

@@ -7,9 +7,9 @@ import {
   prLocator,
   snoozeItem,
   submitPullRequestVote,
-  type Organization,
   type ReviewPullRequestSummary,
 } from '@/lib/azdoCommands';
+import { useActiveOrganizationId } from '@/lib/useActiveConnection';
 import { matchesAllSearchTerms, splitSearchTerms, storedNumber } from '@/lib/utils';
 import { useGridColumns } from '@/lib/useGridColumns';
 import { useColumnVisibility } from '@/lib/useColumnVisibility';
@@ -59,22 +59,17 @@ import {
 import { useMyReviewsSelectionState } from './useMyReviewsSelectionState';
 
 export function useMyReviewsGrid({
-  organizations,
   selectRequest,
   onSelectRequestHandled,
 }: {
-  organizations: Organization[];
   selectRequest?: MyReviewsSelectRequest | null;
   onSelectRequestHandled?: () => void;
 }) {
   const initialViewState = useMemo(() => loadMyReviewsGridViewState(), []);
 
   // ── State ──────────────────────────────────────────────────────────────────
-  const [organizationId, setOrganizationId] = useState(() =>
-    organizations.some((o) => o.id === initialViewState.organizationId)
-      ? initialViewState.organizationId
-      : organizations[0]?.id ?? '',
-  );
+  // The app points at a single active connection chosen in Settings.
+  const organizationId = useActiveOrganizationId();
   const [showSnoozed, setShowSnoozed] = useState(false);
   const [snoozeAnchorRect, setSnoozeAnchorRect] = useState<DOMRect | null>(null);
   const snoozeTargetRef = useRef<ReviewPullRequestSummary | null>(null);
@@ -188,7 +183,7 @@ export function useMyReviewsGrid({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voteSignature]);
 
-  const triageScope = `myReviews:${organizationId || organizations[0]?.id || ''}`;
+  const triageScope = `myReviews:${organizationId}`;
   const archivedKeys = useMemo(() => {
     const snapshots = new Map(
       allPrs.map((pr) => [reviewTriageKey(pr), reviewTriageSnapshot(pr)]),
@@ -318,12 +313,6 @@ export function useMyReviewsGrid({
     selectRequest,
     onSelectRequestHandled,
     onClearForSelectRequest: () => {
-      if (
-        selectRequest?.organizationId &&
-        selectRequest.organizationId !== organizationId
-      ) {
-        setOrganizationId(selectRequest.organizationId);
-      }
       setTextFilter('');
       setColumnFilters({});
       setShowDrafts(true);
@@ -334,10 +323,6 @@ export function useMyReviewsGrid({
   });
 
   // ── Effects ────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!organizationId && organizations[0]) setOrganizationId(organizations[0].id);
-  }, [organizationId, organizations]);
-
   useEffect(() => {
     storeMyReviewsGridViewState({
       collapsedSections,
@@ -448,7 +433,7 @@ export function useMyReviewsGrid({
     previewWidth, setPreviewWidth, maximized, setMaximized,
     columnMenuRect, setColumnMenuRect,
     // filter / sort state
-    organizationId, setOrganizationId,
+    organizationId,
     textFilter, setTextFilter,
     showDrafts, setShowDrafts,
     sort, collapsedSections, columnFilters,

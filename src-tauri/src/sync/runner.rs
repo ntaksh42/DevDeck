@@ -119,20 +119,22 @@ impl SyncRunner {
             }
         });
 
-        let orgs = match self.db.list_organizations() {
-            Ok(orgs) => orgs,
-            Err(e) => {
-                tracing::error!(error = ?e, "sync: failed to load organizations");
-                let mut outcome = SyncPassOutcome::default();
-                outcome.record_failure();
-                return outcome;
-            }
+        // The app points at one active connection at a time, so sync only that
+        // one. GitHub connections are served on-demand (no local cache), so they
+        // are skipped entirely — only Azure DevOps populates the sync cache.
+        let active = match self.db.resolve_organization(None) {
+            Ok(org) => org,
+            // No connection configured yet: nothing to sync, not a failure.
+            Err(_) => return SyncPassOutcome::default(),
         };
+        if active.provider_kind != "azdo" {
+            return SyncPassOutcome::default();
+        }
+        let orgs = vec![active];
         let now = chrono::Utc::now().to_rfc3339();
 
-        // Sync every organization concurrently; each org's PR/work-item/commit
-        // passes also run concurrently. The shared budget caps total in-flight
-        // requests regardless of how wide this fan-out gets.
+        // The active org's PR/work-item/commit passes run concurrently. The
+        // shared budget caps total in-flight requests.
         let mut tasks: JoinSet<SyncPassOutcome> = JoinSet::new();
         for org in orgs {
             tasks.spawn(sync_org(

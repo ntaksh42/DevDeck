@@ -1,7 +1,7 @@
 # 02. 全体アーキテクチャ
 
 このページは、[01](01-tech-stack.md) で名前を知った部品が **どう組み合わさっているか** を説明します。
-AzDoDeck は大きく **4つの層 + 2つの保存先** でできています。
+DevDeck は大きく **4つの層 + 2つの保存先** でできています。
 
 > 編集可能な drawio 版: [`diagrams/architecture.drawio`](diagrams/architecture.drawio)
 

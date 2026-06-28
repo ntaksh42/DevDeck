@@ -8,8 +8,8 @@ import {
   listPipelineProjects,
   queuePipelineRun,
   updatePipelineApproval,
-  type Organization,
 } from "@/lib/azdoCommands";
+import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { ResizeHandle } from "@/components/ResizeHandle";
 import { storedNumber } from "@/lib/utils";
 import { FilterableSelect } from "./FilterableSelect";
@@ -32,8 +32,8 @@ const MIN_PIPELINE_PREVIEW_WIDTH = 320;
 const MAX_PIPELINE_PREVIEW_WIDTH = 8192;
 const PIPELINE_PREVIEW_WIDTH_STORAGE_KEY = "azdodeck:layout:pipelinePreviewWidth";
 
-export function PipelinesView({ organizations }: { organizations: Organization[] }) {
-  const [organizationId, setOrganizationId] = useState(() => organizations[0]?.id ?? "");
+export function PipelinesView() {
+  const selectedOrganizationId = useActiveOrganizationId();
   const [projectId, setProjectId] = useState("");
   const [definitionId, setDefinitionId] = useState<number | null>(null);
   // Run shown in the detail panel, chosen from a watched pipeline's history
@@ -63,12 +63,6 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
       String(Math.round(previewWidth)),
     );
   }, [previewWidth]);
-
-  const selectedOrganizationId = organizationId || organizations[0]?.id || "";
-
-  useEffect(() => {
-    if (!organizationId && organizations[0]) setOrganizationId(organizations[0].id);
-  }, [organizationId, organizations]);
 
   const projectsQuery = useQuery({
     queryKey: ["pipelineProjects", selectedOrganizationId],
@@ -213,35 +207,10 @@ export function PipelinesView({ organizations }: { organizations: Organization[]
     });
   }
 
-  const selectClasses =
-    "h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60";
-
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="shrink-0 rounded-md border border-border bg-card">
-        <div className="grid gap-3 p-3 md:grid-cols-2 xl:grid-cols-[200px_minmax(200px,1fr)_auto]">
-          {organizations.length > 1 ? (
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Organization</span>
-              <select
-                value={selectedOrganizationId}
-                onChange={(event) => {
-                  setOrganizationId(event.target.value);
-                  setProjectId("");
-                  setDefinitionId(null);
-                  setDetailTarget(null);
-                }}
-                className={selectClasses}
-              >
-                {organizations.map((org) => (
-                  <option key={org.id} value={org.id}>
-                    {org.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-
+        <div className="grid gap-3 p-3 md:grid-cols-2 xl:grid-cols-[minmax(200px,1fr)_auto]">
           <label className="grid gap-2">
             <span className="text-sm font-medium">Project</span>
             <FilterableSelect

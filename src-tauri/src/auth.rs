@@ -1,6 +1,7 @@
 use std::sync::{Arc, OnceLock};
 
 use azdo_client::{AdoClient, AzureCliProvider, PatProvider};
+use github_client::GitHubClient;
 
 use crate::db::Organization;
 use crate::error::{AppError, Result};
@@ -39,4 +40,20 @@ pub fn client_for_organization(
     };
 
     Ok(AdoClient::new(&organization.name, auth)?)
+}
+
+/// Builds a GitHub client for a GitHub-kind connection, reading the stored PAT
+/// from the OS credential store via the connection's credential key.
+pub fn github_client_for_organization(
+    organization: &Organization,
+    secrets: &SecretStore,
+) -> Result<GitHubClient> {
+    if organization.auth_provider != "github_pat" {
+        return Err(AppError::InvalidInput(format!(
+            "unsupported GitHub auth provider: {}",
+            organization.auth_provider
+        )));
+    }
+    let pat = secrets.get_pat(&organization.credential_key)?;
+    Ok(GitHubClient::new(&pat)?)
 }
