@@ -4,6 +4,7 @@ use serde::Deserialize;
 
 mod auth;
 mod cancellation;
+mod code_browse;
 mod code_search;
 mod commits;
 mod db;
@@ -21,6 +22,10 @@ mod sync;
 mod work_items;
 
 use cancellation::{run_cancellable, CancellationRegistry};
+use code_browse::{
+    CodeBrowseService, GetFileInput, ListBranchesInput, ListHistoryInput, ListTreeInput,
+    RepoBranch, RepoCommitInfo, RepoFile, RepoTreeItem,
+};
 use code_search::{
     CodeContextResult, CodeSearchResults, CodeSearchService, GetCodeContextInput, SearchCodeInput,
 };
@@ -91,6 +96,7 @@ struct AppState {
     commits: CommitService,
     pipelines: PipelineService,
     code_search: CodeSearchService,
+    code_browse: CodeBrowseService,
     settings: SettingsService,
     snooze: SnoozeService,
     cancellation: CancellationRegistry,
@@ -715,6 +721,57 @@ async fn get_code_search_context(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+async fn list_repo_branches(
+    input: ListBranchesInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<RepoBranch>> {
+    state.code_browse.list_branches(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn list_repo_tree(
+    input: ListTreeInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<RepoTreeItem>> {
+    let operation_id = input.operation_id.clone();
+    run_cancellable(
+        &state.cancellation,
+        operation_id,
+        state.code_browse.list_tree(input),
+    )
+    .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn get_repo_file(input: GetFileInput, state: State<'_, AppState>) -> Result<RepoFile> {
+    let operation_id = input.operation_id.clone();
+    run_cancellable(
+        &state.cancellation,
+        operation_id,
+        state.code_browse.get_file(input),
+    )
+    .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+async fn list_repo_history(
+    input: ListHistoryInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<RepoCommitInfo>> {
+    let operation_id = input.operation_id.clone();
+    run_cancellable(
+        &state.cancellation,
+        operation_id,
+        state.code_browse.list_history(input),
+    )
+    .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 async fn cancel_operation(operation_id: String, state: State<'_, AppState>) -> Result<()> {
     state.cancellation.cancel(&operation_id);
     Ok(())
@@ -963,6 +1020,7 @@ pub fn run() {
                 commits: CommitService::new(db.clone(), SecretStore),
                 pipelines: PipelineService::new(db.clone(), SecretStore),
                 code_search: CodeSearchService::new(db.clone(), SecretStore),
+                code_browse: CodeBrowseService::new(db.clone(), SecretStore),
                 settings: SettingsService::new(db.clone()),
                 snooze: SnoozeService::new(db.clone()),
                 cancellation: CancellationRegistry::new(),
@@ -1036,6 +1094,10 @@ pub fn run() {
             commit_activity,
             search_code,
             get_code_search_context,
+            list_repo_branches,
+            list_repo_tree,
+            get_repo_file,
+            list_repo_history,
             cancel_operation,
             get_commit_changes,
             get_commit_file_diff,

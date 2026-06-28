@@ -9,29 +9,27 @@ describe("normalizeNavOrder", () => {
   });
 
   it("preserves a valid reordering of all known ids", () => {
-    const reordered = ["codeSearch", "pipelines", "commits", "workItems", "pullRequests"];
+    const reordered = ["codeSearch", "pipelines", "workItems", "pullRequests"];
     expect(normalizeNavOrder(reordered)).toEqual(reordered);
   });
 
-  it("drops unknown ids and duplicates", () => {
-    const raw = ["commits", "bogus", "commits", "pullRequests"];
+  it("drops unknown ids (including the retired 'commits') and duplicates", () => {
+    const raw = ["commits", "pipelines", "bogus", "pipelines", "pullRequests"];
     expect(normalizeNavOrder(raw)).toEqual([
-      "commits",
+      "pipelines",
       "pullRequests",
       // remaining known ids appended in default order
       "workItems",
-      "pipelines",
       "codeSearch",
     ]);
   });
 
   it("appends known ids missing from stored data", () => {
     // Simulates older stored data from before an entry existed.
-    expect(normalizeNavOrder(["commits"])).toEqual([
-      "commits",
+    expect(normalizeNavOrder(["pipelines"])).toEqual([
+      "pipelines",
       "pullRequests",
       "workItems",
-      "pipelines",
       "codeSearch",
     ]);
   });
@@ -43,12 +41,11 @@ describe("normalizeNavOrder", () => {
 
 describe("reorderNav", () => {
   it("moves an item forward to the target position", () => {
-    // Move "commits" up to where "pullRequests" is.
-    expect(reorderNav(DEFAULT_NAV_ORDER, "commits", "pullRequests")).toEqual([
-      "commits",
+    // Move "pipelines" up to where "pullRequests" is.
+    expect(reorderNav(DEFAULT_NAV_ORDER, "pipelines", "pullRequests")).toEqual([
+      "pipelines",
       "pullRequests",
       "workItems",
-      "pipelines",
       "codeSearch",
     ]);
   });
@@ -57,7 +54,6 @@ describe("reorderNav", () => {
     // Move "pullRequests" down to where "pipelines" is.
     expect(reorderNav(DEFAULT_NAV_ORDER, "pullRequests", "pipelines")).toEqual([
       "workItems",
-      "commits",
       "pipelines",
       "pullRequests",
       "codeSearch",
@@ -65,7 +61,7 @@ describe("reorderNav", () => {
   });
 
   it("returns the same array reference for a no-op move", () => {
-    expect(reorderNav(DEFAULT_NAV_ORDER, "commits", "commits")).toBe(DEFAULT_NAV_ORDER);
+    expect(reorderNav(DEFAULT_NAV_ORDER, "pipelines", "pipelines")).toBe(DEFAULT_NAV_ORDER);
   });
 
   it("does not mutate the input array", () => {

@@ -80,7 +80,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   { id: "gotoWorkItemViews", label: "Work Item Views", group: "Go to view", defaultCombo: "V", scope: "goto" },
   { id: "gotoCommits", label: "Commits", group: "Go to view", defaultCombo: "C", scope: "goto" },
   { id: "gotoPipelines", label: "Pipelines", group: "Go to view", defaultCombo: "B", scope: "goto" },
-  { id: "gotoCodeSearch", label: "Code Search", group: "Go to view", defaultCombo: "D", scope: "goto" },
+  { id: "gotoCodeSearch", label: "Code", group: "Go to view", defaultCombo: "D", scope: "goto" },
   { id: "gotoSettings", label: "Settings", group: "Go to view", defaultCombo: "S", scope: "goto" },
 ] as const;
 

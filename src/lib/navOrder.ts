@@ -1,13 +1,13 @@
 import { readStoredJson, writeStoredJson } from "@/lib/storage";
 
 // The reorderable top-level nav entries, in their default order. Help/Settings
-// stay pinned at the bottom and are not part of this list.
-export type NavEntryId = "pullRequests" | "workItems" | "commits" | "pipelines" | "codeSearch";
+// stay pinned at the bottom and are not part of this list. Commits is not a
+// top-level entry; it lives as a sub-item under the Code section.
+export type NavEntryId = "pullRequests" | "workItems" | "pipelines" | "codeSearch";
 
 export const DEFAULT_NAV_ORDER: NavEntryId[] = [
   "pullRequests",
   "workItems",
-  "commits",
   "pipelines",
   "codeSearch",
 ];

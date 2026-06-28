@@ -1149,6 +1149,22 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         ],
       };
     }
+    case "list_repo_branches":
+      return demoRepoBranches();
+    case "list_repo_tree": {
+      const input = (
+        args as { input?: { path?: string; includeLastCommit?: boolean } } | undefined
+      )?.input;
+      return demoRepoTree(input?.path, input?.includeLastCommit);
+    }
+    case "get_repo_file": {
+      const input = (args as { input?: { path?: string } } | undefined)?.input;
+      return demoRepoFile(input?.path ?? "/README.md");
+    }
+    case "list_repo_history": {
+      const input = (args as { input?: { path?: string } } | undefined)?.input;
+      return demoRepoHistory(input?.path ?? "/");
+    }
     case "list_pipeline_projects":
       return demoPipelineProjects();
     case "list_pipeline_definitions":
@@ -2375,6 +2391,91 @@ function demoCommitRepositories(): CommitRepositoryOption[] {
       projectName: "Infrastructure",
       repositoryId: "terraform-aws",
       repositoryName: "terraform-aws",
+    },
+  ];
+}
+
+// Demo branches for the code browser. `main` is the default and sorts first.
+function demoRepoBranches() {
+  return [
+    { name: "main", isDefault: true },
+    { name: "develop", isDefault: false },
+    { name: "feature/dashboard", isDefault: false },
+  ];
+}
+
+// A tiny virtual repository for the code browser demo. Keyed by the parent
+// folder path; each entry lists that folder's direct children (folders first).
+const DEMO_REPO_TREE: Record<string, { name: string; path: string; isFolder: boolean }[]> = {
+  "/": [
+    { name: "src", path: "/src", isFolder: true },
+    { name: "README.md", path: "/README.md", isFolder: false },
+    { name: "package.json", path: "/package.json", isFolder: false },
+  ],
+  "/src": [
+    { name: "lib", path: "/src/lib", isFolder: true },
+    { name: "App.tsx", path: "/src/App.tsx", isFolder: false },
+  ],
+  "/src/lib": [
+    { name: "azdoCommands.ts", path: "/src/lib/azdoCommands.ts", isFolder: false },
+    { name: "azdoDemo.ts", path: "/src/lib/azdoDemo.ts", isFolder: false },
+  ],
+};
+
+const DEMO_LAST_COMMIT = {
+  shortId: "7219380a",
+  commitId: "7219380abc1234567890",
+  message: "Initial calculator service",
+  author: "naoto akashi",
+  date: "2026-06-13T00:00:00Z",
+};
+
+function demoRepoTree(path?: string, includeLastCommit?: boolean) {
+  const key = !path || path.trim() === "" ? "/" : path.replace(/\/+$/, "") || "/";
+  const items = DEMO_REPO_TREE[key] ?? [];
+  return items.map((item) => ({
+    ...item,
+    lastCommit: includeLastCommit ? DEMO_LAST_COMMIT : null,
+  }));
+}
+
+// Demo file contents keyed by path, with a generic fallback so any file opens.
+const DEMO_REPO_FILES: Record<string, string> = {
+  "/README.md":
+    "# azdo-dashboard\n\nA Tauri + React dashboard for Azure DevOps.\n\n## Getting started\n\n```sh\npnpm install\npnpm dev\n```\n",
+  "/package.json": '{\n  "name": "azdo-dashboard",\n  "version": "0.1.16",\n  "private": true\n}\n',
+  "/src/App.tsx":
+    'import { useState } from "react";\n\nexport function App() {\n  const [view, setView] = useState("code");\n  return <div className="app">{view}</div>;\n}\n',
+  "/src/lib/azdoCommands.ts":
+    'import { z } from "zod";\n\nexport async function searchCode(input: { query: string }) {\n  const result = await invokeCommand("search_code", { input });\n  return codeSearchResultsSchema.parse(result);\n}\n',
+  "/src/lib/azdoDemo.ts":
+    'export async function demoInvoke(command: string, args?: unknown) {\n  // Returns canned data so the browser preview works without a backend.\n  return null;\n}\n',
+};
+
+function demoRepoFile(path: string) {
+  const content =
+    DEMO_REPO_FILES[path] ?? `// ${path}\n// Demo content for the code browser preview.\n`;
+  return { path, content, isBinary: false, tooLarge: false };
+}
+
+// Demo commit history for the Files > History tab. A short, fixed list so the
+// browser preview shows the layout without a backend.
+function demoRepoHistory(path: string) {
+  const scoped = path && path !== "/" ? ` (${path})` : "";
+  return [
+    {
+      shortId: "7219380a",
+      commitId: "7219380abc1234567890",
+      message: `Initial calculator service${scoped}`,
+      author: "naoto akashi",
+      date: "2026-06-13T00:00:00Z",
+    },
+    {
+      shortId: "a1b2c3d4",
+      commitId: "a1b2c3d4ef5678901234",
+      message: "Add expression utilities",
+      author: "naoto akashi",
+      date: "2026-06-12T00:00:00Z",
     },
   ];
 }

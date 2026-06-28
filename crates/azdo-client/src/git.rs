@@ -33,6 +33,32 @@ pub struct GitRepository {
     pub id: String,
     pub name: String,
     pub project: Option<TeamProject>,
+    /// Fully-qualified default branch ref, e.g. `refs/heads/main`. Absent on
+    /// some response shapes, so kept optional.
+    #[serde(default)]
+    pub default_branch: Option<String>,
+}
+
+/// A Git ref (branch/tag) as returned by the refs API.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitRef {
+    /// Fully-qualified ref name, e.g. `refs/heads/main`.
+    pub name: String,
+    pub object_id: Option<String>,
+}
+
+/// A file or folder entry in a repository tree.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitItem {
+    pub path: String,
+    #[serde(default)]
+    pub is_folder: bool,
+    /// The latest commit touching this item. Only populated when the items
+    /// request asks for it (`latestProcessedChange=true`).
+    #[serde(default)]
+    pub latest_processed_change: Option<GitCommitRef>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -82,7 +108,7 @@ struct PullRequestQueryResponse {
     results: Vec<HashMap<String, Vec<GitPullRequest>>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GitCommitRef {
     pub commit_id: String,
@@ -97,7 +123,7 @@ pub struct GitCommitRef {
     pub parents: Option<Vec<String>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GitUserDate {
     pub name: Option<String>,
@@ -152,6 +178,49 @@ impl AdoClient {
         let response: ListResponse<GitRepository> = self
             .get_json(&path, &[("api-version", "7.1-preview")])
             .await?;
+        Ok(response.value)
+    }
+
+    /// Lists the branch refs (`refs/heads/*`) of a repository.
+    pub async fn list_branches(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+    ) -> Result<Vec<GitRef>> {
+        let path = format!("{project_id}/_apis/git/repositories/{repository_id}/refs");
+        let response: ListResponse<GitRef> = self
+            .get_json(
+                &path,
+                &[("api-version", "7.1-preview"), ("filter", "heads/")],
+            )
+            .await?;
+        Ok(response.value)
+    }
+
+    /// Lists the direct children (one level) of a folder at the tip of a branch.
+    /// `scope_path` is the folder to list, e.g. `/` or `/src`. When
+    /// `include_latest_commit` is set, each item carries its last commit via
+    /// `latestProcessedChange` (one extra server-side join, no per-item calls).
+    pub async fn list_items(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        branch: &str,
+        scope_path: &str,
+        include_latest_commit: bool,
+    ) -> Result<Vec<GitItem>> {
+        let path = format!("{project_id}/_apis/git/repositories/{repository_id}/items");
+        let mut params: Vec<(&str, &str)> = vec![
+            ("api-version", "7.1-preview"),
+            ("scopePath", scope_path),
+            ("recursionLevel", "OneLevel"),
+            ("versionDescriptor.versionType", "branch"),
+            ("versionDescriptor.version", branch),
+        ];
+        if include_latest_commit {
+            params.push(("latestProcessedChange", "true"));
+        }
+        let response: ListResponse<GitItem> = self.get_json(&path, &params).await?;
         Ok(response.value)
     }
 
@@ -1267,5 +1336,99 @@ mod tests {
             )
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn list_branches_filters_heads() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/git/repositories/repo-1/refs"))
+            .and(query_param("api-version", "7.1-preview"))
+            .and(query_param("filter", "heads/"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 2,
+                "value": [
+                    { "name": "refs/heads/main", "objectId": "abc" },
+                    { "name": "refs/heads/feature/x", "objectId": "def" }
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let refs = test_client(&server)
+            .await
+            .list_branches("project-1", "repo-1")
+            .await
+            .unwrap();
+        assert_eq!(refs.len(), 2);
+        assert_eq!(refs[0].name, "refs/heads/main");
+        assert_eq!(refs[0].object_id.as_deref(), Some("abc"));
+    }
+
+    #[tokio::test]
+    async fn list_items_requests_one_level_at_branch() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/git/repositories/repo-1/items"))
+            .and(query_param("recursionLevel", "OneLevel"))
+            .and(query_param("scopePath", "/src"))
+            .and(query_param("versionDescriptor.versionType", "branch"))
+            .and(query_param("versionDescriptor.version", "main"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 3,
+                "value": [
+                    { "path": "/src", "isFolder": true },
+                    { "path": "/src/lib", "isFolder": true },
+                    { "path": "/src/main.py" }
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let items = test_client(&server)
+            .await
+            .list_items("project-1", "repo-1", "main", "/src", false)
+            .await
+            .unwrap();
+        assert_eq!(items.len(), 3);
+        assert!(items[1].is_folder);
+        assert!(!items[2].is_folder);
+        assert_eq!(items[2].path, "/src/main.py");
+        assert!(items[2].latest_processed_change.is_none());
+    }
+
+    #[tokio::test]
+    async fn list_items_includes_latest_commit_when_requested() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/project-1/_apis/git/repositories/repo-1/items"))
+            .and(query_param("latestProcessedChange", "true"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "count": 1,
+                "value": [
+                    {
+                        "path": "/README.md",
+                        "latestProcessedChange": {
+                            "commitId": "7219380abc",
+                            "comment": "Initial calculator service",
+                            "author": { "name": "naoto akashi", "date": "2026-06-13T00:00:00Z" }
+                        }
+                    }
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let items = test_client(&server)
+            .await
+            .list_items("project-1", "repo-1", "main", "/", true)
+            .await
+            .unwrap();
+        let change = items[0].latest_processed_change.as_ref().unwrap();
+        assert_eq!(change.commit_id, "7219380abc");
+        assert_eq!(
+            change.comment.as_deref(),
+            Some("Initial calculator service")
+        );
     }
 }
