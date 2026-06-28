@@ -26,7 +26,8 @@ test.describe("browser preview", () => {
     await expect(main.getByRole("tab", { name: "Rejected" })).toHaveCount(0);
 
     // The PR review panel shows the selected PR with vote actions and comments.
-    await expect(main.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
+    // Voting is a "Your vote" combobox (Approve/Suggestions/Wait/Reject/No vote).
+    await expect(main.getByRole("combobox", { name: "Your vote" })).toBeVisible();
     await expect(main.getByText("Could you add a test for the empty case?")).toBeVisible();
 
     // The local review-result preview lives on the Result tab.
@@ -40,15 +41,18 @@ test.describe("browser preview", () => {
     await main.getByRole("button", { name: "Sort by PR#" }).click();
     await expect(reviewGrid.getByRole("row").first()).toContainText("#101");
 
-    await page.keyboard.press("2");
+    // Sections expand by clicking their header (My Reviews groups PRs by the
+    // reviewer's next action). Expanding "Waiting for author" reveals its PR
+    // while the still-collapsed "Rejected" section keeps its PR hidden.
+    await main.getByRole("button", { name: /Waiting for author/ }).click();
     await expect(main.getByText("Fix crash on back press during payment flow")).toBeVisible();
     await expect(main.getByText("Upgrade EKS cluster to 1.29")).toHaveCount(0);
 
-    await page.keyboard.press("3");
+    await main.getByRole("button", { name: /Approved by you/ }).click();
     await expect(main.getByText("Dark mode support for settings screen")).toBeVisible();
     await expect(main.getByText("Add OpenTelemetry tracing support")).toBeVisible();
     await expect(main.getByText("Upgrade EKS cluster to 1.29")).toHaveCount(0);
-    await page.keyboard.press("4");
+    await main.getByRole("button", { name: /Rejected by you/ }).click();
 
     await main.getByPlaceholder("Filter by repo, title, author…").fill("auth");
     await expect(main.getByText("Migrate token signing to RS256")).toBeVisible();
@@ -56,14 +60,16 @@ test.describe("browser preview", () => {
 
     await main.getByPlaceholder("Filter by repo, title, author…").fill("");
     await main.getByLabel("Show Drafts").check();
+    // Draft PRs land in their own collapsed "Drafts" section; expand it to see them.
+    await main.getByRole("button", { name: /Drafts/ }).click();
     await expect(main.getByText("Draft", { exact: true })).toBeVisible();
 
     await sidebar.getByRole("button", { name: "Search" }).nth(1).click();
     await main.getByPlaceholder("Search work items…").fill("onboarding");
     await main.getByRole("button", { name: "Search" }).click();
-    await expect(
-      main.getByRole("heading", { name: "Validate onboarding with PAT credentials" }),
-    ).toBeVisible();
+    await expect(main.getByRole("button", { name: "Edit title" })).toContainText(
+      "Validate onboarding with PAT credentials",
+    );
     await expect(main.getByRole("separator", { name: "Resize work item preview" })).toBeVisible();
     await expect(
       main.frameLocator('iframe[title="Description"]').getByText("Fetch detail fields from Azure DevOps"),
@@ -82,7 +88,7 @@ test.describe("browser preview", () => {
     await main.getByLabel("From", { exact: true }).fill("2026-05-01");
     await main.getByLabel("To", { exact: true }).fill("2026-05-28");
     await main.getByRole("button", { name: "Search" }).click();
-    await expect(main.getByText("Add commit search dashboard")).toBeVisible();
+    await expect(main.getByText("Add commit search dashboard").first()).toBeVisible();
 
     // The "/" grid shortcut must return focus to the commit search field.
     const commitGrid = main.getByRole("grid", { name: "Commit search results" });
