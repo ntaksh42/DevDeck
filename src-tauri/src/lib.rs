@@ -1,11 +1,11 @@
 use std::str::FromStr;
 
-use serde::Deserialize;
-
+mod app_state;
 mod auth;
 mod cancellation;
 mod code_browse;
 mod code_search;
+mod commands;
 mod commits;
 mod db;
 mod error;
@@ -21,921 +21,26 @@ mod snooze;
 mod sync;
 mod work_items;
 
-use cancellation::{run_cancellable, CancellationRegistry};
-use code_browse::{
-    CodeBrowseService, GetFileInput, ListBranchesInput, ListHistoryInput, ListTreeInput,
-    RepoBranch, RepoCommitInfo, RepoFile, RepoTreeItem,
-};
-use code_search::{
-    CodeContextResult, CodeSearchResults, CodeSearchService, GetCodeContextInput, SearchCodeInput,
-};
-use commits::{
-    CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
-    CommitRepositoryOption, CommitSearchResult, CommitService, GetCommitChangesInput,
-    GetCommitFileDiffInput, GetCommitPullRequestsInput, ListCommitRepositoriesInput,
-    SearchCommitsInput,
-};
-use db::{AppDatabase, AppSettings, Organization, SyncState};
+use app_state::AppState;
+use cancellation::CancellationRegistry;
+use code_browse::CodeBrowseService;
+use code_search::CodeSearchService;
+use commits::CommitService;
+use db::AppDatabase;
 use error::{AppError, Result};
-use orgs::{AddAzureCliOrganizationInput, AddPatOrganizationInput, OrganizationService};
-use pipelines::{
-    CancelPipelineRunInput, GetPipelineDefinitionInput, GetPipelineRunInput,
-    GetPipelineRunLogTailInput, ListPipelineApprovalsInput, ListPipelineArtifactsInput,
-    ListPipelineDefinitionsInput, ListPipelineProjectsInput, ListPipelineRunsInput,
-    PipelineApprovalSummary, PipelineArtifact, PipelineDefinitionDetail, PipelineDefinitionOption,
-    PipelineLogTail, PipelineProjectOption, PipelineRunDetail, PipelineRunSummary, PipelineService,
-    QueuePipelineRunInput, RerunPipelineRunInput, UpdatePipelineApprovalInput,
-};
-use pr_review::{
-    DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
-    PostPullRequestCommentInput, PrCommit, PrDetailsResult, PrFileDiff, PrLocator, PrReviewService,
-    PrReviewer, PrStatusResult, PrThread, PullRequestChanges, PullRequestReview,
-    RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
-    SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
-    SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
-};
-use prs::{
-    ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestSummary,
-    PullRequestSearchResult, PullRequestService, ReviewPullRequestSummary, SearchPullRequestsInput,
-};
-use search::{SearchAllInput, SearchAllResult};
+use orgs::OrganizationService;
+use pipelines::PipelineService;
+use pr_review::PrReviewService;
+use prs::PullRequestService;
 use secrets::SecretStore;
-use settings::{
-    normalize_app_settings, GetReviewResultPreviewInput, ReviewResultPreview, SettingsService,
-    UpdateAppSettingsInput,
-};
-use snooze::{
-    ListSnoozedItemsInput, SnoozeItemInput, SnoozeService, SnoozedItemSummary, UnsnoozeItemInput,
-};
-use sync::{SyncRunner, SyncScope, SyncTrigger};
-use tauri::{AppHandle, Manager, State};
+use settings::SettingsService;
+use snooze::SnoozeService;
+use sync::SyncRunner;
+use tauri::{AppHandle, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
-use tokio::sync::{mpsc, oneshot};
-use work_items::{
-    AddWorkItemCommentInput, AddWorkItemLinkInput, AssignWorkItemsInput, BulkWorkItemResult,
-    ClassificationNodesResult, DeleteWorkItemCommentInput, FetchWorkItemImageInput,
-    GetSavedQueryInput, GetWorkItemPreviewInput, ListClassificationNodesInput,
-    ListMyWorkItemsInput, ListWorkItemFieldAllowedValuesInput, ListWorkItemFieldsInput,
-    ListWorkItemProjectsInput, ListWorkItemTypeStatesInput, ListWorkItemUpdatesInput,
-    MentionCandidate, RecordAssigneeInteractionInput, RecordMentionInteractionInput,
-    RemoveWorkItemLinkInput, RunWorkItemQueryInput, SavedQueryResult, SearchWorkItemAssigneesInput,
-    SearchWorkItemMentionsInput, SearchWorkItemsInput, SetWorkItemCommentReactionInput,
-    SetWorkItemsPriorityInput, SetWorkItemsStateInput, SetWorkItemsTagsInput,
-    UpdateWorkItemCommentInput, UpdateWorkItemFieldsInput, WorkItemAssigneeCandidate,
-    WorkItemComment, WorkItemFieldOption, WorkItemImage, WorkItemPreview, WorkItemProjectOption,
-    WorkItemService, WorkItemSummary, WorkItemUpdateSummary,
-};
+use work_items::WorkItemService;
 
-#[derive(Clone)]
-struct AppState {
-    db: AppDatabase,
-    organizations: OrganizationService,
-    pull_requests: PullRequestService,
-    pr_review: PrReviewService,
-    work_items: WorkItemService,
-    commits: CommitService,
-    pipelines: PipelineService,
-    code_search: CodeSearchService,
-    code_browse: CodeBrowseService,
-    settings: SettingsService,
-    snooze: SnoozeService,
-    cancellation: CancellationRegistry,
-    sync_trigger: mpsc::Sender<SyncTrigger>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct TriggerSyncInput {
-    scope: Option<SyncScope>,
-}
-
-// Keeps SQLite and file I/O off the main thread, where synchronous Tauri
-// commands would otherwise block the UI event loop.
-async fn run_blocking<T, F>(task: F) -> Result<T>
-where
-    F: FnOnce() -> Result<T> + Send + 'static,
-    T: Send + 'static,
-{
-    tauri::async_runtime::spawn_blocking(task)
-        .await
-        .map_err(|error| AppError::Database(format!("background task failed: {error}")))?
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn list_organizations(state: State<'_, AppState>) -> Result<Vec<Organization>> {
-    let service = state.organizations.clone();
-    run_blocking(move || service.list()).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn get_app_settings(state: State<'_, AppState>) -> Result<AppSettings> {
-    let service = state.settings.clone();
-    run_blocking(move || service.get()).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state, input))]
-fn update_app_settings(
-    input: UpdateAppSettingsInput,
-    state: State<'_, AppState>,
-    app: AppHandle,
-) -> Result<AppSettings> {
-    let settings = normalize_app_settings(input);
-    configure_show_window_hotkey(&app, settings.show_window_hotkey.as_deref())?;
-    state.settings.update_normalized(settings)
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn get_review_result_preview(
-    input: GetReviewResultPreviewInput,
-    state: State<'_, AppState>,
-) -> Result<Option<ReviewResultPreview>> {
-    let service = state.settings.clone();
-    run_blocking(move || service.review_result_preview(input)).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn list_sync_states(state: State<'_, AppState>) -> Result<Vec<SyncState>> {
-    let db = state.db.clone();
-    run_blocking(move || db.list_sync_states()).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn snooze_item(input: SnoozeItemInput, state: State<'_, AppState>) -> Result<()> {
-    let service = state.snooze.clone();
-    run_blocking(move || service.snooze_item(input)).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn unsnooze_item(input: UnsnoozeItemInput, state: State<'_, AppState>) -> Result<()> {
-    let service = state.snooze.clone();
-    run_blocking(move || service.unsnooze_item(input)).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn list_snoozed_items(
-    input: ListSnoozedItemsInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<SnoozedItemSummary>> {
-    let service = state.snooze.clone();
-    run_blocking(move || service.list_snoozed_items(input)).await
-}
-
-async fn ensure_write_enabled(state: &State<'_, AppState>) -> Result<()> {
-    let settings = state.settings.clone();
-    let read_only =
-        run_blocking(move || Ok(settings.get()?.read_only_validation_mode_enabled)).await?;
-    if read_only {
-        return Err(AppError::InvalidInput(
-            "Read-only validation mode is enabled. Disable it in Settings to write to Azure DevOps."
-                .to_string(),
-        ));
-    }
-    Ok(())
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn delete_organization(id: String, state: State<'_, AppState>) -> Result<()> {
-    let service = state.organizations.clone();
-    run_blocking(move || service.delete(&id)).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state, input), fields(organization = %input.organization.trim()))]
-async fn add_pat_organization(
-    input: AddPatOrganizationInput,
-    state: State<'_, AppState>,
-) -> Result<Organization> {
-    state.organizations.add_pat_organization(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state), fields(organization = %input.organization.trim()))]
-async fn add_azure_cli_organization(
-    input: AddAzureCliOrganizationInput,
-    state: State<'_, AppState>,
-) -> Result<Organization> {
-    state.organizations.add_azure_cli_organization(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn search_pull_requests(
-    input: SearchPullRequestsInput,
-    state: State<'_, AppState>,
-) -> Result<PullRequestSearchResult> {
-    let service = state.pull_requests.clone();
-    service.search(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn list_my_review_pull_requests(
-    input: ListMyReviewPullRequestsInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<ReviewPullRequestSummary>> {
-    let service = state.pull_requests.clone();
-    run_blocking(move || service.list_my_reviews(input)).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn list_my_created_pull_requests(
-    input: ListMyCreatedPullRequestsInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<MyCreatedPullRequestSummary>> {
-    let service = state.pull_requests.clone();
-    service.list_my_created_pull_requests(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn get_pull_request_review(
-    input: PrLocator,
-    state: State<'_, AppState>,
-) -> Result<PullRequestReview> {
-    state.pr_review.get_review(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn list_pull_request_changes(
-    input: PrLocator,
-    state: State<'_, AppState>,
-) -> Result<PullRequestChanges> {
-    state.pr_review.list_changes(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn get_pull_request_file_diff(
-    input: GetPullRequestFileDiffInput,
-    state: State<'_, AppState>,
-) -> Result<PrFileDiff> {
-    state.pr_review.get_file_diff(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn list_pull_request_commits(
-    input: PrLocator,
-    state: State<'_, AppState>,
-) -> Result<Vec<PrCommit>> {
-    state.pr_review.list_commits(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn post_pull_request_comment(
-    input: PostPullRequestCommentInput,
-    state: State<'_, AppState>,
-) -> Result<PrThread> {
-    ensure_write_enabled(&state).await?;
-    state.pr_review.post_comment(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn set_pull_request_thread_status(
-    input: SetPullRequestThreadStatusInput,
-    state: State<'_, AppState>,
-) -> Result<PrThread> {
-    ensure_write_enabled(&state).await?;
-    state.pr_review.set_thread_status(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn submit_pull_request_vote(
-    input: SubmitPullRequestVoteInput,
-    state: State<'_, AppState>,
-) -> Result<PrReviewer> {
-    ensure_write_enabled(&state).await?;
-    state.pr_review.submit_vote(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn update_pull_request(
-    input: UpdatePullRequestInput,
-    state: State<'_, AppState>,
-) -> Result<PrStatusResult> {
-    ensure_write_enabled(&state).await?;
-    state.pr_review.update_pull_request(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn set_pull_request_reviewer_required(
-    input: SetPullRequestReviewerRequiredInput,
-    state: State<'_, AppState>,
-) -> Result<()> {
-    ensure_write_enabled(&state).await?;
-    state.pr_review.set_reviewer_required(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn remove_pull_request_reviewer(
-    input: RemovePullRequestReviewerInput,
-    state: State<'_, AppState>,
-) -> Result<()> {
-    ensure_write_enabled(&state).await?;
-    state.pr_review.remove_reviewer(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn update_pull_request_details(
-    input: UpdatePullRequestDetailsInput,
-    state: State<'_, AppState>,
-) -> Result<PrDetailsResult> {
-    ensure_write_enabled(&state).await?;
-    state.pr_review.update_pull_request_details(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn search_pull_request_mentions(
-    input: SearchPullRequestMentionsInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<MentionCandidate>> {
-    state.pr_review.search_mentions(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn edit_pull_request_comment(
-    input: EditPullRequestCommentInput,
-    state: State<'_, AppState>,
-) -> Result<PrThread> {
-    ensure_write_enabled(&state).await?;
-    state.pr_review.edit_comment(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn delete_pull_request_comment(
-    input: DeletePullRequestCommentInput,
-    state: State<'_, AppState>,
-) -> Result<()> {
-    ensure_write_enabled(&state).await?;
-    state.pr_review.delete_comment(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn search_all(input: SearchAllInput, state: State<'_, AppState>) -> Result<SearchAllResult> {
-    let db = state.db.clone();
-    let work_items = state.work_items.clone();
-    let pull_requests = state.pull_requests.clone();
-    let commits = state.commits.clone();
-    search::search_all(&db, &work_items, &pull_requests, &commits, input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn search_work_items(
-    input: SearchWorkItemsInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<WorkItemSummary>> {
-    let service = state.work_items.clone();
-    run_blocking(move || service.search(input)).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn list_my_work_items(
-    input: ListMyWorkItemsInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<WorkItemSummary>> {
-    let service = state.work_items.clone();
-    run_blocking(move || service.list_my(input)).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn list_work_item_projects(
-    input: ListWorkItemProjectsInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<WorkItemProjectOption>> {
-    state.work_items.list_projects(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn run_work_item_query(
-    input: RunWorkItemQueryInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<WorkItemSummary>> {
-    state.work_items.run_query(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn count_work_item_query(
-    input: RunWorkItemQueryInput,
-    state: State<'_, AppState>,
-) -> Result<usize> {
-    state.work_items.count_query(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn get_work_item_preview(
-    input: GetWorkItemPreviewInput,
-    state: State<'_, AppState>,
-) -> Result<WorkItemPreview> {
-    state.work_items.preview(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn search_work_item_mentions(
-    input: SearchWorkItemMentionsInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<MentionCandidate>> {
-    state.work_items.search_mentions(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn record_mention_interaction(
-    input: RecordMentionInteractionInput,
-    state: State<'_, AppState>,
-) -> Result<()> {
-    let service = state.work_items.clone();
-    run_blocking(move || service.record_mention_interaction(input)).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn record_assignee_interaction(
-    input: RecordAssigneeInteractionInput,
-    state: State<'_, AppState>,
-) -> Result<()> {
-    let service = state.work_items.clone();
-    run_blocking(move || service.record_assignee_interaction(input)).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn search_work_item_assignees(
-    input: SearchWorkItemAssigneesInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<WorkItemAssigneeCandidate>> {
-    state.work_items.search_assignees(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn fetch_work_item_image(
-    input: FetchWorkItemImageInput,
-    state: State<'_, AppState>,
-) -> Result<WorkItemImage> {
-    state.work_items.fetch_image(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn add_work_item_comment(
-    input: AddWorkItemCommentInput,
-    state: State<'_, AppState>,
-) -> Result<WorkItemComment> {
-    ensure_write_enabled(&state).await?;
-    state.work_items.add_comment(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn add_work_item_link(input: AddWorkItemLinkInput, state: State<'_, AppState>) -> Result<()> {
-    ensure_write_enabled(&state).await?;
-    state.work_items.add_link(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn remove_work_item_link(
-    input: RemoveWorkItemLinkInput,
-    state: State<'_, AppState>,
-) -> Result<()> {
-    ensure_write_enabled(&state).await?;
-    state.work_items.remove_link(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn delete_work_item_comment(
-    input: DeleteWorkItemCommentInput,
-    state: State<'_, AppState>,
-) -> Result<()> {
-    ensure_write_enabled(&state).await?;
-    state.work_items.delete_comment(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn update_work_item_comment(
-    input: UpdateWorkItemCommentInput,
-    state: State<'_, AppState>,
-) -> Result<WorkItemComment> {
-    ensure_write_enabled(&state).await?;
-    state.work_items.update_comment(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn set_work_item_comment_reaction(
-    input: SetWorkItemCommentReactionInput,
-    state: State<'_, AppState>,
-) -> Result<()> {
-    ensure_write_enabled(&state).await?;
-    state.work_items.set_comment_reaction(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn list_work_item_updates(
-    input: ListWorkItemUpdatesInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<WorkItemUpdateSummary>> {
-    state.work_items.list_updates(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn set_work_items_state(
-    input: SetWorkItemsStateInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<BulkWorkItemResult>> {
-    ensure_write_enabled(&state).await?;
-    state.work_items.set_items_state(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn assign_work_items(
-    input: AssignWorkItemsInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<BulkWorkItemResult>> {
-    ensure_write_enabled(&state).await?;
-    state.work_items.assign_items(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn set_work_items_priority(
-    input: SetWorkItemsPriorityInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<BulkWorkItemResult>> {
-    ensure_write_enabled(&state).await?;
-    state.work_items.set_items_priority(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn set_work_items_tags(
-    input: SetWorkItemsTagsInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<BulkWorkItemResult>> {
-    ensure_write_enabled(&state).await?;
-    state.work_items.set_items_tags(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn update_work_item_fields(
-    input: UpdateWorkItemFieldsInput,
-    state: State<'_, AppState>,
-) -> Result<WorkItemPreview> {
-    ensure_write_enabled(&state).await?;
-    state.work_items.update_fields(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn list_work_item_field_allowed_values(
-    input: ListWorkItemFieldAllowedValuesInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<String>> {
-    state.work_items.list_field_allowed_values(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn list_work_item_type_states(
-    input: ListWorkItemTypeStatesInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<String>> {
-    state.work_items.list_type_states(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn list_work_item_fields(
-    input: ListWorkItemFieldsInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<WorkItemFieldOption>> {
-    state.work_items.list_fields(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn list_classification_nodes(
-    input: ListClassificationNodesInput,
-    state: State<'_, AppState>,
-) -> Result<ClassificationNodesResult> {
-    state.work_items.list_classification_nodes(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn get_saved_query(
-    input: GetSavedQueryInput,
-    state: State<'_, AppState>,
-) -> Result<SavedQueryResult> {
-    state.work_items.get_saved_query(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn search_commits(
-    input: SearchCommitsInput,
-    state: State<'_, AppState>,
-) -> Result<CommitSearchResult> {
-    let service = state.commits.clone();
-    service.search(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn list_commit_repositories(
-    input: ListCommitRepositoriesInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<CommitRepositoryOption>> {
-    let service = state.commits.clone();
-    run_blocking(move || service.list_repositories(input)).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn commit_activity(
-    input: CommitActivityInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<CommitActivityDay>> {
-    let service = state.commits.clone();
-    run_blocking(move || service.commit_activity(input)).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn search_code(
-    input: SearchCodeInput,
-    state: State<'_, AppState>,
-) -> Result<CodeSearchResults> {
-    let operation_id = input.operation_id.clone();
-    run_cancellable(
-        &state.cancellation,
-        operation_id,
-        state.code_search.search(input),
-    )
-    .await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn get_code_search_context(
-    input: GetCodeContextInput,
-    state: State<'_, AppState>,
-) -> Result<CodeContextResult> {
-    state.code_search.get_context(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn list_repo_branches(
-    input: ListBranchesInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<RepoBranch>> {
-    state.code_browse.list_branches(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn list_repo_tree(
-    input: ListTreeInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<RepoTreeItem>> {
-    let operation_id = input.operation_id.clone();
-    run_cancellable(
-        &state.cancellation,
-        operation_id,
-        state.code_browse.list_tree(input),
-    )
-    .await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn get_repo_file(input: GetFileInput, state: State<'_, AppState>) -> Result<RepoFile> {
-    let operation_id = input.operation_id.clone();
-    run_cancellable(
-        &state.cancellation,
-        operation_id,
-        state.code_browse.get_file(input),
-    )
-    .await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn list_repo_history(
-    input: ListHistoryInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<RepoCommitInfo>> {
-    let operation_id = input.operation_id.clone();
-    run_cancellable(
-        &state.cancellation,
-        operation_id,
-        state.code_browse.list_history(input),
-    )
-    .await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn cancel_operation(operation_id: String, state: State<'_, AppState>) -> Result<()> {
-    state.cancellation.cancel(&operation_id);
-    Ok(())
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn get_commit_changes(
-    input: GetCommitChangesInput,
-    state: State<'_, AppState>,
-) -> Result<CommitChangeSet> {
-    state.commits.get_commit_changes(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn get_commit_file_diff(
-    input: GetCommitFileDiffInput,
-    state: State<'_, AppState>,
-) -> Result<CommitFileDiff> {
-    state.commits.get_commit_file_diff(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn get_commit_pull_requests(
-    input: GetCommitPullRequestsInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<CommitPullRequest>> {
-    state.commits.get_commit_pull_requests(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn list_pipeline_projects(
-    input: ListPipelineProjectsInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<PipelineProjectOption>> {
-    state.pipelines.list_projects(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn list_pipeline_runs(
-    input: ListPipelineRunsInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<PipelineRunSummary>> {
-    state.pipelines.list_runs(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn list_pipeline_definitions(
-    input: ListPipelineDefinitionsInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<PipelineDefinitionOption>> {
-    state.pipelines.list_definitions(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn get_pipeline_run(
-    input: GetPipelineRunInput,
-    state: State<'_, AppState>,
-) -> Result<PipelineRunDetail> {
-    state.pipelines.get_run(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn list_pipeline_artifacts(
-    input: ListPipelineArtifactsInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<PipelineArtifact>> {
-    state.pipelines.list_artifacts(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn get_pipeline_definition(
-    input: GetPipelineDefinitionInput,
-    state: State<'_, AppState>,
-) -> Result<PipelineDefinitionDetail> {
-    state.pipelines.get_definition(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn get_pipeline_run_log_tail(
-    input: GetPipelineRunLogTailInput,
-    state: State<'_, AppState>,
-) -> Result<PipelineLogTail> {
-    state.pipelines.get_run_log_tail(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn rerun_pipeline_run(
-    input: RerunPipelineRunInput,
-    state: State<'_, AppState>,
-) -> Result<PipelineRunSummary> {
-    ensure_write_enabled(&state).await?;
-    state.pipelines.rerun_run(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn queue_pipeline_run(
-    input: QueuePipelineRunInput,
-    state: State<'_, AppState>,
-) -> Result<PipelineRunSummary> {
-    ensure_write_enabled(&state).await?;
-    state.pipelines.queue_run(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn cancel_pipeline_run(
-    input: CancelPipelineRunInput,
-    state: State<'_, AppState>,
-) -> Result<PipelineRunSummary> {
-    ensure_write_enabled(&state).await?;
-    state.pipelines.cancel_run(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn list_pipeline_approvals(
-    input: ListPipelineApprovalsInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<PipelineApprovalSummary>> {
-    state.pipelines.list_approvals(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn update_pipeline_approval(
-    input: UpdatePipelineApprovalInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<PipelineApprovalSummary>> {
-    ensure_write_enabled(&state).await?;
-    state.pipelines.update_approval(input).await
-}
-
-#[tauri::command]
-#[tracing::instrument(skip(state))]
-async fn trigger_sync(input: Option<TriggerSyncInput>, state: State<'_, AppState>) -> Result<()> {
-    let (tx, rx) = oneshot::channel();
-    state
-        .sync_trigger
-        .send(SyncTrigger {
-            scope: input
-                .and_then(|input| input.scope)
-                .unwrap_or(SyncScope::All),
-            done: tx,
-        })
-        .await
-        .map_err(|error| AppError::InvalidInput(format!("sync runner stopped: {error}")))?;
-    rx.await
-        .map_err(|error| AppError::InvalidInput(format!("sync runner stopped: {error}")))?;
-    Ok(())
-}
-
-fn configure_show_window_hotkey(app: &AppHandle, hotkey: Option<&str>) -> Result<()> {
+pub(crate) fn configure_show_window_hotkey(app: &AppHandle, hotkey: Option<&str>) -> Result<()> {
     let shortcut = parse_show_window_hotkey(hotkey)?;
 
     app.global_shortcut()
@@ -1032,89 +137,89 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            list_organizations,
-            get_app_settings,
-            update_app_settings,
-            get_review_result_preview,
-            list_sync_states,
-            snooze_item,
-            unsnooze_item,
-            list_snoozed_items,
-            delete_organization,
-            add_pat_organization,
-            add_azure_cli_organization,
-            search_pull_requests,
-            list_my_review_pull_requests,
-            list_my_created_pull_requests,
-            get_pull_request_review,
-            list_pull_request_changes,
-            get_pull_request_file_diff,
-            list_pull_request_commits,
-            post_pull_request_comment,
-            set_pull_request_thread_status,
-            submit_pull_request_vote,
-            update_pull_request,
-            set_pull_request_reviewer_required,
-            remove_pull_request_reviewer,
-            update_pull_request_details,
-            search_pull_request_mentions,
-            edit_pull_request_comment,
-            delete_pull_request_comment,
-            search_all,
-            search_work_items,
-            list_my_work_items,
-            list_work_item_projects,
-            run_work_item_query,
-            count_work_item_query,
-            get_work_item_preview,
-            search_work_item_mentions,
-            record_mention_interaction,
-            record_assignee_interaction,
-            search_work_item_assignees,
-            fetch_work_item_image,
-            add_work_item_comment,
-            add_work_item_link,
-            remove_work_item_link,
-            delete_work_item_comment,
-            update_work_item_comment,
-            set_work_item_comment_reaction,
-            update_work_item_fields,
-            list_work_item_updates,
-            list_work_item_field_allowed_values,
-            list_work_item_type_states,
-            list_work_item_fields,
-            list_classification_nodes,
-            get_saved_query,
-            set_work_items_state,
-            assign_work_items,
-            set_work_items_priority,
-            set_work_items_tags,
-            search_commits,
-            list_commit_repositories,
-            commit_activity,
-            search_code,
-            get_code_search_context,
-            list_repo_branches,
-            list_repo_tree,
-            get_repo_file,
-            list_repo_history,
-            cancel_operation,
-            get_commit_changes,
-            get_commit_file_diff,
-            get_commit_pull_requests,
-            list_pipeline_projects,
-            list_pipeline_runs,
-            list_pipeline_definitions,
-            get_pipeline_run,
-            list_pipeline_artifacts,
-            get_pipeline_definition,
-            get_pipeline_run_log_tail,
-            rerun_pipeline_run,
-            queue_pipeline_run,
-            cancel_pipeline_run,
-            list_pipeline_approvals,
-            update_pipeline_approval,
-            trigger_sync
+            commands::orgs::list_organizations,
+            commands::settings::get_app_settings,
+            commands::settings::update_app_settings,
+            commands::settings::get_review_result_preview,
+            commands::settings::list_sync_states,
+            commands::snooze::snooze_item,
+            commands::snooze::unsnooze_item,
+            commands::snooze::list_snoozed_items,
+            commands::orgs::delete_organization,
+            commands::orgs::add_pat_organization,
+            commands::orgs::add_azure_cli_organization,
+            commands::prs::search_pull_requests,
+            commands::prs::list_my_review_pull_requests,
+            commands::prs::list_my_created_pull_requests,
+            commands::pr_review::get_pull_request_review,
+            commands::pr_review::list_pull_request_changes,
+            commands::pr_review::get_pull_request_file_diff,
+            commands::pr_review::list_pull_request_commits,
+            commands::pr_review::post_pull_request_comment,
+            commands::pr_review::set_pull_request_thread_status,
+            commands::pr_review::submit_pull_request_vote,
+            commands::pr_review::update_pull_request,
+            commands::pr_review::set_pull_request_reviewer_required,
+            commands::pr_review::remove_pull_request_reviewer,
+            commands::pr_review::update_pull_request_details,
+            commands::pr_review::search_pull_request_mentions,
+            commands::pr_review::edit_pull_request_comment,
+            commands::pr_review::delete_pull_request_comment,
+            commands::search::search_all,
+            commands::work_items::search_work_items,
+            commands::work_items::list_my_work_items,
+            commands::work_items::list_work_item_projects,
+            commands::work_items::run_work_item_query,
+            commands::work_items::count_work_item_query,
+            commands::work_items::get_work_item_preview,
+            commands::work_items::search_work_item_mentions,
+            commands::work_items::record_mention_interaction,
+            commands::work_items::record_assignee_interaction,
+            commands::work_items::search_work_item_assignees,
+            commands::work_items::fetch_work_item_image,
+            commands::work_items::add_work_item_comment,
+            commands::work_items::add_work_item_link,
+            commands::work_items::remove_work_item_link,
+            commands::work_items::delete_work_item_comment,
+            commands::work_items::update_work_item_comment,
+            commands::work_items::set_work_item_comment_reaction,
+            commands::work_items::update_work_item_fields,
+            commands::work_items::list_work_item_updates,
+            commands::work_items::list_work_item_field_allowed_values,
+            commands::work_items::list_work_item_type_states,
+            commands::work_items::list_work_item_fields,
+            commands::work_items::list_classification_nodes,
+            commands::work_items::get_saved_query,
+            commands::work_items::set_work_items_state,
+            commands::work_items::assign_work_items,
+            commands::work_items::set_work_items_priority,
+            commands::work_items::set_work_items_tags,
+            commands::commits::search_commits,
+            commands::commits::list_commit_repositories,
+            commands::commits::commit_activity,
+            commands::code::search_code,
+            commands::code::get_code_search_context,
+            commands::code::list_repo_branches,
+            commands::code::list_repo_tree,
+            commands::code::get_repo_file,
+            commands::code::list_repo_history,
+            commands::code::cancel_operation,
+            commands::commits::get_commit_changes,
+            commands::commits::get_commit_file_diff,
+            commands::commits::get_commit_pull_requests,
+            commands::pipelines::list_pipeline_projects,
+            commands::pipelines::list_pipeline_runs,
+            commands::pipelines::list_pipeline_definitions,
+            commands::pipelines::get_pipeline_run,
+            commands::pipelines::list_pipeline_artifacts,
+            commands::pipelines::get_pipeline_definition,
+            commands::pipelines::get_pipeline_run_log_tail,
+            commands::pipelines::rerun_pipeline_run,
+            commands::pipelines::queue_pipeline_run,
+            commands::pipelines::cancel_pipeline_run,
+            commands::pipelines::list_pipeline_approvals,
+            commands::pipelines::update_pipeline_approval,
+            commands::sync::trigger_sync
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -1123,7 +228,6 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
     fn parse_show_window_hotkey_validates_before_registration_changes() {
@@ -1132,17 +236,5 @@ mod tests {
             .is_some());
         assert!(parse_show_window_hotkey(Some("   ")).unwrap().is_none());
         assert!(parse_show_window_hotkey(Some("not a shortcut")).is_err());
-    }
-
-    #[test]
-    fn trigger_sync_input_rejects_unknown_scope() {
-        assert!(serde_json::from_value::<TriggerSyncInput>(json!({
-            "scope": "myReviews"
-        }))
-        .is_ok());
-        assert!(serde_json::from_value::<TriggerSyncInput>(json!({
-            "scope": "notARealScope"
-        }))
-        .is_err());
     }
 }

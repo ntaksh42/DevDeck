@@ -49,6 +49,8 @@ export default defineConfig(async () => ({
   },
   test: {
     environment: "jsdom",
+    setupFiles: ["./src/test/setup.ts"],
+    testTimeout: 30000,
     exclude: ["tests/e2e/**", "node_modules/**", "dist/**", "src-tauri/**", ".claude/**"],
   },
 }));
