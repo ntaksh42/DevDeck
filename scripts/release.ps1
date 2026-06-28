@@ -166,7 +166,7 @@ if (-not $NoPush) {
 }
 
 if (-not $NoRelease) {
-  Run "gh" @("release", "create", $tag, "--title", "AzDoDeck $tag", "--generate-notes", "--latest")
+  Run "gh" @("release", "create", $tag, "--title", "DevDeck $tag", "--generate-notes", "--latest")
 }
 
 if (-not $NoWatch) {

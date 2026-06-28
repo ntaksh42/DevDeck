@@ -1,26 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { Organization } from "@/lib/azdoCommands";
 import { PipelinesView } from "./PipelinesView";
 
-// The demo subscriptions seeded by loadPipelineSubscriptions() live under the
-// "contoso" org, matching the browser demo data.
-const organizations: Organization[] = [
-  {
-    id: "contoso",
-    name: "contoso",
-    displayName: "Contoso",
-    baseUrl: "https://dev.azure.com/contoso",
-    authProvider: "pat",
-    credentialKey: "k",
-    authenticatedUserId: "user-1",
-    authenticatedUserDisplayName: "Demo User",
-    authenticatedUserUniqueName: "demo@example.com",
-    createdAt: "2026-06-13T00:00:00Z",
-    updatedAt: "2026-06-13T00:00:00Z",
-  },
-];
+// The view reads the active connection (the browser demo "contoso" org), and the
+// demo subscriptions seeded by loadPipelineSubscriptions() live under that org.
 
 afterEach(() => {
   cleanup();
@@ -31,7 +15,7 @@ function renderView() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <PipelinesView organizations={organizations} />
+      <PipelinesView />
     </QueryClientProvider>,
   );
 }

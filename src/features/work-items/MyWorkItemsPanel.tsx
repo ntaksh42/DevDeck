@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
-import { listMyWorkItems, commandErrorMessage, type Organization } from '@/lib/azdoCommands';
+import { listMyWorkItems, commandErrorMessage } from '@/lib/azdoCommands';
+import { useActiveOrganizationId } from '@/lib/useActiveConnection';
 import { matchesWorkItemQuery, parseSearchQuery } from '@/lib/searchQuery';
 import { ErrorState } from '@/components/StateDisplay';
 import { WorkItemsGrid } from './WorkItemsGrid';
@@ -9,11 +10,9 @@ import { WorkItemTemplatesPanel } from './WorkItemTemplatesPanel';
 import { toMatchTarget } from './workItemMatchTarget';
 import { workItemQueryKeys } from './queryKeys';
 
-export function MyWorkItemsPanel({ organizations }: { organizations: Organization[] }) {
-  const [organizationId, setOrganizationId] = useState(organizations[0]?.id ?? "");
+export function MyWorkItemsPanel() {
+  const selectedOrganizationId = useActiveOrganizationId();
   const [filter, setFilter] = useState("");
-
-  const selectedOrganizationId = organizationId || organizations[0]?.id || "";
 
   const query = useQuery({
     queryKey: workItemQueryKeys.myItems(selectedOrganizationId),
@@ -43,21 +42,6 @@ export function MyWorkItemsPanel({ organizations }: { organizations: Organizatio
             className="min-w-0 flex-1 bg-transparent text-sm outline-none"
           />
         </div>
-
-        {organizations.length > 1 ? (
-          <select
-            value={selectedOrganizationId}
-            onChange={(event) => setOrganizationId(event.target.value)}
-            aria-label="Organization"
-            className="h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-          >
-            {organizations.map((organization) => (
-              <option key={organization.id} value={organization.id}>
-                {organization.name}
-              </option>
-            ))}
-          </select>
-        ) : null}
 
         <WorkItemTemplatesPanel />
       </div>

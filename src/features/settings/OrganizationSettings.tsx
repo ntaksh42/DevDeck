@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Trash2 } from 'lucide-react';
 import {
   deleteOrganization,
+  getActiveOrganization,
+  setActiveOrganization,
   commandErrorMessage,
   type Organization,
 } from '@/lib/azdoCommands';
@@ -35,10 +37,24 @@ export function OrganizationSettings({
 }) {
   const queryClient = useQueryClient();
   const [pendingDelete, setPendingDelete] = useState<Organization | null>(null);
+  const activeQuery = useQuery({
+    queryKey: ["activeOrganization"],
+    queryFn: getActiveOrganization,
+  });
+  const activeId = activeQuery.data?.id ?? null;
+
+  // Switching the active connection swaps the whole API-layer provider, so every
+  // screen's data is stale: invalidate everything and refresh capabilities.
+  const setActiveMutation = useMutation({
+    mutationFn: setActiveOrganization,
+    onSuccess: () => {
+      void queryClient.invalidateQueries();
+    },
+  });
   const deleteMutation = useMutation({
     mutationFn: deleteOrganization,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["organizations"] });
+      void queryClient.invalidateQueries();
     },
   });
 
@@ -61,21 +77,47 @@ export function OrganizationSettings({
       <ValidationModeSettings />
       <div className="overflow-hidden rounded-md border border-border bg-card">
         <div className="border-b border-border px-3 py-2">
-          <h2 className="text-base font-semibold">Organizations</h2>
+          <h2 className="text-base font-semibold">Connections</h2>
+          <p className="text-sm text-muted-foreground">
+            The active connection determines which platform every screen shows.
+          </p>
         </div>
         {deleteMutation.isError && (
           <p className="px-5 py-2 text-sm text-destructive">
             {commandErrorMessage(deleteMutation.error)}
           </p>
         )}
-        <div className="divide-y divide-border">
+        {setActiveMutation.isError && (
+          <p className="px-5 py-2 text-sm text-destructive">
+            {commandErrorMessage(setActiveMutation.error)}
+          </p>
+        )}
+        <div
+          role="radiogroup"
+          aria-label="Active connection"
+          className="divide-y divide-border"
+        >
           {organizations.map((organization) => (
             <div
               key={organization.id}
-              className="grid items-center gap-4 px-3 py-2 md:grid-cols-[1fr_auto_auto_auto]"
+              className="grid items-center gap-4 px-3 py-2 md:grid-cols-[auto_1fr_auto_auto_auto]"
             >
+              <input
+                type="radio"
+                name="active-connection"
+                checked={organization.id === activeId}
+                onChange={() => setActiveMutation.mutate(organization.id)}
+                disabled={setActiveMutation.isPending}
+                aria-label={`Use ${organization.displayName ?? organization.name}`}
+                className="h-4 w-4"
+              />
               <div>
-                <p className="font-medium">{organization.name}</p>
+                <p className="font-medium">
+                  {organization.displayName ?? organization.name}
+                  <span className="ml-2 rounded bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground">
+                    {organization.providerKind === "github" ? "GitHub" : "Azure DevOps"}
+                  </span>
+                </p>
                 <p className="text-sm text-muted-foreground">
                   {organization.baseUrl}
                 </p>
@@ -124,5 +166,7 @@ export function OrganizationSettings({
 }
 
 function formatAuthProvider(value: string): string {
-  return value === "azure_cli" ? "Azure CLI" : value.toUpperCase();
+  if (value === "azure_cli") return "Azure CLI";
+  if (value === "github_pat") return "GitHub PAT";
+  return value.toUpperCase();
 }

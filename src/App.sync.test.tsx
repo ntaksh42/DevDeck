@@ -70,6 +70,9 @@ describe("App — Sync", () => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
       }
+      if (command === "get_active_organization") {
+        return Promise.resolve(organization);
+      }
       if (command === "get_app_settings") {
         return Promise.resolve({ reviewResultFolderPath: null });
       }
@@ -109,6 +112,9 @@ describe("App — Sync", () => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
       }
+      if (command === "get_active_organization") {
+        return Promise.resolve(organization);
+      }
       if (command === "get_app_settings") {
         return Promise.resolve({ reviewResultFolderPath: null });
       }
@@ -143,6 +149,9 @@ describe("App — Sync", () => {
     invokeMock.mockImplementation((command: string) => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
+      }
+      if (command === "get_active_organization") {
+        return Promise.resolve(organization);
       }
       if (command === "get_app_settings") {
         return Promise.resolve({ reviewResultFolderPath: null });
@@ -206,6 +215,9 @@ describe("App — Sync", () => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
       }
+      if (command === "get_active_organization") {
+        return Promise.resolve(organization);
+      }
       if (command === "get_app_settings") {
         return Promise.resolve({ reviewResultFolderPath: null });
       }
@@ -239,6 +251,9 @@ describe("App — Sync", () => {
     invokeMock.mockImplementation((command: string) => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
+      }
+      if (command === "get_active_organization") {
+        return Promise.resolve(organization);
       }
       if (command === "get_app_settings") {
         return Promise.resolve({ reviewResultFolderPath: null });

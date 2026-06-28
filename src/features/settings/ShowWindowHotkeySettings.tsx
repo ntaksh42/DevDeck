@@ -62,7 +62,7 @@ export function ShowWindowHotkeySettings() {
           <div>
             <h2 className="text-base font-semibold">Show window hotkey</h2>
             <p className="text-sm text-muted-foreground">
-              Bring AzDoDeck to the front from anywhere.
+              Bring DevDeck to the front from anywhere.
             </p>
           </div>
         </div>

@@ -91,6 +91,18 @@ impl AppDatabase {
         update_app_settings(&conn, settings)
     }
 
+    /// The id of the connection the app is currently pointed at. `None` until one
+    /// is chosen (the app then defaults to the first connection).
+    pub fn get_active_organization_id(&self) -> Result<Option<String>> {
+        let conn = self.open()?;
+        get_setting(&conn, "active_organization_id")
+    }
+
+    pub fn set_active_organization_id(&self, id: Option<&str>) -> Result<()> {
+        let conn = self.open()?;
+        set_setting(&conn, "active_organization_id", id)
+    }
+
     pub fn get_pr_comment_seen(
         &self,
         org_id: &str,

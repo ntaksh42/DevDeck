@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "AzDoDeck",
+  "productName": "DevDeck",
   "version": "0.1.16",
   "identifier": "com.azdodeck.app",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "AzDoDeck",
+        "title": "DevDeck",
         "width": 1280,
         "height": 800
       }
@@ -24,11 +24,11 @@
   "bundle": {
     "active": true,
     "targets": ["nsis", "msi"],
-    "publisher": "AzDoDeck contributors",
-    "copyright": "Copyright © 2026 AzDoDeck contributors",
+    "publisher": "DevDeck contributors",
+    "copyright": "Copyright © 2026 DevDeck contributors",
     "category": "DeveloperTool",
-    "shortDescription": "Azure DevOps desktop dashboard",
-    "longDescription": "AzDoDeck is a local desktop dashboard for Azure DevOps. Browse pull requests assigned to you, search work items and commits across projects, and take quick actions — all from a single window backed by a local cache.",
+    "shortDescription": "Developer desktop dashboard",
+    "longDescription": "DevDeck is a local desktop dashboard for your development platforms. Browse pull requests assigned to you, search work items and commits across projects, and take quick actions — all from a single window backed by a local cache.",
     "homepage": "https://github.com/ntaksh42/azdo-dashboard",
     "icon": [
       "icons/32x32.png",

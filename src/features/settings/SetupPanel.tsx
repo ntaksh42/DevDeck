@@ -1,14 +1,18 @@
 import { type FormEvent, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Building2, Eye, EyeOff, Loader2, Plus } from 'lucide-react';
+import { Building2, Eye, EyeOff, GitBranch, Loader2, Plus } from 'lucide-react';
 import {
   addAzureCliOrganization,
+  addGithubOrganization,
   addPatOrganization,
   commandErrorMessage,
 } from '@/lib/azdoCommands';
 
+type ProviderKind = "azdo" | "github";
+
 export function SetupPanel({ compact = false }: { compact?: boolean }) {
   const queryClient = useQueryClient();
+  const [provider, setProvider] = useState<ProviderKind>("azdo");
   const [organization, setOrganization] = useState("");
   const [pat, setPat] = useState("");
   const [showPat, setShowPat] = useState(false);
@@ -31,10 +35,35 @@ export function SetupPanel({ compact = false }: { compact?: boolean }) {
     onSuccess: onOrganizationConnected,
   });
 
-  function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  const githubMutation = useMutation({
+    mutationFn: addGithubOrganization,
+    onSuccess: onOrganizationConnected,
+  });
+
+  function resetMutations() {
     patMutation.reset();
     azureCliMutation.reset();
+    githubMutation.reset();
+  }
+
+  function selectProvider(next: ProviderKind) {
+    setProvider(next);
+    resetMutations();
+    setValidationError(null);
+  }
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    resetMutations();
+    if (provider === "github") {
+      if (!pat.trim()) {
+        setValidationError("A GitHub personal access token is required.");
+        return;
+      }
+      setValidationError(null);
+      githubMutation.mutate({ pat });
+      return;
+    }
     if (!organization.trim() || !pat.trim()) {
       setValidationError("Organization and PAT are required.");
       return;
@@ -44,8 +73,7 @@ export function SetupPanel({ compact = false }: { compact?: boolean }) {
   }
 
   function onConnectAzureCli() {
-    patMutation.reset();
-    azureCliMutation.reset();
+    resetMutations();
     if (!organization.trim()) {
       setValidationError("Organization is required.");
       return;
@@ -54,7 +82,9 @@ export function SetupPanel({ compact = false }: { compact?: boolean }) {
     azureCliMutation.mutate({ organization });
   }
 
-  const isConnecting = patMutation.isPending || azureCliMutation.isPending;
+  const isConnecting =
+    patMutation.isPending || azureCliMutation.isPending || githubMutation.isPending;
+  const isGithub = provider === "github";
 
   return (
     <div className="rounded-md border border-border bg-card">
@@ -65,7 +95,7 @@ export function SetupPanel({ compact = false }: { compact?: boolean }) {
           </div>
           <div>
             <h2 className="text-base font-semibold">
-              {compact ? "Add organization" : "Connect Azure DevOps"}
+              {compact ? "Add connection" : isGithub ? "Connect GitHub" : "Connect Azure DevOps"}
             </h2>
             <p className="text-sm text-muted-foreground">
               Credentials are validated before they are saved.
@@ -75,16 +105,49 @@ export function SetupPanel({ compact = false }: { compact?: boolean }) {
       </div>
 
       <form className="grid gap-3 p-3" onSubmit={onSubmit}>
-        <label className="grid gap-2">
-          <span className="text-sm font-medium">Organization</span>
-          <input
-            value={organization}
-            onChange={(event) => setOrganization(event.target.value)}
-            placeholder="contoso"
-            autoFocus={!compact}
-            className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none ring-offset-background focus:ring-2 focus:ring-ring"
-          />
-        </label>
+        <div
+          role="radiogroup"
+          aria-label="Platform"
+          className="inline-flex w-fit rounded-md border border-input p-0.5"
+        >
+          <button
+            type="button"
+            role="radio"
+            aria-checked={!isGithub}
+            onClick={() => selectProvider("azdo")}
+            className={`inline-flex h-8 items-center gap-2 rounded px-3 text-sm font-medium ${
+              !isGithub ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-secondary"
+            }`}
+          >
+            <Building2 className="h-4 w-4" aria-hidden="true" />
+            Azure DevOps
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={isGithub}
+            onClick={() => selectProvider("github")}
+            className={`inline-flex h-8 items-center gap-2 rounded px-3 text-sm font-medium ${
+              isGithub ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-secondary"
+            }`}
+          >
+            <GitBranch className="h-4 w-4" aria-hidden="true" />
+            GitHub
+          </button>
+        </div>
+
+        {isGithub ? null : (
+          <label className="grid gap-2">
+            <span className="text-sm font-medium">Organization</span>
+            <input
+              value={organization}
+              onChange={(event) => setOrganization(event.target.value)}
+              placeholder="contoso"
+              autoFocus={!compact}
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none ring-offset-background focus:ring-2 focus:ring-ring"
+            />
+          </label>
+        )}
 
         <label className="grid gap-2">
           <span className="text-sm font-medium">Personal access token</span>
@@ -130,8 +193,14 @@ export function SetupPanel({ compact = false }: { compact?: boolean }) {
           </p>
         ) : null}
 
-        {patMutation.isSuccess || azureCliMutation.isSuccess ? (
-          <p className="text-sm text-green-700 dark:text-green-400">Organization connected.</p>
+        {githubMutation.isError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {commandErrorMessage(githubMutation.error)}
+          </p>
+        ) : null}
+
+        {patMutation.isSuccess || azureCliMutation.isSuccess || githubMutation.isSuccess ? (
+          <p className="text-sm text-green-700 dark:text-green-400">Connection added.</p>
         ) : null}
 
         <div className="flex flex-wrap gap-3">
@@ -140,26 +209,30 @@ export function SetupPanel({ compact = false }: { compact?: boolean }) {
             disabled={isConnecting}
             className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {patMutation.isPending ? (
+            {patMutation.isPending || githubMutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : isGithub ? (
+              <GitBranch className="h-4 w-4" aria-hidden="true" />
             ) : (
               <Plus className="h-4 w-4" aria-hidden="true" />
             )}
-            Connect
+            {isGithub ? "Connect GitHub" : "Connect"}
           </button>
-          <button
-            type="button"
-            disabled={isConnecting}
-            onClick={onConnectAzureCli}
-            className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-4 text-sm font-medium text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {azureCliMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <Building2 className="h-4 w-4" aria-hidden="true" />
-            )}
-            Connect with Azure CLI
-          </button>
+          {isGithub ? null : (
+            <button
+              type="button"
+              disabled={isConnecting}
+              onClick={onConnectAzureCli}
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-4 text-sm font-medium text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {azureCliMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Building2 className="h-4 w-4" aria-hidden="true" />
+              )}
+              Connect with Azure CLI
+            </button>
+          )}
         </div>
       </form>
     </div>
@@ -167,5 +240,7 @@ export function SetupPanel({ compact = false }: { compact?: boolean }) {
 }
 
 export function formatAuthProvider(value: string): string {
-  return value === "azure_cli" ? "Azure CLI" : value.toUpperCase();
+  if (value === "azure_cli") return "Azure CLI";
+  if (value === "github_pat") return "GitHub PAT";
+  return value.toUpperCase();
 }

@@ -65,13 +65,13 @@ export async function showSyncFailedNotificationEvent(
       : "";
   return sendDesktopNotification("Sync is failing", {
     body:
-      `AzDoDeck could not sync after ${event.consecutiveFailures} attempts. ` +
+      `DevDeck could not sync after ${event.consecutiveFailures} attempts. ` +
       `Retrying in about ${retryMinutes} min.${reason}`,
   });
 }
 
 export async function sendTestDesktopNotification(): Promise<DesktopNotificationResult> {
-  return sendDesktopNotification("AzDoDeck notifications", {
+  return sendDesktopNotification("DevDeck notifications", {
     body: "Desktop notifications are ready.",
   });
 }
@@ -120,7 +120,7 @@ export async function showPipelineWatchNotification(
       : `Pipeline ${input.resultLabel.toLowerCase()}: ${input.definitionName}`;
   const body = settings.notificationContentPreviewEnabled
     ? pipelineWatchNotificationBody(input)
-    : "Open AzDoDeck to review this pipeline run.";
+    : "Open DevDeck to review this pipeline run.";
   return sendDesktopNotification(title, {
     body,
     onClick: input.webUrl
@@ -160,7 +160,7 @@ export async function showWorkItemNotificationEvent(
             .slice(0, 3)
             .map((item) => `#${item.id} ${item.title}`)
             .join(", ")}`
-        : "Open AzDoDeck to review the latest work item updates.",
+        : "Open DevDeck to review the latest work item updates.",
       onClick: jumpUrl
         ? () => {
             void openExternalUrl(jumpUrl);
@@ -175,7 +175,7 @@ export async function showWorkItemNotificationEvent(
       await sendDesktopNotification(workItemNotificationTitle(item), {
         body: contentPreviewEnabled
           ? workItemNotificationBody(event.organizationName, item)
-          : "Open AzDoDeck to review this work item update.",
+          : "Open DevDeck to review this work item update.",
         onClick: item.webUrl
           ? () => {
               void openExternalUrl(item.webUrl!);
@@ -205,7 +205,7 @@ export async function showPullRequestNotificationEvent(
             .slice(0, 3)
             .map((item) => `!${item.pullRequestId} ${item.title}`)
             .join(", ")}`
-        : "Open AzDoDeck to review the latest pull request updates.",
+        : "Open DevDeck to review the latest pull request updates.",
       onClick: jumpUrl
         ? () => {
             void openExternalUrl(jumpUrl);
@@ -220,7 +220,7 @@ export async function showPullRequestNotificationEvent(
       await sendDesktopNotification(pullRequestNotificationTitle(item), {
         body: contentPreviewEnabled
           ? pullRequestNotificationBody(event.organizationName, item)
-          : "Open AzDoDeck to review this pull request update.",
+          : "Open DevDeck to review this pull request update.",
         onClick: item.webUrl
           ? () => {
               void openExternalUrl(item.webUrl!);

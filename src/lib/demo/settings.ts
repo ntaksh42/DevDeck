@@ -22,6 +22,7 @@ export const demoOrganization: Organization = {
   authenticatedUserUniqueName: "demo.user@example.com",
   createdAt: "2026-05-24T00:00:00Z",
   updatedAt: "2026-05-24T00:00:00Z",
+  providerKind: "azdo",
 };
 
 export const DEMO_PREVIEW_IMAGE_DATA_URL =

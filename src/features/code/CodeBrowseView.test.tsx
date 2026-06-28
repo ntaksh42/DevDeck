@@ -1,32 +1,15 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { Organization } from "@/lib/azdoCommands";
 import { CodeBrowseView } from "./CodeBrowseView";
 
 let lastContainer: HTMLElement;
-
-const organizations: Organization[] = [
-  {
-    id: "demo-org",
-    name: "demo-org",
-    displayName: "Demo Org",
-    baseUrl: "https://dev.azure.com/demo-org",
-    authProvider: "pat",
-    credentialKey: "k",
-    authenticatedUserId: "user-1",
-    authenticatedUserDisplayName: "Demo User",
-    authenticatedUserUniqueName: "demo@example.com",
-    createdAt: "2026-06-14T00:00:00Z",
-    updatedAt: "2026-06-14T00:00:00Z",
-  },
-];
 
 function renderView() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const result = render(
     <QueryClientProvider client={client}>
-      <CodeBrowseView organizations={organizations} />
+      <CodeBrowseView />
     </QueryClientProvider>,
   );
   lastContainer = result.container;

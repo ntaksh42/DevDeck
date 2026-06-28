@@ -10,6 +10,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import {
   getAppSettings,
+  getProviderCapabilities,
   listMyReviewPullRequests,
   listMyWorkItems,
   listOrganizations,
@@ -119,6 +120,15 @@ function AppShell() {
   });
   const organizations = organizationsQuery.data ?? [];
   const readOnlyMode = appSettingsQuery.data?.readOnlyValidationModeEnabled ?? false;
+  // Capabilities of the active connection's provider, used to hide nav entries
+  // the active platform does not support (e.g. Pipelines on GitHub).
+  const capabilitiesQuery = useQuery({
+    queryKey: ["providerCapabilities"],
+    queryFn: getProviderCapabilities,
+    enabled: organizations.length > 0,
+    staleTime: 5 * 60_000,
+  });
+  const capabilities = capabilitiesQuery.data?.capabilities ?? null;
 
   // Watch every subscribed pipeline app-wide so start/finish notifications fire
   // regardless of the active view.
@@ -355,6 +365,7 @@ function AppShell() {
         ref={sidebarRef}
         activeView={activeView}
         organizationsLength={organizations.length}
+        capabilities={capabilities}
         sidebarCollapsed={sidebarCollapsed}
         sidebarWidth={sidebarWidth}
         setSidebarWidth={setSidebarWidth}

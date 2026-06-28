@@ -112,6 +112,7 @@ impl CodeSearchService {
         let organization = self
             .db
             .resolve_organization(input.organization_id.as_deref())?;
+
         let client = client_for_organization(&organization, &self.secrets)?;
 
         let response = client
@@ -325,6 +326,7 @@ mod tests {
             authenticated_user_unique_name: None,
             created_at: "2026-06-14T00:00:00Z".to_string(),
             updated_at: "2026-06-14T00:00:00Z".to_string(),
+            provider_kind: "azdo".to_string(),
         }
     }
 

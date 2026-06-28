@@ -20,6 +20,8 @@ pub struct Organization {
     pub authenticated_user_unique_name: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    /// Platform this connection targets: "azdo" or "github".
+    pub provider_kind: String,
 }
 
 pub struct OrganizationDraft {
@@ -32,6 +34,7 @@ pub struct OrganizationDraft {
     pub authenticated_user_id: Option<String>,
     pub authenticated_user_display_name: Option<String>,
     pub authenticated_user_unique_name: Option<String>,
+    pub provider_kind: String,
 }
 
 impl AppDatabase {
@@ -45,13 +48,20 @@ impl AppDatabase {
         get_organization(&conn, id)
     }
 
-    /// Resolves an organization by id, or falls back to the first configured
-    /// organization when no id is given.
+    /// Resolves an organization by id, or falls back to the active connection
+    /// chosen in Settings when no id is given (and to the first configured
+    /// connection when none is marked active). A single active connection keeps
+    /// the app pointed at one platform at a time.
     pub fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {
         if let Some(id) = id {
             return self
                 .get_organization(id)?
                 .ok_or_else(|| AppError::InvalidInput(format!("organization not found: {id}")));
+        }
+        if let Some(active_id) = self.get_active_organization_id()? {
+            if let Some(org) = self.get_organization(&active_id)? {
+                return Ok(org);
+            }
         }
         self.list_organizations()?
             .into_iter()
@@ -75,7 +85,7 @@ pub(crate) fn list_organizations(conn: &Connection) -> Result<Vec<Organization>>
         r#"
         SELECT id, name, display_name, base_url, auth_provider, credential_key,
                authenticated_user_id, authenticated_user_display_name,
-               authenticated_user_unique_name, created_at, updated_at
+               authenticated_user_unique_name, created_at, updated_at, provider_kind
         FROM organizations
         ORDER BY name ASC
         "#,
@@ -94,7 +104,7 @@ fn get_organization(conn: &Connection, id: &str) -> Result<Option<Organization>>
             r#"
             SELECT id, name, display_name, base_url, auth_provider, credential_key,
                    authenticated_user_id, authenticated_user_display_name,
-                   authenticated_user_unique_name, created_at, updated_at
+                   authenticated_user_unique_name, created_at, updated_at, provider_kind
             FROM organizations WHERE id = ?1
             "#,
             [id],
@@ -114,9 +124,9 @@ pub(crate) fn upsert_organization(
         INSERT INTO organizations(
             id, name, display_name, base_url, auth_provider, credential_key,
             authenticated_user_id, authenticated_user_display_name,
-            authenticated_user_unique_name, created_at, updated_at
+            authenticated_user_unique_name, created_at, updated_at, provider_kind
         )
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
         ON CONFLICT(id) DO UPDATE SET
             name = excluded.name,
             display_name = excluded.display_name,
@@ -126,7 +136,8 @@ pub(crate) fn upsert_organization(
             authenticated_user_id = excluded.authenticated_user_id,
             authenticated_user_display_name = excluded.authenticated_user_display_name,
             authenticated_user_unique_name = excluded.authenticated_user_unique_name,
-            updated_at = excluded.updated_at
+            updated_at = excluded.updated_at,
+            provider_kind = excluded.provider_kind
         "#,
         params![
             draft.id,
@@ -139,7 +150,8 @@ pub(crate) fn upsert_organization(
             draft.authenticated_user_display_name,
             draft.authenticated_user_unique_name,
             created_at,
-            now
+            now,
+            draft.provider_kind
         ],
     )?;
     get_organization(conn, &draft.id)?
@@ -174,5 +186,6 @@ fn map_organization(row: &rusqlite::Row<'_>) -> rusqlite::Result<Organization> {
         authenticated_user_unique_name: row.get(8)?,
         created_at: row.get(9)?,
         updated_at: row.get(10)?,
+        provider_kind: row.get(11)?,
     })
 }

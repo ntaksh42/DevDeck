@@ -13,8 +13,8 @@ import {
   commandErrorMessage,
   listMyCreatedPullRequests,
   type MyCreatedPullRequestSummary,
-  type Organization,
 } from "@/lib/azdoCommands";
+import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import {
   formatDate,
   formatRelativeDate,
@@ -246,8 +246,8 @@ CreatedPrRow.displayName = "CreatedPrRow";
 // rather than via the sync:updated wiring the cached review grid uses. The grid
 // layout, resizable/toggleable columns, sort headers, row styling, keyboard,
 // and status bar mirror MyReviewsGrid.
-export function MyPullRequestsGrid({ organizations }: { organizations: Organization[] }) {
-  const [organizationId, setOrganizationId] = useState(() => organizations[0]?.id ?? "");
+export function MyPullRequestsGrid() {
+  const organizationId = useActiveOrganizationId();
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [sort, setSort] = useState<SortState>({ key: "creationDate", direction: "desc" });
   const [textFilter, setTextFilter] = useState("");
@@ -363,20 +363,6 @@ export function MyPullRequestsGrid({ organizations }: { organizations: Organizat
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card">
       {/* Toolbar */}
       <div className="flex items-center gap-2 border-b border-border px-2 py-1.5">
-        {organizations.length > 1 ? (
-          <select
-            value={organizationId}
-            onChange={(event) => setOrganizationId(event.target.value)}
-            className="rounded border border-input bg-background px-2 py-1 text-sm"
-            aria-label="Organization"
-          >
-            {organizations.map((organization) => (
-              <option key={organization.id} value={organization.id}>
-                {organization.name}
-              </option>
-            ))}
-          </select>
-        ) : null}
         <FilterAutocomplete
           value={textFilter}
           onChange={(value) => {

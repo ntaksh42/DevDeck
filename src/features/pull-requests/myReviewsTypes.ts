@@ -141,7 +141,6 @@ export type MyReviewsSelectRequest = {
 };
 
 export type MyReviewsGridProps = {
-  organizations: Organization[];
   selectRequest?: MyReviewsSelectRequest | null;
   onSelectRequestHandled?: () => void;
 };

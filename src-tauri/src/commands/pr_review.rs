@@ -18,7 +18,7 @@ pub async fn get_pull_request_review(
     input: PrLocator,
     state: State<'_, AppState>,
 ) -> Result<PullRequestReview> {
-    state.pr_review.get_review(input).await
+    state.provider().await?.get_pull_request_review(input).await
 }
 
 #[tauri::command]
@@ -27,7 +27,11 @@ pub async fn list_pull_request_changes(
     input: PrLocator,
     state: State<'_, AppState>,
 ) -> Result<PullRequestChanges> {
-    state.pr_review.list_changes(input).await
+    state
+        .provider()
+        .await?
+        .list_pull_request_changes(input)
+        .await
 }
 
 #[tauri::command]
@@ -36,7 +40,11 @@ pub async fn get_pull_request_file_diff(
     input: GetPullRequestFileDiffInput,
     state: State<'_, AppState>,
 ) -> Result<PrFileDiff> {
-    state.pr_review.get_file_diff(input).await
+    state
+        .provider()
+        .await?
+        .get_pull_request_file_diff(input)
+        .await
 }
 
 #[tauri::command]
@@ -45,7 +53,11 @@ pub async fn list_pull_request_commits(
     input: PrLocator,
     state: State<'_, AppState>,
 ) -> Result<Vec<PrCommit>> {
-    state.pr_review.list_commits(input).await
+    state
+        .provider()
+        .await?
+        .list_pull_request_commits(input)
+        .await
 }
 
 #[tauri::command]
@@ -55,7 +67,11 @@ pub async fn post_pull_request_comment(
     state: State<'_, AppState>,
 ) -> Result<PrThread> {
     ensure_write_enabled(&state).await?;
-    state.pr_review.post_comment(input).await
+    state
+        .provider()
+        .await?
+        .post_pull_request_comment(input)
+        .await
 }
 
 #[tauri::command]
@@ -65,7 +81,11 @@ pub async fn set_pull_request_thread_status(
     state: State<'_, AppState>,
 ) -> Result<PrThread> {
     ensure_write_enabled(&state).await?;
-    state.pr_review.set_thread_status(input).await
+    state
+        .provider()
+        .await?
+        .set_pull_request_thread_status(input)
+        .await
 }
 
 #[tauri::command]
@@ -75,7 +95,11 @@ pub async fn submit_pull_request_vote(
     state: State<'_, AppState>,
 ) -> Result<PrReviewer> {
     ensure_write_enabled(&state).await?;
-    state.pr_review.submit_vote(input).await
+    state
+        .provider()
+        .await?
+        .submit_pull_request_vote(input)
+        .await
 }
 
 #[tauri::command]
@@ -85,7 +109,7 @@ pub async fn update_pull_request(
     state: State<'_, AppState>,
 ) -> Result<PrStatusResult> {
     ensure_write_enabled(&state).await?;
-    state.pr_review.update_pull_request(input).await
+    state.provider().await?.update_pull_request(input).await
 }
 
 #[tauri::command]
@@ -95,7 +119,11 @@ pub async fn set_pull_request_reviewer_required(
     state: State<'_, AppState>,
 ) -> Result<()> {
     ensure_write_enabled(&state).await?;
-    state.pr_review.set_reviewer_required(input).await
+    state
+        .provider()
+        .await?
+        .set_pull_request_reviewer_required(input)
+        .await
 }
 
 #[tauri::command]
@@ -105,7 +133,11 @@ pub async fn remove_pull_request_reviewer(
     state: State<'_, AppState>,
 ) -> Result<()> {
     ensure_write_enabled(&state).await?;
-    state.pr_review.remove_reviewer(input).await
+    state
+        .provider()
+        .await?
+        .remove_pull_request_reviewer(input)
+        .await
 }
 
 #[tauri::command]
@@ -115,7 +147,11 @@ pub async fn update_pull_request_details(
     state: State<'_, AppState>,
 ) -> Result<PrDetailsResult> {
     ensure_write_enabled(&state).await?;
-    state.pr_review.update_pull_request_details(input).await
+    state
+        .provider()
+        .await?
+        .update_pull_request_details(input)
+        .await
 }
 
 #[tauri::command]
@@ -124,7 +160,11 @@ pub async fn search_pull_request_mentions(
     input: SearchPullRequestMentionsInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<MentionCandidate>> {
-    state.pr_review.search_mentions(input).await
+    state
+        .provider()
+        .await?
+        .search_pull_request_mentions(input)
+        .await
 }
 
 #[tauri::command]
@@ -134,7 +174,11 @@ pub async fn edit_pull_request_comment(
     state: State<'_, AppState>,
 ) -> Result<PrThread> {
     ensure_write_enabled(&state).await?;
-    state.pr_review.edit_comment(input).await
+    state
+        .provider()
+        .await?
+        .edit_pull_request_comment(input)
+        .await
 }
 
 #[tauri::command]
@@ -144,5 +188,9 @@ pub async fn delete_pull_request_comment(
     state: State<'_, AppState>,
 ) -> Result<()> {
     ensure_write_enabled(&state).await?;
-    state.pr_review.delete_comment(input).await
+    state
+        .provider()
+        .await?
+        .delete_pull_request_comment(input)
+        .await
 }

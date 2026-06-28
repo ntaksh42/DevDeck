@@ -264,7 +264,7 @@ export function parseWorkItemQueryViewsImport(text: string): WorkItemQueryView[]
       ? parsed.views
       : null;
   if (!rawViews) {
-    throw new Error("JSON must be an AzDoDeck work item view export.");
+    throw new Error("JSON must be a DevDeck work item view export.");
   }
   const views = rawViews
     .map(normalizeWorkItemQueryView)

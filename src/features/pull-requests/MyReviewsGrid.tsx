@@ -27,11 +27,10 @@ export { reviewAgeDays } from './myReviewsHelpers';
 export type { MyReviewsSelectRequest } from './myReviewsTypes';
 
 export function MyReviewsGrid({
-  organizations,
   selectRequest,
   onSelectRequestHandled,
 }: MyReviewsGridProps) {
-  const g = useMyReviewsGrid({ organizations, selectRequest, onSelectRequestHandled });
+  const g = useMyReviewsGrid({ selectRequest, onSelectRequestHandled });
 
   function handleKeyDown(e: React.KeyboardEvent) {
     const editable = isEditableTarget(e.target);
@@ -179,9 +178,6 @@ export function MyReviewsGrid({
         </div>
       )}
       <ReviewFilterBar
-        organizations={organizations}
-        organizationId={g.organizationId}
-        onOrganizationChange={(id) => { g.setOrganizationId(id); g.setSelectedIndex(0); g.clearMultiSelection(); }}
         textFilter={g.textFilter}
         onTextFilterChange={(v) => { g.setTextFilter(v); g.setSelectedIndex(0); }}
         filterInputRef={g.filterInputRef}

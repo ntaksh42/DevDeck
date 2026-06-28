@@ -64,6 +64,9 @@ describe("App — Pull Requests", () => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
       }
+      if (command === "get_active_organization") {
+        return Promise.resolve(organization);
+      }
       if (command === "list_my_review_pull_requests") {
         return Promise.resolve([]);
       }
@@ -169,6 +172,9 @@ describe("App — Pull Requests", () => {
     invokeMock.mockImplementation((command: string) => {
       if (command === "list_organizations") {
         return Promise.resolve([organization]);
+      }
+      if (command === "get_active_organization") {
+        return Promise.resolve(organization);
       }
       if (command === "get_app_settings") {
         return Promise.resolve({ reviewResultFolderPath: null });

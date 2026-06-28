@@ -1,4 +1,4 @@
-# AzDoDeck
+# DevDeck
 
 A Windows desktop dashboard for Azure DevOps. Search pull requests, work items, and commits across every project in your organization from a single window — and jump straight to the browser for anything that needs action.
 
@@ -31,7 +31,7 @@ A Windows desktop dashboard for Azure DevOps. Search pull requests, work items, 
 
 ### Windows SmartScreen
 
-Because AzDoDeck is not yet code-signed, Windows Defender SmartScreen shows a warning the first time you run the installer. This is expected for unsigned apps distributed outside the Microsoft Store.
+Because DevDeck is not yet code-signed, Windows Defender SmartScreen shows a warning the first time you run the installer. This is expected for unsigned apps distributed outside the Microsoft Store.
 
 **To bypass the warning:**
 1. Click **More info** (below the warning text).
@@ -47,8 +47,8 @@ Code signing is tracked in issue [#1](../../issues/1).
 2. Enter your **Azure DevOps organization name** (the part after `dev.azure.com/`).
 3. Choose an authentication method:
    - **PAT**: paste a Personal Access Token. Required scopes: `Code (Read)`, `Work Items (Read)`, `Project and Team (Read)`.
-   - **Azure CLI**: requires `az login` completed in a terminal first. AzDoDeck calls `az account get-access-token` automatically.
-4. Click **Connect**. AzDoDeck validates the credential before saving it.
+   - **Azure CLI**: requires `az login` completed in a terminal first. DevDeck calls `az account get-access-token` automatically.
+4. Click **Connect**. DevDeck validates the credential before saving it.
 
 Your PAT is stored in **Windows Credential Manager** — never written to disk in plain text.
 
@@ -73,7 +73,7 @@ Shows all pull requests where you are a reviewer. Rows highlighted in orange are
 | `E` | Mark done locally / restore |
 | `/` | Focus text filter |
 
-The **Review Preview** panel on the right shows a local HTML file if you configure a **Review result folder** in Settings. AzDoDeck matches files containing the PR number (e.g. `review-PR42.html`).
+The **Review Preview** panel on the right shows a local HTML file if you configure a **Review result folder** in Settings. DevDeck matches files containing the PR number (e.g. `review-PR42.html`).
 
 ### Pull Request Search (`G` `P`)
 
@@ -180,7 +180,7 @@ formats to the GitHub Release:
 - `.exe` NSIS installer for normal interactive installs.
 - `.msi` installer for managed Windows environments.
 
-The installers are intentionally small because AzDoDeck uses the system
+The installers are intentionally small because DevDeck uses the system
 Microsoft Edge WebView2 runtime instead of bundling a browser engine. If WebView2
 is missing, the installer downloads and installs the WebView2 bootstrapper
 silently during setup.

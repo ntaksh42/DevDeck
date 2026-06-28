@@ -23,8 +23,7 @@ pub async fn search_work_items(
     input: SearchWorkItemsInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkItemSummary>> {
-    let service = state.work_items.clone();
-    run_blocking(move || service.search(input)).await
+    state.provider().await?.search_work_items(input).await
 }
 
 #[tauri::command]
@@ -33,8 +32,7 @@ pub async fn list_my_work_items(
     input: ListMyWorkItemsInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkItemSummary>> {
-    let service = state.work_items.clone();
-    run_blocking(move || service.list_my(input)).await
+    state.provider().await?.list_my_work_items(input).await
 }
 
 #[tauri::command]
@@ -43,7 +41,7 @@ pub async fn list_work_item_projects(
     input: ListWorkItemProjectsInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkItemProjectOption>> {
-    state.work_items.list_projects(input).await
+    state.provider().await?.list_work_item_projects(input).await
 }
 
 #[tauri::command]
@@ -70,7 +68,7 @@ pub async fn get_work_item_preview(
     input: GetWorkItemPreviewInput,
     state: State<'_, AppState>,
 ) -> Result<WorkItemPreview> {
-    state.work_items.preview(input).await
+    state.provider().await?.get_work_item_preview(input).await
 }
 
 #[tauri::command]
@@ -79,7 +77,11 @@ pub async fn search_work_item_mentions(
     input: SearchWorkItemMentionsInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<MentionCandidate>> {
-    state.work_items.search_mentions(input).await
+    state
+        .provider()
+        .await?
+        .search_work_item_mentions(input)
+        .await
 }
 
 #[tauri::command]
@@ -108,7 +110,11 @@ pub async fn search_work_item_assignees(
     input: SearchWorkItemAssigneesInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkItemAssigneeCandidate>> {
-    state.work_items.search_assignees(input).await
+    state
+        .provider()
+        .await?
+        .search_work_item_assignees(input)
+        .await
 }
 
 #[tauri::command]
@@ -127,7 +133,7 @@ pub async fn add_work_item_comment(
     state: State<'_, AppState>,
 ) -> Result<WorkItemComment> {
     ensure_write_enabled(&state).await?;
-    state.work_items.add_comment(input).await
+    state.provider().await?.add_work_item_comment(input).await
 }
 
 #[tauri::command]
@@ -157,7 +163,11 @@ pub async fn delete_work_item_comment(
     state: State<'_, AppState>,
 ) -> Result<()> {
     ensure_write_enabled(&state).await?;
-    state.work_items.delete_comment(input).await
+    state
+        .provider()
+        .await?
+        .delete_work_item_comment(input)
+        .await
 }
 
 #[tauri::command]
@@ -167,7 +177,11 @@ pub async fn update_work_item_comment(
     state: State<'_, AppState>,
 ) -> Result<WorkItemComment> {
     ensure_write_enabled(&state).await?;
-    state.work_items.update_comment(input).await
+    state
+        .provider()
+        .await?
+        .update_work_item_comment(input)
+        .await
 }
 
 #[tauri::command]
@@ -186,7 +200,7 @@ pub async fn list_work_item_updates(
     input: ListWorkItemUpdatesInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkItemUpdateSummary>> {
-    state.work_items.list_updates(input).await
+    state.provider().await?.list_work_item_updates(input).await
 }
 
 #[tauri::command]
@@ -196,7 +210,7 @@ pub async fn set_work_items_state(
     state: State<'_, AppState>,
 ) -> Result<Vec<BulkWorkItemResult>> {
     ensure_write_enabled(&state).await?;
-    state.work_items.set_items_state(input).await
+    state.provider().await?.set_work_items_state(input).await
 }
 
 #[tauri::command]
@@ -206,7 +220,7 @@ pub async fn assign_work_items(
     state: State<'_, AppState>,
 ) -> Result<Vec<BulkWorkItemResult>> {
     ensure_write_enabled(&state).await?;
-    state.work_items.assign_items(input).await
+    state.provider().await?.assign_work_items(input).await
 }
 
 #[tauri::command]
@@ -216,7 +230,7 @@ pub async fn set_work_items_priority(
     state: State<'_, AppState>,
 ) -> Result<Vec<BulkWorkItemResult>> {
     ensure_write_enabled(&state).await?;
-    state.work_items.set_items_priority(input).await
+    state.provider().await?.set_work_items_priority(input).await
 }
 
 #[tauri::command]
@@ -226,7 +240,7 @@ pub async fn set_work_items_tags(
     state: State<'_, AppState>,
 ) -> Result<Vec<BulkWorkItemResult>> {
     ensure_write_enabled(&state).await?;
-    state.work_items.set_items_tags(input).await
+    state.provider().await?.set_work_items_tags(input).await
 }
 
 #[tauri::command]

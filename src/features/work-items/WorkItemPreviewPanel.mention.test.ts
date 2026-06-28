@@ -27,6 +27,7 @@ function makeOrg(overrides: {
     authenticatedUserUniqueName: overrides.authenticatedUserUniqueName ?? null,
     createdAt: "2026-05-24T00:00:00Z",
     updatedAt: "2026-05-24T00:00:00Z",
+    providerKind: "azdo",
   };
 }
 

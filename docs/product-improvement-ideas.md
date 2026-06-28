@@ -1,4 +1,4 @@
-# AzDoDeck Product Improvement Ideas
+# DevDeck Product Improvement Ideas
 
 This backlog summarizes ideas from a quick review of adjacent tools such as
 Azure DevOps Boards, GitHub Issues and Projects, Jira, Linear, YouTrack,

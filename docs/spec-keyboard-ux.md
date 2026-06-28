@@ -4,7 +4,7 @@
 
 ## 概要
 
-AzDoDeck はキーボード中心の運用を hard requirement としている (AGENTS.md)。既に
+DevDeck はキーボード中心の運用を hard requirement としている (AGENTS.md)。既に
 コマンドパレット (`Ctrl+K`)、Linear 風の `G` チェーン遷移、フォーカス移動
 (`Ctrl+G/P/N`)、グリッド単文字ショートカットを備える。
 

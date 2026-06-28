@@ -12,8 +12,8 @@ import {
   searchCommits,
   listCommitRepositories,
   commandErrorMessage,
-  type Organization,
 } from "@/lib/azdoCommands";
+import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { MultiSelectFilter } from "@/components/MultiSelectFilter";
 import { ErrorState } from "@/components/StateDisplay";
 import { CommitActivityHeatmap } from "./CommitActivityHeatmap";
@@ -28,22 +28,16 @@ import {
 } from "./commitSearchUtils";
 
 export function CommitSearch({
-  organizations,
   externalSearch,
   onExternalSearchHandled,
   onOpenPullRequest,
 }: {
-  organizations: Organization[];
   externalSearch?: { query: string; requestId: number; organizationId?: string } | null;
   onExternalSearchHandled?: () => void;
   onOpenPullRequest?: (query: string, organizationId?: string) => void;
 }) {
   const initialViewState = useMemo(() => loadCommitSearchViewState(), []);
-  const [organizationId, setOrganizationId] = useState(() =>
-    organizations.some((organization) => organization.id === initialViewState.organizationId)
-      ? initialViewState.organizationId
-      : organizations[0]?.id ?? "",
-  );
+  const selectedOrganizationId = useActiveOrganizationId();
   const [query, setQuery] = useState(initialViewState.query);
   const [author, setAuthor] = useState(initialViewState.author);
   const [branch, setBranch] = useState(initialViewState.branch);
@@ -58,7 +52,6 @@ export function CommitSearch({
     mutationFn: searchCommits,
   });
 
-  const selectedOrganizationId = organizationId || organizations[0]?.id || "";
   const repositoriesQuery = useQuery({
     queryKey: ["commitRepositories", selectedOrganizationId],
     queryFn: () => listCommitRepositories({ organizationId: selectedOrganizationId }),
@@ -85,12 +78,6 @@ export function CommitSearch({
     (toDate ? 1 : 0) +
     (projectIds.length > 0 ? 1 : 0) +
     (repositoryIds.length > 0 ? 1 : 0);
-
-  useEffect(() => {
-    if (!organizationId && organizations[0]) {
-      setOrganizationId(organizations[0].id);
-    }
-  }, [organizationId, organizations]);
 
   useEffect(() => {
     storeCommitSearchViewState({
@@ -120,9 +107,8 @@ export function CommitSearch({
 
   useEffect(() => {
     if (!externalSearch) return;
-    const targetOrganizationId = externalSearch.organizationId ?? selectedOrganizationId;
+    const targetOrganizationId = selectedOrganizationId;
     mutation.reset();
-    setOrganizationId(targetOrganizationId);
     setQuery(externalSearch.query);
     setAuthor("");
     setBranch("");
@@ -202,7 +188,7 @@ export function CommitSearch({
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="shrink-0 rounded-md border border-border bg-card">
         <form className="grid gap-3 p-3" onSubmit={onSubmit}>
-          <div className="grid gap-3 xl:grid-cols-[minmax(240px,1fr)_180px_180px_170px_auto]">
+          <div className="grid gap-3 xl:grid-cols-[minmax(240px,1fr)_180px_170px_auto]">
             <label className="grid gap-2">
               <span className="text-sm font-medium">Search</span>
               <div className="flex h-9 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
@@ -216,25 +202,6 @@ export function CommitSearch({
                   className="min-w-0 flex-1 bg-transparent text-sm outline-none"
                 />
               </div>
-            </label>
-
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Organization</span>
-              <select
-                value={selectedOrganizationId}
-                onChange={(event) => {
-                  setOrganizationId(event.target.value);
-                  setProjectIds([]);
-                  setRepositoryIds([]);
-                }}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-              >
-                {organizations.map((organization) => (
-                  <option key={organization.id} value={organization.id}>
-                    {organization.name}
-                  </option>
-                ))}
-              </select>
             </label>
 
             <label className="grid gap-2">

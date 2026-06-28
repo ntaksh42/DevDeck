@@ -35,7 +35,7 @@ export class AppErrorBoundary extends Component<Props, State> {
             />
             <div className="min-w-0">
               <p className="text-sm font-semibold text-destructive">
-                Something went wrong while rendering AzDoDeck.
+                Something went wrong while rendering DevDeck.
               </p>
               <p className="mt-1 break-words text-sm text-destructive">{error.message}</p>
               {error.stack && (

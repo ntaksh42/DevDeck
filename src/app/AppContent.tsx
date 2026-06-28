@@ -77,29 +77,25 @@ export function AppContent({
           />
         ) : activeView === "pullRequestSearch" ? (
           <PullRequestSearch
-            organizations={organizations}
             externalSearch={pullRequestSearchRequest}
             onExternalSearchHandled={onPullRequestSearchHandled}
           />
         ) : activeView === "myReviews" ? (
           <MyReviewsGrid
-            organizations={organizations}
             selectRequest={myReviewsSelectRequest}
             onSelectRequestHandled={onMyReviewsSelectHandled}
           />
         ) : activeView === "myPullRequests" ? (
-          <MyPullRequestsGrid organizations={organizations} />
+          <MyPullRequestsGrid />
         ) : activeView === "workItems" ? (
           <WorkItemSearch
-            organizations={organizations}
             externalSearch={workItemSearchRequest}
             onExternalSearchHandled={onWorkItemSearchHandled}
           />
         ) : activeView === "myWorkItems" ? (
-          <MyWorkItemsPanel organizations={organizations} />
+          <MyWorkItemsPanel />
         ) : activeView === "workItemViews" ? (
           <WorkItemViewsPanel
-            organizations={organizations}
             selectedViewRequestId={selectedWorkItemViewRequestId}
             onSelectedViewChange={onSelectedViewChange}
             onSelectedViewRequestHandled={onSelectedViewRequestHandled}
@@ -107,15 +103,14 @@ export function AppContent({
           />
         ) : activeView === "commits" ? (
           <CommitSearch
-            organizations={organizations}
             externalSearch={commitSearchRequest}
             onExternalSearchHandled={onCommitSearchHandled}
             onOpenPullRequest={onOpenPullRequest}
           />
         ) : activeView === "pipelines" ? (
-          <PipelinesView organizations={organizations} />
+          <PipelinesView />
         ) : activeView === "codeSearch" ? (
-          <CodeBrowseView organizations={organizations} />
+          <CodeBrowseView />
         ) : organizations.length === 0 ? (
           <SetupPanel />
         ) : (

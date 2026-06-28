@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use azdo_client::{AdoClient, AzureCliProvider, PatProvider};
+use github_client::GitHubClient;
 use serde::Deserialize;
 
 use crate::db::{AppDatabase, Organization, OrganizationDraft};
@@ -18,6 +19,12 @@ pub struct AddPatOrganizationInput {
 #[serde(rename_all = "camelCase")]
 pub struct AddAzureCliOrganizationInput {
     pub organization: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddGitHubOrganizationInput {
+    pub pat: String,
 }
 
 #[derive(Debug, Clone)]
@@ -70,6 +77,7 @@ impl OrganizationService {
                 .authenticated_user
                 .provider_display_name,
             authenticated_user_unique_name,
+            provider_kind: "azdo".to_string(),
         })
     }
 
@@ -128,6 +136,46 @@ impl OrganizationService {
                 .authenticated_user
                 .provider_display_name,
             authenticated_user_unique_name,
+            provider_kind: "azdo".to_string(),
+        })
+    }
+
+    /// Validates a GitHub personal access token and stores it as a new
+    /// connection. The connection identity is derived from the authenticated
+    /// user (`GET /user`) rather than from user-typed input, so the owner login
+    /// is always canonical. The connection id is namespaced with a `github:`
+    /// prefix to avoid colliding with an Azure DevOps organization of the same
+    /// name.
+    pub async fn add_github_organization(
+        &self,
+        input: AddGitHubOrganizationInput,
+    ) -> Result<Organization> {
+        let pat = input.pat.trim();
+        if pat.is_empty() {
+            return Err(AppError::InvalidInput("PAT is required".to_string()));
+        }
+
+        tracing::info!(auth_provider = "github_pat", "validating GitHub token");
+        let client = GitHubClient::new(pat)?;
+        let user = client.current_user().await?;
+        let login = user.login;
+        let login_key = login.to_ascii_lowercase();
+
+        let credential_key = github_credential_key(&login_key);
+        self.secrets.delete_credential(&credential_key)?;
+        self.secrets.set_pat(&credential_key, pat)?;
+
+        self.db.upsert_organization(OrganizationDraft {
+            id: format!("github:{login_key}"),
+            name: format!("github:{login_key}"),
+            display_name: Some(login.clone()),
+            base_url: "https://api.github.com".to_string(),
+            auth_provider: "github_pat".to_string(),
+            credential_key,
+            authenticated_user_id: Some(user.id.to_string()),
+            authenticated_user_display_name: user.name.or(Some(login)),
+            authenticated_user_unique_name: user.email,
+            provider_kind: "github".to_string(),
         })
     }
 }
@@ -172,6 +220,10 @@ fn credential_key(organization: &str) -> String {
 
 fn azure_cli_credential_key(organization: &str) -> String {
     format!("azdodeck:org:{organization}:azure-cli")
+}
+
+fn github_credential_key(login: &str) -> String {
+    format!("azdodeck:github:{login}:pat")
 }
 
 /// The credential keys for `organization` that should be removed when the

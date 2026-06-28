@@ -9,10 +9,12 @@ mod commands;
 mod commits;
 mod db;
 mod error;
+mod github;
 mod orgs;
 mod pipelines;
 mod pr_review;
 mod projects;
+mod providers;
 mod prs;
 mod search;
 mod secrets;
@@ -80,7 +82,7 @@ pub fn run() {
     // trace of why. Print it to stderr (visible under `tauri dev` / a console
     // build) before the default hook aborts.
     std::panic::set_hook(Box::new(|info| {
-        eprintln!("AzDoDeck panic: {info}");
+        eprintln!("DevDeck panic: {info}");
     }));
 
     tauri::Builder::default()
@@ -102,18 +104,18 @@ pub fn run() {
             // otherwise the window stays blank with no clue why state was never
             // managed and every command fails.
             let app_data_dir = app.path().app_data_dir().inspect_err(|e| {
-                eprintln!("AzDoDeck setup failed (app_data_dir): {e}");
+                eprintln!("DevDeck setup failed (app_data_dir): {e}");
             })?;
             let db = AppDatabase::new(app_data_dir.join("azdodeck.sqlite3"));
             db.initialize().inspect_err(|e| {
-                eprintln!("AzDoDeck setup failed (db.initialize): {e}");
+                eprintln!("DevDeck setup failed (db.initialize): {e}");
             })?;
             let settings = db.get_app_settings().inspect_err(|e| {
-                eprintln!("AzDoDeck setup failed (get_app_settings): {e}");
+                eprintln!("DevDeck setup failed (get_app_settings): {e}");
             })?;
             configure_show_window_hotkey(app.handle(), settings.show_window_hotkey.as_deref())
                 .inspect_err(|e| {
-                    eprintln!("AzDoDeck setup failed (configure_show_window_hotkey): {e}");
+                    eprintln!("DevDeck setup failed (configure_show_window_hotkey): {e}");
                 })?;
             let (sync_tx, sync_rx) = SyncRunner::channel();
             app.manage(AppState {
@@ -130,6 +132,7 @@ pub fn run() {
                 snooze: SnoozeService::new(db.clone()),
                 cancellation: CancellationRegistry::new(),
                 sync_trigger: sync_tx,
+                active_provider: std::sync::Arc::new(tokio::sync::RwLock::new(None)),
             });
             tauri::async_runtime::spawn(
                 SyncRunner::new(db, SecretStore).run(app.handle().clone(), sync_rx),
@@ -148,6 +151,10 @@ pub fn run() {
             commands::orgs::delete_organization,
             commands::orgs::add_pat_organization,
             commands::orgs::add_azure_cli_organization,
+            commands::orgs::add_github_organization,
+            commands::orgs::get_active_organization,
+            commands::orgs::set_active_organization,
+            commands::orgs::get_provider_capabilities,
             commands::prs::search_pull_requests,
             commands::prs::list_my_review_pull_requests,
             commands::prs::list_my_created_pull_requests,

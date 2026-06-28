@@ -1,6 +1,6 @@
 import { type FormEvent, useRef } from 'react';
 import { Plus, X } from 'lucide-react';
-import { type Organization, type WorkItemProjectOption, type WorkItemFieldOption } from '@/lib/azdoCommands';
+import { type WorkItemProjectOption, type WorkItemFieldOption } from '@/lib/azdoCommands';
 import {
   MAX_VIEW_REFRESH_INTERVAL_SEC,
   MIN_VIEW_REFRESH_INTERVAL_SEC,
@@ -10,9 +10,6 @@ import type { WiqlCompletion } from './workItemViewsHelpers';
 
 export type ViewEditorDialogProps = {
   editingViewId: string | null;
-  organizations: Organization[];
-  organizationId: string;
-  onOrganizationChange: (id: string) => void;
   draftUrl: string;
   onUrlChange: (url: string) => void;
   urlStatus: { text: string; severity: "success" | "error" | "info" } | null;
@@ -50,9 +47,6 @@ export type ViewEditorDialogProps = {
 
 export function ViewEditorDialog({
   editingViewId,
-  organizations,
-  organizationId,
-  onOrganizationChange,
   draftUrl,
   onUrlChange,
   urlStatus,
@@ -159,23 +153,6 @@ export function ViewEditorDialog({
               </p>
             ) : null}
           </div>
-
-          {organizations.length > 1 ? (
-            <label className="grid gap-1.5">
-              <span className="text-xs font-medium text-muted-foreground">Organization</span>
-              <select
-                value={organizationId}
-                onChange={(event) => onOrganizationChange(event.target.value)}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-              >
-                {organizations.map((organization) => (
-                  <option key={organization.id} value={organization.id}>
-                    {organization.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
 
           <label className="grid gap-1.5">
             <span className="text-xs font-medium text-muted-foreground">Name</span>
