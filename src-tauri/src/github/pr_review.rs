@@ -540,10 +540,21 @@ pub async fn submit_vote(
     let (owner, repo) = split_owner_repo(&input.pr.repository_id)?;
     let client = client(organization, secrets)?;
     let me = login_for(organization);
+    // GitHub reviews only have APPROVE / REQUEST_CHANGES / COMMENT, and COMMENT
+    // requires a non-empty body. Sending an empty-body COMMENT (which the old
+    // mapping did for the intermediate Azure DevOps votes and for "no vote")
+    // is rejected with 422. Map any positive vote to APPROVE and any negative
+    // vote to REQUEST_CHANGES (both accept an empty body); GitHub has no way to
+    // clear a submitted vote through the review-submission API.
     let event = match input.vote {
-        v if v >= 10 => "APPROVE",
-        v if v <= -10 => "REQUEST_CHANGES",
-        _ => "COMMENT",
+        v if v > 0 => "APPROVE",
+        v if v < 0 => "REQUEST_CHANGES",
+        _ => {
+            return Err(AppError::InvalidInput(
+                "GitHub does not support clearing a review vote; dismiss the review on GitHub instead."
+                    .to_string(),
+            ));
+        }
     };
     let review = client
         .submit_review(&owner, &repo, input.pr.pull_request_id, event, "")
@@ -633,13 +644,15 @@ pub async fn update_pull_request_details(
 ) -> Result<PrDetailsResult> {
     let (owner, repo) = split_owner_repo(&input.pr.repository_id)?;
     let client = client(organization, secrets)?;
+    // Only send `body` when a new description was provided. Sending `body: ""`
+    // for `description: None` (a title-only edit) would wipe the existing PR
+    // description on GitHub.
+    let mut patch = json!({ "title": input.title });
+    if let Some(description) = &input.description {
+        patch["body"] = json!(description);
+    }
     let pr = client
-        .update_pull_request(
-            &owner,
-            &repo,
-            input.pr.pull_request_id,
-            json!({ "title": input.title, "body": input.description.unwrap_or_default() }),
-        )
+        .update_pull_request(&owner, &repo, input.pr.pull_request_id, patch)
         .await?;
     Ok(PrDetailsResult {
         title: pr.title,
