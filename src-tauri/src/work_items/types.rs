@@ -277,6 +277,37 @@ pub struct SetWorkItemsTagsInput {
     pub remove_tags: Vec<String>,
 }
 
+/// Follows a work item via the local watchlist. Azure DevOps has no public
+/// REST API for the server-side follow/subscription, so the frontend passes a
+/// display snapshot (captured from the already-loaded preview) rather than the
+/// service re-fetching it.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FollowWorkItemInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub project_name: String,
+    pub work_item_id: i64,
+    pub title: String,
+    pub work_item_type: Option<String>,
+    pub state: Option<String>,
+    pub assigned_to: Option<String>,
+    pub web_url: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnfollowWorkItemInput {
+    pub organization_id: Option<String>,
+    pub work_item_id: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListFollowedWorkItemsInput {
+    pub organization_id: Option<String>,
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkItemSummary {

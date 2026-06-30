@@ -1,9 +1,4 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Copy } from 'lucide-react';
 import {
   commandErrorMessage,
@@ -37,8 +32,10 @@ import { CommentComposer } from './CommentComposer';
 import { WorkItemPreviewDetails } from './WorkItemPreviewDetails';
 import { PresetMenu } from './PreviewPresetMenu';
 import { StagedStatusChip } from './StagedStatusChip';
+import { WorkItemFollowToggle } from './WorkItemFollowToggle';
 import { useWorkItemStagedChanges } from './useWorkItemStagedChanges';
 import { useWorkItemPickerState } from './useWorkItemPickerState';
+import { useWorkItemFollow } from './useWorkItemFollow';
 
 // Re-exported so existing importers (and the unit tests) keep a single entry
 // point; the implementations live in the sibling modules linked below.
@@ -182,6 +179,8 @@ export function WorkItemPreviewPanel({
     openFieldRequest,
   });
 
+  const { isFollowed, toggleFollow, pending: followPending } = useWorkItemFollow(preview);
+
   const commentMentionDisplayNames = useMemo(() => {
     const names = new Map<string, string>();
     for (const [id, displayName] of Object.entries(mentionDisplayNamesById)) {
@@ -278,17 +277,20 @@ export function WorkItemPreviewPanel({
                   />
                 }
                 actionsControl={
-                  onDuplicate ? (
-                    <button
-                      type="button"
-                      aria-label="Duplicate work item"
-                      title="Duplicate into a new item (D)"
-                      onClick={duplicateSelected}
-                      className="inline-flex h-5 w-5 items-center justify-center rounded border border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground"
-                    >
-                      <Copy className="h-3 w-3" aria-hidden="true" />
-                    </button>
-                  ) : null
+                  <>
+                    <WorkItemFollowToggle isFollowed={isFollowed} onToggle={toggleFollow} pending={followPending} />
+                    {onDuplicate ? (
+                      <button
+                        type="button"
+                        aria-label="Duplicate work item"
+                        title="Duplicate into a new item (D)"
+                        onClick={duplicateSelected}
+                        className="inline-flex h-5 w-5 items-center justify-center rounded border border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground"
+                      >
+                        <Copy className="h-3 w-3" aria-hidden="true" />
+                      </button>
+                    ) : null}
+                  </>
                 }
                 presetsControl={
                   <PresetMenu
