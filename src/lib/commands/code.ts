@@ -106,6 +106,26 @@ export async function listRepoTree(input: {
   return z.array(repoTreeItemSchema).parse(result);
 }
 
+const repoFileListSchema = z.object({
+  paths: z.array(z.string()),
+  truncated: z.boolean(),
+});
+export type RepoFileList = z.infer<typeof repoFileListSchema>;
+
+// Lists every file path in a repository at a branch tip (recursive), for the
+// fuzzy file finder. Capped server-side; `truncated` reports whether the
+// repository had more files than the cap.
+export async function listRepoFiles(input: {
+  organizationId?: string;
+  project: string;
+  repository: string;
+  branch: string;
+  operationId?: string;
+}): Promise<RepoFileList> {
+  const result = await invokeCommand("list_repo_files", { input });
+  return repoFileListSchema.parse(result);
+}
+
 const repoFileSchema = z.object({
   path: z.string(),
   content: z.string(),

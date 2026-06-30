@@ -13,6 +13,11 @@ const MAX_FILE_BYTES: usize = 512 * 1024;
 /// Maximum commits returned for the Files > History tab.
 const HISTORY_TOP: u32 = 50;
 
+/// Largest number of paths the fuzzy file finder keeps. Azure DevOps' Items
+/// API has no continuation token for `recursionLevel=Full`, so very large
+/// repositories are truncated rather than streaming an unbounded list.
+const MAX_FINDER_PATHS: usize = 20_000;
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListBranchesInput {
@@ -47,6 +52,17 @@ pub struct GetFileInput {
     pub repository: String,
     pub branch: String,
     pub path: String,
+    #[serde(default)]
+    pub operation_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListFilesInput {
+    pub organization_id: Option<String>,
+    pub project: String,
+    pub repository: String,
+    pub branch: String,
     #[serde(default)]
     pub operation_id: Option<String>,
 }
@@ -96,6 +112,16 @@ pub struct RepoCommitInfo {
     pub author: Option<String>,
     /// ISO-8601 commit date (committer date, falling back to author date).
     pub date: Option<String>,
+}
+
+/// Every file path in a repository at a branch tip, for the fuzzy file finder.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoFileList {
+    pub paths: Vec<String>,
+    /// True when the repository has more files than [`MAX_FINDER_PATHS`] and
+    /// the list was cut off.
+    pub truncated: bool,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -188,6 +214,24 @@ impl CodeBrowseService {
                 .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
         });
         Ok(items)
+    }
+
+    /// Lists every file path in a repository at a branch tip, for the fuzzy
+    /// file finder (recursive, unlike [`Self::list_tree`]'s one-level fetch).
+    pub async fn list_files(&self, input: ListFilesInput) -> Result<RepoFileList> {
+        let organization = self
+            .db
+            .resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let items = client
+            .list_items_recursive(&input.project, &input.repository, &input.branch)
+            .await?;
+        Ok(build_file_list(
+            items
+                .into_iter()
+                .filter(|item| !item.is_folder)
+                .map(|item| item.path),
+        ))
     }
 
     /// Fetches a file's text content at the tip of a branch.
@@ -322,6 +366,16 @@ fn leaf_name(path: &str) -> &str {
         .unwrap_or(path)
 }
 
+/// Sorts and caps a file path list at [`MAX_FINDER_PATHS`], reporting whether
+/// it was truncated.
+fn build_file_list(paths: impl Iterator<Item = String>) -> RepoFileList {
+    let mut paths: Vec<String> = paths.collect();
+    paths.sort();
+    let truncated = paths.len() > MAX_FINDER_PATHS;
+    paths.truncate(MAX_FINDER_PATHS);
+    RepoFileList { paths, truncated }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -347,5 +401,20 @@ mod tests {
         assert_eq!(strip_heads_prefix("refs/heads/main"), "main");
         assert_eq!(strip_heads_prefix("refs/heads/feature/x"), "feature/x");
         assert_eq!(strip_heads_prefix("main"), "main");
+    }
+
+    #[test]
+    fn build_file_list_sorts_and_keeps_under_the_cap() {
+        let list = build_file_list(vec!["/b.txt".to_string(), "/a.txt".to_string()].into_iter());
+        assert_eq!(list.paths, vec!["/a.txt", "/b.txt"]);
+        assert!(!list.truncated);
+    }
+
+    #[test]
+    fn build_file_list_truncates_oversized_repositories() {
+        let paths = (0..(MAX_FINDER_PATHS + 5)).map(|i| format!("/file-{i}.txt"));
+        let list = build_file_list(paths);
+        assert_eq!(list.paths.len(), MAX_FINDER_PATHS);
+        assert!(list.truncated);
     }
 }

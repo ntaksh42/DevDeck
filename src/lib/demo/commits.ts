@@ -80,6 +80,17 @@ export function demoRepoTree(path?: string, includeLastCommit?: boolean) {
   }));
 }
 
+// Every file path across the demo tree, for the fuzzy file finder. A flat
+// list of demo files is enough to exercise the picker without a backend.
+export function demoRepoFiles() {
+  const paths = Object.values(DEMO_REPO_TREE)
+    .flat()
+    .filter((item) => !item.isFolder)
+    .map((item) => item.path)
+    .sort();
+  return { paths, truncated: false };
+}
+
 // Demo file contents keyed by path, with a generic fallback so any file opens.
 const DEMO_REPO_FILES: Record<string, string> = {
   "/README.md":

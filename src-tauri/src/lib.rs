@@ -208,6 +208,7 @@ pub fn run() {
             commands::code::get_code_search_context,
             commands::code::list_repo_branches,
             commands::code::list_repo_tree,
+            commands::code::list_repo_files,
             commands::code::get_repo_file,
             commands::code::list_repo_history,
             commands::code::cancel_operation,

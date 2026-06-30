@@ -180,6 +180,54 @@ describe("CodeBrowseView", () => {
   );
 
   it(
+    "opens the file finder with T and jumps to the selected file",
+    async () => {
+      renderView();
+      await selectDemoRepository();
+      await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
+        timeout: 8000,
+      });
+
+      fireEvent.keyDown(window, { key: "t" });
+      const input = await screen.findByLabelText("Find file by name", undefined, {
+        timeout: 8000,
+      });
+      fireEvent.change(input, { target: { value: "azdoCommands" } });
+      const hit = await screen.findByText("/src/lib/azdoCommands.ts", undefined, {
+        timeout: 8000,
+      });
+      fireEvent.click(hit);
+
+      // Closed, and the matched file is now open in the right pane.
+      expect(screen.queryByLabelText("Find file by name")).toBeNull();
+      await waitFor(
+        () => {
+          const code = lastContainer.querySelector("code.hljs");
+          expect(code?.textContent ?? "").toContain("searchCode");
+        },
+        { timeout: 8000 },
+      );
+    },
+    15000,
+  );
+
+  it(
+    "does not open the file finder while typing T in the filter box",
+    async () => {
+      renderView();
+      await selectDemoRepository();
+      await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
+        timeout: 8000,
+      });
+      const box = screen.getByLabelText(/Filter files by name/i);
+      box.focus();
+      fireEvent.keyDown(box, { key: "t" });
+      expect(screen.queryByLabelText("Find file by name")).toBeNull();
+    },
+    15000,
+  );
+
+  it(
     "remembers the last repository and its favorite across remounts",
     async () => {
       const first = renderView();

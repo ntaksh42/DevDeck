@@ -283,6 +283,37 @@ async fn list_items_requests_one_level_at_branch() {
 }
 
 #[tokio::test]
+async fn list_items_recursive_requests_full_recursion_at_branch() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/project-1/_apis/git/repositories/repo-1/items"))
+        .and(query_param("recursionLevel", "Full"))
+        .and(query_param("scopePath", "/"))
+        .and(query_param("versionDescriptor.versionType", "branch"))
+        .and(query_param("versionDescriptor.version", "main"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "count": 3,
+            "value": [
+                { "path": "/src", "isFolder": true },
+                { "path": "/src/lib", "isFolder": true },
+                { "path": "/src/lib/main.py" }
+            ]
+        })))
+        .mount(&server)
+        .await;
+
+    let items = test_client(&server)
+        .await
+        .list_items_recursive("project-1", "repo-1", "main")
+        .await
+        .unwrap();
+    assert_eq!(items.len(), 3);
+    assert!(items[1].is_folder);
+    assert!(!items[2].is_folder);
+    assert_eq!(items[2].path, "/src/lib/main.py");
+}
+
+#[tokio::test]
 async fn list_items_includes_latest_commit_when_requested() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))

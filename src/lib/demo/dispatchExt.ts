@@ -22,6 +22,7 @@ import {
   demoGetCodeSearchContext,
   demoRepoBranches,
   demoRepoFile,
+  demoRepoFiles,
   demoRepoHistory,
   demoRepoTree,
   demoSearchCode,
@@ -155,6 +156,8 @@ export function dispatchExt(command: string, args: unknown): unknown {
       )?.input;
       return demoRepoTree(input?.path, input?.includeLastCommit);
     }
+    case "list_repo_files":
+      return demoRepoFiles();
     case "get_repo_file": {
       const input = (args as { input?: { path?: string } } | undefined)?.input;
       return demoRepoFile(input?.path ?? "/README.md");
