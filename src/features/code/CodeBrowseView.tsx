@@ -7,6 +7,7 @@ import {
 } from "@/lib/azdoCommands";
 import { useActiveOrganization } from "@/lib/useActiveConnection";
 import { openExternalUrl } from "@/lib/openExternal";
+import { isEditableTarget } from "@/lib/utils";
 import { FilterableSelect } from "@/features/pipelines/FilterableSelect";
 import { blameUrl, ROOT, webUrl, type RepoOption, type Selection } from "./codeBrowseShared";
 import {
@@ -16,6 +17,7 @@ import {
   toggleFavoriteRepository,
 } from "./codeBrowseStorage";
 import { TreeLevel } from "./CodeFileTree";
+import { CodeFileFinder } from "./CodeFileFinder";
 import { CodeFolderView } from "./CodeFolderView";
 import { CodeFileView } from "./CodeFileView";
 import { CodeHistoryView } from "./CodeHistoryView";
@@ -112,6 +114,7 @@ export function CodeBrowseView() {
   const [searchQuery, setSearchQuery] = useState("");
   const [tab, setTab] = useState<RightTab>("contents");
   const [baseBranch, setBaseBranch] = useState("");
+  const [finderOpen, setFinderOpen] = useState(false);
   const treeRef = useRef<HTMLDivElement | null>(null);
 
   // Reset navigation state when the repository or branch changes.
@@ -122,7 +125,24 @@ export function CodeBrowseView() {
     setSearchQuery("");
     setTab("contents");
     setBaseBranch("");
+    setFinderOpen(false);
   }, [repositoryId, branch]);
+
+  // `t` opens the fuzzy file finder (GitHub's convention), unless the user is
+  // typing somewhere. Scoped to this view: the listener lives only as long as
+  // CodeBrowseView is mounted.
+  useEffect(() => {
+    if (!repo || !branch) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key.toLowerCase() !== "t") return;
+      if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+      if (isEditableTarget(event.target)) return;
+      event.preventDefault();
+      setFinderOpen(true);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [repo, branch]);
 
   // Compare only applies to files; fall back to Contents when a folder is shown.
   useEffect(() => {
@@ -400,6 +420,18 @@ export function CodeBrowseView() {
           )}
         </div>
       )}
+      {finderOpen && repo ? (
+        <CodeFileFinder
+          organizationId={organizationId}
+          repo={repo}
+          branch={branch}
+          onSelect={(path) => {
+            openFile(path);
+            setFinderOpen(false);
+          }}
+          onClose={() => setFinderOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

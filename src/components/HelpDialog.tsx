@@ -139,6 +139,10 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Open run preview</span><kbd className={kbd}>Enter</kbd></div>
           <div className={row}><span>Open run in browser</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
 
+          <p className={section}>Code</p>
+          <div className={row}><span>Find file by name</span><kbd className={kbd}>T</kbd></div>
+          <div className={row}><span>Move / open / close finder</span><kbd className={kbd}>↑ ↓ · Enter · Esc</kbd></div>
+
           <p className={section}>General</p>
           <div className={row}><span>Go to view</span><kbd className={kbd}>{combo("gotoLeader")} then {gotoKeys}</kbd></div>
           <div className={row}><span>Apply pending work item changes</span><kbd className={kbd}>{combo("applyStaged")}</kbd></div>

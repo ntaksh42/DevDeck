@@ -99,6 +99,28 @@ impl AdoClient {
         Ok(response.value)
     }
 
+    /// Lists every item (files and folders) in a repository at the tip of a
+    /// branch (`recursionLevel=Full`), for the fuzzy file finder. Azure DevOps
+    /// has no continuation token for this endpoint, so very large repositories
+    /// return one large response; callers should cap how much they keep.
+    pub async fn list_items_recursive(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        branch: &str,
+    ) -> Result<Vec<GitItem>> {
+        let path = format!("{project_id}/_apis/git/repositories/{repository_id}/items");
+        let params: Vec<(&str, &str)> = vec![
+            ("api-version", "7.1-preview"),
+            ("scopePath", "/"),
+            ("recursionLevel", "Full"),
+            ("versionDescriptor.versionType", "branch"),
+            ("versionDescriptor.version", branch),
+        ];
+        let response: ListResponse<GitItem> = self.get_json(&path, &params).await?;
+        Ok(response.value)
+    }
+
     pub async fn list_pull_requests(
         &self,
         project_id: &str,
