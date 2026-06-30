@@ -1,10 +1,18 @@
 import { readStoredJson, storageKey, writeStoredJson } from "@/lib/storage";
+import { clamp } from "@/lib/utils";
 
-// Persisted code-browser preferences: favorite repositories and the last
-// repository/branch the user had open, so the view reopens where they left off.
+// Persisted code-browser preferences: favorite repositories, the last
+// repository/branch the user had open, and the file tree panel width, so the
+// view reopens where they left off.
 
 const FAVORITES_KEY = storageKey("azdodeck:codeBrowse:favorites", 1);
 const LAST_KEY = storageKey("azdodeck:codeBrowse:last", 1);
+const TREE_WIDTH_KEY = storageKey("azdodeck:codeBrowse:treeWidth", 1);
+
+// Matches the previous fixed `w-72` (18rem at the default 16px root).
+export const DEFAULT_TREE_WIDTH = 288;
+export const MIN_TREE_WIDTH = 200;
+export const MAX_TREE_WIDTH = 560;
 
 // Favorites are keyed by repository id, scoped per organization so different
 // orgs keep independent stars.
@@ -61,4 +69,20 @@ export function setLastSelection(
   branch: string,
 ): void {
   writeStoredJson(LAST_KEY, { organizationId, repositoryId, branch });
+}
+
+// The file tree panel's drag-resized width, shared across repositories.
+export function getTreeWidth(): number {
+  return readStoredJson<number>(
+    TREE_WIDTH_KEY,
+    (raw) =>
+      typeof raw === "number" && Number.isFinite(raw)
+        ? clamp(raw, MIN_TREE_WIDTH, MAX_TREE_WIDTH)
+        : undefined,
+    DEFAULT_TREE_WIDTH,
+  );
+}
+
+export function setTreeWidth(width: number): void {
+  writeStoredJson(TREE_WIDTH_KEY, clamp(width, MIN_TREE_WIDTH, MAX_TREE_WIDTH));
 }

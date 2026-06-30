@@ -7,22 +7,27 @@ import {
 } from "@/lib/azdoCommands";
 import { useActiveOrganization } from "@/lib/useActiveConnection";
 import { openExternalUrl } from "@/lib/openExternal";
+import { clamp } from "@/lib/utils";
 import { FilterableSelect } from "@/features/pipelines/FilterableSelect";
 import { blameUrl, ROOT, webUrl, type RepoOption, type Selection } from "./codeBrowseShared";
 import {
   getFavoriteRepositoryIds,
   getLastSelection,
+  getTreeWidth,
   setLastSelection,
+  setTreeWidth,
   toggleFavoriteRepository,
+  MAX_TREE_WIDTH,
+  MIN_TREE_WIDTH,
 } from "./codeBrowseStorage";
+import { handleTreeKeyDown, type TypeAheadState } from "./codeTreeKeyboard";
 import { TreeLevel } from "./CodeFileTree";
 import { CodeFolderView } from "./CodeFolderView";
 import { CodeFileView } from "./CodeFileView";
 import { CodeHistoryView } from "./CodeHistoryView";
 import { CodeCompareView } from "./CodeCompareView";
 import { CodeSearchResults } from "./CodeSearchResults";
-
-type RightTab = "contents" | "history" | "compare";
+import { CodeViewTabs, CODE_TABPANEL_ID, type RightTab } from "./CodeViewTabs";
 
 const INPUT_CLASS =
   "h-9 w-full rounded-md border border-input bg-background pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring";
@@ -113,6 +118,33 @@ export function CodeBrowseView() {
   const [tab, setTab] = useState<RightTab>("contents");
   const [baseBranch, setBaseBranch] = useState("");
   const treeRef = useRef<HTMLDivElement | null>(null);
+  const typeAheadRef = useRef<TypeAheadState>({ text: "", time: 0 });
+
+  // File tree panel width, drag- or keyboard-resizable and persisted across
+  // sessions (see the resize handle below).
+  const [treeWidth, setTreeWidthState] = useState<number>(() => getTreeWidth());
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const resizingRef = useRef(false);
+  const activeResizeListenersRef = useRef<{ move: (e: MouseEvent) => void; up: () => void } | null>(
+    null,
+  );
+
+  function persistTreeWidth(width: number): number {
+    setTreeWidth(width);
+    return width;
+  }
+
+  // Remove a drag still in progress if the view unmounts mid-drag (e.g. the
+  // user switches away from Code while dragging).
+  useEffect(() => {
+    return () => {
+      const active = activeResizeListenersRef.current;
+      if (active) {
+        window.removeEventListener("mousemove", active.move);
+        window.removeEventListener("mouseup", active.up);
+      }
+    };
+  }, []);
 
   // Reset navigation state when the repository or branch changes.
   useEffect(() => {
@@ -159,39 +191,13 @@ export function CodeBrowseView() {
     }
   }
 
-  // Keyboard navigation for the tree: arrows move/expand/collapse, Enter/Space
-  // (native button activation) opens. Only the tree container is a tab stop.
+  // Keyboard navigation for the tree: arrows move/expand/collapse, Home/End
+  // jump to the first/last row, PageUp/PageDown jump by a page, typing a
+  // letter jumps to the next match (type-ahead), and Enter/Space (native
+  // button activation) opens. Only the tree container is a tab stop; the
+  // row-finding logic lives in codeTreeKeyboard so it's unit-testable.
   function onTreeKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
-    const container = treeRef.current;
-    if (!container) return;
-    const rows = Array.from(
-      container.querySelectorAll<HTMLButtonElement>("[data-tree-item]"),
-    );
-    if (rows.length === 0) return;
-    const index = rows.indexOf(document.activeElement as HTMLButtonElement);
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      rows[index < 0 ? 0 : Math.min(index + 1, rows.length - 1)]?.focus();
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      rows[index <= 0 ? 0 : index - 1]?.focus();
-    } else if (event.key === "ArrowRight" && index >= 0) {
-      const row = rows[index];
-      if (row.dataset.folder === "true") {
-        event.preventDefault();
-        if (row.dataset.open === "true") rows[Math.min(index + 1, rows.length - 1)]?.focus();
-        else if (row.dataset.path) toggleFolder(row.dataset.path);
-      }
-    } else if (event.key === "ArrowLeft" && index >= 0) {
-      const row = rows[index];
-      event.preventDefault();
-      if (row.dataset.folder === "true" && row.dataset.open === "true" && row.dataset.path) {
-        toggleFolder(row.dataset.path);
-      } else if (row.dataset.path) {
-        const parent = row.dataset.path.replace(/\/[^/]+$/, "");
-        rows.find((candidate) => candidate.dataset.path === parent)?.focus();
-      }
-    }
+    handleTreeKeyDown(event, treeRef.current, typeAheadRef, toggleFolder);
   }
 
   // When the tree gains focus via Tab, move into the first row.
@@ -200,6 +206,47 @@ export function CodeBrowseView() {
     treeRef.current
       ?.querySelector<HTMLButtonElement>("[data-tree-item]")
       ?.focus();
+  }
+
+  // Drag-to-resize the tree panel: track the pointer relative to the bordered
+  // panel's left edge so the handle works regardless of page layout.
+  function onResizeMouseDown(event: React.MouseEvent) {
+    event.preventDefault();
+    resizingRef.current = true;
+    const left = panelRef.current?.getBoundingClientRect().left ?? 0;
+    function onMouseMove(moveEvent: MouseEvent) {
+      if (!resizingRef.current) return;
+      setTreeWidthState(clamp(moveEvent.clientX - left, MIN_TREE_WIDTH, MAX_TREE_WIDTH));
+    }
+    function onMouseUp() {
+      resizingRef.current = false;
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+      activeResizeListenersRef.current = null;
+      setTreeWidthState((current) => persistTreeWidth(current));
+    }
+    activeResizeListenersRef.current = { move: onMouseMove, up: onMouseUp };
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  }
+
+  // Keyboard alternative to dragging: ArrowLeft/Right resize in steps
+  // (Shift for a bigger step), Home/End snap to the min/max width.
+  function onResizeKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    const step = event.shiftKey ? 40 : 16;
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      setTreeWidthState((current) => persistTreeWidth(clamp(current - step, MIN_TREE_WIDTH, MAX_TREE_WIDTH)));
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      setTreeWidthState((current) => persistTreeWidth(clamp(current + step, MIN_TREE_WIDTH, MAX_TREE_WIDTH)));
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setTreeWidthState(persistTreeWidth(MIN_TREE_WIDTH));
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setTreeWidthState(persistTreeWidth(MAX_TREE_WIDTH));
+    }
   }
 
   const repoOptions = useMemo(() => {
@@ -263,9 +310,15 @@ export function CodeBrowseView() {
           Select a repository to browse its files.
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 overflow-hidden rounded-md border border-border bg-card">
+        <div
+          ref={panelRef}
+          className="flex min-h-0 flex-1 overflow-hidden rounded-md border border-border bg-card"
+        >
           {/* Left: search box + file tree */}
-          <div className="flex w-72 shrink-0 flex-col border-r border-border">
+          <div
+            className="flex shrink-0 flex-col border-r border-border"
+            style={{ width: treeWidth }}
+          >
             <div className="relative border-b border-border p-2">
               <Search
                 className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
@@ -307,6 +360,20 @@ export function CodeBrowseView() {
               ) : null}
             </div>
           </div>
+          {/* Drag handle: resizes the tree panel; ArrowLeft/Right (Shift for a
+              bigger step) and Home/End provide a keyboard equivalent. */}
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize file tree"
+            aria-valuenow={treeWidth}
+            aria-valuemin={MIN_TREE_WIDTH}
+            aria-valuemax={MAX_TREE_WIDTH}
+            tabIndex={0}
+            onMouseDown={onResizeMouseDown}
+            onKeyDown={onResizeKeyDown}
+            className="w-1 shrink-0 cursor-col-resize border-r border-border outline-none hover:bg-ring focus-visible:bg-ring"
+          />
 
           {/* Right: search results, or Contents/History of the selection */}
           {searchQuery ? (
@@ -323,19 +390,7 @@ export function CodeBrowseView() {
               <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
                 <div className="flex min-w-0 items-center gap-3">
                   <Breadcrumb path={selected.path} repositoryName={repo.repositoryName} />
-                  <div className="flex shrink-0 gap-1 text-sm">
-                    <TabButton active={tab === "contents"} onClick={() => setTab("contents")}>
-                      Contents
-                    </TabButton>
-                    <TabButton active={tab === "history"} onClick={() => setTab("history")}>
-                      History
-                    </TabButton>
-                    {!selected.isFolder ? (
-                      <TabButton active={tab === "compare"} onClick={() => setTab("compare")}>
-                        Compare
-                      </TabButton>
-                    ) : null}
-                  </div>
+                  <CodeViewTabs tab={tab} onChange={setTab} showCompare={!selected.isFolder} />
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                   {!selected.isFolder ? (
@@ -358,7 +413,12 @@ export function CodeBrowseView() {
                   </button>
                 </div>
               </div>
-              <div className="min-h-0 flex-1 overflow-auto">
+              <div
+                role="tabpanel"
+                id={CODE_TABPANEL_ID}
+                aria-labelledby={`code-tab-${tab}`}
+                className="min-h-0 flex-1 overflow-auto"
+              >
                 {tab === "history" ? (
                   <CodeHistoryView
                     organization={organization}
@@ -389,6 +449,7 @@ export function CodeBrowseView() {
                   />
                 ) : (
                   <CodeFileView
+                    organization={organization}
                     organizationId={organizationId}
                     repo={repo}
                     branch={branch}
@@ -401,29 +462,6 @@ export function CodeBrowseView() {
         </div>
       )}
     </div>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`rounded px-2 py-0.5 ${
-        active ? "bg-secondary font-medium" : "text-muted-foreground hover:text-foreground"
-      }`}
-    >
-      {children}
-    </button>
   );
 }
 

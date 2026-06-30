@@ -62,16 +62,41 @@ export function commitUrl(
   return `${repoBase(organization, repo)}/commit/${commitId}`;
 }
 
-// Builds the Azure DevOps web URL for a path at a branch.
+export type LineRange = { start: number; end: number };
+
+// Builds the Azure DevOps web URL for a path at a branch. When `lines` is
+// given, appends the line-range query params Azure DevOps Web uses for
+// permalinks (`?...&line=10&lineEnd=20`).
 export function webUrl(
   organization: Organization | undefined,
   repo: RepoOption,
   path: string,
   branch: string,
+  lines?: LineRange,
 ): string {
-  return `${repoBase(organization, repo)}?path=${encodeURIComponent(
+  const base = `${repoBase(organization, repo)}?path=${encodeURIComponent(
     path,
   )}&version=GB${encodeURIComponent(branch)}&_a=contents`;
+  if (!lines) return base;
+  return `${base}&line=${lines.start}&lineEnd=${lines.end}&lineStartColumn=1&lineEndColumn=1&lineStyle=plain`;
+}
+
+// Parses a `#L10` (single line) or `#L10-L20` (range) URL hash into a 1-based,
+// normalized (start <= end) line range. Returns null for an absent or
+// unrecognized hash.
+export function parseLineHash(hash: string): LineRange | null {
+  const match = /^#?L(\d+)(?:-L?(\d+))?$/.exec(hash.trim());
+  if (!match) return null;
+  const start = Number(match[1]);
+  const end = match[2] ? Number(match[2]) : start;
+  if (!Number.isInteger(start) || start < 1 || !Number.isInteger(end) || end < 1) return null;
+  return start <= end ? { start, end } : { start: end, end: start };
+}
+
+// Builds a `#L10` or `#L10-L20` hash for a line range, matching GitHub's
+// permalink format.
+export function lineHash(range: LineRange): string {
+  return range.start === range.end ? `#L${range.start}` : `#L${range.start}-L${range.end}`;
 }
 
 // Builds the Azure DevOps web Blame URL for a file. Azure DevOps has no public

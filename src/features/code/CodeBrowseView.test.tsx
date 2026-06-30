@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CodeBrowseView } from "./CodeBrowseView";
+import { MAX_TREE_WIDTH } from "./codeBrowseStorage";
 
 let lastContainer: HTMLElement;
 
@@ -30,6 +31,7 @@ async function selectDemoRepository() {
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
+  window.history.replaceState(null, "", window.location.pathname);
 });
 
 describe("CodeBrowseView", () => {
@@ -105,7 +107,7 @@ describe("CodeBrowseView", () => {
       await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
         timeout: 8000,
       });
-      fireEvent.click(screen.getByRole("button", { name: "History" }));
+      fireEvent.click(screen.getByRole("tab", { name: "History" }));
       expect(
         await screen.findByText("Add expression utilities", undefined, { timeout: 8000 }),
       ).toBeTruthy();
@@ -165,7 +167,7 @@ describe("CodeBrowseView", () => {
         timeout: 8000,
       });
       fireEvent.click(screen.getAllByText("README.md")[0]);
-      fireEvent.click(await screen.findByRole("button", { name: "Compare" }, { timeout: 8000 }));
+      fireEvent.click(await screen.findByRole("tab", { name: "Compare" }, { timeout: 8000 }));
       const baseCombo = screen.getByRole("combobox", { name: "Compare base branch" });
       fireEvent.mouseDown(baseCombo);
       fireEvent.pointerDown(await screen.findByText("develop", undefined, { timeout: 8000 }));
@@ -175,6 +177,95 @@ describe("CodeBrowseView", () => {
           timeout: 8000,
         }),
       ).toBeTruthy();
+    },
+    15000,
+  );
+
+  it(
+    "selects a line range by clicking line numbers and reflects it in the URL hash",
+    async () => {
+      renderView();
+      await selectDemoRepository();
+      await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
+        timeout: 8000,
+      });
+      fireEvent.click(screen.getAllByText("README.md")[0]);
+      const line1 = await screen.findByRole("button", { name: "Line 1" }, { timeout: 8000 });
+      fireEvent.click(line1);
+      const line3 = screen.getByRole("button", { name: "Line 3" });
+      fireEvent.click(line3, { shiftKey: true });
+      await waitFor(() => expect(window.location.hash).toBe("#L1-L3"));
+      expect(screen.getByText("Lines 1-3")).toBeTruthy();
+    },
+    15000,
+  );
+
+  it(
+    "extends a line selection with Shift+ArrowDown from the keyboard",
+    async () => {
+      renderView();
+      await selectDemoRepository();
+      await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
+        timeout: 8000,
+      });
+      fireEvent.click(screen.getAllByText("README.md")[0]);
+      const line1 = await screen.findByRole("button", { name: "Line 1" }, { timeout: 8000 });
+      line1.focus();
+      fireEvent.keyDown(line1, { key: "ArrowDown", shiftKey: true });
+      await waitFor(() => expect(window.location.hash).toBe("#L1-L2"));
+      expect(screen.getByText("Lines 1-2")).toBeTruthy();
+    },
+    15000,
+  );
+
+  it(
+    "resizes the tree panel via keyboard and persists the width across remounts",
+    async () => {
+      const first = renderView();
+      await selectDemoRepository();
+      await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
+        timeout: 8000,
+      });
+      const separator = screen.getByRole("separator", { name: "Resize file tree" });
+      fireEvent.keyDown(separator, { key: "End" });
+      expect(separator.getAttribute("aria-valuenow")).toBe(String(MAX_TREE_WIDTH));
+      first.unmount();
+
+      // A fresh mount auto-restores the last repository (see the "remembers"
+      // test below), so don't re-select it here.
+      renderView();
+      await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
+        timeout: 8000,
+      });
+      expect(
+        screen.getByRole("separator", { name: "Resize file tree" }).getAttribute("aria-valuenow"),
+      ).toBe(String(MAX_TREE_WIDTH));
+    },
+    15000,
+  );
+
+  it(
+    "moves focus between tabs with arrow keys and activates with Enter",
+    async () => {
+      renderView();
+      await selectDemoRepository();
+      await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
+        timeout: 8000,
+      });
+      const contentsTab = screen.getByRole("tab", { name: "Contents" });
+      contentsTab.focus();
+      fireEvent.keyDown(contentsTab, { key: "ArrowRight" });
+      const historyTab = screen.getByRole("tab", { name: "History" });
+      expect(document.activeElement).toBe(historyTab);
+      // Arrow movement only moves focus (roving tabindex); it doesn't activate.
+      expect(historyTab.getAttribute("aria-selected")).toBe("false");
+      fireEvent.keyDown(historyTab, { key: "Enter" });
+      expect(
+        await screen.findByText("Add expression utilities", undefined, { timeout: 8000 }),
+      ).toBeTruthy();
+      expect(screen.getByRole("tab", { name: "History" }).getAttribute("aria-selected")).toBe(
+        "true",
+      );
     },
     15000,
   );

@@ -86,6 +86,7 @@ export function TreeLevel({
                 type="button"
                 data-tree-item
                 data-path={item.path}
+                data-name={item.name}
                 data-folder={item.isFolder ? "true" : "false"}
                 data-open={isOpen ? "true" : "false"}
                 tabIndex={-1}
