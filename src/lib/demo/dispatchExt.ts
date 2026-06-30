@@ -101,8 +101,11 @@ export function dispatchExt(command: string, args: unknown): unknown {
     // ── Commits ────────────────────────────────────────────────────────────
     case "search_commits": {
       const input = (args as { input?: SearchCommitsInput } | undefined)?.input;
-      const commits = demoCommits(input);
-      return { commits, total: commits.length, truncated: false };
+      const all = demoCommits(input);
+      const offset = input?.offset ?? 0;
+      const limit = 100;
+      const page = all.slice(offset, offset + limit);
+      return { commits: page, total: all.length, truncated: (offset + limit) < all.length };
     }
     case "commit_activity": {
       const input = (args as { input?: CommitActivityInput } | undefined)?.input;

@@ -26,6 +26,10 @@ export async function searchCode(input: {
   repositories?: string[];
   branch?: string;
   path?: string;
+  /** Page size; the backend defaults this when omitted. */
+  top?: number;
+  /** Number of leading results to skip, for "load more" paging. */
+  skip?: number;
   operationId?: string;
 }): Promise<CodeSearchResults> {
   const result = await invokeCommand("search_code", { input });
@@ -134,6 +138,10 @@ export async function listRepoHistory(input: {
   repository: string;
   branch: string;
   path: string;
+  /** Page size; the backend defaults this when omitted. */
+  top?: number;
+  /** Number of leading commits to skip, for "load more" paging. */
+  skip?: number;
   operationId?: string;
 }): Promise<RepoCommitInfo[]> {
   const result = await invokeCommand("list_repo_history", { input });

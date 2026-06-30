@@ -57,10 +57,10 @@ fn replace_commits_skips_unchanged_rows_and_deletes_stale() {
         rowid_before, rowid_after,
         "unchanged rows must not be rewritten"
     );
-    assert!(search_commits_fts(&conn, "org1", "retry", None)
+    assert!(search_commits_fts(&conn, "org1", "retry", None, None, None)
         .unwrap()
         .is_empty());
-    let results = search_commits_fts(&conn, "org1", "palette", None).unwrap();
+    let results = search_commits_fts(&conn, "org1", "palette", None, None, None).unwrap();
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].commit_id, "ccc333");
 }
@@ -78,7 +78,7 @@ fn commits_fts_roundtrip() {
     )
     .unwrap();
 
-    let results = search_commits_fts(&conn, "org1", "auth", None).unwrap();
+    let results = search_commits_fts(&conn, "org1", "auth", None, None, None).unwrap();
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].commit_id, "abc123");
 
@@ -95,7 +95,7 @@ fn commits_fts_roundtrip() {
         .unwrap();
     assert_eq!(fts_count, 1);
 
-    let results = search_commits_fts(&conn, "org1", "session", None).unwrap();
+    let results = search_commits_fts(&conn, "org1", "session", None, None, None).unwrap();
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].comment, "refactor auth and session middleware");
 }
@@ -280,6 +280,72 @@ fn purge_old_commits_removes_null_author_date() {
     let remaining = db.search_commits("org1", None, None, None, None).unwrap();
     assert_eq!(remaining.len(), 1);
     assert_eq!(remaining[0].commit_id, "new");
+}
+
+#[test]
+fn search_commits_fts_date_filter_applied_in_sql() {
+    // Verifies that date bounds are applied inside the FTS SQL query rather than
+    // post-hoc, so a date-matching commit is never dropped by the LIMIT 200 cap.
+    let tf = NamedTempFile::new().unwrap();
+    let db = AppDatabase::new(tf.path().to_path_buf());
+    db.initialize().unwrap();
+    db.upsert_organization(make_org_draft("org1")).unwrap();
+
+    let make_dated = |commit_id: &str, comment: &str, date: &str| CachedCommit {
+        org_id: "org1".to_string(),
+        project_id: "p1".to_string(),
+        project_name: "P1".to_string(),
+        repository_id: "repo1".to_string(),
+        repository_name: "Repo1".to_string(),
+        commit_id: commit_id.to_string(),
+        comment: comment.to_string(),
+        author_name: Some("Dev".to_string()),
+        author_email: None,
+        author_date: Some(date.to_string()),
+        web_url: None,
+    };
+
+    db.replace_commits_for_repo(
+        "org1",
+        "repo1",
+        &[
+            make_dated("old", "refactor auth old", "2024-01-01T00:00:00+00:00"),
+            make_dated("new", "refactor auth new", "2026-01-01T00:00:00+00:00"),
+        ],
+    )
+    .unwrap();
+
+    // Without date filter both commits match.
+    let all = db
+        .search_commits_fts("org1", "auth", None, None, None)
+        .unwrap();
+    assert_eq!(all.len(), 2);
+
+    // With from_date only the 2026 commit is returned.
+    let filtered = db
+        .search_commits_fts(
+            "org1",
+            "auth",
+            None,
+            Some("2025-01-01T00:00:00+00:00"),
+            None,
+        )
+        .unwrap();
+    assert_eq!(filtered.len(), 1);
+    assert_eq!(filtered[0].commit_id, "new");
+
+    // With to_date only the 2024 commit is returned.
+    let filtered_to = db
+        .search_commits_fts(
+            "org1",
+            "auth",
+            None,
+            None,
+            Some("2024-12-31T23:59:59+00:00"),
+        )
+        .unwrap();
+    assert_eq!(filtered_to.len(), 1);
+    assert_eq!(filtered_to[0].commit_id, "old");
 }
 
 #[test]

@@ -47,6 +47,7 @@ export function CommitResults({
   activeExternalFilterCount = 0,
   loading,
   onClearExternalFilters,
+  onLoadMore,
   onOpenPullRequest,
   results,
   total,
@@ -56,6 +57,7 @@ export function CommitResults({
   activeExternalFilterCount?: number;
   loading: boolean;
   onClearExternalFilters?: () => void;
+  onLoadMore?: () => void;
   onOpenPullRequest?: (query: string, organizationId?: string) => void;
   results: CommitSummary[];
   total?: number;
@@ -374,6 +376,17 @@ export function CommitResults({
           </div>
         </div>
       )}
+      {onLoadMore && truncated && searched && !loading ? (
+        <div className="shrink-0 border-t border-border px-3 py-2 text-center">
+          <button
+            type="button"
+            onClick={onLoadMore}
+            className="rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            Load more commits
+          </button>
+        </div>
+      ) : null}
       </div>
 
       <ResizeHandle
@@ -394,11 +407,17 @@ export function CommitResults({
         onOpenPullRequest={onOpenPullRequest}
       />
 
-      {copyToast && (
-        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1 text-xs text-background shadow-lg">
-          {copyToast}
-        </div>
-      )}
+      {/* Always in DOM so aria-live fires correctly when content changes. */}
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className={`fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1 text-xs text-background shadow-lg transition-opacity ${
+          copyToast ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+      >
+        {copyToast}
+      </div>
       {columnMenuRect ? (
         <ColumnVisibilityMenu
           anchorRect={columnMenuRect}

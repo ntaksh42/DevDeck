@@ -1,12 +1,11 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { commandErrorMessage, getRepoFile } from "@/lib/azdoCommands";
+import { commandErrorMessage } from "@/lib/azdoCommands";
 import { ErrorState } from "@/components/StateDisplay";
 import { buildDiffLines, collapseDiff } from "@/lib/diffView";
 import { DiffLineText } from "@/components/DiffLineText";
 import { FilterableSelect } from "@/features/pipelines/FilterableSelect";
-import { type RepoOption } from "./codeBrowseShared";
+import { type RepoOption, useRepoFile } from "./codeBrowseShared";
 
 // Files > Compare: diffs the selected file between a chosen base branch and the
 // current branch, reusing the shared diff builder and renderer.
@@ -27,26 +26,8 @@ export function CodeCompareView({
   onBaseBranchChange: (value: string) => void;
   path: string;
 }) {
-  const fileArgs = (forBranch: string) => ({
-    organizationId,
-    project: repo.projectId,
-    repository: repo.repositoryId,
-    branch: forBranch,
-    path,
-  });
-
-  const baseQuery = useQuery({
-    queryKey: ["repoFile", organizationId, repo.repositoryId, baseBranch, path],
-    queryFn: () => getRepoFile(fileArgs(baseBranch)),
-    enabled: !!baseBranch,
-    staleTime: 60_000,
-  });
-  const targetQuery = useQuery({
-    queryKey: ["repoFile", organizationId, repo.repositoryId, branch, path],
-    queryFn: () => getRepoFile(fileArgs(branch)),
-    enabled: !!branch,
-    staleTime: 60_000,
-  });
+  const baseQuery = useRepoFile(organizationId, repo, baseBranch, path);
+  const targetQuery = useRepoFile(organizationId, repo, branch, path);
 
   // A file absent on the base branch (404) is treated as empty, i.e. fully added.
   const baseContent = baseQuery.data?.content ?? "";

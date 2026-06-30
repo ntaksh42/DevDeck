@@ -95,19 +95,15 @@ impl CommitService {
                 to_rfc.as_deref(),
             )?
         } else {
-            // FTS は日付絞り込み非対応なので in-memory でフィルタする
-            let mut rows =
-                self.db
-                    .search_commits_fts(&organization.id, &query, repository_set.as_deref())?;
-            rows.retain(|c| {
-                from_rfc
-                    .as_deref()
-                    .is_none_or(|f| c.author_date.as_deref().is_none_or(|d| d >= f))
-                    && to_rfc
-                        .as_deref()
-                        .is_none_or(|t| c.author_date.as_deref().is_none_or(|d| d <= t))
-            });
-            rows
+            // Date conditions are pushed into the FTS SQL query to avoid the
+            // LIMIT 200 cap dropping date-matching rows.
+            self.db.search_commits_fts(
+                &organization.id,
+                &query,
+                repository_set.as_deref(),
+                from_rfc.as_deref(),
+                to_rfc.as_deref(),
+            )?
         };
 
         let mut results: Vec<CommitSummary> = cached
@@ -142,7 +138,15 @@ impl CommitService {
                 .then_with(|| a.commit_id.cmp(&b.commit_id))
         });
         let total = results.len();
-        let truncated = total > COMMIT_SEARCH_RESULT_LIMIT;
+        // Apply the requested page offset. For FTS and live paths the in-memory
+        // result set is bounded by SQL/API limits (200 and 100 respectively), so
+        // pagination beyond those caps is unavailable — but pagination within
+        // the fetched set works correctly.
+        let offset = input.offset.unwrap_or(0).min(total);
+        if offset > 0 {
+            results.drain(..offset);
+        }
+        let truncated = (offset + COMMIT_SEARCH_RESULT_LIMIT) < total;
         results.truncate(COMMIT_SEARCH_RESULT_LIMIT);
         tracing::info!(
             organization = %organization.name,

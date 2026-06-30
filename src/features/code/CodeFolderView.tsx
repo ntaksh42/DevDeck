@@ -1,13 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
 import { File as FileIcon, Folder as FolderIcon, Loader2 } from "lucide-react";
-import { commandErrorMessage, getRepoFile, type Organization } from "@/lib/azdoCommands";
+import { commandErrorMessage, type Organization } from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
 import { MarkdownView } from "@/lib/markdown";
 import { ErrorState } from "@/components/StateDisplay";
-import { commitUrl, formatDate, useTreeQuery, type RepoOption } from "./codeBrowseShared";
+import { commitUrl, formatDate, useRepoFile, useTreeQuery, type RepoOption } from "./codeBrowseShared";
 
 // Right pane when a folder is selected: the Azure DevOps folder listing with
-// Name / Last change / Commits columns, plus the folder's README rendered below.
+// Name / Last change / Last commit columns, plus the folder's README rendered below.
 export function CodeFolderView({
   organization,
   organizationId,
@@ -51,7 +50,7 @@ export function CodeFolderView({
           <tr className="border-b border-border text-left text-xs text-muted-foreground">
             <th className="px-3 py-1.5 font-medium">Name</th>
             <th className="px-3 py-1.5 font-medium">Last change</th>
-            <th className="px-3 py-1.5 font-medium">Commits</th>
+            <th className="px-3 py-1.5 font-medium">Last commit</th>
           </tr>
         </thead>
         <tbody>
@@ -131,19 +130,7 @@ function ReadmePreview({
   branch: string;
   path: string;
 }) {
-  const query = useQuery({
-    queryKey: ["repoFile", organizationId, repo.repositoryId, branch, path],
-    queryFn: () =>
-      getRepoFile({
-        organizationId,
-        project: repo.projectId,
-        repository: repo.repositoryId,
-        branch,
-        path,
-      }),
-    enabled: !!branch,
-    staleTime: 60_000,
-  });
+  const query = useRepoFile(organizationId, repo, branch, path);
   const file = query.data;
   if (!file || file.isBinary || file.tooLarge || !file.content.trim()) return null;
   return (
