@@ -13,6 +13,7 @@ import {
 } from "@/lib/azdoCommands";
 import { formatDate, formatRelativeDate } from "@/lib/utils";
 import { extractWorkItemMentions, navigateToWorkItem } from "@/lib/crossLinks";
+import { fetchWorkItemImageCached } from "@/lib/workItemImageCache";
 import { MarkdownView } from "@/lib/markdown";
 import { openExternalUrl } from "@/lib/openExternal";
 import { LoadingState, ErrorState, PreviewEmptyState } from "@/components/StateDisplay";
@@ -81,6 +82,10 @@ export function ReviewTab({
   } = usePrReviewActions(pr);
 
   const mentionSearch = usePrMentionSearch(pr.organizationId);
+  const resolvePreviewImage = useCallback(
+    (url: string) => fetchWorkItemImageCached({ organizationId: pr.organizationId, url }),
+    [pr.organizationId],
+  );
 
   const settingsQuery = useQuery({
     queryKey: ["appSettings"],
@@ -305,7 +310,11 @@ export function ReviewTab({
           ) : (
             <div className="pb-2">
               {review.description ? (
-                <MarkdownView text={review.description} className="text-xs text-foreground" />
+                <MarkdownView
+                  text={review.description}
+                  className="text-xs text-foreground"
+                  resolveImageSource={resolvePreviewImage}
+                />
               ) : (
                 <p className="text-xs italic text-muted-foreground">No description.</p>
               )}
@@ -354,6 +363,7 @@ export function ReviewTab({
                   thread={thread}
                   busy={commentMutation.isPending || statusMutation.isPending}
                   mentionSearch={mentionSearch}
+                  resolveImageSource={resolvePreviewImage}
                   onReply={(content) =>
                     commentMutation.mutateAsync({
                       ...prLocator(pr),

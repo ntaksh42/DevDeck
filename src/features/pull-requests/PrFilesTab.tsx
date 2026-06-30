@@ -23,6 +23,7 @@ import {
   type ReviewPullRequestSummary,
 } from "@/lib/azdoCommands";
 import { focusPrimaryPreview, isEditableTarget } from "@/lib/utils";
+import { fetchWorkItemImageCached } from "@/lib/workItemImageCache";
 import { LoadingState, ErrorState, PreviewEmptyState } from "@/components/StateDisplay";
 import { CommentComposer } from "./CommentComposer";
 import { PrThreadCard } from "./PrThreadCard";
@@ -265,6 +266,10 @@ export function PrFilesTab({
       searchPullRequestMentions({ organizationId: pr.organizationId, query }),
     [pr.organizationId],
   );
+  const resolveImageSource = useCallback(
+    (url: string) => fetchWorkItemImageCached({ organizationId: pr.organizationId, url }),
+    [pr.organizationId],
+  );
 
   // Scroll the n/p-focused thread into view once its file's diff is rendered.
   useEffect(() => {
@@ -407,6 +412,7 @@ export function PrFilesTab({
             busy={mutationsBusy}
             showFilePath={false}
             mentionSearch={mentionSearch}
+            resolveImageSource={resolveImageSource}
             onReply={(content) => replyToThread(thread, content)}
             onToggleStatus={() => toggleThreadStatus(thread)}
             onEditComment={(commentId, content) => editComment(thread, commentId, content)}

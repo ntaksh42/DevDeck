@@ -322,6 +322,10 @@ format!(
   キャッシュでは creation_date を対象にメモリ内で絞り込む。active 行は完了日を持たないため期間は常に作成日基準。
   ドラフト除外用に active キャッシュ (`pull_requests.is_draft`) が draft 状態を保持する。
 - Azure DevOps のリッチテキストは表示前にサニタイズ・正規化し、生の HTML を可視テキストに漏らさない。
+  本文中の認証必須な添付画像 (`_apis/wit/attachments/`、Work Item とリッチテキスト共通の添付ストア。
+  PR の説明・コメントもこれを使う) は webview から直接取得すると認証ヘッダが付かず 401 になるため、
+  バックエンド (`fetch_work_item_image`、同一組織の wit 添付 URL のみ許可・LRU キャッシュ) 経由で取得して
+  data URL に差し替えてから表示する。
 - サーバ状態は TanStack Query 経由。ミューテーションで画面表示が変わる場合は該当クエリキーを更新/無効化する。
 - 長いリストは既存のローカル windowing で仮想化する。
 - 広範なリファクタは要求された変更に必要な場合のみ行う。
