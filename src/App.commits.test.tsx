@@ -117,6 +117,8 @@ describe("App — Commits", () => {
         target: { value: "commit" },
       },
     );
+    // Date inputs live behind the collapsed advanced "Filters" panel.
+    fireEvent.click(main.getByRole("button", { name: "Filters" }));
     fireEvent.change(await main.findByLabelText("From"), {
       target: { value: "2026-05-01" },
     });
@@ -189,6 +191,8 @@ describe("App — Commits", () => {
 
     await screen.findByText("No pull requests assigned to you.");
     fireEvent.click(screen.getByRole("button", { name: "Commits" }));
+    // Date inputs live behind the collapsed advanced "Filters" panel.
+    fireEvent.click(await main.findByRole("button", { name: "Filters" }));
     fireEvent.change(await main.findByLabelText("From"), {
       target: { value: "2026-05-25" },
     });
