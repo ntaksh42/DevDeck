@@ -26,8 +26,10 @@ use crate::code_search::{
 };
 use crate::commits::{
     CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
-    CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput, GetCommitFileDiffInput,
-    GetCommitPullRequestsInput, ListCommitRepositoriesInput, SearchCommitsInput,
+    CommitPullRequestsBatchEntry, CommitRepositoryOption, CommitSearchResult,
+    GetCommitChangesInput, GetCommitFileDiffInput, GetCommitPullRequestsBatchInput,
+    GetCommitPullRequestsInput, GetCommitWorkItemsInput, ListCommitRepositoriesInput,
+    SearchCommitsInput,
 };
 use crate::error::Result;
 use crate::pipelines::{
@@ -172,6 +174,19 @@ pub(crate) trait Provider: Send + Sync {
         &self,
         input: GetCommitPullRequestsInput,
     ) -> Result<Vec<CommitPullRequest>>;
+    /// Batched form of `get_commit_pull_requests`, used to prefetch PR counts
+    /// for a visible window of grid rows in one call.
+    async fn get_commit_pull_requests_batch(
+        &self,
+        input: GetCommitPullRequestsBatchInput,
+    ) -> Result<Vec<CommitPullRequestsBatchEntry>>;
+    /// Work items linked to a commit. Azure DevOps only; other providers
+    /// return an empty list rather than `NotSupported` so the (ungated)
+    /// commit preview panel degrades gracefully.
+    async fn get_commit_work_items(
+        &self,
+        input: GetCommitWorkItemsInput,
+    ) -> Result<Vec<WorkItemSummary>>;
 
     // --- Pull request review ---
     async fn get_pull_request_review(&self, input: PrLocator) -> Result<PullRequestReview>;

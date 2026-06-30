@@ -28,6 +28,9 @@ mod sync;
 mod types;
 pub(crate) use candidates::*;
 use conversions::*;
+// Reused by the commits module to build work item summaries for commit-linked
+// work items, mirroring how this module already reuses `commits::encode_path_segment`.
+pub(crate) use conversions::summarize_work_item;
 pub(crate) use query::*;
 pub(crate) use sync::*;
 pub use types::*;

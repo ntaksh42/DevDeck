@@ -1,4 +1,6 @@
-use serde::Deserialize;
+use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::client::AdoClient;
@@ -14,6 +16,24 @@ const WORK_ITEMS_BATCH_LIMIT: usize = 200;
 struct WorkItemTypeFieldValues {
     #[serde(default)]
     allowed_values: Vec<Value>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ArtifactUriQuery<'a> {
+    artifact_uris: Vec<&'a str>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ArtifactUriQueryWorkItemRef {
+    id: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ArtifactUriQueryResponse {
+    #[serde(default)]
+    artifact_uris_query_result: HashMap<String, Vec<ArtifactUriQueryWorkItemRef>>,
 }
 
 impl AdoClient {
@@ -127,6 +147,32 @@ impl AdoClient {
             items.extend(response.value);
         }
         Ok(items)
+    }
+
+    /// Looks up work items linked to the given artifact URIs (e.g.
+    /// `vstfs:///Git/Commit/{projectGuid}%2F{repoGuid}%2F{commitSha}`), keyed
+    /// by the artifact URI. Used to find work items linked to a commit, the
+    /// same mechanism Azure DevOps uses internally for pull requests.
+    pub async fn query_work_item_ids_for_artifact_uris(
+        &self,
+        project_id: &str,
+        artifact_uris: &[String],
+    ) -> Result<HashMap<String, Vec<i64>>> {
+        if artifact_uris.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let path = format!("{project_id}/_apis/wit/artifacturiquery");
+        let body = ArtifactUriQuery {
+            artifact_uris: artifact_uris.iter().map(String::as_str).collect(),
+        };
+        let response: ArtifactUriQueryResponse = self
+            .post_json(&path, &[("api-version", "7.1")], &body)
+            .await?;
+        Ok(response
+            .artifact_uris_query_result
+            .into_iter()
+            .map(|(uri, refs)| (uri, refs.into_iter().map(|r| r.id).collect()))
+            .collect())
     }
 
     pub async fn get_work_item_relations(

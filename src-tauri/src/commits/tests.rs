@@ -5,7 +5,8 @@ use crate::db::{AppDatabase, CachedCommit, Organization};
 use crate::sync::SyncBudget;
 
 use super::helpers::{
-    commit_web_url, normalize_date, normalize_item_path, normalize_optional, ChangeFlags,
+    commit_artifact_uri, commit_web_url, normalize_date, normalize_item_path, normalize_optional,
+    ChangeFlags,
 };
 use super::sync::{commit_full_sync_scope, sync_commits_for_org};
 
@@ -75,6 +76,17 @@ fn commit_web_url_encodes_spaces_and_trims_trailing_slash() {
     assert_eq!(
         commit_web_url(&org, "Platform Team", "azdo dashboard", "abcdef123456"),
         "https://dev.azure.com/contoso/Platform%20Team/_git/azdo%20dashboard/commit/abcdef123456"
+    );
+}
+
+#[test]
+fn commit_artifact_uri_matches_pull_request_artifact_link_shape() {
+    // Mirrors the PR artifact link format
+    // (`vstfs:///Git/PullRequestId/{projGuid}%2F{repoGuid}%2F{prId}`) parsed by
+    // `work_items::pull_request_id_from_artifact`, but for `Git/Commit`.
+    assert_eq!(
+        commit_artifact_uri("proj-guid", "repo-guid", "abc123"),
+        "vstfs:///Git/Commit/proj-guid%2Frepo-guid%2Fabc123"
     );
 }
 

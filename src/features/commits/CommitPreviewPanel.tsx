@@ -6,12 +6,83 @@ import {
   type CommitPullRequest,
   commandErrorMessage,
   getCommitPullRequests,
+  getCommitWorkItems,
 } from "@/lib/azdoCommands";
 import { isEditableTarget, focusPrimaryGrid, formatDate } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
+import { navigateToWorkItem } from "@/lib/crossLinks";
+import { WorkItemStatePill, WorkItemTypeBadge } from "@/features/work-items/WorkItemBadges";
 import { CommitFilesPanel } from "./CommitFilesPanel";
 import { PR_STATUS_LABELS } from "./commitSearchConstants";
 import { commitPrQueryKey, prStatusBadgeClass } from "./commitSearchUtils";
+
+// Lists the work items linked to the selected commit via Azure DevOps's
+// artifact link mechanism. Hidden when the commit has no linked work items,
+// matching the related-PRs panel above it.
+function CommitWorkItemsPanel({ commit }: { commit: CommitSummary }) {
+  const workItemsQuery = useQuery({
+    queryKey: ["commitWorkItems", commit.organizationId, commit.repositoryId, commit.commitId],
+    queryFn: () =>
+      getCommitWorkItems({
+        organizationId: commit.organizationId,
+        projectId: commit.projectId,
+        projectName: commit.projectName,
+        repositoryId: commit.repositoryId,
+        commitId: commit.commitId,
+      }),
+    staleTime: 5 * 60_000,
+  });
+
+  if (workItemsQuery.isLoading) {
+    return (
+      <div className="flex items-center gap-2 border-t border-border px-3 py-2 text-xs text-muted-foreground">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Loading linked work
+        items…
+      </div>
+    );
+  }
+  if (workItemsQuery.isError) {
+    return (
+      <p className="border-t border-border px-3 py-2 text-xs text-destructive">
+        {commandErrorMessage(workItemsQuery.error)}
+      </p>
+    );
+  }
+  const workItems = workItemsQuery.data ?? [];
+  if (workItems.length === 0) return null;
+
+  return (
+    <div className="border-t border-border">
+      <div className="border-b border-border bg-muted px-3 py-1 text-[11px] font-medium text-muted-foreground">
+        {workItems.length} linked work item{workItems.length === 1 ? "" : "s"}
+      </div>
+      <ul>
+        {workItems.map((item) => (
+          <li key={item.id}>
+            <button
+              type="button"
+              onClick={() => navigateToWorkItem({ organizationId: item.organizationId, workItemId: item.id })}
+              onKeyDown={(event) => {
+                // Keep Enter/Space on the button; don't let the preview's
+                // Esc/Arrow handler hijack activation.
+                if (event.key === "Enter" || event.key === " ") {
+                  event.stopPropagation();
+                }
+              }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-muted/50 focus:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              title={`Open work item ${item.id} in Work Items`}
+            >
+              <span className="shrink-0 font-mono text-muted-foreground">#{item.id}</span>
+              <span className="min-w-0 flex-1 truncate font-medium text-foreground">{item.title}</span>
+              {item.workItemType ? <WorkItemTypeBadge type={item.workItemType} /> : null}
+              {item.state ? <WorkItemStatePill state={item.state} /> : null}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 // Lists the PRs that contain the selected commit. This is the query that
 // actually fetches; the grid indicator reads the same cache passively. Renders
@@ -184,6 +255,7 @@ export function CommitPreviewPanel({
               </dl>
             </div>
             <CommitRelatedPrsPanel commit={commit} onOpenPullRequest={onOpenPullRequest} />
+            <CommitWorkItemsPanel commit={commit} />
             <CommitFilesPanel
               key={`${commit.organizationId}:${commit.repositoryId}:${commit.commitId}`}
               organizationId={commit.organizationId}

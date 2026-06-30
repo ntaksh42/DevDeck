@@ -454,3 +454,45 @@ async fn set_work_item_comment_reaction_puts_and_deletes() {
         .await
         .unwrap();
 }
+
+#[tokio::test]
+async fn query_work_item_ids_for_artifact_uris_maps_response() {
+    let server = MockServer::start().await;
+    let uri = "vstfs:///Git/Commit/proj-guid%2Frepo-guid%2Fabc123";
+    Mock::given(method("POST"))
+        .and(path("/project-1/_apis/wit/artifacturiquery"))
+        .and(query_param("api-version", "7.1"))
+        .and(body_json(serde_json::json!({ "artifactUris": [uri] })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "artifactUrisQueryResult": {
+                uri: [
+                    { "id": 1, "url": "https://dev.azure.com/contoso/_apis/wit/workItems/1" },
+                    { "id": 2, "url": "https://dev.azure.com/contoso/_apis/wit/workItems/2" }
+                ]
+            }
+        })))
+        .mount(&server)
+        .await;
+
+    let result = test_client(&server)
+        .await
+        .query_work_item_ids_for_artifact_uris("project-1", &[uri.to_string()])
+        .await
+        .unwrap();
+    let mut ids = result.get(uri).cloned().unwrap_or_default();
+    ids.sort();
+    assert_eq!(ids, vec![1, 2]);
+}
+
+#[tokio::test]
+async fn query_work_item_ids_for_artifact_uris_empty_input_skips_request() {
+    let server = MockServer::start().await;
+    // No mock registered: a request would fail the test via wiremock's
+    // unmatched-request panic, so this also asserts no call is made.
+    let result = test_client(&server)
+        .await
+        .query_work_item_ids_for_artifact_uris("project-1", &[])
+        .await
+        .unwrap();
+    assert!(result.is_empty());
+}

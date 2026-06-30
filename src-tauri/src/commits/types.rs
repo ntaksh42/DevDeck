@@ -147,3 +147,31 @@ pub struct CommitPullRequest {
     pub my_vote_label: String,
     pub web_url: Option<String>,
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetCommitPullRequestsBatchInput {
+    pub organization_id: Option<String>,
+    pub repository_id: String,
+    pub commit_ids: Vec<String>,
+}
+
+/// One commit's related pull requests, as part of a batched lookup. Mirrors
+/// `get_commit_pull_requests`'s per-commit shape so the frontend can populate
+/// the same cache entries from either command.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitPullRequestsBatchEntry {
+    pub commit_id: String,
+    pub pull_requests: Vec<CommitPullRequest>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetCommitWorkItemsInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub project_name: String,
+    pub repository_id: String,
+    pub commit_id: String,
+}
