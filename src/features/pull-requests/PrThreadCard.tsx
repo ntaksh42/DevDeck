@@ -18,6 +18,7 @@ export function PrThreadCard({
   onEditComment,
   onDeleteComment,
   mentionSearch,
+  resolveImageSource,
 }: {
   thread: PrThread;
   busy: boolean;
@@ -27,6 +28,7 @@ export function PrThreadCard({
   onEditComment?: (commentId: number, content: string) => Promise<void>;
   onDeleteComment?: (commentId: number) => Promise<void>;
   mentionSearch?: (query: string) => Promise<MentionCandidate[]>;
+  resolveImageSource?: (url: string) => Promise<string | null>;
 }) {
   const [replying, setReplying] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -136,7 +138,11 @@ export function PrThreadCard({
                   />
                 </div>
               ) : (
-                <MarkdownView text={comment.content ?? ""} className="text-foreground" />
+                <MarkdownView
+                  text={comment.content ?? ""}
+                  className="text-foreground"
+                  resolveImageSource={resolveImageSource}
+                />
               )}
             </div>
           ))}
