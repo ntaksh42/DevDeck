@@ -47,8 +47,15 @@ const commitActivityDaysSchema = z.array(commitActivityDaySchema);
 
 export type CommitActivityDay = z.infer<typeof commitActivityDaySchema>;
 
+/** Atomic change-type tokens from Azure DevOps. A file's `changeType` field is
+ *  a comma-separated string of one or more of these tokens (e.g. "edit, rename").
+ *  Both the frontend (`changeTypeBadge`) and the backend (`ChangeFlags::parse`)
+ *  parse these tokens — kept in sync here as the canonical TS type. */
+export type ChangeTypeToken = "add" | "edit" | "delete" | "rename" | "undelete";
+
 const commitChangedFileSchema = z.object({
   path: z.string(),
+  // Runtime stays z.string() since the API may return composite values like "edit, rename".
   changeType: z.string(),
   originalPath: z.string().nullable(),
 });
@@ -87,6 +94,8 @@ export type SearchCommitsInput = {
   projectIds?: string[];
   /** Repositories to include. Empty/omitted means all repositories. */
   repositoryIds?: string[];
+  /** Offset into the sorted result set for "Load more" pagination. */
+  offset?: number;
 };
 
 export type ListCommitRepositoriesInput = {

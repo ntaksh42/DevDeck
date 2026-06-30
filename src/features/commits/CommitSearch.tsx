@@ -1,6 +1,5 @@
 import {
   type FormEvent,
-  type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
   useMemo,
   useRef,
@@ -12,6 +11,8 @@ import {
   searchCommits,
   listCommitRepositories,
   commandErrorMessage,
+  type SearchCommitsInput,
+  type CommitSummary,
 } from "@/lib/azdoCommands";
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { MultiSelectFilter } from "@/components/MultiSelectFilter";
@@ -26,6 +27,7 @@ import {
   loadCommitViewMode,
   uniqueCommitProjects,
 } from "./commitSearchUtils";
+import { CommitViewToggle } from "./CommitViewToggle";
 
 export function CommitSearch({
   externalSearch,
@@ -57,8 +59,23 @@ export function CommitSearch({
       ),
   );
 
+  // Accumulated commits across Load more pages.
+  const [allCommits, setAllCommits] = useState<CommitSummary[]>([]);
+  // True when the pending mutation is a "load more" append rather than a new search.
+  const isLoadMoreRef = useRef(false);
+  // Last search params saved so Load more can re-issue the same query with a higher offset.
+  const lastSearchInputRef = useRef<SearchCommitsInput | null>(null);
+
   const mutation = useMutation({
     mutationFn: searchCommits,
+    onSuccess(data) {
+      if (isLoadMoreRef.current) {
+        setAllCommits((prev) => [...prev, ...data.commits]);
+      } else {
+        setAllCommits(data.commits);
+      }
+      isLoadMoreRef.current = false;
+    },
   });
 
   const repositoriesQuery = useQuery({
@@ -76,9 +93,20 @@ export function CommitSearch({
         : repositoryOptions,
     [projectIds, repositoryOptions],
   );
-  const results = mutation.data?.commits ?? [];
-  const totalMatches = mutation.data?.total ?? results.length;
+  const totalMatches = mutation.data?.total ?? allCommits.length;
   const resultsTruncated = mutation.data?.truncated ?? false;
+  // Build author autocomplete suggestions from already-fetched commits.
+  const authorSuggestions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const c of allCommits) {
+      for (const v of [c.authorName, c.authorEmail]) {
+        if (v && !seen.has(v)) { seen.add(v); out.push(v); }
+      }
+      if (out.length >= 30) break;
+    }
+    return out;
+  }, [allCommits]);
   const advancedFilterCount =
     (author.trim() ? 1 : 0) +
     (branch.trim() ? 1 : 0) +
@@ -131,7 +159,8 @@ export function CommitSearch({
     setProjectIds([]);
     setRepositoryIds([]);
     setValidationError(null);
-    mutation.mutate({
+    setAllCommits([]);
+    const externalInput: SearchCommitsInput = {
       organizationId: targetOrganizationId,
       query: externalSearch.query,
       author: "",
@@ -140,7 +169,10 @@ export function CommitSearch({
       toDate: "",
       projectIds: undefined,
       repositoryIds: undefined,
-    });
+    };
+    isLoadMoreRef.current = false;
+    lastSearchInputRef.current = externalInput;
+    mutation.mutate(externalInput);
     onExternalSearchHandled?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalSearch?.requestId]);
@@ -162,7 +194,7 @@ export function CommitSearch({
       return;
     }
     setValidationError(null);
-    mutation.mutate({
+    const searchInput: SearchCommitsInput = {
       organizationId: selectedOrganizationId,
       query: keyword,
       author,
@@ -172,7 +204,10 @@ export function CommitSearch({
       toDate,
       projectIds: projectIds.length > 0 ? projectIds : undefined,
       repositoryIds: repositoryIds.length > 0 ? repositoryIds : undefined,
-    });
+    };
+    isLoadMoreRef.current = false;
+    lastSearchInputRef.current = searchInput;
+    mutation.mutate(searchInput);
   }
 
   function clearSearchFilters() {
@@ -184,8 +219,9 @@ export function CommitSearch({
     setProjectIds([]);
     setRepositoryIds([]);
     setValidationError(null);
+    setAllCommits([]);
     if (mutation.isSuccess) {
-      mutation.mutate({
+      const clearInput: SearchCommitsInput = {
         organizationId: selectedOrganizationId,
         query: "",
         author: "",
@@ -194,8 +230,17 @@ export function CommitSearch({
         toDate: "",
         projectIds: undefined,
         repositoryIds: undefined,
-      });
+      };
+      isLoadMoreRef.current = false;
+      lastSearchInputRef.current = clearInput;
+      mutation.mutate(clearInput);
     }
+  }
+
+  function handleLoadMore() {
+    if (!lastSearchInputRef.current || !resultsTruncated) return;
+    isLoadMoreRef.current = true;
+    mutation.mutate({ ...lastSearchInputRef.current, offset: allCommits.length });
   }
 
   return (
@@ -243,7 +288,18 @@ export function CommitSearch({
                 {repositoriesQuery.isLoading
                   ? "Loading repositories"
                   : repositoriesQuery.isError
-                    ? "Repositories unavailable"
+                    ? (
+                      <>
+                        Repositories unavailable{" "}
+                        <button
+                          type="button"
+                          onClick={() => void repositoriesQuery.refetch()}
+                          className="rounded-sm underline hover:no-underline focus:outline-none focus:ring-2 focus:ring-ring"
+                        >
+                          Retry
+                        </button>
+                      </>
+                    )
                     : `${repositoryOptions.length} repositories available`}
               </p>
             </div>
@@ -310,8 +366,14 @@ export function CommitSearch({
                 value={author}
                 onChange={(event) => setAuthor(event.target.value)}
                 placeholder="email or name"
+                list={authorSuggestions.length > 0 ? "commit-author-suggestions" : undefined}
                 className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
+              {authorSuggestions.length > 0 ? (
+                <datalist id="commit-author-suggestions">
+                  {authorSuggestions.map((s) => <option key={s} value={s} />)}
+                </datalist>
+              ) : null}
             </label>
 
             <label className="grid gap-2">
@@ -410,8 +472,9 @@ export function CommitSearch({
           activeExternalFilterCount={activeSearchFilterCount}
           loading={mutation.isPending}
           onClearExternalFilters={clearSearchFilters}
+          onLoadMore={resultsTruncated ? handleLoadMore : undefined}
           onOpenPullRequest={onOpenPullRequest}
-          results={results}
+          results={allCommits}
           total={totalMatches}
           truncated={resultsTruncated}
           searched={mutation.isSuccess}
@@ -421,55 +484,3 @@ export function CommitSearch({
   );
 }
 
-function CommitViewToggle({
-  value,
-  onChange,
-}: {
-  value: CommitViewMode;
-  onChange: (mode: CommitViewMode) => void;
-}) {
-  const tabs: { id: CommitViewMode; label: string }[] = [
-    { id: "results", label: "Results" },
-    { id: "activity", label: "Activity" },
-  ];
-  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
-
-  function handleKeyDown(event: ReactKeyboardEvent, index: number) {
-    let next = index;
-    if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % tabs.length;
-    else if (event.key === "ArrowLeft" || event.key === "ArrowUp")
-      next = (index - 1 + tabs.length) % tabs.length;
-    else return;
-    event.preventDefault();
-    const target = tabs[next];
-    onChange(target.id);
-    tabRefs.current[next]?.focus();
-  }
-
-  return (
-    <div role="tablist" aria-label="Commit view" className="inline-flex rounded-md border border-border bg-card p-0.5">
-      {tabs.map((tab, index) => {
-        const active = value === tab.id;
-        return (
-          <button
-            key={tab.id}
-            ref={(el) => {
-              tabRefs.current[index] = el;
-            }}
-            type="button"
-            role="tab"
-            aria-selected={active}
-            tabIndex={active ? 0 : -1}
-            onClick={() => onChange(tab.id)}
-            onKeyDown={(event) => handleKeyDown(event, index)}
-            className={`rounded px-3 py-1 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ring ${
-              active ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {tab.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}

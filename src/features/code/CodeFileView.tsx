@@ -1,16 +1,16 @@
 import {
   type KeyboardEvent as ReactKeyboardEvent,
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, Loader2, Search, X } from "lucide-react";
-import { commandErrorMessage, getRepoFile } from "@/lib/azdoCommands";
+import { Check, ChevronDown, ChevronUp, Copy, Loader2, Search, WrapText, X } from "lucide-react";
+import { commandErrorMessage } from "@/lib/azdoCommands";
 import { ErrorState } from "@/components/StateDisplay";
 import { highlightCode } from "@/lib/highlight";
-import { leafName, type RepoOption } from "./codeBrowseShared";
+import { leafName, type RepoOption, useRepoFile } from "./codeBrowseShared";
 
 type LineMatch = { start: number; end: number; ordinal: number };
 
@@ -29,19 +29,7 @@ export function CodeFileView({
   branch: string;
   path: string;
 }) {
-  const query = useQuery({
-    queryKey: ["repoFile", organizationId, repo.repositoryId, branch, path],
-    queryFn: () =>
-      getRepoFile({
-        organizationId,
-        project: repo.projectId,
-        repository: repo.repositoryId,
-        branch,
-        path,
-      }),
-    enabled: !!branch,
-    staleTime: 60_000,
-  });
+  const query = useRepoFile(organizationId, repo, branch, path);
 
   const content = query.data?.content ?? "";
   const lines = useMemo(() => content.split("\n"), [content]);
@@ -52,20 +40,26 @@ export function CodeFileView({
 
   const [findOpen, setFindOpen] = useState(false);
   const [find, setFind] = useState("");
+  // Defer the heavy per-line scan so typing in the find box stays responsive on
+  // large files; the input itself updates immediately.
+  const deferredFind = useDeferredValue(find);
   const [current, setCurrent] = useState(0);
+  const [wrap, setWrap] = useState(false);
+  const [copied, setCopied] = useState(false);
   const findInputRef = useRef<HTMLInputElement | null>(null);
   const currentMatchRef = useRef<HTMLElement | null>(null);
 
-  // Reset the find state whenever the file changes.
+  // Reset the find/view state whenever the file changes.
   useEffect(() => {
     setFindOpen(false);
     setFind("");
     setCurrent(0);
+    setCopied(false);
   }, [path]);
 
   // Per-line match ranges plus the total count, computed once per query change.
   const { lineMatches, total } = useMemo(() => {
-    const needle = find.toLowerCase();
+    const needle = deferredFind.toLowerCase();
     const map = new Map<number, LineMatch[]>();
     let ordinal = 0;
     if (needle) {
@@ -83,7 +77,7 @@ export function CodeFileView({
       });
     }
     return { lineMatches: map, total: ordinal };
-  }, [find, lines]);
+  }, [deferredFind, lines]);
 
   // Keep the current index in range and scroll the active match into view.
   useEffect(() => {
@@ -107,6 +101,16 @@ export function CodeFileView({
   function step(delta: number) {
     if (total === 0) return;
     setCurrent((value) => (value + delta + total) % total);
+  }
+
+  async function copyContent() {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard access can be denied; leave the button state unchanged.
+    }
   }
 
   function onContainerKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
@@ -149,9 +153,41 @@ export function CodeFileView({
   }
 
   const searching = findOpen && find.length > 0;
+  const wrapClass = wrap ? "whitespace-pre-wrap break-words" : "whitespace-pre";
   return (
     <div className="relative flex min-h-0 flex-1 flex-col" onKeyDown={onContainerKeyDown}>
-      <div className="flex items-center justify-end gap-2 border-b border-border px-2 py-1">
+      <div className="flex items-center justify-between gap-2 border-b border-border px-2 py-1">
+        <div className="flex items-center gap-2 pl-1 text-xs text-muted-foreground">
+          {highlighted?.language ? (
+            <span className="uppercase tracking-wide">{highlighted.language}</span>
+          ) : null}
+          <span>{lines.length} lines</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setWrap((value) => !value)}
+            aria-pressed={wrap}
+            title={wrap ? "Disable line wrap" : "Wrap long lines"}
+            className={`flex items-center gap-1 rounded px-1 py-0.5 text-xs hover:text-foreground ${
+              wrap ? "text-foreground" : "text-muted-foreground"
+            }`}
+          >
+            <WrapText className="h-3.5 w-3.5" aria-hidden="true" /> Wrap
+          </button>
+          <button
+            type="button"
+            onClick={copyContent}
+            title="Copy file contents"
+            className="flex items-center gap-1 rounded px-1 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+          >
+            {copied ? (
+              <Check className="h-3.5 w-3.5 text-green-600" aria-hidden="true" />
+            ) : (
+              <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            {copied ? "Copied" : "Copy"}
+          </button>
         {findOpen ? (
           <div className="flex items-center gap-1 text-sm">
             <Search className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
@@ -210,6 +246,7 @@ export function CodeFileView({
             <Search className="h-3.5 w-3.5" aria-hidden="true" /> Find
           </button>
         )}
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
@@ -224,7 +261,7 @@ export function CodeFileView({
           </div>
           {searching ? (
             <pre className="min-w-0 flex-1 overflow-x-auto px-3 py-1">
-              <code className="whitespace-pre">
+              <code className={wrapClass}>
                 {lines.map((line, index) => (
                   <div key={index}>
                     {renderLineWithMatches(line, lineMatches.get(index), current, currentMatchRef)}
@@ -235,7 +272,7 @@ export function CodeFileView({
           ) : (
             <pre className="min-w-0 flex-1 overflow-x-auto px-3 py-1">
               <code
-                className="hljs whitespace-pre bg-transparent"
+                className={`hljs ${wrapClass} bg-transparent`}
                 // The HTML is highlight.js output, sanitized by highlightCode.
                 dangerouslySetInnerHTML={{ __html: highlighted?.html ?? "" }}
               />

@@ -60,9 +60,11 @@ impl AppDatabase {
         org_id: &str,
         query: &str,
         repository_ids: Option<&[String]>,
+        from_date: Option<&str>,
+        to_date: Option<&str>,
     ) -> Result<Vec<CachedCommit>> {
         let conn = self.open()?;
-        search_commits_fts(&conn, org_id, query, repository_ids)
+        search_commits_fts(&conn, org_id, query, repository_ids, from_date, to_date)
     }
 
     pub fn list_commit_repositories(&self, org_id: &str) -> Result<Vec<CachedRepository>> {

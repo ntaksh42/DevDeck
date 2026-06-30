@@ -95,6 +95,8 @@ pub(crate) fn search_commits_fts(
     org_id: &str,
     query: &str,
     repository_ids: Option<&[String]>,
+    from_date: Option<&str>,
+    to_date: Option<&str>,
 ) -> Result<Vec<CachedCommit>> {
     let fts_query = fts5_query(query);
     if fts_query.is_empty() {
@@ -103,6 +105,7 @@ pub(crate) fn search_commits_fts(
     // ?1 = fts_query, ?2 = org_id, then one bind per repository id. The repo
     // filter is referenced twice (outer query and FTS subquery), so the same
     // placeholders are reused with the right table prefix in each spot.
+    // Date params are appended after repository ids.
     let mut bind: Vec<Box<dyn rusqlite::ToSql>> =
         vec![Box::new(fts_query), Box::new(org_id.to_string())];
     let placeholders: Vec<String> = match repository_ids.filter(|values| !values.is_empty()) {
@@ -128,11 +131,26 @@ pub(crate) fn search_commits_fts(
             )
         }
     };
+    // Date conditions applied in SQL so they are not affected by the LIMIT 200 cap.
+    let from_clause = from_date
+        .map(|d| {
+            let idx = bind.len() + 1;
+            bind.push(Box::new(d.to_string()));
+            format!(" AND c.author_date >= ?{idx}")
+        })
+        .unwrap_or_default();
+    let to_clause = to_date
+        .map(|d| {
+            let idx = bind.len() + 1;
+            bind.push(Box::new(d.to_string()));
+            format!(" AND c.author_date <= ?{idx}")
+        })
+        .unwrap_or_default();
     let sql = format!(
         "SELECT c.org_id, c.project_id, c.project_name, c.repository_id, c.repository_name, \
                 c.commit_id, c.comment, c.author_name, c.author_email, c.author_date, c.web_url \
          FROM commits c \
-         WHERE c.org_id = ?2{outer} \
+         WHERE c.org_id = ?2{outer}{from_clause}{to_clause} \
            AND c.commit_id IN ( \
                SELECT commit_id FROM commits_fts \
                WHERE commits_fts MATCH ?1 AND org_id = ?2{inner} \
@@ -141,6 +159,8 @@ pub(crate) fn search_commits_fts(
          LIMIT 200",
         outer = repo_clause("c."),
         inner = repo_clause(""),
+        from_clause = from_clause,
+        to_clause = to_clause,
     );
     let mut stmt = conn.prepare(&sql)?;
     let params: Vec<&dyn rusqlite::ToSql> = bind.iter().map(|value| value.as_ref()).collect();

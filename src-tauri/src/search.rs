@@ -112,6 +112,7 @@ pub async fn search_all(
                     to_date: None,
                     project_ids: None,
                     repository_ids: None,
+                    offset: None,
                 })
                 .await?
                 .commits,

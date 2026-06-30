@@ -42,7 +42,7 @@ export function CodeBrowseView() {
     enabled: !!organizationId,
     staleTime: 5 * 60_000,
   });
-  const repositories = (repositoriesQuery.data ?? []) as RepoOption[];
+  const repositories: RepoOption[] = repositoriesQuery.data ?? [];
 
   const [repositoryId, setRepositoryId] = useState("");
   const repo = repositories.find((option) => option.repositoryId === repositoryId) ?? null;

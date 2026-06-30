@@ -60,6 +60,11 @@ pub struct ListHistoryInput {
     pub branch: String,
     /// Path whose commit history to list, e.g. `/` or `/src/main.py`.
     pub path: String,
+    /// Page size; defaults to `HISTORY_TOP` when omitted or zero.
+    pub top: Option<u32>,
+    /// Number of leading commits to skip, for "load more" paging.
+    #[serde(default)]
+    pub skip: Option<u32>,
     #[serde(default)]
     pub operation_id: Option<String>,
 }
@@ -253,6 +258,10 @@ impl CodeBrowseService {
             "" | "/" => None,
             path => Some(path.to_string()),
         };
+        let top = match input.top {
+            Some(value) if value > 0 => value,
+            _ => HISTORY_TOP,
+        };
         let commits = client
             .list_commits(
                 &input.project,
@@ -260,7 +269,8 @@ impl CodeBrowseService {
                 CommitSearchCriteria {
                     branch: Some(input.branch),
                     item_path,
-                    top: Some(HISTORY_TOP),
+                    top: Some(top),
+                    skip: input.skip,
                     ..Default::default()
                 },
             )

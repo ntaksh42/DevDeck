@@ -8,6 +8,8 @@ use crate::error::{AppError, Result};
 use crate::secrets::SecretStore;
 
 const CODE_SEARCH_TOP: u32 = 50;
+// Upper bound on a single page; the Code Search API caps results per request.
+const CODE_SEARCH_MAX_TOP: u32 = 200;
 // Context preview bounds: at most this many matched lines, each with up to this
 // many lines of surrounding context, to keep one file's preview small.
 const CODE_CONTEXT_MAX_MATCHES: usize = 25;
@@ -26,6 +28,11 @@ pub struct SearchCodeInput {
     pub repositories: Option<Vec<String>>,
     pub branch: Option<String>,
     pub path: Option<String>,
+    /// Page size; defaults to `CODE_SEARCH_TOP` when omitted or zero.
+    pub top: Option<u32>,
+    /// Number of leading results to skip, for "load more" paging.
+    #[serde(default)]
+    pub skip: Option<u32>,
     /// Optional id for cooperative cancellation via `cancel_operation`.
     #[serde(default)]
     pub operation_id: Option<String>,
@@ -115,11 +122,12 @@ impl CodeSearchService {
 
         let client = client_for_organization(&organization, &self.secrets)?;
 
+        let top = resolve_top(input.top);
         let response = client
             .search_code(CodeSearchRequest {
                 search_text: query.to_string(),
-                top: CODE_SEARCH_TOP,
-                skip: 0,
+                top,
+                skip: input.skip.unwrap_or(0),
                 project: normalize_values(input.projects),
                 repository: normalize_values(input.repositories),
                 branch: normalize(input.branch),
@@ -245,6 +253,15 @@ fn build_code_context(content: &str, query: &str, context_lines: usize) -> CodeC
     }
 }
 
+/// Resolves the requested page size: defaults when omitted/zero, capped at the
+/// API's per-request maximum.
+fn resolve_top(requested: Option<u32>) -> u32 {
+    match requested {
+        Some(value) if value > 0 => value.min(CODE_SEARCH_MAX_TOP),
+        _ => CODE_SEARCH_TOP,
+    }
+}
+
 fn normalize(value: Option<String>) -> Option<String> {
     value
         .map(|value| value.trim().to_string())
@@ -336,6 +353,14 @@ mod tests {
             code_file_web_url(&org(), "Platform", "azdo dashboard", "/src/main.rs", Some("main")),
             "https://dev.azure.com/contoso/Platform/_git/azdo%20dashboard?path=/src/main.rs&_a=contents&version=GBmain"
         );
+    }
+
+    #[test]
+    fn resolve_top_defaults_and_caps() {
+        assert_eq!(resolve_top(None), CODE_SEARCH_TOP);
+        assert_eq!(resolve_top(Some(0)), CODE_SEARCH_TOP);
+        assert_eq!(resolve_top(Some(30)), 30);
+        assert_eq!(resolve_top(Some(10_000)), CODE_SEARCH_MAX_TOP);
     }
 
     #[test]

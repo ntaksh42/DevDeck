@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { listRepoTree, type Organization } from "@/lib/azdoCommands";
+import { getRepoFile, listRepoTree, type Organization } from "@/lib/azdoCommands";
 
 export type RepoOption = {
   projectId: string;
@@ -32,6 +32,30 @@ export function useTreeQuery(
         branch,
         path,
         includeLastCommit,
+      }),
+    enabled: !!branch,
+    staleTime: 60_000,
+  });
+}
+
+// Shared query for a file's content at a branch tip. Used by the file view, the
+// folder README preview, and both sides of the compare view, which all key the
+// cache the same way (so a file fetched once is reused across them).
+export function useRepoFile(
+  organizationId: string,
+  repo: RepoOption,
+  branch: string,
+  path: string,
+) {
+  return useQuery({
+    queryKey: ["repoFile", organizationId, repo.repositoryId, branch, path],
+    queryFn: () =>
+      getRepoFile({
+        organizationId,
+        project: repo.projectId,
+        repository: repo.repositoryId,
+        branch,
+        path,
       }),
     enabled: !!branch,
     staleTime: 60_000,

@@ -14,6 +14,9 @@ pub struct SearchCommitsInput {
     pub project_ids: Option<Vec<String>>,
     /// Repositories to include. Empty/omitted means all repositories.
     pub repository_ids: Option<Vec<String>>,
+    /// Offset into the sorted result set for "Load more" pagination.
+    /// When omitted or 0 the first page is returned.
+    pub offset: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
