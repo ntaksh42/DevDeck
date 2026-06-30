@@ -100,6 +100,14 @@ pub(crate) fn search_commits_fts(
     if fts_query.is_empty() {
         return Ok(Vec::new());
     }
+    // `commit_id` is UNINDEXED in commits_fts (it's a stored, not searchable,
+    // column), so a pasted SHA never matches via MATCH even though the search
+    // box advertises SHA search. Match it as a prefix directly against
+    // `commits` when the query looks like a hex SHA fragment.
+    let sha_prefix = query
+        .chars()
+        .all(|c| c.is_ascii_hexdigit())
+        .then(|| format!("{}%", escape_like_pattern(query)));
     // ?1 = fts_query, ?2 = org_id, then one bind per repository id. The repo
     // filter is referenced twice (outer query and FTS subquery), so the same
     // placeholders are reused with the right table prefix in each spot.
@@ -128,15 +136,23 @@ pub(crate) fn search_commits_fts(
             )
         }
     };
+    let sha_clause = match sha_prefix.as_ref() {
+        Some(pattern) => {
+            let idx = bind.len() + 1;
+            bind.push(Box::new(pattern.clone()));
+            format!(" OR c.commit_id LIKE ?{idx} ESCAPE '\\'")
+        }
+        None => String::new(),
+    };
     let sql = format!(
         "SELECT c.org_id, c.project_id, c.project_name, c.repository_id, c.repository_name, \
                 c.commit_id, c.comment, c.author_name, c.author_email, c.author_date, c.web_url \
          FROM commits c \
          WHERE c.org_id = ?2{outer} \
-           AND c.commit_id IN ( \
+           AND (c.commit_id IN ( \
                SELECT commit_id FROM commits_fts \
                WHERE commits_fts MATCH ?1 AND org_id = ?2{inner} \
-           ) \
+           ){sha_clause}) \
          ORDER BY c.author_date DESC \
          LIMIT 200",
         outer = repo_clause("c."),

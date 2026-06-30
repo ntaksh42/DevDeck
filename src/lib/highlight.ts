@@ -1,5 +1,15 @@
 import hljs from "highlight.js/lib/common";
+import dockerfile from "highlight.js/lib/languages/dockerfile";
+import powershell from "highlight.js/lib/languages/powershell";
+import scala from "highlight.js/lib/languages/scala";
 import DOMPurify from "dompurify";
+
+// `highlight.js/lib/common` does not register these, even though file
+// extensions below claim them; register them explicitly so highlighting
+// actually uses the named grammar instead of silently auto-detecting.
+hljs.registerLanguage("dockerfile", dockerfile);
+hljs.registerLanguage("powershell", powershell);
+hljs.registerLanguage("scala", scala);
 
 // Maps file extensions to highlight.js language names. Anything not listed
 // falls back to auto-detection.
@@ -43,11 +53,21 @@ const EXTENSION_LANGUAGE: Record<string, string> = {
   md: "markdown",
   markdown: "markdown",
   dockerfile: "dockerfile",
+  lua: "lua",
+  pl: "perl",
+  pm: "perl",
+  r: "r",
+  vb: "vbnet",
+  graphql: "graphql",
+  gql: "graphql",
+  diff: "diff",
+  patch: "diff",
 };
 
 function languageForFile(fileName: string): string | undefined {
   const lower = fileName.toLowerCase();
   if (lower === "dockerfile") return "dockerfile";
+  if (lower === "makefile") return "makefile";
   const ext = lower.includes(".") ? lower.slice(lower.lastIndexOf(".") + 1) : "";
   const mapped = EXTENSION_LANGUAGE[ext];
   // Only return a language highlight.js actually knows; otherwise auto-detect.

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { GitCompare, Loader2 } from "lucide-react";
 import { commandErrorMessage, listRepoHistory, type Organization } from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
 import { ErrorState } from "@/components/StateDisplay";
@@ -13,12 +13,16 @@ export function CodeHistoryView({
   repo,
   branch,
   path,
+  onOpenCommit,
 }: {
   organization: Organization | undefined;
   organizationId: string;
   repo: RepoOption;
   branch: string;
   path: string;
+  // Navigates to the Commits view searched for this commit, reusing the
+  // existing commit diff infrastructure instead of duplicating it here.
+  onOpenCommit?: (query: string, organizationId?: string) => void;
 }) {
   const query = useQuery({
     queryKey: ["repoHistory", organizationId, repo.repositoryId, branch, path],
@@ -57,6 +61,7 @@ export function CodeHistoryView({
           <th className="px-3 py-1.5 font-medium">Message</th>
           <th className="px-3 py-1.5 font-medium">Author</th>
           <th className="px-3 py-1.5 font-medium">Date</th>
+          <th className="px-3 py-1.5 font-medium" />
         </tr>
       </thead>
       <tbody>
@@ -78,6 +83,19 @@ export function CodeHistoryView({
             </td>
             <td className="whitespace-nowrap px-3 py-1.5 text-muted-foreground">
               {formatDate(commit.date)}
+            </td>
+            <td className="px-3 py-1.5 text-right">
+              {onOpenCommit ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenCommit(commit.commitId, organizationId)}
+                  className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+                  title="View this commit's diff in Commits"
+                >
+                  <GitCompare className="h-3.5 w-3.5" aria-hidden="true" />
+                  Diff
+                </button>
+              ) : null}
             </td>
           </tr>
         ))}

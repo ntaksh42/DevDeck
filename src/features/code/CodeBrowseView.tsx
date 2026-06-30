@@ -31,7 +31,11 @@ const INPUT_CLASS =
 // the left, and the selected file/folder (Contents or History) on the right —
 // the Azure DevOps Repos > Files layout. Pressing Enter in the search box runs a
 // full-text code search scoped to the repository.
-export function CodeBrowseView() {
+export function CodeBrowseView({
+  onOpenCommit,
+}: {
+  onOpenCommit?: (query: string, organizationId?: string) => void;
+}) {
   // The app points at a single active connection chosen in Settings.
   const organization = useActiveOrganization().data ?? undefined;
   const organizationId = organization?.id ?? "";
@@ -366,6 +370,7 @@ export function CodeBrowseView() {
                     repo={repo}
                     branch={branch}
                     path={selected.path}
+                    onOpenCommit={onOpenCommit}
                   />
                 ) : tab === "compare" && !selected.isFolder ? (
                   <CodeCompareView

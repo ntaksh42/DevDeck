@@ -37,6 +37,7 @@ export interface AppContentProps {
   onWorkItemNavViewsChange: (views: WorkItemQueryView[]) => void;
   onOpenSettings: () => void;
   onOpenPullRequest: (query: string, organizationId?: string) => void;
+  onOpenCommit: (query: string, organizationId?: string) => void;
 }
 
 export function AppContent({
@@ -57,6 +58,7 @@ export function AppContent({
   onWorkItemNavViewsChange,
   onOpenSettings,
   onOpenPullRequest,
+  onOpenCommit,
 }: AppContentProps) {
   return (
     <section
@@ -110,7 +112,7 @@ export function AppContent({
         ) : activeView === "pipelines" ? (
           <PipelinesView />
         ) : activeView === "codeSearch" ? (
-          <CodeBrowseView />
+          <CodeBrowseView onOpenCommit={onOpenCommit} />
         ) : organizations.length === 0 ? (
           <SetupPanel />
         ) : (

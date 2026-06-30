@@ -6,7 +6,7 @@ import {
   useState,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, Loader2, Search, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, Loader2, Search, X } from "lucide-react";
 import { commandErrorMessage, getRepoFile } from "@/lib/azdoCommands";
 import { ErrorState } from "@/components/StateDisplay";
 import { highlightCode } from "@/lib/highlight";
@@ -53,14 +53,16 @@ export function CodeFileView({
   const [findOpen, setFindOpen] = useState(false);
   const [find, setFind] = useState("");
   const [current, setCurrent] = useState(0);
+  const [raw, setRaw] = useState(false);
   const findInputRef = useRef<HTMLInputElement | null>(null);
   const currentMatchRef = useRef<HTMLElement | null>(null);
 
-  // Reset the find state whenever the file changes.
+  // Reset the find/view state whenever the file changes.
   useEffect(() => {
     setFindOpen(false);
     setFind("");
     setCurrent(0);
+    setRaw(false);
   }, [path]);
 
   // Per-line match ranges plus the total count, computed once per query change.
@@ -109,6 +111,16 @@ export function CodeFileView({
     setCurrent((value) => (value + delta + total) % total);
   }
 
+  function downloadFile() {
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = leafName(path);
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   function onContainerKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
       event.preventDefault();
@@ -149,9 +161,31 @@ export function CodeFileView({
   }
 
   const searching = findOpen && find.length > 0;
+  const showPlainText = searching || raw;
   return (
     <div className="relative flex min-h-0 flex-1 flex-col" onKeyDown={onContainerKeyDown}>
-      <div className="flex items-center justify-end gap-2 border-b border-border px-2 py-1">
+      <div className="flex items-center justify-between gap-2 border-b border-border px-2 py-1">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setRaw((value) => !value)}
+            aria-pressed={raw}
+            title={raw ? "Show highlighted source" : "Show raw source"}
+            className={`flex items-center gap-1 rounded px-1 py-0.5 text-xs hover:text-foreground ${
+              raw ? "text-foreground" : "text-muted-foreground"
+            }`}
+          >
+            {raw ? "Highlighted" : "Raw"}
+          </button>
+          <button
+            type="button"
+            onClick={downloadFile}
+            title="Download file"
+            className="flex items-center gap-1 rounded px-1 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <Download className="h-3.5 w-3.5" aria-hidden="true" /> Download
+          </button>
+        </div>
         {findOpen ? (
           <div className="flex items-center gap-1 text-sm">
             <Search className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
@@ -222,7 +256,7 @@ export function CodeFileView({
               <div key={index}>{index + 1}</div>
             ))}
           </div>
-          {searching ? (
+          {showPlainText ? (
             <pre className="min-w-0 flex-1 overflow-x-auto px-3 py-1">
               <code className="whitespace-pre">
                 {lines.map((line, index) => (

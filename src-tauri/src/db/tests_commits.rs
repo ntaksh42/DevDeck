@@ -101,6 +101,34 @@ fn commits_fts_roundtrip() {
 }
 
 #[test]
+fn search_commits_fts_matches_commit_id_prefix() {
+    let conn = Connection::open_in_memory().unwrap();
+    migrate(&conn).unwrap();
+    upsert_organization(&conn, make_org_draft("org1")).unwrap();
+
+    conn.execute(
+        r#"INSERT OR REPLACE INTO commits(org_id, project_id, project_name, repository_id, repository_name, commit_id, comment)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"#,
+        params!["org1", "p1", "Proj", "repo1", "Repo", "abc123def456", "unrelated message"],
+    )
+    .unwrap();
+
+    // commit_id is UNINDEXED in commits_fts, so a pasted SHA must still match
+    // via a direct prefix lookup, not the FTS index.
+    let full = search_commits_fts(&conn, "org1", "abc123def456", None).unwrap();
+    assert_eq!(full.len(), 1);
+    assert_eq!(full[0].commit_id, "abc123def456");
+
+    let prefix = search_commits_fts(&conn, "org1", "abc123", None).unwrap();
+    assert_eq!(prefix.len(), 1);
+    assert_eq!(prefix[0].commit_id, "abc123def456");
+
+    // A non-hex query must not fall back to a commit_id scan.
+    let no_match = search_commits_fts(&conn, "org1", "not-a-sha!", None).unwrap();
+    assert!(no_match.is_empty());
+}
+
+#[test]
 fn search_commits_author_filter_survives_limit_cap() {
     let tf = NamedTempFile::new().unwrap();
     let db = AppDatabase::new(tf.path().to_path_buf());
