@@ -1,6 +1,9 @@
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FileCode, Loader2, X } from "lucide-react";
 import { commandErrorMessage, searchCode } from "@/lib/azdoCommands";
+import { openExternalUrl } from "@/lib/openExternal";
+import { clamp, isEditableTarget } from "@/lib/utils";
 import { ErrorState } from "@/components/StateDisplay";
 import { type RepoOption } from "./codeBrowseShared";
 
@@ -35,6 +38,47 @@ export function CodeSearchResults({
     enabled: !!query.trim(),
     staleTime: 60_000,
   });
+  const results = search.data?.results ?? [];
+
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const rowRefs = useRef<(HTMLLIElement | null)[]>([]);
+
+  // A new search result set invalidates the previous selection.
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [search.data]);
+
+  function moveSelection(delta: number) {
+    if (results.length === 0) return;
+    const next = clamp(selectedIndex + delta, 0, results.length - 1);
+    setSelectedIndex(next);
+    rowRefs.current[next]?.scrollIntoView?.({ block: "nearest" });
+  }
+
+  function handleKeyDown(event: ReactKeyboardEvent<HTMLUListElement>) {
+    if (isEditableTarget(event.target)) return;
+    if (event.ctrlKey || event.metaKey) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const hit = results[selectedIndex];
+        if (hit) void openExternalUrl(hit.webUrl);
+      }
+      return;
+    }
+    if (event.altKey) return;
+    const key = event.key.toLowerCase();
+    if (event.key === "ArrowDown" || key === "j") {
+      event.preventDefault();
+      moveSelection(1);
+    } else if (event.key === "ArrowUp" || key === "k") {
+      event.preventDefault();
+      moveSelection(-1);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      const hit = results[selectedIndex];
+      if (hit) onOpenFile(hit.path);
+    }
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -62,12 +106,18 @@ export function CodeSearchResults({
           </div>
         ) : search.isError ? (
           <ErrorState message={commandErrorMessage(search.error)} />
-        ) : !search.data || search.data.results.length === 0 ? (
+        ) : results.length === 0 ? (
           <div className="px-3 py-3 text-sm text-muted-foreground">No code matched.</div>
         ) : (
-          <ul>
-            {search.data.results.map((hit) => (
-              <li key={`${hit.path}:${hit.branch ?? ""}`} className="border-b border-border/60">
+          <ul tabIndex={0} onKeyDown={handleKeyDown} className="outline-none">
+            {results.map((hit, index) => (
+              <li
+                key={`${hit.path}:${hit.branch ?? ""}`}
+                ref={(el) => {
+                  rowRefs.current[index] = el;
+                }}
+                className={`border-b border-border/60 ${index === selectedIndex ? "bg-secondary" : ""}`}
+              >
                 <button
                   type="button"
                   onClick={() => onOpenFile(hit.path)}

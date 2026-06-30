@@ -1,4 +1,4 @@
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useState } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ExternalLink, Loader2, Play, Square } from "lucide-react";
 import {
@@ -10,17 +10,11 @@ import {
   listPipelineArtifacts,
   rerunPipelineRun,
   type PipelineRunDetail,
-  type TimelineNode,
 } from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
-import { focusPrimaryGrid, formatDate, isEditableTarget } from "@/lib/utils";
-import {
-  formatDuration,
-  isInProgressStatus,
-  pipelineRunVisual,
-  runToneClasses,
-  shortBranch,
-} from "./pipelineStatus";
+import { clamp, focusPrimaryGrid, formatDate, isEditableTarget } from "@/lib/utils";
+import { formatDuration, isInProgressStatus, pipelineRunVisual, runToneClasses, shortBranch } from "./pipelineStatus";
+import { buildTimelineTree, flattenTimelineTree, TimelineRow } from "./PipelineTimeline";
 
 const LOG_REFRESH_INTERVAL_MS = 15_000;
 
@@ -39,83 +33,6 @@ const LOG_SEVERITY_CLASS: Record<"error" | "warning", string> = {
   warning: "text-amber-300",
 };
 
-type TreeNode = TimelineNode & { children: TreeNode[] };
-
-function buildTimelineTree(nodes: TimelineNode[]): TreeNode[] {
-  const byId = new Map<string, TreeNode>();
-  for (const node of nodes) {
-    byId.set(node.id, { ...node, children: [] });
-  }
-  const roots: TreeNode[] = [];
-  for (const node of byId.values()) {
-    const parent = node.parentId ? byId.get(node.parentId) : undefined;
-    if (parent) parent.children.push(node);
-    else roots.push(node);
-  }
-  const sortNodes = (list: TreeNode[]) => {
-    list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    for (const node of list) sortNodes(node.children);
-  };
-  sortNodes(roots);
-  return roots;
-}
-
-function TimelineRow({
-  node,
-  depth,
-  selectedLogId,
-  onSelectLog,
-}: {
-  node: TreeNode;
-  depth: number;
-  selectedLogId: number | null;
-  onSelectLog: (logId: number) => void;
-}) {
-  const visual = pipelineRunVisual(node.state, node.result);
-  const hasLog = node.logId != null;
-  const isSelected = hasLog && node.logId === selectedLogId;
-  return (
-    <>
-      <button
-        type="button"
-        disabled={!hasLog}
-        onClick={() => hasLog && onSelectLog(node.logId as number)}
-        style={{ paddingLeft: `${8 + depth * 16}px` }}
-        className={`flex w-full items-center gap-2 border-b border-border py-1 pr-2 text-left text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
-          hasLog ? "hover:bg-muted/50" : "cursor-default"
-        } ${isSelected ? "bg-secondary" : ""}`}
-      >
-        <span
-          className={`inline-flex w-fit shrink-0 items-center rounded px-1.5 py-px text-[11px] font-medium ${runToneClasses(
-            visual.tone,
-          )}`}
-        >
-          {visual.label}
-        </span>
-        <span className="truncate">{node.name ?? "(unnamed)"}</span>
-        {node.errorCount > 0 ? (
-          <span className="shrink-0 text-xs text-red-700 dark:text-red-400">{node.errorCount} err</span>
-        ) : null}
-        {node.warningCount > 0 ? (
-          <span className="shrink-0 text-xs text-amber-700 dark:text-amber-400">{node.warningCount} warn</span>
-        ) : null}
-        <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-          {formatDuration(node.startTime, node.finishTime)}
-        </span>
-      </button>
-      {node.children.map((child) => (
-        <TimelineRow
-          key={child.id}
-          node={child}
-          depth={depth + 1}
-          selectedLogId={selectedLogId}
-          onSelectLog={onSelectLog}
-        />
-      ))}
-    </>
-  );
-}
-
 export function PipelineRunDetailPanel({
   organizationId,
   projectId,
@@ -128,12 +45,15 @@ export function PipelineRunDetailPanel({
   const queryClient = useQueryClient();
   const [selectedLogId, setSelectedLogId] = useState<number | null>(null);
   const [errorsOnly, setErrorsOnly] = useState(false);
+  const [cursorIndex, setCursorIndex] = useState(0);
+  const rowRefs = useRef(new Map<string, HTMLButtonElement>());
 
   // Log ids are scoped to a single run, so a leftover selection would fetch a
   // log that does not exist on the newly selected run. Clear it when the run
   // changes.
   useEffect(() => {
     setSelectedLogId(null);
+    setCursorIndex(0);
   }, [buildId]);
 
   const appSettingsQuery = useQuery({
@@ -160,6 +80,36 @@ export function PipelineRunDetailPanel({
     () => (detail ? buildTimelineTree(detail.timeline) : []),
     [detail],
   );
+  const flatTimelineNodes = useMemo(() => flattenTimelineTree(tree), [tree]);
+  const cursorNode = flatTimelineNodes[Math.min(cursorIndex, flatTimelineNodes.length - 1)] ?? null;
+
+  function registerTimelineRow(id: string, el: HTMLButtonElement | null) {
+    if (el) rowRefs.current.set(id, el);
+    else rowRefs.current.delete(id);
+  }
+
+  function moveTimelineCursor(delta: number) {
+    if (flatTimelineNodes.length === 0) return;
+    const next = clamp(cursorIndex + delta, 0, flatTimelineNodes.length - 1);
+    setCursorIndex(next);
+    rowRefs.current.get(flatTimelineNodes[next].id)?.scrollIntoView?.({ block: "nearest" });
+  }
+
+  function handleTimelineKeyDown(event: ReactKeyboardEvent) {
+    if (isEditableTarget(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
+    const key = event.key.toLowerCase();
+    if (event.key === "ArrowDown" || key === "j") {
+      event.preventDefault();
+      moveTimelineCursor(1);
+    } else if (event.key === "ArrowUp" || key === "k") {
+      event.preventDefault();
+      moveTimelineCursor(-1);
+    } else if (event.key === "Enter") {
+      if (cursorNode?.logId == null) return;
+      event.preventDefault();
+      setSelectedLogId(cursorNode.logId);
+    }
+  }
 
   const logQuery = useQuery({
     queryKey: ["pipelineRunLog", organizationId, projectId, buildId, selectedLogId],
@@ -346,7 +296,11 @@ export function PipelineRunDetailPanel({
               ) : null}
             </div>
 
-            <div className="border-b border-border">
+            <div
+              className="border-b border-border outline-none"
+              tabIndex={tree.length > 0 ? 0 : undefined}
+              onKeyDown={handleTimelineKeyDown}
+            >
               {tree.length === 0 ? (
                 detail?.timelineUnavailable ? (
                   <p className="px-3 py-3 text-xs text-amber-700 dark:text-amber-400">
@@ -362,7 +316,9 @@ export function PipelineRunDetailPanel({
                     node={node}
                     depth={0}
                     selectedLogId={selectedLogId}
+                    cursorId={cursorNode?.id ?? null}
                     onSelectLog={setSelectedLogId}
+                    registerRow={registerTimelineRow}
                   />
                 ))
               )}
