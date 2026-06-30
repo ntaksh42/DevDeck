@@ -157,24 +157,19 @@ describe("CodeBrowseView", () => {
   );
 
   it(
-    "compares an open file against a base branch",
+    "compares two revisions and lists their changed files",
     async () => {
       renderView();
       await selectDemoRepository();
       await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
         timeout: 8000,
       });
-      fireEvent.click(screen.getAllByText("README.md")[0]);
+      // Compare no longer requires a file to be open first.
       fireEvent.click(await screen.findByRole("button", { name: "Compare" }, { timeout: 8000 }));
-      const baseCombo = screen.getByRole("combobox", { name: "Compare base branch" });
+      const baseCombo = await screen.findByRole("combobox", { name: "Base branch" }, { timeout: 8000 });
       fireEvent.mouseDown(baseCombo);
       fireEvent.pointerDown(await screen.findByText("develop", undefined, { timeout: 8000 }));
-      // Demo file content is branch-independent, so the two sides match.
-      expect(
-        await screen.findByText(/No differences between develop and main/, undefined, {
-          timeout: 8000,
-        }),
-      ).toBeTruthy();
+      expect(await screen.findByText("/README.md", undefined, { timeout: 8000 })).toBeTruthy();
     },
     15000,
   );

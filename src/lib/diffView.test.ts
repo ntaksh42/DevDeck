@@ -37,6 +37,20 @@ describe("buildDiffLines", () => {
       { kind: "context", baseLine: 3, targetLine: 3, text: "c" },
     ]);
   });
+
+  it("treats leading/trailing whitespace changes as unchanged when ignoreWhitespace is set", () => {
+    const base = "a\n  b\nc\n";
+    const target = "a\nb  \nc\n";
+    const lines = buildDiffLines(base, target, { ignoreWhitespace: true });
+    expect(lines.every((line) => line.kind === "context")).toBe(true);
+  });
+
+  it("still reports the whitespace change when ignoreWhitespace is not set", () => {
+    const base = "a\n  b\nc\n";
+    const target = "a\nb  \nc\n";
+    const lines = buildDiffLines(base, target);
+    expect(lines.some((line) => line.kind !== "context")).toBe(true);
+  });
 });
 
 describe("buildSideBySideRows", () => {

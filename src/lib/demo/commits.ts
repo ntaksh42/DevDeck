@@ -45,6 +45,11 @@ export function demoRepoBranches() {
   ];
 }
 
+// Demo tags for the Compare tab's revision picker.
+export function demoRepoTags() {
+  return [{ name: "v1.0.0" }, { name: "v1.1.0" }];
+}
+
 // A tiny virtual repository for the code browser demo. Keyed by the parent
 // folder path; each entry lists that folder's direct children (folders first).
 const DEMO_REPO_TREE: Record<string, { name: string; path: string; isFolder: boolean }[]> = {
@@ -97,6 +102,42 @@ export function demoRepoFile(path: string) {
   const content =
     DEMO_REPO_FILES[path] ?? `// ${path}\n// Demo content for the code browser preview.\n`;
   return { path, content, isBinary: false, tooLarge: false };
+}
+
+// Demo folder-level diff for the Files > Compare tab. A fixed pair of changed
+// files so the changed-files list and drill-down always have something real
+// to show, regardless of which two revisions were picked.
+export function demoCompareRevisions() {
+  return [
+    { path: "/src/App.tsx", changeType: "edit", originalPath: null },
+    { path: "/README.md", changeType: "edit", originalPath: null },
+  ];
+}
+
+// Per-file before/after content for the demo folder-level diff, keyed by
+// path so each changed file shows a distinct, real diff.
+const DEMO_REVISION_DIFFS: Record<string, { base: string; target: string }> = {
+  "/src/App.tsx": {
+    base: DEMO_REPO_FILES["/src/App.tsx"],
+    target:
+      'import { useState } from "react";\n\nexport function App() {\n  const [view, setView] = useState("compare");\n  return <div className="app">{view}</div>;\n}\n',
+  },
+  "/README.md": {
+    base: DEMO_REPO_FILES["/README.md"],
+    target: `${DEMO_REPO_FILES["/README.md"]}\n## Compare\n\nDiff any two revisions.\n`,
+  },
+};
+
+export function demoRevisionFileDiff(filePath: string) {
+  const diff = DEMO_REVISION_DIFFS[filePath];
+  const fallback = DEMO_REPO_FILES[filePath] ?? "";
+  return {
+    filePath,
+    baseContent: diff?.base ?? fallback,
+    targetContent: diff?.target ?? fallback,
+    baseUnavailableReason: null,
+    targetUnavailableReason: null,
+  };
 }
 
 // Demo commit history for the Files > History tab. A short, fixed list so the

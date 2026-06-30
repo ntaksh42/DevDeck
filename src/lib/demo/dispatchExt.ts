@@ -19,11 +19,14 @@ import {
   demoCommitPullRequests,
   demoCommitRepositories,
   demoCommits,
+  demoCompareRevisions,
   demoGetCodeSearchContext,
   demoRepoBranches,
   demoRepoFile,
   demoRepoHistory,
+  demoRepoTags,
   demoRepoTree,
+  demoRevisionFileDiff,
   demoSearchCode,
 } from "@/lib/demo/commits";
 
@@ -162,6 +165,14 @@ export function dispatchExt(command: string, args: unknown): unknown {
     case "list_repo_history": {
       const input = (args as { input?: { path?: string } } | undefined)?.input;
       return demoRepoHistory(input?.path ?? "/");
+    }
+    case "list_repo_tags":
+      return demoRepoTags();
+    case "compare_repo_revisions":
+      return demoCompareRevisions();
+    case "get_repo_revision_file_diff": {
+      const input = (args as { input?: { filePath?: string } } | undefined)?.input;
+      return demoRevisionFileDiff(input?.filePath ?? "/README.md");
     }
     default:
       return undefined;

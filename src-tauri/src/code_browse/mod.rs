@@ -6,6 +6,9 @@ use crate::db::AppDatabase;
 use crate::error::Result;
 use crate::secrets::SecretStore;
 
+mod compare;
+pub use compare::*;
+
 /// Largest file we render in the browser. Bigger blobs are reported as
 /// `too_large` instead of being streamed into the UI.
 const MAX_FILE_BYTES: usize = 512 * 1024;

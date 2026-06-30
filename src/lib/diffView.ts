@@ -2,6 +2,16 @@ import { diffLines, diffWordsWithSpace } from "diff";
 
 export type DiffLineKind = "context" | "add" | "del";
 
+/** Shared diff options threaded into the line-diff algorithm. */
+export type DiffOptions = {
+  /**
+   * Ignore leading/trailing whitespace when deciding whether two lines are
+   * unchanged (the `diff` package's `ignoreWhitespace`, like `git diff
+   * --ignore-space-at-eol`). It does not collapse internal whitespace runs.
+   */
+  ignoreWhitespace?: boolean;
+};
+
 /** A span within a modified line; `highlight` marks the part that changed. */
 export type InlineSegment = { text: string; highlight: boolean };
 
@@ -78,7 +88,11 @@ export type SideBySideRow = {
  * (GitHub-style), context lines occupy both sides. Paired rows additionally get
  * word-level `segments` when only part of the line changed.
  */
-export function buildSideBySideRows(rawBase: string, rawTarget: string): SideBySideRow[] {
+export function buildSideBySideRows(
+  rawBase: string,
+  rawTarget: string,
+  options?: DiffOptions,
+): SideBySideRow[] {
   const base = normalizeNewlines(rawBase);
   const target = normalizeNewlines(rawTarget);
   const rows: SideBySideRow[] = [];
@@ -103,7 +117,7 @@ export function buildSideBySideRows(rawBase: string, rawTarget: string): SideByS
     pendingLeft = [];
   }
 
-  for (const part of diffLines(base, target)) {
+  for (const part of diffLines(base, target, { ignoreWhitespace: options?.ignoreWhitespace })) {
     const texts = splitLines(part.value);
     if (part.removed) {
       // Hold removed lines until we know whether an added run follows.
@@ -125,8 +139,14 @@ export function buildSideBySideRows(rawBase: string, rawTarget: string): SideByS
   return rows;
 }
 
-export function buildDiffLines(rawBase: string, rawTarget: string): DiffLine[] {
-  const parts = diffLines(normalizeNewlines(rawBase), normalizeNewlines(rawTarget));
+export function buildDiffLines(
+  rawBase: string,
+  rawTarget: string,
+  options?: DiffOptions,
+): DiffLine[] {
+  const parts = diffLines(normalizeNewlines(rawBase), normalizeNewlines(rawTarget), {
+    ignoreWhitespace: options?.ignoreWhitespace,
+  });
   const result: DiffLine[] = [];
   let baseLine = 1;
   let targetLine = 1;

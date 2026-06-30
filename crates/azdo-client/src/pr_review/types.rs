@@ -98,8 +98,14 @@ pub struct GitIterationChanges {
 pub struct GitChangeEntry {
     pub change_type: Option<String>,
     pub item: Option<GitChangeItem>,
-    /// Pre-rename path when the change is a rename.
+    /// Pre-rename path when the change is a rename, as returned by the PR
+    /// iteration/commit changes endpoints.
     pub source_server_item: Option<String>,
+    /// Pre-rename path when the change is a rename, as returned by the
+    /// `diffs/commits` endpoint (Files > Compare). Endpoints populate one of
+    /// `sourceServerItem`/`originalPath`, never both.
+    #[serde(default)]
+    pub original_path: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

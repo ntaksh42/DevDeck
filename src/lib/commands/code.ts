@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { invokeCommand } from "./runtime";
+import { invokeCommand, prFileDiffSchema } from "./runtime";
+
+// Azure DevOps `GitVersionType` values, used to resolve a Compare revision.
+export type RevisionType = "branch" | "tag" | "commit";
 
 const codeSearchHitSchema = z.object({
   fileName: z.string(),
@@ -138,6 +141,62 @@ export async function listRepoHistory(input: {
 }): Promise<RepoCommitInfo[]> {
   const result = await invokeCommand("list_repo_history", { input });
   return z.array(repoCommitInfoSchema).parse(result);
+}
+
+const repoTagSchema = z.object({
+  name: z.string(),
+});
+export type RepoTag = z.infer<typeof repoTagSchema>;
+
+// Lists a repository's tags, alphabetically.
+export async function listRepoTags(input: {
+  organizationId?: string;
+  project: string;
+  repository: string;
+}): Promise<RepoTag[]> {
+  const result = await invokeCommand("list_repo_tags", { input });
+  return z.array(repoTagSchema).parse(result);
+}
+
+const changedFileSchema = z.object({
+  path: z.string(),
+  changeType: z.string(),
+  originalPath: z.string().nullable(),
+});
+export type ChangedFile = z.infer<typeof changedFileSchema>;
+
+// Lists the changed files between two arbitrary revisions (the Files >
+// Compare folder-level diff).
+export async function compareRepoRevisions(input: {
+  organizationId?: string;
+  project: string;
+  repository: string;
+  baseRevision: string;
+  baseRevisionType: RevisionType;
+  targetRevision: string;
+  targetRevisionType: RevisionType;
+}): Promise<ChangedFile[]> {
+  const result = await invokeCommand("compare_repo_revisions", { input });
+  return z.array(changedFileSchema).parse(result);
+}
+
+export type RevisionFileDiff = z.infer<typeof prFileDiffSchema>;
+
+// Fetches a single file's diff between two arbitrary revisions.
+export async function getRepoRevisionFileDiff(input: {
+  organizationId?: string;
+  project: string;
+  repository: string;
+  filePath: string;
+  originalPath?: string | null;
+  changeType: string;
+  baseRevision: string;
+  baseRevisionType: RevisionType;
+  targetRevision: string;
+  targetRevisionType: RevisionType;
+}): Promise<RevisionFileDiff> {
+  const result = await invokeCommand("get_repo_revision_file_diff", { input });
+  return prFileDiffSchema.parse(result);
 }
 
 // Signals a cancellable command (e.g. code search) to stop, by the id passed as

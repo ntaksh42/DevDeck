@@ -415,4 +415,44 @@ impl AdoClient {
             .await?;
         Ok(response.changes)
     }
+
+    /// Lists the tag refs (`refs/tags/*`) of a repository.
+    pub async fn list_tags(&self, project_id: &str, repository_id: &str) -> Result<Vec<GitRef>> {
+        let path = format!("{project_id}/_apis/git/repositories/{repository_id}/refs");
+        let response: ListResponse<GitRef> = self
+            .get_json(
+                &path,
+                &[("api-version", "7.1-preview"), ("filter", "tags/")],
+            )
+            .await?;
+        Ok(response.value)
+    }
+
+    /// Diffs two arbitrary revisions (branch, tag, or commit) and returns the
+    /// changed files between them (a folder-level / "Compare" diff).
+    /// `base_version_type`/`target_version_type` are Azure DevOps
+    /// `GitVersionType` values: `"branch"`, `"tag"`, or `"commit"`.
+    pub async fn get_branches_diff(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        base_version: &str,
+        base_version_type: &str,
+        target_version: &str,
+        target_version_type: &str,
+    ) -> Result<GitCommitDiffs> {
+        let path = format!("{project_id}/_apis/git/repositories/{repository_id}/diffs/commits");
+        self.get_json(
+            &path,
+            &[
+                ("api-version", "7.1-preview"),
+                ("baseVersion", base_version),
+                ("baseVersionType", base_version_type),
+                ("targetVersion", target_version),
+                ("targetVersionType", target_version_type),
+                ("$top", "1000"),
+            ],
+        )
+        .await
+    }
 }

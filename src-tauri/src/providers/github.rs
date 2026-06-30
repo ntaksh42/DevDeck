@@ -6,8 +6,9 @@
 use async_trait::async_trait;
 
 use crate::code_browse::{
-    GetFileInput, ListBranchesInput, ListHistoryInput, ListTreeInput, RepoBranch, RepoCommitInfo,
-    RepoFile, RepoTreeItem,
+    ChangedFile, CompareRevisionsInput, GetFileInput, GetRevisionFileDiffInput, ListBranchesInput,
+    ListHistoryInput, ListTagsInput, ListTreeInput, RepoBranch, RepoCommitInfo, RepoFile, RepoTag,
+    RepoTreeItem, RevisionFileDiff,
 };
 use crate::code_search::{
     CodeContextResult, CodeSearchResults, GetCodeContextInput, SearchCodeInput,
@@ -356,27 +357,37 @@ impl Provider for GithubProvider {
     }
 
     async fn list_repo_branches(&self, _input: ListBranchesInput) -> Result<Vec<RepoBranch>> {
-        Err(AppError::NotSupported(
-            "code browsing is not available for GitHub yet".to_string(),
-        ))
+        Err(code_browse_unsupported())
     }
 
     async fn list_repo_tree(&self, _input: ListTreeInput) -> Result<Vec<RepoTreeItem>> {
-        Err(AppError::NotSupported(
-            "code browsing is not available for GitHub yet".to_string(),
-        ))
+        Err(code_browse_unsupported())
     }
 
     async fn get_repo_file(&self, _input: GetFileInput) -> Result<RepoFile> {
-        Err(AppError::NotSupported(
-            "code browsing is not available for GitHub yet".to_string(),
-        ))
+        Err(code_browse_unsupported())
     }
 
     async fn list_repo_history(&self, _input: ListHistoryInput) -> Result<Vec<RepoCommitInfo>> {
-        Err(AppError::NotSupported(
-            "code browsing is not available for GitHub yet".to_string(),
-        ))
+        Err(code_browse_unsupported())
+    }
+
+    async fn list_repo_tags(&self, _input: ListTagsInput) -> Result<Vec<RepoTag>> {
+        Err(code_browse_unsupported())
+    }
+
+    async fn compare_repo_revisions(
+        &self,
+        _input: CompareRevisionsInput,
+    ) -> Result<Vec<ChangedFile>> {
+        Err(code_browse_unsupported())
+    }
+
+    async fn get_repo_revision_file_diff(
+        &self,
+        _input: GetRevisionFileDiffInput,
+    ) -> Result<RevisionFileDiff> {
+        Err(code_browse_unsupported())
     }
 
     async fn list_pipeline_projects(
@@ -478,4 +489,8 @@ impl Provider for GithubProvider {
 
 fn pipelines_unsupported() -> AppError {
     AppError::NotSupported("Pipelines are not available for GitHub connections".to_string())
+}
+
+fn code_browse_unsupported() -> AppError {
+    AppError::NotSupported("code browsing is not available for GitHub yet".to_string())
 }

@@ -316,3 +316,99 @@ async fn list_items_includes_latest_commit_when_requested() {
         Some("Initial calculator service")
     );
 }
+
+#[tokio::test]
+async fn list_tags_filters_tags() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/project-1/_apis/git/repositories/repo-1/refs"))
+        .and(query_param("api-version", "7.1-preview"))
+        .and(query_param("filter", "tags/"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "count": 1,
+            "value": [{ "name": "refs/tags/v1.0.0", "objectId": "abc" }]
+        })))
+        .mount(&server)
+        .await;
+
+    let refs = test_client(&server)
+        .await
+        .list_tags("project-1", "repo-1")
+        .await
+        .unwrap();
+    assert_eq!(refs.len(), 1);
+    assert_eq!(refs[0].name, "refs/tags/v1.0.0");
+}
+
+#[tokio::test]
+async fn get_branches_diff_sends_flat_version_params() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(
+            "/project-1/_apis/git/repositories/repo-1/diffs/commits",
+        ))
+        .and(query_param("baseVersion", "develop"))
+        .and(query_param("baseVersionType", "branch"))
+        .and(query_param("targetVersion", "v1.0.0"))
+        .and(query_param("targetVersionType", "tag"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "allChangesIncluded": true,
+            "changeCounts": { "Edit": 1 },
+            "changes": [
+                {
+                    "item": { "path": "/src/main.rs", "isFolder": false },
+                    "changeType": "edit"
+                }
+            ],
+            "commonCommit": "base123",
+            "baseCommit": "base123",
+            "targetCommit": "target456",
+            "aheadCount": 1,
+            "behindCount": 0
+        })))
+        .mount(&server)
+        .await;
+
+    let diff = test_client(&server)
+        .await
+        .get_branches_diff("project-1", "repo-1", "develop", "branch", "v1.0.0", "tag")
+        .await
+        .unwrap();
+    assert_eq!(diff.changes.len(), 1);
+    assert_eq!(
+        diff.changes[0].item.as_ref().unwrap().path.as_deref(),
+        Some("/src/main.rs")
+    );
+}
+
+#[tokio::test]
+async fn get_branches_diff_maps_rename_original_path() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(
+            "/project-1/_apis/git/repositories/repo-1/diffs/commits",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "changes": [
+                {
+                    "item": { "path": "/src/new_name.rs", "isFolder": false },
+                    "changeType": "rename",
+                    "originalPath": "/src/old_name.rs"
+                }
+            ]
+        })))
+        .mount(&server)
+        .await;
+
+    let diff = test_client(&server)
+        .await
+        .get_branches_diff("project-1", "repo-1", "develop", "branch", "main", "branch")
+        .await
+        .unwrap();
+    assert_eq!(diff.changes.len(), 1);
+    assert_eq!(diff.changes[0].change_type.as_deref(), Some("rename"));
+    assert_eq!(
+        diff.changes[0].original_path.as_deref(),
+        Some("/src/old_name.rs")
+    );
+}

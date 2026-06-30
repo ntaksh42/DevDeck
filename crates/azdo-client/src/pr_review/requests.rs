@@ -338,4 +338,30 @@ impl AdoClient {
         )
         .await
     }
+
+    /// Fetches the (text) content of a file at an arbitrary revision.
+    /// `version_type` is one of the Azure DevOps `GitVersionType` values:
+    /// `"branch"`, `"tag"`, or `"commit"`.
+    pub async fn get_item_content_at_version(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        item_path: &str,
+        version: &str,
+        version_type: &str,
+    ) -> Result<GitItemContent> {
+        let path = format!("{project_id}/_apis/git/repositories/{repository_id}/items");
+        self.get_json(
+            &path,
+            &[
+                ("api-version", "7.1-preview"),
+                ("path", item_path),
+                ("versionDescriptor.versionType", version_type),
+                ("versionDescriptor.version", version),
+                ("includeContent", "true"),
+                ("$format", "json"),
+            ],
+        )
+        .await
+    }
 }

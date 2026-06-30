@@ -1,10 +1,22 @@
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
+use crate::pr_review::GitChangeEntry;
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListResponse<T> {
     pub value: Vec<T>,
+}
+
+/// Response from the Diffs - Get API (`diffs/commits`): the changed files
+/// between two revisions. Other fields (`aheadCount`, `commonCommit`, ...) are
+/// not needed by callers and are left for serde to ignore.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCommitDiffs {
+    #[serde(default)]
+    pub changes: Vec<GitChangeEntry>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

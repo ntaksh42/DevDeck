@@ -3,8 +3,9 @@ use tauri::State;
 use crate::app_state::AppState;
 use crate::cancellation::run_cancellable;
 use crate::code_browse::{
-    GetFileInput, ListBranchesInput, ListHistoryInput, ListTreeInput, RepoBranch, RepoCommitInfo,
-    RepoFile, RepoTreeItem,
+    ChangedFile, CompareRevisionsInput, GetFileInput, GetRevisionFileDiffInput, ListBranchesInput,
+    ListHistoryInput, ListTagsInput, ListTreeInput, RepoBranch, RepoCommitInfo, RepoFile, RepoTag,
+    RepoTreeItem, RevisionFileDiff,
 };
 use crate::code_search::{
     CodeContextResult, CodeSearchResults, GetCodeContextInput, SearchCodeInput,
@@ -88,6 +89,37 @@ pub async fn list_repo_history(
         provider.list_repo_history(input),
     )
     .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn list_repo_tags(
+    input: ListTagsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<RepoTag>> {
+    state.provider().await?.list_repo_tags(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn compare_repo_revisions(
+    input: CompareRevisionsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<ChangedFile>> {
+    state.provider().await?.compare_repo_revisions(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn get_repo_revision_file_diff(
+    input: GetRevisionFileDiffInput,
+    state: State<'_, AppState>,
+) -> Result<RevisionFileDiff> {
+    state
+        .provider()
+        .await?
+        .get_repo_revision_file_diff(input)
+        .await
 }
 
 #[tauri::command]

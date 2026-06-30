@@ -111,7 +111,6 @@ export function CodeBrowseView() {
   const [filterText, setFilterText] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [tab, setTab] = useState<RightTab>("contents");
-  const [baseBranch, setBaseBranch] = useState("");
   const treeRef = useRef<HTMLDivElement | null>(null);
 
   // Reset navigation state when the repository or branch changes.
@@ -121,13 +120,7 @@ export function CodeBrowseView() {
     setFilterText("");
     setSearchQuery("");
     setTab("contents");
-    setBaseBranch("");
   }, [repositoryId, branch]);
-
-  // Compare only applies to files; fall back to Contents when a folder is shown.
-  useEffect(() => {
-    if (selected.isFolder && tab === "compare") setTab("contents");
-  }, [selected.isFolder, tab]);
 
   function toggleFolder(path: string) {
     setExpanded((prev) => {
@@ -330,11 +323,9 @@ export function CodeBrowseView() {
                     <TabButton active={tab === "history"} onClick={() => setTab("history")}>
                       History
                     </TabButton>
-                    {!selected.isFolder ? (
-                      <TabButton active={tab === "compare"} onClick={() => setTab("compare")}>
-                        Compare
-                      </TabButton>
-                    ) : null}
+                    <TabButton active={tab === "compare"} onClick={() => setTab("compare")}>
+                      Compare
+                    </TabButton>
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
@@ -367,15 +358,14 @@ export function CodeBrowseView() {
                     branch={branch}
                     path={selected.path}
                   />
-                ) : tab === "compare" && !selected.isFolder ? (
+                ) : tab === "compare" ? (
                   <CodeCompareView
+                    key={`${repo.repositoryId}:${branch}`}
                     organizationId={organizationId}
                     repo={repo}
                     branch={branch}
                     branchOptions={branchOptions}
-                    baseBranch={baseBranch}
-                    onBaseBranchChange={setBaseBranch}
-                    path={selected.path}
+                    selectedPath={selected.isFolder ? null : selected.path}
                   />
                 ) : selected.isFolder ? (
                   <CodeFolderView
