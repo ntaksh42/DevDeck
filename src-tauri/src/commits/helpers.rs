@@ -123,6 +123,19 @@ pub(super) fn commit_web_url(
     )
 }
 
+/// Builds the artifact URI Azure DevOps uses to link a commit, e.g. from a
+/// work item's `ArtifactLink` relation. Mirrors the PR artifact link format
+/// parsed by `work_items::pull_request_id_from_artifact`
+/// (`vstfs:///Git/PullRequestId/{projGuid}%2F{repoGuid}%2F{prId}`), but for
+/// `Git/Commit` with a commit sha instead of a PR id.
+pub(super) fn commit_artifact_uri(
+    project_id: &str,
+    repository_id: &str,
+    commit_id: &str,
+) -> String {
+    format!("vstfs:///Git/Commit/{project_id}%2F{repository_id}%2F{commit_id}")
+}
+
 pub(crate) fn encode_path_segment(value: &str) -> String {
     let mut encoded = String::new();
     for byte in value.as_bytes() {

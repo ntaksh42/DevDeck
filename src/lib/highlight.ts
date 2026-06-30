@@ -85,3 +85,55 @@ function escapeHtml(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 }
+
+/**
+ * Highlights a file's content and splits the result back into one sanitized
+ * HTML string per line, for renderers that lay out lines individually (e.g. a
+ * diff view). `highlightCode` only returns one HTML blob for the whole file,
+ * and a token (e.g. a block comment or string) can span multiple lines, so
+ * splitting on `\n` naively would leave unbalanced `<span>` tags. This closes
+ * open spans at each line break and reopens them at the start of the next
+ * line, the standard technique for per-line syntax highlighting.
+ */
+export function highlightLines(content: string, fileName: string): string[] {
+  const { html } = highlightCode(content, fileName);
+  const lines: string[] = [];
+  const openTags: string[] = [];
+  let current = "";
+  let i = 0;
+  while (i < html.length) {
+    if (html.startsWith("<span", i)) {
+      const end = html.indexOf(">", i);
+      if (end === -1) break;
+      const tag = html.slice(i, end + 1);
+      openTags.push(tag);
+      current += tag;
+      i = end + 1;
+    } else if (html.startsWith("</span>", i)) {
+      openTags.pop();
+      current += "</span>";
+      i += "</span>".length;
+    } else if (html[i] === "\n") {
+      current += "</span>".repeat(openTags.length);
+      lines.push(current);
+      current = openTags.join("");
+      i += 1;
+    } else {
+      const next = nextHtmlBoundary(html, i);
+      current += html.slice(i, next);
+      i = next;
+    }
+  }
+  lines.push(current);
+  return lines;
+}
+
+/** Index of the next `<span`, `</span>`, or `\n` at or after `from`. */
+function nextHtmlBoundary(html: string, from: number): number {
+  const candidates = [
+    html.indexOf("<span", from),
+    html.indexOf("</span>", from),
+    html.indexOf("\n", from),
+  ].filter((index) => index !== -1);
+  return candidates.length > 0 ? Math.min(...candidates) : html.length;
+}

@@ -371,22 +371,39 @@ impl AdoClient {
         repository_id: &str,
         commit_id: &str,
     ) -> Result<Vec<GitPullRequest>> {
+        let mut by_commit = self
+            .list_pull_requests_for_commits(
+                repository_id,
+                std::slice::from_ref(&commit_id.to_string()),
+            )
+            .await?;
+        Ok(by_commit.remove(commit_id).unwrap_or_default())
+    }
+
+    /// Batched form of [`list_commit_pull_requests`]: looks up the pull
+    /// requests containing each of several commits in a single Pull Request
+    /// Query API call, keyed by commit id.
+    ///
+    /// [`list_commit_pull_requests`]: AdoClient::list_commit_pull_requests
+    pub async fn list_pull_requests_for_commits(
+        &self,
+        repository_id: &str,
+        commit_ids: &[String],
+    ) -> Result<HashMap<String, Vec<GitPullRequest>>> {
+        if commit_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
         let path = format!("_apis/git/repositories/{repository_id}/pullrequestquery");
         let body = PullRequestQuery {
             queries: vec![PullRequestQueryInput {
-                items: vec![commit_id],
+                items: commit_ids.iter().map(String::as_str).collect(),
                 query_type: "commit",
             }],
         };
         let response: PullRequestQueryResponse = self
             .post_json(&path, &[("api-version", "7.1-preview")], &body)
             .await?;
-        let prs = response
-            .results
-            .into_iter()
-            .flat_map(|mut result| result.remove(commit_id).unwrap_or_default())
-            .collect();
-        Ok(prs)
+        Ok(response.results.into_iter().next().unwrap_or_default())
     }
 
     pub async fn get_commit(

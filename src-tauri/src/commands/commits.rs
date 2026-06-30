@@ -3,10 +3,13 @@ use tauri::State;
 use crate::app_state::AppState;
 use crate::commits::{
     CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
-    CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput, GetCommitFileDiffInput,
-    GetCommitPullRequestsInput, ListCommitRepositoriesInput, SearchCommitsInput,
+    CommitPullRequestsBatchEntry, CommitRepositoryOption, CommitSearchResult,
+    GetCommitChangesInput, GetCommitFileDiffInput, GetCommitPullRequestsBatchInput,
+    GetCommitPullRequestsInput, GetCommitWorkItemsInput, ListCommitRepositoriesInput,
+    SearchCommitsInput,
 };
 use crate::error::Result;
+use crate::work_items::WorkItemSummary;
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
@@ -68,4 +71,26 @@ pub async fn get_commit_pull_requests(
         .await?
         .get_commit_pull_requests(input)
         .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn get_commit_pull_requests_batch(
+    input: GetCommitPullRequestsBatchInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<CommitPullRequestsBatchEntry>> {
+    state
+        .provider()
+        .await?
+        .get_commit_pull_requests_batch(input)
+        .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn get_commit_work_items(
+    input: GetCommitWorkItemsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<WorkItemSummary>> {
+    state.provider().await?.get_commit_work_items(input).await
 }

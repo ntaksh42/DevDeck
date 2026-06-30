@@ -1,4 +1,6 @@
 mod helpers;
+mod linked_work_items;
+mod pull_requests;
 mod service;
 mod sync;
 mod types;

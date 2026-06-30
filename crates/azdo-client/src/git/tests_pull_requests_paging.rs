@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use url::Url;
-use wiremock::matchers::{method, path, query_param};
+use wiremock::matchers::{body_json, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use crate::auth::PatProvider;
@@ -283,4 +283,53 @@ async fn list_commit_pull_requests_empty_when_commit_absent() {
         .await
         .unwrap();
     assert!(prs.is_empty());
+}
+
+#[tokio::test]
+async fn list_pull_requests_for_commits_batches_multiple_commits() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/_apis/git/repositories/repo-1/pullrequestquery"))
+        .and(body_json(serde_json::json!({
+            "queries": [{ "items": ["abc123", "def456"], "type": "commit" }]
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "results": [{
+                "abc123": [{
+                    "pullRequestId": 99,
+                    "title": "Land the fix",
+                    "status": "completed",
+                    "creationDate": "2026-05-24T00:00:00Z",
+                    "repository": {
+                        "id": "repo-1",
+                        "name": "dashboard",
+                        "project": { "id": "project-1", "name": "Platform" }
+                    },
+                    "sourceRefName": "refs/heads/fix",
+                    "targetRefName": "refs/heads/main"
+                }],
+                "def456": []
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    let by_commit = test_client(&server)
+        .await
+        .list_pull_requests_for_commits("repo-1", &["abc123".to_string(), "def456".to_string()])
+        .await
+        .unwrap();
+    assert_eq!(by_commit.get("abc123").map(Vec::len), Some(1));
+    assert_eq!(by_commit.get("def456").map(Vec::len), Some(0));
+}
+
+#[tokio::test]
+async fn list_pull_requests_for_commits_empty_input_skips_request() {
+    let server = MockServer::start().await;
+    let by_commit = test_client(&server)
+        .await
+        .list_pull_requests_for_commits("repo-1", &[])
+        .await
+        .unwrap();
+    assert!(by_commit.is_empty());
 }

@@ -2,9 +2,11 @@ import type {
   CommitActivityDay,
   CommitActivityInput,
   CommitPullRequest,
+  CommitPullRequestsBatchEntry,
   CommitRepositoryOption,
   CommitSummary,
   SearchCommitsInput,
+  WorkItemSummary,
 } from "@/lib/azdoCommands";
 
 export function demoCommitRepositories(): CommitRepositoryOption[] {
@@ -157,6 +159,37 @@ export function demoCommitPullRequests(commitId?: string): CommitPullRequest[] {
         myVoteLabel: "Waiting",
         webUrl:
           "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/4288",
+      },
+    ],
+  };
+  return commitId ? map[commitId] ?? [] : [];
+}
+
+/** Batched form of {@link demoCommitPullRequests}, for the grid's prefetch. */
+export function demoCommitPullRequestsBatch(commitIds: string[]): CommitPullRequestsBatchEntry[] {
+  return commitIds.map((commitId) => ({
+    commitId,
+    pullRequests: demoCommitPullRequests(commitId),
+  }));
+}
+
+// Demo commit → linked work item relationships, mirroring demoCommitPullRequests.
+export function demoCommitWorkItems(commitId?: string): WorkItemSummary[] {
+  const map: Record<string, WorkItemSummary[]> = {
+    abcdef1234567890abcdef1234567890abcdef12: [
+      {
+        organizationId: "contoso",
+        projectId: "platform",
+        projectName: "Platform",
+        id: 501,
+        title: "Track commit search dashboard delivery",
+        workItemType: "User Story",
+        state: "Active",
+        assignedTo: "Demo User",
+        changedDate: "2026-05-27T08:00:00Z",
+        webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/501",
+        extraFields: [],
+        depth: null,
       },
     ],
   };

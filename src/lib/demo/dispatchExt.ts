@@ -17,8 +17,10 @@ import {
 import {
   demoCommitActivity,
   demoCommitPullRequests,
+  demoCommitPullRequestsBatch,
   demoCommitRepositories,
   demoCommits,
+  demoCommitWorkItems,
   demoGetCodeSearchContext,
   demoRepoBranches,
   demoRepoFile,
@@ -134,6 +136,14 @@ export function dispatchExt(command: string, args: unknown): unknown {
     case "get_commit_pull_requests": {
       const input = (args as { input?: { commitId?: string } } | undefined)?.input;
       return demoCommitPullRequests(input?.commitId);
+    }
+    case "get_commit_pull_requests_batch": {
+      const input = (args as { input?: { commitIds?: string[] } } | undefined)?.input;
+      return demoCommitPullRequestsBatch(input?.commitIds ?? []);
+    }
+    case "get_commit_work_items": {
+      const input = (args as { input?: { commitId?: string } } | undefined)?.input;
+      return demoCommitWorkItems(input?.commitId);
     }
     case "cancel_operation":
       // Demo searches resolve instantly, so there is nothing to cancel.

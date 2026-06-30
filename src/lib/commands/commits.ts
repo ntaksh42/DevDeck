@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { invokeCommand, prFileDiffSchema } from "./runtime";
+import { workItemSummariesSchema, type WorkItemSummary } from "./workItems";
 
 const commitSummarySchema = z.object({
   organizationId: z.string(),
@@ -74,6 +75,13 @@ const commitPullRequestSchema = z.object({
 const commitPullRequestsSchema = z.array(commitPullRequestSchema);
 export type CommitPullRequest = z.infer<typeof commitPullRequestSchema>;
 
+const commitPullRequestsBatchEntrySchema = z.object({
+  commitId: z.string(),
+  pullRequests: commitPullRequestsSchema,
+});
+const commitPullRequestsBatchSchema = z.array(commitPullRequestsBatchEntrySchema);
+export type CommitPullRequestsBatchEntry = z.infer<typeof commitPullRequestsBatchEntrySchema>;
+
 export type SearchCommitsInput = {
   organizationId?: string;
   query?: string;
@@ -133,6 +141,26 @@ export async function getCommitPullRequests(input: {
 }): Promise<CommitPullRequest[]> {
   const result = await invokeCommand("get_commit_pull_requests", { input });
   return commitPullRequestsSchema.parse(result);
+}
+
+export async function getCommitPullRequestsBatch(input: {
+  organizationId?: string;
+  repositoryId: string;
+  commitIds: string[];
+}): Promise<CommitPullRequestsBatchEntry[]> {
+  const result = await invokeCommand("get_commit_pull_requests_batch", { input });
+  return commitPullRequestsBatchSchema.parse(result);
+}
+
+export async function getCommitWorkItems(input: {
+  organizationId?: string;
+  projectId: string;
+  projectName: string;
+  repositoryId: string;
+  commitId: string;
+}): Promise<WorkItemSummary[]> {
+  const result = await invokeCommand("get_commit_work_items", { input });
+  return workItemSummariesSchema.parse(result);
 }
 
 export async function searchCommits(

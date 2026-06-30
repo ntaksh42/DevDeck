@@ -14,8 +14,10 @@ use crate::code_search::{
 };
 use crate::commits::{
     CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
-    CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput, GetCommitFileDiffInput,
-    GetCommitPullRequestsInput, ListCommitRepositoriesInput, SearchCommitsInput,
+    CommitPullRequestsBatchEntry, CommitRepositoryOption, CommitSearchResult,
+    GetCommitChangesInput, GetCommitFileDiffInput, GetCommitPullRequestsBatchInput,
+    GetCommitPullRequestsInput, GetCommitWorkItemsInput, ListCommitRepositoriesInput,
+    SearchCommitsInput,
 };
 use crate::db::Organization;
 use crate::error::{AppError, Result};
@@ -254,6 +256,26 @@ impl Provider for GithubProvider {
         input: GetCommitPullRequestsInput,
     ) -> Result<Vec<CommitPullRequest>> {
         github::commits::get_commit_pull_requests(&self.org, &self.secrets, input).await
+    }
+
+    // GitHub has no batched "PRs for several commits" lookup and no artifact-
+    // link equivalent for commit-linked work items (GitHub issues are not
+    // generally linked to commits the way Azure DevOps work items are linked
+    // via ArtifactLink). Both degrade to empty rather than `NotSupported` so
+    // the (ungated) commit preview panel and grid render normally; the grid
+    // falls back to the existing per-commit lookup once a row is previewed.
+    async fn get_commit_pull_requests_batch(
+        &self,
+        _input: GetCommitPullRequestsBatchInput,
+    ) -> Result<Vec<CommitPullRequestsBatchEntry>> {
+        Ok(Vec::new())
+    }
+
+    async fn get_commit_work_items(
+        &self,
+        _input: GetCommitWorkItemsInput,
+    ) -> Result<Vec<WorkItemSummary>> {
+        Ok(Vec::new())
     }
 
     async fn get_pull_request_review(&self, input: PrLocator) -> Result<PullRequestReview> {

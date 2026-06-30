@@ -42,6 +42,7 @@ import {
 } from "./commitSearchUtils";
 import { CommitGridRow, CommitSortHeaderButton } from "./CommitGridRow";
 import { CommitPreviewPanel } from "./CommitPreviewPanel";
+import { useCommitPrPrefetch } from "./useCommitPrPrefetch";
 
 export function CommitResults({
   activeExternalFilterCount = 0,
@@ -256,6 +257,8 @@ export function CommitResults({
   const virtualTopPadding = firstVirtualRow * COMMIT_GRID_ROW_HEIGHT;
   const virtualBottomPadding =
     Math.max(0, sorted.length - lastVirtualRow) * COMMIT_GRID_ROW_HEIGHT;
+
+  useCommitPrPrefetch(virtualRows);
 
   const selectedCommit = sorted[selectedIndex] ?? null;
 
