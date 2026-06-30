@@ -151,7 +151,9 @@ export const CommitGridRow = forwardRef<
         }
       }}
       className={`grid h-[29px] cursor-pointer select-none items-center gap-2 border-b border-border px-2 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
-        selected ? "bg-secondary" : "hover:bg-muted/50"
+        selected
+          ? "bg-secondary shadow-[inset_3px_0_0_hsl(var(--primary))]"
+          : "hover:bg-muted/50"
       }`}
       style={{ gridTemplateColumns: columnTemplate }}
     >

@@ -7,7 +7,7 @@ import {
   useState,
 } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Info, Loader2, Search } from "lucide-react";
+import { ChevronDown, Info, Loader2, Search, SlidersHorizontal } from "lucide-react";
 import {
   searchCommits,
   listCommitRepositories,
@@ -47,6 +47,15 @@ export function CommitSearch({
   const [repositoryIds, setRepositoryIds] = useState<string[]>(initialViewState.repositoryIds);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<CommitViewMode>(() => loadCommitViewMode());
+  const [filtersOpen, setFiltersOpen] = useState(
+    () =>
+      !!(
+        initialViewState.author.trim() ||
+        initialViewState.branch.trim() ||
+        initialViewState.fromDate ||
+        initialViewState.toDate
+      ),
+  );
 
   const mutation = useMutation({
     mutationFn: searchCommits,
@@ -70,12 +79,14 @@ export function CommitSearch({
   const results = mutation.data?.commits ?? [];
   const totalMatches = mutation.data?.total ?? results.length;
   const resultsTruncated = mutation.data?.truncated ?? false;
-  const activeSearchFilterCount =
-    (query.trim() ? 1 : 0) +
+  const advancedFilterCount =
     (author.trim() ? 1 : 0) +
     (branch.trim() ? 1 : 0) +
     (fromDate ? 1 : 0) +
-    (toDate ? 1 : 0) +
+    (toDate ? 1 : 0);
+  const activeSearchFilterCount =
+    (query.trim() ? 1 : 0) +
+    advancedFilterCount +
     (projectIds.length > 0 ? 1 : 0) +
     (repositoryIds.length > 0 ? 1 : 0);
 
@@ -97,13 +108,16 @@ export function CommitSearch({
   }, [viewMode]);
 
   // Drop repository selections that no longer belong to the selected projects.
+  // Skip while repositories are still loading (or unavailable) so a restored
+  // selection is not wiped before its options exist.
   useEffect(() => {
+    if (repositoriesQuery.isLoading || repositoryOptions.length === 0) return;
     const allowed = new Set(filteredRepositoryOptions.map((repository) => repository.repositoryId));
     setRepositoryIds((prev) => {
       const next = prev.filter((id) => allowed.has(id));
       return next.length === prev.length ? prev : next;
     });
-  }, [filteredRepositoryOptions]);
+  }, [filteredRepositoryOptions, repositoriesQuery.isLoading, repositoryOptions.length]);
 
   useEffect(() => {
     if (!externalSearch) return;
@@ -188,8 +202,55 @@ export function CommitSearch({
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="shrink-0 rounded-md border border-border bg-card">
         <form className="grid gap-3 p-3" onSubmit={onSubmit}>
-          <div className="grid gap-3 xl:grid-cols-[minmax(240px,1fr)_180px_170px_auto]">
-            <label className="grid gap-2">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(200px,1fr)_minmax(220px,1fr)_auto]">
+            <div className="grid gap-2">
+              <span className="text-sm font-medium">Project</span>
+              <MultiSelectFilter
+                options={projectOptions.map((project) => ({
+                  value: project.projectId,
+                  label: project.projectName,
+                }))}
+                selected={projectIds}
+                onChange={setProjectIds}
+                placeholder="All projects"
+                ariaLabel="Filter by project"
+                searchable
+                disabled={repositoriesQuery.isLoading || repositoryOptions.length === 0}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <span className="text-sm font-medium">Repository</span>
+              <MultiSelectFilter
+                options={filteredRepositoryOptions.map((repository) => ({
+                  value: repository.repositoryId,
+                  label:
+                    projectIds.length > 0
+                      ? repository.repositoryName
+                      : `${repository.projectName} / ${repository.repositoryName}`,
+                }))}
+                selected={repositoryIds}
+                onChange={setRepositoryIds}
+                placeholder="All repositories"
+                ariaLabel="Filter by repository"
+                searchable
+                disabled={repositoriesQuery.isLoading || filteredRepositoryOptions.length === 0}
+              />
+            </div>
+
+            <div className="flex items-end">
+              <p className="pb-2 text-xs text-muted-foreground">
+                {repositoriesQuery.isLoading
+                  ? "Loading repositories"
+                  : repositoriesQuery.isError
+                    ? "Repositories unavailable"
+                    : `${repositoryOptions.length} repositories available`}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-end gap-2">
+            <label className="grid min-w-0 flex-1 gap-2">
               <span className="text-sm font-medium">Search</span>
               <div className="flex h-9 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
                 <Search className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
@@ -204,6 +265,45 @@ export function CommitSearch({
               </div>
             </label>
 
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((value) => !value)}
+              aria-expanded={filtersOpen}
+              aria-controls="commit-advanced-filters"
+              className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+              Filters
+              {advancedFilterCount > 0 ? (
+                <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-primary px-1.5 text-xs font-semibold text-primary-foreground">
+                  {advancedFilterCount}
+                </span>
+              ) : null}
+              <ChevronDown
+                className={`h-4 w-4 transition-transform ${filtersOpen ? "rotate-180" : ""}`}
+                aria-hidden="true"
+              />
+            </button>
+
+            <button
+              type="submit"
+              disabled={mutation.isPending || !selectedOrganizationId}
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {mutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Search className="h-4 w-4" aria-hidden="true" />
+              )}
+              Search
+            </button>
+          </div>
+
+          {filtersOpen ? (
+          <div
+            id="commit-advanced-filters"
+            className="grid gap-3 border-t border-border pt-3 md:grid-cols-2 xl:grid-cols-[minmax(160px,1fr)_minmax(120px,180px)_150px_150px_auto]"
+          >
             <label className="grid gap-2">
               <span className="text-sm font-medium">Author</span>
               <input
@@ -224,23 +324,6 @@ export function CommitSearch({
               />
             </label>
 
-            <div className="flex items-end">
-              <button
-                type="submit"
-                disabled={mutation.isPending || !selectedOrganizationId}
-                className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
-              >
-                {mutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <Search className="h-4 w-4" aria-hidden="true" />
-                )}
-                Search
-              </button>
-            </div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[150px_150px_auto_220px_240px_1fr]">
             <label className="grid gap-2">
               <span className="text-sm font-medium">From</span>
               <input
@@ -285,63 +368,19 @@ export function CommitSearch({
               </div>
             </div>
 
-            <div className="grid gap-2">
-              <span className="text-sm font-medium">Project</span>
-              <MultiSelectFilter
-                options={projectOptions.map((project) => ({
-                  value: project.projectId,
-                  label: project.projectName,
-                }))}
-                selected={projectIds}
-                onChange={setProjectIds}
-                placeholder="All projects"
-                ariaLabel="Filter by project"
-                searchable
-                disabled={repositoriesQuery.isLoading || repositoryOptions.length === 0}
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <span className="text-sm font-medium">Repository</span>
-              <MultiSelectFilter
-                options={filteredRepositoryOptions.map((repository) => ({
-                  value: repository.repositoryId,
-                  label:
-                    projectIds.length > 0
-                      ? repository.repositoryName
-                      : `${repository.projectName} / ${repository.repositoryName}`,
-                }))}
-                selected={repositoryIds}
-                onChange={setRepositoryIds}
-                placeholder="All repositories"
-                ariaLabel="Filter by repository"
-                searchable
-                disabled={repositoriesQuery.isLoading || filteredRepositoryOptions.length === 0}
-              />
-            </div>
-
-            <div className="flex items-end">
-              <p className="pb-2 text-xs text-muted-foreground">
-                {repositoriesQuery.isLoading
-                  ? "Loading project filters"
-                  : repositoriesQuery.isError
-                    ? "Project filters unavailable"
-                    : `${repositoryOptions.length} repositories available`}
-              </p>
-            </div>
+            <p className="text-xs text-muted-foreground md:col-span-2 xl:col-span-5">
+              Tip: add{" "}
+              <code className="rounded bg-muted px-1 py-0.5 font-mono">path:src/auth</code> to filter
+              by changed path. Path filtering runs on the server, so select a repository first.
+            </p>
           </div>
+          ) : null}
 
           {validationError ? (
             <p role="alert" className="text-sm text-destructive">
               {validationError}
             </p>
           ) : null}
-
-          <p className="text-xs text-muted-foreground">
-            Tip: add{" "}
-            <code className="rounded bg-muted px-1 py-0.5 font-mono">path:src/auth</code> to filter
-            by changed path. Path filtering runs on the server, so select a repository first.
-          </p>
         </form>
       </div>
 
