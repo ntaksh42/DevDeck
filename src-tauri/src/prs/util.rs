@@ -3,6 +3,9 @@ use azdo_client::{AdoError, IdentityRefWithVote};
 // Active PRs across one project; well above what a project realistically has.
 pub(crate) const PROJECT_PR_SYNC_TOP: u32 = 500;
 
+// PRs where the user is a reviewer, queried per project for the review cache.
+pub(crate) const REVIEW_PR_SYNC_TOP: u32 = 200;
+
 pub(crate) fn short_ref(value: &str) -> String {
     value
         .strip_prefix("refs/heads/")

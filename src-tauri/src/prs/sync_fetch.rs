@@ -31,6 +31,7 @@ pub(crate) async fn fetch_active_prs_for_project(
             return PrProjectFetch {
                 project_id,
                 label,
+                queried_count: 0,
                 result: Ok(Vec::new()),
             };
         }
@@ -38,11 +39,13 @@ pub(crate) async fn fetch_active_prs_for_project(
             return PrProjectFetch {
                 project_id,
                 label,
+                queried_count: 0,
                 result: Err(e.into()),
             }
         }
     };
 
+    let queried_count = prs.len();
     let cached = prs
         .into_iter()
         .filter_map(|pr| {
@@ -88,6 +91,7 @@ pub(crate) async fn fetch_active_prs_for_project(
     PrProjectFetch {
         project_id,
         label,
+        queried_count,
         result: Ok(cached),
     }
 }
@@ -97,10 +101,10 @@ pub(crate) async fn fetch_review_prs_for_project(
     org: Organization,
     project: TeamProject,
     user_id: String,
-) -> (String, Result<Vec<CachedReviewPr>>) {
+) -> ReviewPrFetchResult {
     let project_name = project.name.clone();
     let prs = match client
-        .list_pull_requests_by_reviewer(&project.id, &user_id, 200)
+        .list_pull_requests_by_reviewer(&project.id, &user_id, REVIEW_PR_SYNC_TOP)
         .await
     {
         Ok(prs) => prs,
@@ -111,11 +115,12 @@ pub(crate) async fn fetch_review_prs_for_project(
                 error = %e,
                 "review pull request list returned 404, skipping project"
             );
-            return (project_name, Ok(Vec::new()));
+            return (project_name, Ok((Vec::new(), 0)));
         }
         Err(e) => return (project_name, Err(e.into())),
     };
 
+    let queried_count = prs.len();
     let mut cached_reviews = Vec::new();
     for pr in prs {
         let Some(repo) = &pr.repository else {
@@ -164,7 +169,7 @@ pub(crate) async fn fetch_review_prs_for_project(
             ci_check_count: 0,
         });
     }
-    (project_name, Ok(cached_reviews))
+    (project_name, Ok((cached_reviews, queried_count)))
 }
 
 pub(crate) async fn fetch_created_prs_for_project(

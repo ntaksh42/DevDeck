@@ -12,7 +12,9 @@ import {
   searchCommits,
   listCommitRepositories,
   commandErrorMessage,
+  syncUpdatedEventSchema,
 } from "@/lib/azdoCommands";
+import { subscribeTauriEvent } from "@/lib/tauriEvents";
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { MultiSelectFilter } from "@/components/MultiSelectFilter";
 import { ErrorState } from "@/components/StateDisplay";
@@ -60,6 +62,23 @@ export function CommitSearch({
   const mutation = useMutation({
     mutationFn: searchCommits,
   });
+  // Search results live in mutation state, which background sync cannot
+  // invalidate the way it does query-backed views. Re-run the last search
+  // when a commits sync completes so a displayed result set does not go
+  // stale silently.
+  const mutationRef = useRef(mutation);
+  mutationRef.current = mutation;
+  useEffect(() => {
+    return subscribeTauriEvent("sync:updated", (payload) => {
+      const parsed = syncUpdatedEventSchema.safeParse(payload);
+      const scopes = parsed.success ? parsed.data.scopes : ["all"];
+      if (!scopes.includes("commits") && !scopes.includes("all")) return;
+      const current = mutationRef.current;
+      if (current.isSuccess && current.variables) {
+        current.mutate(current.variables);
+      }
+    });
+  }, []);
 
   const repositoriesQuery = useQuery({
     queryKey: ["commitRepositories", selectedOrganizationId],

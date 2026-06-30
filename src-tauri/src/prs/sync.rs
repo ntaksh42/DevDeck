@@ -13,9 +13,14 @@ pub(crate) struct SyncPrsResult {
     pub(crate) warning: Option<String>,
 }
 
+pub(crate) type ReviewPrFetchResult = (String, Result<(Vec<CachedReviewPr>, usize)>);
+
 pub(crate) struct PrProjectFetch {
     pub(crate) project_id: String,
     pub(crate) label: String,
+    /// Raw count returned by the project's active-PR query, before any
+    /// filtering. Used to detect when the query hit `PROJECT_PR_SYNC_TOP`.
+    pub(crate) queried_count: usize,
     pub(crate) result: Result<Vec<CachedPr>>,
 }
 
@@ -63,6 +68,10 @@ pub async fn sync_prs_for_org(
 struct ActivePrsFetch {
     cached_prs: Vec<CachedPr>,
     synced_project_ids: Vec<String>,
+    // Projects whose query hit PROJECT_PR_SYNC_TOP: the fetched snapshot is
+    // truncated, so it must not be used to destructively delete that
+    // project's existing cached rows.
+    capped_project_ids: Vec<String>,
     skipped: Vec<String>,
     last_skip_error: Option<AppError>,
 }
@@ -70,6 +79,10 @@ struct ActivePrsFetch {
 struct ReviewPrsFetch {
     cached_reviews: Vec<CachedReviewPr>,
     failed_projects: Vec<String>,
+    // Projects whose review-PR query hit REVIEW_PR_SYNC_TOP; treated like a
+    // failed project so the org-wide review cache replace is skipped rather
+    // than dropping valid rows the truncated query missed.
+    capped_projects: Vec<String>,
 }
 
 pub(crate) async fn do_sync_prs(
@@ -102,12 +115,13 @@ pub(crate) async fn do_sync_prs(
         }
     }
 
-    let synced_ids: Vec<&str> = active
+    let delete_safe_ids: Vec<&str> = active
         .synced_project_ids
         .iter()
+        .filter(|id| !active.capped_project_ids.contains(id))
         .map(String::as_str)
         .collect();
-    db.replace_pull_requests_for_projects(&org.id, &synced_ids, &active.cached_prs)?;
+    db.replace_pull_requests_for_projects(&org.id, &delete_safe_ids, &active.cached_prs)?;
 
     let mut warning_parts: Vec<String> = Vec::new();
     if !active.skipped.is_empty() {
@@ -117,20 +131,34 @@ pub(crate) async fn do_sync_prs(
             active.skipped.join(", ")
         ));
     }
+    if !active.capped_project_ids.is_empty() {
+        warning_parts.push(format!(
+            "{} project(s) have more than {PROJECT_PR_SYNC_TOP} active pull requests; cached rows for those projects were preserved rather than replaced.",
+            active.capped_project_ids.len()
+        ));
+    }
 
     match review {
         Some(review) => {
             let mut review = review?;
-            if review.failed_projects.is_empty() {
+            if review.failed_projects.is_empty() && review.capped_projects.is_empty() {
                 enrich_review_ci_status(client, &mut review.cached_reviews, budget).await;
                 db.replace_review_pull_requests(&org.id, &review.cached_reviews)?;
             } else {
                 // A partial review list would silently drop PRs from the failed
-                // projects, so keep the previous cache instead.
-                warning_parts.push(format!(
-                    "Review PR cache was not refreshed; query failed for project(s): {}.",
-                    review.failed_projects.join(", ")
-                ));
+                // or capped projects, so keep the previous cache instead.
+                if !review.failed_projects.is_empty() {
+                    warning_parts.push(format!(
+                        "Review PR cache was not refreshed; query failed for project(s): {}.",
+                        review.failed_projects.join(", ")
+                    ));
+                }
+                if !review.capped_projects.is_empty() {
+                    warning_parts.push(format!(
+                        "Review PR cache was not refreshed; project(s) have more than {REVIEW_PR_SYNC_TOP} review pull requests: {}.",
+                        review.capped_projects.join(", ")
+                    ));
+                }
             }
         }
         None => {
@@ -180,6 +208,9 @@ async fn fetch_all_active_prs(
             joined.map_err(|e| AppError::AzureDevOps(format!("PR sync task failed: {e}")))?;
         match fetch.result {
             Ok(prs) => {
+                if fetch.queried_count >= PROJECT_PR_SYNC_TOP as usize {
+                    out.capped_project_ids.push(fetch.project_id.clone());
+                }
                 out.synced_project_ids.push(fetch.project_id);
                 out.cached_prs.extend(prs);
             }
@@ -207,7 +238,7 @@ async fn fetch_all_review_prs(
     user_id: &str,
     budget: &SyncBudget,
 ) -> Result<ReviewPrsFetch> {
-    let mut tasks: JoinSet<(String, Result<Vec<CachedReviewPr>>)> = JoinSet::new();
+    let mut tasks: JoinSet<ReviewPrFetchResult> = JoinSet::new();
     for project in projects {
         let client = client.clone();
         let org = org.clone();
@@ -222,6 +253,7 @@ async fn fetch_all_review_prs(
 
     let mut cached_reviews: Vec<CachedReviewPr> = Vec::new();
     let mut failed_projects: Vec<String> = Vec::new();
+    let mut capped_projects: Vec<String> = Vec::new();
     while let Some(joined) = tasks.join_next().await {
         let (project_name, result) = joined
             .map_err(|e| AppError::AzureDevOps(format!("review PR sync task failed: {e}")))?;
@@ -231,11 +263,13 @@ async fn fetch_all_review_prs(
             result,
             &mut cached_reviews,
             &mut failed_projects,
+            &mut capped_projects,
         );
     }
     Ok(ReviewPrsFetch {
         cached_reviews,
         failed_projects,
+        capped_projects,
     })
 }
 
@@ -322,12 +356,25 @@ async fn join_ci_task(tasks: &mut JoinSet<CiFetchResult>) -> Option<CiFetchResul
 fn collect_review_fetch(
     org: &Organization,
     project_name: String,
-    result: Result<Vec<CachedReviewPr>>,
+    result: Result<(Vec<CachedReviewPr>, usize)>,
     cached_reviews: &mut Vec<CachedReviewPr>,
     review_failed_projects: &mut Vec<String>,
+    review_capped_projects: &mut Vec<String>,
 ) {
     match result {
-        Ok(reviews) => cached_reviews.extend(reviews),
+        Ok((reviews, queried_count)) => {
+            if queried_count >= REVIEW_PR_SYNC_TOP as usize {
+                tracing::warn!(
+                    org = %org.name,
+                    project = %project_name,
+                    queried_count,
+                    "review PR query hit REVIEW_PR_SYNC_TOP, preserving cached data instead of a truncated replace"
+                );
+                review_capped_projects.push(project_name);
+            } else {
+                cached_reviews.extend(reviews);
+            }
+        }
         Err(e) => {
             tracing::warn!(
                 org = %org.name,

@@ -323,3 +323,85 @@ async fn sync_work_items_batches_more_than_two_hundred_ids() {
         .as_deref()
         .is_some_and(|warning| warning.contains("more than 200 IDs")));
 }
+
+#[tokio::test]
+async fn sync_work_items_full_sync_preserves_rows_beyond_capped_query() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/_apis/projects"))
+        .and(query_param("api-version", "7.1-preview"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "count": 1,
+            "value": [{ "id": "project-ok", "name": "Platform" }]
+        })))
+        .mount(&server)
+        .await;
+
+    // The WIQL query hits SYNC_WORK_ITEM_QUERY_TOP exactly, simulating a
+    // project with more than 2000 work items: the snapshot is truncated.
+    let capped_refs: Vec<_> = (1..=SYNC_WORK_ITEM_QUERY_TOP as i64)
+        .map(|id| json!({ "id": id }))
+        .collect();
+    Mock::given(method("POST"))
+        .and(path("/project-ok/_apis/wit/wiql"))
+        .and(query_param("api-version", "7.1-preview"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "workItems": capped_refs
+        })))
+        .mount(&server)
+        .await;
+    // Every hydration batch (10 chunks of 200, for both the all/my queries)
+    // returns nothing; only the queried id count matters for this test.
+    Mock::given(method("POST"))
+        .and(path("/project-ok/_apis/wit/workitemsbatch"))
+        .and(query_param("api-version", "7.1-preview"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "count": 0,
+            "value": []
+        })))
+        .mount(&server)
+        .await;
+
+    let db_file = tempfile::NamedTempFile::new().unwrap();
+    let db = AppDatabase::new(db_file.path().to_path_buf());
+    db.initialize().unwrap();
+    let org = db.upsert_organization(make_org_draft()).unwrap();
+
+    // A cached item that falls outside the capped snapshot (and would never
+    // be returned by a query capped at SYNC_WORK_ITEM_QUERY_TOP). A naive
+    // full-sync replace would delete it even though it still exists upstream.
+    db.upsert_work_items(&[CachedWorkItem {
+        org_id: org.id.clone(),
+        project_id: "project-ok".to_string(),
+        project_name: "Platform".to_string(),
+        id: 999_999,
+        title: "Beyond the cap".to_string(),
+        work_item_type: Some("Task".to_string()),
+        state: Some("Active".to_string()),
+        assigned_to: None,
+        assigned_to_unique_name: None,
+        changed_date: Some("2020-01-01T00:00:00Z".to_string()),
+        web_url: None,
+    }])
+    .unwrap();
+
+    let client = test_client(&server).await;
+    let projects = client.list_projects().await.unwrap();
+    let budget: crate::sync::SyncBudget = std::sync::Arc::new(tokio::sync::Semaphore::new(8));
+    let result = do_sync_work_items(&db, &client, &org, &projects, &budget)
+        .await
+        .unwrap();
+    assert!(result.was_full_sync);
+    assert!(result
+        .warning
+        .as_deref()
+        .is_some_and(|warning| warning.contains("more than 2000")));
+
+    let cached = db
+        .search_work_items(&org.id, None, None, None, None)
+        .unwrap();
+    assert!(
+        cached.iter().any(|item| item.id == 999_999),
+        "row beyond the capped query window must survive a full sync"
+    );
+}

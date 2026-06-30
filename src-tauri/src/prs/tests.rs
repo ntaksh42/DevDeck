@@ -217,6 +217,114 @@ async fn pr_sync_skips_failing_project_and_preserves_its_cache() {
         .is_some_and(|warning| warning.contains("Broken")));
 }
 
+#[tokio::test]
+async fn pr_sync_preserves_active_prs_beyond_capped_query() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/_apis/projects"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "count": 1,
+            "value": [{ "id": "project-ok", "name": "Platform" }]
+        })))
+        .mount(&server)
+        .await;
+
+    // The query hits PROJECT_PR_SYNC_TOP exactly, simulating a project with
+    // more active PRs than the sync cap: the snapshot is truncated.
+    let capped_prs: Vec<_> = (1..=PROJECT_PR_SYNC_TOP)
+        .map(|id| {
+            json!({
+                "pullRequestId": id,
+                "title": format!("PR {id}"),
+                "status": "active",
+                "creationDate": "2026-06-09T00:00:00Z",
+                "repository": {
+                    "id": "repo-ok",
+                    "name": "Good Repo",
+                    "project": { "id": "project-ok", "name": "Platform" }
+                },
+                "sourceRefName": "refs/heads/feature",
+                "targetRefName": "refs/heads/main"
+            })
+        })
+        .collect();
+    Mock::given(method("GET"))
+        .and(path("/project-ok/_apis/git/pullrequests"))
+        .and(query_param("searchCriteria.status", "active"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "count": capped_prs.len(),
+            "value": capped_prs
+        })))
+        .mount(&server)
+        .await;
+
+    let db_file = tempfile::NamedTempFile::new().unwrap();
+    let db = AppDatabase::new(db_file.path().to_path_buf());
+    db.initialize().unwrap();
+    let org = db
+        .upsert_organization(OrganizationDraft {
+            id: "contoso".to_string(),
+            name: "contoso".to_string(),
+            display_name: None,
+            base_url: "https://dev.azure.com/contoso".to_string(),
+            auth_provider: "pat".to_string(),
+            credential_key: "azdodeck:org:contoso:pat".to_string(),
+            authenticated_user_id: None,
+            authenticated_user_display_name: None,
+            authenticated_user_unique_name: None,
+            provider_kind: "azdo".to_string(),
+        })
+        .unwrap();
+
+    // A cached PR outside the capped snapshot; a naive full replace would
+    // delete it even though it still exists upstream. It is dated after the
+    // fetched batch so it is not itself pushed out of the display's
+    // (unrelated) top-500-by-date window.
+    db.replace_pull_requests_for_projects(
+        &org.id,
+        &["project-ok"],
+        &[CachedPr {
+            org_id: org.id.clone(),
+            project_id: "project-ok".to_string(),
+            project_name: "Platform".to_string(),
+            repository_id: "repo-ok".to_string(),
+            repository_name: "Good Repo".to_string(),
+            pull_request_id: 999_999,
+            title: "Beyond the cap".to_string(),
+            status: "active".to_string(),
+            created_by: None,
+            creation_date: "2026-06-10T00:00:00Z".to_string(),
+            source_ref_name: "feature".to_string(),
+            target_ref_name: "main".to_string(),
+            web_url: None,
+            is_draft: false,
+        }],
+    )
+    .unwrap();
+
+    let base_url = Url::parse(&format!("{}/", server.uri())).unwrap();
+    let client = AdoClient::new("contoso", Arc::new(PatProvider::new("test-pat")))
+        .unwrap()
+        .with_base_url(base_url);
+
+    let projects = client.list_projects().await.unwrap();
+    let budget: SyncBudget = std::sync::Arc::new(tokio::sync::Semaphore::new(8));
+    let result = do_sync_prs(&db, &client, &org, &projects, &budget)
+        .await
+        .unwrap();
+
+    let cached = db.search_pull_requests(&org.id, None, None, None).unwrap();
+    let titles: Vec<&str> = cached.iter().map(|pr| pr.title.as_str()).collect();
+    assert!(
+        titles.contains(&"Beyond the cap"),
+        "row beyond the capped query window must survive a full sync"
+    );
+    assert!(result
+        .warning
+        .as_deref()
+        .is_some_and(|warning| warning.contains("more than 500")));
+}
+
 #[test]
 fn normalize_optional_trims_and_rejects_blank() {
     assert_eq!(

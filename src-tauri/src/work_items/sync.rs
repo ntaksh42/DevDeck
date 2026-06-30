@@ -27,10 +27,10 @@ const FULL_WI_SYNC_INTERVAL_HOURS: i64 = 24;
 // WIQL fails with VS402337 when a query would return more than 20,000 items.
 // Cap sync queries well below that; ORDER BY ChangedDate DESC keeps the most
 // recently changed items.
-const SYNC_WORK_ITEM_QUERY_TOP: usize = 2000;
+pub(super) const SYNC_WORK_ITEM_QUERY_TOP: usize = 2000;
 
 pub(super) struct SyncWorkItemsResult {
-    warning: Option<String>,
+    pub(super) warning: Option<String>,
     pub(super) was_full_sync: bool,
 }
 
@@ -197,6 +197,10 @@ pub(super) async fn do_sync_work_items(
     let mut all_cached: Vec<CachedWorkItem> = Vec::new();
     let mut my_cached: Vec<CachedWorkItem> = Vec::new();
     let mut synced_project_ids: Vec<String> = Vec::new();
+    // Projects whose query hit SYNC_WORK_ITEM_QUERY_TOP: the fetched snapshot
+    // is truncated (oldest-changed items dropped), so it must not be used to
+    // destructively delete that project's existing cached rows.
+    let mut capped_project_ids: Vec<String> = Vec::new();
     let mut skipped_projects: Vec<String> = Vec::new();
     let mut last_skip_error: Option<AppError> = None;
     let mut large_query_count = 0usize;
@@ -224,6 +228,11 @@ pub(super) async fn do_sync_work_items(
             // its cached rows survive.
             Ok(None) => continue,
             Ok(Some((project_all, project_my))) => {
+                if project_all.queried_count >= SYNC_WORK_ITEM_QUERY_TOP
+                    || project_my.queried_count >= SYNC_WORK_ITEM_QUERY_TOP
+                {
+                    capped_project_ids.push(fetch.project_id.clone());
+                }
                 synced_project_ids.push(fetch.project_id);
                 if project_all.queried_count > SYNC_WORK_ITEM_BATCH_SIZE {
                     large_query_count += 1;
@@ -258,9 +267,17 @@ pub(super) async fn do_sync_work_items(
     }
 
     let synced_ids: Vec<&str> = synced_project_ids.iter().map(String::as_str).collect();
+    // Projects that hit the query cap must not be destructively replaced: the
+    // fetched snapshot is incomplete, so deleting rows missing from it would
+    // drop valid items that still exist upstream.
+    let delete_safe_ids: Vec<&str> = synced_project_ids
+        .iter()
+        .filter(|id| !capped_project_ids.contains(id))
+        .map(String::as_str)
+        .collect();
     let was_full_sync = delta_since.is_none();
     if was_full_sync {
-        db.replace_work_items(&org.id, &synced_ids, &all_cached, &my_cached)?;
+        db.replace_work_items(&org.id, &delete_safe_ids, &all_cached, &my_cached)?;
     } else {
         db.apply_work_items_delta(&org.id, &synced_ids, &all_cached, &my_cached)?;
     }
@@ -271,6 +288,12 @@ pub(super) async fn do_sync_work_items(
             "{} project(s) skipped due to sync errors: {}.",
             skipped_projects.len(),
             skipped_projects.join(", ")
+        ));
+    }
+    if !capped_project_ids.is_empty() {
+        warning_parts.push(format!(
+            "{} project(s) have more than {SYNC_WORK_ITEM_QUERY_TOP} work items; cached rows for those projects were preserved rather than replaced, so items outside the most-recently-changed window may be stale.",
+            capped_project_ids.len()
         ));
     }
     if large_query_count > 0 {
