@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { render } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { render, waitFor } from "@testing-library/react";
 import { MarkdownView, renderMarkdownHtml } from "./markdown";
 
 describe("renderMarkdownHtml", () => {
@@ -69,5 +69,30 @@ describe("MarkdownView", () => {
   it("renders markdown content into the DOM", () => {
     const { container } = render(<MarkdownView text={"**bold** text"} />);
     expect(container.querySelector("strong")?.textContent).toBe("bold");
+  });
+
+  it("hydrates authenticated Azure DevOps attachment images to data URLs", async () => {
+    const attachmentUrl =
+      "https://dev.azure.com/contoso/proj/_apis/wit/attachments/abc?fileName=a.png";
+    const resolveImageSource = vi.fn().mockResolvedValue("data:image/png;base64,AAAA");
+    const { container } = render(
+      <MarkdownView text={`![alt](${attachmentUrl})`} resolveImageSource={resolveImageSource} />,
+    );
+    await waitFor(() =>
+      expect(container.querySelector("img")?.getAttribute("src")).toBe("data:image/png;base64,AAAA"),
+    );
+    expect(resolveImageSource).toHaveBeenCalledWith(attachmentUrl);
+  });
+
+  it("does not hydrate non-attachment image URLs", async () => {
+    const resolveImageSource = vi.fn().mockResolvedValue("data:image/png;base64,AAAA");
+    render(
+      <MarkdownView
+        text={"![alt](https://example.com/a.png)"}
+        resolveImageSource={resolveImageSource}
+      />,
+    );
+    await Promise.resolve();
+    expect(resolveImageSource).not.toHaveBeenCalled();
   });
 });

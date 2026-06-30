@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Check, Loader2, Pencil, SmilePlus, Trash2, X } from "lucide-react";
 import { formatRelativeDate } from "@/lib/utils";
 import { commentAuthorInitials } from "./workItemHtml";
@@ -61,6 +61,8 @@ export function CollapsibleComment({
   const [draft, setDraft] = useState(commentText ?? "");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [contentHeight, setContentHeight] = useState<number | null>(null);
+  const reactionTriggerRef = useRef<HTMLButtonElement>(null);
+  const reactionMenuRef = useRef<HTMLDivElement>(null);
   // Headroom over the max-h-32 (128px) clamp so a comment barely past it doesn't
   // sprout a toggle for a few pixels.
   const collapsible =
@@ -71,6 +73,54 @@ export function CollapsibleComment({
   useEffect(() => {
     if (contentHeight != null && contentHeight <= 150) setExpanded(true);
   }, [contentHeight]);
+
+  // When the reaction picker opens, move focus into it so it is keyboard-driven
+  // from the first emoji without the user having to tab through the row.
+  useEffect(() => {
+    if (pickerOpen) {
+      reactionMenuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    }
+  }, [pickerOpen]);
+
+  function closeReactionPicker() {
+    setPickerOpen(false);
+    reactionTriggerRef.current?.focus();
+  }
+
+  // Arrow keys roam the emoji row; Escape closes and returns focus to the
+  // trigger. Navigation keys are contained here so the underlying grid does not
+  // also react to them.
+  function onReactionMenuKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const buttons = Array.from(
+      reactionMenuRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? [],
+    );
+    if (buttons.length === 0) return;
+    const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeReactionPicker();
+    } else if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      event.preventDefault();
+      event.stopPropagation();
+      buttons[(index + 1 + buttons.length) % buttons.length]?.focus();
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      event.preventDefault();
+      event.stopPropagation();
+      buttons[(index - 1 + buttons.length) % buttons.length]?.focus();
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      event.stopPropagation();
+      buttons[0]?.focus();
+    } else if (event.key === "End") {
+      event.preventDefault();
+      event.stopPropagation();
+      buttons[buttons.length - 1]?.focus();
+    } else if (event.key === "Enter" || event.key === " ") {
+      // Let the native button activate, but keep the key from reaching the grid.
+      event.stopPropagation();
+    }
+  }
 
   function startEdit() {
     setDraft(commentText ?? "");
@@ -242,8 +292,8 @@ export function CollapsibleComment({
                 })}
                 <div className="relative">
                   <button
+                    ref={reactionTriggerRef}
                     type="button"
-                    disabled={reactionPending}
                     aria-label="Add reaction"
                     aria-expanded={pickerOpen}
                     title="Add reaction"
@@ -254,13 +304,10 @@ export function CollapsibleComment({
                   </button>
                   {pickerOpen ? (
                     <div
+                      ref={reactionMenuRef}
                       role="menu"
-                      onKeyDown={(event) => {
-                        if (event.key === "Escape") {
-                          event.preventDefault();
-                          setPickerOpen(false);
-                        }
-                      }}
+                      aria-label="Reactions"
+                      onKeyDown={onReactionMenuKeyDown}
                       className="absolute left-0 top-full z-30 mt-1 flex gap-0.5 rounded-md border border-border bg-popover p-1 shadow-lg"
                     >
                       {COMMENT_REACTIONS.map((reaction) => {
@@ -269,17 +316,22 @@ export function CollapsibleComment({
                           <button
                             key={reaction.type}
                             type="button"
-                            role="menuitem"
-                            title={reaction.label}
-                            onClick={() => {
-                              onToggleReaction(id, reaction.type, !mine);
-                              setPickerOpen(false);
-                            }}
-                            className={`inline-flex h-7 w-7 items-center justify-center rounded text-base hover:bg-accent ${
-                              mine ? "bg-primary/10" : ""
+                            role="menuitemcheckbox"
+                            aria-checked={mine}
+                            title={`${reaction.label}${mine ? " (you reacted)" : ""}`}
+                            // Keep the picker open after toggling so the check badge
+                            // updates in place and the reaction is clearly applied.
+                            onClick={() => onToggleReaction(id, reaction.type, !mine)}
+                            className={`relative inline-flex h-7 w-7 items-center justify-center rounded text-base hover:bg-accent ${
+                              mine ? "bg-primary/15 ring-2 ring-primary" : ""
                             }`}
                           >
                             <span aria-hidden="true">{reaction.emoji}</span>
+                            {mine ? (
+                              <span className="absolute -right-0.5 -top-0.5 inline-flex h-3 w-3 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                                <Check className="h-2 w-2" aria-hidden="true" />
+                              </span>
+                            ) : null}
                           </button>
                         );
                       })}

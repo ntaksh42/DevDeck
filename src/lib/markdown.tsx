@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import DOMPurify from "dompurify";
 import { marked, type TokenizerAndRendererExtension } from "marked";
 import { openExternalUrl } from "@/lib/openExternal";
@@ -82,14 +82,76 @@ const MARKDOWN_CLASSES = [
   "[&_hr]:my-2 [&_hr]:border-border",
 ].join(" ");
 
+// Azure DevOps embeds description/comment images as authenticated attachment
+// URLs (the rich-text editor's shared `_apis/wit/attachments/` store). A plain
+// <img> fetch from the webview omits the PAT/bearer auth, so the image 401s and
+// renders broken. Resolve those to data URLs through the backend instead. Other
+// schemes (data/blob) and non-attachment URLs (e.g. README images) are left
+// untouched.
+function toAzdoAttachmentUrl(src: string, baseUrl: string | null | undefined): string | null {
+  try {
+    const url = new URL(src, baseUrl || window.location.href);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    if (!url.pathname.toLowerCase().includes("/_apis/wit/attachments/")) return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Renders sanitized markdown. Links open in the external browser instead of
- * navigating the app webview.
+ * navigating the app webview. When `resolveImageSource` is provided,
+ * authenticated Azure DevOps attachment images are hydrated to data URLs so
+ * they display instead of failing as unauthenticated fetches.
  */
-export function MarkdownView({ text, className }: { text: string; className?: string }) {
+export function MarkdownView({
+  text,
+  className,
+  resolveImageSource,
+  baseUrl,
+}: {
+  text: string;
+  className?: string;
+  resolveImageSource?: (url: string) => Promise<string | null>;
+  baseUrl?: string | null;
+}) {
   const html = useMemo(() => renderMarkdownHtml(text), [text]);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const root = containerRef.current;
+    if (!root || !resolveImageSource) return;
+    let cancelled = false;
+    for (const image of Array.from(root.querySelectorAll("img"))) {
+      const rawSrc = image.getAttribute("src");
+      if (!rawSrc || /^(data|blob):/i.test(rawSrc) || image.dataset.azdoImageHydrated) {
+        continue;
+      }
+      const attachmentUrl = toAzdoAttachmentUrl(rawSrc, baseUrl);
+      if (!attachmentUrl) continue;
+      image.dataset.azdoImageHydrated = "true";
+      void resolveImageSource(attachmentUrl)
+        .then((dataUrl) => {
+          if (cancelled || !dataUrl || !image.isConnected) return;
+          image.src = dataUrl;
+        })
+        .catch(() => {
+          if (cancelled || !image.isConnected) return;
+          const fallback = document.createElement("span");
+          fallback.textContent = "Image could not be loaded.";
+          fallback.className = "text-xs italic text-muted-foreground";
+          image.replaceWith(fallback);
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [html, resolveImageSource, baseUrl]);
+
   return (
     <div
+      ref={containerRef}
       className={`${MARKDOWN_CLASSES} ${className ?? ""}`}
       onClick={(event) => {
         const anchor = (event.target as HTMLElement).closest("a");
