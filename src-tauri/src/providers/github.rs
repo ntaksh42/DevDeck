@@ -22,11 +22,12 @@ use crate::error::{AppError, Result};
 use crate::github;
 use crate::pipelines::{
     CancelPipelineRunInput, GetPipelineDefinitionInput, GetPipelineRunInput,
-    GetPipelineRunLogTailInput, ListPipelineApprovalsInput, ListPipelineArtifactsInput,
-    ListPipelineDefinitionsInput, ListPipelineProjectsInput, ListPipelineRunsInput,
-    PipelineApprovalSummary, PipelineArtifact, PipelineDefinitionDetail, PipelineDefinitionOption,
-    PipelineLogTail, PipelineProjectOption, PipelineRunDetail, PipelineRunSummary,
-    QueuePipelineRunInput, RerunPipelineRunInput, UpdatePipelineApprovalInput,
+    GetPipelineRunLogTailInput, GetPipelineTestSummaryInput, ListPipelineApprovalsInput,
+    ListPipelineArtifactsInput, ListPipelineDefinitionsInput, ListPipelineProjectsInput,
+    ListPipelineRunsInput, PipelineApprovalSummary, PipelineArtifact, PipelineDefinitionDetail,
+    PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption, PipelineRunDetail,
+    PipelineRunSummary, PipelineTestSummary, QueuePipelineRunInput, RerunPipelineRunInput,
+    RetryPipelineStageInput, UpdatePipelineApprovalInput,
 };
 use crate::pr_review::{
     DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
@@ -457,6 +458,17 @@ impl Provider for GithubProvider {
         &self,
         _input: UpdatePipelineApprovalInput,
     ) -> Result<Vec<PipelineApprovalSummary>> {
+        Err(pipelines_unsupported())
+    }
+
+    async fn get_pipeline_test_summary(
+        &self,
+        _input: GetPipelineTestSummaryInput,
+    ) -> Result<PipelineTestSummary> {
+        Err(pipelines_unsupported())
+    }
+
+    async fn retry_pipeline_stage(&self, _input: RetryPipelineStageInput) -> Result<()> {
         Err(pipelines_unsupported())
     }
 

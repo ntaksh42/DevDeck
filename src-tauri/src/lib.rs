@@ -226,6 +226,8 @@ pub fn run() {
             commands::pipelines::cancel_pipeline_run,
             commands::pipelines::list_pipeline_approvals,
             commands::pipelines::update_pipeline_approval,
+            commands::pipelines::get_pipeline_test_summary,
+            commands::pipelines::retry_pipeline_stage,
             commands::sync::trigger_sync
         ])
         .run(tauri::generate_context!())

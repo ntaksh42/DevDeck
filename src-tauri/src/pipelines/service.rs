@@ -7,14 +7,17 @@ use crate::projects::ProjectDirectory;
 use crate::secrets::SecretStore;
 
 use super::convert::{
-    approval_to_summary, build_to_summary, definition_to_detail, normalize_optional,
-    resolve_requested_for, timeline_to_nodes,
+    approval_to_summary, build_to_summary, definition_to_detail, failed_test_from,
+    normalize_optional, resolve_requested_for, run_has_failures, timeline_to_nodes,
 };
 use super::types::*;
 
 const RUN_LIST_TOP: u32 = 50;
 const DEFINITION_LIST_TOP: u32 = 200;
 const DEFAULT_LOG_TAIL_LINES: usize = 200;
+// Failed test results to pull per run and to surface overall in the summary.
+const FAILED_RESULTS_PER_RUN: u32 = 100;
+const FAILED_RESULTS_TOTAL_CAP: usize = 200;
 
 #[derive(Debug, Clone)]
 pub struct PipelineService {
@@ -312,5 +315,84 @@ impl PipelineService {
             .update_pipeline_approval(&project.id, &input.approval_id, status, &comment)
             .await?;
         Ok(updated.into_iter().map(approval_to_summary).collect())
+    }
+
+    /// Aggregates the test runs published against a build into pass/fail counts
+    /// and a list of failed tests.
+    pub async fn get_test_summary(
+        &self,
+        input: GetPipelineTestSummaryInput,
+    ) -> Result<PipelineTestSummary> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
+
+        let runs = client
+            .list_test_runs_for_build(&project.id, input.build_id)
+            .await?;
+
+        let mut total_tests = 0;
+        let mut passed_tests = 0;
+        let mut failed: Vec<FailedTest> = Vec::new();
+        let mut truncated = false;
+        for run in &runs {
+            total_tests += run.total_tests;
+            passed_tests += run.passed_tests;
+            // Only query results for runs that report failures, to avoid an
+            // extra request per fully-passing run.
+            if !run_has_failures(run) {
+                continue;
+            }
+            let results = client
+                .list_failed_test_results(&project.id, run.id, FAILED_RESULTS_PER_RUN)
+                .await?;
+            if results.len() as u32 >= FAILED_RESULTS_PER_RUN {
+                truncated = true;
+            }
+            for result in results {
+                if failed.len() >= FAILED_RESULTS_TOTAL_CAP {
+                    truncated = true;
+                    break;
+                }
+                failed.push(failed_test_from(run, result));
+            }
+        }
+
+        Ok(PipelineTestSummary {
+            run_count: runs.len(),
+            total_tests,
+            passed_tests,
+            failed_tests: failed.len(),
+            failed,
+            truncated,
+        })
+    }
+
+    /// Retries a stage of a run (re-runs its failed jobs by default).
+    pub async fn retry_stage(&self, input: RetryPipelineStageInput) -> Result<()> {
+        let stage_ref_name = input.stage_ref_name.trim();
+        if stage_ref_name.is_empty() {
+            return Err(AppError::InvalidInput(
+                "stage reference name is required".to_string(),
+            ));
+        }
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
+        client
+            .retry_build_stage(
+                &project.id,
+                input.build_id,
+                stage_ref_name,
+                input.force_retry_all_jobs,
+            )
+            .await?;
+        Ok(())
     }
 }

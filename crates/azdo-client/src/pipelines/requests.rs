@@ -6,7 +6,8 @@ use crate::git::ListResponse;
 
 use super::types::{
     build_definition_detail, Approval, Build, BuildArtifact, BuildDefinitionDetail,
-    BuildDefinitionRef, BuildListCriteria, BuildLogTail, RawBuildDefinition, Timeline,
+    BuildDefinitionRef, BuildListCriteria, BuildLogTail, RawBuildDefinition, TestCaseResult,
+    TestRun, Timeline,
 };
 
 impl AdoClient {
@@ -183,5 +184,67 @@ impl AdoClient {
             .patch_json(&path, &[("api-version", "7.1")], "application/json", &body)
             .await?;
         Ok(response.value)
+    }
+
+    /// Lists the test runs published against a build, including aggregate counts.
+    pub async fn list_test_runs_for_build(
+        &self,
+        project_id: &str,
+        build_id: i64,
+    ) -> Result<Vec<TestRun>> {
+        let path = format!("{project_id}/_apis/test/runs");
+        let build_uri = format!("vstfs:///Build/Build/{build_id}");
+        let response: ListResponse<TestRun> = self
+            .get_json(
+                &path,
+                &[
+                    ("api-version", "7.1"),
+                    ("buildUri", build_uri.as_str()),
+                    ("includeRunDetails", "true"),
+                ],
+            )
+            .await?;
+        Ok(response.value)
+    }
+
+    /// Lists the failed test results of a test run (up to `top`).
+    pub async fn list_failed_test_results(
+        &self,
+        project_id: &str,
+        run_id: i64,
+        top: u32,
+    ) -> Result<Vec<TestCaseResult>> {
+        let path = format!("{project_id}/_apis/test/Runs/{run_id}/results");
+        let top = top.to_string();
+        let response: ListResponse<TestCaseResult> = self
+            .get_json(
+                &path,
+                &[
+                    ("api-version", "7.1"),
+                    ("outcomes", "Failed"),
+                    ("$top", top.as_str()),
+                ],
+            )
+            .await?;
+        Ok(response.value)
+    }
+
+    /// Retries a build stage (re-runs its failed jobs, or all jobs when
+    /// `force_retry_all_jobs` is set). `stage_ref_name` is the stage record's
+    /// `identifier` from the build timeline. Returns an empty 200.
+    pub async fn retry_build_stage(
+        &self,
+        project_id: &str,
+        build_id: i64,
+        stage_ref_name: &str,
+        force_retry_all_jobs: bool,
+    ) -> Result<()> {
+        let path = format!("{project_id}/_apis/build/builds/{build_id}/stages/{stage_ref_name}");
+        let body = json!({
+            "state": "retry",
+            "forceRetryAllJobs": force_retry_all_jobs,
+        });
+        self.patch_no_content(&path, &[("api-version", "7.1")], "application/json", &body)
+            .await
     }
 }

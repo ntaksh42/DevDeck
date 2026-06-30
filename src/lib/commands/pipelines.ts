@@ -51,6 +51,7 @@ export type PipelineApprovalSummary = z.infer<typeof pipelineApprovalSummarySche
 const timelineNodeSchema = z.object({
   id: z.string(),
   parentId: z.string().nullable(),
+  identifier: z.string().nullable(),
   nodeType: z.string().nullable(),
   name: z.string().nullable(),
   state: z.string().nullable(),
@@ -63,6 +64,23 @@ const timelineNodeSchema = z.object({
   order: z.number().nullable(),
 });
 export type TimelineNode = z.infer<typeof timelineNodeSchema>;
+
+const failedTestSchema = z.object({
+  runName: z.string().nullable(),
+  title: z.string(),
+  errorMessage: z.string().nullable(),
+  durationMs: z.number(),
+});
+const pipelineTestSummarySchema = z.object({
+  runCount: z.number(),
+  totalTests: z.number(),
+  passedTests: z.number(),
+  failedTests: z.number(),
+  failed: z.array(failedTestSchema),
+  truncated: z.boolean(),
+});
+export type FailedTest = z.infer<typeof failedTestSchema>;
+export type PipelineTestSummary = z.infer<typeof pipelineTestSummarySchema>;
 
 const pipelineRunDetailSchema = z.object({
   run: pipelineRunSummarySchema,
@@ -225,4 +243,23 @@ export async function updatePipelineApproval(input: {
 }): Promise<PipelineApprovalSummary[]> {
   const result = await invokeCommand("update_pipeline_approval", { input });
   return pipelineApprovalSummariesSchema.parse(result);
+}
+
+export async function getPipelineTestSummary(input: {
+  organizationId?: string;
+  projectId: string;
+  buildId: number;
+}): Promise<PipelineTestSummary> {
+  const result = await invokeCommand("get_pipeline_test_summary", { input });
+  return pipelineTestSummarySchema.parse(result);
+}
+
+export async function retryPipelineStage(input: {
+  organizationId?: string;
+  projectId: string;
+  buildId: number;
+  stageRefName: string;
+  forceRetryAllJobs?: boolean;
+}): Promise<void> {
+  await invokeCommand("retry_pipeline_stage", { input });
 }

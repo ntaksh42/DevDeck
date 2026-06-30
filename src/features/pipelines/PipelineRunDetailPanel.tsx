@@ -1,4 +1,4 @@
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useState } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ExternalLink, Loader2, Play, Square } from "lucide-react";
 import {
@@ -7,20 +7,17 @@ import {
   getAppSettings,
   getPipelineRun,
   getPipelineRunLogTail,
+  getPipelineTestSummary,
   listPipelineArtifacts,
   rerunPipelineRun,
+  retryPipelineStage,
   type PipelineRunDetail,
-  type TimelineNode,
 } from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
 import { focusPrimaryGrid, formatDate, isEditableTarget } from "@/lib/utils";
-import {
-  formatDuration,
-  isInProgressStatus,
-  pipelineRunVisual,
-  runToneClasses,
-  shortBranch,
-} from "./pipelineStatus";
+import { PipelineTestSummary } from "./PipelineTestSummary";
+import { PipelineTimeline } from "./PipelineTimeline";
+import { formatDuration, isInProgressStatus, pipelineRunVisual, runToneClasses, shortBranch } from "./pipelineStatus";
 
 const LOG_REFRESH_INTERVAL_MS = 15_000;
 
@@ -38,83 +35,6 @@ const LOG_SEVERITY_CLASS: Record<"error" | "warning", string> = {
   error: "text-red-400",
   warning: "text-amber-300",
 };
-
-type TreeNode = TimelineNode & { children: TreeNode[] };
-
-function buildTimelineTree(nodes: TimelineNode[]): TreeNode[] {
-  const byId = new Map<string, TreeNode>();
-  for (const node of nodes) {
-    byId.set(node.id, { ...node, children: [] });
-  }
-  const roots: TreeNode[] = [];
-  for (const node of byId.values()) {
-    const parent = node.parentId ? byId.get(node.parentId) : undefined;
-    if (parent) parent.children.push(node);
-    else roots.push(node);
-  }
-  const sortNodes = (list: TreeNode[]) => {
-    list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    for (const node of list) sortNodes(node.children);
-  };
-  sortNodes(roots);
-  return roots;
-}
-
-function TimelineRow({
-  node,
-  depth,
-  selectedLogId,
-  onSelectLog,
-}: {
-  node: TreeNode;
-  depth: number;
-  selectedLogId: number | null;
-  onSelectLog: (logId: number) => void;
-}) {
-  const visual = pipelineRunVisual(node.state, node.result);
-  const hasLog = node.logId != null;
-  const isSelected = hasLog && node.logId === selectedLogId;
-  return (
-    <>
-      <button
-        type="button"
-        disabled={!hasLog}
-        onClick={() => hasLog && onSelectLog(node.logId as number)}
-        style={{ paddingLeft: `${8 + depth * 16}px` }}
-        className={`flex w-full items-center gap-2 border-b border-border py-1 pr-2 text-left text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
-          hasLog ? "hover:bg-muted/50" : "cursor-default"
-        } ${isSelected ? "bg-secondary" : ""}`}
-      >
-        <span
-          className={`inline-flex w-fit shrink-0 items-center rounded px-1.5 py-px text-[11px] font-medium ${runToneClasses(
-            visual.tone,
-          )}`}
-        >
-          {visual.label}
-        </span>
-        <span className="truncate">{node.name ?? "(unnamed)"}</span>
-        {node.errorCount > 0 ? (
-          <span className="shrink-0 text-xs text-red-700 dark:text-red-400">{node.errorCount} err</span>
-        ) : null}
-        {node.warningCount > 0 ? (
-          <span className="shrink-0 text-xs text-amber-700 dark:text-amber-400">{node.warningCount} warn</span>
-        ) : null}
-        <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-          {formatDuration(node.startTime, node.finishTime)}
-        </span>
-      </button>
-      {node.children.map((child) => (
-        <TimelineRow
-          key={child.id}
-          node={child}
-          depth={depth + 1}
-          selectedLogId={selectedLogId}
-          onSelectLog={onSelectLog}
-        />
-      ))}
-    </>
-  );
-}
 
 export function PipelineRunDetailPanel({
   organizationId,
@@ -156,10 +76,14 @@ export function PipelineRunDetailPanel({
   const detail = runQuery.data ?? null;
   const run = detail?.run ?? null;
 
-  const tree = useMemo(
-    () => (detail ? buildTimelineTree(detail.timeline) : []),
-    [detail],
-  );
+  const testSummaryQuery = useQuery({
+    queryKey: ["pipelineTestSummary", organizationId, projectId, buildId],
+    queryFn: () =>
+      getPipelineTestSummary({ organizationId, projectId, buildId: buildId as number }),
+    enabled: buildId != null && !!projectId,
+    staleTime: 60_000,
+  });
+  const testSummary = testSummaryQuery.data ?? null;
 
   const logQuery = useQuery({
     queryKey: ["pipelineRunLog", organizationId, projectId, buildId, selectedLogId],
@@ -213,6 +137,25 @@ export function PipelineRunDetailPanel({
     },
   });
 
+  const retryStage = useMutation({
+    mutationFn: (stageRefName: string) =>
+      retryPipelineStage({
+        organizationId,
+        projectId,
+        buildId: buildId as number,
+        stageRefName,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["pipelineRun", organizationId, projectId, buildId],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["pipelineSubscriptionHistory", organizationId, projectId],
+      });
+    },
+  });
+  const retryingStageRef = retryStage.isPending ? (retryStage.variables ?? null) : null;
+
   function handleKeyDown(event: ReactKeyboardEvent) {
     if (isEditableTarget(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.key === "Escape" || event.key === "ArrowLeft") {
@@ -236,8 +179,14 @@ export function PipelineRunDetailPanel({
     if (window.confirm("Cancel this run?")) cancel.mutate();
   }
 
+  function onRetryStageClick(stageRefName: string) {
+    if (window.confirm(`Retry the "${stageRefName}" stage's failed jobs?`)) {
+      retryStage.mutate(stageRefName);
+    }
+  }
+
   const visual = run ? pipelineRunVisual(run.status, run.result) : null;
-  const mutationError = rerun.error ?? cancel.error;
+  const mutationError = rerun.error ?? cancel.error ?? retryStage.error;
 
   return (
     <aside
@@ -347,26 +296,18 @@ export function PipelineRunDetailPanel({
             </div>
 
             <div className="border-b border-border">
-              {tree.length === 0 ? (
-                detail?.timelineUnavailable ? (
-                  <p className="px-3 py-3 text-xs text-amber-700 dark:text-amber-400">
-                    Failed to load the timeline. It may be a transient error — try refreshing.
-                  </p>
-                ) : (
-                  <p className="px-3 py-3 text-xs text-muted-foreground">No timeline available.</p>
-                )
-              ) : (
-                tree.map((node) => (
-                  <TimelineRow
-                    key={node.id}
-                    node={node}
-                    depth={0}
-                    selectedLogId={selectedLogId}
-                    onSelectLog={setSelectedLogId}
-                  />
-                ))
-              )}
+              <PipelineTimeline
+                timeline={detail?.timeline ?? []}
+                timelineUnavailable={detail?.timelineUnavailable ?? false}
+                selectedLogId={selectedLogId}
+                onSelectLog={setSelectedLogId}
+                onRetryStage={onRetryStageClick}
+                retryingStageRef={retryingStageRef}
+                retryDisabled={readOnly || retryStage.isPending}
+              />
             </div>
+
+            {testSummary ? <PipelineTestSummary summary={testSummary} /> : null}
 
             {artifacts.length > 0 ? (
               <div className="border-b border-border px-3 py-2">

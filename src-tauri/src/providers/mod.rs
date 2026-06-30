@@ -32,11 +32,12 @@ use crate::commits::{
 use crate::error::Result;
 use crate::pipelines::{
     CancelPipelineRunInput, GetPipelineDefinitionInput, GetPipelineRunInput,
-    GetPipelineRunLogTailInput, ListPipelineApprovalsInput, ListPipelineArtifactsInput,
-    ListPipelineDefinitionsInput, ListPipelineProjectsInput, ListPipelineRunsInput,
-    PipelineApprovalSummary, PipelineArtifact, PipelineDefinitionDetail, PipelineDefinitionOption,
-    PipelineLogTail, PipelineProjectOption, PipelineRunDetail, PipelineRunSummary,
-    QueuePipelineRunInput, RerunPipelineRunInput, UpdatePipelineApprovalInput,
+    GetPipelineRunLogTailInput, GetPipelineTestSummaryInput, ListPipelineApprovalsInput,
+    ListPipelineArtifactsInput, ListPipelineDefinitionsInput, ListPipelineProjectsInput,
+    ListPipelineRunsInput, PipelineApprovalSummary, PipelineArtifact, PipelineDefinitionDetail,
+    PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption, PipelineRunDetail,
+    PipelineRunSummary, PipelineTestSummary, QueuePipelineRunInput, RerunPipelineRunInput,
+    RetryPipelineStageInput, UpdatePipelineApprovalInput,
 };
 use crate::pr_review::{
     DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
@@ -268,6 +269,11 @@ pub(crate) trait Provider: Send + Sync {
         &self,
         input: UpdatePipelineApprovalInput,
     ) -> Result<Vec<PipelineApprovalSummary>>;
+    async fn get_pipeline_test_summary(
+        &self,
+        input: GetPipelineTestSummaryInput,
+    ) -> Result<PipelineTestSummary>;
+    async fn retry_pipeline_stage(&self, input: RetryPipelineStageInput) -> Result<()>;
 
     // --- Cross-kind command palette search ---
     async fn search_all(
