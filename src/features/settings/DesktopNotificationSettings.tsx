@@ -23,6 +23,9 @@ export function DesktopNotificationSettings() {
   const [prReviewRequests, setPrReviewRequests] = useState(true);
   const [prVoteResets, setPrVoteResets] = useState(true);
   const [prCommentReplies, setPrCommentReplies] = useState(true);
+  const [quietHoursEnabled, setQuietHoursEnabled] = useState(false);
+  const [quietHoursStart, setQuietHoursStart] = useState("22:00");
+  const [quietHoursEnd, setQuietHoursEnd] = useState("08:00");
   const [testResult, setTestResult] = useState<string | null>(null);
 
   useEffect(() => {
@@ -34,6 +37,9 @@ export function DesktopNotificationSettings() {
     setPrReviewRequests(settings?.notifyPrReviewRequests ?? true);
     setPrVoteResets(settings?.notifyPrVoteResets ?? true);
     setPrCommentReplies(settings?.notifyPrCommentReplies ?? true);
+    setQuietHoursEnabled(settings?.quietHoursEnabled ?? false);
+    setQuietHoursStart(settings?.quietHoursStart ?? "22:00");
+    setQuietHoursEnd(settings?.quietHoursEnd ?? "08:00");
   }, [settingsQuery.data]);
 
   const mutation = useMutation({
@@ -55,6 +61,9 @@ export function DesktopNotificationSettings() {
         notifyPrReviewRequests: prReviewRequests,
         notifyPrVoteResets: prVoteResets,
         notifyPrCommentReplies: prCommentReplies,
+        quietHoursEnabled,
+        quietHoursStart,
+        quietHoursEnd,
       }),
     );
   }
@@ -156,6 +165,45 @@ export function DesktopNotificationSettings() {
                 className="h-4 w-4 rounded border-input"
               />
               Comment replies &amp; mentions
+            </label>
+          </div>
+        </div>
+
+        <div className="border-t border-border pt-3">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={quietHoursEnabled}
+              onChange={(event) => setQuietHoursEnabled(event.target.checked)}
+              className="h-4 w-4 rounded border-input"
+            />
+            Quiet hours
+          </label>
+          <p className="mb-2 mt-1 text-xs text-muted-foreground">
+            Suppress desktop notifications during this local-time window. A
+            window ending earlier than it starts (e.g. 22:00-08:00) spans
+            midnight.
+          </p>
+          <div className="grid gap-2 sm:max-w-md sm:grid-cols-2">
+            <label className="grid gap-1 text-sm">
+              <span className="text-muted-foreground">From</span>
+              <input
+                type="time"
+                value={quietHoursStart}
+                disabled={!quietHoursEnabled}
+                onChange={(event) => setQuietHoursStart(event.target.value)}
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+              />
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="text-muted-foreground">To</span>
+              <input
+                type="time"
+                value={quietHoursEnd}
+                disabled={!quietHoursEnabled}
+                onChange={(event) => setQuietHoursEnd(event.target.value)}
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+              />
             </label>
           </div>
         </div>
