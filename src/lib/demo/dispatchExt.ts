@@ -22,6 +22,7 @@ import {
   demoGetCodeSearchContext,
   demoRepoBranches,
   demoRepoFile,
+  demoRepoFileBinary,
   demoRepoHistory,
   demoRepoTree,
   demoSearchCode,
@@ -158,6 +159,10 @@ export function dispatchExt(command: string, args: unknown): unknown {
     case "get_repo_file": {
       const input = (args as { input?: { path?: string } } | undefined)?.input;
       return demoRepoFile(input?.path ?? "/README.md");
+    }
+    case "get_repo_file_binary": {
+      const input = (args as { input?: { path?: string } } | undefined)?.input;
+      return demoRepoFileBinary(input?.path ?? "/logo.png");
     }
     case "list_repo_history": {
       const input = (args as { input?: { path?: string } } | undefined)?.input;

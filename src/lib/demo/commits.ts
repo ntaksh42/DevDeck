@@ -52,6 +52,7 @@ const DEMO_REPO_TREE: Record<string, { name: string; path: string; isFolder: boo
     { name: "src", path: "/src", isFolder: true },
     { name: "README.md", path: "/README.md", isFolder: false },
     { name: "package.json", path: "/package.json", isFolder: false },
+    { name: "logo.png", path: "/logo.png", isFolder: false },
   ],
   "/src": [
     { name: "lib", path: "/src/lib", isFolder: true },
@@ -94,9 +95,21 @@ const DEMO_REPO_FILES: Record<string, string> = {
 };
 
 export function demoRepoFile(path: string) {
+  if (path === "/logo.png") {
+    return { path, content: "", isBinary: true, tooLarge: false };
+  }
   const content =
     DEMO_REPO_FILES[path] ?? `// ${path}\n// Demo content for the code browser preview.\n`;
   return { path, content, isBinary: false, tooLarge: false };
+}
+
+// A 1x1 transparent PNG, used as canned content for the binary file preview
+// demo so the image preview renders without a backend.
+const DEMO_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
+export function demoRepoFileBinary(path: string) {
+  return { path, contentBase64: DEMO_PNG_BASE64, tooLarge: false };
 }
 
 // Demo commit history for the Files > History tab. A short, fixed list so the

@@ -1,6 +1,6 @@
 use serde_json::json;
 
-use crate::client::AdoClient;
+use crate::client::{AdoClient, BinaryResponse};
 use crate::error::Result;
 use crate::git::{GitCommitRef, IdentityRefWithVote, ListResponse};
 
@@ -334,6 +334,31 @@ impl AdoClient {
                 ("versionDescriptor.version", branch),
                 ("includeContent", "true"),
                 ("$format", "json"),
+            ],
+        )
+        .await
+    }
+
+    /// Fetches the raw bytes of a file at the tip of a branch, e.g. for
+    /// binary/image preview or download. Unlike [`get_item_content_at_branch`],
+    /// which always decodes a JSON envelope, this requests the item's raw
+    /// representation directly.
+    pub async fn get_item_bytes_at_branch(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        item_path: &str,
+        branch: &str,
+    ) -> Result<BinaryResponse> {
+        let path = format!("{project_id}/_apis/git/repositories/{repository_id}/items");
+        self.get_bytes(
+            &path,
+            &[
+                ("api-version", "7.1-preview"),
+                ("path", item_path),
+                ("versionDescriptor.versionType", "branch"),
+                ("versionDescriptor.version", branch),
+                ("download", "true"),
             ],
         )
         .await

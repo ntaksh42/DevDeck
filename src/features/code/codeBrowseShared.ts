@@ -94,3 +94,39 @@ export function leafName(path: string): string {
   const index = trimmed.lastIndexOf("/");
   return index >= 0 ? trimmed.slice(index + 1) : trimmed;
 }
+
+// Extension → image MIME type, for files we can preview inline as <img>.
+const IMAGE_MIME_TYPES: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  svg: "image/svg+xml",
+  webp: "image/webp",
+  bmp: "image/bmp",
+  ico: "image/x-icon",
+};
+
+function extension(path: string): string {
+  const name = leafName(path);
+  const dot = name.lastIndexOf(".");
+  return dot >= 0 ? name.slice(dot + 1).toLowerCase() : "";
+}
+
+// Whether a path looks like a common image type we can preview inline,
+// independent of the backend's `isBinary` flag (SVG is XML text, not binary,
+// but should still preview as an image).
+export function isImagePath(path: string): boolean {
+  return extension(path) in IMAGE_MIME_TYPES;
+}
+
+// The MIME type to use for an inline image preview's data URL.
+export function imageMimeType(path: string): string {
+  return IMAGE_MIME_TYPES[extension(path)] ?? "application/octet-stream";
+}
+
+// Whether a path is a Markdown file, eligible for the Rendered/Raw toggle.
+export function isMarkdownPath(path: string): boolean {
+  const ext = extension(path);
+  return ext === "md" || ext === "markdown";
+}

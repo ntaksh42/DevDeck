@@ -1,4 +1,6 @@
 use azdo_client::{CommitSearchCriteria, GitCommitRef};
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 
 use crate::auth::client_for_organization;
@@ -9,6 +11,11 @@ use crate::secrets::SecretStore;
 /// Largest file we render in the browser. Bigger blobs are reported as
 /// `too_large` instead of being streamed into the UI.
 const MAX_FILE_BYTES: usize = 512 * 1024;
+
+/// Largest binary blob we fetch for inline preview (e.g. images). Mirrors the
+/// work item attachment image cap; bigger files are reported as `too_large`
+/// so the frontend can fall back to opening the file in Azure DevOps instead.
+const MAX_BINARY_PREVIEW_BYTES: usize = 10 * 1024 * 1024;
 
 /// Maximum commits returned for the Files > History tab.
 const HISTORY_TOP: u32 = 50;
@@ -49,6 +56,16 @@ pub struct GetFileInput {
     pub path: String,
     #[serde(default)]
     pub operation_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetFileBinaryInput {
+    pub organization_id: Option<String>,
+    pub project: String,
+    pub repository: String,
+    pub branch: String,
+    pub path: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -106,6 +123,16 @@ pub struct RepoFile {
     /// True when Azure DevOps flagged the blob as binary; `content` is empty.
     pub is_binary: bool,
     /// True when the blob exceeded [`MAX_FILE_BYTES`]; `content` is empty.
+    pub too_large: bool,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoFileBinary {
+    pub path: String,
+    /// Base64-encoded file bytes; empty when `too_large`.
+    pub content_base64: String,
+    /// True when the blob exceeded [`MAX_BINARY_PREVIEW_BYTES`].
     pub too_large: bool,
 }
 
@@ -239,6 +266,38 @@ impl CodeBrowseService {
                 too_large: false,
             }),
         }
+    }
+
+    /// Fetches a file's raw bytes at the tip of a branch, base64-encoded, for
+    /// inline preview (e.g. images) distinct from the text content path. Used
+    /// only when the caller already knows it wants binary content; callers
+    /// decide previewability (e.g. by file extension) rather than this method.
+    pub async fn get_file_binary(&self, input: GetFileBinaryInput) -> Result<RepoFileBinary> {
+        let organization = self
+            .db
+            .resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let response = client
+            .get_item_bytes_at_branch(
+                &input.project,
+                &input.repository,
+                &input.path,
+                &input.branch,
+            )
+            .await?;
+
+        if response.bytes.len() > MAX_BINARY_PREVIEW_BYTES {
+            return Ok(RepoFileBinary {
+                path: input.path,
+                content_base64: String::new(),
+                too_large: true,
+            });
+        }
+        Ok(RepoFileBinary {
+            path: input.path,
+            content_base64: BASE64_STANDARD.encode(response.bytes),
+            too_large: false,
+        })
     }
 
     /// Lists the commit history for a path at a branch (the Files > History tab).

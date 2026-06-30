@@ -389,6 +389,7 @@ export function CodeBrowseView() {
                   />
                 ) : (
                   <CodeFileView
+                    organization={organization}
                     organizationId={organizationId}
                     repo={repo}
                     branch={branch}

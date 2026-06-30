@@ -83,7 +83,10 @@ describe("CodeBrowseView", () => {
         timeout: 8000,
       });
       fireEvent.click(screen.getAllByText("README.md")[0]);
-      // The file pane highlights content into a <code class="hljs"> block.
+      // README.md opens in the rendered Markdown view by default; switch to
+      // Raw to check the file pane highlights content into a
+      // <code class="hljs"> block.
+      fireEvent.click(await screen.findByRole("button", { name: "Raw" }, { timeout: 8000 }));
       await waitFor(
         () => {
           const code = lastContainer.querySelector("code.hljs");
@@ -144,6 +147,9 @@ describe("CodeBrowseView", () => {
         timeout: 8000,
       });
       fireEvent.click(screen.getAllByText("README.md")[0]);
+      // README.md opens in the rendered Markdown view by default, which has no
+      // line-numbered source to search; switch to Raw first.
+      fireEvent.click(await screen.findByRole("button", { name: "Raw" }, { timeout: 8000 }));
       const findButton = await screen.findByRole("button", { name: "Find" }, { timeout: 8000 });
       fireEvent.click(findButton);
       fireEvent.change(screen.getByLabelText("Find in file"), {

@@ -304,3 +304,32 @@ async fn get_item_content_at_branch_requests_branch_version() {
         .unwrap();
     assert_eq!(item.content.as_deref(), Some("line1\nline2\n"));
 }
+
+#[tokio::test]
+async fn get_item_bytes_at_branch_downloads_raw_content() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/project-1/_apis/git/repositories/repo-1/items"))
+        .and(query_param("path", "/logo.png"))
+        .and(query_param("versionDescriptor.versionType", "branch"))
+        .and(query_param("versionDescriptor.version", "main"))
+        .and(query_param("download", "true"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/octet-stream")
+                .set_body_bytes(vec![137, 80, 78, 71]),
+        )
+        .mount(&server)
+        .await;
+
+    let response = test_client(&server)
+        .await
+        .get_item_bytes_at_branch("project-1", "repo-1", "/logo.png", "main")
+        .await
+        .unwrap();
+    assert_eq!(response.bytes, vec![137, 80, 78, 71]);
+    assert_eq!(
+        response.content_type.as_deref(),
+        Some("application/octet-stream")
+    );
+}

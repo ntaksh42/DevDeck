@@ -7,10 +7,13 @@ import {
 } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp, Loader2, Search, X } from "lucide-react";
-import { commandErrorMessage, getRepoFile } from "@/lib/azdoCommands";
+import { commandErrorMessage, getRepoFile, type Organization } from "@/lib/azdoCommands";
+import { openExternalUrl } from "@/lib/openExternal";
 import { ErrorState } from "@/components/StateDisplay";
 import { highlightCode } from "@/lib/highlight";
-import { leafName, type RepoOption } from "./codeBrowseShared";
+import { MarkdownView } from "@/lib/markdown";
+import { CodeImagePreview } from "./CodeImagePreview";
+import { isImagePath, isMarkdownPath, leafName, webUrl, type RepoOption } from "./codeBrowseShared";
 
 type LineMatch = { start: number; end: number; ordinal: number };
 
@@ -19,16 +22,24 @@ type LineMatch = { start: number; end: number; ordinal: number };
 // and scrolls between them; while searching, lines render as plain text with
 // the matches marked so highlight spans don't get in the way.
 export function CodeFileView({
+  organization,
   organizationId,
   repo,
   branch,
   path,
 }: {
+  organization: Organization | undefined;
   organizationId: string;
   repo: RepoOption;
   branch: string;
   path: string;
 }) {
+  const isImage = isImagePath(path);
+  const isMarkdown = isMarkdownPath(path);
+  const [view, setView] = useState<"rendered" | "raw">("rendered");
+  const showRendered = isMarkdown && view === "rendered";
+  // Images preview through CodeImagePreview's authenticated binary fetch
+  // instead of the text content path, so this query is skipped for them.
   const query = useQuery({
     queryKey: ["repoFile", organizationId, repo.repositoryId, branch, path],
     queryFn: () =>
@@ -39,7 +50,7 @@ export function CodeFileView({
         branch,
         path,
       }),
-    enabled: !!branch,
+    enabled: !!branch && !isImage,
     staleTime: 60_000,
   });
 
@@ -56,11 +67,12 @@ export function CodeFileView({
   const findInputRef = useRef<HTMLInputElement | null>(null);
   const currentMatchRef = useRef<HTMLElement | null>(null);
 
-  // Reset the find state whenever the file changes.
+  // Reset the find state and view mode whenever the file changes.
   useEffect(() => {
     setFindOpen(false);
     setFind("");
     setCurrent(0);
+    setView("rendered");
   }, [path]);
 
   // Per-line match ranges plus the total count, computed once per query change.
@@ -110,6 +122,7 @@ export function CodeFileView({
   }
 
   function onContainerKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (showRendered) return;
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
       event.preventDefault();
       openFind();
@@ -127,6 +140,17 @@ export function CodeFileView({
     }
   }
 
+  if (isImage) {
+    return (
+      <CodeImagePreview
+        organization={organization}
+        organizationId={organizationId}
+        repo={repo}
+        branch={branch}
+        path={path}
+      />
+    );
+  }
   if (query.isLoading) {
     return (
       <div className="flex items-center gap-1.5 px-3 py-3 text-sm text-muted-foreground">
@@ -139,20 +163,49 @@ export function CodeFileView({
   }
   const file = query.data;
   if (!file) return null;
+  const openInBrowser = (
+    <button
+      type="button"
+      onClick={() => openExternalUrl(webUrl(organization, repo, path, branch))}
+      className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+    >
+      Open in Azure DevOps
+    </button>
+  );
   if (file.isBinary) {
-    return <div className="px-3 py-3 text-sm text-muted-foreground">Binary file not shown.</div>;
+    return (
+      <div className="flex flex-col items-start gap-2 px-3 py-3 text-sm text-muted-foreground">
+        <span>Binary file not shown.</span>
+        {openInBrowser}
+      </div>
+    );
   }
   if (file.tooLarge) {
     return (
-      <div className="px-3 py-3 text-sm text-muted-foreground">File is too large to preview.</div>
+      <div className="flex flex-col items-start gap-2 px-3 py-3 text-sm text-muted-foreground">
+        <span>File is too large to preview.</span>
+        {openInBrowser}
+      </div>
     );
   }
 
   const searching = findOpen && find.length > 0;
   return (
     <div className="relative flex min-h-0 flex-1 flex-col" onKeyDown={onContainerKeyDown}>
-      <div className="flex items-center justify-end gap-2 border-b border-border px-2 py-1">
-        {findOpen ? (
+      <div className="flex items-center justify-between gap-2 border-b border-border px-2 py-1">
+        {isMarkdown ? (
+          <div className="flex shrink-0 items-center gap-1 text-sm">
+            <ViewToggleButton active={view === "rendered"} onClick={() => setView("rendered")}>
+              Rendered
+            </ViewToggleButton>
+            <ViewToggleButton active={view === "raw"} onClick={() => setView("raw")}>
+              Raw
+            </ViewToggleButton>
+          </div>
+        ) : (
+          <div />
+        )}
+        {showRendered ? null : findOpen ? (
           <div className="flex items-center gap-1 text-sm">
             <Search className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
             <input
@@ -213,37 +266,70 @@ export function CodeFileView({
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
-        <div className="flex font-mono text-[12px] leading-5">
-          <div
-            aria-hidden="true"
-            className="shrink-0 select-none border-r border-border px-2 py-1 text-right text-muted-foreground"
-          >
-            {lines.map((_, index) => (
-              <div key={index}>{index + 1}</div>
-            ))}
+        {showRendered ? (
+          <div className="p-3">
+            <MarkdownView text={file.content} />
           </div>
-          {searching ? (
-            <pre className="min-w-0 flex-1 overflow-x-auto px-3 py-1">
-              <code className="whitespace-pre">
-                {lines.map((line, index) => (
-                  <div key={index}>
-                    {renderLineWithMatches(line, lineMatches.get(index), current, currentMatchRef)}
-                  </div>
-                ))}
-              </code>
-            </pre>
-          ) : (
-            <pre className="min-w-0 flex-1 overflow-x-auto px-3 py-1">
-              <code
-                className="hljs whitespace-pre bg-transparent"
-                // The HTML is highlight.js output, sanitized by highlightCode.
-                dangerouslySetInnerHTML={{ __html: highlighted?.html ?? "" }}
-              />
-            </pre>
-          )}
-        </div>
+        ) : (
+          <div className="flex font-mono text-[12px] leading-5">
+            <div
+              aria-hidden="true"
+              className="shrink-0 select-none border-r border-border px-2 py-1 text-right text-muted-foreground"
+            >
+              {lines.map((_, index) => (
+                <div key={index}>{index + 1}</div>
+              ))}
+            </div>
+            {searching ? (
+              <pre className="min-w-0 flex-1 overflow-x-auto px-3 py-1">
+                <code className="whitespace-pre">
+                  {lines.map((line, index) => (
+                    <div key={index}>
+                      {renderLineWithMatches(line, lineMatches.get(index), current, currentMatchRef)}
+                    </div>
+                  ))}
+                </code>
+              </pre>
+            ) : (
+              <pre className="min-w-0 flex-1 overflow-x-auto px-3 py-1">
+                <code
+                  className="hljs whitespace-pre bg-transparent"
+                  // The HTML is highlight.js output, sanitized by highlightCode.
+                  dangerouslySetInnerHTML={{ __html: highlighted?.html ?? "" }}
+                />
+              </pre>
+            )}
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+// Toggles between the rendered Markdown view and the syntax-highlighted
+// source for .md/.markdown files.
+function ViewToggleButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`rounded px-2 py-0.5 text-xs ${
+        active
+          ? "bg-muted font-medium text-foreground"
+          : "text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

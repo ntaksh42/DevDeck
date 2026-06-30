@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use reqwest::header::CONTENT_TYPE;
+use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use reqwest::StatusCode;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -75,6 +75,47 @@ impl AdoClient {
             true,
             || self.http.get(url.clone()).query(query),
             |resp| async move { decode_json(resp).await },
+        )
+        .await
+    }
+
+    /// Fetches raw bytes from an API path (as opposed to [`get_json`], which
+    /// decodes a JSON body). Used for binary/blob content such as file
+    /// downloads, where the response is the file's bytes rather than a JSON
+    /// envelope. Sets `Accept: application/octet-stream` so endpoints that
+    /// pick a representation based on the Accept header return raw content
+    /// instead of their default (often JSON) representation.
+    pub(crate) async fn get_bytes(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+    ) -> Result<BinaryResponse> {
+        let url = self
+            .base_url
+            .join(path)
+            .map_err(|e| AdoError::Auth(e.to_string()))?;
+
+        self.send_with_retry(
+            "GET",
+            path,
+            true,
+            || {
+                self.http
+                    .get(url.clone())
+                    .query(query)
+                    .header(ACCEPT, "application/octet-stream")
+            },
+            |resp| async move {
+                let content_type = resp
+                    .headers()
+                    .get(CONTENT_TYPE)
+                    .and_then(|value| value.to_str().ok())
+                    .map(str::to_string);
+                Ok(BinaryResponse {
+                    bytes: resp.bytes().await?.to_vec(),
+                    content_type,
+                })
+            },
         )
         .await
     }

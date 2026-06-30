@@ -3,8 +3,8 @@ use tauri::State;
 use crate::app_state::AppState;
 use crate::cancellation::run_cancellable;
 use crate::code_browse::{
-    GetFileInput, ListBranchesInput, ListHistoryInput, ListTreeInput, RepoBranch, RepoCommitInfo,
-    RepoFile, RepoTreeItem,
+    GetFileBinaryInput, GetFileInput, ListBranchesInput, ListHistoryInput, ListTreeInput,
+    RepoBranch, RepoCommitInfo, RepoFile, RepoFileBinary, RepoTreeItem,
 };
 use crate::code_search::{
     CodeContextResult, CodeSearchResults, GetCodeContextInput, SearchCodeInput,
@@ -72,6 +72,15 @@ pub async fn get_repo_file(input: GetFileInput, state: State<'_, AppState>) -> R
         provider.get_repo_file(input),
     )
     .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn get_repo_file_binary(
+    input: GetFileBinaryInput,
+    state: State<'_, AppState>,
+) -> Result<RepoFileBinary> {
+    state.provider().await?.get_repo_file_binary(input).await
 }
 
 #[tauri::command]

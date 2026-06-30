@@ -127,6 +127,26 @@ export async function getRepoFile(input: {
   return repoFileSchema.parse(result);
 }
 
+const repoFileBinarySchema = z.object({
+  path: z.string(),
+  contentBase64: z.string(),
+  tooLarge: z.boolean(),
+});
+export type RepoFileBinary = z.infer<typeof repoFileBinarySchema>;
+
+// Fetches a file's raw bytes at the tip of a branch, base64-encoded, for
+// inline preview (e.g. images) distinct from the text content path.
+export async function getRepoFileBinary(input: {
+  organizationId?: string;
+  project: string;
+  repository: string;
+  branch: string;
+  path: string;
+}): Promise<RepoFileBinary> {
+  const result = await invokeCommand("get_repo_file_binary", { input });
+  return repoFileBinarySchema.parse(result);
+}
+
 // Lists the commit history for a path at a branch (the Files > History tab).
 export async function listRepoHistory(input: {
   organizationId?: string;
