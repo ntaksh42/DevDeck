@@ -1,4 +1,4 @@
-import type { PipelineApprovalSummary } from "@/lib/azdoCommands";
+import type { PipelineApprovalSummary, PipelineTestSummary } from "@/lib/azdoCommands";
 
 export function demoPipelineProjects() {
   return [
@@ -99,37 +99,94 @@ export function demoPipelineRuns() {
 export function demoPipelineRunDetail(buildId: number) {
   const runs = demoPipelineRuns();
   const run = runs.find((r) => r.buildId === buildId) ?? runs[0];
+  const timeline = [
+    {
+      id: "stage-1",
+      parentId: null,
+      identifier: "Build",
+      nodeType: "Stage",
+      name: "Build",
+      state: "completed",
+      result: "succeeded",
+      startTime: run.startTime,
+      finishTime: run.finishTime,
+      logId: null,
+      errorCount: 0,
+      warningCount: 0,
+      order: 1,
+    },
+    {
+      id: "job-1",
+      parentId: "stage-1",
+      identifier: null,
+      nodeType: "Job",
+      name: "Compile",
+      state: "completed",
+      result: "succeeded",
+      startTime: run.startTime,
+      finishTime: run.finishTime,
+      logId: 7,
+      errorCount: 0,
+      warningCount: 0,
+      order: 1,
+    },
+  ];
+  if (run.result === "failed") {
+    timeline.push({
+      id: "stage-2",
+      parentId: null,
+      identifier: "Deploy",
+      nodeType: "Stage",
+      name: "Deploy",
+      state: "completed",
+      result: "failed",
+      startTime: run.startTime,
+      finishTime: run.finishTime,
+      logId: null,
+      errorCount: 1,
+      warningCount: 0,
+      order: 2,
+    });
+  }
+  return { run, timelineUnavailable: false, timeline };
+}
+
+export function demoPipelineTestSummary(buildId: number): PipelineTestSummary {
+  const detail = demoPipelineRunDetail(buildId);
+  if (detail.run.result !== "failed") {
+    return {
+      runCount: 1,
+      totalTests: 128,
+      passedTests: 128,
+      failedTests: 0,
+      failed: [],
+      truncated: false,
+    };
+  }
   return {
-    run,
-    timelineUnavailable: false,
-    timeline: [
+    runCount: 1,
+    totalTests: 128,
+    passedTests: 125,
+    failedTests: 3,
+    truncated: false,
+    failed: [
       {
-        id: "stage-1",
-        parentId: null,
-        nodeType: "Stage",
-        name: "Build",
-        state: "completed",
-        result: run.result ?? "succeeded",
-        startTime: run.startTime,
-        finishTime: run.finishTime,
-        logId: null,
-        errorCount: run.result === "failed" ? 1 : 0,
-        warningCount: 0,
-        order: 1,
+        runName: "VSTest",
+        title: "PaymentFlowTests.RefundsAreIdempotent",
+        errorMessage: "Expected 1 refund, got 2.",
+        durationMs: 412,
       },
       {
-        id: "job-1",
-        parentId: "stage-1",
-        nodeType: "Job",
-        name: "Compile",
-        state: "completed",
-        result: run.result ?? "succeeded",
-        startTime: run.startTime,
-        finishTime: run.finishTime,
-        logId: 7,
-        errorCount: run.result === "failed" ? 1 : 0,
-        warningCount: 0,
-        order: 1,
+        runName: "VSTest",
+        title: "AuthTests.TokenRefreshRetries",
+        errorMessage: "Timed out waiting for token refresh.",
+        durationMs: 5031,
+      },
+      {
+        runName: "VSTest",
+        title: "SearchTests.RanksExactMatchFirst",
+        errorMessage: null,
+        durationMs: 88,
       },
     ],
   };

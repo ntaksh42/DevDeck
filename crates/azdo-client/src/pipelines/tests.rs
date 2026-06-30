@@ -76,7 +76,7 @@ async fn get_build_timeline_parses_records() {
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "records": [
                 {
-                    "id": "stage-1", "parentId": null, "type": "Stage",
+                    "id": "stage-1", "parentId": null, "identifier": "Build", "type": "Stage",
                     "name": "Build", "state": "completed", "result": "failed",
                     "errorCount": 1, "warningCount": 0, "order": 1
                 },
@@ -97,10 +97,13 @@ async fn get_build_timeline_parses_records() {
         .unwrap();
 
     assert_eq!(timeline.records.len(), 2);
+    let stage = timeline.records.iter().find(|r| r.id == "stage-1").unwrap();
+    assert_eq!(stage.identifier.as_deref(), Some("Build"));
     let job = timeline.records.iter().find(|r| r.id == "job-1").unwrap();
     assert_eq!(job.parent_id.as_deref(), Some("stage-1"));
     assert_eq!(job.log.as_ref().unwrap().id, 7);
     assert_eq!(job.error_count, 1);
+    assert_eq!(job.identifier, None);
 }
 
 #[tokio::test]
@@ -377,4 +380,82 @@ async fn update_pipeline_approval_patches_status() {
         .unwrap();
     assert_eq!(updated.len(), 1);
     assert_eq!(updated[0].status.as_deref(), Some("approved"));
+}
+
+#[tokio::test]
+async fn list_test_runs_for_build_passes_build_uri() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/project-1/_apis/test/runs"))
+        .and(query_param("api-version", "7.1"))
+        .and(query_param("buildUri", "vstfs:///Build/Build/101"))
+        .and(query_param("includeRunDetails", "true"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "count": 1,
+            "value": [{
+                "id": 9, "name": "VSTest", "state": "Completed",
+                "totalTests": 10, "passedTests": 8, "unanalyzedTests": 2
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    let runs = test_client(&server)
+        .await
+        .list_test_runs_for_build("project-1", 101)
+        .await
+        .unwrap();
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].total_tests, 10);
+    assert_eq!(runs[0].passed_tests, 8);
+}
+
+#[tokio::test]
+async fn list_failed_test_results_filters_outcome() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/project-1/_apis/test/Runs/9/results"))
+        .and(query_param("api-version", "7.1"))
+        .and(query_param("outcomes", "Failed"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "count": 1,
+            "value": [{
+                "testCaseTitle": "Fail1",
+                "outcome": "Failed",
+                "errorMessage": "Assert.Fail",
+                "durationInMs": 74,
+                "automatedTestName": "Ns.UnitTest1.Fail1"
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    let results = test_client(&server)
+        .await
+        .list_failed_test_results("project-1", 9, 50)
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].test_case_title.as_deref(), Some("Fail1"));
+    assert_eq!(results[0].outcome.as_deref(), Some("Failed"));
+}
+
+#[tokio::test]
+async fn retry_build_stage_patches_retry_state() {
+    let server = MockServer::start().await;
+    Mock::given(method("PATCH"))
+        .and(path("/project-1/_apis/build/builds/101/stages/Deploy"))
+        .and(query_param("api-version", "7.1"))
+        .and(body_json(
+            serde_json::json!({ "state": "retry", "forceRetryAllJobs": false }),
+        ))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&server)
+        .await;
+
+    test_client(&server)
+        .await
+        .retry_build_stage("project-1", 101, "Deploy", false)
+        .await
+        .unwrap();
 }

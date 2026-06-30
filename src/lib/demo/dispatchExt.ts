@@ -13,6 +13,7 @@ import {
   demoPipelineRunDetail,
   demoPipelineRuns,
   demoPipelineRunsFiltered,
+  demoPipelineTestSummary,
 } from "@/lib/demo/pipelines";
 import {
   demoCommitActivity,
@@ -98,6 +99,12 @@ export function dispatchExt(command: string, args: unknown): unknown {
         demoPipelineApprovals()[0];
       return [{ ...approval, status: input?.status ?? "approved" }];
     }
+    case "get_pipeline_test_summary": {
+      const input = (args as { input?: { buildId?: number } } | undefined)?.input;
+      return demoPipelineTestSummary(input?.buildId ?? 1001);
+    }
+    case "retry_pipeline_stage":
+      return null;
     // ── Commits ────────────────────────────────────────────────────────────
     case "search_commits": {
       const input = (args as { input?: SearchCommitsInput } | undefined)?.input;

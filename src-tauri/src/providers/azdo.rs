@@ -22,11 +22,12 @@ use crate::db::AppDatabase;
 use crate::error::Result;
 use crate::pipelines::{
     CancelPipelineRunInput, GetPipelineDefinitionInput, GetPipelineRunInput,
-    GetPipelineRunLogTailInput, ListPipelineApprovalsInput, ListPipelineArtifactsInput,
-    ListPipelineDefinitionsInput, ListPipelineProjectsInput, ListPipelineRunsInput,
-    PipelineApprovalSummary, PipelineArtifact, PipelineDefinitionDetail, PipelineDefinitionOption,
-    PipelineLogTail, PipelineProjectOption, PipelineRunDetail, PipelineRunSummary, PipelineService,
-    QueuePipelineRunInput, RerunPipelineRunInput, UpdatePipelineApprovalInput,
+    GetPipelineRunLogTailInput, GetPipelineTestSummaryInput, ListPipelineApprovalsInput,
+    ListPipelineArtifactsInput, ListPipelineDefinitionsInput, ListPipelineProjectsInput,
+    ListPipelineRunsInput, PipelineApprovalSummary, PipelineArtifact, PipelineDefinitionDetail,
+    PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption, PipelineRunDetail,
+    PipelineRunSummary, PipelineService, PipelineTestSummary, QueuePipelineRunInput,
+    RerunPipelineRunInput, RetryPipelineStageInput, UpdatePipelineApprovalInput,
 };
 use crate::pr_review::{
     DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
@@ -435,6 +436,17 @@ impl Provider for AzdoProvider {
         input: ListPipelineApprovalsInput,
     ) -> Result<Vec<PipelineApprovalSummary>> {
         self.pipelines.list_approvals(input).await
+    }
+
+    async fn get_pipeline_test_summary(
+        &self,
+        input: GetPipelineTestSummaryInput,
+    ) -> Result<PipelineTestSummary> {
+        self.pipelines.get_test_summary(input).await
+    }
+
+    async fn retry_pipeline_stage(&self, input: RetryPipelineStageInput) -> Result<()> {
+        self.pipelines.retry_stage(input).await
     }
 
     async fn update_pipeline_approval(

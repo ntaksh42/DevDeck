@@ -92,6 +92,27 @@ pub struct CancelPipelineRunInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GetPipelineTestSummaryInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub build_id: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RetryPipelineStageInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub build_id: i64,
+    /// The stage record's `identifier` (stageRefName) from the run timeline.
+    pub stage_ref_name: String,
+    /// Re-run every job in the stage rather than only failed ones.
+    #[serde(default)]
+    pub force_retry_all_jobs: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListPipelineApprovalsInput {
     pub organization_id: Option<String>,
     pub project_id: String,
@@ -160,6 +181,8 @@ pub struct PipelineRunSummary {
 pub struct TimelineNode {
     pub id: String,
     pub parent_id: Option<String>,
+    /// Stage records carry their `stageRefName` here, used to retry the stage.
+    pub identifier: Option<String>,
     pub node_type: Option<String>,
     pub name: Option<String>,
     pub state: Option<String>,
@@ -220,4 +243,25 @@ pub struct PipelineDefinitionDetail {
     pub name: String,
     pub triggers: Vec<PipelineTrigger>,
     pub variables: Vec<PipelineVariable>,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FailedTest {
+    pub run_name: Option<String>,
+    pub title: String,
+    pub error_message: Option<String>,
+    pub duration_ms: f64,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PipelineTestSummary {
+    pub run_count: usize,
+    pub total_tests: i64,
+    pub passed_tests: i64,
+    pub failed_tests: usize,
+    pub failed: Vec<FailedTest>,
+    /// True when more failed results existed than were collected.
+    pub truncated: bool,
 }

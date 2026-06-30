@@ -1,5 +1,6 @@
 use azdo_client::{
-    Approval, Build, BuildDefinitionDetail, DefinitionTrigger, DefinitionVariable, Timeline,
+    Approval, Build, BuildDefinitionDetail, DefinitionTrigger, DefinitionVariable, TestCaseResult,
+    TestRun, Timeline,
 };
 
 use crate::commits::encode_path_segment;
@@ -139,6 +140,7 @@ pub(super) fn timeline_to_nodes(timeline: Timeline) -> Vec<TimelineNode> {
         .map(|record| TimelineNode {
             id: record.id,
             parent_id: record.parent_id,
+            identifier: record.identifier,
             node_type: record.record_type,
             name: record.name,
             state: record.state,
@@ -151,6 +153,26 @@ pub(super) fn timeline_to_nodes(timeline: Timeline) -> Vec<TimelineNode> {
             order: record.order,
         })
         .collect()
+}
+
+/// A run has failures when not every counted test passed (excluding the
+/// not-applicable/not-executed buckets that are not real failures).
+pub(super) fn run_has_failures(run: &TestRun) -> bool {
+    run.unanalyzed_tests > 0
+        || run.total_tests > run.passed_tests + run.not_applicable_tests + run.incomplete_tests
+}
+
+pub(super) fn failed_test_from(run: &TestRun, result: TestCaseResult) -> FailedTest {
+    let title = result
+        .test_case_title
+        .or(result.automated_test_name)
+        .unwrap_or_else(|| "(unnamed test)".to_string());
+    FailedTest {
+        run_name: run.name.clone(),
+        title,
+        error_message: result.error_message,
+        duration_ms: result.duration_in_ms,
+    }
 }
 
 #[cfg(test)]
@@ -251,5 +273,60 @@ mod tests {
     fn resolve_requested_for_errors_when_user_id_missing() {
         let err = resolve_requested_for(true, None).unwrap_err();
         assert!(matches!(err, AppError::InvalidInput(_)));
+    }
+
+    fn test_run(total: i64, passed: i64, unanalyzed: i64) -> TestRun {
+        TestRun {
+            id: 9,
+            name: Some("VSTest".to_string()),
+            state: Some("Completed".to_string()),
+            total_tests: total,
+            passed_tests: passed,
+            unanalyzed_tests: unanalyzed,
+            not_applicable_tests: 0,
+            incomplete_tests: 0,
+        }
+    }
+
+    #[test]
+    fn run_has_failures_true_when_unanalyzed_present() {
+        assert!(run_has_failures(&test_run(10, 8, 2)));
+    }
+
+    #[test]
+    fn run_has_failures_false_when_all_passed() {
+        assert!(!run_has_failures(&test_run(10, 10, 0)));
+    }
+
+    #[test]
+    fn failed_test_from_prefers_test_case_title() {
+        let failed = failed_test_from(
+            &test_run(10, 8, 2),
+            TestCaseResult {
+                test_case_title: Some("PaymentFlowTests.Refund".to_string()),
+                automated_test_name: Some("Ns.PaymentFlowTests.Refund".to_string()),
+                outcome: Some("Failed".to_string()),
+                error_message: Some("Assert.Fail".to_string()),
+                duration_in_ms: 412.0,
+            },
+        );
+        assert_eq!(failed.title, "PaymentFlowTests.Refund");
+        assert_eq!(failed.run_name.as_deref(), Some("VSTest"));
+        assert_eq!(failed.duration_ms, 412.0);
+    }
+
+    #[test]
+    fn failed_test_from_falls_back_to_automated_test_name() {
+        let failed = failed_test_from(
+            &test_run(10, 8, 2),
+            TestCaseResult {
+                test_case_title: None,
+                automated_test_name: Some("Ns.PaymentFlowTests.Refund".to_string()),
+                outcome: Some("Failed".to_string()),
+                error_message: None,
+                duration_in_ms: 1.0,
+            },
+        );
+        assert_eq!(failed.title, "Ns.PaymentFlowTests.Refund");
     }
 }

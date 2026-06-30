@@ -115,6 +115,9 @@ pub struct TimelineLogRef {
 pub struct TimelineRecord {
     pub id: String,
     pub parent_id: Option<String>,
+    /// Stable reference name of the record; for stage records this is the
+    /// `stageRefName` used to retry the stage.
+    pub identifier: Option<String>,
     #[serde(rename = "type")]
     pub record_type: Option<String>,
     pub name: Option<String>,
@@ -176,6 +179,38 @@ pub struct BuildListCriteria {
 pub struct BuildLogTail {
     pub lines: Vec<String>,
     pub truncated: bool,
+}
+
+/// A test run associated with a build (classic Test Management API), with its
+/// aggregate counts when requested via `includeRunDetails`.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TestRun {
+    pub id: i64,
+    pub name: Option<String>,
+    pub state: Option<String>,
+    #[serde(default)]
+    pub total_tests: i64,
+    #[serde(default)]
+    pub passed_tests: i64,
+    #[serde(default)]
+    pub unanalyzed_tests: i64,
+    #[serde(default)]
+    pub not_applicable_tests: i64,
+    #[serde(default)]
+    pub incomplete_tests: i64,
+}
+
+/// A single test case result.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TestCaseResult {
+    pub test_case_title: Option<String>,
+    pub automated_test_name: Option<String>,
+    pub outcome: Option<String>,
+    pub error_message: Option<String>,
+    #[serde(default)]
+    pub duration_in_ms: f64,
 }
 
 pub(super) fn build_definition_detail(raw: RawBuildDefinition) -> BuildDefinitionDetail {

@@ -4,11 +4,12 @@ use crate::app_state::{ensure_write_enabled, AppState};
 use crate::error::Result;
 use crate::pipelines::{
     CancelPipelineRunInput, GetPipelineDefinitionInput, GetPipelineRunInput,
-    GetPipelineRunLogTailInput, ListPipelineApprovalsInput, ListPipelineArtifactsInput,
-    ListPipelineDefinitionsInput, ListPipelineProjectsInput, ListPipelineRunsInput,
-    PipelineApprovalSummary, PipelineArtifact, PipelineDefinitionDetail, PipelineDefinitionOption,
-    PipelineLogTail, PipelineProjectOption, PipelineRunDetail, PipelineRunSummary,
-    QueuePipelineRunInput, RerunPipelineRunInput, UpdatePipelineApprovalInput,
+    GetPipelineRunLogTailInput, GetPipelineTestSummaryInput, ListPipelineApprovalsInput,
+    ListPipelineArtifactsInput, ListPipelineDefinitionsInput, ListPipelineProjectsInput,
+    ListPipelineRunsInput, PipelineApprovalSummary, PipelineArtifact, PipelineDefinitionDetail,
+    PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption, PipelineRunDetail,
+    PipelineRunSummary, PipelineTestSummary, QueuePipelineRunInput, RerunPipelineRunInput,
+    RetryPipelineStageInput, UpdatePipelineApprovalInput,
 };
 
 #[tauri::command]
@@ -133,4 +134,27 @@ pub async fn update_pipeline_approval(
         .await?
         .update_pipeline_approval(input)
         .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn get_pipeline_test_summary(
+    input: GetPipelineTestSummaryInput,
+    state: State<'_, AppState>,
+) -> Result<PipelineTestSummary> {
+    state
+        .provider()
+        .await?
+        .get_pipeline_test_summary(input)
+        .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn retry_pipeline_stage(
+    input: RetryPipelineStageInput,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    ensure_write_enabled(&state).await?;
+    state.provider().await?.retry_pipeline_stage(input).await
 }
