@@ -246,7 +246,7 @@ describe("App — Navigation", () => {
         el.getAttribute("data-nav-entry"),
       );
 
-    expect(order()).toEqual(["pullRequests", "workItems", "pipelines", "codeSearch"]);
+    expect(order()).toEqual(["pullRequests", "workItems", "pipelines", "codeSearch", "wiki"]);
 
     // Alt+ArrowUp on Pipelines swaps it above Work Items.
     fireEvent.keyDown(within(nav).getByRole("button", { name: "Pipelines" }), {
@@ -254,7 +254,7 @@ describe("App — Navigation", () => {
       altKey: true,
     });
 
-    const expected = ["pullRequests", "pipelines", "workItems", "codeSearch"];
+    const expected = ["pullRequests", "pipelines", "workItems", "codeSearch", "wiki"];
     await waitFor(() => expect(order()).toEqual(expected));
     expect(
       JSON.parse(window.localStorage.getItem("azdodeck:layout:navOrder") ?? "null"),
@@ -290,6 +290,6 @@ describe("App — Navigation", () => {
       Array.from(nav.querySelectorAll("[data-nav-entry]")).map((el) =>
         el.getAttribute("data-nav-entry"),
       ),
-    ).toEqual(["codeSearch", "pipelines", "workItems", "pullRequests"]);
+    ).toEqual(["codeSearch", "pipelines", "workItems", "pullRequests", "wiki"]);
   });
 });

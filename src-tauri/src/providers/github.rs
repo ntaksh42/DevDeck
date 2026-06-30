@@ -42,6 +42,7 @@ use crate::prs::{
 };
 use crate::search::{SearchAllInput, SearchAllResult, SearchAllTotals};
 use crate::secrets::SecretStore;
+use crate::wiki::{GetWikiPageInput, SearchWikiPagesInput, WikiPageContent, WikiSearchResults};
 use crate::work_items::{
     AddWorkItemCommentInput, AssignWorkItemsInput, BulkWorkItemResult, DeleteWorkItemCommentInput,
     GetWorkItemPreviewInput, ListMyWorkItemsInput, ListWorkItemProjectsInput,
@@ -80,6 +81,7 @@ impl Provider for GithubProvider {
             code_search: true,
             code_browse: false,
             pipelines: false,
+            wiki: false,
             work_item_priority: false,
             resolve_review_threads: true,
         }
@@ -460,6 +462,14 @@ impl Provider for GithubProvider {
         Err(pipelines_unsupported())
     }
 
+    async fn search_wiki_pages(&self, _input: SearchWikiPagesInput) -> Result<WikiSearchResults> {
+        Err(wiki_unsupported())
+    }
+
+    async fn get_wiki_page(&self, _input: GetWikiPageInput) -> Result<WikiPageContent> {
+        Err(wiki_unsupported())
+    }
+
     async fn search_all(&self, _input: SearchAllInput) -> Result<SearchAllResult> {
         // The command palette degrades to no results for GitHub (no local cache);
         // the dedicated PR/Issue/Commit/Code screens cover live GitHub search.
@@ -478,4 +488,8 @@ impl Provider for GithubProvider {
 
 fn pipelines_unsupported() -> AppError {
     AppError::NotSupported("Pipelines are not available for GitHub connections".to_string())
+}
+
+fn wiki_unsupported() -> AppError {
+    AppError::NotSupported("Wiki is not available for GitHub connections".to_string())
 }

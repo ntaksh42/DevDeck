@@ -21,6 +21,7 @@ mod secrets;
 mod settings;
 mod snooze;
 mod sync;
+mod wiki;
 mod work_items;
 
 use app_state::AppState;
@@ -40,6 +41,7 @@ use snooze::SnoozeService;
 use sync::SyncRunner;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+use wiki::WikiService;
 use work_items::WorkItemService;
 
 pub(crate) fn configure_show_window_hotkey(app: &AppHandle, hotkey: Option<&str>) -> Result<()> {
@@ -128,6 +130,7 @@ pub fn run() {
                 pipelines: PipelineService::new(db.clone(), SecretStore),
                 code_search: CodeSearchService::new(db.clone(), SecretStore),
                 code_browse: CodeBrowseService::new(db.clone(), SecretStore),
+                wiki: WikiService::new(db.clone(), SecretStore),
                 settings: SettingsService::new(db.clone()),
                 snooze: SnoozeService::new(db.clone()),
                 cancellation: CancellationRegistry::new(),
@@ -226,6 +229,8 @@ pub fn run() {
             commands::pipelines::cancel_pipeline_run,
             commands::pipelines::list_pipeline_approvals,
             commands::pipelines::update_pipeline_approval,
+            commands::wiki::search_wiki_pages,
+            commands::wiki::get_wiki_page,
             commands::sync::trigger_sync
         ])
         .run(tauri::generate_context!())

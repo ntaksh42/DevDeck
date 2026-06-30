@@ -11,6 +11,9 @@ export const PipelinesView = lazy(() =>
 export const CodeBrowseView = lazy(() =>
   import("@/features/code/CodeBrowseView").then((m) => ({ default: m.CodeBrowseView })),
 );
+export const WikiView = lazy(() =>
+  import("@/features/wiki/WikiView").then((m) => ({ default: m.WikiView })),
+);
 export const WorkItemSearch = lazy(() =>
   import("@/features/work-items/WorkItemSearch").then((m) => ({ default: m.WorkItemSearch })),
 );

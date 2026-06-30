@@ -19,6 +19,7 @@ use crate::secrets::SecretStore;
 use crate::settings::SettingsService;
 use crate::snooze::SnoozeService;
 use crate::sync::{SyncScope, SyncTrigger};
+use crate::wiki::WikiService;
 use crate::work_items::WorkItemService;
 
 #[derive(Clone)]
@@ -32,6 +33,7 @@ pub(crate) struct AppState {
     pub(crate) pipelines: PipelineService,
     pub(crate) code_search: CodeSearchService,
     pub(crate) code_browse: CodeBrowseService,
+    pub(crate) wiki: WikiService,
     pub(crate) settings: SettingsService,
     pub(crate) snooze: SnoozeService,
     pub(crate) cancellation: CancellationRegistry,
@@ -84,6 +86,7 @@ impl AppState {
                 self.code_search.clone(),
                 self.code_browse.clone(),
                 self.pipelines.clone(),
+                self.wiki.clone(),
                 self.db.clone(),
             )),
         }

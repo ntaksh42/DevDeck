@@ -10,6 +10,7 @@ export type View =
   | "commits"
   | "pipelines"
   | "codeSearch"
+  | "wiki"
   | "settings";
 
 export type NavSectionId = "pullRequests" | "workItems" | "code";
@@ -35,6 +36,7 @@ export const GOTO_BINDING_VIEWS = {
   gotoCommits: "commits",
   gotoPipelines: "pipelines",
   gotoCodeSearch: "codeSearch",
+  gotoWiki: "wiki",
   gotoSettings: "settings",
 } satisfies Partial<Record<keyof KeybindingMap, View>>;
 

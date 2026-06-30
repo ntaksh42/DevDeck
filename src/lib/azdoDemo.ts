@@ -127,6 +127,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
           codeSearch: true,
           codeBrowse: true,
           pipelines: true,
+          wiki: true,
           workItemPriority: true,
           resolveReviewThreads: true,
         },

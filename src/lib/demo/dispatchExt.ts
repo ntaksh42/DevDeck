@@ -1,4 +1,4 @@
-// Pipeline, commit, code-browser, and repo dispatch cases extracted from
+// Pipeline, commit, code-browser, repo, and wiki dispatch cases extracted from
 // demoInvoke to keep the main file within the 500-line limit.
 // Returns `undefined` for unrecognised commands so the caller can fall through.
 import type {
@@ -26,6 +26,7 @@ import {
   demoRepoTree,
   demoSearchCode,
 } from "@/lib/demo/commits";
+import { demoGetWikiPage, demoSearchWikiPages } from "@/lib/demo/wiki";
 
 export function dispatchExt(command: string, args: unknown): unknown {
   switch (command) {
@@ -162,6 +163,15 @@ export function dispatchExt(command: string, args: unknown): unknown {
     case "list_repo_history": {
       const input = (args as { input?: { path?: string } } | undefined)?.input;
       return demoRepoHistory(input?.path ?? "/");
+    }
+    // ── Wiki ───────────────────────────────────────────────────────────────
+    case "search_wiki_pages": {
+      const input = (args as { input?: { query?: string } } | undefined)?.input;
+      return demoSearchWikiPages(input?.query ?? "");
+    }
+    case "get_wiki_page": {
+      const input = (args as { input?: { path?: string } } | undefined)?.input;
+      return demoGetWikiPage(input?.path ?? "/Getting-Started");
     }
     default:
       return undefined;
