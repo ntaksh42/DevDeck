@@ -5,13 +5,14 @@ use crate::error::Result;
 use crate::work_items::{
     AddWorkItemCommentInput, AddWorkItemLinkInput, AssignWorkItemsInput, BulkWorkItemResult,
     ClassificationNodesResult, DeleteWorkItemCommentInput, FetchWorkItemImageInput,
-    GetSavedQueryInput, GetWorkItemPreviewInput, ListClassificationNodesInput,
-    ListMyWorkItemsInput, ListWorkItemFieldAllowedValuesInput, ListWorkItemFieldsInput,
-    ListWorkItemProjectsInput, ListWorkItemTypeStatesInput, ListWorkItemUpdatesInput,
-    MentionCandidate, RecordAssigneeInteractionInput, RecordMentionInteractionInput,
-    RemoveWorkItemLinkInput, RunWorkItemQueryInput, SavedQueryResult, SearchWorkItemAssigneesInput,
-    SearchWorkItemMentionsInput, SearchWorkItemsInput, SetWorkItemCommentReactionInput,
-    SetWorkItemsPriorityInput, SetWorkItemsStateInput, SetWorkItemsTagsInput,
+    FollowWorkItemInput, GetSavedQueryInput, GetWorkItemPreviewInput, ListClassificationNodesInput,
+    ListFollowedWorkItemsInput, ListMyWorkItemsInput, ListWorkItemFieldAllowedValuesInput,
+    ListWorkItemFieldsInput, ListWorkItemProjectsInput, ListWorkItemTypeStatesInput,
+    ListWorkItemUpdatesInput, MentionCandidate, RecordAssigneeInteractionInput,
+    RecordMentionInteractionInput, RemoveWorkItemLinkInput, RunWorkItemQueryInput,
+    SavedQueryResult, SearchWorkItemAssigneesInput, SearchWorkItemMentionsInput,
+    SearchWorkItemsInput, SetWorkItemCommentReactionInput, SetWorkItemsPriorityInput,
+    SetWorkItemsStateInput, SetWorkItemsTagsInput, UnfollowWorkItemInput,
     UpdateWorkItemCommentInput, UpdateWorkItemFieldsInput, WorkItemAssigneeCandidate,
     WorkItemComment, WorkItemFieldOption, WorkItemImage, WorkItemPreview, WorkItemProjectOption,
     WorkItemSummary, WorkItemUpdateSummary,
@@ -296,4 +297,36 @@ pub async fn get_saved_query(
     state: State<'_, AppState>,
 ) -> Result<SavedQueryResult> {
     state.work_items.get_saved_query(input).await
+}
+
+// Local follow watchlist (issue #304): no Azure DevOps API involved, so these
+// skip `ensure_write_enabled` the same way `snooze_item` does.
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn follow_work_item(
+    input: FollowWorkItemInput,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    let service = state.work_items.clone();
+    run_blocking(move || service.follow_work_item(input)).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn unfollow_work_item(
+    input: UnfollowWorkItemInput,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    let service = state.work_items.clone();
+    run_blocking(move || service.unfollow_work_item(input)).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn list_followed_work_items(
+    input: ListFollowedWorkItemsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<WorkItemSummary>> {
+    let service = state.work_items.clone();
+    run_blocking(move || service.list_followed_work_items(input)).await
 }

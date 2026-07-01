@@ -499,5 +499,33 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         }
         conn.execute_batch("PRAGMA user_version = 17;")?;
     }
+    if current < 18 {
+        // Local "follow" watchlist for work items. Azure DevOps exposes no public
+        // REST API for the server-side follow/subscription, so this stores a
+        // denormalized snapshot of the item captured at follow time (title,
+        // state, etc.) rather than joining against the work item cache, which
+        // may not contain items the user has never searched/synced.
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS followed_work_items(
+                organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                work_item_id    INTEGER NOT NULL,
+                project_id      TEXT NOT NULL,
+                project_name    TEXT NOT NULL,
+                title           TEXT NOT NULL,
+                work_item_type  TEXT,
+                state           TEXT,
+                assigned_to     TEXT,
+                web_url         TEXT,
+                followed_at     TEXT NOT NULL,
+                PRIMARY KEY (organization_id, work_item_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_followed_wi_followed_at
+                ON followed_work_items(organization_id, followed_at DESC);
+
+            PRAGMA user_version = 18;
+            "#,
+        )?;
+    }
     Ok(())
 }
