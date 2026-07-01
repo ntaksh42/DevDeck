@@ -235,6 +235,10 @@ mod tests {
                 author_name: Some("Alice".to_string()),
                 author_email: None,
                 author_date: Some("2026-06-04T00:00:00Z".to_string()),
+                author_image_url: None,
+                committer_name: None,
+                committer_email: None,
+                committer_date: None,
                 web_url: None,
             }],
         )

@@ -13,6 +13,10 @@ const commitSummarySchema = z.object({
   authorName: z.string().nullable(),
   authorEmail: z.string().nullable(),
   authorDate: z.string().nullable(),
+  authorImageUrl: z.string().nullable(),
+  committerName: z.string().nullable(),
+  committerEmail: z.string().nullable(),
+  committerDate: z.string().nullable(),
   webUrl: z.string().nullable(),
 });
 
@@ -73,6 +77,19 @@ const commitPullRequestSchema = z.object({
 });
 const commitPullRequestsSchema = z.array(commitPullRequestSchema);
 export type CommitPullRequest = z.infer<typeof commitPullRequestSchema>;
+
+const commitContainingRefSchema = z.object({
+  kind: z.union([z.literal("branch"), z.literal("tag")]),
+  name: z.string(),
+});
+const commitRefsResultSchema = z.object({
+  refs: z.array(commitContainingRefSchema),
+  truncated: z.boolean(),
+});
+export type CommitContainingRef = z.infer<typeof commitContainingRefSchema>;
+export type CommitRefsResult = z.infer<typeof commitRefsResultSchema>;
+
+const commitAvatarImageSchema = z.object({ dataUrl: z.string() });
 
 export type SearchCommitsInput = {
   organizationId?: string;
@@ -154,4 +171,22 @@ export async function commitActivity(
 ): Promise<CommitActivityDay[]> {
   const result = await invokeCommand("commit_activity", { input });
   return commitActivityDaysSchema.parse(result);
+}
+
+export async function getCommitRefs(input: {
+  organizationId?: string;
+  projectId: string;
+  repositoryId: string;
+  commitId: string;
+}): Promise<CommitRefsResult> {
+  const result = await invokeCommand("get_commit_refs", { input });
+  return commitRefsResultSchema.parse(result);
+}
+
+export async function fetchCommitAvatar(input: {
+  organizationId?: string;
+  url: string;
+}): Promise<string> {
+  const result = await invokeCommand("fetch_commit_avatar", { input });
+  return commitAvatarImageSchema.parse(result).dataUrl;
 }

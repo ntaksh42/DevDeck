@@ -251,6 +251,93 @@ async fn list_branches_filters_heads() {
 }
 
 #[tokio::test]
+async fn list_commits_requests_user_image_url() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/project-1/_apis/git/repositories/repo-1/commits"))
+        .and(query_param("searchCriteria.includeUserImageUrl", "true"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "count": 1,
+            "value": [{
+                "commitId": "abc123",
+                "comment": "Add avatar",
+                "author": {
+                    "name": "Test User",
+                    "email": "test@example.com",
+                    "imageUrl": "https://dev.azure.com/testorg/_apis/GraphProfile/MemberAvatars/abc"
+                }
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    let commits = test_client(&server)
+        .await
+        .list_commits(
+            "project-1",
+            "repo-1",
+            CommitSearchCriteria {
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        commits[0].author.as_ref().unwrap().image_url.as_deref(),
+        Some("https://dev.azure.com/testorg/_apis/GraphProfile/MemberAvatars/abc")
+    );
+}
+
+#[tokio::test]
+async fn list_tags_filters_tags() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/project-1/_apis/git/repositories/repo-1/refs"))
+        .and(query_param("filter", "tags/"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "count": 1,
+            "value": [{ "name": "refs/tags/v1.0", "objectId": "abc" }]
+        })))
+        .mount(&server)
+        .await;
+
+    let refs = test_client(&server)
+        .await
+        .list_tags("project-1", "repo-1")
+        .await
+        .unwrap();
+    assert_eq!(refs.len(), 1);
+    assert_eq!(refs[0].name, "refs/tags/v1.0");
+}
+
+#[tokio::test]
+async fn get_commits_diff_common_commit_returns_merge_base() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(
+            "/project-1/_apis/git/repositories/repo-1/diffs/commits",
+        ))
+        .and(query_param("baseVersion", "main"))
+        .and(query_param("baseVersionType", "branch"))
+        .and(query_param("targetVersion", "abc123"))
+        .and(query_param("targetVersionType", "commit"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "commonCommit": "abc123",
+            "aheadCount": 3,
+            "behindCount": 0
+        })))
+        .mount(&server)
+        .await;
+
+    let common_commit = test_client(&server)
+        .await
+        .get_commits_diff_common_commit("project-1", "repo-1", "main", "branch", "abc123")
+        .await
+        .unwrap();
+    assert_eq!(common_commit.as_deref(), Some("abc123"));
+}
+
+#[tokio::test]
 async fn list_items_requests_one_level_at_branch() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))

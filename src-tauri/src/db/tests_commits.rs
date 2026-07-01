@@ -16,6 +16,10 @@ fn make_cached_commit(commit_id: &str, comment: &str) -> CachedCommit {
         author_name: Some("Alice".to_string()),
         author_email: None,
         author_date: Some("2026-06-01T00:00:00Z".to_string()),
+        author_image_url: None,
+        committer_name: None,
+        committer_email: None,
+        committer_date: None,
         web_url: None,
     }
 }
@@ -133,6 +137,10 @@ fn search_commits_author_filter_survives_limit_cap() {
                 "other@example.com".to_string()
             }),
             author_date: Some(format!("{year:04}-01-01T00:00:00+00:00")),
+            author_image_url: None,
+            committer_name: None,
+            committer_email: None,
+            committer_date: None,
             web_url: None,
         });
     }
@@ -176,6 +184,10 @@ fn replace_commits_for_repo_scopes_to_repository() {
         author_name: None,
         author_email: None,
         author_date: None,
+        author_image_url: None,
+        committer_name: None,
+        committer_email: None,
+        committer_date: None,
         web_url: None,
     };
 
@@ -220,6 +232,10 @@ fn purge_old_commits_removes_dated_rows_only() {
         author_name: None,
         author_email: None,
         author_date: date.map(|s| s.to_string()),
+        author_image_url: None,
+        committer_name: None,
+        committer_email: None,
+        committer_date: None,
         web_url: None,
     };
 
@@ -259,6 +275,10 @@ fn purge_old_commits_removes_null_author_date() {
         author_name: None,
         author_email: None,
         author_date: date.map(|s| s.to_string()),
+        author_image_url: None,
+        committer_name: None,
+        committer_email: None,
+        committer_date: None,
         web_url: None,
     };
 
@@ -300,6 +320,10 @@ fn commit_activity_groups_by_day_and_filters_by_author() {
         author_name: Some(name.to_string()),
         author_email: Some(email.to_string()),
         author_date: date.map(|s| s.to_string()),
+        author_image_url: None,
+        committer_name: None,
+        committer_email: None,
+        committer_date: None,
         web_url: None,
     };
 

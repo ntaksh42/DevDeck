@@ -499,5 +499,24 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         }
         conn.execute_batch("PRAGMA user_version = 17;")?;
     }
+    if current < 18 {
+        // Commits now carry committer identity (distinct from author) and an
+        // author avatar URL. Existing rows default to NULL; committer fields
+        // backfill on the next sync (commits are otherwise immutable once
+        // cached, so older rows stay without these until then). The
+        // table-exists guard keeps partial historical databases from tripping
+        // over a not-yet-created commits table.
+        if table_exists(conn, "commits")?
+            && !table_column_exists(conn, "commits", "committer_name")?
+        {
+            conn.execute_batch(
+                "ALTER TABLE commits ADD COLUMN committer_name TEXT;
+                 ALTER TABLE commits ADD COLUMN committer_email TEXT;
+                 ALTER TABLE commits ADD COLUMN committer_date TEXT;
+                 ALTER TABLE commits ADD COLUMN author_image_url TEXT;",
+            )?;
+        }
+        conn.execute_batch("PRAGMA user_version = 18;")?;
+    }
     Ok(())
 }

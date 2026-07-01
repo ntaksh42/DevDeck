@@ -12,6 +12,7 @@ import {
   commitSortLabels,
 } from "./commitSearchConstants";
 import { commitPrQueryKey } from "./commitSearchUtils";
+import { CommitAvatar } from "./CommitAvatar";
 
 // Cells stay direct grid items (keyed Fragment) so the column template lines up.
 function renderCommitCell(key: CommitColumnKey, commit: CommitSummary, prCount: number): ReactNode {
@@ -52,8 +53,13 @@ function renderCommitCell(key: CommitColumnKey, commit: CommitSummary, prCount: 
       );
     case "author":
       return (
-        <span className="truncate text-xs text-muted-foreground" title={commit.authorName ?? undefined}>
-          {commit.authorName ?? "—"}
+        <span className="flex min-w-0 items-center gap-1.5" title={commit.authorName ?? undefined}>
+          <CommitAvatar
+            organizationId={commit.organizationId}
+            imageUrl={commit.authorImageUrl}
+            name={commit.authorName}
+          />
+          <span className="truncate text-xs text-muted-foreground">{commit.authorName ?? "—"}</span>
         </span>
       );
     case "pr":

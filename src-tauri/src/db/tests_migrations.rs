@@ -67,6 +67,24 @@ fn migrate_v1_db_upgrades_to_latest() {
 }
 
 #[test]
+fn migrate_v1_db_adds_committer_and_avatar_columns_to_commits() {
+    let conn = Connection::open_in_memory().unwrap();
+    migrate(&conn).unwrap();
+
+    for column in [
+        "committer_name",
+        "committer_email",
+        "committer_date",
+        "author_image_url",
+    ] {
+        assert!(
+            table_column_exists(&conn, "commits", column).unwrap(),
+            "commits table must have a {column} column"
+        );
+    }
+}
+
+#[test]
 fn migrate_v2_db_upgrades_to_v3() {
     let conn = Connection::open_in_memory().unwrap();
     conn.pragma_update(None, "foreign_keys", "ON").unwrap();

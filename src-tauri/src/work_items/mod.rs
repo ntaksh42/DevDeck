@@ -20,7 +20,7 @@ use crate::projects::ProjectDirectory;
 use crate::secrets::SecretStore;
 
 mod candidates;
-mod conversions;
+pub(crate) mod conversions;
 mod metadata;
 mod mutations;
 mod query;

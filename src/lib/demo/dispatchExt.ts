@@ -26,6 +26,8 @@ import {
   demoRepoTree,
   demoSearchCode,
 } from "@/lib/demo/commits";
+import { demoCommitRefs } from "@/lib/demo/commitRefs";
+import { DEMO_PREVIEW_IMAGE_DATA_URL } from "@/lib/demo/settings";
 
 export function dispatchExt(command: string, args: unknown): unknown {
   switch (command) {
@@ -135,6 +137,12 @@ export function dispatchExt(command: string, args: unknown): unknown {
       const input = (args as { input?: { commitId?: string } } | undefined)?.input;
       return demoCommitPullRequests(input?.commitId);
     }
+    case "get_commit_refs": {
+      const input = (args as { input?: { commitId?: string } } | undefined)?.input;
+      return demoCommitRefs(input?.commitId);
+    }
+    case "fetch_commit_avatar":
+      return { dataUrl: DEMO_PREVIEW_IMAGE_DATA_URL };
     case "cancel_operation":
       // Demo searches resolve instantly, so there is nothing to cancel.
       return null;
