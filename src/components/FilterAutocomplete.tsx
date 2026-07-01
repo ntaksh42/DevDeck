@@ -12,10 +12,16 @@ const MAX_SUGGESTIONS = 8;
 /**
  * Distinct pool values that contain the typed text (case-insensitive),
  * excluding an exact match, capped for the dropdown. Pure for unit testing.
+ * When `showAllWhenEmpty` is set, an empty query yields the first distinct
+ * pool values instead of nothing, so callers can offer candidates on focus.
  */
-export function filterSuggestions(pool: string[], value: string): string[] {
+export function filterSuggestions(
+  pool: string[],
+  value: string,
+  showAllWhenEmpty = false,
+): string[] {
   const term = value.trim().toLowerCase();
-  if (!term) return [];
+  if (!term && !showAllWhenEmpty) return [];
   const seen = new Set<string>();
   const out: string[] = [];
   for (const candidate of pool) {
@@ -23,7 +29,7 @@ export function filterSuggestions(pool: string[], value: string): string[] {
     if (!trimmed) continue;
     const lower = trimmed.toLowerCase();
     if (lower === term) continue;
-    if (!lower.includes(term)) continue;
+    if (term && !lower.includes(term)) continue;
     if (seen.has(lower)) continue;
     seen.add(lower);
     out.push(trimmed);
@@ -48,6 +54,7 @@ export function FilterAutocomplete({
   suggestionPool,
   inputRef,
   ariaLabel = "Filter",
+  showAllOnFocus = false,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -56,12 +63,13 @@ export function FilterAutocomplete({
   suggestionPool: string[];
   inputRef?: RefObject<HTMLInputElement | null>;
   ariaLabel?: string;
+  showAllOnFocus?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(-1);
   const listId = useRef(`filter-suggest-${Math.round(Math.random() * 1e9)}`).current;
 
-  const suggestions = open ? filterSuggestions(suggestionPool, value) : [];
+  const suggestions = open ? filterSuggestions(suggestionPool, value, showAllOnFocus) : [];
 
   // Keep the highlight within range as the suggestion list changes.
   useEffect(() => {

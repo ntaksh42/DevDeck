@@ -8,6 +8,20 @@ describe("filterSuggestions", () => {
     expect(filterSuggestions(pool, "  ")).toEqual([]);
   });
 
+  it("returns distinct pool values for an empty query when showAllWhenEmpty is set", () => {
+    expect(filterSuggestions(pool, "  ", true)).toEqual([
+      "azdo-dashboard",
+      "api-gateway",
+      "Alice Johnson",
+      "android-app",
+    ]);
+  });
+
+  it("caps showAllWhenEmpty results at 8", () => {
+    const many = Array.from({ length: 20 }, (_, i) => `branch-${i}`);
+    expect(filterSuggestions(many, "", true).length).toBe(8);
+  });
+
   it("matches case-insensitively and de-duplicates", () => {
     expect(filterSuggestions(pool, "api")).toEqual(["api-gateway"]);
   });
