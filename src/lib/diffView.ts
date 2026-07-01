@@ -125,6 +125,19 @@ export function buildSideBySideRows(rawBase: string, rawTarget: string): SideByS
   return rows;
 }
 
+export type DiffSummary = { additions: number; deletions: number };
+
+/** Added/removed line counts for a file, aggregated from `buildDiffLines`. */
+export function summarizeDiff(rawBase: string, rawTarget: string): DiffSummary {
+  let additions = 0;
+  let deletions = 0;
+  for (const line of buildDiffLines(rawBase, rawTarget)) {
+    if (line.kind === "add") additions++;
+    else if (line.kind === "del") deletions++;
+  }
+  return { additions, deletions };
+}
+
 export function buildDiffLines(rawBase: string, rawTarget: string): DiffLine[] {
   const parts = diffLines(normalizeNewlines(rawBase), normalizeNewlines(rawTarget));
   const result: DiffLine[] = [];

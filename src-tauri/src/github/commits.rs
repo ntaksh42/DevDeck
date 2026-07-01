@@ -58,9 +58,13 @@ pub async fn get_commit_changes(
     let commit = client
         .get_commit_detail(&owner, &repo, &input.commit_id)
         .await?;
+    // GitHub's commit endpoint always reports files relative to the default
+    // parent; there is no per-arbitrary-parent compare call wired up here, so
+    // `input.base_commit_id` only affects which parent's content is fetched
+    // for an individual file's diff (`get_commit_file_diff`), not this list.
     Ok(CommitChangeSet {
         commit_id: commit.sha,
-        parent_commit_id: commit.parents.first().map(|p| p.sha.clone()),
+        parents: commit.parents.into_iter().map(|p| p.sha).collect(),
         files: commit.files.into_iter().map(file_to_changed).collect(),
     })
 }

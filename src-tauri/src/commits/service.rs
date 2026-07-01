@@ -276,12 +276,30 @@ impl CommitService {
         let commit = client
             .get_commit(&input.project_id, &input.repository_id, &input.commit_id)
             .await?;
-        let parent_commit_id = commit
-            .parents
-            .and_then(|parents| parents.into_iter().next());
-        let entries = client
-            .get_commit_changes(&input.project_id, &input.repository_id, &input.commit_id)
-            .await?;
+        let parents = commit.parents.unwrap_or_default();
+        let default_parent = parents.first();
+        let base_commit_id = normalize_optional(input.base_commit_id);
+
+        // The plain "changes" endpoint always diffs against the default
+        // parent; a non-default base (picking another parent on a merge
+        // commit) needs the Diffs API instead.
+        let entries = match base_commit_id.as_deref() {
+            Some(base) if Some(base) != default_parent.map(String::as_str) => {
+                client
+                    .get_commit_diffs(
+                        &input.project_id,
+                        &input.repository_id,
+                        base,
+                        &input.commit_id,
+                    )
+                    .await?
+            }
+            _ => {
+                client
+                    .get_commit_changes(&input.project_id, &input.repository_id, &input.commit_id)
+                    .await?
+            }
+        };
         let files = entries
             .into_iter()
             .filter_map(|entry| {
@@ -298,7 +316,7 @@ impl CommitService {
             .collect();
         Ok(CommitChangeSet {
             commit_id: input.commit_id,
-            parent_commit_id,
+            parents,
             files,
         })
     }
