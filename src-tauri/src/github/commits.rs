@@ -6,9 +6,9 @@ use github_client::{CommitSearchItem, PrFileItem};
 
 use crate::auth::github_client_for_organization;
 use crate::commits::{
-    CommitChangeSet, CommitChangedFile, CommitFileDiff, CommitPullRequest, CommitSearchResult,
-    CommitSummary, GetCommitChangesInput, GetCommitFileDiffInput, GetCommitPullRequestsInput,
-    SearchCommitsInput,
+    fetch_parents_concurrently, CommitChangeSet, CommitChangedFile, CommitFileDiff, CommitParents,
+    CommitPullRequest, CommitSearchResult, CommitSummary, GetCommitChangesInput,
+    GetCommitFileDiffInput, GetCommitParentsInput, GetCommitPullRequestsInput, SearchCommitsInput,
 };
 use crate::db::Organization;
 use crate::error::{AppError, Result};
@@ -136,6 +136,43 @@ pub async fn get_commit_pull_requests(
                 my_vote_label: String::new(),
                 web_url: Some(pr.html_url),
             }
+        })
+        .collect())
+}
+
+/// Resolves parent commit shas for the commit graph view. Unlike Azure
+/// DevOps, GitHub's list/search endpoints do include parents, but that would
+/// mean plumbing a new field through the shared `CommitSummary` cache path
+/// just for this read-only view — so this reuses the same bounded-concurrency
+/// per-commit lookup as the Azure DevOps provider instead, keeping the graph
+/// feature's fetch shape identical across providers.
+pub async fn get_commit_parents(
+    organization: &Organization,
+    secrets: &SecretStore,
+    input: GetCommitParentsInput,
+) -> Result<Vec<CommitParents>> {
+    let (owner, repo) = split_owner_repo(&input.repository_id)?;
+    let client = github_client_for_organization(organization, secrets)?;
+
+    let parents_by_id = fetch_parents_concurrently(input.commit_ids, move |commit_id| {
+        let client = client.clone();
+        let owner = owner.clone();
+        let repo = repo.clone();
+        async move {
+            let detail = client
+                .get_commit_detail(&owner, &repo, &commit_id)
+                .await
+                .ok()?;
+            Some(detail.parents.into_iter().map(|p| p.sha).collect())
+        }
+    })
+    .await;
+
+    Ok(parents_by_id
+        .into_iter()
+        .map(|(commit_id, parent_ids)| CommitParents {
+            commit_id,
+            parent_ids,
         })
         .collect())
 }

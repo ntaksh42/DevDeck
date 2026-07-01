@@ -46,7 +46,7 @@ export type CommitSearchViewState = {
   toDate: string;
 };
 
-export type CommitViewMode = "results" | "activity";
+export type CommitViewMode = "results" | "activity" | "graph";
 
 export type CommitSortKey = "date" | "repository" | "author" | "comment";
 export type CommitSortState = { key: CommitSortKey; direction: "asc" | "desc" };

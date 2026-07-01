@@ -17,6 +17,7 @@ import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { MultiSelectFilter } from "@/components/MultiSelectFilter";
 import { ErrorState } from "@/components/StateDisplay";
 import { CommitActivityHeatmap } from "./CommitActivityHeatmap";
+import { CommitGraph } from "./CommitGraph";
 import { extractCommitQuery } from "./commitQuery";
 import { CommitResults } from "./CommitResults";
 import { type CommitViewMode, COMMIT_VIEW_MODE_STORAGE_KEY } from "./commitSearchConstants";
@@ -405,6 +406,8 @@ export function CommitSearch({
           projectId={projectIds.length === 1 ? projectIds[0] : ""}
           repositoryId={repositoryIds.length === 1 ? repositoryIds[0] : ""}
         />
+      ) : viewMode === "graph" ? (
+        <CommitGraph loading={mutation.isPending} results={results} searched={mutation.isSuccess} />
       ) : (
         <CommitResults
           activeExternalFilterCount={activeSearchFilterCount}
@@ -431,6 +434,7 @@ function CommitViewToggle({
   const tabs: { id: CommitViewMode; label: string }[] = [
     { id: "results", label: "Results" },
     { id: "activity", label: "Activity" },
+    { id: "graph", label: "Graph" },
   ];
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 

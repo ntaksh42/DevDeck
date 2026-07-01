@@ -62,6 +62,13 @@ export type CommitChangeSet = z.infer<typeof commitChangeSetSchema>;
 // A commit's per-file diff has the same shape as a PR file diff.
 export type CommitFileDiff = z.infer<typeof prFileDiffSchema>;
 
+const commitParentsEntrySchema = z.object({
+  commitId: z.string(),
+  parentIds: z.array(z.string()),
+});
+const commitParentsSchema = z.array(commitParentsEntrySchema);
+export type CommitParentsEntry = z.infer<typeof commitParentsEntrySchema>;
+
 const commitPullRequestSchema = z.object({
   pullRequestId: z.number(),
   repositoryId: z.string(),
@@ -124,6 +131,16 @@ export async function getCommitFileDiff(input: {
 }): Promise<CommitFileDiff> {
   const result = await invokeCommand("get_commit_file_diff", { input });
   return prFileDiffSchema.parse(result);
+}
+
+export async function getCommitParents(input: {
+  organizationId?: string;
+  projectId: string;
+  repositoryId: string;
+  commitIds: string[];
+}): Promise<CommitParentsEntry[]> {
+  const result = await invokeCommand("get_commit_parents", { input });
+  return commitParentsSchema.parse(result);
 }
 
 export async function getCommitPullRequests(input: {

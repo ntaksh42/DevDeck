@@ -1,4 +1,4 @@
-use azdo_client::CommitSearchCriteria;
+use azdo_client::{AdoClient, CommitSearchCriteria};
 use chrono::{DateTime, Utc};
 
 use crate::auth::client_for_organization;
@@ -7,15 +7,16 @@ use crate::error::{AppError, Result};
 use crate::prs::vote_label;
 use crate::secrets::SecretStore;
 
+use super::graph::fetch_parents_concurrently;
 use super::helpers::{
     cached_commit_to_summary, commit_to_cached, encode_path_segment, fetch_commit_side,
     normalize_date, normalize_item_path, normalize_optional, normalize_set, ChangeFlags,
 };
 use super::{
     CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitChangedFile, CommitFileDiff,
-    CommitPullRequest, CommitRepositoryOption, CommitSearchResult, CommitSummary,
-    GetCommitChangesInput, GetCommitFileDiffInput, GetCommitPullRequestsInput,
-    ListCommitRepositoriesInput, SearchCommitsInput,
+    CommitParents, CommitPullRequest, CommitRepositoryOption, CommitSearchResult, CommitSummary,
+    GetCommitChangesInput, GetCommitFileDiffInput, GetCommitParentsInput,
+    GetCommitPullRequestsInput, ListCommitRepositoriesInput, SearchCommitsInput,
 };
 
 /// How long a commit's related-PR lookup stays cached before being refreshed.
@@ -357,6 +358,25 @@ impl CommitService {
         })
     }
 
+    /// Resolves parent commit ids for the commit graph view. Azure DevOps
+    /// only exposes parents on the single-commit endpoint, so this issues one
+    /// detail request per commit id (bounded concurrency) rather than relying
+    /// on the list/search response, which never carries them.
+    pub async fn get_commit_parents(
+        &self,
+        input: GetCommitParentsInput,
+    ) -> Result<Vec<CommitParents>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        Ok(fetch_commit_parents(
+            &client,
+            &input.project_id,
+            &input.repository_id,
+            input.commit_ids,
+        )
+        .await)
+    }
+
     /// Returns the pull requests that contain a commit, served from an
     /// on-demand cache. Returns an empty list (not an error) when the commit is
     /// not part of any pull request.
@@ -440,6 +460,43 @@ impl CommitService {
     fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {
         self.db.resolve_organization(id)
     }
+}
+
+/// Fetches parent commit ids for a bounded set of commits in one Azure DevOps
+/// repository, via bounded-concurrency per-commit detail requests (the
+/// list/search endpoint never includes parents). Takes the client directly,
+/// rather than as a `CommitService` method body, so it can be exercised
+/// against a mock server in tests without needing a full service instance.
+pub(crate) async fn fetch_commit_parents(
+    client: &AdoClient,
+    project_id: &str,
+    repository_id: &str,
+    commit_ids: Vec<String>,
+) -> Vec<CommitParents> {
+    let client = client.clone();
+    let project_id = project_id.to_string();
+    let repository_id = repository_id.to_string();
+    let parents_by_id = fetch_parents_concurrently(commit_ids, move |commit_id| {
+        let client = client.clone();
+        let project_id = project_id.clone();
+        let repository_id = repository_id.clone();
+        async move {
+            client
+                .get_commit(&project_id, &repository_id, &commit_id)
+                .await
+                .ok()?
+                .parents
+        }
+    })
+    .await;
+
+    parents_by_id
+        .into_iter()
+        .map(|(commit_id, parent_ids)| CommitParents {
+            commit_id,
+            parent_ids,
+        })
+        .collect()
 }
 
 fn cached_commit_pr_to_summary(pr: CachedCommitPr) -> CommitPullRequest {

@@ -82,9 +82,8 @@ export function storeCommitSearchViewState(state: CommitSearchViewState) {
 }
 
 export function loadCommitViewMode(): CommitViewMode {
-  return window.localStorage.getItem(COMMIT_VIEW_MODE_STORAGE_KEY) === "activity"
-    ? "activity"
-    : "results";
+  const stored = window.localStorage.getItem(COMMIT_VIEW_MODE_STORAGE_KEY);
+  return stored === "activity" || stored === "graph" ? stored : "results";
 }
 
 export function commitPrQueryKey(commit: CommitSummary) {

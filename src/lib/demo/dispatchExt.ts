@@ -26,6 +26,7 @@ import {
   demoRepoTree,
   demoSearchCode,
 } from "@/lib/demo/commits";
+import { demoCommitParents } from "@/lib/demo/commitGraphDemo";
 
 export function dispatchExt(command: string, args: unknown): unknown {
   switch (command) {
@@ -134,6 +135,10 @@ export function dispatchExt(command: string, args: unknown): unknown {
     case "get_commit_pull_requests": {
       const input = (args as { input?: { commitId?: string } } | undefined)?.input;
       return demoCommitPullRequests(input?.commitId);
+    }
+    case "get_commit_parents": {
+      const input = (args as { input?: { commitIds?: string[] } } | undefined)?.input;
+      return demoCommitParents(input?.commitIds ?? []);
     }
     case "cancel_operation":
       // Demo searches resolve instantly, so there is nothing to cancel.

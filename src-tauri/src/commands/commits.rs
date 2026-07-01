@@ -2,9 +2,10 @@ use tauri::State;
 
 use crate::app_state::AppState;
 use crate::commits::{
-    CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
-    CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput, GetCommitFileDiffInput,
-    GetCommitPullRequestsInput, ListCommitRepositoriesInput, SearchCommitsInput,
+    CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitParents,
+    CommitPullRequest, CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput,
+    GetCommitFileDiffInput, GetCommitParentsInput, GetCommitPullRequestsInput,
+    ListCommitRepositoriesInput, SearchCommitsInput,
 };
 use crate::error::Result;
 
@@ -68,4 +69,13 @@ pub async fn get_commit_pull_requests(
         .await?
         .get_commit_pull_requests(input)
         .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn get_commit_parents(
+    input: GetCommitParentsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<CommitParents>> {
+    state.provider().await?.get_commit_parents(input).await
 }

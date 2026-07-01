@@ -7,6 +7,7 @@ use crate::sync::SyncBudget;
 use super::helpers::{
     commit_web_url, normalize_date, normalize_item_path, normalize_optional, ChangeFlags,
 };
+use super::service::fetch_commit_parents;
 use super::sync::{commit_full_sync_scope, sync_commits_for_org};
 
 #[test]
@@ -203,4 +204,69 @@ async fn delta_commit_sync_merges_without_dropping_existing_commits() {
         "delta sync must not drop existing commits"
     );
     assert!(ids.contains(&"new-commit"));
+}
+
+#[tokio::test]
+async fn fetch_commit_parents_resolves_each_id_and_skips_failures() {
+    use std::sync::Arc;
+
+    use azdo_client::PatProvider;
+    use serde_json::json;
+    use url::Url;
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/proj-1/_apis/git/repositories/repo-1/commits/c1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "commitId": "c1",
+            "comment": "Single-parent commit",
+            "parents": ["root"]
+        })))
+        .mount(&server)
+        .await;
+    // A merge commit — two parents.
+    Mock::given(method("GET"))
+        .and(path("/proj-1/_apis/git/repositories/repo-1/commits/c2"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "commitId": "c2",
+            "comment": "Merge commit",
+            "parents": ["c1", "branch-tip"]
+        })))
+        .mount(&server)
+        .await;
+    // Simulates a commit whose detail lookup fails (e.g. transient error);
+    // it must be omitted from the result instead of failing the batch.
+    Mock::given(method("GET"))
+        .and(path(
+            "/proj-1/_apis/git/repositories/repo-1/commits/missing",
+        ))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&server)
+        .await;
+
+    let base_url = Url::parse(&format!("{}/", server.uri())).unwrap();
+    let client = AdoClient::new("contoso", Arc::new(PatProvider::new("test-pat")))
+        .unwrap()
+        .with_base_url(base_url);
+
+    let mut result = fetch_commit_parents(
+        &client,
+        "proj-1",
+        "repo-1",
+        vec!["c1".to_string(), "c2".to_string(), "missing".to_string()],
+    )
+    .await;
+    result.sort_by(|a, b| a.commit_id.cmp(&b.commit_id));
+
+    assert_eq!(result.len(), 2, "the failed lookup must be omitted");
+    assert_eq!(result[0].commit_id, "c1");
+    assert_eq!(result[0].parent_ids, vec!["root".to_string()]);
+    assert_eq!(result[1].commit_id, "c2");
+    assert_eq!(
+        result[1].parent_ids,
+        vec!["c1".to_string(), "branch-tip".to_string()]
+    );
 }

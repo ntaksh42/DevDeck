@@ -25,9 +25,10 @@ use crate::code_search::{
     CodeContextResult, CodeSearchResults, GetCodeContextInput, SearchCodeInput,
 };
 use crate::commits::{
-    CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
-    CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput, GetCommitFileDiffInput,
-    GetCommitPullRequestsInput, ListCommitRepositoriesInput, SearchCommitsInput,
+    CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitParents,
+    CommitPullRequest, CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput,
+    GetCommitFileDiffInput, GetCommitParentsInput, GetCommitPullRequestsInput,
+    ListCommitRepositoriesInput, SearchCommitsInput,
 };
 use crate::error::Result;
 use crate::pipelines::{
@@ -172,6 +173,7 @@ pub(crate) trait Provider: Send + Sync {
         &self,
         input: GetCommitPullRequestsInput,
     ) -> Result<Vec<CommitPullRequest>>;
+    async fn get_commit_parents(&self, input: GetCommitParentsInput) -> Result<Vec<CommitParents>>;
 
     // --- Pull request review ---
     async fn get_pull_request_review(&self, input: PrLocator) -> Result<PullRequestReview>;

@@ -13,9 +13,10 @@ use crate::code_search::{
     CodeContextResult, CodeSearchResults, GetCodeContextInput, SearchCodeInput,
 };
 use crate::commits::{
-    CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
-    CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput, GetCommitFileDiffInput,
-    GetCommitPullRequestsInput, ListCommitRepositoriesInput, SearchCommitsInput,
+    CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitParents,
+    CommitPullRequest, CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput,
+    GetCommitFileDiffInput, GetCommitParentsInput, GetCommitPullRequestsInput,
+    ListCommitRepositoriesInput, SearchCommitsInput,
 };
 use crate::db::Organization;
 use crate::error::{AppError, Result};
@@ -254,6 +255,10 @@ impl Provider for GithubProvider {
         input: GetCommitPullRequestsInput,
     ) -> Result<Vec<CommitPullRequest>> {
         github::commits::get_commit_pull_requests(&self.org, &self.secrets, input).await
+    }
+
+    async fn get_commit_parents(&self, input: GetCommitParentsInput) -> Result<Vec<CommitParents>> {
+        github::commits::get_commit_parents(&self.org, &self.secrets, input).await
     }
 
     async fn get_pull_request_review(&self, input: PrLocator) -> Result<PullRequestReview> {

@@ -133,6 +133,29 @@ pub struct GetCommitPullRequestsInput {
     pub commit_id: String,
 }
 
+/// Input for the commit graph view: parent ids for a bounded batch of
+/// commits, all from the same repository (a DAG spanning repositories would
+/// not be meaningful).
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetCommitParentsInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub repository_id: String,
+    pub commit_ids: Vec<String>,
+}
+
+/// A commit's parent ids, used to lay out the commit graph. A commit whose
+/// parents could not be resolved (lookup failure, or simply not requested) is
+/// omitted from the response rather than represented with an empty list, so
+/// the frontend can tell "no parents" (root commit) apart from "unknown".
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitParents {
+    pub commit_id: String,
+    pub parent_ids: Vec<String>,
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CommitPullRequest {

@@ -13,10 +13,10 @@ use crate::code_search::{
     CodeContextResult, CodeSearchResults, CodeSearchService, GetCodeContextInput, SearchCodeInput,
 };
 use crate::commits::{
-    CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
-    CommitRepositoryOption, CommitSearchResult, CommitService, GetCommitChangesInput,
-    GetCommitFileDiffInput, GetCommitPullRequestsInput, ListCommitRepositoriesInput,
-    SearchCommitsInput,
+    CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitParents,
+    CommitPullRequest, CommitRepositoryOption, CommitSearchResult, CommitService,
+    GetCommitChangesInput, GetCommitFileDiffInput, GetCommitParentsInput,
+    GetCommitPullRequestsInput, ListCommitRepositoriesInput, SearchCommitsInput,
 };
 use crate::db::AppDatabase;
 use crate::error::Result;
@@ -254,6 +254,10 @@ impl Provider for AzdoProvider {
         input: GetCommitPullRequestsInput,
     ) -> Result<Vec<CommitPullRequest>> {
         self.commits.get_commit_pull_requests(input).await
+    }
+
+    async fn get_commit_parents(&self, input: GetCommitParentsInput) -> Result<Vec<CommitParents>> {
+        self.commits.get_commit_parents(input).await
     }
 
     async fn get_pull_request_review(&self, input: PrLocator) -> Result<PullRequestReview> {
