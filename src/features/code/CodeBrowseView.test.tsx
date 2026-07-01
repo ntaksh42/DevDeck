@@ -200,4 +200,79 @@ describe("CodeBrowseView", () => {
     },
     15000,
   );
+
+  it(
+    "navigates back to the root from the breadcrumb",
+    async () => {
+      renderView();
+      await selectDemoRepository();
+      await waitFor(() => expect(screen.getAllByText("src").length).toBeGreaterThan(0), {
+        timeout: 8000,
+      });
+      // Open the src folder from the tree, then click the repository name in
+      // the breadcrumb to return to the root folder listing.
+      fireEvent.click(screen.getAllByText("src")[0]);
+      await waitFor(() => expect(screen.getAllByText("App.tsx").length).toBeGreaterThan(0), {
+        timeout: 8000,
+      });
+      fireEvent.click(screen.getByRole("button", { name: "azdo-dashboard" }));
+      await waitFor(
+        () => expect(screen.getAllByText("package.json").length).toBeGreaterThan(0),
+        { timeout: 8000 },
+      );
+    },
+    15000,
+  );
+
+  it(
+    "moves through the folder table with arrow keys",
+    async () => {
+      renderView();
+      await selectDemoRepository();
+      await waitFor(() => expect(screen.getAllByText("package.json").length).toBeGreaterThan(0), {
+        timeout: 8000,
+      });
+      const rows = Array.from(
+        lastContainer.querySelectorAll<HTMLButtonElement>("[data-folder-item]"),
+      );
+      expect(rows.length).toBeGreaterThan(1);
+      rows[0].focus();
+      fireEvent.keyDown(rows[0], { key: "ArrowDown" });
+      expect(document.activeElement).toBe(rows[1]);
+      fireEvent.keyDown(rows[1], { key: "k" });
+      expect(document.activeElement).toBe(rows[0]);
+      fireEvent.keyDown(rows[0], { key: "End" });
+      expect(document.activeElement).toBe(rows[rows.length - 1]);
+    },
+    15000,
+  );
+
+  it(
+    "restores the last opened file across remounts",
+    async () => {
+      const first = renderView();
+      await selectDemoRepository();
+      await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
+        timeout: 8000,
+      });
+      fireEvent.click(screen.getAllByText("README.md")[0]);
+      await waitFor(() => expect(lastContainer.querySelector("code.hljs")).not.toBeNull(), {
+        timeout: 8000,
+      });
+      first.unmount();
+
+      // A fresh mount reopens the same file without any clicks.
+      renderView();
+      await waitFor(
+        () => {
+          const code = lastContainer.querySelector("code.hljs");
+          expect(code?.textContent ?? "").toContain(
+            "A Tauri + React dashboard for Azure DevOps.",
+          );
+        },
+        { timeout: 8000 },
+      );
+    },
+    15000,
+  );
 });

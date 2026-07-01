@@ -1,9 +1,10 @@
+import { type KeyboardEvent as ReactKeyboardEvent, useRef } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { commandErrorMessage, listRepoHistory, type Organization } from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
 import { ErrorState } from "@/components/StateDisplay";
-import { commitUrl, formatDate, type RepoOption } from "./codeBrowseShared";
+import { commitUrl, formatDate, handleRowNavKey, type RepoOption } from "./codeBrowseShared";
 
 const HISTORY_PAGE_SIZE = 50;
 
@@ -44,6 +45,14 @@ export function CodeHistoryView({
         : allPages.reduce((sum, page) => sum + page.length, 0),
   });
 
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Arrow keys (or J/K) move focus between commit rows; Enter/Space (native
+  // button activation) opens the focused commit in Azure DevOps.
+  function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    handleRowNavKey(event, containerRef.current, "[data-history-item]");
+  }
+
   if (query.isLoading) {
     return (
       <div className="flex items-center gap-1.5 px-3 py-3 text-sm text-muted-foreground">
@@ -60,7 +69,7 @@ export function CodeHistoryView({
   }
 
   return (
-    <div>
+    <div ref={containerRef} onKeyDown={onKeyDown}>
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border text-left text-xs text-muted-foreground">
@@ -76,6 +85,7 @@ export function CodeHistoryView({
               <td className="px-3 py-1.5">
                 <button
                   type="button"
+                  data-history-item
                   onClick={() => openExternalUrl(commitUrl(organization, repo, commit.commitId))}
                   className="font-mono text-xs text-primary hover:underline"
                   title="Open commit in Azure DevOps"

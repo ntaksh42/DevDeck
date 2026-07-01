@@ -1,9 +1,17 @@
+import { type KeyboardEvent as ReactKeyboardEvent, useRef } from "react";
 import { File as FileIcon, Folder as FolderIcon, Loader2 } from "lucide-react";
 import { commandErrorMessage, type Organization } from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
 import { MarkdownView } from "@/lib/markdown";
 import { ErrorState } from "@/components/StateDisplay";
-import { commitUrl, formatDate, useRepoFile, useTreeQuery, type RepoOption } from "./codeBrowseShared";
+import {
+  commitUrl,
+  formatDate,
+  handleRowNavKey,
+  useRepoFile,
+  useTreeQuery,
+  type RepoOption,
+} from "./codeBrowseShared";
 
 // Right pane when a folder is selected: the Azure DevOps folder listing with
 // Name / Last change / Last commit columns, plus the folder's README rendered below.
@@ -25,6 +33,13 @@ export function CodeFolderView({
   onOpenFile: (path: string) => void;
 }) {
   const query = useTreeQuery(organizationId, repo, branch, path, true);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Arrow keys (or J/K) move focus between rows; Enter/Space (native button
+  // activation) opens the focused entry, matching the Commits grid.
+  function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    handleRowNavKey(event, containerRef.current, "[data-folder-item]");
+  }
 
   if (query.isLoading) {
     return (
@@ -44,7 +59,7 @@ export function CodeFolderView({
   const readme = items.find((item) => !item.isFolder && /^readme\.md$/i.test(item.name));
 
   return (
-    <div>
+    <div ref={containerRef} onKeyDown={onKeyDown}>
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border text-left text-xs text-muted-foreground">
@@ -59,6 +74,7 @@ export function CodeFolderView({
               <td className="px-3 py-1.5">
                 <button
                   type="button"
+                  data-folder-item
                   onClick={() => (item.isFolder ? onOpenFolder(item.path) : onOpenFile(item.path))}
                   className="flex items-center gap-2 text-left"
                 >

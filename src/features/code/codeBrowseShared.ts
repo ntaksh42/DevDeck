@@ -118,3 +118,33 @@ export function leafName(path: string): string {
   const index = trimmed.lastIndexOf("/");
   return index >= 0 ? trimmed.slice(index + 1) : trimmed;
 }
+
+// The ancestor folder paths of a path, outermost first, excluding the root and
+// the path itself: `/src/lib/a.ts` → ["/src", "/src/lib"].
+export function ancestorFolders(path: string): string[] {
+  const segments = path.split("/").filter(Boolean);
+  return segments.slice(0, -1).map((_, index) => "/" + segments.slice(0, index + 1).join("/"));
+}
+
+// Roving keyboard navigation for a table of focusable row buttons matching
+// `selector` inside `container`: ArrowUp/ArrowDown (or K/J) move, Home/End
+// jump. Returns true when the key was handled.
+export function handleRowNavKey(
+  event: { key: string; preventDefault: () => void },
+  container: HTMLElement | null,
+  selector: string,
+): boolean {
+  const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+  const down = key === "ArrowDown" || key === "j";
+  const up = key === "ArrowUp" || key === "k";
+  if (!down && !up && key !== "Home" && key !== "End") return false;
+  const rows = Array.from(container?.querySelectorAll<HTMLButtonElement>(selector) ?? []);
+  if (rows.length === 0) return false;
+  event.preventDefault();
+  const index = rows.indexOf(document.activeElement as HTMLButtonElement);
+  if (key === "Home") rows[0]?.focus();
+  else if (key === "End") rows[rows.length - 1]?.focus();
+  else if (down) rows[index < 0 ? 0 : Math.min(index + 1, rows.length - 1)]?.focus();
+  else rows[index <= 0 ? 0 : index - 1]?.focus();
+  return true;
+}

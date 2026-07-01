@@ -8,7 +8,14 @@ import {
 import { useActiveOrganization } from "@/lib/useActiveConnection";
 import { openExternalUrl } from "@/lib/openExternal";
 import { FilterableSelect } from "@/features/pipelines/FilterableSelect";
-import { blameUrl, ROOT, webUrl, type RepoOption, type Selection } from "./codeBrowseShared";
+import {
+  ancestorFolders,
+  blameUrl,
+  ROOT,
+  webUrl,
+  type RepoOption,
+  type Selection,
+} from "./codeBrowseShared";
 import {
   getFavoriteRepositoryIds,
   getLastSelection,
@@ -55,14 +62,18 @@ export function CodeBrowseView() {
   }, [organizationId]);
 
   // Restore the last opened repository once the repository list loads, if the
-  // user has not already picked one this session and it still exists.
+  // user has not already picked one this session and it still exists. The last
+  // opened path is held aside and applied once the branch has settled.
   const [restoredBranch, setRestoredBranch] = useState<string | null>(null);
+  const pendingSelectionRef = useRef<Selection | null>(null);
   useEffect(() => {
     if (repositoryId || repositories.length === 0) return;
     const last = getLastSelection(organizationId);
     if (last && repositories.some((option) => option.repositoryId === last.repositoryId)) {
       setRepositoryId(last.repositoryId);
       setRestoredBranch(last.branch || null);
+      pendingSelectionRef.current =
+        last.path && last.path !== "/" ? { path: last.path, isFolder: last.isFolder } : null;
     }
   }, [organizationId, repositories, repositoryId]);
 
@@ -99,13 +110,6 @@ export function CodeBrowseView() {
     setRestoredBranch(null);
   }, [branches, restoredBranch]);
 
-  // Remember the open repository/branch so the view reopens here next time.
-  useEffect(() => {
-    if (organizationId && repositoryId && branch) {
-      setLastSelection(organizationId, repositoryId, branch);
-    }
-  }, [organizationId, repositoryId, branch]);
-
   const [selected, setSelected] = useState<Selection>(ROOT);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [filterText, setFilterText] = useState("");
@@ -114,10 +118,29 @@ export function CodeBrowseView() {
   const [baseBranch, setBaseBranch] = useState("");
   const treeRef = useRef<HTMLDivElement | null>(null);
 
-  // Reset navigation state when the repository or branch changes.
+  // Remember the open repository/branch/path so the view reopens here next time.
   useEffect(() => {
-    setSelected(ROOT);
-    setExpanded(new Set());
+    if (organizationId && repositoryId && branch) {
+      setLastSelection(organizationId, repositoryId, branch, selected.path, selected.isFolder);
+    }
+  }, [organizationId, repositoryId, branch, selected]);
+
+  // Reset navigation state when the repository or branch changes. A restored
+  // selection (held until the branch settles) replaces the root and expands
+  // its ancestor folders so the tree shows where the user left off.
+  useEffect(() => {
+    const pending = branch ? pendingSelectionRef.current : null;
+    if (branch) pendingSelectionRef.current = null;
+    setSelected(pending ?? ROOT);
+    setExpanded(
+      pending
+        ? new Set(
+            pending.isFolder
+              ? [...ancestorFolders(pending.path), pending.path]
+              : ancestorFolders(pending.path),
+          )
+        : new Set(),
+    );
     setFilterText("");
     setSearchQuery("");
     setTab("contents");
@@ -175,6 +198,12 @@ export function CodeBrowseView() {
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       rows[index <= 0 ? 0 : index - 1]?.focus();
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      rows[0]?.focus();
+    } else if (event.key === "End") {
+      event.preventDefault();
+      rows[rows.length - 1]?.focus();
     } else if (event.key === "ArrowRight" && index >= 0) {
       const row = rows[index];
       if (row.dataset.folder === "true") {
@@ -322,7 +351,13 @@ export function CodeBrowseView() {
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
                 <div className="flex min-w-0 items-center gap-3">
-                  <Breadcrumb path={selected.path} repositoryName={repo.repositoryName} />
+                  <Breadcrumb
+                    path={selected.path}
+                    repositoryName={repo.repositoryName}
+                    onNavigate={(target) =>
+                      target === "/" ? setSelected(ROOT) : openFolder(target)
+                    }
+                  />
                   <div className="flex shrink-0 gap-1 text-sm">
                     <TabButton active={tab === "contents"} onClick={() => setTab("contents")}>
                       Contents
@@ -427,16 +462,52 @@ function TabButton({
   );
 }
 
-function Breadcrumb({ path, repositoryName }: { path: string; repositoryName: string }) {
+// The current path as a clickable breadcrumb: the repository name navigates to
+// the root, each intermediate segment to that folder. The last segment is the
+// current location and stays plain text.
+function Breadcrumb({
+  path,
+  repositoryName,
+  onNavigate,
+}: {
+  path: string;
+  repositoryName: string;
+  onNavigate: (path: string) => void;
+}) {
   const segments = path.split("/").filter(Boolean);
   return (
-    <div className="flex min-w-0 items-center gap-1 truncate text-sm">
-      <span className="font-medium">{repositoryName}</span>
-      {segments.map((segment, index) => (
-        <span key={index} className="text-muted-foreground">
-          / {segment}
-        </span>
-      ))}
-    </div>
+    <nav aria-label="Current path" className="flex min-w-0 items-center gap-1 truncate text-sm">
+      {segments.length === 0 ? (
+        <span className="font-medium">{repositoryName}</span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onNavigate("/")}
+          className="font-medium hover:underline"
+        >
+          {repositoryName}
+        </button>
+      )}
+      {segments.map((segment, index) => {
+        const target = "/" + segments.slice(0, index + 1).join("/");
+        const isLast = index === segments.length - 1;
+        return (
+          <span key={target} className="flex items-center gap-1 text-muted-foreground">
+            <span aria-hidden="true">/</span>
+            {isLast ? (
+              <span>{segment}</span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onNavigate(target)}
+                className="hover:text-foreground hover:underline"
+              >
+                {segment}
+              </button>
+            )}
+          </span>
+        );
+      })}
+    </nav>
   );
 }
