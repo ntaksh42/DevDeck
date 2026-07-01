@@ -13,10 +13,10 @@ use crate::code_search::{
     CodeContextResult, CodeSearchResults, CodeSearchService, GetCodeContextInput, SearchCodeInput,
 };
 use crate::commits::{
-    CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
-    CommitRepositoryOption, CommitSearchResult, CommitService, GetCommitChangesInput,
-    GetCommitFileDiffInput, GetCommitPullRequestsInput, ListCommitRepositoriesInput,
-    SearchCommitsInput,
+    CherryPickCommitInput, CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff,
+    CommitPullRequest, CommitRefOperationResult, CommitRepositoryOption, CommitSearchResult,
+    CommitService, GetCommitChangesInput, GetCommitFileDiffInput, GetCommitPullRequestsInput,
+    ListCommitRepositoriesInput, RevertCommitInput, SearchCommitsInput,
 };
 use crate::db::AppDatabase;
 use crate::error::Result;
@@ -103,6 +103,7 @@ impl Provider for AzdoProvider {
             pipelines: true,
             work_item_priority: true,
             resolve_review_threads: true,
+            commit_mutations: true,
         }
     }
 
@@ -254,6 +255,17 @@ impl Provider for AzdoProvider {
         input: GetCommitPullRequestsInput,
     ) -> Result<Vec<CommitPullRequest>> {
         self.commits.get_commit_pull_requests(input).await
+    }
+
+    async fn cherry_pick_commit(
+        &self,
+        input: CherryPickCommitInput,
+    ) -> Result<CommitRefOperationResult> {
+        self.commits.cherry_pick_commit(input).await
+    }
+
+    async fn revert_commit(&self, input: RevertCommitInput) -> Result<CommitRefOperationResult> {
+        self.commits.revert_commit(input).await
     }
 
     async fn get_pull_request_review(&self, input: PrLocator) -> Result<PullRequestReview> {

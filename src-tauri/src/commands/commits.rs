@@ -1,10 +1,11 @@
 use tauri::State;
 
-use crate::app_state::AppState;
+use crate::app_state::{ensure_write_enabled, AppState};
 use crate::commits::{
-    CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
-    CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput, GetCommitFileDiffInput,
-    GetCommitPullRequestsInput, ListCommitRepositoriesInput, SearchCommitsInput,
+    CherryPickCommitInput, CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff,
+    CommitPullRequest, CommitRefOperationResult, CommitRepositoryOption, CommitSearchResult,
+    GetCommitChangesInput, GetCommitFileDiffInput, GetCommitPullRequestsInput,
+    ListCommitRepositoriesInput, RevertCommitInput, SearchCommitsInput,
 };
 use crate::error::Result;
 
@@ -68,4 +69,24 @@ pub async fn get_commit_pull_requests(
         .await?
         .get_commit_pull_requests(input)
         .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn cherry_pick_commit(
+    input: CherryPickCommitInput,
+    state: State<'_, AppState>,
+) -> Result<CommitRefOperationResult> {
+    ensure_write_enabled(&state).await?;
+    state.provider().await?.cherry_pick_commit(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn revert_commit(
+    input: RevertCommitInput,
+    state: State<'_, AppState>,
+) -> Result<CommitRefOperationResult> {
+    ensure_write_enabled(&state).await?;
+    state.provider().await?.revert_commit(input).await
 }

@@ -10,12 +10,13 @@ pub mod pr_status;
 pub mod work_items;
 
 pub use auth::{AdoCredentialProvider, AzureCliProvider, PatProvider};
-pub use client::{AdoClient, RetryPolicy};
+pub use client::{AdoClient, AsyncRefOperationPollPolicy, RetryPolicy};
 pub use code_search::{CodeSearchRequest, CodeSearchResponse, CodeSearchResult};
 pub use error::{AdoError, Result};
 pub use git::{
-    CommitSearchCriteria, GitCommitRef, GitItem, GitPullRequest, GitRef, GitRepository,
-    GitUserDate, IdentityRef, IdentityRefWithVote, PullRequestStatus, TeamProject,
+    CommitSearchCriteria, GitAsyncOperationStatus, GitAsyncRefOperationDetail, GitCherryPick,
+    GitCommitRef, GitItem, GitPullRequest, GitRef, GitRepository, GitRevert, GitUserDate,
+    IdentityRef, IdentityRefWithVote, PullRequestStatus, TeamProject,
 };
 pub use identity::{AuthenticatedUser, ConnectionData, Identity, IdentityPickerIdentity};
 pub use pipelines::{

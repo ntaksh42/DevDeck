@@ -132,6 +132,22 @@ export function dispatchExt(command: string, args: unknown): unknown {
       const input = (args as { input?: { commitId?: string } } | undefined)?.input;
       return demoCommitPullRequests(input?.commitId);
     }
+    case "cherry_pick_commit":
+    case "revert_commit": {
+      const input = (
+        args as { input?: { newBranchName?: string; repositoryName?: string } } | undefined
+      )?.input;
+      const newBranchName = input?.newBranchName ?? "demo-branch";
+      return {
+        status: "completed",
+        newBranchName,
+        newBranchWebUrl: `https://dev.azure.com/contoso/Demo%20Project/_git/${
+          input?.repositoryName ?? "demo-repo"
+        }?version=GB${encodeURIComponent(newBranchName)}`,
+        conflict: false,
+        failureMessage: null,
+      };
+    }
     case "cancel_operation":
       // Demo searches resolve instantly, so there is nothing to cancel.
       return null;

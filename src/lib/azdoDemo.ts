@@ -129,6 +129,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
           pipelines: true,
           workItemPriority: true,
           resolveReviewThreads: true,
+          commitMutations: true,
         },
       };
     case "get_app_settings":

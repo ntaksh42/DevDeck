@@ -97,6 +97,7 @@ const providerCapabilitiesSchema = z.object({
   pipelines: z.boolean(),
   workItemPriority: z.boolean(),
   resolveReviewThreads: z.boolean(),
+  commitMutations: z.boolean(),
 });
 
 const providerInfoSchema = z.object({

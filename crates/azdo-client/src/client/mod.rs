@@ -59,12 +59,38 @@ impl Default for RetryPolicy {
     }
 }
 
+/// How long to keep polling an async ref operation (cherry-pick/revert) for a
+/// terminal status before giving up and returning the last known state. Azure
+/// DevOps runs these server-side with no webhook/callback, so the client must
+/// poll `GET .../cherryPicks/{id}` (or `.../reverts/{id}`) itself.
+#[derive(Debug, Clone, Copy)]
+pub struct AsyncRefOperationPollPolicy {
+    pub max_attempts: usize,
+    pub interval: Duration,
+}
+
+impl AsyncRefOperationPollPolicy {
+    pub(crate) fn attempts(self) -> usize {
+        self.max_attempts.max(1)
+    }
+}
+
+impl Default for AsyncRefOperationPollPolicy {
+    fn default() -> Self {
+        Self {
+            max_attempts: 20,
+            interval: Duration::from_millis(1000),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct AdoClient {
     pub(crate) http: reqwest::Client,
     pub(crate) base_url: Url,
     pub(crate) auth: Arc<dyn AdoCredentialProvider>,
     pub(crate) retry_policy: RetryPolicy,
+    pub(crate) poll_policy: AsyncRefOperationPollPolicy,
 }
 
 #[derive(Debug, Clone)]
@@ -87,6 +113,7 @@ impl AdoClient {
             base_url,
             auth,
             retry_policy: RetryPolicy::default(),
+            poll_policy: AsyncRefOperationPollPolicy::default(),
         })
     }
 
@@ -97,6 +124,11 @@ impl AdoClient {
 
     pub fn with_retry_policy(mut self, retry_policy: RetryPolicy) -> Self {
         self.retry_policy = retry_policy;
+        self
+    }
+
+    pub fn with_poll_policy(mut self, poll_policy: AsyncRefOperationPollPolicy) -> Self {
+        self.poll_policy = poll_policy;
         self
     }
 }

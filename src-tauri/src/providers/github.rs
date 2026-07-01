@@ -13,9 +13,10 @@ use crate::code_search::{
     CodeContextResult, CodeSearchResults, GetCodeContextInput, SearchCodeInput,
 };
 use crate::commits::{
-    CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
-    CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput, GetCommitFileDiffInput,
-    GetCommitPullRequestsInput, ListCommitRepositoriesInput, SearchCommitsInput,
+    CherryPickCommitInput, CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff,
+    CommitPullRequest, CommitRefOperationResult, CommitRepositoryOption, CommitSearchResult,
+    GetCommitChangesInput, GetCommitFileDiffInput, GetCommitPullRequestsInput,
+    ListCommitRepositoriesInput, RevertCommitInput, SearchCommitsInput,
 };
 use crate::db::Organization;
 use crate::error::{AppError, Result};
@@ -82,6 +83,7 @@ impl Provider for GithubProvider {
             pipelines: false,
             work_item_priority: false,
             resolve_review_threads: true,
+            commit_mutations: false,
         }
     }
 
@@ -254,6 +256,21 @@ impl Provider for GithubProvider {
         input: GetCommitPullRequestsInput,
     ) -> Result<Vec<CommitPullRequest>> {
         github::commits::get_commit_pull_requests(&self.org, &self.secrets, input).await
+    }
+
+    async fn cherry_pick_commit(
+        &self,
+        _input: CherryPickCommitInput,
+    ) -> Result<CommitRefOperationResult> {
+        Err(AppError::NotSupported(
+            "cherry-pick is not available for GitHub".to_string(),
+        ))
+    }
+
+    async fn revert_commit(&self, _input: RevertCommitInput) -> Result<CommitRefOperationResult> {
+        Err(AppError::NotSupported(
+            "revert is not available for GitHub".to_string(),
+        ))
     }
 
     async fn get_pull_request_review(&self, input: PrLocator) -> Result<PullRequestReview> {

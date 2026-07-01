@@ -25,9 +25,10 @@ use crate::code_search::{
     CodeContextResult, CodeSearchResults, GetCodeContextInput, SearchCodeInput,
 };
 use crate::commits::{
-    CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
-    CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput, GetCommitFileDiffInput,
-    GetCommitPullRequestsInput, ListCommitRepositoriesInput, SearchCommitsInput,
+    CherryPickCommitInput, CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff,
+    CommitPullRequest, CommitRefOperationResult, CommitRepositoryOption, CommitSearchResult,
+    GetCommitChangesInput, GetCommitFileDiffInput, GetCommitPullRequestsInput,
+    ListCommitRepositoriesInput, RevertCommitInput, SearchCommitsInput,
 };
 use crate::error::Result;
 use crate::pipelines::{
@@ -80,6 +81,9 @@ pub struct ProviderCapabilities {
     pub work_item_priority: bool,
     /// Resolving inline review threads (GitHub: via GraphQL; Azure DevOps: yes).
     pub resolve_review_threads: bool,
+    /// Cherry-pick/revert from the commit preview (Azure DevOps only; GitHub
+    /// has no equivalent single-call API).
+    pub commit_mutations: bool,
 }
 
 /// The platform name exposed to the frontend, derived from `kind`.
@@ -172,6 +176,11 @@ pub(crate) trait Provider: Send + Sync {
         &self,
         input: GetCommitPullRequestsInput,
     ) -> Result<Vec<CommitPullRequest>>;
+    async fn cherry_pick_commit(
+        &self,
+        input: CherryPickCommitInput,
+    ) -> Result<CommitRefOperationResult>;
+    async fn revert_commit(&self, input: RevertCommitInput) -> Result<CommitRefOperationResult>;
 
     // --- Pull request review ---
     async fn get_pull_request_review(&self, input: PrLocator) -> Result<PullRequestReview>;
