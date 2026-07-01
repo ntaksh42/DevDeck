@@ -2,7 +2,7 @@ use serde_json::json;
 
 use crate::client::AdoClient;
 use crate::error::Result;
-use crate::git::{GitCommitRef, IdentityRefWithVote, ListResponse};
+use crate::git::{GitCommitRef, IdentityRefWithVote, ListResponse, WebApiTagDefinition};
 
 use super::types::{
     GitChangeEntry, GitItemContent, GitIteration, GitIterationChanges, GitPullRequestDetail,
@@ -224,6 +224,36 @@ impl AdoClient {
     ) -> Result<()> {
         let path = format!(
             "{project_id}/_apis/git/repositories/{repository_id}/pullRequests/{pull_request_id}/reviewers/{reviewer_id}"
+        );
+        self.delete(&path, &[("api-version", "7.1-preview")]).await
+    }
+
+    /// Adds a label to a pull request by name (issue #386).
+    pub async fn add_pull_request_label(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        pull_request_id: i64,
+        name: &str,
+    ) -> Result<WebApiTagDefinition> {
+        let path = format!(
+            "{project_id}/_apis/git/repositories/{repository_id}/pullRequests/{pull_request_id}/labels"
+        );
+        let body = json!({ "name": name });
+        self.post_json(&path, &[("api-version", "7.1-preview")], &body)
+            .await
+    }
+
+    /// Removes a label from a pull request by its id (issue #386).
+    pub async fn remove_pull_request_label(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        pull_request_id: i64,
+        label_id: &str,
+    ) -> Result<()> {
+        let path = format!(
+            "{project_id}/_apis/git/repositories/{repository_id}/pullRequests/{pull_request_id}/labels/{label_id}"
         );
         self.delete(&path, &[("api-version", "7.1-preview")]).await
     }

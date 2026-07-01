@@ -98,6 +98,9 @@ pub async fn get_review(
         is_draft: detail.draft,
         auto_complete: false,
         reviewers,
+        // GitHub PR labels are not mapped yet (issue #386 scoped label
+        // support to Azure DevOps connections for this change).
+        labels: Vec::new(),
         threads,
     })
 }

@@ -81,6 +81,43 @@ impl AdoClient {
         Ok(response.value)
     }
 
+    /// Lists branch statistics for a repository: each branch's tip commit and
+    /// its ahead/behind counts relative to the repository's base (default)
+    /// branch (issue #398).
+    pub async fn list_branch_stats(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+    ) -> Result<Vec<GitBranchStats>> {
+        let path = format!("{project_id}/_apis/git/repositories/{repository_id}/stats/branches");
+        let response: ListResponse<GitBranchStats> = self
+            .get_json(&path, &[("api-version", "7.1-preview")])
+            .await?;
+        Ok(response.value)
+    }
+
+    /// Creates a pull request (issue #387). `source_ref_name`/`target_ref_name`
+    /// must be full refs (e.g. `refs/heads/main`).
+    pub async fn create_pull_request(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        source_ref_name: &str,
+        target_ref_name: &str,
+        title: &str,
+        description: &str,
+    ) -> Result<GitPullRequest> {
+        let path = format!("{project_id}/_apis/git/repositories/{repository_id}/pullrequests");
+        let body = serde_json::json!({
+            "sourceRefName": source_ref_name,
+            "targetRefName": target_ref_name,
+            "title": title,
+            "description": description,
+        });
+        self.post_json(&path, &[("api-version", "7.1-preview")], &body)
+            .await
+    }
+
     /// Lists the direct children (one level) of a folder at the tip of a branch.
     /// `scope_path` is the folder to list, e.g. `/` or `/src`. When
     /// `include_latest_commit` is set, each item carries its last commit via

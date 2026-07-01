@@ -57,6 +57,19 @@ export function renderPrSearchCell(key: PrSearchColumnKey, pr: PullRequestSummar
           {pr.sourceRefName} → {pr.targetRefName}
         </span>
       );
+    case "labels":
+      return pr.labels.length === 0 ? null : (
+        <span className="flex min-w-0 flex-wrap gap-1 truncate" title={pr.labels.join(", ")}>
+          {pr.labels.map((label) => (
+            <span
+              key={label}
+              className="rounded-full border border-border bg-secondary px-1.5 py-0.5 text-[10px] text-foreground"
+            >
+              {label}
+            </span>
+          ))}
+        </span>
+      );
   }
 }
 

@@ -4,6 +4,7 @@ import type {
   AddWorkItemCommentInput,
   AppSettings,
   AssignWorkItemsInput,
+  CreatePullRequestInput,
   DeleteWorkItemCommentInput,
   DeletePullRequestCommentInput,
   EditPullRequestCommentInput,
@@ -180,6 +181,13 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       const input = (args as { input?: SearchPullRequestsInput } | undefined)?.input;
       return demoPullRequests(input);
     }
+    case "create_pull_request": {
+      const input = (args as { input?: CreatePullRequestInput } | undefined)?.input;
+      return {
+        pullRequestId: 9100,
+        webUrl: `https://dev.azure.com/contoso/Platform/_git/${input?.repositoryId ?? "azdo-dashboard"}/pullrequest/9100`,
+      };
+    }
     case "list_my_review_pull_requests": {
       const snoozed = demoSnoozedKeys("pull_request");
       return demoReviewPullRequests().filter(
@@ -222,6 +230,9 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       if (!input) throw new Error("missing input");
       return demoDeletePrComment(input);
     }
+    case "add_pull_request_label":
+    case "remove_pull_request_label":
+      return null;
     case "set_pull_request_thread_status": {
       const input = (args as { input?: SetPullRequestThreadStatusInput } | undefined)?.input;
       if (!input) throw new Error("missing input");

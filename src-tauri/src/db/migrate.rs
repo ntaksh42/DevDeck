@@ -499,5 +499,20 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         }
         conn.execute_batch("PRAGMA user_version = 17;")?;
     }
+    if current < 18 {
+        // PR search can now show and filter by label (issue #386). Labels are
+        // stored as a JSON array of names; existing rows default to an empty
+        // array and are filled in on the next sync. The table-exists guard
+        // keeps partial historical databases from tripping over a
+        // not-yet-created pull_requests table.
+        if table_exists(conn, "pull_requests")?
+            && !table_column_exists(conn, "pull_requests", "labels")?
+        {
+            conn.execute_batch(
+                "ALTER TABLE pull_requests ADD COLUMN labels TEXT NOT NULL DEFAULT '[]';",
+            )?;
+        }
+        conn.execute_batch("PRAGMA user_version = 18;")?;
+    }
     Ok(())
 }

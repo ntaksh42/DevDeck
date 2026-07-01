@@ -43,6 +43,14 @@ impl PrReviewService {
                     is_required: reviewer.is_required,
                 })
                 .collect(),
+            labels: detail
+                .labels
+                .into_iter()
+                .map(|label| PrLabel {
+                    id: label.id,
+                    name: label.name,
+                })
+                .collect(),
             threads: map_threads(threads, me),
         })
     }

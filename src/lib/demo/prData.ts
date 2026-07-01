@@ -43,6 +43,7 @@ export function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSe
       closedDate: null,
       isDraft: false,
       webUrl: "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/pullrequest/42",
+      labels: ["needs-review"],
     },
     {
       organizationId: "contoso",
@@ -60,6 +61,7 @@ export function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSe
       closedDate: null,
       isDraft: false,
       webUrl: "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/103",
+      labels: ["hotfix", "security"],
     },
     {
       organizationId: "contoso",
@@ -77,6 +79,7 @@ export function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSe
       closedDate: ago(3 * day),
       isDraft: false,
       webUrl: "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/99",
+      labels: [],
     },
     {
       organizationId: "contoso",
@@ -94,6 +97,7 @@ export function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSe
       closedDate: null,
       isDraft: false,
       webUrl: "https://dev.azure.com/contoso/Mobile/_git/android-app/pullrequest/189",
+      labels: ["hotfix"],
     },
     {
       organizationId: "contoso",
@@ -111,6 +115,7 @@ export function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSe
       closedDate: ago(9 * day),
       isDraft: false,
       webUrl: "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/pullrequest/88",
+      labels: [],
     },
     {
       organizationId: "contoso",
@@ -128,6 +133,7 @@ export function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSe
       closedDate: null,
       isDraft: true,
       webUrl: "https://dev.azure.com/contoso/Mobile/_git/android-app/pullrequest/180",
+      labels: ["needs-review"],
     },
     {
       organizationId: "contoso",
@@ -145,6 +151,7 @@ export function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSe
       closedDate: null,
       isDraft: false,
       webUrl: "https://dev.azure.com/contoso/Infrastructure/_git/terraform-aws/pullrequest/55",
+      labels: [],
     },
   ];
 
@@ -452,6 +459,10 @@ export function demoPrReviewDetail(prId: number): PullRequestReview {
         isRequired: false,
         isMe: false,
       },
+    ],
+    labels: [
+      { id: "demo-label-1", name: "hotfix" },
+      { id: "demo-label-2", name: "needs-docs" },
     ],
     threads: demoThreadsFor(prId),
   };

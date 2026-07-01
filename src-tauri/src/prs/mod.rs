@@ -8,6 +8,8 @@ mod util;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_create_pr;
 
 pub(crate) use notifications::*;
 pub(crate) use search::*;

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use url::Url;
-use wiremock::matchers::{method, path, query_param, query_param_is_missing};
+use wiremock::matchers::{body_partial_json, method, path, query_param, query_param_is_missing};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use super::*;
@@ -280,4 +280,82 @@ async fn list_pull_requests_closed_in_range_pages_and_filters_by_close_time() {
     assert_eq!(prs.len(), 3);
     assert_eq!(prs[0].pull_request_id, 50);
     assert_eq!(prs[2].pull_request_id, 52);
+}
+
+#[tokio::test]
+async fn list_pull_requests_maps_labels() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(
+            "/project-1/_apis/git/repositories/repo-1/pullrequests",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "count": 1,
+            "value": [{
+                "pullRequestId": 42,
+                "title": "Add dashboard",
+                "status": "active",
+                "creationDate": "2026-05-24T00:00:00Z",
+                "sourceRefName": "refs/heads/feature/dashboard",
+                "targetRefName": "refs/heads/main",
+                "labels": [{ "id": "lbl-1", "name": "hotfix", "active": true }]
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    let prs = test_client(&server)
+        .await
+        .list_pull_requests("project-1", "repo-1", PullRequestStatus::Active)
+        .await
+        .unwrap();
+    assert_eq!(prs[0].labels.len(), 1);
+    assert_eq!(prs[0].labels[0].name, "hotfix");
+}
+
+#[tokio::test]
+async fn create_pull_request_posts_refs_and_title() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(
+            "/project-1/_apis/git/repositories/repo-1/pullrequests",
+        ))
+        .and(body_partial_json(serde_json::json!({
+            "sourceRefName": "refs/heads/feature/x",
+            "targetRefName": "refs/heads/main",
+            "title": "New PR"
+        })))
+        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({
+            "pullRequestId": 77,
+            "title": "New PR",
+            "status": "active",
+            "creationDate": "2026-05-24T00:00:00Z",
+            "repository": {
+                "id": "repo-1",
+                "name": "azdo-dashboard",
+                "project": { "id": "project-1", "name": "Platform" }
+            },
+            "sourceRefName": "refs/heads/feature/x",
+            "targetRefName": "refs/heads/main"
+        })))
+        .mount(&server)
+        .await;
+
+    let pr = test_client(&server)
+        .await
+        .create_pull_request(
+            "project-1",
+            "repo-1",
+            "refs/heads/feature/x",
+            "refs/heads/main",
+            "New PR",
+            "Body",
+        )
+        .await
+        .unwrap();
+    assert_eq!(pr.pull_request_id, 77);
+    assert_eq!(
+        pr.repository.and_then(|r| r.project).map(|p| p.name),
+        Some("Platform".to_string())
+    );
 }

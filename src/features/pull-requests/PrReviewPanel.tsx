@@ -2,10 +2,12 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import {
+  addPullRequestLabel,
   commandErrorMessage,
   getAppSettings,
   getPullRequestReview,
   prLocator,
+  removePullRequestLabel,
   removePullRequestReviewer,
   setPullRequestReviewerRequired,
   type ReviewPullRequestSummary,
@@ -100,6 +102,26 @@ export function PrReviewPanel({
   });
   const reviewerActionsBusy = reviewerRequiredMutation.isPending || removeReviewerMutation.isPending;
 
+  // Label management (issue #386): same pattern as reviewer mutations above.
+  const [labelError, setLabelError] = useState<string | null>(null);
+  const addLabelMutation = useMutation({
+    mutationFn: addPullRequestLabel,
+    onSuccess: () => {
+      setLabelError(null);
+      invalidateReviewerData();
+    },
+    onError: (error) => setLabelError(commandErrorMessage(error)),
+  });
+  const removeLabelMutation = useMutation({
+    mutationFn: removePullRequestLabel,
+    onSuccess: () => {
+      setLabelError(null);
+      invalidateReviewerData();
+    },
+    onError: (error) => setLabelError(commandErrorMessage(error)),
+  });
+  const labelMutationBusy = addLabelMutation.isPending || removeLabelMutation.isPending;
+
   // Esc / ← step back to the grid from anywhere in the preview that is not a
   // text field (composer Esc is handled locally and stops propagation first).
   function handlePreviewKeyDown(event: React.KeyboardEvent) {
@@ -137,10 +159,24 @@ export function PrReviewPanel({
             removeReviewerMutation.mutate({ ...prLocator(selectedPr), reviewerId: reviewer.id });
           }
         }}
+        labelMutationBusy={labelMutationBusy}
+        onAddLabel={(name) => {
+          if (!selectedPr) return;
+          addLabelMutation.mutate({ ...prLocator(selectedPr), name });
+        }}
+        onRemoveLabel={(label) => {
+          if (!selectedPr) return;
+          removeLabelMutation.mutate({ ...prLocator(selectedPr), labelId: label.id });
+        }}
       />
       {reviewerError ? (
         <div className="shrink-0 border-b border-border bg-red-50 px-3 py-1 text-xs text-destructive dark:bg-red-950/40">
           {reviewerError}
+        </div>
+      ) : null}
+      {labelError ? (
+        <div className="shrink-0 border-b border-border bg-red-50 px-3 py-1 text-xs text-destructive dark:bg-red-950/40">
+          {labelError}
         </div>
       ) : null}
 

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -5,11 +6,13 @@ import {
   Maximize2,
   MessageSquare,
   Minimize2,
+  Plus,
   X,
   XCircle,
 } from "lucide-react";
 import { formatRelativeDate } from "@/lib/utils";
 import type {
+  PrLabel,
   PrReviewer,
   PullRequestReview,
   ReviewPullRequestSummary,
@@ -173,6 +176,9 @@ export function PrReviewHeader({
   reviewerActionsBusy = false,
   onToggleReviewerRequired,
   onRemoveReviewer,
+  labelMutationBusy = false,
+  onAddLabel,
+  onRemoveLabel,
 }: {
   selectedPr: ReviewPullRequestSummary | null;
   review: PullRequestReview | null;
@@ -181,7 +187,11 @@ export function PrReviewHeader({
   reviewerActionsBusy?: boolean;
   onToggleReviewerRequired?: (reviewer: PrReviewer) => void;
   onRemoveReviewer?: (reviewer: PrReviewer) => void;
+  labelMutationBusy?: boolean;
+  onAddLabel?: (name: string) => void;
+  onRemoveLabel?: (label: PrLabel) => void;
 }) {
+  const [newLabel, setNewLabel] = useState("");
   const maximizeButton = onToggleMaximize ? (
     <button
       type="button"
@@ -302,6 +312,67 @@ export function PrReviewHeader({
               ) : null}
             </span>
           ))}
+        </div>
+      ) : null}
+      {review && onAddLabel && onRemoveLabel ? (
+        <div className="flex flex-wrap items-center gap-1">
+          {review.labels.map((label) => (
+            <span
+              key={label.id}
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-secondary px-1.5 py-0.5 text-[11px] text-foreground"
+            >
+              {label.name}
+              <button
+                type="button"
+                disabled={labelMutationBusy}
+                onClick={() => onRemoveLabel(label)}
+                aria-label={`Remove label ${label.name}`}
+                title="Remove label"
+                className="rounded hover:text-destructive disabled:opacity-50"
+              >
+                <X className="h-3 w-3" aria-hidden="true" />
+              </button>
+            </span>
+          ))}
+          <input
+            value={newLabel}
+            onChange={(event) => setNewLabel(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                event.stopPropagation();
+                const name = newLabel.trim();
+                if (name) {
+                  onAddLabel(name);
+                  setNewLabel("");
+                }
+              } else if (event.key === "Escape" && newLabel) {
+                event.stopPropagation();
+                setNewLabel("");
+              }
+            }}
+            placeholder="Add label…"
+            aria-label="Add label"
+            className="h-5 w-24 rounded border border-input bg-background px-1 text-[11px] outline-none focus:ring-2 focus:ring-ring"
+          />
+          {newLabel.trim() ? (
+            <button
+              type="button"
+              disabled={labelMutationBusy}
+              onClick={() => {
+                const name = newLabel.trim();
+                if (name) {
+                  onAddLabel(name);
+                  setNewLabel("");
+                }
+              }}
+              aria-label="Add label"
+              title="Add label"
+              className="inline-flex items-center gap-0.5 rounded border border-border px-1 py-0.5 text-[11px] hover:bg-accent disabled:opacity-50"
+            >
+              <Plus className="h-3 w-3" aria-hidden="true" /> Add
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

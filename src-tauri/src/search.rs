@@ -219,6 +219,7 @@ mod tests {
                 target_ref_name: "refs/heads/main".to_string(),
                 web_url: None,
                 is_draft: false,
+                labels: Vec::new(),
             }],
         )
         .unwrap();

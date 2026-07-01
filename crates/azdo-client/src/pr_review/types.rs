@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
-use crate::git::{IdentityRef, IdentityRefWithVote};
+use crate::git::{IdentityRef, IdentityRefWithVote, WebApiTagDefinition};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -21,6 +21,10 @@ pub struct GitPullRequestDetail {
     /// Tip of the source branch; required when completing a PR to guard against
     /// merging a stale revision.
     pub last_merge_source_commit: Option<GitCommitRefId>,
+    /// Labels (tags) on the pull request (issue #386). Absent on older
+    /// responses, so this defaults to empty rather than failing to deserialize.
+    #[serde(default)]
+    pub labels: Vec<WebApiTagDefinition>,
 }
 
 #[derive(Debug, Deserialize)]

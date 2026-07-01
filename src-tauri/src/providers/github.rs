@@ -6,8 +6,8 @@
 use async_trait::async_trait;
 
 use crate::code_browse::{
-    GetFileInput, ListBranchesInput, ListHistoryInput, ListTreeInput, RepoBranch, RepoCommitInfo,
-    RepoFile, RepoTreeItem,
+    BranchSummary, GetFileInput, ListBranchesInput, ListHistoryInput, ListTreeInput, RepoBranch,
+    RepoCommitInfo, RepoFile, RepoTreeItem,
 };
 use crate::code_search::{
     CodeContextResult, CodeSearchResults, GetCodeContextInput, SearchCodeInput,
@@ -29,16 +29,18 @@ use crate::pipelines::{
     QueuePipelineRunInput, RerunPipelineRunInput, UpdatePipelineApprovalInput,
 };
 use crate::pr_review::{
-    DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
-    PostPullRequestCommentInput, PrCommit, PrDetailsResult, PrFileDiff, PrLocator, PrReviewer,
-    PrStatusResult, PrThread, PullRequestChanges, PullRequestReview,
-    RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
-    SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
-    SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
+    AddPullRequestLabelInput, DeletePullRequestCommentInput, EditPullRequestCommentInput,
+    GetPullRequestFileDiffInput, PostPullRequestCommentInput, PrCommit, PrDetailsResult,
+    PrFileDiff, PrLocator, PrReviewer, PrStatusResult, PrThread, PullRequestChanges,
+    PullRequestReview, RemovePullRequestLabelInput, RemovePullRequestReviewerInput,
+    SearchPullRequestMentionsInput, SetPullRequestReviewerRequiredInput,
+    SetPullRequestThreadStatusInput, SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput,
+    UpdatePullRequestInput,
 };
 use crate::prs::{
-    ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestSummary,
-    PullRequestSearchResult, ReviewPullRequestSummary, SearchPullRequestsInput,
+    CreatePullRequestInput, CreatePullRequestResult, ListMyCreatedPullRequestsInput,
+    ListMyReviewPullRequestsInput, MyCreatedPullRequestSummary, PullRequestSearchResult,
+    ReviewPullRequestSummary, SearchPullRequestsInput,
 };
 use crate::search::{SearchAllInput, SearchAllResult, SearchAllTotals};
 use crate::secrets::SecretStore;
@@ -126,6 +128,15 @@ impl Provider for GithubProvider {
         _input: ListMyReviewPullRequestsInput,
     ) -> Result<Vec<ReviewPullRequestSummary>> {
         github::prs::list_my_reviews(&self.org, &self.secrets).await
+    }
+
+    async fn create_pull_request(
+        &self,
+        _input: CreatePullRequestInput,
+    ) -> Result<CreatePullRequestResult> {
+        Err(AppError::NotSupported(
+            "creating pull requests is not available for GitHub connections yet".to_string(),
+        ))
     }
 
     async fn search_work_items(&self, input: SearchWorkItemsInput) -> Result<Vec<WorkItemSummary>> {
@@ -342,6 +353,18 @@ impl Provider for GithubProvider {
         github::pr_review::delete_comment(&self.org, &self.secrets, input).await
     }
 
+    async fn add_pull_request_label(&self, _input: AddPullRequestLabelInput) -> Result<()> {
+        Err(AppError::NotSupported(
+            "pull request labels are not available for GitHub connections yet".to_string(),
+        ))
+    }
+
+    async fn remove_pull_request_label(&self, _input: RemovePullRequestLabelInput) -> Result<()> {
+        Err(AppError::NotSupported(
+            "pull request labels are not available for GitHub connections yet".to_string(),
+        ))
+    }
+
     async fn search_code(&self, input: SearchCodeInput) -> Result<CodeSearchResults> {
         github::code::search(&self.org, &self.secrets, &input).await
     }
@@ -374,6 +397,12 @@ impl Provider for GithubProvider {
     }
 
     async fn list_repo_history(&self, _input: ListHistoryInput) -> Result<Vec<RepoCommitInfo>> {
+        Err(AppError::NotSupported(
+            "code browsing is not available for GitHub yet".to_string(),
+        ))
+    }
+
+    async fn list_branch_summaries(&self, _input: ListBranchesInput) -> Result<Vec<BranchSummary>> {
         Err(AppError::NotSupported(
             "code browsing is not available for GitHub yet".to_string(),
         ))

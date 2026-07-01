@@ -99,6 +99,8 @@ pub struct PullRequestSummary {
     pub target_ref_name: String,
     pub web_url: Option<String>,
     pub is_draft: bool,
+    /// Label (tag) names on the pull request (issue #386).
+    pub labels: Vec<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -108,4 +110,25 @@ pub struct PullRequestSearchResult {
     /// Total matches before the display cap, so the UI can show "100+".
     pub total: usize,
     pub truncated: bool,
+}
+
+/// Creates a pull request from a source branch into a target branch (issue
+/// #387). Branch names may be short (`main`) or full refs (`refs/heads/main`).
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreatePullRequestInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub repository_id: String,
+    pub source_branch: String,
+    pub target_branch: String,
+    pub title: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CreatePullRequestResult {
+    pub pull_request_id: i64,
+    pub web_url: Option<String>,
 }

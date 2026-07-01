@@ -1,7 +1,12 @@
-use azdo_client::{CommitSearchCriteria, GitCommitRef};
+use std::collections::HashMap;
+
+use azdo_client::{
+    CommitSearchCriteria, GitBranchStats, GitCommitRef, GitPullRequest, PullRequestStatus,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::auth::client_for_organization;
+use crate::commits::encode_path_segment;
 use crate::db::AppDatabase;
 use crate::error::Result;
 use crate::secrets::SecretStore;
@@ -75,6 +80,25 @@ pub struct RepoBranch {
     /// Short branch name, e.g. `main` (the `refs/heads/` prefix is stripped).
     pub name: String,
     pub is_default: bool,
+}
+
+/// A repository branch with its tip-commit metadata, divergence from the base
+/// branch, and the active pull request that uses it as a source branch, if
+/// any (issue #398).
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchSummary {
+    pub name: String,
+    pub is_base_version: bool,
+    pub ahead_count: i64,
+    pub behind_count: i64,
+    pub last_commit_id: Option<String>,
+    pub last_commit_comment: Option<String>,
+    pub last_updated: Option<String>,
+    pub last_author: Option<String>,
+    pub pull_request_id: Option<i64>,
+    pub pull_request_title: Option<String>,
+    pub pull_request_url: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -156,6 +180,36 @@ impl CodeBrowseService {
         // Default branch first, then alphabetical for stable, scannable order.
         branches.sort_by(|a, b| b.is_default.cmp(&a.is_default).then(a.name.cmp(&b.name)));
         Ok(branches)
+    }
+
+    /// Lists the repository's branches with tip-commit metadata and
+    /// ahead/behind counts relative to the base branch, linking each to the
+    /// active pull request that uses it as a source branch, if any (issue
+    /// #398). Hits the API on demand rather than reading the cache.
+    pub async fn list_branch_summaries(
+        &self,
+        input: ListBranchesInput,
+    ) -> Result<Vec<BranchSummary>> {
+        let organization = self
+            .db
+            .resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+
+        let stats = client
+            .list_branch_stats(&input.project, &input.repository)
+            .await?;
+
+        // A 404 (e.g. an empty repository) is treated as "no active PRs"
+        // rather than failing the whole branch list.
+        let active = client
+            .list_pull_requests(&input.project, &input.repository, PullRequestStatus::Active)
+            .await
+            .unwrap_or_default();
+        Ok(build_branch_summaries(
+            &organization.base_url,
+            stats,
+            active,
+        ))
     }
 
     /// Lists the direct children of a folder at the tip of a branch, folders
@@ -315,6 +369,77 @@ fn strip_heads_prefix(ref_name: &str) -> &str {
     ref_name.strip_prefix("refs/heads/").unwrap_or(ref_name)
 }
 
+/// Combines branch ahead/behind stats with the active pull requests that use
+/// each branch as a source, sorted base branch first then most-recently
+/// updated (issue #398). Pure so it can be unit tested without network I/O.
+fn build_branch_summaries(
+    org_base_url: &str,
+    stats: Vec<GitBranchStats>,
+    active_prs: Vec<GitPullRequest>,
+) -> Vec<BranchSummary> {
+    // Map active PRs by source branch so each branch can surface its open PR.
+    let mut pr_by_branch: HashMap<String, (i64, String, Option<String>)> = HashMap::new();
+    for pr in active_prs {
+        let branch = strip_heads_prefix(&pr.source_ref_name).to_string();
+        let web_url = pr.repository.as_ref().and_then(|repo| {
+            repo.project.as_ref().map(|project| {
+                format!(
+                    "{org_base_url}/{}/_git/{}/pullrequest/{}",
+                    encode_path_segment(&project.name),
+                    encode_path_segment(&repo.name),
+                    pr.pull_request_id
+                )
+            })
+        });
+        // Keep the lowest PR id when several PRs share a source branch.
+        pr_by_branch
+            .entry(branch)
+            .or_insert((pr.pull_request_id, pr.title.clone(), web_url));
+    }
+
+    let mut branches: Vec<BranchSummary> = stats
+        .into_iter()
+        .map(|stat| {
+            let (last_commit_id, last_commit_comment, last_updated, last_author) = match stat.commit
+            {
+                Some(commit) => (
+                    Some(commit.commit_id),
+                    commit.comment,
+                    commit
+                        .committer
+                        .as_ref()
+                        .and_then(|user| user.date)
+                        .map(|date| date.to_rfc3339()),
+                    commit.committer.and_then(|user| user.name),
+                ),
+                None => (None, None, None, None),
+            };
+            let linked = pr_by_branch.get(&stat.name);
+            BranchSummary {
+                name: stat.name,
+                is_base_version: stat.is_base_version,
+                ahead_count: stat.ahead_count,
+                behind_count: stat.behind_count,
+                last_commit_id,
+                last_commit_comment,
+                last_updated,
+                last_author,
+                pull_request_id: linked.map(|l| l.0),
+                pull_request_title: linked.map(|l| l.1.clone()),
+                pull_request_url: linked.and_then(|l| l.2.clone()),
+            }
+        })
+        .collect();
+
+    // Base branch first, then most-recently updated.
+    branches.sort_by(|a, b| {
+        b.is_base_version
+            .cmp(&a.is_base_version)
+            .then_with(|| b.last_updated.cmp(&a.last_updated))
+    });
+    branches
+}
+
 /// Normalizes a tree scope path: blank/`""` becomes `/`, trailing slashes are
 /// trimmed (except the root) so it matches the path the API echoes back.
 fn normalize_scope(path: Option<&str>) -> String {
@@ -331,6 +456,9 @@ fn leaf_name(path: &str) -> &str {
         .next()
         .unwrap_or(path)
 }
+
+#[cfg(test)]
+mod tests_branch_summaries;
 
 #[cfg(test)]
 mod tests {

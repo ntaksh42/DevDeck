@@ -173,6 +173,7 @@ async fn pr_sync_skips_failing_project_and_preserves_its_cache() {
                 target_ref_name: "main".to_string(),
                 web_url: None,
                 is_draft: false,
+                labels: Vec::new(),
             },
             CachedPr {
                 org_id: org.id.clone(),
@@ -189,6 +190,7 @@ async fn pr_sync_skips_failing_project_and_preserves_its_cache() {
                 target_ref_name: "main".to_string(),
                 web_url: None,
                 is_draft: false,
+                labels: Vec::new(),
             },
         ],
     )
@@ -344,6 +346,7 @@ fn sort_summaries_orders_by_close_then_title() {
         target_ref_name: "main".into(),
         web_url: None,
         is_draft: false,
+        labels: Vec::new(),
     };
     let mut rows = vec![
         make(
@@ -433,6 +436,7 @@ fn matches_query_checks_title_repo_author_and_branches() {
         target_ref_name: "main".to_string(),
         web_url: None,
         is_draft: false,
+        labels: Vec::new(),
     };
 
     assert!(matches_query(&summary, "dashboard"));
@@ -459,6 +463,7 @@ fn matches_query_matches_pr_number_by_prefix() {
         target_ref_name: "main".to_string(),
         web_url: None,
         is_draft: false,
+        labels: Vec::new(),
     };
 
     assert!(matches_query(&summary, "421"));
