@@ -6,6 +6,7 @@ use tokio::task::JoinSet;
 
 use super::*;
 use crate::auth::client_for_organization;
+use crate::commits::encode_path_segment;
 use crate::db::{AppDatabase, Organization};
 use crate::error::{AppError, Result};
 use crate::secrets::SecretStore;
@@ -305,6 +306,57 @@ impl PullRequestService {
         }
 
         Ok(results)
+    }
+
+    /// Creates a pull request from a source branch into a target branch
+    /// (issue #387) and returns its id and browser URL.
+    pub async fn create_pull_request(
+        &self,
+        input: CreatePullRequestInput,
+    ) -> Result<CreatePullRequestResult> {
+        let title = input.title.trim();
+        if title.is_empty() {
+            return Err(AppError::InvalidInput("a title is required".to_string()));
+        }
+        let source = full_ref(&input.source_branch);
+        let target = full_ref(&input.target_branch);
+        if source.is_empty() || target.is_empty() {
+            return Err(AppError::InvalidInput(
+                "source and target branches are required".to_string(),
+            ));
+        }
+        if source == target {
+            return Err(AppError::InvalidInput(
+                "source and target branches must differ".to_string(),
+            ));
+        }
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let pr = client
+            .create_pull_request(
+                &input.project_id,
+                &input.repository_id,
+                &source,
+                &target,
+                title,
+                input.description.as_deref().unwrap_or("").trim(),
+            )
+            .await?;
+        let web_url = pr.repository.as_ref().and_then(|repo| {
+            repo.project.as_ref().map(|project| {
+                format!(
+                    "{}/{}/_git/{}/pullrequest/{}",
+                    organization.base_url,
+                    encode_path_segment(&project.name),
+                    encode_path_segment(&repo.name),
+                    pr.pull_request_id
+                )
+            })
+        });
+        Ok(CreatePullRequestResult {
+            pull_request_id: pr.pull_request_id,
+            web_url,
+        })
     }
 
     fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {

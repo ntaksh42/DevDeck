@@ -137,6 +137,24 @@ pub struct DeletePullRequestCommentInput {
     pub comment_id: i64,
 }
 
+/// Adds a label to a pull request by name (issue #386).
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddPullRequestLabelInput {
+    #[serde(flatten)]
+    pub pr: PrLocator,
+    pub name: String,
+}
+
+/// Removes a label from a pull request by its id (issue #386).
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemovePullRequestLabelInput {
+    #[serde(flatten)]
+    pub pr: PrLocator,
+    pub label_id: String,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PrCommit {
@@ -161,7 +179,16 @@ pub struct PullRequestReview {
     pub is_draft: bool,
     pub auto_complete: bool,
     pub reviewers: Vec<PrReviewer>,
+    pub labels: Vec<PrLabel>,
     pub threads: Vec<PrThread>,
+}
+
+/// A pull request label (tag), issue #386.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrLabel {
+    pub id: String,
+    pub name: String,
 }
 
 #[derive(Debug, Serialize)]

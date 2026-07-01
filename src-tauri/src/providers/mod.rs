@@ -18,8 +18,8 @@ use async_trait::async_trait;
 use serde::Serialize;
 
 use crate::code_browse::{
-    GetFileInput, ListBranchesInput, ListHistoryInput, ListTreeInput, RepoBranch, RepoCommitInfo,
-    RepoFile, RepoTreeItem,
+    BranchSummary, GetFileInput, ListBranchesInput, ListHistoryInput, ListTreeInput, RepoBranch,
+    RepoCommitInfo, RepoFile, RepoTreeItem,
 };
 use crate::code_search::{
     CodeContextResult, CodeSearchResults, GetCodeContextInput, SearchCodeInput,
@@ -39,16 +39,18 @@ use crate::pipelines::{
     QueuePipelineRunInput, RerunPipelineRunInput, UpdatePipelineApprovalInput,
 };
 use crate::pr_review::{
-    DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
-    PostPullRequestCommentInput, PrCommit, PrDetailsResult, PrFileDiff, PrLocator, PrReviewer,
-    PrStatusResult, PrThread, PullRequestChanges, PullRequestReview,
-    RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
-    SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
-    SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
+    AddPullRequestLabelInput, DeletePullRequestCommentInput, EditPullRequestCommentInput,
+    GetPullRequestFileDiffInput, PostPullRequestCommentInput, PrCommit, PrDetailsResult,
+    PrFileDiff, PrLocator, PrReviewer, PrStatusResult, PrThread, PullRequestChanges,
+    PullRequestReview, RemovePullRequestLabelInput, RemovePullRequestReviewerInput,
+    SearchPullRequestMentionsInput, SetPullRequestReviewerRequiredInput,
+    SetPullRequestThreadStatusInput, SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput,
+    UpdatePullRequestInput,
 };
 use crate::prs::{
-    ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestSummary,
-    PullRequestSearchResult, ReviewPullRequestSummary, SearchPullRequestsInput,
+    CreatePullRequestInput, CreatePullRequestResult, ListMyCreatedPullRequestsInput,
+    ListMyReviewPullRequestsInput, MyCreatedPullRequestSummary, PullRequestSearchResult,
+    ReviewPullRequestSummary, SearchPullRequestsInput,
 };
 use crate::work_items::{
     AddWorkItemCommentInput, AssignWorkItemsInput, BulkWorkItemResult, DeleteWorkItemCommentInput,
@@ -108,6 +110,11 @@ pub(crate) trait Provider: Send + Sync {
         &self,
         input: ListMyReviewPullRequestsInput,
     ) -> Result<Vec<ReviewPullRequestSummary>>;
+    /// Creates a pull request (issue #387; GitHub: not supported yet).
+    async fn create_pull_request(
+        &self,
+        input: CreatePullRequestInput,
+    ) -> Result<CreatePullRequestResult>;
 
     // --- Work items (GitHub: issues) ---
     async fn search_work_items(&self, input: SearchWorkItemsInput) -> Result<Vec<WorkItemSummary>>;
@@ -216,6 +223,11 @@ pub(crate) trait Provider: Send + Sync {
     ) -> Result<PrThread>;
     async fn delete_pull_request_comment(&self, input: DeletePullRequestCommentInput)
         -> Result<()>;
+    /// Adds a label to a pull request (issue #386; GitHub: not supported yet).
+    async fn add_pull_request_label(&self, input: AddPullRequestLabelInput) -> Result<()>;
+    /// Removes a label from a pull request (issue #386; GitHub: not supported
+    /// yet).
+    async fn remove_pull_request_label(&self, input: RemovePullRequestLabelInput) -> Result<()>;
 
     // --- Code search & browse ---
     async fn search_code(&self, input: SearchCodeInput) -> Result<CodeSearchResults>;
@@ -227,6 +239,9 @@ pub(crate) trait Provider: Send + Sync {
     async fn list_repo_tree(&self, input: ListTreeInput) -> Result<Vec<RepoTreeItem>>;
     async fn get_repo_file(&self, input: GetFileInput) -> Result<RepoFile>;
     async fn list_repo_history(&self, input: ListHistoryInput) -> Result<Vec<RepoCommitInfo>>;
+    /// Lists a repository's branches with ahead/behind stats and linked active
+    /// pull requests (issue #398; GitHub: not supported yet).
+    async fn list_branch_summaries(&self, input: ListBranchesInput) -> Result<Vec<BranchSummary>>;
 
     // --- Pipelines (GitHub: not supported) ---
     async fn list_pipeline_projects(

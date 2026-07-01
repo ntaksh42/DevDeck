@@ -42,6 +42,12 @@ const prThreadSchema = z.object({
 
 export type PrThread = z.infer<typeof prThreadSchema>;
 
+const prLabelSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+export type PrLabel = z.infer<typeof prLabelSchema>;
+
 const pullRequestReviewSchema = z.object({
   pullRequestId: z.number(),
   title: z.string(),
@@ -53,6 +59,7 @@ const pullRequestReviewSchema = z.object({
   isDraft: z.boolean(),
   autoComplete: z.boolean().default(false),
   reviewers: z.array(prReviewerSchema),
+  labels: z.array(prLabelSchema).default([]),
   threads: z.array(prThreadSchema),
 });
 
@@ -288,4 +295,16 @@ export async function deletePullRequestComment(
   input: DeletePullRequestCommentInput,
 ): Promise<void> {
   await invokeCommand("delete_pull_request_comment", { input });
+}
+
+export async function addPullRequestLabel(
+  input: PrLocatorInput & { name: string },
+): Promise<void> {
+  await invokeCommand("add_pull_request_label", { input });
+}
+
+export async function removePullRequestLabel(
+  input: PrLocatorInput & { labelId: string },
+): Promise<void> {
+  await invokeCommand("remove_pull_request_label", { input });
 }

@@ -73,6 +73,32 @@ export async function listRepoBranches(input: {
   return z.array(repoBranchSchema).parse(result);
 }
 
+const branchSummarySchema = z.object({
+  name: z.string(),
+  isBaseVersion: z.boolean(),
+  aheadCount: z.number(),
+  behindCount: z.number(),
+  lastCommitId: z.string().nullable(),
+  lastCommitComment: z.string().nullable(),
+  lastUpdated: z.string().nullable(),
+  lastAuthor: z.string().nullable(),
+  pullRequestId: z.number().nullable(),
+  pullRequestTitle: z.string().nullable(),
+  pullRequestUrl: z.string().nullable(),
+});
+export type BranchSummary = z.infer<typeof branchSummarySchema>;
+
+// Lists a repository's branches with ahead/behind stats and the active pull
+// request that uses each branch as a source, if any (issue #398).
+export async function listBranchSummaries(input: {
+  organizationId?: string;
+  project: string;
+  repository: string;
+}): Promise<BranchSummary[]> {
+  const result = await invokeCommand("list_branch_summaries", { input });
+  return z.array(branchSummarySchema).parse(result);
+}
+
 const repoCommitInfoSchema = z.object({
   shortId: z.string(),
   commitId: z.string(),

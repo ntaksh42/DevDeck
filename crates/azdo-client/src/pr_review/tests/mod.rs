@@ -6,6 +6,7 @@ use wiremock::MockServer;
 use crate::auth::PatProvider;
 use crate::client::AdoClient;
 
+mod labels;
 mod pr_ops;
 mod threads;
 

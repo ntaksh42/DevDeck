@@ -20,6 +20,8 @@ pub struct CachedPr {
     pub target_ref_name: String,
     pub web_url: Option<String>,
     pub is_draft: bool,
+    /// Label (tag) names on the pull request (issue #386).
+    pub labels: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -129,8 +131,8 @@ fn upsert_pull_requests(conn: &Connection, prs: &[CachedPr]) -> Result<()> {
         INSERT INTO pull_requests(
             org_id, project_id, project_name, repository_id, repository_name,
             pull_request_id, title, status, created_by, creation_date,
-            source_ref_name, target_ref_name, web_url, is_draft
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            source_ref_name, target_ref_name, web_url, is_draft, labels
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
         ON CONFLICT(org_id, repository_id, pull_request_id) DO UPDATE SET
             project_id = excluded.project_id,
             project_name = excluded.project_name,
@@ -142,10 +144,12 @@ fn upsert_pull_requests(conn: &Connection, prs: &[CachedPr]) -> Result<()> {
             source_ref_name = excluded.source_ref_name,
             target_ref_name = excluded.target_ref_name,
             web_url = excluded.web_url,
-            is_draft = excluded.is_draft
+            is_draft = excluded.is_draft,
+            labels = excluded.labels
         "#,
     )?;
     for pr in prs {
+        let labels_json = serde_json::to_string(&pr.labels).unwrap_or_else(|_| "[]".to_string());
         stmt.execute(params![
             pr.org_id,
             pr.project_id,
@@ -160,7 +164,8 @@ fn upsert_pull_requests(conn: &Connection, prs: &[CachedPr]) -> Result<()> {
             pr.source_ref_name,
             pr.target_ref_name,
             pr.web_url,
-            pr.is_draft
+            pr.is_draft,
+            labels_json
         ])?;
     }
     Ok(())
@@ -177,7 +182,7 @@ fn search_pull_requests(
         r#"
         SELECT org_id, project_id, project_name, repository_id, repository_name,
                pull_request_id, title, status, created_by, creation_date,
-               source_ref_name, target_ref_name, web_url, is_draft
+               source_ref_name, target_ref_name, web_url, is_draft, labels
         FROM pull_requests
         WHERE org_id = ?1
           AND (?2 IS NULL OR project_id = ?2)
@@ -279,6 +284,7 @@ fn list_review_pull_requests(conn: &Connection, org_id: &str) -> Result<Vec<Cach
 }
 
 fn map_cached_pr(row: &rusqlite::Row<'_>) -> rusqlite::Result<CachedPr> {
+    let labels_json: String = row.get(14)?;
     Ok(CachedPr {
         org_id: row.get(0)?,
         project_id: row.get(1)?,
@@ -294,6 +300,7 @@ fn map_cached_pr(row: &rusqlite::Row<'_>) -> rusqlite::Result<CachedPr> {
         target_ref_name: row.get(11)?,
         web_url: row.get(12)?,
         is_draft: row.get(13)?,
+        labels: serde_json::from_str(&labels_json).unwrap_or_default(),
     })
 }
 

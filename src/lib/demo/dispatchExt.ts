@@ -26,6 +26,7 @@ import {
   demoRepoTree,
   demoSearchCode,
 } from "@/lib/demo/commits";
+import { demoBranchSummaries } from "@/lib/demo/branches";
 
 export function dispatchExt(command: string, args: unknown): unknown {
   switch (command) {
@@ -149,6 +150,10 @@ export function dispatchExt(command: string, args: unknown): unknown {
     }
     case "list_repo_branches":
       return demoRepoBranches();
+    case "list_branch_summaries": {
+      const input = (args as { input?: { repository?: string } } | undefined)?.input;
+      return demoBranchSummaries(input?.repository);
+    }
     case "list_repo_tree": {
       const input = (
         args as { input?: { path?: string; includeLastCommit?: boolean } } | undefined

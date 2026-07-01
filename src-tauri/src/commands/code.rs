@@ -3,8 +3,8 @@ use tauri::State;
 use crate::app_state::AppState;
 use crate::cancellation::run_cancellable;
 use crate::code_browse::{
-    GetFileInput, ListBranchesInput, ListHistoryInput, ListTreeInput, RepoBranch, RepoCommitInfo,
-    RepoFile, RepoTreeItem,
+    BranchSummary, GetFileInput, ListBranchesInput, ListHistoryInput, ListTreeInput, RepoBranch,
+    RepoCommitInfo, RepoFile, RepoTreeItem,
 };
 use crate::code_search::{
     CodeContextResult, CodeSearchResults, GetCodeContextInput, SearchCodeInput,
@@ -43,6 +43,15 @@ pub async fn list_repo_branches(
     state: State<'_, AppState>,
 ) -> Result<Vec<RepoBranch>> {
     state.provider().await?.list_repo_branches(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn list_branch_summaries(
+    input: ListBranchesInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<BranchSummary>> {
+    state.provider().await?.list_branch_summaries(input).await
 }
 
 #[tauri::command]

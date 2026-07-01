@@ -56,6 +56,32 @@ describe("PrReviewPanel status actions", () => {
   );
 });
 
+describe("PrReviewPanel labels", () => {
+  it("renders label chips from the review and can queue removing one", async () => {
+    renderPanel();
+
+    // The demo review (pull request 999 falls back to the generic demo
+    // detail) carries two labels; the header renders them as removable chips.
+    expect(await screen.findByText("hotfix", {}, { timeout: 8000 })).toBeTruthy();
+    expect(screen.getByText("needs-docs")).toBeTruthy();
+
+    const removeButton = screen.getByRole("button", { name: "Remove label hotfix" });
+    fireEvent.click(removeButton);
+    // The demo remove-label command is a no-op, so this just confirms the
+    // control is wired without asserting on a specific post-mutation state.
+    expect(removeButton).toBeTruthy();
+  });
+
+  it("adds a label by typing a name and pressing Enter", async () => {
+    renderPanel();
+    const input = await screen.findByLabelText("Add label", {}, { timeout: 8000 });
+    fireEvent.change(input, { target: { value: "triaged" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    // The input clears once the add mutation is queued.
+    expect((input as HTMLInputElement).value).toBe("");
+  });
+});
+
 describe("PrReviewPanel Result tab", () => {
   // PR 101 is one of the demo PRs that resolves a review-result HTML file.
   const resultPr: ReviewPullRequestSummary = { ...pr, pullRequestId: 101 };

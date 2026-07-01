@@ -6,8 +6,8 @@ use async_trait::async_trait;
 
 use crate::app_state::run_blocking;
 use crate::code_browse::{
-    CodeBrowseService, GetFileInput, ListBranchesInput, ListHistoryInput, ListTreeInput,
-    RepoBranch, RepoCommitInfo, RepoFile, RepoTreeItem,
+    BranchSummary, CodeBrowseService, GetFileInput, ListBranchesInput, ListHistoryInput,
+    ListTreeInput, RepoBranch, RepoCommitInfo, RepoFile, RepoTreeItem,
 };
 use crate::code_search::{
     CodeContextResult, CodeSearchResults, CodeSearchService, GetCodeContextInput, SearchCodeInput,
@@ -29,16 +29,18 @@ use crate::pipelines::{
     QueuePipelineRunInput, RerunPipelineRunInput, UpdatePipelineApprovalInput,
 };
 use crate::pr_review::{
-    DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
-    PostPullRequestCommentInput, PrCommit, PrDetailsResult, PrFileDiff, PrLocator, PrReviewService,
-    PrReviewer, PrStatusResult, PrThread, PullRequestChanges, PullRequestReview,
+    AddPullRequestLabelInput, DeletePullRequestCommentInput, EditPullRequestCommentInput,
+    GetPullRequestFileDiffInput, PostPullRequestCommentInput, PrCommit, PrDetailsResult,
+    PrFileDiff, PrLocator, PrReviewService, PrReviewer, PrStatusResult, PrThread,
+    PullRequestChanges, PullRequestReview, RemovePullRequestLabelInput,
     RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
     SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
     SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
 };
 use crate::prs::{
-    ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestSummary,
-    PullRequestSearchResult, PullRequestService, ReviewPullRequestSummary, SearchPullRequestsInput,
+    CreatePullRequestInput, CreatePullRequestResult, ListMyCreatedPullRequestsInput,
+    ListMyReviewPullRequestsInput, MyCreatedPullRequestSummary, PullRequestSearchResult,
+    PullRequestService, ReviewPullRequestSummary, SearchPullRequestsInput,
 };
 use crate::search::{self, SearchAllInput, SearchAllResult};
 use crate::work_items::{
@@ -128,6 +130,13 @@ impl Provider for AzdoProvider {
     ) -> Result<Vec<ReviewPullRequestSummary>> {
         let service = self.pull_requests.clone();
         run_blocking(move || service.list_my_reviews(input)).await
+    }
+
+    async fn create_pull_request(
+        &self,
+        input: CreatePullRequestInput,
+    ) -> Result<CreatePullRequestResult> {
+        self.pull_requests.create_pull_request(input).await
     }
 
     async fn search_work_items(&self, input: SearchWorkItemsInput) -> Result<Vec<WorkItemSummary>> {
@@ -342,6 +351,14 @@ impl Provider for AzdoProvider {
         self.pr_review.delete_comment(input).await
     }
 
+    async fn add_pull_request_label(&self, input: AddPullRequestLabelInput) -> Result<()> {
+        self.pr_review.add_label(input).await
+    }
+
+    async fn remove_pull_request_label(&self, input: RemovePullRequestLabelInput) -> Result<()> {
+        self.pr_review.remove_label(input).await
+    }
+
     async fn search_code(&self, input: SearchCodeInput) -> Result<CodeSearchResults> {
         self.code_search.search(input).await
     }
@@ -367,6 +384,10 @@ impl Provider for AzdoProvider {
 
     async fn list_repo_history(&self, input: ListHistoryInput) -> Result<Vec<RepoCommitInfo>> {
         self.code_browse.list_history(input).await
+    }
+
+    async fn list_branch_summaries(&self, input: ListBranchesInput) -> Result<Vec<BranchSummary>> {
+        self.code_browse.list_branch_summaries(input).await
     }
 
     async fn list_pipeline_projects(

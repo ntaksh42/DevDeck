@@ -5,7 +5,7 @@ import {
   useState,
 } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Loader2, Search } from 'lucide-react';
+import { GitBranch, Loader2, Plus, Search } from 'lucide-react';
 import {
   searchPullRequests,
   listCommitRepositories,
@@ -13,9 +13,12 @@ import {
   type SearchPullRequestsInput,
 } from '@/lib/azdoCommands';
 import { useActiveOrganizationId } from '@/lib/useActiveConnection';
+import { openExternalUrl } from '@/lib/openExternal';
 import { ErrorState } from '@/components/StateDisplay';
 import { MultiSelectFilter } from '@/components/MultiSelectFilter';
 import { PullRequestResults } from './PrSearchResults';
+import { CreatePullRequestForm } from './CreatePullRequestForm';
+import { BranchesPanel } from './BranchesPanel';
 import {
   PR_SEARCH_QUERY_STORAGE_KEY,
   PR_SEARCH_STATUS_OPTIONS,
@@ -89,6 +92,22 @@ export function PullRequestSearch({
       setRepositoryIds((prev) => prev.filter((id) => allowed.has(id)));
     }
   }
+
+  // Create-PR (#387) and Branches (#398) both need exactly one repository
+  // resolved to a project, so they stay disabled under a broader selection.
+  const selectedRepo =
+    repositoryIds.length === 1
+      ? allRepositories.find((r) => r.repositoryId === repositoryIds[0])
+      : undefined;
+  const [showCreatePr, setShowCreatePr] = useState(false);
+  const [createPrSourceBranch, setCreatePrSourceBranch] = useState<string | undefined>(undefined);
+  const [showBranches, setShowBranches] = useState(false);
+  useEffect(() => {
+    if (!selectedRepo) {
+      setShowCreatePr(false);
+      setShowBranches(false);
+    }
+  }, [selectedRepo]);
 
   const mutation = useMutation({ mutationFn: searchPullRequests });
   const results = mutation.data?.pullRequests ?? [];
@@ -336,14 +355,66 @@ export function PullRequestSearch({
             </label>
           </div>
 
-          <p id="pr-search-status-note" className="text-xs text-muted-foreground">
-            Active pull requests are served from the local cache. Completed and
-            abandoned pull requests are fetched live from Azure DevOps, so those
-            statuses may take a moment. Target branch and the date window narrow
-            the live query server-side.
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p id="pr-search-status-note" className="text-xs text-muted-foreground">
+              Active pull requests are served from the local cache. Completed and
+              abandoned pull requests are fetched live from Azure DevOps, so those
+              statuses may take a moment. Target branch and the date window narrow
+              the live query server-side.
+            </p>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCreatePrSourceBranch(undefined);
+                  setShowCreatePr((open) => !open);
+                }}
+                disabled={!selectedRepo}
+                aria-expanded={showCreatePr}
+                title={selectedRepo ? "Create a pull request" : "Select a single repository to create a PR"}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                New pull request
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowBranches((open) => !open)}
+                disabled={!selectedRepo}
+                aria-expanded={showBranches}
+                title={selectedRepo ? "Show branches for the selected repository" : "Select a single repository to list its branches"}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <GitBranch className="h-4 w-4" aria-hidden="true" />
+                Branches
+              </button>
+            </div>
+          </div>
         </form>
       </div>
+
+      {showCreatePr && selectedRepo ? (
+        <CreatePullRequestForm
+          organizationId={organizationId}
+          projectId={selectedRepo.projectId}
+          repositoryId={selectedRepo.repositoryId}
+          initialSourceBranch={createPrSourceBranch}
+          onClose={() => setShowCreatePr(false)}
+        />
+      ) : null}
+
+      {showBranches && selectedRepo ? (
+        <BranchesPanel
+          organizationId={organizationId}
+          project={selectedRepo.projectId}
+          repository={selectedRepo.repositoryId}
+          onOpenPullRequest={(url) => openExternalUrl(url)}
+          onCreatePrFromBranch={(branchName) => {
+            setCreatePrSourceBranch(branchName);
+            setShowCreatePr(true);
+          }}
+        />
+      ) : null}
 
       {mutation.isError && <ErrorState message={commandErrorMessage(mutation.error)} />}
 

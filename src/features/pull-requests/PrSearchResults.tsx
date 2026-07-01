@@ -18,6 +18,7 @@ import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { LoadingState } from '@/components/StateDisplay';
 import { ActiveFilters } from '@/components/ActiveFilters';
 import { ColumnFilterDropdown } from '@/components/ColumnFilterDropdown';
+import { MultiSelectFilter } from '@/components/MultiSelectFilter';
 import {
   activeColumnFilterCount,
   applyColumnFilters,
@@ -44,6 +45,7 @@ import {
   MIN_PR_SEARCH_PREVIEW_WIDTH,
   MAX_PR_SEARCH_PREVIEW_WIDTH,
   PR_SEARCH_PREVIEW_WIDTH_STORAGE_KEY,
+  prLabelOptions,
   toReviewSummary,
 } from './PrSearchTypes';
 
@@ -110,10 +112,17 @@ export function PullRequestResults({
     [results],
   );
 
-  const filteredResults = useMemo(
-    () => applyColumnFilters(results, columnFilters, PR_SEARCH_FILTERABLE_COLUMNS),
-    [columnFilters, results],
-  );
+  // Labels are multi-valued per row, so they get their own multi-select
+  // filter (any selected label present) instead of the single-value
+  // per-column dropdown the other filterable columns share.
+  const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
+  const availableLabels = useMemo(() => prLabelOptions(results), [results]);
+
+  const filteredResults = useMemo(() => {
+    const byColumn = applyColumnFilters(results, columnFilters, PR_SEARCH_FILTERABLE_COLUMNS);
+    if (selectedLabels.length === 0) return byColumn;
+    return byColumn.filter((pr) => pr.labels.some((label) => selectedLabels.includes(label)));
+  }, [columnFilters, results, selectedLabels]);
 
   const {
     scrollerRef,
@@ -130,8 +139,9 @@ export function PullRequestResults({
   const virtualRows = filteredResults.slice(firstVirtualRow, lastVirtualRow);
 
   const columnFilterCount = activeColumnFilterCount(columnFilters);
-  const hasActiveColumnFilters = columnFilterCount > 0;
-  const activeFilterCount = Math.max(0, activeExternalFilterCount) + columnFilterCount;
+  const hasActiveColumnFilters = columnFilterCount > 0 || selectedLabels.length > 0;
+  const activeFilterCount =
+    Math.max(0, activeExternalFilterCount) + columnFilterCount + (selectedLabels.length > 0 ? 1 : 0);
 
   useEffect(() => {
     setSelectedIndex((index) => Math.min(index, Math.max(filteredResults.length - 1, 0)));
@@ -201,6 +211,7 @@ export function PullRequestResults({
 
   function clearAllFilters() {
     setColumnFilters({});
+    setSelectedLabels([]);
     setOpenFilterCol(null);
     setFilterAnchorRect(null);
     onClearExternalFilters?.();
@@ -286,6 +297,20 @@ export function PullRequestResults({
         <span className="flex items-center gap-2 text-sm text-muted-foreground">
           {countLabel}
           <ActiveFilters count={activeFilterCount} onClear={clearAllFilters} />
+          {availableLabels.length > 0 ? (
+            <MultiSelectFilter
+              options={availableLabels.map((label) => ({ value: label, label }))}
+              selected={selectedLabels}
+              onChange={(next) => {
+                setSelectedLabels(next);
+                setSelectedIndex(0);
+              }}
+              placeholder="All labels"
+              ariaLabel="Filter by label"
+              searchable
+              className="w-40"
+            />
+          ) : null}
           <button
             type="button"
             onClick={(event) => setColumnMenuRect(event.currentTarget.getBoundingClientRect())}

@@ -25,10 +25,11 @@ export function toReviewSummary(pr: PullRequestSummary): ReviewPullRequestSummar
   };
 }
 
-export const DEFAULT_PR_SEARCH_COLUMN_WIDTHS = [56, 70, 220, 130, 104, 64, 120];
-export const PR_SEARCH_COLUMN_MIN_WIDTHS = [52, 64, 160, 104, 86, 58, 100];
-export const PR_SEARCH_COLUMN_MAX_WIDTHS = [120, 140, 720, 360, 280, 120, 360];
-export const PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY = 'azdodeck:layout:prSearchGridColumnWidths:v2';
+export const DEFAULT_PR_SEARCH_COLUMN_WIDTHS = [56, 70, 220, 130, 104, 64, 120, 140];
+export const PR_SEARCH_COLUMN_MIN_WIDTHS = [52, 64, 160, 104, 86, 58, 100, 90];
+export const PR_SEARCH_COLUMN_MAX_WIDTHS = [120, 140, 720, 360, 280, 120, 360, 320];
+// v3: added the "labels" column (issue #386).
+export const PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY = 'azdodeck:layout:prSearchGridColumnWidths:v3';
 export const PR_SEARCH_QUERY_STORAGE_KEY = 'azdodeck:view:prSearchQuery';
 export const PR_SEARCH_ROW_HEIGHT = 29;
 export const PR_SEARCH_OVERSCAN = 8;
@@ -105,7 +106,8 @@ export type PrSearchColumnKey =
   | "repository"
   | "author"
   | "date"
-  | "branch";
+  | "branch"
+  | "labels";
 export const PR_SEARCH_KEYS: PrSearchColumnKey[] = [
   "pullRequestId",
   "status",
@@ -114,6 +116,7 @@ export const PR_SEARCH_KEYS: PrSearchColumnKey[] = [
   "author",
   "date",
   "branch",
+  "labels",
 ];
 export const PR_SEARCH_COLUMN_LABELS: Record<PrSearchColumnKey, string> = {
   pullRequestId: "PR#",
@@ -123,7 +126,18 @@ export const PR_SEARCH_COLUMN_LABELS: Record<PrSearchColumnKey, string> = {
   author: "Author",
   date: "Date",
   branch: "Branch",
+  labels: "Labels",
 };
+
+// Unique, sorted label names present across the given results, for the
+// standalone label filter (issue #386). Labels are multi-valued per row, so
+// they use their own multi-select filter instead of the single-value
+// per-column dropdown the other filterable columns share.
+export function prLabelOptions(results: readonly PullRequestSummary[]): string[] {
+  return [...new Set(results.flatMap((pr) => pr.labels))].sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: "base" }),
+  );
+}
 export const PR_SEARCH_REQUIRED_COLUMNS: PrSearchColumnKey[] = ["pullRequestId", "title"];
 export const PR_SEARCH_COLUMN_FILTER_KEY: Partial<Record<PrSearchColumnKey, PrSearchFilterableColumn>> = {
   status: "status",

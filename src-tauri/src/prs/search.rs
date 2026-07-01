@@ -210,6 +210,7 @@ pub(crate) fn cached_pr_to_summary(pr: CachedPr) -> PullRequestSummary {
         target_ref_name: pr.target_ref_name,
         web_url: pr.web_url,
         is_draft: pr.is_draft,
+        labels: pr.labels,
     }
 }
 
@@ -255,6 +256,7 @@ fn live_pr_to_summary(
         target_ref_name: short_ref(&pr.target_ref_name),
         web_url: Some(web_url),
         is_draft: pr.is_draft.unwrap_or(false),
+        labels: pr.labels.into_iter().map(|label| label.name).collect(),
     })
 }
 

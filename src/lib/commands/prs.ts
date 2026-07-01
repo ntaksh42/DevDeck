@@ -17,6 +17,8 @@ export const pullRequestSummarySchema = z.object({
   targetRefName: z.string(),
   webUrl: z.string().nullable(),
   isDraft: z.boolean(),
+  // Label (tag) names on the pull request (issue #386).
+  labels: z.array(z.string()).default([]),
 });
 
 export const pullRequestSummariesSchema = z.array(pullRequestSummarySchema);
@@ -114,6 +116,29 @@ export async function searchPullRequests(
 ): Promise<PullRequestSearchResult> {
   const result = await invokeCommand("search_pull_requests", { input });
   return pullRequestSearchResultSchema.parse(result);
+}
+
+const createPullRequestResultSchema = z.object({
+  pullRequestId: z.number(),
+  webUrl: z.string().nullable(),
+});
+export type CreatePullRequestResult = z.infer<typeof createPullRequestResultSchema>;
+
+export type CreatePullRequestInput = {
+  organizationId?: string;
+  projectId: string;
+  repositoryId: string;
+  sourceBranch: string;
+  targetBranch: string;
+  title: string;
+  description?: string;
+};
+
+export async function createPullRequest(
+  input: CreatePullRequestInput,
+): Promise<CreatePullRequestResult> {
+  const result = await invokeCommand("create_pull_request", { input });
+  return createPullRequestResultSchema.parse(result);
 }
 
 export async function listMyReviewPullRequests(

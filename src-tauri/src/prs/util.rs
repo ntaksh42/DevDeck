@@ -10,6 +10,17 @@ pub(crate) fn short_ref(value: &str) -> String {
         .to_string()
 }
 
+/// Expands a branch name to a full ref (`refs/heads/...`) unless it already is
+/// one. Empty input stays empty so the caller can reject it.
+pub(crate) fn full_ref(branch: &str) -> String {
+    let trimmed = branch.trim();
+    if trimmed.is_empty() || trimmed.starts_with("refs/") {
+        trimmed.to_string()
+    } else {
+        format!("refs/heads/{trimmed}")
+    }
+}
+
 pub(crate) fn vote_label(vote: i32) -> &'static str {
     match vote {
         10 => "Approved",

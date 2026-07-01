@@ -35,6 +35,29 @@ pub struct GitRef {
     pub object_id: Option<String>,
 }
 
+/// Per-branch statistics relative to the repository's base (default) branch.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitBranchStats {
+    pub name: String,
+    #[serde(default)]
+    pub ahead_count: i64,
+    #[serde(default)]
+    pub behind_count: i64,
+    #[serde(default)]
+    pub is_base_version: bool,
+    pub commit: Option<GitCommitRef>,
+}
+
+/// A pull request label (tag), as returned inline on `GitPullRequest` /
+/// `GitPullRequestDetail` and by the dedicated labels endpoints.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebApiTagDefinition {
+    pub id: String,
+    pub name: String,
+}
+
 /// A file or folder entry in a repository tree.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -68,6 +91,10 @@ pub struct GitPullRequest {
     pub reviewers: Option<Vec<IdentityRefWithVote>>,
     pub is_draft: Option<bool>,
     pub merge_status: Option<String>,
+    /// Labels (tags) on the pull request. Absent on older responses, so this
+    /// defaults to empty rather than failing to deserialize.
+    #[serde(default)]
+    pub labels: Vec<WebApiTagDefinition>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

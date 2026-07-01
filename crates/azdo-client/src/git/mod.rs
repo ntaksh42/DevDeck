@@ -4,6 +4,8 @@ mod types;
 pub use types::*;
 
 #[cfg(test)]
+mod tests_branch_stats;
+#[cfg(test)]
 mod tests_commits;
 #[cfg(test)]
 mod tests_pull_requests;

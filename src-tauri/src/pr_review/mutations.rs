@@ -382,4 +382,44 @@ impl PrReviewService {
             is_required: reviewer.is_required,
         })
     }
+
+    /// Adds a label to a pull request by name (issue #386).
+    pub async fn add_label(&self, input: AddPullRequestLabelInput) -> Result<()> {
+        let name = input.name.trim();
+        if name.is_empty() {
+            return Err(AppError::InvalidInput(
+                "label name cannot be empty".to_string(),
+            ));
+        }
+        let organization = self
+            .db
+            .resolve_organization(input.pr.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        client
+            .add_pull_request_label(
+                &input.pr.project_id,
+                &input.pr.repository_id,
+                input.pr.pull_request_id,
+                name,
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// Removes a label from a pull request (issue #386).
+    pub async fn remove_label(&self, input: RemovePullRequestLabelInput) -> Result<()> {
+        let organization = self
+            .db
+            .resolve_organization(input.pr.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        client
+            .remove_pull_request_label(
+                &input.pr.project_id,
+                &input.pr.repository_id,
+                input.pr.pull_request_id,
+                &input.label_id,
+            )
+            .await?;
+        Ok(())
+    }
 }

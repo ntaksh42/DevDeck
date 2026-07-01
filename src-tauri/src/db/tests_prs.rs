@@ -89,6 +89,7 @@ fn pull_requests_search() {
         target_ref_name: "refs/heads/main".to_string(),
         web_url: None,
         is_draft: false,
+        labels: vec!["hotfix".to_string()],
     };
     db.replace_pull_requests_for_projects("org1", &["p1"], &[pr])
         .unwrap();
@@ -98,6 +99,7 @@ fn pull_requests_search() {
         .unwrap();
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].pull_request_id, 1);
+    assert_eq!(results[0].labels, vec!["hotfix".to_string()]);
 
     let no_results = db
         .search_pull_requests("org1", None, None, Some("completed"))

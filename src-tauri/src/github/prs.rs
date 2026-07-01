@@ -63,6 +63,9 @@ fn item_to_search_summary(org_id: &str, item: IssueSearchItem) -> PullRequestSum
         target_ref_name: String::new(),
         web_url: Some(item.html_url),
         is_draft: item.draft,
+        // GitHub PR labels are not fetched by the search query yet (issue #386
+        // scoped label support to Azure DevOps connections for this change).
+        labels: Vec::new(),
     }
 }
 

@@ -43,6 +43,7 @@ function pullRequest(id: number, title: string): PullRequestSummary {
     targetRefName: "refs/heads/main",
     webUrl: `https://dev.azure.com/contoso/_git/core/pullrequest/${id}`,
     isDraft: false,
+    labels: [],
   };
 }
 
