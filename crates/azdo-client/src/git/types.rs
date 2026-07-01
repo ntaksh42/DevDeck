@@ -35,6 +35,18 @@ pub struct GitRef {
     pub object_id: Option<String>,
 }
 
+/// Result of a single ref create/update/delete from the "Update Refs" API.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitRefUpdateResult {
+    pub name: String,
+    pub success: bool,
+    pub update_status: String,
+    /// Reason for a rejection (e.g. a branch policy), when the server sets one.
+    #[serde(default)]
+    pub custom_message: Option<String>,
+}
+
 /// A file or folder entry in a repository tree.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]

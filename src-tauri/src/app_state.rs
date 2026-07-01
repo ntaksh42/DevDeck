@@ -109,7 +109,13 @@ where
 }
 
 pub(crate) async fn ensure_write_enabled(state: &State<'_, AppState>) -> Result<()> {
-    let settings = state.settings.clone();
+    ensure_settings_write_enabled(&state.settings).await
+}
+
+/// The read-only check behind [`ensure_write_enabled`], factored out so it can
+/// be exercised directly in tests without a `tauri::State`.
+async fn ensure_settings_write_enabled(settings: &SettingsService) -> Result<()> {
+    let settings = settings.clone();
     let read_only =
         run_blocking(move || Ok(settings.get()?.read_only_validation_mode_enabled)).await?;
     if read_only {
@@ -136,5 +142,42 @@ mod tests {
             "scope": "notARealScope"
         }))
         .is_err());
+    }
+
+    // Returns the backing `NamedTempFile` alongside the service: it must stay
+    // alive for the database file to exist (dropping it deletes the file).
+    fn test_settings_service() -> (tempfile::NamedTempFile, SettingsService) {
+        let db_file = tempfile::NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(db_file.path().to_path_buf());
+        db.initialize().unwrap();
+        (db_file, SettingsService::new(db))
+    }
+
+    // Exercises the same gate `create_branch`/`delete_branch` (and every other
+    // write command) run through via `ensure_write_enabled`.
+    #[tokio::test]
+    async fn ensure_settings_write_enabled_rejects_when_read_only_mode_is_on() {
+        let (_db_file, settings_service) = test_settings_service();
+        let mut settings = settings_service.get().unwrap();
+        settings.read_only_validation_mode_enabled = true;
+        settings_service.update_normalized(settings).unwrap();
+
+        let error = ensure_settings_write_enabled(&settings_service)
+            .await
+            .unwrap_err();
+        match error {
+            AppError::InvalidInput(message) => {
+                assert!(message.contains("Read-only validation mode is enabled"));
+            }
+            other => panic!("expected InvalidInput, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn ensure_settings_write_enabled_allows_writes_by_default() {
+        let (_db_file, settings_service) = test_settings_service();
+        assert!(ensure_settings_write_enabled(&settings_service)
+            .await
+            .is_ok());
     }
 }

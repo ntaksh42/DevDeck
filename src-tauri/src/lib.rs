@@ -210,6 +210,8 @@ pub fn run() {
             commands::code::list_repo_tree,
             commands::code::get_repo_file,
             commands::code::list_repo_history,
+            commands::code::create_branch,
+            commands::code::delete_branch,
             commands::code::cancel_operation,
             commands::commits::get_commit_changes,
             commands::commits::get_commit_file_diff,

@@ -21,6 +21,7 @@ import { CodeFileView } from "./CodeFileView";
 import { CodeHistoryView } from "./CodeHistoryView";
 import { CodeCompareView } from "./CodeCompareView";
 import { CodeSearchResults } from "./CodeSearchResults";
+import { CodeBranchActions } from "./CodeBranchActions";
 
 type RightTab = "contents" | "history" | "compare";
 
@@ -248,14 +249,27 @@ export function CodeBrowseView() {
             />
           </button>
         </div>
-        <FilterableSelect
-          value={branch}
-          options={branchOptions}
-          onChange={setBranch}
-          disabled={!repo || branchesQuery.isLoading || branchOptions.length === 0}
-          placeholder="Branch"
-          ariaLabel="Branch"
-        />
+        <div className="flex items-center gap-1">
+          <div className="min-w-0 flex-1">
+            <FilterableSelect
+              value={branch}
+              options={branchOptions}
+              onChange={setBranch}
+              disabled={!repo || branchesQuery.isLoading || branchOptions.length === 0}
+              placeholder="Branch"
+              ariaLabel="Branch"
+            />
+          </div>
+          {repo ? (
+            <CodeBranchActions
+              organizationId={organizationId}
+              repo={repo}
+              branches={branches}
+              currentBranch={branch}
+              onBranchCreated={setBranch}
+            />
+          ) : null}
+        </div>
       </div>
 
       {!repo ? (

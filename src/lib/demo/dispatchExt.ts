@@ -20,6 +20,8 @@ import {
   demoCommitPullRequests,
   demoCommitRepositories,
   demoCommits,
+  demoCreateBranch,
+  demoDeleteBranch,
   demoGetCodeSearchContext,
   demoRepoBranches,
   demoRepoFile,
@@ -159,6 +161,17 @@ export function dispatchExt(command: string, args: unknown): unknown {
     case "list_repo_history": {
       const input = (args as { input?: { path?: string } } | undefined)?.input;
       return demoRepoHistory(input?.path ?? "/");
+    }
+    case "create_branch": {
+      const input = (
+        args as { input?: { sourceBranch?: string; newBranchName?: string } } | undefined
+      )?.input;
+      return demoCreateBranch(input?.sourceBranch ?? "main", input?.newBranchName ?? "");
+    }
+    case "delete_branch": {
+      const input = (args as { input?: { branch?: string } } | undefined)?.input;
+      demoDeleteBranch(input?.branch ?? "");
+      return null;
     }
     default:
       return undefined;

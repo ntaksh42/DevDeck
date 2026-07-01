@@ -26,6 +26,8 @@ pub enum AdoError {
     Auth(String),
     #[error("wiql query shape mismatch: {0}")]
     WiqlQueryShape(String),
+    #[error("ref update rejected: {0}")]
+    RefUpdateRejected(String),
 }
 
 impl AdoError {

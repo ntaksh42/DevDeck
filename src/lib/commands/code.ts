@@ -77,6 +77,28 @@ export async function listRepoBranches(input: {
   return z.array(repoBranchSchema).parse(result);
 }
 
+// Creates a branch from the tip of an existing branch.
+export async function createBranch(input: {
+  organizationId?: string;
+  project: string;
+  repository: string;
+  sourceBranch: string;
+  newBranchName: string;
+}): Promise<RepoBranch> {
+  const result = await invokeCommand("create_branch", { input });
+  return repoBranchSchema.parse(result);
+}
+
+// Deletes a branch.
+export async function deleteBranch(input: {
+  organizationId?: string;
+  project: string;
+  repository: string;
+  branch: string;
+}): Promise<void> {
+  await invokeCommand("delete_branch", { input });
+}
+
 const repoCommitInfoSchema = z.object({
   shortId: z.string(),
   commitId: z.string(),

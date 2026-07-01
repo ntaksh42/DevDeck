@@ -37,12 +37,40 @@ export function demoCommitRepositories(): CommitRepositoryOption[] {
 }
 
 // Demo branches for the code browser. `main` is the default and sorts first.
+// Mutable so create/delete actions in demo mode are reflected on refetch.
+let demoBranches = [
+  { name: "main", isDefault: true },
+  { name: "develop", isDefault: false },
+  { name: "feature/dashboard", isDefault: false },
+];
+
 export function demoRepoBranches() {
-  return [
-    { name: "main", isDefault: true },
-    { name: "develop", isDefault: false },
-    { name: "feature/dashboard", isDefault: false },
-  ];
+  return demoBranches;
+}
+
+// Creates a demo branch from an existing one, mirroring the validation the
+// real Azure DevOps API would perform (unknown source, duplicate name).
+export function demoCreateBranch(sourceBranch: string, newBranchName: string) {
+  if (!demoBranches.some((branch) => branch.name === sourceBranch)) {
+    throw new Error(`Branch '${sourceBranch}' was not found.`);
+  }
+  if (demoBranches.some((branch) => branch.name === newBranchName)) {
+    throw new Error(`Branch '${newBranchName}' already exists.`);
+  }
+  const created = { name: newBranchName, isDefault: false };
+  demoBranches = [...demoBranches, created];
+  return created;
+}
+
+export function demoDeleteBranch(branch: string) {
+  const target = demoBranches.find((item) => item.name === branch);
+  if (!target) {
+    throw new Error(`Branch '${branch}' was not found.`);
+  }
+  if (target.isDefault) {
+    throw new Error("The default branch cannot be deleted.");
+  }
+  demoBranches = demoBranches.filter((item) => item.name !== branch);
 }
 
 // A tiny virtual repository for the code browser demo. Keyed by the parent
