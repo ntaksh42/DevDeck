@@ -158,3 +158,69 @@ impl PullRequestStatus {
         }
     }
 }
+
+/// Status of an async cherry-pick/revert ref operation. Azure DevOps runs these
+/// server-side and reports progress through this field; `Unknown` absorbs any
+/// status value not in the documented set instead of failing to deserialize.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum GitAsyncOperationStatus {
+    Queued,
+    InProgress,
+    Completed,
+    Failed,
+    Abandoned,
+    #[serde(other)]
+    Unknown,
+}
+
+impl GitAsyncOperationStatus {
+    /// True once the operation will not change state again.
+    pub fn is_terminal(self) -> bool {
+        matches!(self, Self::Completed | Self::Failed | Self::Abandoned)
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Queued => "queued",
+            Self::InProgress => "inProgress",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Abandoned => "abandoned",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+/// Progress/failure detail for a cherry-pick or revert operation.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitAsyncRefOperationDetail {
+    #[serde(default)]
+    pub conflict: bool,
+    #[serde(default)]
+    pub failure_message: Option<String>,
+}
+
+/// Result of a Cherry Picks Create/Get call. `cherry_pick_id` and `status` are
+/// always present; the branch is only actually created once `status` reaches
+/// [`GitAsyncOperationStatus::Completed`] with no conflict.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCherryPick {
+    pub cherry_pick_id: i64,
+    pub status: GitAsyncOperationStatus,
+    #[serde(default)]
+    pub detailed_status: Option<GitAsyncRefOperationDetail>,
+}
+
+/// Result of a Reverts Create/Get call. Mirrors [`GitCherryPick`]; Azure DevOps
+/// models cherry-pick and revert as separate resources with the same shape.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitRevert {
+    pub revert_id: i64,
+    pub status: GitAsyncOperationStatus,
+    #[serde(default)]
+    pub detailed_status: Option<GitAsyncRefOperationDetail>,
+}

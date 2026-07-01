@@ -1,6 +1,6 @@
-import { type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { GitPullRequest, Loader2, Maximize2, Minimize2 } from "lucide-react";
+import { GitCommitHorizontal, GitPullRequest, Loader2, Maximize2, Minimize2, Undo2 } from "lucide-react";
 import {
   type CommitSummary,
   type CommitPullRequest,
@@ -9,7 +9,9 @@ import {
 } from "@/lib/azdoCommands";
 import { isEditableTarget, focusPrimaryGrid, formatDate } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
+import { useProviderCapabilities } from "@/lib/useActiveConnection";
 import { CommitFilesPanel } from "./CommitFilesPanel";
+import { CommitRefOperationDialog } from "./CommitRefOperationDialog";
 import { PR_STATUS_LABELS } from "./commitSearchConstants";
 import { commitPrQueryKey, prStatusBadgeClass } from "./commitSearchUtils";
 
@@ -104,6 +106,10 @@ export function CommitPreviewPanel({
   onToggleMaximize: () => void;
   onOpenPullRequest?: (query: string, organizationId?: string) => void;
 }) {
+  const [activeOperation, setActiveOperation] = useState<"cherry-pick" | "revert" | null>(null);
+  const capabilitiesQuery = useProviderCapabilities();
+  const canMutate = capabilitiesQuery.data?.commitMutations ?? false;
+
   // Esc / ← step back to the grid (mirrors the grid's Enter / → into here).
   function handleKeyDown(event: ReactKeyboardEvent) {
     if (isEditableTarget(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
@@ -126,33 +132,62 @@ export function CommitPreviewPanel({
         ) : (
           <span className="text-sm text-muted-foreground">No commit selected</span>
         )}
-        {commit?.webUrl ? (
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          {commit?.webUrl ? (
+            <button
+              type="button"
+              onClick={() => openExternalUrl(commit.webUrl as string)}
+              title="Open in Azure DevOps (O)"
+              className="rounded border border-border bg-card px-1.5 py-px text-[11px] text-primary hover:bg-secondary"
+            >
+              Open
+            </button>
+          ) : null}
+          {commit && canMutate ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setActiveOperation("cherry-pick")}
+                title="Cherry-pick this commit onto another branch"
+                className="flex items-center gap-1 rounded border border-border bg-card px-1.5 py-px text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+              >
+                <GitCommitHorizontal className="h-3 w-3" aria-hidden="true" />
+                Cherry-pick
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveOperation("revert")}
+                title="Revert this commit onto another branch"
+                className="flex items-center gap-1 rounded border border-border bg-card px-1.5 py-px text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+              >
+                <Undo2 className="h-3 w-3" aria-hidden="true" />
+                Revert
+              </button>
+            </>
+          ) : null}
           <button
             type="button"
-            onClick={() => openExternalUrl(commit.webUrl as string)}
-            title="Open in Azure DevOps (O)"
-            className="ml-auto shrink-0 rounded border border-border bg-card px-1.5 py-px text-[11px] text-primary hover:bg-secondary"
+            onClick={onToggleMaximize}
+            aria-pressed={maximized}
+            aria-label={maximized ? "Restore split view" : "Maximize preview"}
+            title={`${maximized ? "Restore split view" : "Maximize preview"} (\\)`}
+            className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           >
-            Open
+            {maximized ? (
+              <Minimize2 className="h-3.5 w-3.5" aria-hidden="true" />
+            ) : (
+              <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
           </button>
-        ) : null}
-        <button
-          type="button"
-          onClick={onToggleMaximize}
-          aria-pressed={maximized}
-          aria-label={maximized ? "Restore split view" : "Maximize preview"}
-          title={`${maximized ? "Restore split view" : "Maximize preview"} (\\)`}
-          className={`shrink-0 rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${
-            commit?.webUrl ? "" : "ml-auto"
-          }`}
-        >
-          {maximized ? (
-            <Minimize2 className="h-3.5 w-3.5" aria-hidden="true" />
-          ) : (
-            <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
-          )}
-        </button>
+        </div>
       </div>
+      {commit && activeOperation ? (
+        <CommitRefOperationDialog
+          kind={activeOperation}
+          commit={commit}
+          onClose={() => setActiveOperation(null)}
+        />
+      ) : null}
       <div
         className="min-h-0 flex-1 overflow-y-auto outline-none"
         data-primary-preview="true"

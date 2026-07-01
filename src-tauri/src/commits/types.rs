@@ -144,3 +144,56 @@ pub struct CommitPullRequest {
     pub my_vote_label: String,
     pub web_url: Option<String>,
 }
+
+/// Shared shape for [`CherryPickCommitInput`] and [`RevertCommitInput`]: both
+/// name a single source commit, the branch to apply it onto, and a proposed
+/// name for the new branch Azure DevOps creates. `project_name`/
+/// `repository_name` are passed through from the already-loaded
+/// [`CommitSummary`] on the frontend so building the result's web URL does not
+/// need an extra lookup.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CherryPickCommitInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub project_name: String,
+    pub repository_id: String,
+    pub repository_name: String,
+    pub commit_id: String,
+    /// Target branch to cherry-pick onto (short name, e.g. `main`).
+    pub onto_branch: String,
+    /// Proposed name for the new branch (short name, e.g. `cherry-pick/abc1234`).
+    pub new_branch_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RevertCommitInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub project_name: String,
+    pub repository_id: String,
+    pub repository_name: String,
+    pub commit_id: String,
+    /// Target branch to revert onto (short name, e.g. `main`).
+    pub onto_branch: String,
+    /// Proposed name for the new branch (short name, e.g. `revert/abc1234`).
+    pub new_branch_name: String,
+}
+
+/// Outcome of a cherry-pick or revert. Azure DevOps runs the operation
+/// server-side and this is only known for certain once `status` is
+/// `"completed"` (branch created, `new_branch_web_url` populated) or
+/// `"failed"`/`"abandoned"` (`failure_message` explains why, no branch was
+/// created). `"queued"`/`"inProgress"` means the client's poll budget ran out
+/// before Azure DevOps finished — the operation may still complete later, so
+/// this is reported to the UI rather than treated as an error.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitRefOperationResult {
+    pub status: String,
+    pub new_branch_name: String,
+    pub new_branch_web_url: Option<String>,
+    pub conflict: bool,
+    pub failure_message: Option<String>,
+}

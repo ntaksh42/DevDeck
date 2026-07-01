@@ -155,3 +155,38 @@ export async function commitActivity(
   const result = await invokeCommand("commit_activity", { input });
   return commitActivityDaysSchema.parse(result);
 }
+
+const commitRefOperationResultSchema = z.object({
+  status: z.string(),
+  newBranchName: z.string(),
+  newBranchWebUrl: z.string().nullable(),
+  conflict: z.boolean(),
+  failureMessage: z.string().nullable(),
+});
+
+export type CommitRefOperationResult = z.infer<typeof commitRefOperationResultSchema>;
+
+export type CommitRefOperationInput = {
+  organizationId?: string;
+  projectId: string;
+  projectName: string;
+  repositoryId: string;
+  repositoryName: string;
+  commitId: string;
+  ontoBranch: string;
+  newBranchName: string;
+};
+
+export async function cherryPickCommit(
+  input: CommitRefOperationInput,
+): Promise<CommitRefOperationResult> {
+  const result = await invokeCommand("cherry_pick_commit", { input });
+  return commitRefOperationResultSchema.parse(result);
+}
+
+export async function revertCommit(
+  input: CommitRefOperationInput,
+): Promise<CommitRefOperationResult> {
+  const result = await invokeCommand("revert_commit", { input });
+  return commitRefOperationResultSchema.parse(result);
+}

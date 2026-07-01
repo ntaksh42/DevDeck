@@ -136,6 +136,56 @@ pub(crate) fn encode_path_segment(value: &str) -> String {
     encoded
 }
 
+/// Percent-encodes a query value while keeping `/` readable, matching how
+/// Azure DevOps' own web UI renders branch names in `version=GB...` links.
+pub(super) fn encode_query_value(value: &str) -> String {
+    let mut encoded = String::new();
+    for byte in value.as_bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'/' => {
+                encoded.push(*byte as char);
+            }
+            byte => encoded.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    encoded
+}
+
+/// Expands a short branch name (`main`) to a fully-qualified ref
+/// (`refs/heads/main`) for the async ref operation APIs. Already-qualified
+/// input (`refs/heads/main`, `refs/tags/v1`) passes through unchanged.
+pub(super) fn to_full_ref_name(branch: &str) -> String {
+    let trimmed = branch.trim();
+    if trimmed.starts_with("refs/") {
+        trimmed.to_string()
+    } else {
+        format!("refs/heads/{trimmed}")
+    }
+}
+
+/// Strips a `refs/heads/` prefix, mirroring the short names shown in the UI's
+/// branch picker.
+pub(super) fn short_branch_name(ref_name: &str) -> &str {
+    ref_name.strip_prefix("refs/heads/").unwrap_or(ref_name)
+}
+
+/// Web URL for a branch at the tip of its history (no path), e.g. what the
+/// cherry-pick/revert dialog links to once the new branch exists.
+pub(super) fn branch_web_url(
+    organization: &Organization,
+    project_name: &str,
+    repository_name: &str,
+    branch_short_name: &str,
+) -> String {
+    format!(
+        "{}/{}/_git/{}?version=GB{}",
+        organization.base_url.trim_end_matches('/'),
+        encode_path_segment(project_name),
+        encode_path_segment(repository_name),
+        encode_query_value(branch_short_name)
+    )
+}
+
 pub(super) fn cached_commit_to_summary(c: CachedCommit) -> CommitSummary {
     let short_commit_id = c.commit_id.chars().take(8).collect();
     CommitSummary {
