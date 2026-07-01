@@ -54,6 +54,18 @@ describe("PrReviewPanel status actions", () => {
     },
     15000,
   );
+
+  it(
+    "offers Reactivate instead of Abandon for an abandoned PR",
+    async () => {
+      renderPanel({ ...pr, status: "abandoned" });
+      await screen.findByRole("button", { name: "Complete" }, { timeout: 8000 });
+      fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+      expect(await screen.findByRole("menuitem", { name: "Reactivate" })).toBeTruthy();
+      expect(screen.queryByRole("menuitem", { name: "Abandon" })).toBeNull();
+    },
+    15000,
+  );
 });
 
 describe("PrReviewPanel Result tab", () => {

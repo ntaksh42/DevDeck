@@ -46,6 +46,11 @@ export const reviewPullRequestSummarySchema = z.object({
   myVoteLabel: z.string(),
   myIsRequired: z.boolean(),
   isDraft: z.boolean(),
+  // Only populated for PRs sourced from PR Search (which can query non-active
+  // statuses); My Reviews only ever returns active PRs. Lets the review panel
+  // tell an abandoned PR apart from an active one (e.g. to offer Reactivate
+  // instead of Abandon).
+  status: z.string().optional(),
   mergeStatus: z.string().nullable().default(null),
   // Aggregate CI verdict: "succeeded" | "failed" | "in_progress" | "none".
   // null means CI was never fetched for this PR (treated as unknown/none).

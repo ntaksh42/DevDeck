@@ -97,6 +97,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Maximize preview</span><kbd className={kbd}>\</kbd></div>
           <div className={row}><span>Show drafts</span><kbd className={kbd}>D</kbd></div>
           <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
+          <div className={row}><span>Copy as Markdown link</span><kbd className={kbd}>L</kbd></div>
           <div className={row}><span>Snooze selected row</span><kbd className={kbd}>Z</kbd></div>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ PgUp PgDn Home End</kbd></div>
           <div className={row}><span>Select multiple (check file-overlap conflict risk)</span><kbd className={kbd}>Shift+↑ ↓ · Shift+click</kbd></div>
@@ -107,6 +108,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>O / Ctrl+Enter</kbd></div>
           <div className={row}><span>Maximize preview</span><kbd className={kbd}>\</kbd></div>
           <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
+          <div className={row}><span>Copy as Markdown link</span><kbd className={kbd}>L</kbd></div>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ PgUp PgDn Home End</kbd></div>
           <div className={row}><span>Mark done / restore (My Reviews, My Items)</span><kbd className={kbd}>E</kbd></div>
 
@@ -114,6 +116,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>
           <div className={row}><span>Open detail preview</span><kbd className={kbd}>Enter / →</kbd></div>
           <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>Ctrl+Enter / O</kbd></div>
+          <div className={row}><span>Copy as Markdown link</span><kbd className={kbd}>L</kbd></div>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ PgUp PgDn Home End</kbd></div>
           <div className={row}><span>Select row</span><kbd className={kbd}>Space</kbd></div>
           <div className={row}><span>Assign selected item</span><kbd className={kbd}>A</kbd></div>

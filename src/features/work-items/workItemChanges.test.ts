@@ -4,6 +4,7 @@ import {
   DUPLICATE_TITLE_PREFIX,
   buildDuplicateDraft,
   buildInverseChanges,
+  buildWorkItemEmailLink,
   customPreviewFieldValue,
   stagedEntriesForPreview,
   type StagedChanges,
@@ -159,6 +160,26 @@ describe("buildInverseChanges", () => {
   it("skips priority when the prior value was never set", () => {
     const inverse = buildInverseChanges(makePreview({ priority: null }), { priority: 1 });
     expect(inverse.priority).toBeUndefined();
+  });
+});
+
+describe("buildWorkItemEmailLink", () => {
+  it("builds a mailto link with the id/title as subject and title+url as body", () => {
+    const preview = makePreview({
+      id: 456,
+      title: "Fix login",
+      webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/456",
+    });
+    expect(buildWorkItemEmailLink(preview)).toBe(
+      "mailto:?subject=%23456%20Fix%20login&body=Fix%20login%0Ahttps%3A%2F%2Fdev.azure.com%2Fcontoso%2FPlatform%2F_workitems%2Fedit%2F456",
+    );
+  });
+
+  it("falls back to the title alone in the body when there is no URL", () => {
+    const preview = makePreview({ id: 1, title: "No link yet", webUrl: null });
+    expect(buildWorkItemEmailLink(preview)).toBe(
+      "mailto:?subject=%231%20No%20link%20yet&body=No%20link%20yet",
+    );
   });
 });
 

@@ -4,6 +4,7 @@ import type { PullRequestAction } from "@/lib/azdoCommands";
 
 type OverflowProps = {
   isDraft: boolean;
+  isAbandoned: boolean;
   autoComplete: boolean;
   readOnly: boolean;
   pending: boolean;
@@ -60,6 +61,7 @@ function OverflowMenuPopup({
   triggerRef,
   onClose,
   isDraft,
+  isAbandoned,
   autoComplete,
   readOnly,
   pending,
@@ -243,17 +245,31 @@ function OverflowMenuPopup({
         Transition work items
       </button>
       <div className="my-1 border-t border-border" />
-      <button
-        type="button"
-        role="menuitem"
-        data-menu-item="true"
-        disabled={readOnly || pending}
-        title={readOnly ? "Read-only validation mode is enabled" : undefined}
-        onClick={() => runAndClose("abandon", "Abandon this pull request?")}
-        className={`${itemClass} text-destructive`}
-      >
-        Abandon
-      </button>
+      {isAbandoned ? (
+        <button
+          type="button"
+          role="menuitem"
+          data-menu-item="true"
+          disabled={readOnly || pending}
+          title={readOnly ? "Read-only validation mode is enabled" : undefined}
+          onClick={() => runAndClose("reactivate", "Reactivate this abandoned pull request?")}
+          className={itemClass}
+        >
+          Reactivate
+        </button>
+      ) : (
+        <button
+          type="button"
+          role="menuitem"
+          data-menu-item="true"
+          disabled={readOnly || pending}
+          title={readOnly ? "Read-only validation mode is enabled" : undefined}
+          onClick={() => runAndClose("abandon", "Abandon this pull request?")}
+          className={`${itemClass} text-destructive`}
+        >
+          Abandon
+        </button>
+      )}
     </div>
   );
 }

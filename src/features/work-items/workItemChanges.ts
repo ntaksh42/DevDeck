@@ -201,6 +201,15 @@ export function buildDuplicateDraft(preview: WorkItemPreview): WorkItemDuplicate
   };
 }
 
+// Builds the "Email a link" mailto: URL for a work item, mirroring Azure
+// DevOps Web's own share action (subject + body pre-filled with the title and
+// URL, no recipient).
+export function buildWorkItemEmailLink(preview: WorkItemPreview): string {
+  const subject = `#${preview.id} ${preview.title}`;
+  const body = preview.webUrl ? `${preview.title}\n${preview.webUrl}` : preview.title;
+  return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
 // Computes the from/to rows shown in the staged-changes summary.
 export function stagedEntriesForPreview(
   preview: WorkItemPreview | null | undefined,

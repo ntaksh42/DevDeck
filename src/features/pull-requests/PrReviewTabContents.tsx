@@ -198,6 +198,7 @@ export function ReviewTab({
           ) : null}
           <PrOverflowMenu
             isDraft={review.isDraft}
+            isAbandoned={pr.status === "abandoned"}
             autoComplete={review.autoComplete}
             readOnly={readOnly}
             pending={updateMutation.isPending}

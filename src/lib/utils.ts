@@ -144,6 +144,13 @@ export function matchesAllSearchTerms(
   return terms.every((term) => haystack.includes(term));
 }
 
+// Builds a "[text](url)" Markdown link for the "copy as Markdown link" actions
+// (PRs, work items, commits). Strips `[`/`]` from the text so it can't break
+// out of the link syntax.
+export function markdownLink(text: string, url: string): string {
+  return `[${text.replace(/[[\]]/g, "")}](${url})`;
+}
+
 export function formatDate(value: string): string {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return "—";
