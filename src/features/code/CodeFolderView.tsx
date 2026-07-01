@@ -4,6 +4,7 @@ import { commandErrorMessage, type Organization } from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
 import { MarkdownView } from "@/lib/markdown";
 import { ErrorState } from "@/components/StateDisplay";
+import { useGridVirtualizer } from "@/lib/useGridVirtualizer";
 import {
   commitUrl,
   formatDate,
@@ -12,6 +13,11 @@ import {
   useTreeQuery,
   type RepoOption,
 } from "./codeBrowseShared";
+
+// Folders larger than this window their rows instead of rendering them all.
+const VIRTUALIZE_THRESHOLD = 300;
+// Fixed row height (h-8) the windowing math relies on.
+const ROW_HEIGHT = 32;
 
 // Right pane when a folder is selected: the Azure DevOps folder listing with
 // Name / Last change / Last commit columns, plus the folder's README rendered below.
@@ -34,6 +40,15 @@ export function CodeFolderView({
 }) {
   const query = useTreeQuery(organizationId, repo, branch, path, true);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const allItems = query.data ?? [];
+  // Very large folders window their rows with the shared grid virtualizer;
+  // small ones render everything (keeps the README directly below the table).
+  const virtualize = allItems.length > VIRTUALIZE_THRESHOLD;
+  const virtualizer = useGridVirtualizer({
+    rowCount: allItems.length,
+    rowHeight: ROW_HEIGHT,
+    overscan: 10,
+  });
 
   // Arrow keys (or J/K) move focus between rows; Enter/Space (native button
   // activation) opens the focused entry, matching the Commits grid.
@@ -51,15 +66,24 @@ export function CodeFolderView({
   if (query.isError) {
     return <ErrorState message={commandErrorMessage(query.error)} />;
   }
-  const items = query.data ?? [];
-  if (items.length === 0) {
+  if (allItems.length === 0) {
     return <div className="px-3 py-3 text-sm text-muted-foreground">This folder is empty.</div>;
   }
 
-  const readme = items.find((item) => !item.isFolder && /^readme\.md$/i.test(item.name));
+  const readme = allItems.find((item) => !item.isFolder && /^readme\.md$/i.test(item.name));
+  const items = virtualize
+    ? allItems.slice(virtualizer.firstRow, virtualizer.lastRow)
+    : allItems;
 
   return (
-    <div ref={containerRef} onKeyDown={onKeyDown}>
+    <div
+      ref={(node) => {
+        containerRef.current = node;
+        if (virtualize) virtualizer.scrollerRef(node);
+      }}
+      onKeyDown={onKeyDown}
+      className={virtualize ? "h-full overflow-y-auto" : undefined}
+    >
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border text-left text-xs text-muted-foreground">
@@ -69,8 +93,11 @@ export function CodeFolderView({
           </tr>
         </thead>
         <tbody>
+          {virtualize && virtualizer.topPadding > 0 ? (
+            <tr style={{ height: virtualizer.topPadding }} aria-hidden="true" />
+          ) : null}
           {items.map((item) => (
-            <tr key={item.path} className="border-b border-border/60 hover:bg-muted/50">
+            <tr key={item.path} className="h-8 border-b border-border/60 hover:bg-muted/50">
               <td className="px-3 py-1.5">
                 <button
                   type="button"
@@ -89,7 +116,7 @@ export function CodeFolderView({
                       aria-hidden="true"
                     />
                   )}
-                  <span>{item.name}</span>
+                  <span className="whitespace-nowrap">{item.name}</span>
                 </button>
               </td>
               <td className="whitespace-nowrap px-3 py-1.5 text-muted-foreground">
@@ -119,6 +146,9 @@ export function CodeFolderView({
               </td>
             </tr>
           ))}
+          {virtualize && virtualizer.bottomPadding > 0 ? (
+            <tr style={{ height: virtualizer.bottomPadding }} aria-hidden="true" />
+          ) : null}
         </tbody>
       </table>
       {readme ? (

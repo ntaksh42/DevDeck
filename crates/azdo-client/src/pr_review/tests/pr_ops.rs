@@ -304,3 +304,65 @@ async fn get_item_content_at_branch_requests_branch_version() {
         .unwrap();
     assert_eq!(item.content.as_deref(), Some("line1\nline2\n"));
 }
+
+#[tokio::test]
+async fn get_item_content_at_version_requests_tag_version() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/project-1/_apis/git/repositories/repo-1/items"))
+        .and(query_param("path", "/src/app.ts"))
+        .and(query_param("versionDescriptor.versionType", "tag"))
+        .and(query_param("versionDescriptor.version", "v1.0"))
+        .and(query_param("includeContent", "true"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "content": "tagged\n",
+            "contentMetadata": { "isBinary": false }
+        })))
+        .mount(&server)
+        .await;
+
+    let item = test_client(&server)
+        .await
+        .get_item_content_at_version(
+            "project-1",
+            "repo-1",
+            "/src/app.ts",
+            crate::GitVersionType::Tag,
+            "v1.0",
+        )
+        .await
+        .unwrap();
+    assert_eq!(item.content.as_deref(), Some("tagged\n"));
+}
+
+#[tokio::test]
+async fn get_item_bytes_downloads_octet_stream() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/project-1/_apis/git/repositories/repo-1/items"))
+        .and(query_param("path", "/logo.png"))
+        .and(query_param("$format", "octetStream"))
+        .and(query_param("versionDescriptor.versionType", "branch"))
+        .and(query_param("versionDescriptor.version", "main"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "image/png")
+                .set_body_bytes(vec![0x89u8, 0x50, 0x4e, 0x47]),
+        )
+        .mount(&server)
+        .await;
+
+    let response = test_client(&server)
+        .await
+        .get_item_bytes(
+            "project-1",
+            "repo-1",
+            "/logo.png",
+            crate::GitVersionType::Branch,
+            "main",
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.bytes, vec![0x89u8, 0x50, 0x4e, 0x47]);
+    assert_eq!(response.content_type.as_deref(), Some("image/png"));
+}

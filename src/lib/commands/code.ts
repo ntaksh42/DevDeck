@@ -115,20 +115,56 @@ const repoFileSchema = z.object({
   content: z.string(),
   isBinary: z.boolean(),
   tooLarge: z.boolean(),
+  /** True when `content` is only the leading bytes of a larger text file. */
+  truncated: z.boolean(),
+  /** A data: URL for image files, rendered instead of text content. */
+  imageDataUrl: z.string().nullable(),
 });
 export type RepoFile = z.infer<typeof repoFileSchema>;
 
-// Fetches a file's text content at the tip of a branch.
+/** An explicit ref for file requests, overriding the branch tip. */
+export type RepoFileVersion = { versionType: "branch" | "commit" | "tag"; version: string };
+
+// Fetches a file's content at the tip of a branch, or at the explicit
+// versionType/version ref when given. Images come back as `imageDataUrl`.
 export async function getRepoFile(input: {
   organizationId?: string;
   project: string;
   repository: string;
   branch: string;
   path: string;
+  versionType?: RepoFileVersion["versionType"];
+  version?: string;
   operationId?: string;
 }): Promise<RepoFile> {
   const result = await invokeCommand("get_repo_file", { input });
   return repoFileSchema.parse(result);
+}
+
+const repoPathItemSchema = z.object({
+  name: z.string(),
+  path: z.string(),
+  isFolder: z.boolean(),
+});
+const repoPathListSchema = z.object({
+  items: z.array(repoPathItemSchema),
+  truncated: z.boolean(),
+});
+export type RepoPathItem = z.infer<typeof repoPathItemSchema>;
+export type RepoPathList = z.infer<typeof repoPathListSchema>;
+
+// Lists every path in a repository at a branch tip (one recursive call), for
+// filtering the tree across unexpanded folders. `truncated` marks a capped
+// result on very large repositories.
+export async function listRepoPaths(input: {
+  organizationId?: string;
+  project: string;
+  repository: string;
+  branch: string;
+  operationId?: string;
+}): Promise<RepoPathList> {
+  const result = await invokeCommand("list_repo_paths", { input });
+  return repoPathListSchema.parse(result);
 }
 
 // Lists the commit history for a path at a branch (the Files > History tab).

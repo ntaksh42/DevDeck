@@ -49,10 +49,12 @@ export function demoRepoBranches() {
 // folder path; each entry lists that folder's direct children (folders first).
 const DEMO_REPO_TREE: Record<string, { name: string; path: string; isFolder: boolean }[]> = {
   "/": [
+    { name: "assets", path: "/assets", isFolder: true },
     { name: "src", path: "/src", isFolder: true },
     { name: "README.md", path: "/README.md", isFolder: false },
     { name: "package.json", path: "/package.json", isFolder: false },
   ],
+  "/assets": [{ name: "logo.png", path: "/assets/logo.png", isFolder: false }],
   "/src": [
     { name: "lib", path: "/src/lib", isFolder: true },
     { name: "App.tsx", path: "/src/App.tsx", isFolder: false },
@@ -93,10 +95,34 @@ const DEMO_REPO_FILES: Record<string, string> = {
     'export async function demoInvoke(command: string, args?: unknown) {\n  // Returns canned data so the browser preview works without a backend.\n  return null;\n}\n',
 };
 
+// A 1x1 transparent PNG so the browser preview can exercise the image pane.
+const DEMO_IMAGE_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
 export function demoRepoFile(path: string) {
+  if (/\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i.test(path)) {
+    return {
+      path,
+      content: "",
+      isBinary: true,
+      tooLarge: false,
+      truncated: false,
+      imageDataUrl: DEMO_IMAGE_DATA_URL,
+    };
+  }
   const content =
     DEMO_REPO_FILES[path] ?? `// ${path}\n// Demo content for the code browser preview.\n`;
-  return { path, content, isBinary: false, tooLarge: false };
+  return { path, content, isBinary: false, tooLarge: false, truncated: false, imageDataUrl: null };
+}
+
+// Every file/folder path in the demo repository, flattened for the recursive
+// tree filter.
+export function demoRepoPaths() {
+  const items = Object.values(DEMO_REPO_TREE)
+    .flat()
+    .map(({ name, path, isFolder }) => ({ name, path, isFolder }))
+    .sort((a, b) => a.path.toLowerCase().localeCompare(b.path.toLowerCase()));
+  return { items, truncated: false };
 }
 
 // Demo commit history for the Files > History tab. A short, fixed list so the

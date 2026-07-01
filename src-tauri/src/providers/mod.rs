@@ -18,8 +18,8 @@ use async_trait::async_trait;
 use serde::Serialize;
 
 use crate::code_browse::{
-    GetFileInput, ListBranchesInput, ListHistoryInput, ListTreeInput, RepoBranch, RepoCommitInfo,
-    RepoFile, RepoTreeItem,
+    GetFileInput, ListBranchesInput, ListHistoryInput, ListPathsInput, ListTreeInput, RepoBranch,
+    RepoCommitInfo, RepoFile, RepoPathList, RepoTreeItem,
 };
 use crate::code_search::{
     CodeContextResult, CodeSearchResults, GetCodeContextInput, SearchCodeInput,
@@ -227,6 +227,7 @@ pub(crate) trait Provider: Send + Sync {
     async fn list_repo_tree(&self, input: ListTreeInput) -> Result<Vec<RepoTreeItem>>;
     async fn get_repo_file(&self, input: GetFileInput) -> Result<RepoFile>;
     async fn list_repo_history(&self, input: ListHistoryInput) -> Result<Vec<RepoCommitInfo>>;
+    async fn list_repo_paths(&self, input: ListPathsInput) -> Result<RepoPathList>;
 
     // --- Pipelines (GitHub: not supported) ---
     async fn list_pipeline_projects(

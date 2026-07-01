@@ -23,6 +23,8 @@ import {
   toggleFavoriteRepository,
 } from "./codeBrowseStorage";
 import { TreeLevel } from "./CodeFileTree";
+import { CodeFilteredTree } from "./CodeFilteredTree";
+import { Breadcrumb, TabButton } from "./CodeBrowseChrome";
 import { CodeFolderView } from "./CodeFolderView";
 import { CodeFileView } from "./CodeFileView";
 import { CodeHistoryView } from "./CodeHistoryView";
@@ -116,6 +118,11 @@ export function CodeBrowseView() {
   const [searchQuery, setSearchQuery] = useState("");
   const [tab, setTab] = useState<RightTab>("contents");
   const [baseBranch, setBaseBranch] = useState("");
+  // A commit picked via History > View, pinning the Contents tab to that ref.
+  const [pinnedCommit, setPinnedCommit] = useState<{
+    commitId: string;
+    shortId: string;
+  } | null>(null);
   const treeRef = useRef<HTMLDivElement | null>(null);
 
   // Remember the open repository/branch/path so the view reopens here next time.
@@ -145,6 +152,7 @@ export function CodeBrowseView() {
     setSearchQuery("");
     setTab("contents");
     setBaseBranch("");
+    setPinnedCommit(null);
   }, [repositoryId, branch]);
 
   // Compare only applies to files; fall back to Contents when a folder is shown.
@@ -164,12 +172,14 @@ export function CodeBrowseView() {
   function openFolder(path: string) {
     setSelected({ path, isFolder: true });
     setExpanded((prev) => new Set(prev).add(path));
+    setPinnedCommit(null);
   }
 
   function openFile(path: string) {
     setSelected({ path, isFolder: false });
     setSearchQuery("");
     setTab("contents");
+    setPinnedCommit(null);
   }
 
   function onSearchKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
@@ -319,14 +329,23 @@ export function CodeBrowseView() {
               onFocus={onTreeFocus}
               className="min-h-0 flex-1 overflow-y-auto py-1 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             >
-              {branch ? (
+              {branch && filterText.trim() ? (
+                <CodeFilteredTree
+                  organizationId={organizationId}
+                  repo={repo}
+                  branch={branch}
+                  filterText={filterText}
+                  selectedPath={selected.path}
+                  onOpenFolder={openFolder}
+                  onOpenFile={openFile}
+                />
+              ) : branch ? (
                 <TreeLevel
                   organizationId={organizationId}
                   repo={repo}
                   branch={branch}
                   parentPath="/"
                   depth={0}
-                  filterText={filterText}
                   selectedPath={selected.path}
                   expanded={expanded}
                   onToggle={toggleFolder}
@@ -401,6 +420,17 @@ export function CodeBrowseView() {
                     repo={repo}
                     branch={branch}
                     path={selected.path}
+                    onViewAtCommit={
+                      !selected.isFolder
+                        ? (commit) => {
+                            setPinnedCommit({
+                              commitId: commit.commitId,
+                              shortId: commit.shortId,
+                            });
+                            setTab("contents");
+                          }
+                        : undefined
+                    }
                   />
                 ) : tab === "compare" && !selected.isFolder ? (
                   <CodeCompareView
@@ -428,6 +458,13 @@ export function CodeBrowseView() {
                     repo={repo}
                     branch={branch}
                     path={selected.path}
+                    version={
+                      pinnedCommit
+                        ? { versionType: "commit", version: pinnedCommit.commitId }
+                        : undefined
+                    }
+                    versionLabel={pinnedCommit ? `commit ${pinnedCommit.shortId}` : undefined}
+                    onExitVersion={() => setPinnedCommit(null)}
                   />
                 )}
               </div>
@@ -439,75 +476,3 @@ export function CodeBrowseView() {
   );
 }
 
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`rounded px-2 py-0.5 ${
-        active ? "bg-secondary font-medium" : "text-muted-foreground hover:text-foreground"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-// The current path as a clickable breadcrumb: the repository name navigates to
-// the root, each intermediate segment to that folder. The last segment is the
-// current location and stays plain text.
-function Breadcrumb({
-  path,
-  repositoryName,
-  onNavigate,
-}: {
-  path: string;
-  repositoryName: string;
-  onNavigate: (path: string) => void;
-}) {
-  const segments = path.split("/").filter(Boolean);
-  return (
-    <nav aria-label="Current path" className="flex min-w-0 items-center gap-1 truncate text-sm">
-      {segments.length === 0 ? (
-        <span className="font-medium">{repositoryName}</span>
-      ) : (
-        <button
-          type="button"
-          onClick={() => onNavigate("/")}
-          className="font-medium hover:underline"
-        >
-          {repositoryName}
-        </button>
-      )}
-      {segments.map((segment, index) => {
-        const target = "/" + segments.slice(0, index + 1).join("/");
-        const isLast = index === segments.length - 1;
-        return (
-          <span key={target} className="flex items-center gap-1 text-muted-foreground">
-            <span aria-hidden="true">/</span>
-            {isLast ? (
-              <span>{segment}</span>
-            ) : (
-              <button
-                type="button"
-                onClick={() => onNavigate(target)}
-                className="hover:text-foreground hover:underline"
-              >
-                {segment}
-              </button>
-            )}
-          </span>
-        );
-      })}
-    </nav>
-  );
-}

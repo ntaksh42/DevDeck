@@ -7,7 +7,7 @@ import {
   useState,
 } from "react";
 import { Check, ChevronDown, ChevronUp, Copy, Loader2, Search, WrapText, X } from "lucide-react";
-import { commandErrorMessage } from "@/lib/azdoCommands";
+import { commandErrorMessage, type RepoFileVersion } from "@/lib/azdoCommands";
 import { ErrorState } from "@/components/StateDisplay";
 import { highlightCode } from "@/lib/highlight";
 import { leafName, type RepoOption, useRepoFile } from "./codeBrowseShared";
@@ -15,21 +15,29 @@ import { leafName, type RepoOption, useRepoFile } from "./codeBrowseShared";
 type LineMatch = { start: number; end: number; ordinal: number };
 
 // Right pane when a file is selected: its content with line numbers and
-// highlight.js syntax coloring. A find-in-file bar (Ctrl+F) highlights matches
-// and scrolls between them; while searching, lines render as plain text with
-// the matches marked so highlight spans don't get in the way.
+// highlight.js syntax coloring, or the image itself for image files. A
+// find-in-file bar (Ctrl+F) highlights matches and scrolls between them; while
+// searching, lines render as plain text with the matches marked so highlight
+// spans don't get in the way. `version` pins the content to an explicit ref
+// (e.g. a commit picked in the History tab) instead of the branch tip.
 export function CodeFileView({
   organizationId,
   repo,
   branch,
   path,
+  version,
+  versionLabel,
+  onExitVersion,
 }: {
   organizationId: string;
   repo: RepoOption;
   branch: string;
   path: string;
+  version?: RepoFileVersion;
+  versionLabel?: string;
+  onExitVersion?: () => void;
 }) {
-  const query = useRepoFile(organizationId, repo, branch, path);
+  const query = useRepoFile(organizationId, repo, branch, path, version);
 
   const content = query.data?.content ?? "";
   const lines = useMemo(() => content.split("\n"), [content]);
@@ -56,6 +64,20 @@ export function CodeFileView({
     setCurrent(0);
     setCopied(false);
   }, [path]);
+
+  // Ctrl/Cmd+F opens find-in-file from anywhere in the Files view while a
+  // file is open, not just when the file pane has focus.
+  useEffect(() => {
+    function onDocumentKeyDown(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        setFindOpen(true);
+        window.setTimeout(() => findInputRef.current?.select(), 0);
+      }
+    }
+    document.addEventListener("keydown", onDocumentKeyDown);
+    return () => document.removeEventListener("keydown", onDocumentKeyDown);
+  }, []);
 
   // Per-line match ranges plus the total count, computed once per query change.
   const { lineMatches, total } = useMemo(() => {
@@ -113,13 +135,6 @@ export function CodeFileView({
     }
   }
 
-  function onContainerKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
-      event.preventDefault();
-      openFind();
-    }
-  }
-
   function onFindKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -143,19 +158,66 @@ export function CodeFileView({
   }
   const file = query.data;
   if (!file) return null;
-  if (file.isBinary) {
-    return <div className="px-3 py-3 text-sm text-muted-foreground">Binary file not shown.</div>;
+
+  // Shown while the content is pinned to an explicit ref (History > View).
+  const versionBanner = version ? (
+    <div className="flex items-center gap-2 border-b border-border bg-amber-100/60 px-3 py-1.5 text-xs dark:bg-amber-900/30">
+      <span>Viewing this file at {versionLabel ?? version.version}</span>
+      {onExitVersion ? (
+        <button
+          type="button"
+          onClick={onExitVersion}
+          className="font-medium text-primary hover:underline"
+        >
+          Back to {branch}
+        </button>
+      ) : null}
+    </div>
+  ) : null;
+
+  if (file.imageDataUrl) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        {versionBanner}
+        <div className="min-h-0 flex-1 overflow-auto p-4">
+          <img
+            src={file.imageDataUrl}
+            alt={leafName(path)}
+            className="max-w-full rounded border border-border"
+          />
+        </div>
+      </div>
+    );
   }
   if (file.tooLarge) {
     return (
-      <div className="px-3 py-3 text-sm text-muted-foreground">File is too large to preview.</div>
+      <div>
+        {versionBanner}
+        <div className="px-3 py-3 text-sm text-muted-foreground">
+          File is too large to preview.
+        </div>
+      </div>
+    );
+  }
+  if (file.isBinary) {
+    return (
+      <div>
+        {versionBanner}
+        <div className="px-3 py-3 text-sm text-muted-foreground">Binary file not shown.</div>
+      </div>
     );
   }
 
   const searching = findOpen && find.length > 0;
   const wrapClass = wrap ? "whitespace-pre-wrap break-words" : "whitespace-pre";
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col" onKeyDown={onContainerKeyDown}>
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      {versionBanner}
+      {file.truncated ? (
+        <div className="border-b border-border bg-amber-100/60 px-3 py-1.5 text-xs dark:bg-amber-900/30">
+          Showing the first 512 KB of this file. Open it in Azure DevOps for the full content.
+        </div>
+      ) : null}
       <div className="flex items-center justify-between gap-2 border-b border-border px-2 py-1">
         <div className="flex items-center gap-2 pl-1 text-xs text-muted-foreground">
           {highlighted?.language ? (

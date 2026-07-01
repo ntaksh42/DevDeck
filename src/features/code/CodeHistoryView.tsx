@@ -1,7 +1,12 @@
 import { type KeyboardEvent as ReactKeyboardEvent, useRef } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { commandErrorMessage, listRepoHistory, type Organization } from "@/lib/azdoCommands";
+import {
+  commandErrorMessage,
+  listRepoHistory,
+  type Organization,
+  type RepoCommitInfo,
+} from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
 import { ErrorState } from "@/components/StateDisplay";
 import { commitUrl, formatDate, handleRowNavKey, type RepoOption } from "./codeBrowseShared";
@@ -9,19 +14,22 @@ import { commitUrl, formatDate, handleRowNavKey, type RepoOption } from "./codeB
 const HISTORY_PAGE_SIZE = 50;
 
 // The Files > History tab: the commit history of the selected file or folder at
-// the current branch, paged in with "Load more".
+// the current branch, paged in with "Load more". For files, `onViewAtCommit`
+// adds a per-row View action that shows the file as of that commit.
 export function CodeHistoryView({
   organization,
   organizationId,
   repo,
   branch,
   path,
+  onViewAtCommit,
 }: {
   organization: Organization | undefined;
   organizationId: string;
   repo: RepoOption;
   branch: string;
   path: string;
+  onViewAtCommit?: (commit: RepoCommitInfo) => void;
 }) {
   const query = useInfiniteQuery({
     queryKey: ["repoHistory", organizationId, repo.repositoryId, branch, path],
@@ -77,6 +85,7 @@ export function CodeHistoryView({
             <th className="px-3 py-1.5 font-medium">Message</th>
             <th className="px-3 py-1.5 font-medium">Author</th>
             <th className="px-3 py-1.5 font-medium">Date</th>
+            {onViewAtCommit ? <th className="px-3 py-1.5 font-medium" /> : null}
           </tr>
         </thead>
         <tbody>
@@ -100,6 +109,18 @@ export function CodeHistoryView({
               <td className="whitespace-nowrap px-3 py-1.5 text-muted-foreground">
                 {formatDate(commit.date)}
               </td>
+              {onViewAtCommit ? (
+                <td className="whitespace-nowrap px-3 py-1.5">
+                  <button
+                    type="button"
+                    onClick={() => onViewAtCommit(commit)}
+                    className="text-xs text-primary hover:underline"
+                    title="Show the file as of this commit"
+                  >
+                    View
+                  </button>
+                </td>
+              ) : null}
             </tr>
           ))}
         </tbody>

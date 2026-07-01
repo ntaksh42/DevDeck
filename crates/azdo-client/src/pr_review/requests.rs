@@ -1,8 +1,8 @@
 use serde_json::json;
 
-use crate::client::AdoClient;
+use crate::client::{AdoClient, BinaryResponse};
 use crate::error::Result;
-use crate::git::{GitCommitRef, IdentityRefWithVote, ListResponse};
+use crate::git::{GitCommitRef, GitVersionType, IdentityRefWithVote, ListResponse};
 
 use super::types::{
     GitChangeEntry, GitItemContent, GitIteration, GitIterationChanges, GitPullRequestDetail,
@@ -301,17 +301,12 @@ impl AdoClient {
         item_path: &str,
         commit_id: &str,
     ) -> Result<GitItemContent> {
-        let path = format!("{project_id}/_apis/git/repositories/{repository_id}/items");
-        self.get_json(
-            &path,
-            &[
-                ("api-version", "7.1-preview"),
-                ("path", item_path),
-                ("versionDescriptor.versionType", "commit"),
-                ("versionDescriptor.version", commit_id),
-                ("includeContent", "true"),
-                ("$format", "json"),
-            ],
+        self.get_item_content_at_version(
+            project_id,
+            repository_id,
+            item_path,
+            GitVersionType::Commit,
+            commit_id,
         )
         .await
     }
@@ -324,16 +319,66 @@ impl AdoClient {
         item_path: &str,
         branch: &str,
     ) -> Result<GitItemContent> {
+        self.get_item_content_at_version(
+            project_id,
+            repository_id,
+            item_path,
+            GitVersionType::Branch,
+            branch,
+        )
+        .await
+    }
+
+    /// Fetches the (text) content of a file at an arbitrary ref (branch,
+    /// commit, or tag).
+    pub async fn get_item_content_at_version(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        item_path: &str,
+        version_type: GitVersionType,
+        version: &str,
+    ) -> Result<GitItemContent> {
         let path = format!("{project_id}/_apis/git/repositories/{repository_id}/items");
         self.get_json(
             &path,
             &[
                 ("api-version", "7.1-preview"),
                 ("path", item_path),
-                ("versionDescriptor.versionType", "branch"),
-                ("versionDescriptor.version", branch),
+                (
+                    "versionDescriptor.versionType",
+                    version_type.as_query_value(),
+                ),
+                ("versionDescriptor.version", version),
                 ("includeContent", "true"),
                 ("$format", "json"),
+            ],
+        )
+        .await
+    }
+
+    /// Downloads a file's raw bytes at an arbitrary ref (branch, commit, or
+    /// tag), e.g. for image previews of binary blobs.
+    pub async fn get_item_bytes(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        item_path: &str,
+        version_type: GitVersionType,
+        version: &str,
+    ) -> Result<BinaryResponse> {
+        let path = format!("{project_id}/_apis/git/repositories/{repository_id}/items");
+        self.get_bytes(
+            &path,
+            &[
+                ("api-version", "7.1-preview"),
+                ("path", item_path),
+                (
+                    "versionDescriptor.versionType",
+                    version_type.as_query_value(),
+                ),
+                ("versionDescriptor.version", version),
+                ("$format", "octetStream"),
             ],
         )
         .await
