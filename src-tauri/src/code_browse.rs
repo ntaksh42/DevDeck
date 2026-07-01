@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::auth::client_for_organization;
 use crate::db::AppDatabase;
-use crate::error::Result;
+use crate::error::{AppError, Result};
 use crate::secrets::SecretStore;
 
 /// Largest file we render in the browser. Bigger blobs are reported as
@@ -49,6 +49,28 @@ pub struct GetFileInput {
     pub path: String,
     #[serde(default)]
     pub operation_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateBranchInput {
+    pub organization_id: Option<String>,
+    pub project: String,
+    pub repository: String,
+    /// Existing branch (short name, no `refs/heads/` prefix) to branch from.
+    pub source_branch: String,
+    /// Short name for the new branch (no `refs/heads/` prefix).
+    pub new_branch_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteBranchInput {
+    pub organization_id: Option<String>,
+    pub project: String,
+    pub repository: String,
+    /// Short branch name (no `refs/heads/` prefix) to delete.
+    pub branch: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -246,6 +268,53 @@ impl CodeBrowseService {
         }
     }
 
+    /// Creates a branch from the tip of an existing branch.
+    pub async fn create_branch(&self, input: CreateBranchInput) -> Result<RepoBranch> {
+        let organization = self
+            .db
+            .resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let source_object_id = resolve_branch_object_id(
+            &client,
+            &input.project,
+            &input.repository,
+            &input.source_branch,
+        )
+        .await?;
+        client
+            .create_branch(
+                &input.project,
+                &input.repository,
+                &input.new_branch_name,
+                &source_object_id,
+            )
+            .await?;
+        Ok(RepoBranch {
+            name: input.new_branch_name,
+            is_default: false,
+        })
+    }
+
+    /// Deletes a branch.
+    pub async fn delete_branch(&self, input: DeleteBranchInput) -> Result<()> {
+        let organization = self
+            .db
+            .resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let current_object_id =
+            resolve_branch_object_id(&client, &input.project, &input.repository, &input.branch)
+                .await?;
+        client
+            .delete_branch(
+                &input.project,
+                &input.repository,
+                &input.branch,
+                &current_object_id,
+            )
+            .await?;
+        Ok(())
+    }
+
     /// Lists the commit history for a path at a branch (the Files > History tab).
     pub async fn list_history(&self, input: ListHistoryInput) -> Result<Vec<RepoCommitInfo>> {
         let organization = self
@@ -313,6 +382,24 @@ fn commit_info(change: GitCommitRef) -> RepoCommitInfo {
 
 fn strip_heads_prefix(ref_name: &str) -> &str {
     ref_name.strip_prefix("refs/heads/").unwrap_or(ref_name)
+}
+
+/// Looks up a branch's current tip commit id, required as the `objectId` for
+/// both creating a branch (source) and deleting one (its current position).
+async fn resolve_branch_object_id(
+    client: &azdo_client::AdoClient,
+    project: &str,
+    repository: &str,
+    branch: &str,
+) -> Result<String> {
+    let ref_name = format!("refs/heads/{branch}");
+    client
+        .list_branches(project, repository)
+        .await?
+        .into_iter()
+        .find(|git_ref| git_ref.name == ref_name)
+        .and_then(|git_ref| git_ref.object_id)
+        .ok_or_else(|| AppError::InvalidInput(format!("Branch '{branch}' was not found.")))
 }
 
 /// Normalizes a tree scope path: blank/`""` becomes `/`, trailing slashes are

@@ -1,10 +1,10 @@
 use tauri::State;
 
-use crate::app_state::AppState;
+use crate::app_state::{ensure_write_enabled, AppState};
 use crate::cancellation::run_cancellable;
 use crate::code_browse::{
-    GetFileInput, ListBranchesInput, ListHistoryInput, ListTreeInput, RepoBranch, RepoCommitInfo,
-    RepoFile, RepoTreeItem,
+    CreateBranchInput, DeleteBranchInput, GetFileInput, ListBranchesInput, ListHistoryInput,
+    ListTreeInput, RepoBranch, RepoCommitInfo, RepoFile, RepoTreeItem,
 };
 use crate::code_search::{
     CodeContextResult, CodeSearchResults, GetCodeContextInput, SearchCodeInput,
@@ -88,6 +88,23 @@ pub async fn list_repo_history(
         provider.list_repo_history(input),
     )
     .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn create_branch(
+    input: CreateBranchInput,
+    state: State<'_, AppState>,
+) -> Result<RepoBranch> {
+    ensure_write_enabled(&state).await?;
+    state.provider().await?.create_branch(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn delete_branch(input: DeleteBranchInput, state: State<'_, AppState>) -> Result<()> {
+    ensure_write_enabled(&state).await?;
+    state.provider().await?.delete_branch(input).await
 }
 
 #[tauri::command]

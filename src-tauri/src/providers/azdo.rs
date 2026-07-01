@@ -6,8 +6,8 @@ use async_trait::async_trait;
 
 use crate::app_state::run_blocking;
 use crate::code_browse::{
-    CodeBrowseService, GetFileInput, ListBranchesInput, ListHistoryInput, ListTreeInput,
-    RepoBranch, RepoCommitInfo, RepoFile, RepoTreeItem,
+    CodeBrowseService, CreateBranchInput, DeleteBranchInput, GetFileInput, ListBranchesInput,
+    ListHistoryInput, ListTreeInput, RepoBranch, RepoCommitInfo, RepoFile, RepoTreeItem,
 };
 use crate::code_search::{
     CodeContextResult, CodeSearchResults, CodeSearchService, GetCodeContextInput, SearchCodeInput,
@@ -367,6 +367,14 @@ impl Provider for AzdoProvider {
 
     async fn list_repo_history(&self, input: ListHistoryInput) -> Result<Vec<RepoCommitInfo>> {
         self.code_browse.list_history(input).await
+    }
+
+    async fn create_branch(&self, input: CreateBranchInput) -> Result<RepoBranch> {
+        self.code_browse.create_branch(input).await
+    }
+
+    async fn delete_branch(&self, input: DeleteBranchInput) -> Result<()> {
+        self.code_browse.delete_branch(input).await
     }
 
     async fn list_pipeline_projects(
