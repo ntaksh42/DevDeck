@@ -9,6 +9,7 @@ import {
   CommitSearch,
   PipelinesView,
   CodeBrowseView,
+  WikiView,
   WorkItemSearch,
   WorkItemViewsPanel,
   MyWorkItemsPanel,
@@ -111,6 +112,8 @@ export function AppContent({
           <PipelinesView />
         ) : activeView === "codeSearch" ? (
           <CodeBrowseView />
+        ) : activeView === "wiki" ? (
+          <WikiView />
         ) : organizations.length === 0 ? (
           <SetupPanel />
         ) : (

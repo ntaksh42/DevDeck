@@ -50,6 +50,7 @@ use crate::prs::{
     ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestSummary,
     PullRequestSearchResult, ReviewPullRequestSummary, SearchPullRequestsInput,
 };
+use crate::wiki::{GetWikiPageInput, SearchWikiPagesInput, WikiPageContent, WikiSearchResults};
 use crate::work_items::{
     AddWorkItemCommentInput, AssignWorkItemsInput, BulkWorkItemResult, DeleteWorkItemCommentInput,
     GetWorkItemPreviewInput, ListMyWorkItemsInput, ListWorkItemProjectsInput,
@@ -76,6 +77,8 @@ pub struct ProviderCapabilities {
     pub code_search: bool,
     pub code_browse: bool,
     pub pipelines: bool,
+    /// Wiki search/preview (Azure DevOps only; GitHub has no wiki concept).
+    pub wiki: bool,
     /// Work-item priority field (Azure DevOps only).
     pub work_item_priority: bool,
     /// Resolving inline review threads (GitHub: via GraphQL; Azure DevOps: yes).
@@ -268,6 +271,10 @@ pub(crate) trait Provider: Send + Sync {
         &self,
         input: UpdatePipelineApprovalInput,
     ) -> Result<Vec<PipelineApprovalSummary>>;
+
+    // --- Wiki (GitHub: not supported) ---
+    async fn search_wiki_pages(&self, input: SearchWikiPagesInput) -> Result<WikiSearchResults>;
+    async fn get_wiki_page(&self, input: GetWikiPageInput) -> Result<WikiPageContent>;
 
     // --- Cross-kind command palette search ---
     async fn search_all(

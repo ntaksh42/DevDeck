@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import {
+  Book,
   BookOpen,
   Code,
   GitBranch,
@@ -388,6 +389,16 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
         />
       </NavSection>
     ),
+    wiki: (
+      <NavButton
+        key="wiki"
+        active={activeView === "wiki"}
+        disabled={organizationsLength === 0}
+        icon={<Book className="h-4 w-4" aria-hidden="true" />}
+        label="Wiki"
+        onClick={() => onNavigate("wiki")}
+      />
+    ),
   };
 
   return (
@@ -405,9 +416,8 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
       >
         <div className="space-y-1">
           {navOrder
-            .filter(
-              (id) => id !== "pipelines" || capabilities?.pipelines !== false,
-            )
+            .filter((id) => id !== "pipelines" || capabilities?.pipelines !== false)
+            .filter((id) => id !== "wiki" || capabilities?.wiki !== false)
             .map((id) => (
             <div
               key={id}

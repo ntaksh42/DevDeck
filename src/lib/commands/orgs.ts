@@ -95,6 +95,7 @@ const providerCapabilitiesSchema = z.object({
   codeSearch: z.boolean(),
   codeBrowse: z.boolean(),
   pipelines: z.boolean(),
+  wiki: z.boolean(),
   workItemPriority: z.boolean(),
   resolveReviewThreads: z.boolean(),
 });

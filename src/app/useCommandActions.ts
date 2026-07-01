@@ -106,6 +106,14 @@ export function useCommandActions({
       run: () => setView("codeSearch"),
     },
     {
+      disabled: organizationsLength === 0,
+      group: "Navigation",
+      id: "nav.wiki",
+      keywords: ["wiki", "docs", "documentation", "page"],
+      label: "Go to Wiki",
+      run: () => setView("wiki"),
+    },
+    {
       group: "Navigation",
       id: "nav.settings",
       keywords: ["option", "preferences"],

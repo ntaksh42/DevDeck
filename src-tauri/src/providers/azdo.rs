@@ -41,6 +41,9 @@ use crate::prs::{
     PullRequestSearchResult, PullRequestService, ReviewPullRequestSummary, SearchPullRequestsInput,
 };
 use crate::search::{self, SearchAllInput, SearchAllResult};
+use crate::wiki::{
+    GetWikiPageInput, SearchWikiPagesInput, WikiPageContent, WikiSearchResults, WikiService,
+};
 use crate::work_items::{
     AddWorkItemCommentInput, AssignWorkItemsInput, BulkWorkItemResult, DeleteWorkItemCommentInput,
     GetWorkItemPreviewInput, ListMyWorkItemsInput, ListWorkItemProjectsInput,
@@ -61,6 +64,7 @@ pub(crate) struct AzdoProvider {
     code_search: CodeSearchService,
     code_browse: CodeBrowseService,
     pipelines: PipelineService,
+    wiki: WikiService,
     db: AppDatabase,
 }
 
@@ -74,6 +78,7 @@ impl AzdoProvider {
         code_search: CodeSearchService,
         code_browse: CodeBrowseService,
         pipelines: PipelineService,
+        wiki: WikiService,
         db: AppDatabase,
     ) -> Self {
         Self {
@@ -84,6 +89,7 @@ impl AzdoProvider {
             code_search,
             code_browse,
             pipelines,
+            wiki,
             db,
         }
     }
@@ -101,6 +107,7 @@ impl Provider for AzdoProvider {
             code_search: true,
             code_browse: true,
             pipelines: true,
+            wiki: true,
             work_item_priority: true,
             resolve_review_threads: true,
         }
@@ -442,6 +449,14 @@ impl Provider for AzdoProvider {
         input: UpdatePipelineApprovalInput,
     ) -> Result<Vec<PipelineApprovalSummary>> {
         self.pipelines.update_approval(input).await
+    }
+
+    async fn search_wiki_pages(&self, input: SearchWikiPagesInput) -> Result<WikiSearchResults> {
+        self.wiki.search(input).await
+    }
+
+    async fn get_wiki_page(&self, input: GetWikiPageInput) -> Result<WikiPageContent> {
+        self.wiki.get_page(input).await
     }
 
     async fn search_all(&self, input: SearchAllInput) -> Result<SearchAllResult> {
