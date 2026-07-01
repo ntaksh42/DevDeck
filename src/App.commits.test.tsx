@@ -95,6 +95,10 @@ describe("App — Commits", () => {
               authorName: "Test User",
               authorEmail: "test@example.com",
               authorDate: "2026-05-24T00:00:00Z",
+              authorImageUrl: null,
+              committerName: null,
+              committerEmail: null,
+              committerDate: null,
               webUrl:
                 "https://dev.azure.com/contoso/project/_git/repo/commit/abcdef1234567890abcdef1234567890abcdef12",
             },

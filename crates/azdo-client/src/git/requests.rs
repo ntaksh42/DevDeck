@@ -72,6 +72,18 @@ impl AdoClient {
         Ok(response.value)
     }
 
+    /// Lists the tag refs (`refs/tags/*`) of a repository.
+    pub async fn list_tags(&self, project_id: &str, repository_id: &str) -> Result<Vec<GitRef>> {
+        let path = format!("{project_id}/_apis/git/repositories/{repository_id}/refs");
+        let response: ListResponse<GitRef> = self
+            .get_json(
+                &path,
+                &[("api-version", "7.1-preview"), ("filter", "tags/")],
+            )
+            .await?;
+        Ok(response.value)
+    }
+
     /// Lists the direct children (one level) of a folder at the tip of a branch.
     /// `scope_path` is the folder to list, e.g. `/` or `/src`. When
     /// `include_latest_commit` is set, each item carries its last commit via
@@ -324,6 +336,9 @@ impl AdoClient {
         let mut query = vec![
             ("api-version", "7.1-preview".to_string()),
             ("$top", criteria.top.unwrap_or(50).to_string()),
+            // Populates GitUserDate.imageUrl for both author and committer, so
+            // the UI can show avatars without a separate identity lookup.
+            ("searchCriteria.includeUserImageUrl", "true".to_string()),
         ];
         if let Some(skip) = criteria.skip.filter(|value| *value > 0) {
             query.push(("$skip", skip.to_string()));
@@ -414,5 +429,35 @@ impl AdoClient {
             .get_json(&path, &[("api-version", "7.1-preview")])
             .await?;
         Ok(response.changes)
+    }
+
+    /// Returns the merge base (`commonCommit`) of `base_version` (a branch or
+    /// tag name) and `commit_id`. Azure DevOps has no dedicated "refs
+    /// containing this commit" endpoint; the Diffs API's merge-base result is
+    /// used instead: a ref contains `commit_id` exactly when this returns
+    /// `Some(commit_id)`.
+    pub async fn get_commits_diff_common_commit(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        base_version: &str,
+        base_version_type: &str,
+        commit_id: &str,
+    ) -> Result<Option<String>> {
+        let path = format!("{project_id}/_apis/git/repositories/{repository_id}/diffs/commits");
+        let response: GitCommitDiffs = self
+            .get_json(
+                &path,
+                &[
+                    ("api-version", "7.1-preview"),
+                    ("baseVersion", base_version),
+                    ("baseVersionType", base_version_type),
+                    ("targetVersion", commit_id),
+                    ("targetVersionType", "commit"),
+                    ("$top", "1"),
+                ],
+            )
+            .await?;
+        Ok(response.common_commit)
     }
 }

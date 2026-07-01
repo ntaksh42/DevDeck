@@ -66,6 +66,10 @@ pub struct CommitSummary {
     pub author_name: Option<String>,
     pub author_email: Option<String>,
     pub author_date: Option<String>,
+    pub author_image_url: Option<String>,
+    pub committer_name: Option<String>,
+    pub committer_email: Option<String>,
+    pub committer_date: Option<String>,
     pub web_url: Option<String>,
 }
 
@@ -146,4 +150,43 @@ pub struct CommitPullRequest {
     pub my_vote: i32,
     pub my_vote_label: String,
     pub web_url: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetCommitRefsInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub repository_id: String,
+    pub commit_id: String,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitContainingRef {
+    pub kind: String,
+    pub name: String,
+}
+
+/// `truncated` is true when the repository has more branches/tags than the
+/// service checks (Azure DevOps has no "refs containing this commit" API; each
+/// candidate ref is checked individually, so the count is capped).
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitRefsResult {
+    pub refs: Vec<CommitContainingRef>,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FetchCommitAvatarInput {
+    pub organization_id: Option<String>,
+    pub url: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitAvatarImage {
+    pub data_url: String,
 }

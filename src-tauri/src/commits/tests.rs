@@ -1,13 +1,78 @@
-use azdo_client::AdoClient;
-use chrono::Utc;
+use azdo_client::{AdoClient, GitCommitRef, GitUserDate};
+use chrono::{DateTime, Utc};
 
 use crate::db::{AppDatabase, CachedCommit, Organization};
 use crate::sync::SyncBudget;
 
 use super::helpers::{
-    commit_web_url, normalize_date, normalize_item_path, normalize_optional, ChangeFlags,
+    commit_to_cached, commit_web_url, normalize_date, normalize_item_path, normalize_optional,
+    ChangeFlags,
 };
 use super::sync::{commit_full_sync_scope, sync_commits_for_org};
+
+fn test_org() -> Organization {
+    Organization {
+        id: "contoso".to_string(),
+        name: "contoso".to_string(),
+        display_name: None,
+        base_url: "https://dev.azure.com/contoso".to_string(),
+        auth_provider: "pat".to_string(),
+        credential_key: "azdodeck:org:contoso:pat".to_string(),
+        authenticated_user_id: None,
+        authenticated_user_display_name: None,
+        authenticated_user_unique_name: None,
+        created_at: "2026-05-24T00:00:00Z".to_string(),
+        updated_at: "2026-05-24T00:00:00Z".to_string(),
+        provider_kind: "azdo".to_string(),
+    }
+}
+
+#[test]
+fn commit_to_cached_propagates_committer_and_author_avatar() {
+    let commit = GitCommitRef {
+        commit_id: "abc123".to_string(),
+        comment: Some("Fix bug".to_string()),
+        author: Some(GitUserDate {
+            name: Some("Alice".to_string()),
+            email: Some("alice@example.com".to_string()),
+            date: Some(
+                DateTime::parse_from_rfc3339("2026-06-01T00:00:00Z")
+                    .unwrap()
+                    .with_timezone(&Utc),
+            ),
+            image_url: Some(
+                "https://dev.azure.com/contoso/_apis/GraphProfile/MemberAvatars/abc".to_string(),
+            ),
+        }),
+        committer: Some(GitUserDate {
+            name: Some("Merge Bot".to_string()),
+            email: Some("bot@example.com".to_string()),
+            date: Some(
+                DateTime::parse_from_rfc3339("2026-06-02T00:00:00Z")
+                    .unwrap()
+                    .with_timezone(&Utc),
+            ),
+            image_url: None,
+        }),
+        remote_url: None,
+        url: None,
+        parents: None,
+    };
+
+    let cached = commit_to_cached(&test_org(), "p1", "Platform", "repo1", "Repo", commit);
+
+    assert_eq!(cached.author_name.as_deref(), Some("Alice"));
+    assert_eq!(
+        cached.author_image_url.as_deref(),
+        Some("https://dev.azure.com/contoso/_apis/GraphProfile/MemberAvatars/abc")
+    );
+    assert_eq!(cached.committer_name.as_deref(), Some("Merge Bot"));
+    assert_eq!(cached.committer_email.as_deref(), Some("bot@example.com"));
+    assert_eq!(
+        cached.committer_date.as_deref(),
+        Some("2026-06-02T00:00:00+00:00")
+    );
+}
 
 #[test]
 fn change_flags_parse_detects_add_and_delete() {
@@ -156,6 +221,10 @@ async fn delta_commit_sync_merges_without_dropping_existing_commits() {
             author_name: Some("Dev".to_string()),
             author_email: Some("dev@example.com".to_string()),
             author_date: Some("2026-06-19T00:00:00Z".to_string()),
+            author_image_url: None,
+            committer_name: None,
+            committer_email: None,
+            committer_date: None,
             web_url: None,
         }],
     )

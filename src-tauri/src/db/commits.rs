@@ -20,6 +20,10 @@ pub struct CachedCommit {
     pub author_name: Option<String>,
     pub author_email: Option<String>,
     pub author_date: Option<String>,
+    pub author_image_url: Option<String>,
+    pub committer_name: Option<String>,
+    pub committer_email: Option<String>,
+    pub committer_date: Option<String>,
     pub web_url: Option<String>,
 }
 

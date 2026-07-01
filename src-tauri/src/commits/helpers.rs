@@ -150,6 +150,10 @@ pub(super) fn cached_commit_to_summary(c: CachedCommit) -> CommitSummary {
         author_name: c.author_name,
         author_email: c.author_email,
         author_date: c.author_date,
+        author_image_url: c.author_image_url,
+        committer_name: c.committer_name,
+        committer_email: c.committer_email,
+        committer_date: c.committer_date,
         web_url: c.web_url,
     }
 }
@@ -168,6 +172,13 @@ pub(super) fn commit_to_cached(
         .author
         .as_ref()
         .and_then(|a| a.date.map(|d| d.to_rfc3339()));
+    let author_image_url = commit.author.as_ref().and_then(|a| a.image_url.clone());
+    let committer_name = commit.committer.as_ref().and_then(|c| c.name.clone());
+    let committer_email = commit.committer.as_ref().and_then(|c| c.email.clone());
+    let committer_date = commit
+        .committer
+        .as_ref()
+        .and_then(|c| c.date.map(|d| d.to_rfc3339()));
     let commit_id = commit.commit_id;
     // commit.url is a REST endpoint, never a browser URL; only remoteUrl or a
     // constructed _git link may be shown to the user.
@@ -190,6 +201,10 @@ pub(super) fn commit_to_cached(
         author_name,
         author_email,
         author_date,
+        author_image_url,
+        committer_name,
+        committer_email,
+        committer_date,
         web_url,
     }
 }

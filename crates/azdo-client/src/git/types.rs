@@ -91,6 +91,21 @@ pub struct GitUserDate {
     pub name: Option<String>,
     pub email: Option<String>,
     pub date: Option<DateTime<Utc>>,
+    /// Avatar URL for this author/committer. Only populated when the request
+    /// sets `searchCriteria.includeUserImageUrl=true` (see `list_commits`).
+    #[serde(default)]
+    pub image_url: Option<String>,
+}
+
+/// Result of the Diffs API (`GET .../diffs/commits`), used to determine commit
+/// ancestry: `common_commit` is the merge base of `baseVersion`/`targetVersion`.
+/// A commit is contained in a ref when the merge base of that ref and the
+/// commit equals the commit itself. Other response fields (changes,
+/// changeCounts, ...) are ignored.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCommitDiffs {
+    pub common_commit: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

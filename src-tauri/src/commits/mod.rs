@@ -1,4 +1,6 @@
+mod avatar;
 mod helpers;
+mod refs;
 mod service;
 mod sync;
 mod types;

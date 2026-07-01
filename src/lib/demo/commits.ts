@@ -201,6 +201,12 @@ export function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
       authorName: "Demo User",
       authorEmail: "demo@example.com",
       authorDate: "2026-05-27T08:00:00Z",
+      authorImageUrl: "https://dev.azure.com/contoso/_apis/GraphProfile/MemberAvatars/demo-user",
+      // Squash-merged by a different account than the PR author, so the
+      // preview's committer row has something to show.
+      committerName: "Azure Pipelines",
+      committerEmail: "pipelines@contoso.example",
+      committerDate: "2026-05-27T08:05:00Z",
       webUrl: "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/commit/abcdef1234567890abcdef1234567890abcdef12",
     },
     {
@@ -215,6 +221,10 @@ export function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
       authorName: "Demo User",
       authorEmail: "demo@example.com",
       authorDate: "2026-05-26T14:30:00Z",
+      authorImageUrl: "https://dev.azure.com/contoso/_apis/GraphProfile/MemberAvatars/demo-user",
+      committerName: "Demo User",
+      committerEmail: "demo@example.com",
+      committerDate: "2026-05-26T14:30:00Z",
       webUrl: "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/commit/beef1234567890abcdef1234567890abcdef1234",
     },
     {
@@ -229,6 +239,11 @@ export function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
       authorName: "Alice Johnson",
       authorEmail: "alice@example.com",
       authorDate: "2026-05-26T09:30:00Z",
+      // No avatar URL exercises the initials fallback in the demo preview.
+      authorImageUrl: null,
+      committerName: "Alice Johnson",
+      committerEmail: "alice@example.com",
+      committerDate: "2026-05-26T09:30:00Z",
       webUrl: "https://dev.azure.com/contoso/Platform/_git/api-gateway/commit/1234567890abcdef1234567890abcdef12345678",
     },
     {
@@ -243,6 +258,10 @@ export function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
       authorName: "Bob Tanaka",
       authorEmail: "bob@example.com",
       authorDate: "2026-05-25T16:00:00Z",
+      authorImageUrl: "https://dev.azure.com/contoso/_apis/GraphProfile/MemberAvatars/bob-tanaka",
+      committerName: "Bob Tanaka",
+      committerEmail: "bob@example.com",
+      committerDate: "2026-05-25T16:00:00Z",
       webUrl: "https://dev.azure.com/contoso/Platform/_git/api-gateway/commit/cafe5678901234567890abcdef1234567890cafe",
     },
     {
@@ -257,6 +276,10 @@ export function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
       authorName: "Frank Lee",
       authorEmail: "frank@example.com",
       authorDate: "2026-05-25T03:15:00Z",
+      authorImageUrl: null,
+      committerName: "Frank Lee",
+      committerEmail: "frank@example.com",
+      committerDate: "2026-05-25T03:15:00Z",
       webUrl: "https://dev.azure.com/contoso/Mobile/_git/android-app/commit/fedcba9876543210fedcba9876543210fedcba98",
     },
     {
@@ -271,6 +294,10 @@ export function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
       authorName: "Carol Wang",
       authorEmail: "carol@example.com",
       authorDate: "2026-05-24T11:45:00Z",
+      authorImageUrl: "https://dev.azure.com/contoso/_apis/GraphProfile/MemberAvatars/carol-wang",
+      committerName: "Carol Wang",
+      committerEmail: "carol@example.com",
+      committerDate: "2026-05-24T11:45:00Z",
       webUrl: "https://dev.azure.com/contoso/Mobile/_git/android-app/commit/dead1234567890abcdef1234567890abcdefdead",
     },
     {
@@ -285,6 +312,10 @@ export function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
       authorName: "Eve Nakamura",
       authorEmail: "eve@example.com",
       authorDate: "2026-05-23T07:00:00Z",
+      authorImageUrl: null,
+      committerName: "Eve Nakamura",
+      committerEmail: "eve@example.com",
+      committerDate: "2026-05-23T07:00:00Z",
       webUrl: "https://dev.azure.com/contoso/Infrastructure/_git/terraform-aws/commit/f00d5678901234567890abcdef1234567890f00d",
     },
     {
@@ -299,6 +330,10 @@ export function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
       authorName: "Eve Nakamura",
       authorEmail: "eve@example.com",
       authorDate: "2026-05-21T13:20:00Z",
+      authorImageUrl: null,
+      committerName: "Eve Nakamura",
+      committerEmail: "eve@example.com",
+      committerDate: "2026-05-21T13:20:00Z",
       webUrl: "https://dev.azure.com/contoso/Infrastructure/_git/terraform-aws/commit/babe1234567890abcdef1234567890abcdefbabe",
     },
   ];

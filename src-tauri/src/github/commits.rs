@@ -212,6 +212,13 @@ fn item_to_summary(org_id: &str, item: CommitSearchItem) -> CommitSummary {
         author_name: author.as_ref().and_then(|a| a.name.clone()),
         author_email: author.as_ref().and_then(|a| a.email.clone()),
         author_date: author.as_ref().and_then(|a| a.date.clone()),
+        // GitHub avatars/committer identity aren't wired up for this provider
+        // yet (out of scope for the Azure DevOps-specific commit identity work
+        // these fields were added for); the UI treats all of these as optional.
+        author_image_url: None,
+        committer_name: None,
+        committer_email: None,
+        committer_date: None,
         web_url: Some(item.html_url),
     }
 }

@@ -91,6 +91,16 @@ export function commitPrQueryKey(commit: CommitSummary) {
   return ["commitPullRequests", commit.organizationId, commit.repositoryId, commit.commitId] as const;
 }
 
+export function commitRefsQueryKey(commit: CommitSummary) {
+  return [
+    "commitRefs",
+    commit.organizationId,
+    commit.projectId,
+    commit.repositoryId,
+    commit.commitId,
+  ] as const;
+}
+
 export function uniqueCommitProjects(repositories: CommitRepositoryOption[]) {
   const projects = new Map<string, { projectId: string; projectName: string }>();
   for (const repository of repositories) {

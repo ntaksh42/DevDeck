@@ -37,7 +37,20 @@ impl AdoClient {
     pub async fn get_attachment_bytes(&self, url: &str) -> Result<BinaryResponse> {
         let url = Url::parse(url).map_err(|e| AdoError::Auth(e.to_string()))?;
         self.validate_attachment_url(&url)?;
+        self.fetch_validated_bytes(url).await
+    }
 
+    /// Fetches an identity avatar image. Like [`get_attachment_bytes`], this
+    /// requires the PAT auth header, so avatar `imageUrl`s from commit
+    /// author/committer data cannot be used directly as an `<img src>` and
+    /// must be proxied through here.
+    pub async fn get_avatar_bytes(&self, url: &str) -> Result<BinaryResponse> {
+        let url = Url::parse(url).map_err(|e| AdoError::Auth(e.to_string()))?;
+        self.validate_avatar_url(&url)?;
+        self.fetch_validated_bytes(url).await
+    }
+
+    async fn fetch_validated_bytes(&self, url: Url) -> Result<BinaryResponse> {
         let request_url = url.clone();
         self.send_with_retry(
             "GET",
@@ -343,6 +356,41 @@ impl AdoClient {
         {
             return Err(AdoError::Auth(
                 "only Azure DevOps work item attachment URLs can be fetched".to_string(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn validate_avatar_url(&self, url: &Url) -> Result<()> {
+        if url.scheme() != self.base_url.scheme()
+            || url.port_or_known_default() != self.base_url.port_or_known_default()
+            || !same_azure_devops_organization_url(url, &self.base_url)
+        {
+            return Err(AdoError::Auth(
+                "avatar URL is outside the Azure DevOps organization".to_string(),
+            ));
+        }
+
+        let base_path = self.base_url.path().trim_end_matches('/');
+        if !is_legacy_visualstudio_org_url(url, &self.base_url)
+            && !base_path.is_empty()
+            && base_path != "/"
+            && !url_path_is_within_base(url.path(), base_path)
+        {
+            return Err(AdoError::Auth(
+                "avatar URL is outside the Azure DevOps organization".to_string(),
+            ));
+        }
+
+        let path = url.path().to_ascii_lowercase();
+        // Covers both the current Graph avatar endpoint and the legacy
+        // identityImage endpoint, which some on-prem/older orgs still return.
+        if !path.contains("/_apis/graphprofile/memberavatars/")
+            && !path.contains("/_api/_common/identityimage")
+        {
+            return Err(AdoError::Auth(
+                "only Azure DevOps avatar URLs can be fetched".to_string(),
             ));
         }
 

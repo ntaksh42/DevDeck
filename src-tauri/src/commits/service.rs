@@ -26,8 +26,8 @@ const COMMIT_SEARCH_RESULT_LIMIT: usize = 100;
 
 #[derive(Debug, Clone)]
 pub struct CommitService {
-    db: AppDatabase,
-    secrets: SecretStore,
+    pub(super) db: AppDatabase,
+    pub(super) secrets: SecretStore,
 }
 
 impl CommitService {
@@ -441,7 +441,7 @@ impl CommitService {
             .collect())
     }
 
-    fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {
+    pub(super) fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {
         self.db.resolve_organization(id)
     }
 }

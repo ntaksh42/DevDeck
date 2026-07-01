@@ -2,9 +2,11 @@ use tauri::State;
 
 use crate::app_state::AppState;
 use crate::commits::{
-    CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
-    CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput, GetCommitFileDiffInput,
-    GetCommitPullRequestsInput, ListCommitRepositoriesInput, SearchCommitsInput,
+    CommitActivityDay, CommitActivityInput, CommitAvatarImage, CommitChangeSet, CommitFileDiff,
+    CommitPullRequest, CommitRefsResult, CommitRepositoryOption, CommitSearchResult,
+    FetchCommitAvatarInput, GetCommitChangesInput, GetCommitFileDiffInput,
+    GetCommitPullRequestsInput, GetCommitRefsInput, ListCommitRepositoriesInput,
+    SearchCommitsInput,
 };
 use crate::error::Result;
 
@@ -68,4 +70,27 @@ pub async fn get_commit_pull_requests(
         .await?
         .get_commit_pull_requests(input)
         .await
+}
+
+// `get_commit_refs` and `fetch_commit_avatar` are Azure DevOps-specific (no
+// GitHub equivalent is wired up), so they call the commit service directly
+// rather than going through the cross-provider `Provider` trait — the same
+// pattern `fetch_work_item_image` uses for work item attachment images.
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn get_commit_refs(
+    input: GetCommitRefsInput,
+    state: State<'_, AppState>,
+) -> Result<CommitRefsResult> {
+    state.commits.get_commit_refs(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn fetch_commit_avatar(
+    input: FetchCommitAvatarInput,
+    state: State<'_, AppState>,
+) -> Result<CommitAvatarImage> {
+    state.commits.fetch_avatar(input).await
 }
