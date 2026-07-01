@@ -3,8 +3,9 @@ use tauri::State;
 use crate::app_state::AppState;
 use crate::commits::{
     CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
-    CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput, GetCommitFileDiffInput,
-    GetCommitPullRequestsInput, ListCommitRepositoriesInput, SearchCommitsInput,
+    CommitRangeChangeSet, CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput,
+    GetCommitFileDiffInput, GetCommitPullRequestsInput, GetCommitRangeChangesInput,
+    ListCommitRepositoriesInput, SearchCommitsInput,
 };
 use crate::error::Result;
 
@@ -46,6 +47,19 @@ pub async fn get_commit_changes(
     state: State<'_, AppState>,
 ) -> Result<CommitChangeSet> {
     state.provider().await?.get_commit_changes(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn get_commit_range_changes(
+    input: GetCommitRangeChangesInput,
+    state: State<'_, AppState>,
+) -> Result<CommitRangeChangeSet> {
+    state
+        .provider()
+        .await?
+        .get_commit_range_changes(input)
+        .await
 }
 
 #[tauri::command]

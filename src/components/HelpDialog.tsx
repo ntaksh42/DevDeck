@@ -109,6 +109,8 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ PgUp PgDn Home End</kbd></div>
           <div className={row}><span>Mark done / restore (My Reviews, My Items)</span><kbd className={kbd}>E</kbd></div>
+          <div className={row}><span>Mark for compare, 2 commits (Commits)</span><kbd className={kbd}>Space · Shift+click</kbd></div>
+          <div className={row}><span>Clear compare selection (Commits)</span><kbd className={kbd}>Esc</kbd></div>
 
           <p className={section}>Work Items</p>
           <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>

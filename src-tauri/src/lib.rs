@@ -212,6 +212,7 @@ pub fn run() {
             commands::code::list_repo_history,
             commands::code::cancel_operation,
             commands::commits::get_commit_changes,
+            commands::commits::get_commit_range_changes,
             commands::commits::get_commit_file_diff,
             commands::commits::get_commit_pull_requests,
             commands::pipelines::list_pipeline_projects,

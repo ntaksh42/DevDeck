@@ -124,9 +124,11 @@ export const CommitGridRow = forwardRef<
     selected: boolean;
     columnTemplate: string;
     visibleColumns: CommitColumnKey[];
-    onSelect: () => void;
+    onSelect: (shiftKey: boolean) => void;
+    /** This row's slot in the two-commit compare selection, if marked. */
+    compareMark?: 1 | 2 | null;
   }
->(({ commit, selected, columnTemplate, visibleColumns, onSelect }, ref) => {
+>(({ commit, selected, columnTemplate, visibleColumns, onSelect, compareMark = null }, ref) => {
   // Reflects the related-PR lookup that the preview triggers on selection;
   // reads cached query data only, so the grid never fans out N requests.
   const prQuery = useQuery({
@@ -141,7 +143,7 @@ export const CommitGridRow = forwardRef<
       tabIndex={selected ? 0 : -1}
       role="row"
       aria-selected={selected}
-      onClick={onSelect}
+      onClick={(e) => onSelect(e.shiftKey)}
       onKeyDown={(e: ReactKeyboardEvent<HTMLDivElement>) => {
         if ((e.target as HTMLElement).closest("button")) return;
         if (e.key === "Enter") {
@@ -150,13 +152,27 @@ export const CommitGridRow = forwardRef<
           else focusPrimaryPreview();
         }
       }}
-      className={`grid h-[29px] cursor-pointer select-none items-center gap-2 border-b border-border px-2 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
+      className={`relative grid h-[29px] cursor-pointer select-none items-center gap-2 border-b border-border px-2 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
         selected
           ? "bg-secondary shadow-[inset_3px_0_0_hsl(var(--primary))]"
           : "hover:bg-muted/50"
       }`}
       style={{ gridTemplateColumns: columnTemplate }}
     >
+      {compareMark ? (
+        <span
+          aria-hidden="true"
+          title={compareMark === 1 ? "Compare: base" : "Compare: target"}
+          className={`absolute inset-y-0 left-0 w-1 ${
+            compareMark === 1 ? "bg-amber-500" : "bg-sky-500"
+          }`}
+        />
+      ) : null}
+      {compareMark ? (
+        <span className="sr-only">
+          {compareMark === 1 ? "Marked as compare base" : "Marked as compare target"}
+        </span>
+      ) : null}
       {visibleColumns.map((key) => (
         <Fragment key={key}>{renderCommitCell(key, commit, prCount)}</Fragment>
       ))}

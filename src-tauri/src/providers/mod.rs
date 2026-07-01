@@ -26,8 +26,9 @@ use crate::code_search::{
 };
 use crate::commits::{
     CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
-    CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput, GetCommitFileDiffInput,
-    GetCommitPullRequestsInput, ListCommitRepositoriesInput, SearchCommitsInput,
+    CommitRangeChangeSet, CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput,
+    GetCommitFileDiffInput, GetCommitPullRequestsInput, GetCommitRangeChangesInput,
+    ListCommitRepositoriesInput, SearchCommitsInput,
 };
 use crate::error::Result;
 use crate::pipelines::{
@@ -167,6 +168,10 @@ pub(crate) trait Provider: Send + Sync {
     ) -> Result<Vec<CommitRepositoryOption>>;
     async fn commit_activity(&self, input: CommitActivityInput) -> Result<Vec<CommitActivityDay>>;
     async fn get_commit_changes(&self, input: GetCommitChangesInput) -> Result<CommitChangeSet>;
+    async fn get_commit_range_changes(
+        &self,
+        input: GetCommitRangeChangesInput,
+    ) -> Result<CommitRangeChangeSet>;
     async fn get_commit_file_diff(&self, input: GetCommitFileDiffInput) -> Result<CommitFileDiff>;
     async fn get_commit_pull_requests(
         &self,

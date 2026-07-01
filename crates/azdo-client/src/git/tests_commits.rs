@@ -78,6 +78,58 @@ async fn get_commit_changes_maps_entries() {
 }
 
 #[tokio::test]
+async fn get_commit_diff_sends_base_and_target_versions() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(
+            "/project-1/_apis/git/repositories/repo-1/diffs/commits",
+        ))
+        .and(query_param("baseVersion", "base-sha"))
+        .and(query_param("baseVersionType", "commit"))
+        .and(query_param("targetVersion", "target-sha"))
+        .and(query_param("targetVersionType", "commit"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "allChangesIncluded": true,
+            "changes": [
+                {
+                    "item": { "path": "/src/new_file.rs", "isFolder": false },
+                    "changeType": "add"
+                },
+                {
+                    "item": { "path": "/src/old_file.rs", "isFolder": false },
+                    "changeType": "delete"
+                }
+            ],
+            "baseCommit": "base-sha",
+            "targetCommit": "target-sha"
+        })))
+        .mount(&server)
+        .await;
+
+    let changes = test_client(&server)
+        .await
+        .get_commit_diff("project-1", "repo-1", "base-sha", "target-sha")
+        .await
+        .unwrap();
+
+    // Base/target orientation must not be swapped: the added file only exists
+    // on the target side, the deleted file only on the base side. Callers
+    // (get_commit_range_changes / get_commit_file_diff) rely on this ordering
+    // to decide which side to fetch content for.
+    assert_eq!(changes.len(), 2);
+    assert_eq!(changes[0].change_type.as_deref(), Some("add"));
+    assert_eq!(
+        changes[0].item.as_ref().unwrap().path.as_deref(),
+        Some("/src/new_file.rs")
+    );
+    assert_eq!(changes[1].change_type.as_deref(), Some("delete"));
+    assert_eq!(
+        changes[1].item.as_ref().unwrap().path.as_deref(),
+        Some("/src/old_file.rs")
+    );
+}
+
+#[tokio::test]
 async fn list_commits_uses_search_criteria() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))

@@ -115,6 +115,27 @@ pub struct CommitChangeSet {
     pub files: Vec<CommitChangedFile>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetCommitRangeChangesInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub repository_id: String,
+    pub base_commit_id: String,
+    pub target_commit_id: String,
+}
+
+/// Changed files between two arbitrary commits (the two-commit compare view),
+/// as opposed to [`CommitChangeSet`] which diffs a commit against its own
+/// parent.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitRangeChangeSet {
+    pub base_commit_id: String,
+    pub target_commit_id: String,
+    pub files: Vec<CommitChangedFile>,
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CommitFileDiff {

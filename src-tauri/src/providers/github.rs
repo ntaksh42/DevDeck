@@ -14,8 +14,9 @@ use crate::code_search::{
 };
 use crate::commits::{
     CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
-    CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput, GetCommitFileDiffInput,
-    GetCommitPullRequestsInput, ListCommitRepositoriesInput, SearchCommitsInput,
+    CommitRangeChangeSet, CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput,
+    GetCommitFileDiffInput, GetCommitPullRequestsInput, GetCommitRangeChangesInput,
+    ListCommitRepositoriesInput, SearchCommitsInput,
 };
 use crate::db::Organization;
 use crate::error::{AppError, Result};
@@ -243,6 +244,13 @@ impl Provider for GithubProvider {
 
     async fn get_commit_changes(&self, input: GetCommitChangesInput) -> Result<CommitChangeSet> {
         github::commits::get_commit_changes(&self.org, &self.secrets, input).await
+    }
+
+    async fn get_commit_range_changes(
+        &self,
+        input: GetCommitRangeChangesInput,
+    ) -> Result<CommitRangeChangeSet> {
+        github::commits::get_commit_range_changes(&self.org, &self.secrets, input).await
     }
 
     async fn get_commit_file_diff(&self, input: GetCommitFileDiffInput) -> Result<CommitFileDiff> {

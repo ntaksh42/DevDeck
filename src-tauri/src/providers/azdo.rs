@@ -14,9 +14,9 @@ use crate::code_search::{
 };
 use crate::commits::{
     CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
-    CommitRepositoryOption, CommitSearchResult, CommitService, GetCommitChangesInput,
-    GetCommitFileDiffInput, GetCommitPullRequestsInput, ListCommitRepositoriesInput,
-    SearchCommitsInput,
+    CommitRangeChangeSet, CommitRepositoryOption, CommitSearchResult, CommitService,
+    GetCommitChangesInput, GetCommitFileDiffInput, GetCommitPullRequestsInput,
+    GetCommitRangeChangesInput, ListCommitRepositoriesInput, SearchCommitsInput,
 };
 use crate::db::AppDatabase;
 use crate::error::Result;
@@ -243,6 +243,13 @@ impl Provider for AzdoProvider {
 
     async fn get_commit_changes(&self, input: GetCommitChangesInput) -> Result<CommitChangeSet> {
         self.commits.get_commit_changes(input).await
+    }
+
+    async fn get_commit_range_changes(
+        &self,
+        input: GetCommitRangeChangesInput,
+    ) -> Result<CommitRangeChangeSet> {
+        self.commits.get_commit_range_changes(input).await
     }
 
     async fn get_commit_file_diff(&self, input: GetCommitFileDiffInput) -> Result<CommitFileDiff> {

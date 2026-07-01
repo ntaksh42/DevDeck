@@ -15,6 +15,15 @@ struct CommitChangesResponse {
     changes: Vec<GitChangeEntry>,
 }
 
+/// Response from `diffs/commits`, which also carries ahead/behind counts and
+/// commit ids the caller does not need; only `changes` is used.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitCommitDiffsResponse {
+    #[serde(default)]
+    changes: Vec<GitChangeEntry>,
+}
+
 /// Request body for the Pull Request Query API. Looks up pull requests by the
 /// commits they contain (`type: "commit"`).
 #[derive(Debug, Serialize)]
@@ -412,6 +421,33 @@ impl AdoClient {
         );
         let response: CommitChangesResponse = self
             .get_json(&path, &[("api-version", "7.1-preview")])
+            .await?;
+        Ok(response.changes)
+    }
+
+    /// Lists the files changed between two arbitrary commits (not necessarily
+    /// parent/child), via `GET .../diffs/commits`. Unlike [`get_commit_changes`],
+    /// which diffs a commit against its own parent, this accepts any two commit
+    /// ids as `base_commit_id`/`target_commit_id`.
+    pub async fn get_commit_diff(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        base_commit_id: &str,
+        target_commit_id: &str,
+    ) -> Result<Vec<GitChangeEntry>> {
+        let path = format!("{project_id}/_apis/git/repositories/{repository_id}/diffs/commits");
+        let response: GitCommitDiffsResponse = self
+            .get_json(
+                &path,
+                &[
+                    ("api-version", "7.1-preview"),
+                    ("baseVersion", base_commit_id),
+                    ("baseVersionType", "commit"),
+                    ("targetVersion", target_commit_id),
+                    ("targetVersionType", "commit"),
+                ],
+            )
             .await?;
         Ok(response.changes)
     }

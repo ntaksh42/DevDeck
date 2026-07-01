@@ -1,10 +1,10 @@
-use azdo_client::{AdoClient, AdoError, GitCommitRef};
+use azdo_client::{AdoClient, AdoError, GitChangeEntry, GitCommitRef};
 use chrono::{DateTime, NaiveDate, Utc};
 
 use crate::db::{CachedCommit, Organization};
 use crate::error::{AppError, Result};
 
-use super::CommitSummary;
+use super::{CommitChangedFile, CommitSummary};
 
 const MAX_DIFF_CONTENT_BYTES: usize = 256 * 1024;
 
@@ -54,6 +54,26 @@ pub(super) async fn fetch_commit_side(
         Err(AdoError::Api { status: 404, .. }) => Ok((None, Some("missing".to_string()))),
         Err(error) => Err(error.into()),
     }
+}
+
+/// Maps raw git change entries (from either the single-commit `changes`
+/// endpoint or the two-commit `diffs/commits` endpoint) into the changed-file
+/// list the frontend renders, dropping folder entries.
+pub(super) fn entries_to_changed_files(entries: Vec<GitChangeEntry>) -> Vec<CommitChangedFile> {
+    entries
+        .into_iter()
+        .filter_map(|entry| {
+            let item = entry.item?;
+            if item.is_folder.unwrap_or(false) {
+                return None;
+            }
+            Some(CommitChangedFile {
+                path: item.path?,
+                change_type: entry.change_type.unwrap_or_else(|| "edit".to_string()),
+                original_path: entry.source_server_item,
+            })
+        })
+        .collect()
 }
 
 pub(super) fn normalize_optional(value: Option<String>) -> Option<String> {

@@ -57,8 +57,16 @@ const commitChangeSetSchema = z.object({
   parentCommitId: z.string().nullable(),
   files: z.array(commitChangedFileSchema),
 });
+const commitRangeChangeSetSchema = z.object({
+  baseCommitId: z.string(),
+  targetCommitId: z.string(),
+  files: z.array(commitChangedFileSchema),
+});
 export type CommitChangedFile = z.infer<typeof commitChangedFileSchema>;
 export type CommitChangeSet = z.infer<typeof commitChangeSetSchema>;
+/** Changed files between two arbitrary commits (compare view), as opposed to
+ * `CommitChangeSet` which diffs a commit against its own parent. */
+export type CommitRangeChangeSet = z.infer<typeof commitRangeChangeSetSchema>;
 // A commit's per-file diff has the same shape as a PR file diff.
 export type CommitFileDiff = z.infer<typeof prFileDiffSchema>;
 
@@ -110,6 +118,17 @@ export async function getCommitChanges(input: {
 }): Promise<CommitChangeSet> {
   const result = await invokeCommand("get_commit_changes", { input });
   return commitChangeSetSchema.parse(result);
+}
+
+export async function getCommitRangeChanges(input: {
+  organizationId?: string;
+  projectId: string;
+  repositoryId: string;
+  baseCommitId: string;
+  targetCommitId: string;
+}): Promise<CommitRangeChangeSet> {
+  const result = await invokeCommand("get_commit_range_changes", { input });
+  return commitRangeChangeSetSchema.parse(result);
 }
 
 export async function getCommitFileDiff(input: {

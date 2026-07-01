@@ -1,19 +1,18 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronsUpDown, ExternalLink, Loader2 } from "lucide-react";
+import { ExternalLink, Loader2 } from "lucide-react";
 import {
   commandErrorMessage,
   getCommitChanges,
   getCommitFileDiff,
   type CommitChangedFile,
 } from "@/lib/azdoCommands";
-import { buildDiffLines, collapseDiff, type DiffLine } from "@/lib/diffView";
 import { openExternalUrl } from "@/lib/openExternal";
-import { DiffLineText } from "@/components/DiffLineText";
+import { FileDiffView } from "@/components/FileDiffView";
 
-const MAX_RENDERED_DIFF_LINES = 2000;
-
-type ChangeBadge = { label: string; cls: string };
+// Exported so the two-commit compare panel (CommitComparePanel) can render
+// the same changed-file badges/names without duplicating this logic.
+export type ChangeBadge = { label: string; cls: string };
 const ADD_BADGE: ChangeBadge = { label: "A", cls: "border-green-200 bg-green-100 text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-300" };
 const DELETE_BADGE: ChangeBadge = { label: "D", cls: "border-red-200 bg-red-100 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300" };
 const RENAME_BADGE: ChangeBadge = {
@@ -22,7 +21,7 @@ const RENAME_BADGE: ChangeBadge = {
 };
 const EDIT_BADGE: ChangeBadge = { label: "M", cls: "border-blue-200 bg-blue-100 text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-300" };
 
-function changeTypeBadge(changeType: string): ChangeBadge {
+export function changeTypeBadge(changeType: string): ChangeBadge {
   const tokens = changeType.toLowerCase().split(",").map((token) => token.trim());
   if (tokens.includes("rename")) return RENAME_BADGE;
   if (tokens.includes("delete")) return DELETE_BADGE;
@@ -30,13 +29,7 @@ function changeTypeBadge(changeType: string): ChangeBadge {
   return EDIT_BADGE;
 }
 
-const UNAVAILABLE_MESSAGES: Record<string, string> = {
-  binary: "Binary file — diff is not available.",
-  tooLarge: "File is too large to diff in the app.",
-  missing: "File content could not be loaded.",
-};
-
-function fileName(path: string): string {
+export function fileName(path: string): string {
   return path.replace(/^\/+/, "").split("/").pop() ?? path;
 }
 
@@ -162,7 +155,7 @@ export function CommitFilesPanel({
                       {commandErrorMessage(diffQuery.error)}
                     </p>
                   ) : diffQuery.data ? (
-                    <CommitDiffView
+                    <FileDiffView
                       baseContent={diffQuery.data.baseContent}
                       targetContent={diffQuery.data.targetContent}
                       baseUnavailableReason={diffQuery.data.baseUnavailableReason}
@@ -175,114 +168,6 @@ export function CommitFilesPanel({
           );
         })}
       </ul>
-    </div>
-  );
-}
-
-function rowBackground(kind: DiffLine["kind"]): string {
-  return kind === "add"
-    ? "bg-green-50 text-green-900 dark:bg-green-950/40 dark:text-green-200"
-    : kind === "del"
-      ? "bg-red-50 text-red-900 dark:bg-red-950/40 dark:text-red-200"
-      : "";
-}
-
-function CommitDiffView({
-  baseContent,
-  targetContent,
-  baseUnavailableReason,
-  targetUnavailableReason,
-}: {
-  baseContent: string | null;
-  targetContent: string | null;
-  baseUnavailableReason: string | null;
-  targetUnavailableReason: string | null;
-}) {
-  const [expandedGaps, setExpandedGaps] = useState<Set<number>>(() => new Set());
-
-  const baseBlocked = baseUnavailableReason != null;
-  const targetBlocked = targetUnavailableReason != null;
-  const fatalReason =
-    baseBlocked && targetBlocked ? (targetUnavailableReason ?? baseUnavailableReason) : null;
-  const baseText = baseBlocked ? "" : baseContent ?? "";
-  const targetText = targetBlocked ? "" : targetContent ?? "";
-
-  const collapsed = useMemo(() => {
-    if (fatalReason) return [];
-    const lines = buildDiffLines(baseText, targetText);
-    return collapseDiff(lines, (line) => line.kind === "context");
-  }, [baseText, targetText, fatalReason]);
-
-  if (fatalReason) {
-    return (
-      <p className="px-3 py-2 text-xs text-muted-foreground">
-        {UNAVAILABLE_MESSAGES[fatalReason] ?? "Diff is not available."}
-      </p>
-    );
-  }
-
-  const partialNote = targetBlocked
-    ? `New version unavailable (${UNAVAILABLE_MESSAGES[targetUnavailableReason!] ?? targetUnavailableReason}); showing the previous version.`
-    : baseBlocked
-      ? `Previous version unavailable (${UNAVAILABLE_MESSAGES[baseUnavailableReason!] ?? baseUnavailableReason}); showing the new file.`
-      : null;
-
-  let rendered = 0;
-  const out: React.ReactNode[] = [];
-  for (let i = 0; i < collapsed.length && rendered < MAX_RENDERED_DIFF_LINES; i++) {
-    const item = collapsed[i];
-    if (item.type === "gap" && !expandedGaps.has(i)) {
-      out.push(
-        <button
-          key={`gap${i}`}
-          type="button"
-          onClick={() => setExpandedGaps((prev) => new Set(prev).add(i))}
-          className="flex w-full items-center justify-center gap-1 border-y border-border/60 bg-muted/40 py-0.5 text-[11px] text-muted-foreground hover:bg-muted/70"
-        >
-          <ChevronsUpDown className="h-3 w-3" aria-hidden="true" />
-          Expand {item.rows.length} unchanged line{item.rows.length === 1 ? "" : "s"}
-        </button>,
-      );
-      continue;
-    }
-    const rows = item.type === "row" ? [item.row] : item.rows;
-    for (const line of rows) {
-      if (rendered >= MAX_RENDERED_DIFF_LINES) break;
-      const marker = line.kind === "add" ? "+" : line.kind === "del" ? "-" : " ";
-      out.push(
-        <div
-          key={`l${i}-${rendered}`}
-          className={`grid grid-cols-[3rem_3rem_1fr] ${rowBackground(line.kind)}`}
-        >
-          <span className="select-none border-r border-border/60 pr-1 text-right text-muted-foreground/70">
-            {line.baseLine ?? ""}
-          </span>
-          <span className="select-none border-r border-border/60 pr-1 text-right text-muted-foreground/70">
-            {line.targetLine ?? ""}
-          </span>
-          <span className="whitespace-pre-wrap break-all pl-1">
-            {marker}
-            <DiffLineText segments={line.segments} text={line.text} kind={line.kind} />
-          </span>
-        </div>,
-      );
-      rendered += 1;
-    }
-  }
-
-  return (
-    <div className="font-mono text-[11px] leading-4">
-      {partialNote ? (
-        <p className="border-b border-border bg-yellow-50 px-2 py-1 text-[11px] text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-300">
-          {partialNote}
-        </p>
-      ) : null}
-      {out}
-      {rendered >= MAX_RENDERED_DIFF_LINES ? (
-        <p className="px-2 py-1 text-[11px] italic text-muted-foreground">
-          Diff truncated to the first {MAX_RENDERED_DIFF_LINES} lines.
-        </p>
-      ) : null}
     </div>
   );
 }

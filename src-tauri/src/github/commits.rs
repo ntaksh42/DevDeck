@@ -6,9 +6,9 @@ use github_client::{CommitSearchItem, PrFileItem};
 
 use crate::auth::github_client_for_organization;
 use crate::commits::{
-    CommitChangeSet, CommitChangedFile, CommitFileDiff, CommitPullRequest, CommitSearchResult,
-    CommitSummary, GetCommitChangesInput, GetCommitFileDiffInput, GetCommitPullRequestsInput,
-    SearchCommitsInput,
+    CommitChangeSet, CommitChangedFile, CommitFileDiff, CommitPullRequest, CommitRangeChangeSet,
+    CommitSearchResult, CommitSummary, GetCommitChangesInput, GetCommitFileDiffInput,
+    GetCommitPullRequestsInput, GetCommitRangeChangesInput, SearchCommitsInput,
 };
 use crate::db::Organization;
 use crate::error::{AppError, Result};
@@ -62,6 +62,31 @@ pub async fn get_commit_changes(
         commit_id: commit.sha,
         parent_commit_id: commit.parents.first().map(|p| p.sha.clone()),
         files: commit.files.into_iter().map(file_to_changed).collect(),
+    })
+}
+
+/// Changed files between two arbitrary commits (the two-commit compare view),
+/// via GitHub's compare API, as opposed to [`get_commit_changes`] which diffs
+/// a commit against its own parent.
+pub async fn get_commit_range_changes(
+    organization: &Organization,
+    secrets: &SecretStore,
+    input: GetCommitRangeChangesInput,
+) -> Result<CommitRangeChangeSet> {
+    let (owner, repo) = split_owner_repo(&input.repository_id)?;
+    let client = github_client_for_organization(organization, secrets)?;
+    let files = client
+        .compare_commits(
+            &owner,
+            &repo,
+            &input.base_commit_id,
+            &input.target_commit_id,
+        )
+        .await?;
+    Ok(CommitRangeChangeSet {
+        base_commit_id: input.base_commit_id,
+        target_commit_id: input.target_commit_id,
+        files: files.into_iter().map(file_to_changed).collect(),
     })
 }
 

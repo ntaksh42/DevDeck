@@ -42,6 +42,7 @@ import {
 } from "./commitSearchUtils";
 import { CommitGridRow, CommitSortHeaderButton } from "./CommitGridRow";
 import { CommitPreviewPanel } from "./CommitPreviewPanel";
+import { CommitComparePanel } from "./CommitComparePanel";
 
 export function CommitResults({
   activeExternalFilterCount = 0,
@@ -64,6 +65,9 @@ export function CommitResults({
 }) {
   const [sort, setCommitSort] = useState<CommitSortState>(() => loadCommitSort());
   const [selectedIndex, setSelectedIndex] = useState(0);
+  // Up to two commits marked for the compare view (Shift+click a row, or
+  // Space on the focused row); oldest mark drops off once a third is added.
+  const [compareCommits, setCompareCommits] = useState<CommitSummary[]>([]);
   const [visibleColumns, setVisibleColumns] = useState<CommitColumnKey[]>(
     loadCommitVisibleColumns,
   );
@@ -155,6 +159,31 @@ export function CommitResults({
     setSelectedIndex((i) => Math.min(i, Math.max(sorted.length - 1, 0)));
   }, [sorted.length]);
 
+  // A fresh search result set invalidates any in-progress compare selection.
+  useEffect(() => {
+    setCompareCommits([]);
+  }, [results]);
+
+  function compareKey(commit: CommitSummary): string {
+    return `${commit.repositoryId}:${commit.commitId}`;
+  }
+
+  function toggleCompareMark(commit: CommitSummary) {
+    setCompareCommits((current) => {
+      const key = compareKey(commit);
+      const idx = current.findIndex((c) => compareKey(c) === key);
+      if (idx !== -1) return current.filter((_, i) => i !== idx);
+      const next = [...current, commit];
+      return next.length > 2 ? next.slice(next.length - 2) : next;
+    });
+  }
+
+  function compareMarkFor(commit: CommitSummary): 1 | 2 | null {
+    const key = compareKey(commit);
+    const idx = compareCommits.findIndex((c) => compareKey(c) === key);
+    return idx === -1 ? null : ((idx + 1) as 1 | 2);
+  }
+
   function applySort(key: CommitSortKey) {
     setCommitSort((current) => {
       if (current.key !== key) return { key, direction: defaultCommitSortDir(key) };
@@ -205,6 +234,17 @@ export function CommitResults({
         const commit = sorted[selectedIndex];
         if (commit?.webUrl) openExternalUrl(commit.webUrl);
       }
+      return;
+    }
+    if (e.key === "Escape" && compareCommits.length > 0) {
+      e.preventDefault();
+      setCompareCommits([]);
+      return;
+    }
+    if (e.key === " ") {
+      e.preventDefault();
+      const commit = sorted[selectedIndex];
+      if (commit) toggleCompareMark(commit);
       return;
     }
     if (e.key === "/") { e.preventDefault(); focusFilterInput(); return; }
@@ -277,6 +317,24 @@ export function CommitResults({
         <h2 className="text-base font-semibold">Results</h2>
         <span className="flex items-center gap-2 text-sm text-muted-foreground">
           {countLabel}
+          {compareCommits.length === 1 ? (
+            <span className="rounded border border-amber-300 bg-amber-50 px-1.5 py-px text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+              Comparing: {compareCommits[0].shortCommitId} vs — (Shift+click or Space on another
+              commit)
+            </span>
+          ) : compareCommits.length === 2 ? (
+            <span className="flex items-center gap-1 rounded border border-sky-300 bg-sky-50 px-1.5 py-px text-xs text-sky-800 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-300">
+              Comparing: {compareCommits[0].shortCommitId} → {compareCommits[1].shortCommitId}
+              <button
+                type="button"
+                onClick={() => setCompareCommits([])}
+                className="ml-1 rounded px-1 hover:bg-sky-100 dark:hover:bg-sky-900"
+                title="Clear compare selection (Esc)"
+              >
+                Clear
+              </button>
+            </span>
+          ) : null}
           <ActiveFilters count={activeFilterCount} onClear={onClearExternalFilters ?? (() => {})} />
           <button
             type="button"
@@ -363,7 +421,11 @@ export function CommitResults({
                       selected={index === selectedIndex}
                       columnTemplate={commitColTemplate}
                       visibleColumns={visibleColumns}
-                      onSelect={() => setSelectedIndex(index)}
+                      compareMark={compareMarkFor(commit)}
+                      onSelect={(shiftKey) => {
+                        if (shiftKey) toggleCompareMark(commit);
+                        else setSelectedIndex(index);
+                      }}
                     />
                   );
                 })}
@@ -387,12 +449,22 @@ export function CommitResults({
         value={previewWidth}
       />
 
-      <CommitPreviewPanel
-        commit={selectedCommit}
-        maximized={maximized}
-        onToggleMaximize={() => setMaximized((value) => !value)}
-        onOpenPullRequest={onOpenPullRequest}
-      />
+      {compareCommits.length === 2 ? (
+        <CommitComparePanel
+          base={compareCommits[0]}
+          target={compareCommits[1]}
+          maximized={maximized}
+          onToggleMaximize={() => setMaximized((value) => !value)}
+          onClear={() => setCompareCommits([])}
+        />
+      ) : (
+        <CommitPreviewPanel
+          commit={selectedCommit}
+          maximized={maximized}
+          onToggleMaximize={() => setMaximized((value) => !value)}
+          onOpenPullRequest={onOpenPullRequest}
+        />
+      )}
 
       {copyToast && (
         <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1 text-xs text-background shadow-lg">

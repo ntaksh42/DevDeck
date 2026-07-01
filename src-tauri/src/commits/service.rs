@@ -8,14 +8,15 @@ use crate::prs::vote_label;
 use crate::secrets::SecretStore;
 
 use super::helpers::{
-    cached_commit_to_summary, commit_to_cached, encode_path_segment, fetch_commit_side,
-    normalize_date, normalize_item_path, normalize_optional, normalize_set, ChangeFlags,
+    cached_commit_to_summary, commit_to_cached, encode_path_segment, entries_to_changed_files,
+    fetch_commit_side, normalize_date, normalize_item_path, normalize_optional, normalize_set,
+    ChangeFlags,
 };
 use super::{
-    CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitChangedFile, CommitFileDiff,
-    CommitPullRequest, CommitRepositoryOption, CommitSearchResult, CommitSummary,
+    CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
+    CommitRangeChangeSet, CommitRepositoryOption, CommitSearchResult, CommitSummary,
     GetCommitChangesInput, GetCommitFileDiffInput, GetCommitPullRequestsInput,
-    ListCommitRepositoriesInput, SearchCommitsInput,
+    GetCommitRangeChangesInput, ListCommitRepositoriesInput, SearchCommitsInput,
 };
 
 /// How long a commit's related-PR lookup stays cached before being refreshed.
@@ -282,24 +283,38 @@ impl CommitService {
         let entries = client
             .get_commit_changes(&input.project_id, &input.repository_id, &input.commit_id)
             .await?;
-        let files = entries
-            .into_iter()
-            .filter_map(|entry| {
-                let item = entry.item?;
-                if item.is_folder.unwrap_or(false) {
-                    return None;
-                }
-                Some(CommitChangedFile {
-                    path: item.path?,
-                    change_type: entry.change_type.unwrap_or_else(|| "edit".to_string()),
-                    original_path: entry.source_server_item,
-                })
-            })
-            .collect();
+        let files = entries_to_changed_files(entries);
         Ok(CommitChangeSet {
             commit_id: input.commit_id,
             parent_commit_id,
             files,
+        })
+    }
+
+    /// Changed files between two arbitrary commits (the two-commit compare
+    /// view), as opposed to [`Self::get_commit_changes`] which diffs a commit
+    /// against its own parent. `base_commit_id`/`target_commit_id` are passed
+    /// through unchanged so callers can reuse them as `parentCommitId`/
+    /// `commitId` in a later [`Self::get_commit_file_diff`] call for the same
+    /// pair without inverting which side is which.
+    pub async fn get_commit_range_changes(
+        &self,
+        input: GetCommitRangeChangesInput,
+    ) -> Result<CommitRangeChangeSet> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let entries = client
+            .get_commit_diff(
+                &input.project_id,
+                &input.repository_id,
+                &input.base_commit_id,
+                &input.target_commit_id,
+            )
+            .await?;
+        Ok(CommitRangeChangeSet {
+            base_commit_id: input.base_commit_id,
+            target_commit_id: input.target_commit_id,
+            files: entries_to_changed_files(entries),
         })
     }
 

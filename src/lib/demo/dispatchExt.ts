@@ -121,6 +121,21 @@ export function dispatchExt(command: string, args: unknown): unknown {
         ],
       };
     }
+    case "get_commit_range_changes": {
+      const input = (
+        args as
+          | { input?: { baseCommitId?: string; targetCommitId?: string } }
+          | undefined
+      )?.input;
+      return {
+        baseCommitId: input?.baseCommitId ?? "demobase",
+        targetCommitId: input?.targetCommitId ?? "demotarget",
+        files: [
+          { path: "/src/app.ts", changeType: "edit", originalPath: null },
+          { path: "/src/new-feature.ts", changeType: "add", originalPath: null },
+        ],
+      };
+    }
     case "get_commit_file_diff": {
       const input = (args as { input?: { filePath?: string } } | undefined)?.input;
       return {

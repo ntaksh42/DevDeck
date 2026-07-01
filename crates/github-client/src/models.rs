@@ -284,6 +284,15 @@ pub struct CommitWithFiles {
     pub files: Vec<PrFileItem>,
 }
 
+/// `GET /repos/{o}/{r}/compare/{base}...{head}` — files changed between two
+/// arbitrary commits. Only `files` is used; the endpoint also returns
+/// ahead/behind counts and per-commit metadata the caller does not need.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CompareCommitsResponse {
+    #[serde(default)]
+    pub files: Vec<PrFileItem>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
