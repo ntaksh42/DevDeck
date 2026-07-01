@@ -8,7 +8,6 @@ export type TreeProps = {
   branch: string;
   parentPath: string;
   depth: number;
-  filterText: string;
   selectedPath: string;
   expanded: Set<string>;
   onToggle: (path: string) => void;
@@ -19,13 +18,13 @@ export type TreeProps = {
 // One level of the file tree: fetches the children of `parentPath` and renders
 // each, recursing into expanded folders so each level loads lazily on demand.
 // Rows carry data attributes so the container can drive keyboard navigation.
+// (Filtering is handled by CodeFilteredTree, which swaps in for the tree.)
 export function TreeLevel({
   organizationId,
   repo,
   branch,
   parentPath,
   depth,
-  filterText,
   selectedPath,
   expanded,
   onToggle,
@@ -33,10 +32,7 @@ export function TreeLevel({
   onOpenFile,
 }: TreeProps) {
   const query = useTreeQuery(organizationId, repo, branch, parentPath, false);
-  const needle = filterText.trim().toLowerCase();
-  const items = (query.data ?? []).filter(
-    (item) => !needle || item.name.toLowerCase().includes(needle),
-  );
+  const items = query.data ?? [];
 
   if (query.isLoading) {
     return (
@@ -113,7 +109,6 @@ export function TreeLevel({
                 branch={branch}
                 parentPath={item.path}
                 depth={depth + 1}
-                filterText={filterText}
                 selectedPath={selectedPath}
                 expanded={expanded}
                 onToggle={onToggle}
@@ -129,7 +124,7 @@ export function TreeLevel({
           className="px-2 py-1 text-xs text-muted-foreground"
           style={{ paddingLeft: depth * 12 + 8 }}
         >
-          {needle ? "No matches" : "Empty"}
+          Empty
         </li>
       ) : null}
     </ul>

@@ -3,8 +3,8 @@ use tauri::State;
 use crate::app_state::AppState;
 use crate::cancellation::run_cancellable;
 use crate::code_browse::{
-    GetFileInput, ListBranchesInput, ListHistoryInput, ListTreeInput, RepoBranch, RepoCommitInfo,
-    RepoFile, RepoTreeItem,
+    GetFileInput, ListBranchesInput, ListHistoryInput, ListPathsInput, ListTreeInput, RepoBranch,
+    RepoCommitInfo, RepoFile, RepoPathList, RepoTreeItem,
 };
 use crate::code_search::{
     CodeContextResult, CodeSearchResults, GetCodeContextInput, SearchCodeInput,
@@ -86,6 +86,22 @@ pub async fn list_repo_history(
         &state.cancellation,
         operation_id,
         provider.list_repo_history(input),
+    )
+    .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn list_repo_paths(
+    input: ListPathsInput,
+    state: State<'_, AppState>,
+) -> Result<RepoPathList> {
+    let operation_id = input.operation_id.clone();
+    let provider = state.provider().await?;
+    run_cancellable(
+        &state.cancellation,
+        operation_id,
+        provider.list_repo_paths(input),
     )
     .await
 }

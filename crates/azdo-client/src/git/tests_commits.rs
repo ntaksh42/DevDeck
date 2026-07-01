@@ -308,7 +308,7 @@ async fn list_items_requests_one_level_at_branch() {
 
     let items = test_client(&server)
         .await
-        .list_items("project-1", "repo-1", "main", "/src", false)
+        .list_items("project-1", "repo-1", "main", "/src", false, false)
         .await
         .unwrap();
     assert_eq!(items.len(), 3);
@@ -316,6 +316,32 @@ async fn list_items_requests_one_level_at_branch() {
     assert!(!items[2].is_folder);
     assert_eq!(items[2].path, "/src/main.py");
     assert!(items[2].latest_processed_change.is_none());
+}
+
+#[tokio::test]
+async fn list_items_requests_full_recursion_when_recursive() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/project-1/_apis/git/repositories/repo-1/items"))
+        .and(query_param("recursionLevel", "Full"))
+        .and(query_param("scopePath", "/"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "count": 2,
+            "value": [
+                { "path": "/src", "isFolder": true },
+                { "path": "/src/lib/util.py" }
+            ]
+        })))
+        .mount(&server)
+        .await;
+
+    let items = test_client(&server)
+        .await
+        .list_items("project-1", "repo-1", "main", "/", true, false)
+        .await
+        .unwrap();
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[1].path, "/src/lib/util.py");
 }
 
 #[tokio::test]
@@ -342,7 +368,7 @@ async fn list_items_includes_latest_commit_when_requested() {
 
     let items = test_client(&server)
         .await
-        .list_items("project-1", "repo-1", "main", "/", true)
+        .list_items("project-1", "repo-1", "main", "/", false, true)
         .await
         .unwrap();
     let change = items[0].latest_processed_change.as_ref().unwrap();

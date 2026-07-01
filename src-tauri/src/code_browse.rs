@@ -1,4 +1,8 @@
+mod util;
+
 use azdo_client::{CommitSearchCriteria, GitCommitRef};
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 
 use crate::auth::client_for_organization;
@@ -6,12 +10,25 @@ use crate::db::AppDatabase;
 use crate::error::Result;
 use crate::secrets::SecretStore;
 
-/// Largest file we render in the browser. Bigger blobs are reported as
-/// `too_large` instead of being streamed into the UI.
+use util::{
+    image_mime, leaf_name, normalize_scope, resolve_version, strip_heads_prefix,
+    truncate_at_char_boundary,
+};
+
+/// Largest text file we render in full. Bigger files return their leading
+/// bytes with `truncated=true` instead of nothing.
 const MAX_FILE_BYTES: usize = 512 * 1024;
+
+/// Largest image we inline as a base64 data URL. Bigger images are reported as
+/// `too_large`.
+const MAX_IMAGE_BYTES: usize = 2 * 1024 * 1024;
 
 /// Maximum commits returned for the Files > History tab.
 const HISTORY_TOP: u32 = 50;
+
+/// Maximum entries returned by the recursive path listing (tree filter). The
+/// response carries `truncated=true` when the repository has more.
+const MAX_RECURSIVE_PATHS: usize = 20_000;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -47,6 +64,23 @@ pub struct GetFileInput {
     pub repository: String,
     pub branch: String,
     pub path: String,
+    /// Optional ref overriding `branch`: `versionType` is `branch`, `commit`,
+    /// or `tag`, and `version` names it. Both must be set together.
+    #[serde(default)]
+    pub version_type: Option<String>,
+    #[serde(default)]
+    pub version: Option<String>,
+    #[serde(default)]
+    pub operation_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListPathsInput {
+    pub organization_id: Option<String>,
+    pub project: String,
+    pub repository: String,
+    pub branch: String,
     #[serde(default)]
     pub operation_id: Option<String>,
 }
@@ -110,8 +144,31 @@ pub struct RepoFile {
     pub content: String,
     /// True when Azure DevOps flagged the blob as binary; `content` is empty.
     pub is_binary: bool,
-    /// True when the blob exceeded [`MAX_FILE_BYTES`]; `content` is empty.
+    /// True when the blob exceeded its size cap; `content` is empty.
     pub too_large: bool,
+    /// True when `content` holds only the leading [`MAX_FILE_BYTES`] of a
+    /// larger text file.
+    pub truncated: bool,
+    /// A `data:` URL for image files, rendered instead of text content.
+    pub image_data_url: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoPathItem {
+    /// Display name (last path segment).
+    pub name: String,
+    /// Full repository path, e.g. `/src/main.py`.
+    pub path: String,
+    pub is_folder: bool,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoPathList {
+    pub items: Vec<RepoPathItem>,
+    /// True when the repository has more entries than [`MAX_RECURSIVE_PATHS`].
+    pub truncated: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -174,6 +231,7 @@ impl CodeBrowseService {
                 &input.repository,
                 &input.branch,
                 &scope,
+                false,
                 include_last_commit,
             )
             .await?
@@ -195,18 +253,55 @@ impl CodeBrowseService {
         Ok(items)
     }
 
-    /// Fetches a file's text content at the tip of a branch.
+    /// Fetches a file's content at a ref (the branch tip by default, or the
+    /// `versionType`/`version` override). Text comes back as a string (the
+    /// leading [`MAX_FILE_BYTES`] with `truncated=true` when larger), images as
+    /// a base64 data URL, and other binaries as `is_binary`.
     pub async fn get_file(&self, input: GetFileInput) -> Result<RepoFile> {
         let organization = self
             .db
             .resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
+        let (version_type, version) = resolve_version(&input)?;
+
+        if let Some(mime) = image_mime(&input.path) {
+            let response = client
+                .get_item_bytes(
+                    &input.project,
+                    &input.repository,
+                    &input.path,
+                    version_type,
+                    version,
+                )
+                .await?;
+            if response.bytes.len() > MAX_IMAGE_BYTES {
+                return Ok(RepoFile {
+                    path: input.path,
+                    content: String::new(),
+                    is_binary: true,
+                    too_large: true,
+                    truncated: false,
+                    image_data_url: None,
+                });
+            }
+            let encoded = BASE64_STANDARD.encode(&response.bytes);
+            return Ok(RepoFile {
+                path: input.path,
+                content: String::new(),
+                is_binary: true,
+                too_large: false,
+                truncated: false,
+                image_data_url: Some(format!("data:{mime};base64,{encoded}")),
+            });
+        }
+
         let item = client
-            .get_item_content_at_branch(
+            .get_item_content_at_version(
                 &input.project,
                 &input.repository,
                 &input.path,
-                &input.branch,
+                version_type,
+                version,
             )
             .await?;
 
@@ -221,29 +316,57 @@ impl CodeBrowseService {
                 content: String::new(),
                 is_binary: true,
                 too_large: false,
+                truncated: false,
+                image_data_url: None,
             });
         }
-        match item.content {
-            Some(content) if content.len() > MAX_FILE_BYTES => Ok(RepoFile {
-                path: input.path,
-                content: String::new(),
-                is_binary: false,
-                too_large: true,
-            }),
-            Some(content) => Ok(RepoFile {
-                path: input.path,
-                content,
-                is_binary: false,
-                too_large: false,
-            }),
-            // No content and not flagged binary: treat as an empty file.
-            None => Ok(RepoFile {
-                path: input.path,
-                content: String::new(),
-                is_binary: false,
-                too_large: false,
-            }),
-        }
+        // No content and not flagged binary is an empty file.
+        let content = item.content.unwrap_or_default();
+        let truncated = content.len() > MAX_FILE_BYTES;
+        Ok(RepoFile {
+            path: input.path,
+            content: if truncated {
+                truncate_at_char_boundary(&content, MAX_FILE_BYTES).to_string()
+            } else {
+                content
+            },
+            is_binary: false,
+            too_large: false,
+            truncated,
+            image_data_url: None,
+        })
+    }
+
+    /// Lists every path in a repository at a branch tip (one recursive items
+    /// call), for filtering the tree across unexpanded folders. Sorted by
+    /// path; capped at [`MAX_RECURSIVE_PATHS`] with `truncated` set.
+    pub async fn list_paths(&self, input: ListPathsInput) -> Result<RepoPathList> {
+        let organization = self
+            .db
+            .resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let mut items: Vec<RepoPathItem> = client
+            .list_items(
+                &input.project,
+                &input.repository,
+                &input.branch,
+                "/",
+                true,
+                false,
+            )
+            .await?
+            .into_iter()
+            .filter(|item| item.path != "/")
+            .map(|item| RepoPathItem {
+                name: leaf_name(&item.path).to_string(),
+                path: item.path,
+                is_folder: item.is_folder,
+            })
+            .collect();
+        items.sort_by_key(|item| item.path.to_lowercase());
+        let truncated = items.len() > MAX_RECURSIVE_PATHS;
+        items.truncate(MAX_RECURSIVE_PATHS);
+        Ok(RepoPathList { items, truncated })
     }
 
     /// Lists the commit history for a path at a branch (the Files > History tab).
@@ -308,54 +431,5 @@ fn commit_info(change: GitCommitRef) -> RepoCommitInfo {
         message,
         author,
         date,
-    }
-}
-
-fn strip_heads_prefix(ref_name: &str) -> &str {
-    ref_name.strip_prefix("refs/heads/").unwrap_or(ref_name)
-}
-
-/// Normalizes a tree scope path: blank/`""` becomes `/`, trailing slashes are
-/// trimmed (except the root) so it matches the path the API echoes back.
-fn normalize_scope(path: Option<&str>) -> String {
-    let trimmed = path.unwrap_or("/").trim();
-    if trimmed.is_empty() || trimmed == "/" {
-        return "/".to_string();
-    }
-    trimmed.trim_end_matches('/').to_string()
-}
-
-fn leaf_name(path: &str) -> &str {
-    path.trim_end_matches('/')
-        .rsplit('/')
-        .next()
-        .unwrap_or(path)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn normalize_scope_defaults_to_root() {
-        assert_eq!(normalize_scope(None), "/");
-        assert_eq!(normalize_scope(Some("")), "/");
-        assert_eq!(normalize_scope(Some("  ")), "/");
-        assert_eq!(normalize_scope(Some("/src/")), "/src");
-        assert_eq!(normalize_scope(Some("/src")), "/src");
-    }
-
-    #[test]
-    fn leaf_name_takes_last_segment() {
-        assert_eq!(leaf_name("/src/main.py"), "main.py");
-        assert_eq!(leaf_name("/README.md"), "README.md");
-        assert_eq!(leaf_name("/src/lib"), "lib");
-    }
-
-    #[test]
-    fn strip_heads_prefix_shortens_branch() {
-        assert_eq!(strip_heads_prefix("refs/heads/main"), "main");
-        assert_eq!(strip_heads_prefix("refs/heads/feature/x"), "feature/x");
-        assert_eq!(strip_heads_prefix("main"), "main");
     }
 }

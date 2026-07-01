@@ -32,9 +32,19 @@ export function toggleFavoriteRepository(organizationId: string, repositoryId: s
   return next;
 }
 
-type LastSelection = { organizationId: string; repositoryId: string; branch: string };
+type LastSelection = {
+  organizationId: string;
+  repositoryId: string;
+  branch: string;
+  // The path that was open when the view was left. Entries written before the
+  // field existed lack it; an empty path means "start at the root".
+  path: string;
+  isFolder: boolean;
+};
 
-export function getLastSelection(organizationId: string): { repositoryId: string; branch: string } | null {
+export function getLastSelection(
+  organizationId: string,
+): { repositoryId: string; branch: string; path: string; isFolder: boolean } | null {
   const stored = readStoredJson<LastSelection | null>(
     LAST_KEY,
     (raw) => {
@@ -47,18 +57,27 @@ export function getLastSelection(organizationId: string): { repositoryId: string
         organizationId: value.organizationId,
         repositoryId: value.repositoryId,
         branch: typeof value.branch === "string" ? value.branch : "",
+        path: typeof value.path === "string" ? value.path : "",
+        isFolder: typeof value.isFolder === "boolean" ? value.isFolder : true,
       };
     },
     null,
   );
   if (!stored || stored.organizationId !== organizationId) return null;
-  return { repositoryId: stored.repositoryId, branch: stored.branch };
+  return {
+    repositoryId: stored.repositoryId,
+    branch: stored.branch,
+    path: stored.path,
+    isFolder: stored.isFolder,
+  };
 }
 
 export function setLastSelection(
   organizationId: string,
   repositoryId: string,
   branch: string,
+  path: string,
+  isFolder: boolean,
 ): void {
-  writeStoredJson(LAST_KEY, { organizationId, repositoryId, branch });
+  writeStoredJson(LAST_KEY, { organizationId, repositoryId, branch, path, isFolder });
 }

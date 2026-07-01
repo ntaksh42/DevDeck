@@ -15,7 +15,7 @@ pub use code_search::{CodeSearchRequest, CodeSearchResponse, CodeSearchResult};
 pub use error::{AdoError, Result};
 pub use git::{
     CommitSearchCriteria, GitCommitRef, GitItem, GitPullRequest, GitRef, GitRepository,
-    GitUserDate, IdentityRef, IdentityRefWithVote, PullRequestStatus, TeamProject,
+    GitUserDate, GitVersionType, IdentityRef, IdentityRefWithVote, PullRequestStatus, TeamProject,
 };
 pub use identity::{AuthenticatedUser, ConnectionData, Identity, IdentityPickerIdentity};
 pub use pipelines::{
