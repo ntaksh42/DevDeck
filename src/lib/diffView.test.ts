@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDiffLines, buildSideBySideRows, collapseDiff } from "./diffView";
+import { buildDiffLines, buildSideBySideRows, collapseDiff, summarizeDiff } from "./diffView";
 
 describe("buildDiffLines", () => {
   it("marks added and removed lines with line numbers", () => {
@@ -36,6 +36,22 @@ describe("buildDiffLines", () => {
       { kind: "context", baseLine: 2, targetLine: 2, text: "b" },
       { kind: "context", baseLine: 3, targetLine: 3, text: "c" },
     ]);
+  });
+});
+
+describe("summarizeDiff", () => {
+  it("counts added and removed lines", () => {
+    const base = "const x = 1;\nconst y = 2;\n";
+    const target = "const x = 1;\nconst y = 3;\nconst z = 4;\n";
+    expect(summarizeDiff(base, target)).toEqual({ additions: 2, deletions: 1 });
+  });
+
+  it("counts a whole-file addition as pure additions", () => {
+    expect(summarizeDiff("", "a\nb\n")).toEqual({ additions: 2, deletions: 0 });
+  });
+
+  it("returns zero for identical content", () => {
+    expect(summarizeDiff("a\nb\n", "a\nb\n")).toEqual({ additions: 0, deletions: 0 });
   });
 });
 

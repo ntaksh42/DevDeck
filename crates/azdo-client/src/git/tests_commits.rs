@@ -78,6 +78,42 @@ async fn get_commit_changes_maps_entries() {
 }
 
 #[tokio::test]
+async fn get_commit_diffs_sends_base_and_target_versions() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(
+            "/project-1/_apis/git/repositories/repo-1/diffs/commits",
+        ))
+        .and(query_param("baseVersion", "parent2"))
+        .and(query_param("baseVersionType", "commit"))
+        .and(query_param("targetVersion", "merge-commit"))
+        .and(query_param("targetVersionType", "commit"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "allChangesIncluded": true,
+            "changeCounts": { "Edit": 1 },
+            "changes": [
+                {
+                    "item": { "path": "/src/other.rs", "isFolder": false },
+                    "changeType": "edit"
+                }
+            ]
+        })))
+        .mount(&server)
+        .await;
+
+    let changes = test_client(&server)
+        .await
+        .get_commit_diffs("project-1", "repo-1", "parent2", "merge-commit")
+        .await
+        .unwrap();
+    assert_eq!(changes.len(), 1);
+    assert_eq!(
+        changes[0].item.as_ref().unwrap().path.as_deref(),
+        Some("/src/other.rs")
+    );
+}
+
+#[tokio::test]
 async fn list_commits_uses_search_criteria() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))

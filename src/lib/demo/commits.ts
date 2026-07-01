@@ -121,6 +121,24 @@ export function demoRepoHistory(path: string) {
   ];
 }
 
+// A merge-commit id used by the demo `get_commit_changes` response so the
+// browser preview can exercise the parent selector (#530) with a real
+// two-parent commit.
+export const DEMO_MERGE_COMMIT_ID = "demomerge";
+
+export function demoCommitChanges(commitId?: string) {
+  const id = commitId ?? "demosha";
+  const isMerge = id === DEMO_MERGE_COMMIT_ID;
+  return {
+    commitId: id,
+    parents: isMerge ? ["demoparent", "demoparent2"] : ["demoparent"],
+    files: [
+      { path: "/src/app.ts", changeType: "edit", originalPath: null },
+      { path: "/README.md", changeType: "add", originalPath: null },
+    ],
+  };
+}
+
 // Demo commit → PR relationships. Only a couple of commits map to PRs so the
 // "no related PRs" path stays exercised for the rest.
 export function demoCommitPullRequests(commitId?: string): CommitPullRequest[] {

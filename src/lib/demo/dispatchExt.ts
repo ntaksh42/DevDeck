@@ -16,6 +16,7 @@ import {
 } from "@/lib/demo/pipelines";
 import {
   demoCommitActivity,
+  demoCommitChanges,
   demoCommitPullRequests,
   demoCommitRepositories,
   demoCommits,
@@ -115,14 +116,7 @@ export function dispatchExt(command: string, args: unknown): unknown {
       return demoCommitRepositories();
     case "get_commit_changes": {
       const input = (args as { input?: { commitId?: string } } | undefined)?.input;
-      return {
-        commitId: input?.commitId ?? "demosha",
-        parentCommitId: "demoparent",
-        files: [
-          { path: "/src/app.ts", changeType: "edit", originalPath: null },
-          { path: "/README.md", changeType: "add", originalPath: null },
-        ],
-      };
+      return demoCommitChanges(input?.commitId);
     }
     case "get_commit_file_diff": {
       const input = (args as { input?: { filePath?: string } } | undefined)?.input;

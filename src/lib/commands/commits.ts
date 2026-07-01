@@ -61,7 +61,9 @@ const commitChangedFileSchema = z.object({
 });
 const commitChangeSetSchema = z.object({
   commitId: z.string(),
-  parentCommitId: z.string().nullable(),
+  // All parent commit ids, first-parent first. More than one means a merge
+  // commit; the UI lets the user pick which one to diff against.
+  parents: z.array(z.string()),
   files: z.array(commitChangedFileSchema),
 });
 export type CommitChangedFile = z.infer<typeof commitChangedFileSchema>;
@@ -116,6 +118,8 @@ export async function getCommitChanges(input: {
   projectId: string;
   repositoryId: string;
   commitId: string;
+  /** Parent to diff against, for a merge commit's parent selector. */
+  baseCommitId?: string | null;
 }): Promise<CommitChangeSet> {
   const result = await invokeCommand("get_commit_changes", { input });
   return commitChangeSetSchema.parse(result);

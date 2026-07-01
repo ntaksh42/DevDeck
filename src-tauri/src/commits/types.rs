@@ -87,6 +87,11 @@ pub struct GetCommitChangesInput {
     pub project_id: String,
     pub repository_id: String,
     pub commit_id: String,
+    /// Parent commit to diff against, for merge commits with more than one
+    /// parent. `None` uses the provider's default parent. Azure DevOps honors
+    /// this for any parent; GitHub only exposes the default parent's changes
+    /// (see `github::commits::get_commit_changes`).
+    pub base_commit_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -114,7 +119,9 @@ pub struct CommitChangedFile {
 #[serde(rename_all = "camelCase")]
 pub struct CommitChangeSet {
     pub commit_id: String,
-    pub parent_commit_id: Option<String>,
+    /// All parent commit ids, in the provider's order (first parent first).
+    /// More than one entry means this is a merge commit.
+    pub parents: Vec<String>,
     pub files: Vec<CommitChangedFile>,
 }
 
