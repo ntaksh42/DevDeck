@@ -4,17 +4,19 @@ import {
   useMemo,
   useState,
 } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery } from '@tanstack/react-query';
 import { Loader2, Search } from 'lucide-react';
 import {
   searchPullRequests,
   listCommitRepositories,
+  listRepoBranches,
   commandErrorMessage,
   type SearchPullRequestsInput,
 } from '@/lib/azdoCommands';
 import { useActiveOrganizationId } from '@/lib/useActiveConnection';
 import { ErrorState } from '@/components/StateDisplay';
 import { MultiSelectFilter } from '@/components/MultiSelectFilter';
+import { FilterAutocomplete } from '@/components/FilterAutocomplete';
 import { PullRequestResults } from './PrSearchResults';
 import {
   PR_SEARCH_QUERY_STORAGE_KEY,
@@ -74,6 +76,30 @@ export function PullRequestSearch({
         ? allRepositories.filter((r) => projectIds.includes(r.projectId))
         : allRepositories,
     [allRepositories, projectIds],
+  );
+
+  // Fetch branches for the selected repositories so the target-branch field can
+  // suggest real branch names. Scoped to the selected repos to avoid fanning out
+  // across every repository in the org when nothing is narrowed.
+  const selectedRepositories = useMemo(
+    () => allRepositories.filter((r) => repositoryIds.includes(r.repositoryId)),
+    [allRepositories, repositoryIds],
+  );
+  const branchQueries = useQueries({
+    queries: selectedRepositories.map((repo) => ({
+      queryKey: ["prBranchSuggestions", organizationId, repo.projectId, repo.repositoryId],
+      queryFn: () =>
+        listRepoBranches({
+          organizationId,
+          project: repo.projectId,
+          repository: repo.repositoryId,
+        }),
+      enabled: !!organizationId,
+      staleTime: 5 * 60_000,
+    })),
+  });
+  const branchSuggestions = Array.from(
+    new Set(branchQueries.flatMap((q) => (q.data ?? []).map((b) => b.name))),
   );
 
   // Changing the project scope drops repository selections that no longer
@@ -264,15 +290,18 @@ export function PullRequestSearch({
           </div>
 
           <div className="grid gap-3 lg:grid-cols-[1fr_150px_150px_150px_170px_auto]">
-            <label className="grid gap-2">
+            <div className="grid gap-2">
               <span className="text-sm font-medium">Target branch</span>
-              <input
+              <FilterAutocomplete
                 value={targetBranch}
-                onChange={(e) => setTargetBranch(e.target.value)}
+                onChange={setTargetBranch}
+                onClear={() => setTargetBranch("")}
                 placeholder="e.g. main"
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                suggestionPool={branchSuggestions}
+                ariaLabel="Filter by target branch"
+                showAllOnFocus
               />
-            </label>
+            </div>
 
             <label className="grid gap-2">
               <span className="text-sm font-medium">From</span>
@@ -340,7 +369,8 @@ export function PullRequestSearch({
             Active pull requests are served from the local cache. Completed and
             abandoned pull requests are fetched live from Azure DevOps, so those
             statuses may take a moment. Target branch and the date window narrow
-            the live query server-side.
+            the live query server-side. Select a repository to get target-branch
+            suggestions.
           </p>
         </form>
       </div>
