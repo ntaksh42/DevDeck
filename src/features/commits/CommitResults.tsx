@@ -7,7 +7,14 @@ import {
   useState,
 } from "react";
 import { type CommitSummary } from "@/lib/azdoCommands";
-import { clamp, storedNumber, isEditableTarget, focusFilterInput, focusPrimaryPreview } from "@/lib/utils";
+import {
+  clamp,
+  storedNumber,
+  isEditableTarget,
+  focusFilterInput,
+  focusPrimaryPreview,
+  markdownLink,
+} from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
 import { useGridColumns } from "@/lib/useGridColumns";
 import { ColumnResizeHandle, ResizeHandle } from "@/components/ResizeHandle";
@@ -229,6 +236,17 @@ export function CommitResults({
           setCopyToast("URL copied");
           window.setTimeout(() => setCopyToast(null), 2000);
         });
+      }
+    } else if (e.key === "l" || e.key === "L") {
+      const commit = sorted[selectedIndex];
+      if (commit?.webUrl) {
+        const subject = commit.comment.split(/\r?\n/, 1)[0] || "(no comment)";
+        void navigator.clipboard
+          .writeText(markdownLink(`${commit.shortCommitId} ${subject}`, commit.webUrl))
+          .then(() => {
+            setCopyToast("Markdown link copied");
+            window.setTimeout(() => setCopyToast(null), 2000);
+          });
       }
     }
   }

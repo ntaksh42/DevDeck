@@ -15,6 +15,21 @@ export async function openExternalUrl(url: string): Promise<void> {
   window.open(parsedUrl.toString(), "_blank", "noopener,noreferrer");
 }
 
+/** Opens the user's default mail client with a pre-filled `mailto:` link (e.g.
+ * a work item's "Email a link" action). */
+export async function openMailtoUrl(url: string): Promise<void> {
+  if (!url.startsWith("mailto:")) {
+    throw new Error("Only mailto URLs can be opened.");
+  }
+
+  if (isTauriRuntime()) {
+    await openUrl(url);
+    return;
+  }
+
+  window.location.href = url;
+}
+
 /** Opens a local file in its default OS handler (e.g. an HTML review result in
  * the browser). Only works in the desktop runtime; the browser dev preview has
  * no filesystem access. */

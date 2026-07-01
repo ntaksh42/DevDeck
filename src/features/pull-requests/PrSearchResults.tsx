@@ -7,6 +7,7 @@ import {
   isEditableTarget,
   focusFilterInput,
   focusPrimaryPreview,
+  markdownLink,
 } from '@/lib/utils';
 import { useGridColumns } from '@/lib/useGridColumns';
 import { useColumnVisibility } from '@/lib/useColumnVisibility';
@@ -256,6 +257,18 @@ export function PullRequestResults({
           setCopyToast("URL copied");
           window.setTimeout(() => setCopyToast(null), 2000);
         });
+      }
+    }
+    else if (e.key === "l" || e.key === "L") {
+      e.preventDefault();
+      const pr = filteredResults[selectedIndex];
+      if (pr?.webUrl) {
+        void navigator.clipboard
+          .writeText(markdownLink(`!${pr.pullRequestId} ${pr.title}`, pr.webUrl))
+          .then(() => {
+            setCopyToast("Markdown link copied");
+            window.setTimeout(() => setCopyToast(null), 2000);
+          });
       }
     }
   }

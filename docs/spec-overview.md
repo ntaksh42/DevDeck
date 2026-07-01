@@ -257,8 +257,13 @@ find-next) は、入力欄以外では抑止し、ネイティブ動作が素通
 ### グリッド内
 
 `↑ ↓ / J K / Home / End / PageUp / PageDown` で移動、`Enter` でプレビュー/オープン、
-`Ctrl+Enter` でブラウザを開く、`C` で URL コピー。作業項目グリッドでは
+`Ctrl+Enter` でブラウザを開く、`C` で URL コピー、`L` で Markdown 形式のリンク
+(`[!123 タイトル](url)` / 作業項目は `[#123 タイトル](url)` / コミットは短縮 SHA
++ 件名) をコピー。作業項目グリッドでは
 `S` 状態 / `A` 割当 / `P` 優先度 / `F` フィールド循環、`Ctrl+S` で適用、`M` でコメント。
+作業項目プレビューのヘッダーには「Email a link」ボタンがあり、タイトルと URL を
+本文に入れた `mailto:` リンクで既定のメールクライアントを開く (Azure DevOps Web の
+Share 相当、Duplicate ボタンの隣、Tab キーで到達可能)。
 行を1件選択中は、ステータスバーに主要な行ショートカットのコンパクトな凡例を表示する
 (My Reviews / 作業項目グリッド)。Pipelines の監視パイプライン実行行でも
 `↑ ↓ / J K / Home / End` で移動、`Enter` で実行プレビュー、`Ctrl+Enter` で

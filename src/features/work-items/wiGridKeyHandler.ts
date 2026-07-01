@@ -4,6 +4,7 @@ import {
   isEditableTarget,
   focusFilterInput,
   focusPrimaryPreview,
+  markdownLink,
 } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
 import { toggleTriageArchived } from '@/lib/triage';
@@ -115,6 +116,16 @@ export function createWiKeyHandler(deps: WiKeyHandlerDeps): (e: React.KeyboardEv
           setCopyToast("URL copied");
           window.setTimeout(() => setCopyToast(null), 2000);
         });
+      }
+    } else if (e.key === "l" || e.key === "L") {
+      const item = displayed[selectedIndex];
+      if (item?.webUrl) {
+        void navigator.clipboard
+          .writeText(markdownLink(`#${item.id} ${item.title}`, item.webUrl))
+          .then(() => {
+            setCopyToast("Markdown link copied");
+            window.setTimeout(() => setCopyToast(null), 2000);
+          });
       }
     } else if (e.key === " ") {
       e.preventDefault();

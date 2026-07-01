@@ -4,7 +4,6 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Copy } from 'lucide-react';
 import {
   commandErrorMessage,
   type MentionCandidate,
@@ -25,6 +24,7 @@ import {
   type WorkItemDuplicateDraft,
 } from './workItemChanges';
 import { makeWorkItemPreviewKeyDown } from './workItemPreviewKeyDown';
+import { WorkItemPreviewActions } from './WorkItemPreviewActions';
 import {
   AssigneePicker,
   ClassificationPicker,
@@ -278,17 +278,10 @@ export function WorkItemPreviewPanel({
                   />
                 }
                 actionsControl={
-                  onDuplicate ? (
-                    <button
-                      type="button"
-                      aria-label="Duplicate work item"
-                      title="Duplicate into a new item (D)"
-                      onClick={duplicateSelected}
-                      className="inline-flex h-5 w-5 items-center justify-center rounded border border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground"
-                    >
-                      <Copy className="h-3 w-3" aria-hidden="true" />
-                    </button>
-                  ) : null
+                  <WorkItemPreviewActions
+                    preview={preview}
+                    onDuplicate={onDuplicate ? duplicateSelected : null}
+                  />
                 }
                 presetsControl={
                   <PresetMenu

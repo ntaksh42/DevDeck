@@ -1,7 +1,7 @@
 import { type CSSProperties } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { commandErrorMessage } from '@/lib/azdoCommands';
-import { isEditableTarget, focusPrimaryPreview } from '@/lib/utils';
+import { isEditableTarget, focusPrimaryPreview, markdownLink } from '@/lib/utils';
 import { SnoozeMenu } from '@/components/SnoozeMenu';
 import { SnoozedItemsPanel } from '@/components/SnoozedItemsPanel';
 import { ColumnResizeHandle } from '@/components/ResizeHandle';
@@ -109,6 +109,19 @@ export function MyReviewsGrid({
           () => { g.setCopyToast('URL copied'); setTimeout(() => g.setCopyToast(null), 1500); },
           () => { g.setCopyToast('Copy failed'); setTimeout(() => g.setCopyToast(null), 1500); },
         );
+      }
+      return;
+    }
+    if (e.key === 'l' || e.key === 'L') {
+      e.preventDefault();
+      const pr = g.sortedPrs[g.selectedIndex];
+      if (pr?.webUrl) {
+        void navigator.clipboard
+          .writeText(markdownLink(`!${pr.pullRequestId} ${pr.title}`, pr.webUrl))
+          .then(
+            () => { g.setCopyToast('Markdown link copied'); setTimeout(() => g.setCopyToast(null), 1500); },
+            () => { g.setCopyToast('Copy failed'); setTimeout(() => g.setCopyToast(null), 1500); },
+          );
       }
       return;
     }
