@@ -1,45 +1,36 @@
-import {
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   commandErrorMessage,
-  deletePullRequestComment,
-  editPullRequestComment,
-  getPullRequestFileDiff,
   listPullRequestChanges,
-  postPullRequestComment,
   prLocator,
   searchPullRequestMentions,
-  setPullRequestThreadStatus,
   type MentionCandidate,
-  type PrChangedFile,
   type PrThread,
   type ReviewPullRequestSummary,
 } from "@/lib/azdoCommands";
 import { focusPrimaryPreview, isEditableTarget } from "@/lib/utils";
 import { fetchWorkItemImageCached } from "@/lib/workItemImageCache";
 import { LoadingState, ErrorState, PreviewEmptyState } from "@/components/StateDisplay";
-import { CommentComposer } from "./CommentComposer";
-import { PrThreadCard } from "./PrThreadCard";
 import { PrFileListPanel } from "./PrFileListPanel";
 import { PrDiffPanel } from "./PrDiffPanel";
+import { usePrFileComments } from "./usePrFileComments";
 import {
   buildFileTreeRows,
+  filterFilesByQuery,
   loadViewedKeys,
   loadViewMode,
   loadWholeFile,
   pathKey,
   viewedStorageKey,
-  type CommentSide,
-  type DiffCommentDraft,
+  type CommentScrollRequest,
   type ViewMode,
 } from "./PrFilesTabTypes";
+
+// How long (ms) to ignore scroll-driven selection updates after a
+// programmatic scroll (tree click, j/k, n/p, ]/[), so the resulting scroll
+// doesn't immediately feed back into another selection change.
+const SCROLL_TRACKING_SUPPRESS_MS = 300;
 
 export function PrFilesTab({
   pr,
@@ -48,22 +39,25 @@ export function PrFilesTab({
   pr: ReviewPullRequestSummary;
   threads: PrThread[] | undefined;
 }) {
-  const queryClient = useQueryClient();
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>(loadViewMode);
   const [showWholeFile, setShowWholeFile] = useState<boolean>(loadWholeFile);
-  // Side + line number where a new inline comment is being drafted. "right"
-  // anchors to the target (new) file, "left" to the base (old) file.
-  const [commentDraft, setCommentDraft] = useState<DiffCommentDraft | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
   const [viewedKeys, setViewedKeys] = useState<Set<string>>(() =>
     loadViewedKeys(viewedStorageKey(pr)),
   );
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(() => new Set());
+  const [filterQuery, setFilterQuery] = useState("");
   // Thread the n/p shortcuts last jumped to (for ordering).
   const [focusedThreadId, setFocusedThreadId] = useState<number | null>(null);
-  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(() => new Set());
+  const [scrollRequest, setScrollRequest] = useState<CommentScrollRequest | null>(null);
+
   const fileListRef = useRef<HTMLDivElement | null>(null);
   const diffScrollRef = useRef<HTMLDivElement | null>(null);
+  const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const suppressTrackingUntilRef = useRef(0);
+  const scrollRafPendingRef = useRef(false);
+
+  const comments = usePrFileComments(pr);
 
   const changesQuery = useQuery({
     queryKey: ["prChanges", pr.organizationId, pr.repositoryId, pr.pullRequestId],
@@ -73,11 +67,22 @@ export function PrFilesTab({
 
   const changes = changesQuery.data ?? null;
   const files = changes?.files ?? [];
-  const selectedFile = files.find((file) => file.path === selectedPath) ?? null;
 
-  const { rows: fileTreeRows, visibleFiles } = useMemo(
-    () => buildFileTreeRows(files, collapsedFolders),
-    [files, collapsedFolders],
+  const filteredFiles = useMemo(() => filterFilesByQuery(files, filterQuery), [files, filterQuery]);
+
+  // `rows` respects folder collapse (tree display); `visibleFiles` does not —
+  // it lists every filtered file in tree order and drives j/k navigation and
+  // the continuous diff scroll, so collapsing a folder only affects the tree.
+  const { rows: fileTreeRows, visibleFiles: sectionFiles } = useMemo(
+    () => buildFileTreeRows(filteredFiles, collapsedFolders),
+    [filteredFiles, collapsedFolders],
+  );
+
+  // Falls back to the first section file so "Whole file" mode always has
+  // something to show even before a file has been explicitly selected.
+  const activeFile = useMemo(
+    () => sectionFiles.find((file) => file.path === selectedPath) ?? sectionFiles[0] ?? null,
+    [sectionFiles, selectedPath],
   );
 
   function toggleFolder(path: string) {
@@ -92,66 +97,21 @@ export function PrFilesTab({
   // Reset selection state when switching PRs.
   useEffect(() => {
     setSelectedPath(null);
-    setCommentDraft(null);
-    setActionError(null);
+    setFilterQuery("");
     setFocusedThreadId(null);
+    setScrollRequest(null);
     setCollapsedFolders(new Set());
     setViewedKeys(loadViewedKeys(viewedStorageKey(pr)));
+    sectionRefs.current.clear();
   }, [pr]);
 
+  // Default to the first file once the change list loads, so the continuous
+  // scroll view opens with a section already active.
   useEffect(() => {
-    setCommentDraft(null);
-  }, [selectedPath]);
-
-  // Scope invalidation to this PR so other PRs' cached reviews stay warm.
-  function invalidateReview() {
-    void queryClient.invalidateQueries({
-      queryKey: ["prReview", pr.organizationId, pr.repositoryId, pr.pullRequestId],
-    });
-  }
-
-  const commentMutation = useMutation({
-    mutationFn: postPullRequestComment,
-    onSuccess: () => {
-      setActionError(null);
-      setCommentDraft(null);
-      invalidateReview();
-    },
-    onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
-  });
-
-  const statusMutation = useMutation({
-    mutationFn: setPullRequestThreadStatus,
-    onSuccess: () => {
-      setActionError(null);
-      invalidateReview();
-    },
-    onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
-  });
-
-  const editMutation = useMutation({
-    mutationFn: editPullRequestComment,
-    onSuccess: () => {
-      setActionError(null);
-      invalidateReview();
-    },
-    onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: deletePullRequestComment,
-    onSuccess: () => {
-      setActionError(null);
-      invalidateReview();
-    },
-    onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
-  });
-
-  const mutationsBusy =
-    commentMutation.isPending ||
-    statusMutation.isPending ||
-    editMutation.isPending ||
-    deleteMutation.isPending;
+    if (selectedPath == null && sectionFiles.length > 0) {
+      setSelectedPath(sectionFiles[0].path);
+    }
+  }, [selectedPath, sectionFiles]);
 
   // Path matching is normalized: the threads and changes APIs can disagree on
   // leading slash and casing.
@@ -165,27 +125,19 @@ export function PrFilesTab({
     return counts;
   }, [threads]);
 
-  // Threads of the selected file, indexed by the side + line they anchor to.
-  // "right" is the target (new) file; "left" is the base (old) file.
-  const { threadsByRightLine, threadsByLeftLine } = useMemo(() => {
-    const right = new Map<number, PrThread[]>();
-    const left = new Map<number, PrThread[]>();
-    if (!selectedFile) return { threadsByRightLine: right, threadsByLeftLine: left };
-    const selectedKey = pathKey(selectedFile.path);
+  // All threads grouped by file, handed to each diff section so it only
+  // computes its own per-line thread index.
+  const threadsByFile = useMemo(() => {
+    const map = new Map<string, PrThread[]>();
     for (const thread of threads ?? []) {
-      if (!thread.filePath || pathKey(thread.filePath) !== selectedKey) continue;
-      if (thread.rightLine != null) {
-        const list = right.get(thread.rightLine) ?? [];
-        list.push(thread);
-        right.set(thread.rightLine, list);
-      } else if (thread.leftLine != null) {
-        const list = left.get(thread.leftLine) ?? [];
-        list.push(thread);
-        left.set(thread.leftLine, list);
-      }
+      if (!thread.filePath) continue;
+      const key = pathKey(thread.filePath);
+      const list = map.get(key) ?? [];
+      list.push(thread);
+      map.set(key, list);
     }
-    return { threadsByRightLine: right, threadsByLeftLine: left };
-  }, [threads, selectedFile]);
+    return map;
+  }, [threads]);
 
   // Viewed state is keyed by file path + target commit, so a new iteration
   // re-surfaces files for review (GitHub resets "viewed" when content changes).
@@ -197,6 +149,10 @@ export function PrFilesTab({
   const viewedCount = files.reduce(
     (count, file) => count + (viewedKeys.has(fileViewedKey(file.path)) ? 1 : 0),
     0,
+  );
+  const isViewed = useCallback(
+    (path: string) => viewedKeys.has(fileViewedKey(path)),
+    [viewedKeys, fileViewedKey],
   );
 
   // Unresolved file-anchored threads in file/line order, for n/p navigation.
@@ -220,47 +176,6 @@ export function PrFilesTab({
     return result;
   }, [files, threads]);
 
-  const diffQuery = useQuery({
-    // Commit ids are part of the key so a new iteration does not serve a stale
-    // cached diff.
-    queryKey: [
-      "prFileDiff",
-      pr.organizationId,
-      pr.repositoryId,
-      pr.pullRequestId,
-      selectedFile?.path,
-      changes?.baseCommitId,
-      changes?.targetCommitId,
-    ],
-    queryFn: () =>
-      getPullRequestFileDiff({
-        ...prLocator(pr),
-        filePath: (selectedFile as PrChangedFile).path,
-        originalPath: selectedFile?.originalPath ?? null,
-        changeType: selectedFile?.changeType ?? "edit",
-        baseCommitId: changes?.baseCommitId ?? null,
-        targetCommitId: changes?.targetCommitId ?? null,
-      }),
-    enabled: !!selectedFile && !!changes,
-    staleTime: 60_000,
-  });
-
-  const onStartComment = useCallback((side: CommentSide, line: number) => {
-    setActionError(null);
-    setCommentDraft({ side, line });
-  }, []);
-
-  // A line carrying a comment thread or an open draft must never be folded away.
-  const lineHasContent = useCallback(
-    (side: CommentSide, line: number | null): boolean => {
-      if (line == null) return false;
-      const source = side === "right" ? threadsByRightLine : threadsByLeftLine;
-      if ((source.get(line)?.length ?? 0) > 0) return true;
-      return commentDraft?.side === side && commentDraft.line === line;
-    },
-    [threadsByRightLine, threadsByLeftLine, commentDraft],
-  );
-
   const mentionSearch = useCallback(
     (query: string): Promise<MentionCandidate[]> =>
       searchPullRequestMentions({ organizationId: pr.organizationId, query }),
@@ -271,16 +186,53 @@ export function PrFilesTab({
     [pr.organizationId],
   );
 
-  // Scroll the n/p-focused thread into view once its file's diff is rendered.
-  useEffect(() => {
-    if (focusedThreadId == null) return;
-    const entry = orderedUnresolvedThreads.find((thread) => thread.threadId === focusedThreadId);
-    if (!entry || entry.filePath !== selectedPath) return;
-    const target = diffScrollRef.current?.querySelector(
-      `[data-comment-line="${entry.rightLine}"]`,
-    );
-    target?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [focusedThreadId, selectedPath, orderedUnresolvedThreads, diffQuery.data]);
+  function registerSectionRef(path: string) {
+    return (el: HTMLDivElement | null) => {
+      if (el) sectionRefs.current.set(path, el);
+      else sectionRefs.current.delete(path);
+    };
+  }
+
+  function scrollToSection(path: string, behavior: ScrollBehavior) {
+    requestAnimationFrame(() => {
+      const el = sectionRefs.current.get(path);
+      if (!el) return;
+      suppressTrackingUntilRef.current = Date.now() + SCROLL_TRACKING_SUPPRESS_MS;
+      el.scrollIntoView({ block: "start", behavior });
+    });
+  }
+
+  function selectFile(path: string) {
+    setSelectedPath(path);
+    scrollToSection(path, "auto");
+  }
+
+  // Tracks which section is nearest the top of the scroll container and syncs
+  // it back to `selectedPath`, throttled to one check per frame. Suppressed
+  // right after a programmatic scroll so the two mechanisms don't fight.
+  function handleDiffScroll() {
+    if (scrollRafPendingRef.current) return;
+    scrollRafPendingRef.current = true;
+    requestAnimationFrame(() => {
+      scrollRafPendingRef.current = false;
+      if (Date.now() < suppressTrackingUntilRef.current) return;
+      const container = diffScrollRef.current;
+      if (!container) return;
+      const containerTop = container.getBoundingClientRect().top;
+      let closestPath: string | null = null;
+      let closestDist = Infinity;
+      for (const [path, el] of sectionRefs.current) {
+        const dist = Math.abs(el.getBoundingClientRect().top - containerTop);
+        if (dist < closestDist) {
+          closestDist = dist;
+          closestPath = path;
+        }
+      }
+      if (closestPath) {
+        setSelectedPath((prev) => (prev === closestPath ? prev : closestPath));
+      }
+    });
+  }
 
   function toggleViewed(path: string) {
     setViewedKeys((prev) => {
@@ -307,21 +259,36 @@ export function PrFilesTab({
     });
   }
 
+  function jumpHunk(direction: 1 | -1) {
+    const container = diffScrollRef.current;
+    if (!container) return;
+    const marks = Array.from(container.querySelectorAll<HTMLElement>("[data-hunk-start]"));
+    if (marks.length === 0) return;
+    const containerTop = container.getBoundingClientRect().top;
+    const target =
+      direction === 1
+        ? marks.find((el) => el.getBoundingClientRect().top > containerTop + 1)
+        : [...marks].reverse().find((el) => el.getBoundingClientRect().top < containerTop - 1);
+    if (!target) return;
+    suppressTrackingUntilRef.current = Date.now() + SCROLL_TRACKING_SUPPRESS_MS;
+    target.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
+
   function handleFilesKeyDown(event: React.KeyboardEvent) {
     if (isEditableTarget(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.key === "j" || event.key === "k") {
-      if (visibleFiles.length === 0) return;
+      if (sectionFiles.length === 0) return;
       event.preventDefault();
       event.stopPropagation();
-      const index = visibleFiles.findIndex((file) => file.path === selectedPath);
+      const index = sectionFiles.findIndex((file) => file.path === selectedPath);
       const delta = event.key === "j" ? 1 : -1;
       const nextIndex =
         index < 0
           ? event.key === "j"
             ? 0
-            : visibleFiles.length - 1
-          : Math.max(0, Math.min(visibleFiles.length - 1, index + delta));
-      setSelectedPath(visibleFiles[nextIndex].path);
+            : sectionFiles.length - 1
+          : Math.max(0, Math.min(sectionFiles.length - 1, index + delta));
+      selectFile(sectionFiles[nextIndex].path);
       return;
     }
     if (event.key === "v") {
@@ -346,108 +313,20 @@ export function PrFilesTab({
       const entry = orderedUnresolvedThreads[nextIndex];
       setSelectedPath(entry.filePath);
       setFocusedThreadId(entry.threadId);
+      scrollToSection(entry.filePath, "auto");
+      setScrollRequest({ path: entry.filePath, line: entry.rightLine, nonce: Date.now() });
+      return;
+    }
+    if (event.key === "]" || event.key === "[") {
+      event.preventDefault();
+      event.stopPropagation();
+      jumpHunk(event.key === "]" ? 1 : -1);
     }
   }
 
   if (changesQuery.isLoading) return <LoadingState />;
   if (changesQuery.isError) return <ErrorState message={commandErrorMessage(changesQuery.error)} onRetry={() => void changesQuery.refetch()} />;
   if (files.length === 0) return <PreviewEmptyState message="No changed files." />;
-
-  function postInlineComment(content: string): Promise<void> {
-    if (!selectedFile || !commentDraft) return Promise.resolve();
-    return commentMutation
-      .mutateAsync({
-        ...prLocator(pr),
-        content,
-        filePath: selectedFile.path,
-        ...(commentDraft.side === "left"
-          ? { leftLine: commentDraft.line }
-          : { rightLine: commentDraft.line }),
-      })
-      .then(() => undefined);
-  }
-
-  function replyToThread(thread: PrThread, content: string): Promise<void> {
-    return commentMutation
-      .mutateAsync({ ...prLocator(pr), threadId: thread.id, content })
-      .then(() => undefined);
-  }
-
-  function toggleThreadStatus(thread: PrThread) {
-    statusMutation.mutate({
-      ...prLocator(pr),
-      threadId: thread.id,
-      status: thread.isResolved ? "active" : "closed",
-    });
-  }
-
-  function editComment(thread: PrThread, commentId: number, content: string): Promise<void> {
-    return editMutation
-      .mutateAsync({ ...prLocator(pr), threadId: thread.id, commentId, content })
-      .then(() => undefined);
-  }
-
-  function deleteComment(thread: PrThread, commentId: number): Promise<void> {
-    return deleteMutation.mutateAsync({ ...prLocator(pr), threadId: thread.id, commentId });
-  }
-
-  // Inline block rendered under a diff line: existing threads + comment box for
-  // the given side ("right" = target file, "left" = base file).
-  function lineAttachments(side: CommentSide, line: number | null): ReactNode {
-    if (line == null) return null;
-    const source = side === "right" ? threadsByRightLine : threadsByLeftLine;
-    const lineThreads = source.get(line) ?? [];
-    const drafting = commentDraft?.side === side && commentDraft.line === line;
-    if (lineThreads.length === 0 && !drafting) return null;
-    return (
-      <div
-        // n/p navigation scrolls to right-side threads via this attribute.
-        data-comment-line={side === "right" ? line : undefined}
-        className="space-y-1 border-y border-border bg-muted/30 px-2 py-1.5 font-sans whitespace-normal"
-      >
-        {lineThreads.map((thread) => (
-          <PrThreadCard
-            key={thread.id}
-            thread={thread}
-            busy={mutationsBusy}
-            showFilePath={false}
-            mentionSearch={mentionSearch}
-            resolveImageSource={resolveImageSource}
-            baseUrl={pr.webUrl}
-            onReply={(content) => replyToThread(thread, content)}
-            onToggleStatus={() => toggleThreadStatus(thread)}
-            onEditComment={(commentId, content) => editComment(thread, commentId, content)}
-            onDeleteComment={(commentId) => deleteComment(thread, commentId)}
-          />
-        ))}
-        {drafting ? (
-          <CommentComposer
-            placeholder={
-              side === "left"
-                ? "Comment on the old line… (Ctrl+Enter to post)"
-                : "Comment on this line… (Ctrl+Enter to post)"
-            }
-            autoFocus
-            busy={commentMutation.isPending}
-            mentionSearch={mentionSearch}
-            onSubmit={postInlineComment}
-            onCancel={() => {
-              setCommentDraft(null);
-              focusPrimaryPreview();
-            }}
-            onSubmitted={() => {
-              setCommentDraft(null);
-              focusPrimaryPreview();
-            }}
-          />
-        ) : null}
-      </div>
-    );
-  }
-
-  const selectedViewed = selectedFile
-    ? viewedKeys.has(fileViewedKey(selectedFile.path))
-    : false;
 
   return (
     <div
@@ -464,29 +343,45 @@ export function PrFilesTab({
         fileViewedKey={fileViewedKey}
         viewedCount={viewedCount}
         activeThreadCounts={activeThreadCounts}
-        onSelectFile={setSelectedPath}
+        filterQuery={filterQuery}
+        onFilterQueryChange={setFilterQuery}
+        onSelectFile={selectFile}
         onToggleFolder={toggleFolder}
         onSetAllViewed={setAllViewed}
         fileListRef={fileListRef}
       />
       <PrDiffPanel
         pr={pr}
-        selectedFile={selectedFile}
-        selectedViewed={selectedViewed}
+        hasFiles={files.length > 0}
+        sectionFiles={sectionFiles}
+        activeFile={activeFile}
         viewMode={viewMode}
         showWholeFile={showWholeFile}
-        actionError={actionError}
+        actionError={comments.actionError}
+        baseCommitId={changes?.baseCommitId}
         targetCommitId={changes?.targetCommitId}
         diffScrollRef={diffScrollRef}
-        diffIsLoading={diffQuery.isLoading}
-        diffIsError={diffQuery.isError}
-        diffError={diffQuery.error}
-        diffData={diffQuery.data}
-        onRetryDiff={() => void diffQuery.refetch()}
-        lineAttachments={lineAttachments}
-        lineHasContent={lineHasContent}
-        onStartComment={onStartComment}
-        onToggleViewed={() => { if (selectedFile) toggleViewed(selectedFile.path); }}
+        onDiffScroll={handleDiffScroll}
+        isViewed={isViewed}
+        onToggleViewed={toggleViewed}
+        threadsByFile={threadsByFile}
+        mutationsBusy={comments.mutationsBusy}
+        mentionSearch={mentionSearch}
+        resolveImageSource={resolveImageSource}
+        commentDraft={comments.commentDraft}
+        commentBusy={comments.commentMutation.isPending}
+        onStartComment={comments.startComment}
+        onCancelComment={() => {
+          comments.cancelComment();
+          focusPrimaryPreview();
+        }}
+        onPostComment={comments.postInlineComment}
+        onReplyThread={comments.replyToThread}
+        onToggleThreadStatus={comments.toggleThreadStatus}
+        onEditComment={comments.editComment}
+        onDeleteComment={comments.deleteComment}
+        scrollRequest={scrollRequest}
+        registerSectionRef={registerSectionRef}
         setViewMode={setViewMode}
         setShowWholeFile={setShowWholeFile}
       />

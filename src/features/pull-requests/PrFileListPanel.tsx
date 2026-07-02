@@ -1,6 +1,33 @@
 import { ChevronDown, ChevronRight, Folder } from "lucide-react";
 import type { PrChangedFile } from "@/lib/azdoCommands";
-import { changeTypeBadge, pathKey, type FileTreeRow } from "./PrFilesTabTypes";
+import { focusPrimaryPreview } from "@/lib/utils";
+import { changeTypeMarker, pathKey, type FileTreeRow } from "./PrFilesTabTypes";
+
+/** Sum of unresolved-thread counts for every file under a collapsed folder,
+ * matched by path prefix so nested subfolders roll up too. */
+function folderThreadCount(
+  folderPath: string,
+  files: PrChangedFile[],
+  activeThreadCounts: Map<string, number>,
+): number {
+  const prefix = `${pathKey(folderPath)}/`;
+  let total = 0;
+  for (const file of files) {
+    if (pathKey(file.path).startsWith(prefix)) {
+      total += activeThreadCounts.get(pathKey(file.path)) ?? 0;
+    }
+  }
+  return total;
+}
+
+function ThreadCountBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="inline-flex shrink-0 items-center rounded-full border border-blue-200 bg-blue-50 px-1.5 text-[10px] font-medium text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
+      {count}
+    </span>
+  );
+}
 
 export function PrFileListPanel({
   files,
@@ -10,6 +37,8 @@ export function PrFileListPanel({
   fileViewedKey,
   viewedCount,
   activeThreadCounts,
+  filterQuery,
+  onFilterQueryChange,
   onSelectFile,
   onToggleFolder,
   onSetAllViewed,
@@ -22,6 +51,8 @@ export function PrFileListPanel({
   fileViewedKey: (path: string) => string;
   viewedCount: number;
   activeThreadCounts: Map<string, number>;
+  filterQuery: string;
+  onFilterQueryChange: (query: string) => void;
   onSelectFile: (path: string) => void;
   onToggleFolder: (path: string) => void;
   onSetAllViewed: (viewed: boolean) => void;
@@ -49,14 +80,39 @@ export function PrFileListPanel({
           >
             {viewedCount < files.length ? "Mark all" : "Clear all"}
           </button>
-          <span className="text-muted-foreground/70" title="j/k move files · v toggle viewed · n/p jump comments">
-            j/k · v · n/p
+          <span
+            className="text-muted-foreground/70"
+            title="j/k move files · v toggle viewed · n/p jump comments · [/] jump changed blocks"
+          >
+            j/k · v · n/p · [/]
           </span>
         </div>
+      </div>
+      <div className="shrink-0 border-b border-border px-2 py-1">
+        <input
+          type="text"
+          role="searchbox"
+          aria-label="Filter files"
+          placeholder="Filter files…"
+          value={filterQuery}
+          onChange={(event) => onFilterQueryChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.stopPropagation();
+              onFilterQueryChange("");
+              focusPrimaryPreview();
+            }
+          }}
+          data-filter-input="true"
+          className="w-full rounded border border-border bg-card px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-ring"
+        />
       </div>
       <div ref={fileListRef} className="min-h-0 flex-1 overflow-y-auto">
         {fileTreeRows.map((row) => {
           if (row.kind === "folder") {
+            const threadCount = row.collapsed
+              ? folderThreadCount(row.path, files, activeThreadCounts)
+              : 0;
             return (
               <button
                 key={`folder:${row.path}`}
@@ -73,12 +129,13 @@ export function PrFileListPanel({
                   <ChevronDown className="h-3 w-3 shrink-0" aria-hidden="true" />
                 )}
                 <Folder className="h-3 w-3 shrink-0 text-muted-foreground/70" aria-hidden="true" />
-                <span className="truncate font-mono">{row.name}</span>
+                <span className="min-w-0 flex-1 truncate font-mono">{row.name}</span>
+                <ThreadCountBadge count={threadCount} />
               </button>
             );
           }
           const file = row.file;
-          const badge = changeTypeBadge(file.changeType);
+          const marker = changeTypeMarker(file.changeType);
           const threadCount = activeThreadCounts.get(pathKey(file.path)) ?? 0;
           const selected = file.path === selectedPath;
           const viewed = viewedKeys.has(fileViewedKey(file.path));
@@ -95,21 +152,17 @@ export function PrFileListPanel({
               title={file.path}
             >
               <span
-                className={`inline-flex w-4 shrink-0 items-center justify-center rounded border text-[10px] font-semibold ${badge.cls}`}
-                aria-label={file.changeType}
+                className={`w-3 shrink-0 text-center text-[11px] font-semibold ${marker?.cls ?? ""}`}
+                aria-label={marker ? `${marker.label} change` : "edited"}
               >
-                {badge.label}
+                {marker?.symbol ?? ""}
               </span>
               <span
                 className={`min-w-0 flex-1 truncate font-mono ${viewed ? "line-through" : ""}`}
               >
                 {row.name}
               </span>
-              {threadCount > 0 ? (
-                <span className="inline-flex shrink-0 items-center rounded-full border border-blue-200 bg-blue-50 px-1.5 text-[10px] font-medium text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
-                  {threadCount}
-                </span>
-              ) : null}
+              <ThreadCountBadge count={threadCount} />
             </div>
           );
         })}
