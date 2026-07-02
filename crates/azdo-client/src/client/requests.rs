@@ -10,8 +10,8 @@ use url::Url;
 use crate::error::{AdoError, Result};
 
 use super::helpers::{
-    almsearch_base_url, decode_json, is_legacy_visualstudio_org_url, parse_retry_after,
-    same_azure_devops_organization_url, url_path_is_within_base, vssps_base_url,
+    almsearch_base_url, decode_json, is_allowed_attachment_path, is_legacy_visualstudio_org_url,
+    parse_retry_after, same_azure_devops_organization_url, url_path_is_within_base, vssps_base_url,
 };
 use super::{AdoClient, BinaryResponse};
 
@@ -368,13 +368,9 @@ impl AdoClient {
             ));
         }
 
-        if !url
-            .path()
-            .to_ascii_lowercase()
-            .contains("/_apis/wit/attachments/")
-        {
+        if !is_allowed_attachment_path(url.path()) {
             return Err(AdoError::Auth(
-                "only Azure DevOps work item attachment URLs can be fetched".to_string(),
+                "only Azure DevOps attachment URLs can be fetched".to_string(),
             ));
         }
 

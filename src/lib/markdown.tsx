@@ -37,18 +37,29 @@ marked.use({ extensions: [azdoMentionExtension] });
 // blob covers locally hydrated attachment images.
 const SAFE_IMAGE_SCHEME = /^(https?:|data:|blob:)/i;
 
+// A relative URL (no scheme, e.g. "/org/proj/_apis/.../attachments/x.png") is
+// resolved against `baseUrl` for hydration below, so it must not be stripped
+// here. A protocol-relative URL ("//evil.com/x.png") has no explicit scheme
+// but still resolves to an external host, so it is treated as unsafe.
+const EXPLICIT_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+
 // Harden the sanitized output: external links must not leak the opener or
 // referrer (tabnabbing), and images must not act as trackers via referrer or
 // unsafe schemes. DOMPurify already drops javascript: URLs; this also strips
-// any other unexpected image scheme so only safe fetches remain.
+// any other unexpected image scheme so only safe fetches (and same-origin
+// relative paths) remain.
 DOMPurify.addHook("afterSanitizeAttributes", (node) => {
   if (node.tagName === "A" && node.getAttribute("target") === "_blank") {
     node.setAttribute("rel", "noopener noreferrer");
   }
   if (node.tagName === "IMG") {
     const src = node.getAttribute("src");
-    if (src && !SAFE_IMAGE_SCHEME.test(src.trim())) {
-      node.removeAttribute("src");
+    if (src) {
+      const trimmed = src.trim();
+      const keep =
+        SAFE_IMAGE_SCHEME.test(trimmed) ||
+        (!EXPLICIT_SCHEME.test(trimmed) && !trimmed.startsWith("//"));
+      if (!keep) node.removeAttribute("src");
     }
     node.setAttribute("referrerpolicy", "no-referrer");
   }
@@ -83,16 +94,22 @@ const MARKDOWN_CLASSES = [
 ].join(" ");
 
 // Azure DevOps embeds description/comment images as authenticated attachment
-// URLs (the rich-text editor's shared `_apis/wit/attachments/` store). A plain
-// <img> fetch from the webview omits the PAT/bearer auth, so the image 401s and
-// renders broken. Resolve those to data URLs through the backend instead. Other
-// schemes (data/blob) and non-attachment URLs (e.g. README images) are left
-// untouched.
+// URLs: either the rich-text editor's shared `_apis/wit/attachments/` store, or
+// (for images pasted into a PR description/comment) the PR-scoped
+// `_apis/git/repositories/{repoId}/pullRequests/{prId}/attachments/{fileName}`
+// endpoint. A plain <img> fetch from the webview omits the PAT/bearer auth, so
+// the image 401s and renders broken. Resolve those to data URLs through the
+// backend instead. Other schemes (data/blob) and non-attachment URLs (e.g.
+// README images) are left untouched.
+const PR_ATTACHMENT_PATH =
+  /\/_apis\/git\/repositories\/[^/]+\/pullrequests\/[^/]+\/attachments\/[^/]+/;
+
 function toAzdoAttachmentUrl(src: string, baseUrl: string | null | undefined): string | null {
   try {
     const url = new URL(src, baseUrl || window.location.href);
     if (url.protocol !== "http:" && url.protocol !== "https:") return null;
-    if (!url.pathname.toLowerCase().includes("/_apis/wit/attachments/")) return null;
+    const path = url.pathname.toLowerCase();
+    if (!path.includes("/_apis/wit/attachments/") && !PR_ATTACHMENT_PATH.test(path)) return null;
     return url.href;
   } catch {
     return null;

@@ -95,4 +95,38 @@ describe("MarkdownView", () => {
     await Promise.resolve();
     expect(resolveImageSource).not.toHaveBeenCalled();
   });
+
+  it("hydrates absolute PR attachment image URLs", async () => {
+    const attachmentUrl =
+      "https://dev.azure.com/contoso/proj/_apis/git/repositories/repo-1/pullRequests/42/attachments/screen.png";
+    const resolveImageSource = vi.fn().mockResolvedValue("data:image/png;base64,AAAA");
+    const { container } = render(
+      <MarkdownView text={`![alt](${attachmentUrl})`} resolveImageSource={resolveImageSource} />,
+    );
+    await waitFor(() =>
+      expect(container.querySelector("img")?.getAttribute("src")).toBe("data:image/png;base64,AAAA"),
+    );
+    expect(resolveImageSource).toHaveBeenCalledWith(attachmentUrl);
+  });
+
+  it("resolves relative PR attachment image URLs against baseUrl before hydrating", async () => {
+    const relativeSrc = "/contoso/proj/_apis/git/repositories/repo-1/pullRequests/42/attachments/screen.png";
+    const resolveImageSource = vi.fn().mockResolvedValue("data:image/png;base64,AAAA");
+    const { container } = render(
+      <MarkdownView
+        text={`![alt](${relativeSrc})`}
+        resolveImageSource={resolveImageSource}
+        baseUrl="https://dev.azure.com/contoso/proj/_git/repo/pullrequest/42"
+      />,
+    );
+    await waitFor(() =>
+      expect(container.querySelector("img")?.getAttribute("src")).toBe("data:image/png;base64,AAAA"),
+    );
+    expect(resolveImageSource).toHaveBeenCalledWith(`https://dev.azure.com${relativeSrc}`);
+  });
+
+  it("drops protocol-relative image sources during sanitization", () => {
+    const html = renderMarkdownHtml('<img src="//evil.example/x.png">');
+    expect(html).not.toContain("evil.example");
+  });
 });

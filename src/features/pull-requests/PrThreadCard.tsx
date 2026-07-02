@@ -19,6 +19,7 @@ export function PrThreadCard({
   onDeleteComment,
   mentionSearch,
   resolveImageSource,
+  baseUrl,
 }: {
   thread: PrThread;
   busy: boolean;
@@ -29,6 +30,7 @@ export function PrThreadCard({
   onDeleteComment?: (commentId: number) => Promise<void>;
   mentionSearch?: (query: string) => Promise<MentionCandidate[]>;
   resolveImageSource?: (url: string) => Promise<string | null>;
+  baseUrl?: string | null;
 }) {
   const [replying, setReplying] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -142,6 +144,7 @@ export function PrThreadCard({
                   text={comment.content ?? ""}
                   className="text-foreground"
                   resolveImageSource={resolveImageSource}
+                  baseUrl={baseUrl}
                 />
               )}
             </div>
