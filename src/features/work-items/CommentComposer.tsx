@@ -205,8 +205,8 @@ export function CommentComposer({
     }, 0);
   }
 
-  function postComment() {
-    if (!selectedItem || !commentText.trim() || commentMutation.isPending) return;
+  function postComment(): boolean {
+    if (!selectedItem || !commentText.trim() || commentMutation.isPending) return false;
     mentionsToRecordRef.current = selectedMentions
       .filter(
         (m) =>
@@ -228,15 +228,19 @@ export function CommentComposer({
         renderAzureMentionMarkdown(commentText, selectedMentions),
       ),
     });
+    return true;
   }
 
   function handleCommentKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
       event.preventDefault();
-      postComment();
+      const posted = postComment();
       // One keystroke finishes the "comment + property change" flow, like
       // Azure DevOps' save-with-comment.
       if (hasStagedChanges) onApplyStaged();
+      // Submitting ends the editing session: hand focus back to the panel so
+      // its single-key shortcuts and row navigation resume immediately.
+      if (posted || hasStagedChanges) onEscapeToPanel();
       return;
     }
 

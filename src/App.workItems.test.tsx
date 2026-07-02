@@ -268,6 +268,8 @@ describe("App — Work Items", () => {
     const comboCommentBox = screen.getByLabelText("Comment");
     fireEvent.change(comboCommentBox, { target: { value: "Closing this" } });
     fireEvent.keyDown(comboCommentBox, { key: "Enter", ctrlKey: true });
+    // Posting hands focus back to the preview panel so keyboard flow resumes.
+    expect(document.activeElement).toBe(screen.getByLabelText("Work item preview"));
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("update_work_item_fields", {
         input: {
