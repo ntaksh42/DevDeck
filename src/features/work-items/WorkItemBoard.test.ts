@@ -18,6 +18,7 @@ function item(id: number, state: string | null): WorkItemSummary {
     assignedTo: null,
     changedDate: null,
     webUrl: null,
+    tags: null,
     extraFields: [],
     depth: null,
   };

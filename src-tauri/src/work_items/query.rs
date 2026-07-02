@@ -13,6 +13,7 @@ pub(crate) const WORK_ITEM_FIELDS: &[&str] = &[
     "System.State",
     "System.AssignedTo",
     "System.ChangedDate",
+    "System.Tags",
 ];
 
 pub(crate) const WORK_ITEM_PREVIEW_FIELDS: &[&str] = &[

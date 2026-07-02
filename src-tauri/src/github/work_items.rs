@@ -306,6 +306,9 @@ fn item_to_summary(
         assigned_to,
         changed_date: item.updated_at,
         web_url: Some(item.html_url),
+        // GitHub issue search results do not carry labels; the grid Tags column
+        // stays empty for GitHub-backed work items.
+        tags: None,
         extra_fields: Vec::new(),
         depth: None,
     }

@@ -83,14 +83,23 @@ export function demoWorkItemComment(markdown?: string): WorkItemComment {
   };
 }
 
-export function withEmptyExtraFields(
-  items: Omit<WorkItemSummary, "extraFields" | "depth">[],
-): WorkItemSummary[] {
-  return items.map((item) => ({ ...item, extraFields: [], depth: null }));
+// Demo seed rows omit the derived `extraFields`/`depth` and treat `tags` as
+// optional so most fixtures can skip it; `withEmptyExtraFields` fills the gaps.
+type WorkItemSeed = Omit<WorkItemSummary, "extraFields" | "depth" | "tags"> & {
+  tags?: string | null;
+};
+
+export function withEmptyExtraFields(items: WorkItemSeed[]): WorkItemSummary[] {
+  return items.map((item) => ({
+    tags: null,
+    ...item,
+    extraFields: [],
+    depth: null,
+  }));
 }
 
 export function demoWorkItems(input?: SearchWorkItemsInput): WorkItemSummary[] {
-  const all: Omit<WorkItemSummary, "extraFields" | "depth">[] = [
+  const all: WorkItemSeed[] = [
     {
       organizationId: "contoso",
       projectId: "platform",
@@ -114,6 +123,7 @@ export function demoWorkItems(input?: SearchWorkItemsInput): WorkItemSummary[] {
       assignedTo: "Alice Johnson",
       changedDate: "2026-05-26T15:30:00Z",
       webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/118",
+      tags: "regression; needs-triage",
     },
     {
       organizationId: "contoso",
@@ -126,6 +136,7 @@ export function demoWorkItems(input?: SearchWorkItemsInput): WorkItemSummary[] {
       assignedTo: "Bob Tanaka",
       changedDate: "2026-05-25T09:00:00Z",
       webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/110",
+      tags: "security",
     },
     {
       organizationId: "contoso",
@@ -258,6 +269,7 @@ export function demoMyWorkItems(): WorkItemSummary[] {
       assignedTo: "Demo User",
       changedDate: "2026-05-25T14:30:00Z",
       webUrl: "https://dev.azure.com/contoso/Mobile/_workitems/edit/187",
+      tags: "crash; android; needs-triage",
     },
     {
       organizationId: "contoso",

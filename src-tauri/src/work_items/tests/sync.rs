@@ -166,6 +166,7 @@ async fn sync_work_items_delta_preserves_items_missing_from_window() {
         assigned_to_unique_name: None,
         changed_date: Some("2026-01-01T00:00:00Z".to_string()),
         web_url: None,
+        tags: None,
     }])
     .unwrap();
 

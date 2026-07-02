@@ -14,8 +14,8 @@ pub(crate) fn upsert_work_items(conn: &Connection, items: &[CachedWorkItem]) -> 
         INSERT INTO work_items(
             org_id, project_id, project_name, id, title,
             work_item_type, state, assigned_to, changed_date, web_url,
-            assigned_to_unique_name
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            assigned_to_unique_name, tags
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
         ON CONFLICT(org_id, id) DO UPDATE SET
             project_id = excluded.project_id,
             project_name = excluded.project_name,
@@ -25,7 +25,8 @@ pub(crate) fn upsert_work_items(conn: &Connection, items: &[CachedWorkItem]) -> 
             assigned_to = excluded.assigned_to,
             changed_date = excluded.changed_date,
             web_url = excluded.web_url,
-            assigned_to_unique_name = excluded.assigned_to_unique_name
+            assigned_to_unique_name = excluded.assigned_to_unique_name,
+            tags = excluded.tags
         WHERE excluded.changed_date IS NOT work_items.changed_date
         "#,
     )?;
@@ -41,7 +42,8 @@ pub(crate) fn upsert_work_items(conn: &Connection, items: &[CachedWorkItem]) -> 
             item.assigned_to,
             item.changed_date,
             item.web_url,
-            item.assigned_to_unique_name
+            item.assigned_to_unique_name,
+            item.tags
         ])?;
     }
     Ok(())
@@ -75,7 +77,7 @@ pub(crate) fn update_my_work_item_if_present(
     }
     conn.execute(
         "UPDATE my_work_items SET title=?3, work_item_type=?4, state=?5, \
-         assigned_to=?6, assigned_to_unique_name=?7, changed_date=?8, web_url=?9 \
+         assigned_to=?6, assigned_to_unique_name=?7, changed_date=?8, web_url=?9, tags=?10 \
          WHERE org_id=?1 AND id=?2",
         rusqlite::params![
             item.org_id,
@@ -86,7 +88,8 @@ pub(crate) fn update_my_work_item_if_present(
             item.assigned_to,
             item.assigned_to_unique_name,
             item.changed_date,
-            item.web_url
+            item.web_url,
+            item.tags
         ],
     )?;
     Ok(())
@@ -105,7 +108,7 @@ pub(crate) fn search_work_items(
     let mut sql = String::from(
         "SELECT org_id, project_id, project_name, id, title, \
                 work_item_type, state, assigned_to, changed_date, web_url, \
-                assigned_to_unique_name \
+                assigned_to_unique_name, tags \
          FROM work_items \
          WHERE org_id = ?1",
     );
@@ -149,7 +152,7 @@ pub(crate) fn search_work_items_fts(
         r#"
         SELECT w.org_id, w.project_id, w.project_name, w.id, w.title,
                w.work_item_type, w.state, w.assigned_to, w.changed_date, w.web_url,
-               w.assigned_to_unique_name
+               w.assigned_to_unique_name, w.tags
         FROM work_items w
         WHERE w.org_id = ?2
           AND w.id IN (
@@ -198,7 +201,7 @@ fn search_work_items_by_id_prefix(
         r#"
         SELECT org_id, project_id, project_name, id, title,
                work_item_type, state, assigned_to, changed_date, web_url,
-               assigned_to_unique_name
+               assigned_to_unique_name, tags
         FROM work_items
         WHERE org_id = ?1
           AND CAST(id AS TEXT) LIKE ?2
@@ -224,7 +227,7 @@ fn search_work_items_like(
         r#"
         SELECT org_id, project_id, project_name, id, title,
                work_item_type, state, assigned_to, changed_date, web_url,
-               assigned_to_unique_name
+               assigned_to_unique_name, tags
         FROM work_items
         WHERE org_id = ?1
           AND (title LIKE ?2 ESCAPE '\'
@@ -249,8 +252,8 @@ pub(crate) fn upsert_my_work_items(conn: &Connection, items: &[CachedWorkItem]) 
         INSERT OR REPLACE INTO my_work_items(
             org_id, project_id, project_name, id, title,
             work_item_type, state, assigned_to, changed_date, web_url,
-            assigned_to_unique_name
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            assigned_to_unique_name, tags
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
         "#,
     )?;
     for item in items {
@@ -265,7 +268,8 @@ pub(crate) fn upsert_my_work_items(conn: &Connection, items: &[CachedWorkItem]) 
             item.assigned_to,
             item.changed_date,
             item.web_url,
-            item.assigned_to_unique_name
+            item.assigned_to_unique_name,
+            item.tags
         ])?;
     }
     Ok(())
@@ -276,7 +280,7 @@ pub(crate) fn list_my_work_items(conn: &Connection, org_id: &str) -> Result<Vec<
         r#"
         SELECT org_id, project_id, project_name, id, title,
                work_item_type, state, assigned_to, changed_date, web_url,
-               assigned_to_unique_name
+               assigned_to_unique_name, tags
         FROM my_work_items
         WHERE org_id = ?1
         ORDER BY changed_date DESC
@@ -307,5 +311,6 @@ fn map_cached_work_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<CachedWorkI
         changed_date: row.get(8)?,
         web_url: row.get(9)?,
         assigned_to_unique_name: row.get(10)?,
+        tags: row.get(11)?,
     })
 }

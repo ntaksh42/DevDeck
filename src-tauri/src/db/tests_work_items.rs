@@ -135,6 +135,7 @@ fn make_cached_wi(id: i64, title: &str, changed: &str) -> CachedWorkItem {
         assigned_to_unique_name: None,
         changed_date: Some(changed.to_string()),
         web_url: None,
+        tags: None,
     }
 }
 
@@ -221,6 +222,7 @@ fn update_my_work_item_removes_row_when_reassigned_away() {
         assigned_to_unique_name: Some("me@example.com".to_string()),
         changed_date: None,
         web_url: None,
+        tags: None,
     };
     db.replace_work_items(
         "org1",
@@ -264,6 +266,7 @@ fn update_my_work_item_keeps_row_when_still_mine() {
         assigned_to_unique_name: Some("me@example.com".to_string()),
         changed_date: None,
         web_url: None,
+        tags: None,
     };
     db.replace_work_items(
         "org1",
@@ -304,6 +307,7 @@ fn apply_work_item_updates_batches_upsert_and_my_items() {
         assigned_to_unique_name: Some("me@example.com".to_string()),
         changed_date: Some(format!("2024-01-0{id}T00:00:00Z")),
         web_url: None,
+        tags: None,
     };
 
     let seed = [mine(1, "Active"), mine(2, "Active")];
@@ -370,6 +374,7 @@ fn replace_work_items_clears_and_repopulates_both_tables() {
         assigned_to_unique_name: None,
         changed_date: None,
         web_url: None,
+        tags: None,
     };
 
     // Seed both tables (distinct IDs per table: work=1, my=10)
@@ -420,6 +425,7 @@ fn replace_work_items_preserves_unsynced_project_rows() {
         assigned_to_unique_name: None,
         changed_date: None,
         web_url: None,
+        tags: None,
     };
 
     // Seed p1 and p2

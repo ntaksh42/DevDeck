@@ -18,7 +18,7 @@ export type WorkItemQueryView = {
   projectId: string;
   previewVisible?: boolean;
   sortDirection?: SortDirection;
-  sortKey?: "id" | "workItemType" | "state" | "title" | "projectName" | "assignedTo" | "changedDate";
+  sortKey?: "id" | "workItemType" | "state" | "title" | "projectName" | "assignedTo" | "tags" | "changedDate";
   wiql: string;
   limit: number;
   refreshIntervalSec?: number;
@@ -57,6 +57,7 @@ function isWorkItemSortKey(value: unknown): value is NonNullable<WorkItemQueryVi
     value === "title" ||
     value === "projectName" ||
     value === "assignedTo" ||
+    value === "tags" ||
     value === "changedDate"
   );
 }

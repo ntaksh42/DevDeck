@@ -21,6 +21,7 @@ pub struct CachedWorkItem {
     pub assigned_to_unique_name: Option<String>,
     pub changed_date: Option<String>,
     pub web_url: Option<String>,
+    pub tags: Option<String>,
 }
 
 impl AppDatabase {

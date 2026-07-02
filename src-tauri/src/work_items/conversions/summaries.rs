@@ -52,6 +52,7 @@ pub(crate) fn summarize_work_item(
         assigned_to: identity_field(&work_item, "System.AssignedTo"),
         changed_date: string_field(&work_item, "System.ChangedDate"),
         web_url: work_item_web_url(organization, project_name, work_item.id, &work_item),
+        tags: string_field(&work_item, "System.Tags"),
         extra_fields: Vec::new(),
         depth: None,
     }
@@ -185,6 +186,7 @@ pub(crate) fn cached_wi_to_summary(wi: CachedWorkItem) -> WorkItemSummary {
         assigned_to: wi.assigned_to,
         changed_date: wi.changed_date,
         web_url: wi.web_url,
+        tags: wi.tags,
         extra_fields: Vec::new(),
         depth: None,
     }
@@ -214,5 +216,6 @@ pub(crate) fn work_item_to_cached(
         assigned_to_unique_name: identity_unique_name_field(wi, "System.AssignedTo"),
         changed_date: string_field(wi, "System.ChangedDate"),
         web_url: Some(web_url),
+        tags: string_field(wi, "System.Tags"),
     }
 }

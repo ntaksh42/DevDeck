@@ -185,6 +185,7 @@ mod tests {
                 assigned_to_unique_name: None,
                 changed_date: Some("2026-06-01T00:00:00Z".to_string()),
                 web_url: None,
+                tags: None,
             },
             CachedWorkItem {
                 org_id: "contoso".to_string(),
@@ -198,6 +199,7 @@ mod tests {
                 assigned_to_unique_name: None,
                 changed_date: Some("2026-06-02T00:00:00Z".to_string()),
                 web_url: None,
+                tags: None,
             },
         ])
         .unwrap();
@@ -360,6 +362,7 @@ mod tests {
             assigned_to_unique_name: None,
             changed_date: Some("2026-06-06T00:00:00Z".to_string()),
             web_url: None,
+            tags: None,
         }])
         .unwrap();
 
@@ -405,6 +408,7 @@ mod tests {
                 assigned_to_unique_name: None,
                 changed_date: Some("2026-06-05T00:00:00Z".to_string()),
                 web_url: None,
+                tags: None,
             })
             .collect();
         db.upsert_work_items(&extra).unwrap();

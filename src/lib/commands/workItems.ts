@@ -17,6 +17,7 @@ const workItemSummarySchema = z.object({
   assignedTo: z.string().nullable(),
   changedDate: z.string().nullable(),
   webUrl: z.string().nullable(),
+  tags: z.string().nullable().default(null),
   extraFields: z.array(workItemSummaryExtraFieldSchema).default([]),
   depth: z.number().nullable().default(null),
 });

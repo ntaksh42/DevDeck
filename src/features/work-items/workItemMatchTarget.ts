@@ -20,7 +20,9 @@ function extraFieldValue(item: WorkItemSummary, referenceName: string): string |
 export function toMatchTarget(item: WorkItemSummary): WorkItemMatchTarget {
   const priorityRaw = extraFieldValue(item, PRIORITY_REFERENCE_NAME);
   const priority = priorityRaw !== null && priorityRaw.trim() !== "" ? Number(priorityRaw) : NaN;
-  const tagsRaw = extraFieldValue(item, TAGS_REFERENCE_NAME);
+  // Prefer the first-class `tags` field (populated for cached grid rows); fall
+  // back to the extra field for query results that only carry System.Tags there.
+  const tagsRaw = item.tags ?? extraFieldValue(item, TAGS_REFERENCE_NAME);
   return {
     id: item.id,
     title: item.title,
