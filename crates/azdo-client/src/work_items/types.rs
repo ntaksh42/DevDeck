@@ -169,6 +169,13 @@ pub struct WorkItemTypeState {
     pub name: String,
 }
 
+/// A work item type definition row from `wit/workitemtypes`; only the display
+/// name is consumed (it doubles as the `$type` create-path segment).
+#[derive(Debug, Deserialize)]
+pub struct WorkItemTypeDefinition {
+    pub name: String,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct WorkItemTypeStatesList {
     pub value: Vec<WorkItemTypeState>,

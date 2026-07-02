@@ -1,4 +1,5 @@
 import type {
+  CreateWorkItemInput,
   GetWorkItemPreviewInput,
   RunWorkItemQueryInput,
   SearchWorkItemsInput,
@@ -96,6 +97,39 @@ export function withEmptyExtraFields(items: WorkItemSeed[]): WorkItemSummary[] {
     extraFields: [],
     depth: null,
   }));
+}
+
+// Work items created in this browser session via the create dialog. Prepended
+// to demoWorkItems/demoMyWorkItems so creations persist across refetches.
+const demoCreatedWorkItems: WorkItemSummary[] = [];
+let nextDemoCreatedWorkItemId = 900;
+
+export function demoCreateWorkItem(input?: CreateWorkItemInput): WorkItemSummary {
+  const title = input?.title.trim() ?? "";
+  if (!title) throw new Error("title is required");
+  const workItemType = input?.workItemType.trim() || "Task";
+  const projectId = input?.projectId ?? "platform";
+  const projectName =
+    demoWorkItemProjects().find((project) => project.projectId === projectId)
+      ?.projectName ?? projectId;
+  const id = nextDemoCreatedWorkItemId++;
+  const created: WorkItemSummary = {
+    organizationId: input?.organizationId ?? "contoso",
+    projectId,
+    projectName,
+    id,
+    title,
+    workItemType,
+    state: "New",
+    assignedTo: input?.assignedTo?.trim() || null,
+    changedDate: new Date().toISOString(),
+    webUrl: `https://dev.azure.com/contoso/${encodeURIComponent(projectName)}/_workitems/edit/${id}`,
+    tags: input?.tags?.length ? input.tags.join("; ") : null,
+    extraFields: [],
+    depth: null,
+  };
+  demoCreatedWorkItems.unshift(created);
+  return created;
 }
 
 export function demoWorkItems(input?: SearchWorkItemsInput): WorkItemSummary[] {
@@ -217,7 +251,10 @@ export function demoWorkItems(input?: SearchWorkItemsInput): WorkItemSummary[] {
   const typeFilter = new Set((input?.workItemTypes ?? []).filter(Boolean));
   const projectFilter = new Set((input?.projectIds ?? []).filter(Boolean));
 
-  return applyWorkItemScenario(withEmptyExtraFields(all)).filter((item) => {
+  return [
+    ...demoCreatedWorkItems,
+    ...applyWorkItemScenario(withEmptyExtraFields(all)),
+  ].filter((item) => {
     if (projectFilter.size > 0 && !projectFilter.has(item.projectId)) return false;
     if (stateFilter.size > 0 && !(item.state && stateFilter.has(item.state))) return false;
     if (typeFilter.size > 0 && !(item.workItemType && typeFilter.has(item.workItemType))) return false;
@@ -233,7 +270,10 @@ export function demoWorkItems(input?: SearchWorkItemsInput): WorkItemSummary[] {
 }
 
 export function demoMyWorkItems(): WorkItemSummary[] {
-  return applyWorkItemScenario(withEmptyExtraFields([
+  const createdMine = demoCreatedWorkItems.filter(
+    (item) => item.assignedTo === "Demo User",
+  );
+  return [...createdMine, ...applyWorkItemScenario(withEmptyExtraFields([
     {
       organizationId: "contoso",
       projectId: "platform",
@@ -295,7 +335,7 @@ export function demoMyWorkItems(): WorkItemSummary[] {
       changedDate: "2026-05-23T07:00:00Z",
       webUrl: "https://dev.azure.com/contoso/Infrastructure/_workitems/edit/51",
     },
-  ]));
+  ]))];
 }
 
 export function demoWorkItemProjects(): WorkItemProjectOption[] {

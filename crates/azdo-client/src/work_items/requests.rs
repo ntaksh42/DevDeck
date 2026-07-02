@@ -299,6 +299,44 @@ impl AdoClient {
         Ok(response.value)
     }
 
+    /// Creates a work item of `work_item_type` in a project. `fields` are
+    /// `(reference_name, value)` pairs applied as a single JSON Patch document,
+    /// so type rules validate the full field set at once. Azure DevOps requires
+    /// the `application/json-patch+json` content type on this POST.
+    pub async fn create_work_item(
+        &self,
+        project_id: &str,
+        work_item_type: &str,
+        fields: &[(String, Value)],
+    ) -> Result<WorkItem> {
+        let encoded_type = encode_path_segment(work_item_type);
+        let path = format!("{project_id}/_apis/wit/workitems/${encoded_type}");
+        let operations: Vec<WorkItemPatchOperation> = fields
+            .iter()
+            .map(|(reference_name, value)| WorkItemPatchOperation {
+                op: "add",
+                path: format!("/fields/{reference_name}"),
+                value: value.clone(),
+            })
+            .collect();
+        self.post_json_with_content_type(
+            &path,
+            &[("api-version", "7.1-preview")],
+            "application/json-patch+json",
+            &operations,
+        )
+        .await
+    }
+
+    /// Lists the work item type names defined for a project (e.g. Bug, Task).
+    pub async fn list_work_item_types(&self, project_id: &str) -> Result<Vec<String>> {
+        let path = format!("{project_id}/_apis/wit/workitemtypes");
+        let response: crate::git::ListResponse<WorkItemTypeDefinition> = self
+            .get_json(&path, &[("api-version", "7.1-preview")])
+            .await?;
+        Ok(response.value.into_iter().map(|t| t.name).collect())
+    }
+
     pub async fn update_work_item_assigned_to(
         &self,
         project_id: &str,

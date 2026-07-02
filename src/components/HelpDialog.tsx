@@ -123,6 +123,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Change state</span><kbd className={kbd}>S</kbd></div>
           <div className={row}><span>Change priority</span><kbd className={kbd}>P</kbd></div>
           <div className={row}><span>Edit custom field (press again for next)</span><kbd className={kbd}>F</kbd></div>
+          <div className={row}><span>Duplicate into a new item (preview)</span><kbd className={kbd}>D</kbd></div>
           <div className={row}><span>Apply pending property changes</span><kbd className={kbd}>Ctrl+S</kbd></div>
           <div className={row}><span>Discard pending property changes</span><kbd className={kbd}>Esc</kbd></div>
           <div className={row}><span>Undo last apply (10s window)</span><kbd className={kbd}>U</kbd></div>

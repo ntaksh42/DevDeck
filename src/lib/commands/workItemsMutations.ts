@@ -4,6 +4,8 @@ import {
   WorkItemComment,
   workItemPreviewSchema,
   WorkItemPreview,
+  workItemSummarySchema,
+  WorkItemSummary,
   bulkWorkItemResultsSchema,
   BulkWorkItemResult,
   CommentReactionType,
@@ -72,6 +74,21 @@ export type SetWorkItemsTagsInput = {
   removeTags?: string[];
 };
 
+export type CreateWorkItemInput = {
+  organizationId?: string;
+  projectId: string;
+  /** Work item type display name, e.g. "Bug" or "User Story". */
+  workItemType: string;
+  title: string;
+  /** Plain-text description; the backend escapes it into System.Description. */
+  description?: string;
+  assignedTo?: string;
+  areaPath?: string;
+  iterationPath?: string;
+  priority?: number;
+  tags?: string[];
+};
+
 export type WorkItemLinkType = "Parent" | "Child" | "Related" | "Predecessor" | "Successor";
 
 export async function addWorkItemComment(
@@ -123,6 +140,13 @@ export async function setWorkItemCommentReaction(input: {
   engaged: boolean;
 }): Promise<void> {
   await invokeCommand("set_work_item_comment_reaction", { input });
+}
+
+export async function createWorkItem(
+  input: CreateWorkItemInput,
+): Promise<WorkItemSummary> {
+  const result = await invokeCommand("create_work_item", { input });
+  return workItemSummarySchema.parse(result);
 }
 
 export async function updateWorkItemFields(

@@ -240,6 +240,31 @@ pub struct BulkWorkItemResult {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CreateWorkItemInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    /// Work item type display name, e.g. "Bug" or "User Story".
+    pub work_item_type: String,
+    pub title: String,
+    /// Plain-text description; sent as `System.Description`.
+    pub description: Option<String>,
+    pub assigned_to: Option<String>,
+    pub area_path: Option<String>,
+    pub iteration_path: Option<String>,
+    pub priority: Option<i64>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListWorkItemTypesInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SetWorkItemsStateInput {
     pub organization_id: Option<String>,
     pub project_id: String,

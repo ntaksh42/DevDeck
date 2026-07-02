@@ -19,6 +19,12 @@ impl WorkItemService {
             .await?)
     }
 
+    pub async fn list_types(&self, input: ListWorkItemTypesInput) -> Result<Vec<String>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        Ok(client.list_work_item_types(&input.project_id).await?)
+    }
+
     pub async fn list_type_states(
         &self,
         input: ListWorkItemTypeStatesInput,

@@ -1,18 +1,22 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Search } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 import { listMyWorkItems, commandErrorMessage } from '@/lib/azdoCommands';
 import { useActiveOrganizationId } from '@/lib/useActiveConnection';
 import { matchesWorkItemQuery, parseSearchQuery } from '@/lib/searchQuery';
 import { ErrorState } from '@/components/StateDisplay';
 import { WorkItemsGrid } from './WorkItemsGrid';
 import { WorkItemTemplatesPanel } from './WorkItemTemplatesPanel';
+import { CreateWorkItemDialog, type CreateWorkItemDraft } from './CreateWorkItemDialog';
 import { toMatchTarget } from './workItemMatchTarget';
 import { workItemQueryKeys } from './queryKeys';
 
 export function MyWorkItemsPanel() {
   const selectedOrganizationId = useActiveOrganizationId();
   const [filter, setFilter] = useState("");
+  const [createDraft, setCreateDraft] = useState<CreateWorkItemDraft | null>(null);
+  const [createdStatus, setCreatedStatus] = useState<string | null>(null);
+  const statusTimeoutRef = useRef<number | null>(null);
 
   const query = useQuery({
     queryKey: workItemQueryKeys.myItems(selectedOrganizationId),
@@ -27,6 +31,12 @@ export function MyWorkItemsPanel() {
     if (parsed.filters.length === 0 && parsed.text.length === 0) return allResults;
     return allResults.filter((item) => matchesWorkItemQuery(toMatchTarget(item), parsed));
   }, [allResults, filter]);
+
+  function showCreatedStatus(message: string) {
+    setCreatedStatus(message);
+    if (statusTimeoutRef.current !== null) window.clearTimeout(statusTimeoutRef.current);
+    statusTimeoutRef.current = window.setTimeout(() => setCreatedStatus(null), 5000);
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -43,7 +53,32 @@ export function MyWorkItemsPanel() {
           />
         </div>
 
-        <WorkItemTemplatesPanel />
+        <button
+          type="button"
+          onClick={() => setCreateDraft({})}
+          title="Create a new work item"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+        >
+          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+          New item
+        </button>
+        <WorkItemTemplatesPanel
+          onApplyTemplate={(fields) =>
+            setCreateDraft({
+              workItemType: fields.workItemType,
+              title: fields.title,
+              priority: fields.priority != null ? String(fields.priority) : undefined,
+              areaPath: fields.areaPath,
+              iterationPath: fields.iteration,
+              tags: fields.tags.join("; "),
+            })
+          }
+        />
+        {createdStatus ? (
+          <span role="status" className="truncate text-[11px] text-muted-foreground">
+            {createdStatus}
+          </span>
+        ) : null}
       </div>
       {query.isError ? (
         <ErrorState message={commandErrorMessage(query.error)} onRetry={() => void query.refetch()} />
@@ -61,6 +96,14 @@ export function MyWorkItemsPanel() {
         triageScope={`myWorkItems:${selectedOrganizationId}`}
         snoozeOrganizationId={selectedOrganizationId}
       />
+
+      {createDraft ? (
+        <CreateWorkItemDialog
+          initialDraft={createDraft}
+          onClose={() => setCreateDraft(null)}
+          onCreated={(item) => showCreatedStatus(`Created #${item.id} "${item.title}".`)}
+        />
+      ) : null}
     </div>
   );
 }

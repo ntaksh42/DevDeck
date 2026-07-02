@@ -4,6 +4,7 @@ import type {
   AddWorkItemCommentInput,
   AppSettings,
   AssignWorkItemsInput,
+  CreateWorkItemInput,
   DeleteWorkItemCommentInput,
   DeletePullRequestCommentInput,
   EditPullRequestCommentInput,
@@ -67,6 +68,7 @@ import {
 } from "@/lib/demo/prReview";
 import {
   deleteDemoWorkItemComment,
+  demoCreateWorkItem,
   demoMyWorkItems,
   demoRunWorkItemQuery,
   demoUpdateWorkItemFields,
@@ -81,6 +83,7 @@ import {
   demoClassificationNodes,
   demoListWorkItemFieldAllowedValues,
   demoListWorkItemFields,
+  demoListWorkItemTypes,
   demoListWorkItemTypeStates,
   demoMentionCandidates,
   demoWorkItemUpdates,
@@ -359,6 +362,12 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       const input = (args as { input?: UpdateWorkItemFieldsInput } | undefined)?.input;
       return demoUpdateWorkItemFields(input);
     }
+    case "create_work_item": {
+      const input = (args as { input?: CreateWorkItemInput } | undefined)?.input;
+      return demoCreateWorkItem(input);
+    }
+    case "list_work_item_types":
+      return demoListWorkItemTypes();
     case "list_work_item_updates":
       return demoWorkItemUpdates();
     case "list_work_item_field_allowed_values": {
