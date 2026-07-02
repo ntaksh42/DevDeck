@@ -156,8 +156,9 @@ export function DiffContent({
           gapReveal={gapReveal}
           onRevealGap={revealGap}
           gapKey={(row) => `${row.left?.line ?? ""}:${row.right?.line ?? ""}`}
-          renderRow={(row, key) => (
-            <div key={key}>
+          isChangedRow={(row) => row.left?.kind === "del" || row.right?.kind === "add"}
+          renderRow={(row, key, isHunkStart) => (
+            <div key={key} data-hunk-start={isHunkStart ? "true" : undefined}>
               <div className="grid grid-cols-2">
                 <SplitCell cell={row.left} side="left" onStartComment={onStartComment} />
                 <SplitCell cell={row.right} side="right" onStartComment={onStartComment} />
@@ -179,12 +180,13 @@ export function DiffContent({
         gapReveal={gapReveal}
         onRevealGap={revealGap}
         gapKey={(line) => `${line.baseLine ?? ""}:${line.targetLine ?? ""}`}
-        renderRow={(line, key) => {
+        isChangedRow={(line) => line.kind !== "context"}
+        renderRow={(line, key, isHunkStart) => {
           // Deleted lines anchor to the old (left) file; everything else to new.
           const side: CommentSide = line.kind === "del" ? "left" : "right";
           const anchorLine = line.kind === "del" ? line.baseLine : line.targetLine;
           return (
-            <div key={key}>
+            <div key={key} data-hunk-start={isHunkStart ? "true" : undefined}>
               <DiffRow line={line} onStartComment={onStartComment} />
               {lineAttachments(side, anchorLine)}
             </div>
@@ -205,17 +207,24 @@ function CollapsedDiff<T>({
   gapReveal,
   onRevealGap,
   gapKey,
+  isChangedRow,
   renderRow,
 }: {
   items: CollapsedItem<T>[];
   gapReveal: Map<string, GapReveal>;
   onRevealGap: (key: string, side: "top" | "bottom" | "all", total: number) => void;
   gapKey: (row: T) => string;
-  renderRow: (row: T, key: string) => ReactNode;
+  // A changed (add/del) row. Used to mark each hunk's first row with
+  // `data-hunk-start` for the `[`/`]` navigation shortcut. Gaps only ever
+  // fold unchanged (context) rows, so the row right after one is always a
+  // hunk start without any special-casing here.
+  isChangedRow: (row: T) => boolean;
+  renderRow: (row: T, key: string, isHunkStart: boolean) => ReactNode;
 }) {
   const out: ReactNode[] = [];
   let rendered = 0;
   let truncated = false;
+  let prevChanged = false;
 
   function pushRows(rows: T[], from: number, to: number, prefix: string) {
     for (let k = from; k < to; k++) {
@@ -223,7 +232,9 @@ function CollapsedDiff<T>({
         truncated = true;
         return;
       }
-      out.push(renderRow(rows[k], `${prefix}${k}`));
+      const changed = isChangedRow(rows[k]);
+      out.push(renderRow(rows[k], `${prefix}${k}`, changed && !prevChanged));
+      prevChanged = changed;
       rendered += 1;
     }
   }

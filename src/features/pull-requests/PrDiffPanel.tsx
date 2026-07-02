@@ -1,96 +1,124 @@
-import { type ReactNode, type RefObject } from "react";
-import { ExternalLink, Loader2 } from "lucide-react";
-import { commandErrorMessage, type PrChangedFile, type ReviewPullRequestSummary } from "@/lib/azdoCommands";
-import { openExternalUrl } from "@/lib/openExternal";
-import { ErrorState, PreviewEmptyState } from "@/components/StateDisplay";
-import { DiffContent } from "./PrFileDiffView";
+import { type RefObject } from "react";
+import type {
+  MentionCandidate,
+  PrChangedFile,
+  PrThread,
+  ReviewPullRequestSummary,
+} from "@/lib/azdoCommands";
+import { PreviewEmptyState } from "@/components/StateDisplay";
+import { PrFileDiffSection } from "./PrFileDiffSection";
 import {
-  prFileDiffUrl,
+  pathKey,
   VIEW_MODE_STORAGE_KEY,
   WHOLE_FILE_STORAGE_KEY,
+  type CommentScrollRequest,
   type CommentSide,
+  type DiffCommentDraft,
   type ViewMode,
 } from "./PrFilesTabTypes";
 
-type DiffData = {
-  baseContent: string | null;
-  targetContent: string | null;
-  baseUnavailableReason: string | null;
-  targetUnavailableReason: string | null;
-};
-
 export function PrDiffPanel({
   pr,
-  selectedFile,
-  selectedViewed,
+  hasFiles,
+  sectionFiles,
+  activeFile,
   viewMode,
   showWholeFile,
   actionError,
+  baseCommitId,
   targetCommitId,
   diffScrollRef,
-  diffIsLoading,
-  diffIsError,
-  diffError,
-  diffData,
-  onRetryDiff,
-  lineAttachments,
-  lineHasContent,
-  onStartComment,
+  onDiffScroll,
+  isViewed,
   onToggleViewed,
+  threadsByFile,
+  mutationsBusy,
+  mentionSearch,
+  resolveImageSource,
+  commentDraft,
+  commentBusy,
+  onStartComment,
+  onCancelComment,
+  onPostComment,
+  onReplyThread,
+  onToggleThreadStatus,
+  onEditComment,
+  onDeleteComment,
+  scrollRequest,
+  registerSectionRef,
   setViewMode,
   setShowWholeFile,
 }: {
   pr: ReviewPullRequestSummary;
-  selectedFile: PrChangedFile | null;
-  selectedViewed: boolean;
+  hasFiles: boolean;
+  // Filtered files in tree order, independent of folder collapse state — the
+  // continuous scroll shows every matching file regardless of what's
+  // collapsed in the tree.
+  sectionFiles: PrChangedFile[];
+  activeFile: PrChangedFile | null;
   viewMode: ViewMode;
   showWholeFile: boolean;
   actionError: string | null;
+  baseCommitId: string | null | undefined;
   targetCommitId: string | null | undefined;
   diffScrollRef: RefObject<HTMLDivElement | null>;
-  diffIsLoading: boolean;
-  diffIsError: boolean;
-  diffError: unknown;
-  diffData: DiffData | undefined;
-  onRetryDiff: () => void;
-  lineAttachments: (side: CommentSide, line: number | null) => ReactNode;
-  lineHasContent: (side: CommentSide, line: number | null) => boolean;
-  onStartComment: (side: CommentSide, line: number) => void;
-  onToggleViewed: () => void;
+  onDiffScroll: () => void;
+  isViewed: (path: string) => boolean;
+  onToggleViewed: (path: string) => void;
+  threadsByFile: Map<string, PrThread[]>;
+  mutationsBusy: boolean;
+  mentionSearch: (query: string) => Promise<MentionCandidate[]>;
+  resolveImageSource: (url: string) => Promise<string | null>;
+  commentDraft: DiffCommentDraft | null;
+  commentBusy: boolean;
+  onStartComment: (path: string, side: CommentSide, line: number) => void;
+  onCancelComment: () => void;
+  onPostComment: (content: string) => Promise<void>;
+  onReplyThread: (thread: PrThread, content: string) => Promise<void>;
+  onToggleThreadStatus: (thread: PrThread) => void;
+  onEditComment: (thread: PrThread, commentId: number, content: string) => Promise<void>;
+  onDeleteComment: (thread: PrThread, commentId: number) => Promise<void>;
+  scrollRequest: CommentScrollRequest | null;
+  registerSectionRef: (path: string) => (el: HTMLDivElement | null) => void;
   setViewMode: (mode: ViewMode) => void;
   setShowWholeFile: (updater: (prev: boolean) => boolean) => void;
 }) {
+  const renderedFiles = showWholeFile ? (activeFile ? [activeFile] : []) : sectionFiles;
+
+  function sectionProps(file: PrChangedFile, eager: boolean) {
+    return {
+      pr,
+      file,
+      baseCommitId,
+      targetCommitId,
+      viewMode,
+      wholeFile: showWholeFile,
+      eager,
+      viewed: isViewed(file.path),
+      onToggleViewed: () => onToggleViewed(file.path),
+      fileThreads: threadsByFile.get(pathKey(file.path)) ?? [],
+      mutationsBusy,
+      mentionSearch,
+      resolveImageSource,
+      commentDraft,
+      commentBusy,
+      onStartComment,
+      onCancelComment,
+      onPostComment,
+      onReplyThread,
+      onToggleThreadStatus,
+      onEditComment,
+      onDeleteComment,
+      scrollRequest,
+      scrollRootRef: diffScrollRef,
+      registerRef: registerSectionRef(file.path),
+    };
+  }
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      {selectedFile ? (
-        <div className="flex shrink-0 items-center gap-2 border-b border-border bg-muted px-2 py-1">
-          <span
-            className="min-w-0 flex-1 truncate font-mono text-[11px]"
-            dir="rtl"
-            title={selectedFile.path}
-          >
-            {`‎${selectedFile.path}`}
-          </span>
-          <label className="flex shrink-0 cursor-pointer items-center gap-1 text-[11px] text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={selectedViewed}
-              onChange={onToggleViewed}
-              className="h-3 w-3"
-            />
-            Viewed
-          </label>
-          {pr.webUrl ? (
-            <button
-              type="button"
-              onClick={() => openExternalUrl(prFileDiffUrl(pr.webUrl as string, selectedFile.path))}
-              title={`Open diff in Azure DevOps: ${selectedFile.path}`}
-              aria-label={`Open diff for ${selectedFile.path} in Azure DevOps`}
-              className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
-          ) : null}
+      {hasFiles ? (
+        <div className="flex shrink-0 items-center justify-end gap-2 border-b border-border bg-muted px-2 py-1">
           <button
             type="button"
             aria-pressed={showWholeFile}
@@ -101,7 +129,7 @@ export function PrDiffPanel({
                 return next;
               });
             }}
-            title="Show the whole file instead of only the changed regions"
+            title="Show the whole file instead of only the changed regions (disables continuous scroll)"
             className={`shrink-0 rounded border px-2 py-px text-[11px] font-medium ${
               showWholeFile
                 ? "border-primary bg-primary/10 text-primary"
@@ -144,32 +172,16 @@ export function PrDiffPanel({
         </div>
       ) : null}
 
-      <div ref={diffScrollRef} className="min-h-0 flex-1 overflow-auto">
-        {!selectedFile ? (
-          <PreviewEmptyState message="Select a file to view its diff." />
-        ) : diffIsLoading ? (
-          <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            Loading diff
-          </div>
-        ) : diffIsError ? (
-          <ErrorState message={commandErrorMessage(diffError)} onRetry={onRetryDiff} />
-        ) : diffData ? (
-          <DiffContent
-            // Remount per file/iteration so collapsed/expanded state resets.
-            key={`${selectedFile.path}@${targetCommitId ?? ""}`}
-            baseContent={diffData.baseContent}
-            targetContent={diffData.targetContent}
-            baseUnavailableReason={diffData.baseUnavailableReason}
-            targetUnavailableReason={diffData.targetUnavailableReason}
-            webUrl={pr.webUrl}
-            viewMode={viewMode}
-            wholeFile={showWholeFile}
-            lineAttachments={lineAttachments}
-            lineHasContent={lineHasContent}
-            onStartComment={onStartComment}
-          />
-        ) : null}
+      <div ref={diffScrollRef} onScroll={onDiffScroll} className="min-h-0 flex-1 overflow-auto">
+        {!hasFiles ? (
+          <PreviewEmptyState message="No changed files." />
+        ) : renderedFiles.length === 0 ? (
+          <PreviewEmptyState message="No files match your filter." />
+        ) : (
+          renderedFiles.map((file) => (
+            <PrFileDiffSection key={file.path} {...sectionProps(file, showWholeFile)} />
+          ))
+        )}
       </div>
     </div>
   );
