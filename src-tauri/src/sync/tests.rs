@@ -374,5 +374,6 @@ fn work_item(id: i64, title: &str, state: Option<&str>) -> CachedWorkItem {
         web_url: Some(format!(
             "https://dev.azure.com/org/project/_workitems/edit/{id}"
         )),
+        tags: None,
     }
 }

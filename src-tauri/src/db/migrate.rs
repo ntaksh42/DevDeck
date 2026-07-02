@@ -499,5 +499,21 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         }
         conn.execute_batch("PRAGMA user_version = 17;")?;
     }
+    if current < 18 {
+        // The work item grid now shows a Tags column, so the cache needs to
+        // remember each item's `System.Tags` value. Existing rows default to
+        // NULL (no tags) and are populated on the next sync. The table-exists
+        // guards keep partial historical databases from tripping over tables
+        // that a truncated migration path has not created yet.
+        if table_exists(conn, "work_items")? && !table_column_exists(conn, "work_items", "tags")? {
+            conn.execute_batch("ALTER TABLE work_items ADD COLUMN tags TEXT;")?;
+        }
+        if table_exists(conn, "my_work_items")?
+            && !table_column_exists(conn, "my_work_items", "tags")?
+        {
+            conn.execute_batch("ALTER TABLE my_work_items ADD COLUMN tags TEXT;")?;
+        }
+        conn.execute_batch("PRAGMA user_version = 18;")?;
+    }
     Ok(())
 }

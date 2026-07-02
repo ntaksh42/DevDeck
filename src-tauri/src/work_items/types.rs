@@ -290,6 +290,8 @@ pub struct WorkItemSummary {
     pub assigned_to: Option<String>,
     pub changed_date: Option<String>,
     pub web_url: Option<String>,
+    /// Raw `System.Tags` value ("tag1; tag2"); `None` when the item has no tags.
+    pub tags: Option<String>,
     pub extra_fields: Vec<WorkItemCustomField>,
     /// Tree depth for `FROM WorkItemLinks` query results; `None` for flat queries.
     pub depth: Option<u32>,

@@ -9,11 +9,11 @@ import { openExternalUrl } from '@/lib/openExternal';
 
 // ─── Grid layout constants ────────────────────────────────────────────────────
 
-export const DEFAULT_WI_COLUMN_WIDTHS = [46, 64, 60, 180, 82, 84, 68];
-export const WI_COLUMN_MIN_WIDTHS = [44, 58, 56, 150, 70, 74, 60];
-export const WI_COLUMN_MAX_WIDTHS = [120, 200, 180, 720, 300, 260, 160];
-export const WI_COLUMN_WIDTHS_STORAGE_KEY = storageKey("azdodeck:layout:wiSearchGridColumnWidths", 2);
-export const WI_VISIBLE_COLUMNS_STORAGE_KEY = storageKey("azdodeck:layout:wiSearchGridVisibleColumns", 1);
+export const DEFAULT_WI_COLUMN_WIDTHS = [46, 64, 60, 180, 82, 84, 140, 68];
+export const WI_COLUMN_MIN_WIDTHS = [44, 58, 56, 150, 70, 74, 60, 60];
+export const WI_COLUMN_MAX_WIDTHS = [120, 200, 180, 720, 300, 260, 400, 160];
+export const WI_COLUMN_WIDTHS_STORAGE_KEY = storageKey("azdodeck:layout:wiSearchGridColumnWidths", 3);
+export const WI_VISIBLE_COLUMNS_STORAGE_KEY = storageKey("azdodeck:layout:wiSearchGridVisibleColumns", 2);
 export const WI_SORT_STORAGE_KEY = storageKey("azdodeck:view:wiSearchGridSort", 1);
 export const WI_COLUMN_FILTERS_STORAGE_KEY = storageKey("azdodeck:view:wiSearchGridColumnFilters", 1);
 export const DEFAULT_WORK_ITEM_PREVIEW_WIDTH = 440;
@@ -33,6 +33,7 @@ export type WiSortKey =
   | "title"
   | "projectName"
   | "assignedTo"
+  | "tags"
   | "changedDate";
 export type WiSortState = { key: WiSortKey; direction: SortDirection };
 
@@ -57,6 +58,7 @@ export const wiSortLabels: Record<WiSortKey, string> = {
   title: "Title",
   projectName: "Project",
   assignedTo: "Assigned To",
+  tags: "Tags",
   changedDate: "Changed",
 };
 
@@ -74,6 +76,9 @@ export function compareWorkItems(a: WorkItemSummary, b: WorkItemSummary, key: Wi
       return a.projectName.localeCompare(b.projectName);
     case "assignedTo":
       return (a.assignedTo ?? "￿").localeCompare(b.assignedTo ?? "￿");
+    case "tags":
+      // Empty tags sort last; otherwise compare the raw "tag1; tag2" strings.
+      return (a.tags ?? "￿").localeCompare(b.tags ?? "￿");
     case "changedDate":
       return (a.changedDate ?? "").localeCompare(b.changedDate ?? "");
   }
@@ -88,6 +93,7 @@ export const WI_GRID_KEYS: WiSortKey[] = [
   "title",
   "projectName",
   "assignedTo",
+  "tags",
   "changedDate",
 ];
 export const WI_GRID_REQUIRED_COLUMNS: WiSortKey[] = ["id", "title"];
@@ -228,6 +234,27 @@ export function workItemCellValue(item: WorkItemSummary, column: WiSortKey): Rea
           {item.assignedTo ?? "—"}
         </span>
       );
+    case "tags": {
+      const tags = splitWorkItemTags(item.tags);
+      if (tags.length === 0) {
+        return <span className="text-xs text-muted-foreground">—</span>;
+      }
+      return (
+        <div
+          className="flex min-w-0 items-center gap-1 overflow-hidden"
+          title={tags.join(", ")}
+        >
+          {tags.map((tag) => (
+            <span
+              key={tag}
+              className="max-w-full shrink-0 truncate rounded border border-border bg-muted px-1.5 text-[11px] leading-[18px] text-muted-foreground"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
+      );
+    }
     case "changedDate":
       return (
         <span
@@ -238,6 +265,16 @@ export function workItemCellValue(item: WorkItemSummary, column: WiSortKey): Rea
         </span>
       );
   }
+}
+
+// Azure DevOps stores tags as a single "tag1; tag2; tag3" string. Split it into
+// trimmed, non-empty tags so the grid can render one chip per tag.
+export function splitWorkItemTags(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(";")
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0);
 }
 
 export function extraFieldValue(item: WorkItemSummary, referenceName: string): string | null {

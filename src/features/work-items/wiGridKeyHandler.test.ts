@@ -14,6 +14,7 @@ function makeItem(overrides: Partial<WorkItemSummary> = {}): WorkItemSummary {
     assignedTo: null,
     changedDate: null,
     webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/456",
+    tags: null,
     extraFields: [],
     depth: null,
     ...overrides,
