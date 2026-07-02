@@ -40,7 +40,8 @@ export function CommitSearch({
 }) {
   const initialViewState = useMemo(() => loadCommitSearchViewState(), []);
   const selectedOrganizationId = useActiveOrganizationId();
-  const [query, setQuery] = useState(initialViewState.query);
+  // The search text intentionally resets when the view is left (remount on nav).
+  const [query, setQuery] = useState("");
   const [author, setAuthor] = useState(initialViewState.author);
   const [branch, setBranch] = useState(initialViewState.branch);
   const [fromDate, setFromDate] = useState(initialViewState.fromDate);
@@ -125,11 +126,10 @@ export function CommitSearch({
       fromDate,
       organizationId: selectedOrganizationId,
       projectIds,
-      query,
       repositoryIds,
       toDate,
     });
-  }, [author, branch, fromDate, projectIds, query, repositoryIds, selectedOrganizationId, toDate]);
+  }, [author, branch, fromDate, projectIds, repositoryIds, selectedOrganizationId, toDate]);
 
   useEffect(() => {
     window.localStorage.setItem(COMMIT_VIEW_MODE_STORAGE_KEY, viewMode);

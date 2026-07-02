@@ -29,7 +29,6 @@ export const DEFAULT_PR_SEARCH_COLUMN_WIDTHS = [56, 70, 220, 130, 104, 64, 120];
 export const PR_SEARCH_COLUMN_MIN_WIDTHS = [52, 64, 160, 104, 86, 58, 100];
 export const PR_SEARCH_COLUMN_MAX_WIDTHS = [120, 140, 720, 360, 280, 120, 360];
 export const PR_SEARCH_COLUMN_WIDTHS_STORAGE_KEY = 'azdodeck:layout:prSearchGridColumnWidths:v2';
-export const PR_SEARCH_QUERY_STORAGE_KEY = 'azdodeck:view:prSearchQuery';
 export const PR_SEARCH_ROW_HEIGHT = 29;
 export const PR_SEARCH_OVERSCAN = 8;
 export type PrSearchFilterableColumn = "status" | "repository" | "createdBy" | "branch";

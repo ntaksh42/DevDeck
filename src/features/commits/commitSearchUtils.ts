@@ -55,7 +55,6 @@ export function loadCommitSearchViewState(): CommitSearchViewState {
     fromDate: "",
     organizationId: "",
     projectIds: [],
-    query: "",
     repositoryIds: [],
     toDate: "",
   };
@@ -68,7 +67,6 @@ export function loadCommitSearchViewState(): CommitSearchViewState {
       fromDate: typeof parsed.fromDate === "string" ? parsed.fromDate : "",
       organizationId: typeof parsed.organizationId === "string" ? parsed.organizationId : "",
       projectIds: stringArray(parsed.projectIds),
-      query: typeof parsed.query === "string" ? parsed.query : "",
       repositoryIds: stringArray(parsed.repositoryIds),
       toDate: typeof parsed.toDate === "string" ? parsed.toDate : "",
     };

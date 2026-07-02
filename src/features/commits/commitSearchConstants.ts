@@ -41,7 +41,6 @@ export type CommitSearchViewState = {
   fromDate: string;
   organizationId: string;
   projectIds: string[];
-  query: string;
   repositoryIds: string[];
   toDate: string;
 };
