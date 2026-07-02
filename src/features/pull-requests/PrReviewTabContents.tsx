@@ -315,6 +315,7 @@ export function ReviewTab({
                   text={review.description}
                   className="text-xs text-foreground"
                   resolveImageSource={resolvePreviewImage}
+                  baseUrl={pr.webUrl}
                 />
               ) : (
                 <p className="text-xs italic text-muted-foreground">No description.</p>
@@ -365,6 +366,7 @@ export function ReviewTab({
                   busy={commentMutation.isPending || statusMutation.isPending}
                   mentionSearch={mentionSearch}
                   resolveImageSource={resolvePreviewImage}
+                  baseUrl={pr.webUrl}
                   onReply={(content) =>
                     commentMutation.mutateAsync({
                       ...prLocator(pr),

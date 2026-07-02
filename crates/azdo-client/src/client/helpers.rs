@@ -41,6 +41,25 @@ pub(crate) fn is_legacy_visualstudio_org_url(url: &Url, base_url: &Url) -> bool 
     url_host.eq_ignore_ascii_case(&format!("{org}.visualstudio.com"))
 }
 
+/// Decides whether an attachment URL path points at a fetchable Azure DevOps
+/// attachment: a work item attachment, or a pull request attachment at
+/// `/_apis/git/repositories/{repo}/pullrequests/{id}/attachments/{fileName}`.
+pub(crate) fn is_allowed_attachment_path(path: &str) -> bool {
+    let path = path.to_ascii_lowercase();
+    if path.contains("/_apis/wit/attachments/") {
+        return true;
+    }
+    let Some(rest) = path.split("/_apis/git/repositories/").nth(1) else {
+        return false;
+    };
+    let mut segments = rest.split('/');
+    segments.next().is_some_and(|repo| !repo.is_empty())
+        && segments.next() == Some("pullrequests")
+        && segments.next().is_some_and(|id| !id.is_empty())
+        && segments.next() == Some("attachments")
+        && segments.next().is_some_and(|file| !file.is_empty())
+}
+
 pub(crate) fn vssps_base_url(base_url: &Url) -> Result<Url> {
     if base_url.host_str() != Some("dev.azure.com") {
         return Ok(base_url.clone());

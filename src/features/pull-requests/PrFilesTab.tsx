@@ -413,6 +413,7 @@ export function PrFilesTab({
             showFilePath={false}
             mentionSearch={mentionSearch}
             resolveImageSource={resolveImageSource}
+            baseUrl={pr.webUrl}
             onReply={(content) => replyToThread(thread, content)}
             onToggleStatus={() => toggleThreadStatus(thread)}
             onEditComment={(commentId, content) => editComment(thread, commentId, content)}

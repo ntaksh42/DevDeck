@@ -101,6 +101,35 @@ async fn get_attachment_bytes_fetches_authenticated_image() {
 }
 
 #[tokio::test]
+async fn get_attachment_bytes_fetches_pull_request_attachment() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(
+            "/project-1/_apis/git/repositories/repo-1/pullRequests/42/attachments/screen.png",
+        ))
+        .and(header("Authorization", "Basic OnRlc3QtcGF0"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "image/png")
+                .set_body_bytes(vec![137, 80, 78, 71]),
+        )
+        .mount(&server)
+        .await;
+
+    let response = test_client(&server)
+        .await
+        .get_attachment_bytes(&format!(
+            "{}/project-1/_apis/git/repositories/repo-1/pullRequests/42/attachments/screen.png",
+            server.uri()
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(response.content_type.as_deref(), Some("image/png"));
+    assert_eq!(response.bytes, vec![137, 80, 78, 71]);
+}
+
+#[tokio::test]
 async fn get_attachment_bytes_rejects_non_attachment_urls() {
     let server = MockServer::start().await;
     let err = test_client(&server)
@@ -133,6 +162,34 @@ fn validate_attachment_url_accepts_legacy_visualstudio_org_host() {
             .unwrap();
 
     client.validate_attachment_url(&url).unwrap();
+}
+
+#[test]
+fn validate_attachment_url_accepts_pull_request_attachment_case_variants() {
+    let client = AdoClient::new("contoso", Arc::new(PatProvider::new("test-pat")))
+        .unwrap()
+        .with_base_url(Url::parse("https://dev.azure.com/contoso/").unwrap());
+    let url = Url::parse(
+        "https://dev.azure.com/contoso/project-1/_apis/git/repositories/repo-1/pullRequests/42/attachments/screen.png",
+    )
+    .unwrap();
+
+    client.validate_attachment_url(&url).unwrap();
+}
+
+#[test]
+fn validate_attachment_url_rejects_non_attachment_git_urls() {
+    let client = AdoClient::new("contoso", Arc::new(PatProvider::new("test-pat")))
+        .unwrap()
+        .with_base_url(Url::parse("https://dev.azure.com/contoso/").unwrap());
+    let url = Url::parse(
+        "https://dev.azure.com/contoso/project-1/_apis/git/repositories/repo-1/items?path=x.png",
+    )
+    .unwrap();
+
+    let err = client.validate_attachment_url(&url).unwrap_err();
+
+    assert!(matches!(err, AdoError::Auth(_)));
 }
 
 #[test]
