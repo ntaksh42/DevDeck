@@ -23,6 +23,17 @@ type RunSelection = {
   buildId: number;
 };
 
+// A live pulsing dot so a running pipeline reads at a glance without hunting for
+// the blue "Running" badge among the rows.
+function RunningDot() {
+  return (
+    <span className="relative flex h-2 w-2" aria-hidden="true">
+      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-500 opacity-75" />
+      <span className="relative inline-flex h-2 w-2 rounded-full bg-blue-500" />
+    </span>
+  );
+}
+
 export function PipelineSubscriptionsBoard({
   organizationId,
   subscriptions,
@@ -101,6 +112,21 @@ export function PipelineSubscriptionsBoard({
       };
     }),
   });
+
+  // Count watched pipelines whose latest run is currently executing so the
+  // header can surface "N running" at a glance. Uses the same "active" tone that
+  // paints a row's badge blue, so the count always matches the visible badges.
+  const runningCount = useMemo(
+    () =>
+      orgSubscriptions.reduce((count, _sub, index) => {
+        const latest = queries[index]?.data?.[0];
+        if (!latest) return count;
+        return pipelineRunVisual(latest.status, latest.result).tone === "active"
+          ? count + 1
+          : count;
+      }, 0),
+    [orgSubscriptions, queries],
+  );
 
   function toggle(key: string) {
     setExpanded((prev) => {
@@ -206,6 +232,16 @@ export function PipelineSubscriptionsBoard({
         <span className="text-sm text-muted-foreground">
           {orgSubscriptions.length}
         </span>
+        {runningCount > 0 ? (
+          <span
+            role="status"
+            className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800"
+            title={`${runningCount} watched pipeline${runningCount === 1 ? "" : "s"} currently running`}
+          >
+            <RunningDot />
+            {runningCount} running
+          </span>
+        ) : null}
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <input
             type="text"
@@ -245,6 +281,7 @@ export function PipelineSubscriptionsBoard({
           const runs = query?.data ?? [];
           const latest = runs[0];
           const visual = pipelineRunVisual(latest?.status, latest?.result);
+          const isRunning = latest != null && visual.tone === "active";
           const isOpen = expanded.has(key);
           // Roving tabindex: the selected run is the Tab entry point, falling
           // back to the first row when the selection is in another pipeline.
@@ -252,7 +289,11 @@ export function PipelineSubscriptionsBoard({
           const tabbableRunIndex = selectedRunIndex >= 0 ? selectedRunIndex : 0;
           return (
             <div key={key} className="border-b border-border last:border-b-0">
-              <div className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/40">
+              <div
+                className={`flex items-center gap-2 border-l-2 px-2 py-1.5 hover:bg-muted/40 ${
+                  isRunning ? "border-l-blue-500 bg-blue-50/60" : "border-l-transparent"
+                }`}
+              >
                 <button
                   type="button"
                   onClick={() => toggle(key)}
@@ -286,10 +327,11 @@ export function PipelineSubscriptionsBoard({
                   </span>
                 ) : null}
                 <span
-                  className={`inline-flex shrink-0 items-center rounded px-1.5 py-px text-xs font-medium ${runToneClasses(
+                  className={`inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-px text-xs font-medium ${runToneClasses(
                     visual.tone,
                   )}`}
                 >
+                  {isRunning ? <RunningDot /> : null}
                   {latest ? visual.label : "No runs"}
                 </span>
                 <button

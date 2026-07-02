@@ -188,6 +188,30 @@ describe("PipelineSubscriptionsBoard primary grid marker", () => {
     });
   });
 
+  it("surfaces a running summary when a watched pipeline's latest run is in progress", async () => {
+    // CI (def 1) has an in-progress latest run; Nightly (def 2) is completed.
+    listPipelineRuns.mockImplementation(async (input: { definitionId: number }) =>
+      input.definitionId === 1
+        ? [run({ buildId: 101, definitionId: 1, definitionName: "CI", status: "inProgress" })]
+        : [run({ buildId: 202, definitionId: 2, definitionName: "Nightly" })],
+    );
+
+    renderBoard(null);
+
+    // The header pill counts only the running pipeline, not every subscription.
+    expect(await screen.findByText("1 running")).toBeTruthy();
+  });
+
+  it("hides the running summary when no watched pipeline is executing", async () => {
+    renderBoard(null);
+
+    // Both defaults are completed, so the "running" pill must not appear.
+    await screen.findByRole("button", { name: /CI/, expanded: false });
+    await waitFor(() => {
+      expect(screen.queryByText(/running$/)).toBeNull();
+    });
+  });
+
   it("opens the focused run in the browser on Ctrl+Enter", async () => {
     renderBoard(null);
 
