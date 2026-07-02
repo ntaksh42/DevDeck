@@ -157,16 +157,29 @@ export function DiffContent({
           onRevealGap={revealGap}
           gapKey={(row) => `${row.left?.line ?? ""}:${row.right?.line ?? ""}`}
           isChangedRow={(row) => row.left?.kind === "del" || row.right?.kind === "add"}
-          renderRow={(row, key, isHunkStart) => (
-            <div key={key} data-hunk-start={isHunkStart ? "true" : undefined}>
-              <div className="grid grid-cols-2">
-                <SplitCell cell={row.left} side="left" onStartComment={onStartComment} />
-                <SplitCell cell={row.right} side="right" onStartComment={onStartComment} />
+          renderRow={(row, key, isHunkStart) => {
+            // Azure DevOps anchors each thread/draft under the side it
+            // belongs to; the opposite column is hatched instead of left
+            // blank so the two columns' row heights still line up.
+            const leftAttachment = lineAttachments("left", row.left ? row.left.line : null);
+            const rightAttachment = lineAttachments("right", row.right ? row.right.line : null);
+            return (
+              <div key={key} data-hunk-start={isHunkStart ? "true" : undefined}>
+                <div className="grid grid-cols-2">
+                  <SplitCell cell={row.left} side="left" onStartComment={onStartComment} />
+                  <SplitCell cell={row.right} side="right" onStartComment={onStartComment} />
+                </div>
+                {leftAttachment || rightAttachment ? (
+                  <div className="grid grid-cols-2">
+                    <div className="min-w-0 border-r border-border/60">
+                      {leftAttachment ?? <AttachmentHatch />}
+                    </div>
+                    <div className="min-w-0">{rightAttachment ?? <AttachmentHatch />}</div>
+                  </div>
+                ) : null}
               </div>
-              {lineAttachments("left", row.left ? row.left.line : null)}
-              {lineAttachments("right", row.right ? row.right.line : null)}
-            </div>
-          )}
+            );
+          }}
         />
       </div>
     );
@@ -317,6 +330,25 @@ function GapBar({
         <ChevronDown className="h-3 w-3" aria-hidden="true" />
       </button>
     </div>
+  );
+}
+
+/**
+ * Fills the column opposite a thread/draft in split view, so a comment
+ * anchored to only one side doesn't leave the two columns' row heights
+ * mismatched. Stretches to the sibling cell's height via CSS grid's default
+ * row stretch — no JS height sync needed.
+ */
+function AttachmentHatch() {
+  return (
+    <div
+      aria-hidden="true"
+      className="h-full min-h-[1.75rem] w-full bg-muted/20"
+      style={{
+        backgroundImage:
+          "repeating-linear-gradient(45deg, rgba(100,116,139,0.25) 0, rgba(100,116,139,0.25) 2px, transparent 2px, transparent 8px)",
+      }}
+    />
   );
 }
 

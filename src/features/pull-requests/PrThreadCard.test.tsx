@@ -67,7 +67,8 @@ describe("PrThreadCard focus restoration", () => {
 
   it("returns focus to the preview pane when the reply composer is cancelled", () => {
     const preview = renderInPreview();
-    fireEvent.click(screen.getByRole("button", { name: "Reply" }));
+    // The always-visible "Write a reply…" row expands into the composer.
+    fireEvent.click(screen.getByRole("button", { name: "Write a reply…" }));
     // The composer autofocuses its textarea while open.
     expect(document.activeElement).toBe(screen.getByRole("textbox"));
 
@@ -88,7 +89,7 @@ describe("PrThreadCard focus restoration", () => {
 describe("PrThreadCard resolve toggle", () => {
   afterEach(cleanup);
 
-  it("shows the Resolve toggle for a thread without a status (#434)", () => {
+  it("shows the Resolve button next to the reply row for a thread without a status (#434)", () => {
     const onToggleStatus = vi.fn();
     render(
       <PrThreadCard
@@ -113,5 +114,112 @@ describe("PrThreadCard resolve toggle", () => {
       />,
     );
     expect(screen.getByRole("button", { name: "Reactivate" })).toBeTruthy();
+  });
+});
+
+describe("PrThreadCard status dropdown", () => {
+  afterEach(cleanup);
+
+  it("opens focused on the first option, selects Resolved with the keyboard, and returns focus to the trigger", () => {
+    const onToggleStatus = vi.fn();
+    render(
+      <PrThreadCard
+        thread={makeThread()}
+        busy={false}
+        onReply={async () => {}}
+        onToggleStatus={onToggleStatus}
+      />,
+    );
+    const trigger = screen.getByRole("button", { name: "Active" });
+    fireEvent.click(trigger);
+
+    const options = screen.getAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual(["Active", "Resolved"]);
+    // Opens focused on the first option.
+    expect(document.activeElement).toBe(options[0]);
+
+    fireEvent.keyDown(options[0], { key: "ArrowDown" });
+    expect(document.activeElement).toBe(options[1]);
+
+    fireEvent.click(options[1]);
+    expect(onToggleStatus).toHaveBeenCalledTimes(1);
+    // Closing returns focus to the trigger.
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("does not call onToggleStatus when the currently-selected option is re-picked", () => {
+    const onToggleStatus = vi.fn();
+    render(
+      <PrThreadCard
+        thread={makeThread()}
+        busy={false}
+        onReply={async () => {}}
+        onToggleStatus={onToggleStatus}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Active" }));
+    fireEvent.click(screen.getAllByRole("option")[0]);
+    expect(onToggleStatus).not.toHaveBeenCalled();
+  });
+
+  it("closes on Escape and returns focus to the trigger", () => {
+    render(
+      <PrThreadCard
+        thread={makeThread()}
+        busy={false}
+        onReply={async () => {}}
+        onToggleStatus={() => {}}
+      />,
+    );
+    const trigger = screen.getByRole("button", { name: "Active" });
+    fireEvent.click(trigger);
+    expect(screen.getAllByRole("option")).toHaveLength(2);
+
+    fireEvent.keyDown(screen.getAllByRole("option")[0], { key: "Escape" });
+    expect(screen.queryAllByRole("option")).toHaveLength(0);
+    expect(document.activeElement).toBe(trigger);
+  });
+});
+
+describe("PrThreadCard collapse toggle", () => {
+  afterEach(cleanup);
+
+  it("shows only the first author and a one-line summary when collapsed", () => {
+    render(
+      <PrThreadCard
+        thread={makeThread()}
+        busy={false}
+        onReply={async () => {}}
+        onToggleStatus={() => {}}
+      />,
+    );
+    const toggle = screen.getByRole("button", { name: "Collapse thread" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByText("Alice")).toBeTruthy();
+    expect(screen.getByText("Looks good")).toBeTruthy();
+    // The reply row and per-comment Edit action are hidden while collapsed.
+    expect(screen.queryByRole("button", { name: "Write a reply…" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand thread" }));
+    expect(screen.getByRole("button", { name: "Write a reply…" })).toBeTruthy();
+  });
+});
+
+describe("PrThreadCard avatars", () => {
+  afterEach(cleanup);
+
+  it("renders an initials avatar per comment", () => {
+    render(
+      <PrThreadCard
+        thread={makeThread()}
+        busy={false}
+        onReply={async () => {}}
+        onToggleStatus={() => {}}
+      />,
+    );
+    expect(screen.getByText("AL")).toBeTruthy();
   });
 });
