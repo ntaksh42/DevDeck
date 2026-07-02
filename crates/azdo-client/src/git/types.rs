@@ -35,6 +35,24 @@ pub struct GitRef {
     pub object_id: Option<String>,
 }
 
+/// The kind of ref a `versionDescriptor.version` names in item requests.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GitVersionType {
+    Branch,
+    Commit,
+    Tag,
+}
+
+impl GitVersionType {
+    pub fn as_query_value(self) -> &'static str {
+        match self {
+            GitVersionType::Branch => "branch",
+            GitVersionType::Commit => "commit",
+            GitVersionType::Tag => "tag",
+        }
+    }
+}
+
 /// A file or folder entry in a repository tree.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]

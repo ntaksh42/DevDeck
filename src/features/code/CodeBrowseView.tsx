@@ -8,7 +8,14 @@ import {
 import { useActiveOrganization } from "@/lib/useActiveConnection";
 import { openExternalUrl } from "@/lib/openExternal";
 import { FilterableSelect } from "@/features/pipelines/FilterableSelect";
-import { blameUrl, ROOT, webUrl, type RepoOption, type Selection } from "./codeBrowseShared";
+import {
+  ancestorFolders,
+  blameUrl,
+  ROOT,
+  webUrl,
+  type RepoOption,
+  type Selection,
+} from "./codeBrowseShared";
 import {
   getFavoriteRepositoryIds,
   getLastSelection,
@@ -16,6 +23,8 @@ import {
   toggleFavoriteRepository,
 } from "./codeBrowseStorage";
 import { TreeLevel } from "./CodeFileTree";
+import { CodeFilteredTree } from "./CodeFilteredTree";
+import { Breadcrumb, TabButton } from "./CodeBrowseChrome";
 import { CodeFolderView } from "./CodeFolderView";
 import { CodeFileView } from "./CodeFileView";
 import { CodeHistoryView } from "./CodeHistoryView";
@@ -55,14 +64,18 @@ export function CodeBrowseView() {
   }, [organizationId]);
 
   // Restore the last opened repository once the repository list loads, if the
-  // user has not already picked one this session and it still exists.
+  // user has not already picked one this session and it still exists. The last
+  // opened path is held aside and applied once the branch has settled.
   const [restoredBranch, setRestoredBranch] = useState<string | null>(null);
+  const pendingSelectionRef = useRef<Selection | null>(null);
   useEffect(() => {
     if (repositoryId || repositories.length === 0) return;
     const last = getLastSelection(organizationId);
     if (last && repositories.some((option) => option.repositoryId === last.repositoryId)) {
       setRepositoryId(last.repositoryId);
       setRestoredBranch(last.branch || null);
+      pendingSelectionRef.current =
+        last.path && last.path !== "/" ? { path: last.path, isFolder: last.isFolder } : null;
     }
   }, [organizationId, repositories, repositoryId]);
 
@@ -99,29 +112,47 @@ export function CodeBrowseView() {
     setRestoredBranch(null);
   }, [branches, restoredBranch]);
 
-  // Remember the open repository/branch so the view reopens here next time.
-  useEffect(() => {
-    if (organizationId && repositoryId && branch) {
-      setLastSelection(organizationId, repositoryId, branch);
-    }
-  }, [organizationId, repositoryId, branch]);
-
   const [selected, setSelected] = useState<Selection>(ROOT);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [filterText, setFilterText] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [tab, setTab] = useState<RightTab>("contents");
   const [baseBranch, setBaseBranch] = useState("");
+  // A commit picked via History > View, pinning the Contents tab to that ref.
+  const [pinnedCommit, setPinnedCommit] = useState<{
+    commitId: string;
+    shortId: string;
+  } | null>(null);
   const treeRef = useRef<HTMLDivElement | null>(null);
 
-  // Reset navigation state when the repository or branch changes.
+  // Remember the open repository/branch/path so the view reopens here next time.
   useEffect(() => {
-    setSelected(ROOT);
-    setExpanded(new Set());
+    if (organizationId && repositoryId && branch) {
+      setLastSelection(organizationId, repositoryId, branch, selected.path, selected.isFolder);
+    }
+  }, [organizationId, repositoryId, branch, selected]);
+
+  // Reset navigation state when the repository or branch changes. A restored
+  // selection (held until the branch settles) replaces the root and expands
+  // its ancestor folders so the tree shows where the user left off.
+  useEffect(() => {
+    const pending = branch ? pendingSelectionRef.current : null;
+    if (branch) pendingSelectionRef.current = null;
+    setSelected(pending ?? ROOT);
+    setExpanded(
+      pending
+        ? new Set(
+            pending.isFolder
+              ? [...ancestorFolders(pending.path), pending.path]
+              : ancestorFolders(pending.path),
+          )
+        : new Set(),
+    );
     setFilterText("");
     setSearchQuery("");
     setTab("contents");
     setBaseBranch("");
+    setPinnedCommit(null);
   }, [repositoryId, branch]);
 
   // Compare only applies to files; fall back to Contents when a folder is shown.
@@ -141,12 +172,14 @@ export function CodeBrowseView() {
   function openFolder(path: string) {
     setSelected({ path, isFolder: true });
     setExpanded((prev) => new Set(prev).add(path));
+    setPinnedCommit(null);
   }
 
   function openFile(path: string) {
     setSelected({ path, isFolder: false });
     setSearchQuery("");
     setTab("contents");
+    setPinnedCommit(null);
   }
 
   function onSearchKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
@@ -175,6 +208,12 @@ export function CodeBrowseView() {
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       rows[index <= 0 ? 0 : index - 1]?.focus();
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      rows[0]?.focus();
+    } else if (event.key === "End") {
+      event.preventDefault();
+      rows[rows.length - 1]?.focus();
     } else if (event.key === "ArrowRight" && index >= 0) {
       const row = rows[index];
       if (row.dataset.folder === "true") {
@@ -290,14 +329,23 @@ export function CodeBrowseView() {
               onFocus={onTreeFocus}
               className="min-h-0 flex-1 overflow-y-auto py-1 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             >
-              {branch ? (
+              {branch && filterText.trim() ? (
+                <CodeFilteredTree
+                  organizationId={organizationId}
+                  repo={repo}
+                  branch={branch}
+                  filterText={filterText}
+                  selectedPath={selected.path}
+                  onOpenFolder={openFolder}
+                  onOpenFile={openFile}
+                />
+              ) : branch ? (
                 <TreeLevel
                   organizationId={organizationId}
                   repo={repo}
                   branch={branch}
                   parentPath="/"
                   depth={0}
-                  filterText={filterText}
                   selectedPath={selected.path}
                   expanded={expanded}
                   onToggle={toggleFolder}
@@ -322,7 +370,13 @@ export function CodeBrowseView() {
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
                 <div className="flex min-w-0 items-center gap-3">
-                  <Breadcrumb path={selected.path} repositoryName={repo.repositoryName} />
+                  <Breadcrumb
+                    path={selected.path}
+                    repositoryName={repo.repositoryName}
+                    onNavigate={(target) =>
+                      target === "/" ? setSelected(ROOT) : openFolder(target)
+                    }
+                  />
                   <div className="flex shrink-0 gap-1 text-sm">
                     <TabButton active={tab === "contents"} onClick={() => setTab("contents")}>
                       Contents
@@ -366,6 +420,17 @@ export function CodeBrowseView() {
                     repo={repo}
                     branch={branch}
                     path={selected.path}
+                    onViewAtCommit={
+                      !selected.isFolder
+                        ? (commit) => {
+                            setPinnedCommit({
+                              commitId: commit.commitId,
+                              shortId: commit.shortId,
+                            });
+                            setTab("contents");
+                          }
+                        : undefined
+                    }
                   />
                 ) : tab === "compare" && !selected.isFolder ? (
                   <CodeCompareView
@@ -393,6 +458,13 @@ export function CodeBrowseView() {
                     repo={repo}
                     branch={branch}
                     path={selected.path}
+                    version={
+                      pinnedCommit
+                        ? { versionType: "commit", version: pinnedCommit.commitId }
+                        : undefined
+                    }
+                    versionLabel={pinnedCommit ? `commit ${pinnedCommit.shortId}` : undefined}
+                    onExitVersion={() => setPinnedCommit(null)}
                   />
                 )}
               </div>
@@ -404,39 +476,3 @@ export function CodeBrowseView() {
   );
 }
 
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`rounded px-2 py-0.5 ${
-        active ? "bg-secondary font-medium" : "text-muted-foreground hover:text-foreground"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Breadcrumb({ path, repositoryName }: { path: string; repositoryName: string }) {
-  const segments = path.split("/").filter(Boolean);
-  return (
-    <div className="flex min-w-0 items-center gap-1 truncate text-sm">
-      <span className="font-medium">{repositoryName}</span>
-      {segments.map((segment, index) => (
-        <span key={index} className="text-muted-foreground">
-          / {segment}
-        </span>
-      ))}
-    </div>
-  );
-}

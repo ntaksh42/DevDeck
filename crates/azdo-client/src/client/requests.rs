@@ -79,6 +79,38 @@ impl AdoClient {
         .await
     }
 
+    /// GETs raw bytes (e.g. `$format=octetStream` item downloads) with the
+    /// shared retry behavior, returning the body and its Content-Type.
+    pub(crate) async fn get_bytes(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+    ) -> Result<BinaryResponse> {
+        let url = self
+            .base_url
+            .join(path)
+            .map_err(|e| AdoError::Auth(e.to_string()))?;
+
+        self.send_with_retry(
+            "GET",
+            path,
+            true,
+            || self.http.get(url.clone()).query(query),
+            |resp| async move {
+                let content_type = resp
+                    .headers()
+                    .get(CONTENT_TYPE)
+                    .and_then(|value| value.to_str().ok())
+                    .map(str::to_string);
+                Ok(BinaryResponse {
+                    bytes: resp.bytes().await?.to_vec(),
+                    content_type,
+                })
+            },
+        )
+        .await
+    }
+
     pub(crate) async fn get_text(&self, path: &str, query: &[(&str, &str)]) -> Result<String> {
         let url = self
             .base_url

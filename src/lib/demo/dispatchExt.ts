@@ -24,6 +24,7 @@ import {
   demoRepoBranches,
   demoRepoFile,
   demoRepoHistory,
+  demoRepoPaths,
   demoRepoTree,
   demoSearchCode,
 } from "@/lib/demo/commits";
@@ -160,6 +161,8 @@ export function dispatchExt(command: string, args: unknown): unknown {
       const input = (args as { input?: { path?: string } } | undefined)?.input;
       return demoRepoHistory(input?.path ?? "/");
     }
+    case "list_repo_paths":
+      return demoRepoPaths();
     default:
       return undefined;
   }

@@ -81,8 +81,9 @@ impl AdoClient {
         Ok(response.value)
     }
 
-    /// Lists the direct children (one level) of a folder at the tip of a branch.
-    /// `scope_path` is the folder to list, e.g. `/` or `/src`. When
+    /// Lists the children of a folder at the tip of a branch. `scope_path` is
+    /// the folder to list, e.g. `/` or `/src`. `recursive` lists the whole
+    /// subtree (`recursionLevel=Full`) instead of one level. When
     /// `include_latest_commit` is set, each item carries its last commit via
     /// `latestProcessedChange` (one extra server-side join, no per-item calls).
     pub async fn list_items(
@@ -91,13 +92,15 @@ impl AdoClient {
         repository_id: &str,
         branch: &str,
         scope_path: &str,
+        recursive: bool,
         include_latest_commit: bool,
     ) -> Result<Vec<GitItem>> {
         let path = format!("{project_id}/_apis/git/repositories/{repository_id}/items");
+        let recursion_level = if recursive { "Full" } else { "OneLevel" };
         let mut params: Vec<(&str, &str)> = vec![
             ("api-version", "7.1-preview"),
             ("scopePath", scope_path),
-            ("recursionLevel", "OneLevel"),
+            ("recursionLevel", recursion_level),
             ("versionDescriptor.versionType", "branch"),
             ("versionDescriptor.version", branch),
         ];
