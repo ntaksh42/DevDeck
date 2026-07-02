@@ -11,7 +11,7 @@ import {
   type PullRequestReview,
   type ReviewPullRequestSummary,
 } from "@/lib/azdoCommands";
-import { formatDate, formatRelativeDate } from "@/lib/utils";
+import { focusPrimaryPreview, formatDate, formatRelativeDate } from "@/lib/utils";
 import { extractWorkItemMentions, navigateToWorkItem } from "@/lib/crossLinks";
 import { fetchWorkItemImageCached } from "@/lib/workItemImageCache";
 import { MarkdownView } from "@/lib/markdown";
@@ -430,6 +430,9 @@ export function ReviewTab({
           onSubmit={(content) =>
             commentMutation.mutateAsync({ ...prLocator(pr), content }).then(() => undefined)
           }
+          onSubmitted={() => {
+            focusPrimaryPreview();
+          }}
         />
       </div>
     </div>
