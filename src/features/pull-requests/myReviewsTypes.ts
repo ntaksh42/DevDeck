@@ -121,7 +121,6 @@ export type MyReviewsGridViewState = {
   organizationId: string;
   showDrafts: boolean;
   sort: SortState;
-  textFilter: string;
   visibleColumns: SortKey[];
 };
 

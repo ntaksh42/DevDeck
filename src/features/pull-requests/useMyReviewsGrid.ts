@@ -73,7 +73,8 @@ export function useMyReviewsGrid({
   const [showSnoozed, setShowSnoozed] = useState(false);
   const [snoozeAnchorRect, setSnoozeAnchorRect] = useState<DOMRect | null>(null);
   const snoozeTargetRef = useRef<ReviewPullRequestSummary | null>(null);
-  const [textFilter, setTextFilter] = useState(initialViewState.textFilter);
+  // The filter text intentionally resets when the view is left (remount on nav).
+  const [textFilter, setTextFilter] = useState('');
   const [collapsedSections, setCollapsedSections] = useState<Set<ReviewSection>>(
     initialViewState.collapsedSections,
   );
@@ -330,10 +331,9 @@ export function useMyReviewsGrid({
       organizationId,
       showDrafts,
       sort,
-      textFilter,
       visibleColumns,
     });
-  }, [collapsedSections, columnFilters, organizationId, showDrafts, sort, textFilter, visibleColumns]);
+  }, [collapsedSections, columnFilters, organizationId, showDrafts, sort, visibleColumns]);
 
   useEffect(() => {
     containerRef.current?.focus();

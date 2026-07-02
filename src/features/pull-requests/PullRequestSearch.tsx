@@ -19,7 +19,6 @@ import { MultiSelectFilter } from '@/components/MultiSelectFilter';
 import { FilterAutocomplete } from '@/components/FilterAutocomplete';
 import { PullRequestResults } from './PrSearchResults';
 import {
-  PR_SEARCH_QUERY_STORAGE_KEY,
   PR_SEARCH_STATUS_OPTIONS,
   PR_SEARCH_STATUS_STORAGE_KEY,
   PR_SEARCH_DATE_BASIS_OPTIONS,
@@ -42,10 +41,8 @@ export function PullRequestSearch({
   onExternalSearchHandled?: () => void;
 }) {
   const organizationId = useActiveOrganizationId();
-  // Keep the last query across view switches (the component remounts on nav).
-  const [query, setQuery] = useState(
-    () => window.localStorage.getItem(PR_SEARCH_QUERY_STORAGE_KEY) ?? "",
-  );
+  // The search text intentionally resets when the view is left (remount on nav).
+  const [query, setQuery] = useState("");
   const [statuses, setStatuses] = useState<PrSearchStatus[]>(loadPrSearchStatuses);
   const [projectIds, setProjectIds] = useState<string[]>([]);
   const [repositoryIds, setRepositoryIds] = useState<string[]>([]);
@@ -140,10 +137,6 @@ export function PullRequestSearch({
       sortBy,
     };
   }
-
-  useEffect(() => {
-    window.localStorage.setItem(PR_SEARCH_QUERY_STORAGE_KEY, query);
-  }, [query]);
 
   useEffect(() => {
     window.localStorage.setItem(PR_SEARCH_STATUS_STORAGE_KEY, JSON.stringify(statuses));

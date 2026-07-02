@@ -112,7 +112,6 @@ export function defaultMyReviewsGridViewState(): MyReviewsGridViewState {
     organizationId: '',
     showDrafts: false,
     sort: { key: 'creationDate', direction: 'desc' },
-    textFilter: '',
     visibleColumns: [...PR_GRID_KEYS],
   };
 }
@@ -166,8 +165,6 @@ export function loadMyReviewsGridViewState(): MyReviewsGridViewState {
       showDrafts:
         typeof parsed.showDrafts === 'boolean' ? parsed.showDrafts : fallback.showDrafts,
       sort,
-      textFilter:
-        typeof parsed.textFilter === 'string' ? parsed.textFilter : fallback.textFilter,
       visibleColumns: normalizeVisibleColumns(
         PR_GRID_KEYS,
         PR_GRID_REQUIRED_COLUMNS,
