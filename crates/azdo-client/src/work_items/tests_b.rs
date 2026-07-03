@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use url::Url;
-use wiremock::matchers::{body_json, method, path, query_param};
+use wiremock::matchers::{body_json, header, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use crate::auth::PatProvider;
@@ -46,6 +46,79 @@ async fn update_work_item_state_patches_state_field() {
 
     assert_eq!(item.id, 10);
     assert_eq!(item.fields["System.State"].as_str(), Some("Active"));
+}
+
+#[tokio::test]
+async fn create_work_item_posts_patch_document_with_patch_content_type() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/project-1/_apis/wit/workitems/$User%20Story"))
+        .and(query_param("api-version", "7.1-preview"))
+        .and(header("Content-Type", "application/json-patch+json"))
+        .and(body_json(serde_json::json!([
+            {
+                "op": "add",
+                "path": "/fields/System.Title",
+                "value": "New story"
+            },
+            {
+                "op": "add",
+                "path": "/fields/System.Tags",
+                "value": "ui; backlog"
+            }
+        ])))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": 42,
+            "fields": {
+                "System.Title": "New story",
+                "System.State": "New",
+                "System.WorkItemType": "User Story"
+            }
+        })))
+        .mount(&server)
+        .await;
+
+    let item = test_client(&server)
+        .await
+        .create_work_item(
+            "project-1",
+            "User Story",
+            &[
+                ("System.Title".to_string(), serde_json::json!("New story")),
+                ("System.Tags".to_string(), serde_json::json!("ui; backlog")),
+            ],
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(item.id, 42);
+    assert_eq!(item.fields["System.State"].as_str(), Some("New"));
+}
+
+#[tokio::test]
+async fn list_work_item_types_returns_type_names() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/project-1/_apis/wit/workitemtypes"))
+        .and(query_param("api-version", "7.1-preview"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "count": 3,
+            "value": [
+                { "name": "Bug", "referenceName": "Microsoft.VSTS.WorkItemTypes.Bug" },
+                { "name": "Task", "referenceName": "Microsoft.VSTS.WorkItemTypes.Task" },
+                { "name": "User Story", "referenceName": "Microsoft.VSTS.WorkItemTypes.UserStory" }
+            ]
+        })))
+        .mount(&server)
+        .await;
+
+    let types = test_client(&server)
+        .await
+        .list_work_item_types("project-1")
+        .await
+        .unwrap();
+
+    assert_eq!(types, vec!["Bug", "Task", "User Story"]);
 }
 
 #[tokio::test]

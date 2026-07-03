@@ -6,7 +6,7 @@ const workItemSummaryExtraFieldSchema = z.object({
   value: z.string().nullable(),
 });
 
-const workItemSummarySchema = z.object({
+export const workItemSummarySchema = z.object({
   organizationId: z.string(),
   projectId: z.string(),
   projectName: z.string(),
@@ -294,6 +294,11 @@ export type ListWorkItemFieldsInput = {
   projectId: string;
 };
 
+export type ListWorkItemTypesInput = {
+  organizationId?: string;
+  projectId: string;
+};
+
 export type ListClassificationNodesInput = {
   organizationId?: string;
   projectId: string;
@@ -400,6 +405,13 @@ export async function listWorkItemTypeStates(
   input: ListWorkItemTypeStatesInput,
 ): Promise<string[]> {
   const result = await invokeCommand("list_work_item_type_states", { input });
+  return z.array(z.string()).parse(result);
+}
+
+export async function listWorkItemTypes(
+  input: ListWorkItemTypesInput,
+): Promise<string[]> {
+  const result = await invokeCommand("list_work_item_types", { input });
   return z.array(z.string()).parse(result);
 }
 

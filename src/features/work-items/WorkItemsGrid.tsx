@@ -1,5 +1,6 @@
-import type { CSSProperties } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { commandErrorMessage } from '@/lib/azdoCommands';
+import { CreateWorkItemDialog, type CreateWorkItemDraft } from './CreateWorkItemDialog';
 import { SnoozeMenu } from '@/components/SnoozeMenu';
 import { SnoozedItemsPanel } from '@/components/SnoozedItemsPanel';
 import { ResizeHandle } from '@/components/ResizeHandle';
@@ -74,6 +75,10 @@ export function WorkItemsGrid({
     { results, loading, triageScope, activeExternalFilterCount, onClearExternalFilters, autoFocus },
     state,
   );
+
+  // Duplicate flow: the preview panel hands over a prefilled draft (D key or
+  // the header button) and the create dialog finishes the job.
+  const [duplicateDraft, setDuplicateDraft] = useState<CreateWorkItemDraft | null>(null);
 
   return (
     <div
@@ -259,6 +264,18 @@ export function WorkItemsGrid({
               previewLoading={g.previewQuery.isFetching}
               selectedItem={g.selectedItem}
               onPreviewUpdated={g.handlePreviewUpdated}
+              onDuplicate={(draft) =>
+                setDuplicateDraft({
+                  projectId: draft.projectId,
+                  workItemType: draft.workItemType ?? undefined,
+                  title: draft.title,
+                  priority: draft.priority ?? undefined,
+                  areaPath: draft.areaPath ?? undefined,
+                  iterationPath: draft.iterationPath ?? undefined,
+                  tags: draft.tags.join("; "),
+                  assignedTo: draft.assignedTo ?? undefined,
+                })
+              }
             />
           </>
         ) : null}
@@ -283,6 +300,16 @@ export function WorkItemsGrid({
           onToggle={state.toggleColumnVisibility}
           onReset={state.resetColumnVisibility}
           onClose={() => state.setColumnMenuRect(null)}
+        />
+      ) : null}
+      {duplicateDraft ? (
+        <CreateWorkItemDialog
+          initialDraft={duplicateDraft}
+          onClose={() => setDuplicateDraft(null)}
+          onCreated={(item) => {
+            state.setCopyToast(`Created #${item.id} "${item.title}"`);
+            window.setTimeout(() => state.setCopyToast(null), 3000);
+          }}
         />
       ) : null}
       {state.snoozeAnchorRect && snoozeOrganizationId ? (

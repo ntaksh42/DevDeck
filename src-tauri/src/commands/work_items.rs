@@ -4,12 +4,13 @@ use crate::app_state::{ensure_write_enabled, run_blocking, AppState};
 use crate::error::Result;
 use crate::work_items::{
     AddWorkItemCommentInput, AddWorkItemLinkInput, AssignWorkItemsInput, BulkWorkItemResult,
-    ClassificationNodesResult, DeleteWorkItemCommentInput, FetchWorkItemImageInput,
-    GetSavedQueryInput, GetWorkItemPreviewInput, ListClassificationNodesInput,
-    ListMyWorkItemsInput, ListWorkItemFieldAllowedValuesInput, ListWorkItemFieldsInput,
-    ListWorkItemProjectsInput, ListWorkItemTypeStatesInput, ListWorkItemUpdatesInput,
-    MentionCandidate, RecordAssigneeInteractionInput, RecordMentionInteractionInput,
-    RemoveWorkItemLinkInput, RunWorkItemQueryInput, SavedQueryResult, SearchWorkItemAssigneesInput,
+    ClassificationNodesResult, CreateWorkItemInput, DeleteWorkItemCommentInput,
+    FetchWorkItemImageInput, GetSavedQueryInput, GetWorkItemPreviewInput,
+    ListClassificationNodesInput, ListMyWorkItemsInput, ListWorkItemFieldAllowedValuesInput,
+    ListWorkItemFieldsInput, ListWorkItemProjectsInput, ListWorkItemTypeStatesInput,
+    ListWorkItemTypesInput, ListWorkItemUpdatesInput, MentionCandidate,
+    RecordAssigneeInteractionInput, RecordMentionInteractionInput, RemoveWorkItemLinkInput,
+    RunWorkItemQueryInput, SavedQueryResult, SearchWorkItemAssigneesInput,
     SearchWorkItemMentionsInput, SearchWorkItemsInput, SetWorkItemCommentReactionInput,
     SetWorkItemsPriorityInput, SetWorkItemsStateInput, SetWorkItemsTagsInput,
     UpdateWorkItemCommentInput, UpdateWorkItemFieldsInput, WorkItemAssigneeCandidate,
@@ -241,6 +242,25 @@ pub async fn set_work_items_tags(
 ) -> Result<Vec<BulkWorkItemResult>> {
     ensure_write_enabled(&state).await?;
     state.provider().await?.set_work_items_tags(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn create_work_item(
+    input: CreateWorkItemInput,
+    state: State<'_, AppState>,
+) -> Result<WorkItemSummary> {
+    ensure_write_enabled(&state).await?;
+    state.work_items.create_item(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn list_work_item_types(
+    input: ListWorkItemTypesInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>> {
+    state.work_items.list_types(input).await
 }
 
 #[tauri::command]

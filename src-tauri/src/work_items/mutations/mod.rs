@@ -6,6 +6,7 @@
 //! than being silently dropped, so the frontend can notify the user.
 
 mod comments;
+mod create;
 
 use std::collections::HashMap;
 

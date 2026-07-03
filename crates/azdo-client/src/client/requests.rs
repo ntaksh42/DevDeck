@@ -216,6 +216,37 @@ impl AdoClient {
         self.post_json_to_url(url, query, body).await
     }
 
+    /// POST with an explicit Content-Type. Work item creation requires
+    /// `application/json-patch+json` even though the verb is POST.
+    pub(crate) async fn post_json_with_content_type<B: Serialize + ?Sized, T: DeserializeOwned>(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        content_type: &str,
+        body: &B,
+    ) -> Result<T> {
+        let url = self
+            .base_url
+            .join(path)
+            .map_err(|e| AdoError::Auth(e.to_string()))?;
+        self.send_with_retry(
+            "POST",
+            url.as_str(),
+            false,
+            || {
+                // Content-Type must be set before `.json()`: reqwest only adds
+                // its own application/json header when none is present.
+                self.http
+                    .post(url.clone())
+                    .query(query)
+                    .header("Content-Type", content_type)
+                    .json(body)
+            },
+            |resp| async move { decode_json(resp).await },
+        )
+        .await
+    }
+
     /// POSTs to the Almsearch service host (Code/Work Item Search), which lives
     /// on a different subdomain than the core REST API.
     pub(crate) async fn post_json_almsearch<B: Serialize + ?Sized, T: DeserializeOwned>(

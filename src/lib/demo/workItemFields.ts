@@ -75,6 +75,10 @@ export function demoListWorkItemTypeStates(input?: ListWorkItemTypeStatesInput):
   return DEMO_STATES_BY_TYPE[input.workItemType] ?? DEMO_STATES_FALLBACK;
 }
 
+export function demoListWorkItemTypes(): string[] {
+  return Object.keys(DEMO_STATES_BY_TYPE);
+}
+
 export function demoListWorkItemFields(_input?: ListWorkItemFieldsInput): WorkItemFieldOption[] {
   return [
     { name: "Release Train", referenceName: "Custom.ReleaseTrain", fieldType: "string", custom: true },
