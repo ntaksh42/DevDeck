@@ -6,7 +6,6 @@ import {
   listPipelineApprovals,
   listPipelineDefinitions,
   listPipelineProjects,
-  queuePipelineRun,
   updatePipelineApproval,
 } from "@/lib/azdoCommands";
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
@@ -26,6 +25,9 @@ import {
   removeSubscription,
   savePipelineSubscriptions,
 } from "./pipelineSubscriptionsStorage";
+import { useQueueRunForm } from "./useQueueRunForm";
+
+export { toSourceBranchRef } from "./useQueueRunForm";
 
 const DEFAULT_PIPELINE_PREVIEW_WIDTH = 460;
 const MIN_PIPELINE_PREVIEW_WIDTH = 320;
@@ -160,52 +162,32 @@ export function PipelinesView() {
     persistSubscriptions(result.subscriptions);
   }
 
-  // Queue a new pipeline run (#397): pick the selected definition, a branch, and
-  // optional runtime parameters.
-  const [queueOpen, setQueueOpen] = useState(false);
-  const [queueBranch, setQueueBranch] = useState("main");
-  const [queueParams, setQueueParams] = useState("");
-  const [queueError, setQueueError] = useState<string | null>(null);
-  const [queueNotice, setQueueNotice] = useState<string | null>(null);
   const canQueue = definitionId != null && !!selectedProject && !!selectedDefinition;
-  const queueMutation = useMutation({
-    mutationFn: queuePipelineRun,
-    onSuccess: (run) => {
-      setQueueError(null);
-      setQueueOpen(false);
-      setQueueNotice(`Queued ${selectedDefinition?.name ?? "pipeline"} #${run.buildId}.`);
-      window.setTimeout(() => setQueueNotice(null), 4000);
-      void queryClient.invalidateQueries({ queryKey: ["pipelineSubscriptionHistory"] });
-    },
-    onError: (error) => setQueueError(commandErrorMessage(error)),
+  const {
+    queueOpen,
+    setQueueOpen,
+    queueBranch,
+    setQueueBranch,
+    queueParams,
+    setQueueParams,
+    queueParamValues,
+    setQueueParamValues,
+    queueError,
+    setQueueError,
+    queueNotice,
+    showQueueBranchSelect,
+    queueBranchOptions,
+    queueBranchesQuery,
+    overridableVariables,
+    queueMutation,
+    submitQueue,
+  } = useQueueRunForm({
+    organizationId: selectedOrganizationId,
+    projectId,
+    definitionId,
+    canQueue,
+    definitionName: selectedDefinition?.name,
   });
-
-  function submitQueue() {
-    if (!canQueue || definitionId == null) return;
-    const branch = queueBranch.trim();
-    if (!branch) {
-      setQueueError("Enter a branch.");
-      return;
-    }
-    const parameters: Record<string, string> = {};
-    for (const line of queueParams.split("\n")) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      const eq = trimmed.indexOf("=");
-      if (eq <= 0) {
-        setQueueError(`Parameters must be name=value (got "${trimmed}").`);
-        return;
-      }
-      parameters[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1).trim();
-    }
-    queueMutation.mutate({
-      organizationId: selectedOrganizationId,
-      projectId,
-      definitionId,
-      sourceBranch: branch,
-      parameters: Object.keys(parameters).length > 0 ? parameters : undefined,
-    });
-  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -284,16 +266,54 @@ export function PipelinesView() {
             </p>
             <label className="grid gap-1">
               <span className="text-xs text-muted-foreground">Branch</span>
-              <input
-                value={queueBranch}
-                onChange={(event) => setQueueBranch(event.target.value)}
-                placeholder="main"
-                aria-label="Branch"
-                className="h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-              />
+              {showQueueBranchSelect ? (
+                <FilterableSelect
+                  ariaLabel="Branch"
+                  value={queueBranch}
+                  options={queueBranchOptions}
+                  disabled={queueBranchesQuery.isLoading}
+                  placeholder={queueBranchesQuery.isLoading ? "Loading branches…" : "Select a branch"}
+                  allowCustomValue
+                  onChange={setQueueBranch}
+                />
+              ) : (
+                <input
+                  value={queueBranch}
+                  onChange={(event) => setQueueBranch(event.target.value)}
+                  placeholder="main"
+                  aria-label="Branch"
+                  className="h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+              )}
             </label>
+            {overridableVariables.length > 0 ? (
+              <div className="grid gap-2">
+                {overridableVariables.map((variable) => (
+                  <label key={variable.name} className="grid gap-1">
+                    <span className="text-xs text-muted-foreground">{variable.name}</span>
+                    <input
+                      type={variable.isSecret ? "password" : "text"}
+                      value={queueParamValues[variable.name] ?? ""}
+                      onChange={(event) =>
+                        setQueueParamValues((prev) => ({
+                          ...prev,
+                          [variable.name]: event.target.value,
+                        }))
+                      }
+                      placeholder={variable.isSecret ? "Secret value" : undefined}
+                      aria-label={variable.name}
+                      className="h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </label>
+                ))}
+              </div>
+            ) : null}
             <label className="grid gap-1">
-              <span className="text-xs text-muted-foreground">Parameters (one name=value per line, optional)</span>
+              <span className="text-xs text-muted-foreground">
+                {overridableVariables.length > 0
+                  ? "Additional parameters (one name=value per line, optional)"
+                  : "Parameters (one name=value per line, optional)"}
+              </span>
               <textarea
                 value={queueParams}
                 onChange={(event) => setQueueParams(event.target.value)}

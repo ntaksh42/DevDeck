@@ -108,6 +108,37 @@ pub struct UpdatePipelineApprovalInput {
     pub comment: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdatePipelineDefinitionInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub definition_id: i64,
+    /// The complete desired set of non-secret variables (adds, changes, and
+    /// removes are expressed by what is present/absent here). Secret
+    /// variables are never included and cannot be changed through this
+    /// command.
+    pub variables: Vec<PipelineVariableUpdate>,
+    /// `None` leaves the definition's triggers untouched.
+    pub ci_trigger: Option<PipelineCiTriggerUpdate>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PipelineVariableUpdate {
+    pub name: String,
+    pub value: Option<String>,
+    pub allow_override: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PipelineCiTriggerUpdate {
+    pub enabled: bool,
+    pub branch_filters: Vec<String>,
+    pub path_filters: Vec<String>,
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PipelineApprovalSummary {
@@ -220,4 +251,17 @@ pub struct PipelineDefinitionDetail {
     pub name: String,
     pub triggers: Vec<PipelineTrigger>,
     pub variables: Vec<PipelineVariable>,
+    pub repository: Option<PipelineDefinitionRepository>,
+}
+
+/// The repository a pipeline definition builds from, when Azure DevOps
+/// reports one. Only `"TfsGit"` repositories support the branch picker; other
+/// types (e.g. `"GitHub"`) fall back to free-text branch entry.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PipelineDefinitionRepository {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub repository_type: String,
 }

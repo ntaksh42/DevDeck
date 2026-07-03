@@ -10,6 +10,7 @@ use super::convert::{
     approval_to_summary, build_to_summary, definition_to_detail, normalize_optional,
     resolve_requested_for, timeline_to_nodes,
 };
+use super::definition_update::apply_definition_update;
 use super::types::*;
 
 const RUN_LIST_TOP: u32 = 50;
@@ -174,6 +175,30 @@ impl PipelineService {
             .get_build_definition(&project.id, input.definition_id)
             .await?;
         Ok(definition_to_detail(definition))
+    }
+
+    /// Updates a pipeline definition's non-secret variables and, when
+    /// provided, its CI trigger. Fetches the raw definition, applies the
+    /// requested changes in place (preserving secret variables and
+    /// unaffected triggers), and PUTs the full document back.
+    pub async fn update_definition(
+        &self,
+        input: UpdatePipelineDefinitionInput,
+    ) -> Result<PipelineDefinitionDetail> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
+        let mut raw = client
+            .get_build_definition_raw(&project.id, input.definition_id)
+            .await?;
+        apply_definition_update(&mut raw, &input.variables, input.ci_trigger.as_ref())?;
+        let updated = client
+            .update_build_definition(&project.id, input.definition_id, &raw)
+            .await?;
+        Ok(definition_to_detail(updated))
     }
 
     pub async fn get_run_log_tail(

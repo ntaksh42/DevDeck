@@ -37,6 +37,7 @@ use crate::pipelines::{
     PipelineApprovalSummary, PipelineArtifact, PipelineDefinitionDetail, PipelineDefinitionOption,
     PipelineLogTail, PipelineProjectOption, PipelineRunDetail, PipelineRunSummary,
     QueuePipelineRunInput, RerunPipelineRunInput, UpdatePipelineApprovalInput,
+    UpdatePipelineDefinitionInput,
 };
 use crate::pr_review::{
     DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
@@ -250,6 +251,10 @@ pub(crate) trait Provider: Send + Sync {
     async fn get_pipeline_definition(
         &self,
         input: GetPipelineDefinitionInput,
+    ) -> Result<PipelineDefinitionDetail>;
+    async fn update_pipeline_definition(
+        &self,
+        input: UpdatePipelineDefinitionInput,
     ) -> Result<PipelineDefinitionDetail>;
     async fn get_pipeline_run_log_tail(
         &self,
