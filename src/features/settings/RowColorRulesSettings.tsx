@@ -80,7 +80,7 @@ export function RowColorRulesSettings() {
           rules.map((rule, index) => (
             <div
               key={rule.id}
-              className="flex flex-wrap items-center gap-2 rounded-md border border-border p-2"
+              className="relative flex flex-wrap items-center gap-2 rounded-md border border-border p-2"
             >
               <label className="sr-only" htmlFor={`field-${rule.id}`}>
                 Field

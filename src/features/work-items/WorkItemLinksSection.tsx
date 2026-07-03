@@ -103,7 +103,10 @@ export function WorkItemLinksSection({ preview }: { preview: WorkItemPreview }) 
           </div>
         ))}
       </div>
-      <div className="mt-1.5 flex items-center gap-1">
+      {/* relative: contain the absolutely-positioned sr-only label; without a
+          positioned ancestor it escapes every overflow clip and stretches the
+          document scroll area (window scrollbar bug). */}
+      <div className="relative mt-1.5 flex items-center gap-1">
         <label className="sr-only" htmlFor="add-link-type">
           Link type
         </label>
