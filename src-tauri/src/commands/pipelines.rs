@@ -9,6 +9,7 @@ use crate::pipelines::{
     PipelineApprovalSummary, PipelineArtifact, PipelineDefinitionDetail, PipelineDefinitionOption,
     PipelineLogTail, PipelineProjectOption, PipelineRunDetail, PipelineRunSummary,
     QueuePipelineRunInput, RerunPipelineRunInput, UpdatePipelineApprovalInput,
+    UpdatePipelineDefinitionInput,
 };
 
 #[tauri::command]
@@ -67,6 +68,20 @@ pub async fn get_pipeline_definition(
     state: State<'_, AppState>,
 ) -> Result<PipelineDefinitionDetail> {
     state.provider().await?.get_pipeline_definition(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn update_pipeline_definition(
+    input: UpdatePipelineDefinitionInput,
+    state: State<'_, AppState>,
+) -> Result<PipelineDefinitionDetail> {
+    ensure_write_enabled(&state).await?;
+    state
+        .provider()
+        .await?
+        .update_pipeline_definition(input)
+        .await
 }
 
 #[tauri::command]

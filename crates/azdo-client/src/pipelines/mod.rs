@@ -6,6 +6,6 @@ mod tests;
 
 pub use types::{
     Approval, ApprovalStep, Build, BuildArtifact, BuildArtifactResource, BuildDefinitionDetail,
-    BuildDefinitionRef, BuildIdentityRef, BuildListCriteria, BuildLogTail, DefinitionTrigger,
-    DefinitionVariable, Timeline, TimelineLogRef, TimelineRecord,
+    BuildDefinitionRef, BuildDefinitionRepository, BuildIdentityRef, BuildListCriteria,
+    BuildLogTail, DefinitionTrigger, DefinitionVariable, Timeline, TimelineLogRef, TimelineRecord,
 };

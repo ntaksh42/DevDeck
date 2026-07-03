@@ -13,6 +13,7 @@ import {
   demoPipelineRunDetail,
   demoPipelineRuns,
   demoPipelineRunsFiltered,
+  demoUpdatePipelineDefinition,
 } from "@/lib/demo/pipelines";
 import {
   demoCommitActivity,
@@ -57,6 +58,18 @@ export function dispatchExt(command: string, args: unknown): unknown {
     case "get_pipeline_definition": {
       const input = (args as { input?: { definitionId?: number } } | undefined)?.input;
       return demoPipelineDefinitionDetail(input?.definitionId ?? 1);
+    }
+    case "update_pipeline_definition": {
+      const input = (
+        args as {
+          input?: {
+            definitionId?: number;
+            variables?: { name: string; value?: string | null; allowOverride: boolean }[];
+            ciTrigger?: { enabled: boolean; branchFilters: string[]; pathFilters: string[] } | null;
+          };
+        } | undefined
+      )?.input;
+      return demoUpdatePipelineDefinition(input ?? {});
     }
     case "get_pipeline_run_log_tail":
       return {

@@ -111,4 +111,69 @@ describe("FilterableSelect", () => {
     fireEvent.keyDown(input, { key: "ArrowDown" }); // CI -> Nightly
     expect(input.getAttribute("aria-activedescendant")).toBe(optionEls[1].id);
   });
+
+  it("without allowCustomValue, Enter on unmatched text does not commit", () => {
+    const { input, onChange } = setup();
+    fireEvent.mouseDown(input);
+    fireEvent.change(input, { target: { value: "release/9.9" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.queryByRole("listbox")).toBeTruthy();
+  });
+
+  describe("allowCustomValue", () => {
+    function setupCustom(value = "") {
+      const onChange = vi.fn();
+      render(
+        <FilterableSelect
+          ariaLabel="Branch"
+          value={value}
+          options={options}
+          onChange={onChange}
+          allowCustomValue
+        />,
+      );
+      const input = screen.getByRole("combobox", { name: "Branch" });
+      return { input, onChange };
+    }
+
+    it("commits typed text that matches no option on Enter", () => {
+      const { input, onChange } = setupCustom();
+      fireEvent.mouseDown(input);
+      fireEvent.change(input, { target: { value: "release/9.9" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(onChange).toHaveBeenCalledWith("release/9.9");
+      expect(screen.queryByRole("listbox")).toBeNull();
+    });
+
+    it("commits typed text when a click lands outside the widget", () => {
+      const { input, onChange } = setupCustom();
+      fireEvent.mouseDown(input);
+      fireEvent.change(input, { target: { value: "hotfix/1" } });
+      fireEvent.pointerDown(document.body);
+      expect(onChange).toHaveBeenCalledWith("hotfix/1");
+    });
+
+    it("still picks a matching option instead of the raw text", () => {
+      const { input, onChange } = setupCustom();
+      fireEvent.mouseDown(input);
+      fireEvent.change(input, { target: { value: "nightly" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(onChange).toHaveBeenCalledWith("2");
+    });
+
+    it("closes on Escape without committing the typed text", () => {
+      const { input, onChange } = setupCustom();
+      fireEvent.mouseDown(input);
+      fireEvent.change(input, { target: { value: "release/9.9" } });
+      fireEvent.keyDown(input, { key: "Escape" });
+      expect(onChange).not.toHaveBeenCalled();
+      expect(screen.queryByRole("listbox")).toBeNull();
+    });
+
+    it("displays a custom value that isn't in the option list", () => {
+      const { input } = setupCustom("release/9.9");
+      expect((input as HTMLInputElement).value).toBe("release/9.9");
+    });
+  });
 });

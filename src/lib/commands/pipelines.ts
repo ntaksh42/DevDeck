@@ -92,11 +92,21 @@ const pipelineVariableSchema = z.object({
 });
 export type PipelineVariable = z.infer<typeof pipelineVariableSchema>;
 
+const pipelineDefinitionRepositorySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.string(),
+});
+export type PipelineDefinitionRepository = z.infer<
+  typeof pipelineDefinitionRepositorySchema
+>;
+
 const pipelineDefinitionDetailSchema = z.object({
   definitionId: z.number(),
   name: z.string(),
   triggers: z.array(pipelineTriggerSchema),
   variables: z.array(pipelineVariableSchema),
+  repository: pipelineDefinitionRepositorySchema.nullable(),
 });
 export type PipelineDefinitionDetail = z.infer<typeof pipelineDefinitionDetailSchema>;
 
@@ -225,4 +235,30 @@ export async function updatePipelineApproval(input: {
 }): Promise<PipelineApprovalSummary[]> {
   const result = await invokeCommand("update_pipeline_approval", { input });
   return pipelineApprovalSummariesSchema.parse(result);
+}
+
+export type UpdatePipelineDefinitionVariableInput = {
+  name: string;
+  value?: string | null;
+  allowOverride: boolean;
+};
+
+export type UpdatePipelineDefinitionCiTriggerInput = {
+  enabled: boolean;
+  branchFilters: string[];
+  pathFilters: string[];
+};
+
+export async function updatePipelineDefinition(input: {
+  organizationId?: string;
+  projectId: string;
+  definitionId: number;
+  /** The complete desired set of non-secret variables; secret variables are
+   * never included here and cannot be changed through this command. */
+  variables: UpdatePipelineDefinitionVariableInput[];
+  /** `undefined`/`null` leaves the definition's triggers untouched. */
+  ciTrigger?: UpdatePipelineDefinitionCiTriggerInput | null;
+}): Promise<PipelineDefinitionDetail> {
+  const result = await invokeCommand("update_pipeline_definition", { input });
+  return pipelineDefinitionDetailSchema.parse(result);
 }

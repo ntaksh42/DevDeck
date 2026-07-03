@@ -212,6 +212,55 @@ describe("PipelineSubscriptionsBoard primary grid marker", () => {
     });
   });
 
+  it("moves a running watched pipeline to the top while preserving relative order otherwise", async () => {
+    // Release (def 3) is watched last but is currently running; it must
+    // display first, ahead of CI and Nightly, which keep their watch order.
+    const threeSubs: PipelineSubscription[] = [
+      ...subscriptions,
+      {
+        organizationId: "contoso",
+        projectId: "demo-project",
+        projectName: "Demo Project",
+        definitionId: 3,
+        definitionName: "Release",
+      },
+    ];
+    listPipelineRuns.mockImplementation(async (input: { definitionId: number }) => {
+      if (input.definitionId === 3) {
+        return [run({ buildId: 303, definitionId: 3, definitionName: "Release", status: "inProgress" })];
+      }
+      if (input.definitionId === 1) {
+        return [run({ buildId: 101, definitionId: 1, definitionName: "CI" })];
+      }
+      return [run({ buildId: 202, definitionId: 2, definitionName: "Nightly" })];
+    });
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <PipelineSubscriptionsBoard
+          organizationId="contoso"
+          subscriptions={threeSubs}
+          selectedBuildId={null}
+          onSelectRun={() => {}}
+          onRemove={() => {}}
+        />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByText("1 running");
+
+    await waitFor(() => {
+      const names = Array.from(
+        document.querySelectorAll<HTMLElement>("button[aria-expanded]"),
+      ).map((button) => button.textContent ?? "");
+      expect(names).toHaveLength(3);
+      expect(names[0]).toContain("Release");
+      expect(names[1]).toContain("CI");
+      expect(names[2]).toContain("Nightly");
+    });
+  });
+
   it("opens the focused run in the browser on Ctrl+Enter", async () => {
     renderBoard(null);
 

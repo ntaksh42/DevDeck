@@ -54,6 +54,7 @@ export const writeCommands = new Set([
   "queue_pipeline_run",
   "cancel_pipeline_run",
   "update_pipeline_approval",
+  "update_pipeline_definition",
 ]);
 
 export const DEFAULT_DEMO_SETTINGS: AppSettings = {

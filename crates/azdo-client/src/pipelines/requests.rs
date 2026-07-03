@@ -97,6 +97,35 @@ impl AdoClient {
         Ok(build_definition_detail(raw))
     }
 
+    /// Fetches a build definition as raw JSON. Updating a definition requires
+    /// PUTting back the full document (including fields this client does not
+    /// model), so callers that need to mutate a definition start from this raw
+    /// form rather than the typed `BuildDefinitionDetail`.
+    pub async fn get_build_definition_raw(
+        &self,
+        project_id: &str,
+        definition_id: i64,
+    ) -> Result<serde_json::Value> {
+        let path = format!("{project_id}/_apis/build/definitions/{definition_id}");
+        self.get_json(&path, &[("api-version", "7.1")]).await
+    }
+
+    /// PUTs a full build definition document back (typically fetched via
+    /// `get_build_definition_raw` and mutated in place, `revision` included
+    /// for the API's optimistic-concurrency check).
+    pub async fn update_build_definition(
+        &self,
+        project_id: &str,
+        definition_id: i64,
+        body: &serde_json::Value,
+    ) -> Result<BuildDefinitionDetail> {
+        let path = format!("{project_id}/_apis/build/definitions/{definition_id}");
+        let raw: RawBuildDefinition = self
+            .put_json(&path, &[("api-version", "7.1")], body)
+            .await?;
+        Ok(build_definition_detail(raw))
+    }
+
     pub async fn get_build_log_tail(
         &self,
         project_id: &str,

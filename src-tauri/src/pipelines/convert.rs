@@ -1,5 +1,6 @@
 use azdo_client::{
-    Approval, Build, BuildDefinitionDetail, DefinitionTrigger, DefinitionVariable, Timeline,
+    Approval, Build, BuildDefinitionDetail, BuildDefinitionRepository, DefinitionTrigger,
+    DefinitionVariable, Timeline,
 };
 
 use crate::commits::encode_path_segment;
@@ -112,6 +113,15 @@ pub(super) fn definition_to_detail(definition: BuildDefinitionDetail) -> Pipelin
             .into_iter()
             .map(variable_to_ipc)
             .collect(),
+        repository: definition.repository.map(repository_to_ipc),
+    }
+}
+
+fn repository_to_ipc(repository: BuildDefinitionRepository) -> PipelineDefinitionRepository {
+    PipelineDefinitionRepository {
+        id: repository.id,
+        name: repository.name,
+        repository_type: repository.repository_type,
     }
 }
 
@@ -215,6 +225,11 @@ mod tests {
                     allow_override: false,
                 },
             ],
+            repository: Some(BuildDefinitionRepository {
+                id: "repo-1".to_string(),
+                name: "MyRepo".to_string(),
+                repository_type: "TfsGit".to_string(),
+            }),
         });
 
         assert_eq!(detail.definition_id, 12);
@@ -231,6 +246,9 @@ mod tests {
             .unwrap();
         assert!(secret.is_secret);
         assert_eq!(secret.value, None);
+        let repository = detail.repository.as_ref().unwrap();
+        assert_eq!(repository.id, "repo-1");
+        assert_eq!(repository.repository_type, "TfsGit");
     }
 
     #[test]

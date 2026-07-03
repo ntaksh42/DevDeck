@@ -181,6 +181,11 @@ async fn get_build_definition_parses_triggers_and_sorts_variables() {
                 "Zeta": { "value": "last", "allowOverride": true },
                 "Alpha": { "value": "first" },
                 "ApiKey": { "isSecret": true }
+            },
+            "repository": {
+                "id": "repo-1",
+                "name": "MyRepo",
+                "type": "TfsGit"
             }
         })))
         .mount(&server)
@@ -193,6 +198,10 @@ async fn get_build_definition_parses_triggers_and_sorts_variables() {
         .unwrap();
 
     assert_eq!(detail.id, 12);
+    let repository = detail.repository.as_ref().unwrap();
+    assert_eq!(repository.id, "repo-1");
+    assert_eq!(repository.name, "MyRepo");
+    assert_eq!(repository.repository_type, "TfsGit");
     assert_eq!(detail.triggers.len(), 2);
     assert_eq!(
         detail.triggers[0].trigger_type.as_deref(),
@@ -215,6 +224,107 @@ async fn get_build_definition_parses_triggers_and_sorts_variables() {
 
     let overridable = detail.variables.iter().find(|v| v.name == "Zeta").unwrap();
     assert!(overridable.allow_override);
+}
+
+#[tokio::test]
+async fn get_build_definition_repository_absent_when_not_reported() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/project-1/_apis/build/definitions/12"))
+        .and(query_param("api-version", "7.1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": 12,
+            "name": "CI"
+        })))
+        .mount(&server)
+        .await;
+
+    let detail = test_client(&server)
+        .await
+        .get_build_definition("project-1", 12)
+        .await
+        .unwrap();
+
+    assert!(detail.repository.is_none());
+}
+
+#[tokio::test]
+async fn get_build_definition_raw_returns_full_json() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/project-1/_apis/build/definitions/12"))
+        .and(query_param("api-version", "7.1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": 12,
+            "name": "CI",
+            "revision": 5,
+            "triggers": [],
+            "variables": {
+                "ApiKey": { "isSecret": true }
+            }
+        })))
+        .mount(&server)
+        .await;
+
+    let raw = test_client(&server)
+        .await
+        .get_build_definition_raw("project-1", 12)
+        .await
+        .unwrap();
+
+    assert_eq!(raw["id"], serde_json::json!(12));
+    assert_eq!(raw["revision"], serde_json::json!(5));
+    assert_eq!(
+        raw["variables"]["ApiKey"]["isSecret"],
+        serde_json::json!(true)
+    );
+}
+
+#[tokio::test]
+async fn update_build_definition_puts_full_body_with_revision() {
+    let server = MockServer::start().await;
+    Mock::given(method("PUT"))
+        .and(path("/project-1/_apis/build/definitions/12"))
+        .and(query_param("api-version", "7.1"))
+        .and(body_json(serde_json::json!({
+            "id": 12,
+            "name": "CI",
+            "revision": 5,
+            "triggers": [],
+            "variables": {
+                "BuildConfiguration": { "value": "Release", "allowOverride": true }
+            }
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": 12,
+            "name": "CI",
+            "revision": 6,
+            "triggers": [],
+            "variables": {
+                "BuildConfiguration": { "value": "Release", "allowOverride": true }
+            }
+        })))
+        .mount(&server)
+        .await;
+
+    let body = serde_json::json!({
+        "id": 12,
+        "name": "CI",
+        "revision": 5,
+        "triggers": [],
+        "variables": {
+            "BuildConfiguration": { "value": "Release", "allowOverride": true }
+        }
+    });
+    let detail = test_client(&server)
+        .await
+        .update_build_definition("project-1", 12, &body)
+        .await
+        .unwrap();
+
+    assert_eq!(detail.id, 12);
+    assert_eq!(detail.variables[0].name, "BuildConfiguration");
+    assert_eq!(detail.variables[0].value.as_deref(), Some("Release"));
 }
 
 #[tokio::test]

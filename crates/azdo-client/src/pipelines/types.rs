@@ -19,6 +19,18 @@ pub struct BuildDefinitionDetail {
     pub name: String,
     pub triggers: Vec<DefinitionTrigger>,
     pub variables: Vec<DefinitionVariable>,
+    /// The Git repository the definition builds from, when the API reports
+    /// one (absent for some YAML pipeline shapes).
+    pub repository: Option<BuildDefinitionRepository>,
+}
+
+/// The repository a build definition is configured against.
+#[derive(Debug, Clone)]
+pub struct BuildDefinitionRepository {
+    pub id: String,
+    pub name: String,
+    /// e.g. `"TfsGit"`, `"GitHub"`.
+    pub repository_type: String,
 }
 
 #[derive(Debug, Clone)]
@@ -45,6 +57,17 @@ pub(super) struct RawBuildDefinition {
     triggers: Vec<RawTrigger>,
     #[serde(default)]
     variables: HashMap<String, RawVariable>,
+    #[serde(default)]
+    repository: Option<RawRepository>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawRepository {
+    id: String,
+    name: String,
+    #[serde(rename = "type")]
+    repository_type: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -199,10 +222,16 @@ pub(super) fn build_definition_detail(raw: RawBuildDefinition) -> BuildDefinitio
         })
         .collect();
     variables.sort_by(|a, b| a.name.cmp(&b.name));
+    let repository = raw.repository.map(|repository| BuildDefinitionRepository {
+        id: repository.id,
+        name: repository.name,
+        repository_type: repository.repository_type,
+    });
     BuildDefinitionDetail {
         id: raw.id,
         name: raw.name,
         triggers,
         variables,
+        repository,
     }
 }

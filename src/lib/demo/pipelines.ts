@@ -1,4 +1,8 @@
-import type { PipelineApprovalSummary } from "@/lib/azdoCommands";
+import type {
+  PipelineApprovalSummary,
+  PipelineDefinitionDetail,
+  PipelineVariable,
+} from "@/lib/azdoCommands";
 
 export function demoPipelineProjects() {
   return [
@@ -135,7 +139,11 @@ export function demoPipelineRunDetail(buildId: number) {
   };
 }
 
-export function demoPipelineDefinitionDetail(definitionId: number) {
+// Definitions are cached per session so edits made through
+// `demoUpdatePipelineDefinition` remain visible on subsequent reads.
+const demoDefinitionStore = new Map<number, PipelineDefinitionDetail>();
+
+function buildDemoPipelineDefinitionDetail(definitionId: number): PipelineDefinitionDetail {
   if (definitionId === 2) {
     return {
       definitionId: 2,
@@ -155,6 +163,9 @@ export function demoPipelineDefinitionDetail(definitionId: number) {
           allowOverride: true,
         },
       ],
+      // Demo mode has no repository catalog to resolve branches against, so
+      // the Queue run branch field falls back to free-text entry.
+      repository: null,
     };
   }
   return {
@@ -186,7 +197,57 @@ export function demoPipelineDefinitionDetail(definitionId: number) {
         allowOverride: false,
       },
     ],
+    repository: null,
   };
+}
+
+export function demoPipelineDefinitionDetail(definitionId: number): PipelineDefinitionDetail {
+  const existing = demoDefinitionStore.get(definitionId);
+  if (existing) {
+    return existing;
+  }
+  const created = buildDemoPipelineDefinitionDetail(definitionId);
+  demoDefinitionStore.set(definitionId, created);
+  return created;
+}
+
+export function demoUpdatePipelineDefinition(input: {
+  definitionId?: number;
+  variables?: { name: string; value?: string | null; allowOverride: boolean }[];
+  ciTrigger?: { enabled: boolean; branchFilters: string[]; pathFilters: string[] } | null;
+}): PipelineDefinitionDetail {
+  const definitionId = input.definitionId ?? 1;
+  const current = demoPipelineDefinitionDetail(definitionId);
+
+  const secretVariables = current.variables.filter((variable) => variable.isSecret);
+  const nextVariables: PipelineVariable[] = [
+    ...secretVariables,
+    ...(input.variables ?? []).map((variable) => ({
+      name: variable.name,
+      value: variable.value ?? null,
+      isSecret: false,
+      allowOverride: variable.allowOverride,
+    })),
+  ].sort((a, b) => a.name.localeCompare(b.name));
+
+  let nextTriggers = current.triggers;
+  if (input.ciTrigger) {
+    const { enabled, branchFilters, pathFilters } = input.ciTrigger;
+    const otherTriggers = current.triggers.filter(
+      (trigger) => trigger.triggerType !== "continuousIntegration",
+    );
+    nextTriggers = enabled
+      ? [...otherTriggers, { triggerType: "continuousIntegration", branchFilters, pathFilters }]
+      : otherTriggers;
+  }
+
+  const updated: PipelineDefinitionDetail = {
+    ...current,
+    variables: nextVariables,
+    triggers: nextTriggers,
+  };
+  demoDefinitionStore.set(definitionId, updated);
+  return updated;
 }
 
 export function demoPipelineRunsFiltered(input?: {

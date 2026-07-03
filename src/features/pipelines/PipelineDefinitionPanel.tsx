@@ -1,10 +1,13 @@
+import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Pencil } from "lucide-react";
 import {
   commandErrorMessage,
   getPipelineDefinition,
   type PipelineTrigger,
   type PipelineVariable,
 } from "@/lib/azdoCommands";
+import { PipelineDefinitionEditForm } from "./PipelineDefinitionEditForm";
 
 const TRIGGER_LABELS: Record<string, string> = {
   continuousIntegration: "Continuous integration",
@@ -101,13 +104,36 @@ export function PipelineDefinitionPanel({
 
   const detail = definitionQuery.data;
 
+  const [editing, setEditing] = useState(false);
+  const editButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  function stopEditing() {
+    setEditing(false);
+    window.setTimeout(() => editButtonRef.current?.focus(), 0);
+  }
+
   return (
     <aside className="flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-card">
       <div className="border-b border-border p-3">
-        <h2 className="truncate text-sm font-semibold" title={definitionName}>
-          {definitionName}
-        </h2>
-        <p className="truncate text-xs text-muted-foreground">Pipeline definition</p>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-semibold" title={definitionName}>
+              {definitionName}
+            </h2>
+            <p className="truncate text-xs text-muted-foreground">Pipeline definition</p>
+          </div>
+          {detail && !editing ? (
+            <button
+              type="button"
+              ref={editButtonRef}
+              onClick={() => setEditing(true)}
+              className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border bg-card px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+              Edit
+            </button>
+          ) : null}
+        </div>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-3">
         {definitionQuery.isLoading && (
@@ -118,7 +144,17 @@ export function PipelineDefinitionPanel({
             {commandErrorMessage(definitionQuery.error)}
           </p>
         )}
-        {detail && (
+        {detail && editing ? (
+          <PipelineDefinitionEditForm
+            organizationId={organizationId}
+            projectId={projectId}
+            definitionId={definitionId}
+            detail={detail}
+            onCancel={stopEditing}
+            onSaved={stopEditing}
+          />
+        ) : null}
+        {detail && !editing && (
           <>
             <section className="flex flex-col gap-2">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

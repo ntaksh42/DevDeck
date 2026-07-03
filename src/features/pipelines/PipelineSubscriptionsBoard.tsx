@@ -128,6 +128,27 @@ export function PipelineSubscriptionsBoard({
     [orgSubscriptions, queries],
   );
 
+  // Surface running pipelines at a glance: pair each subscription with its run
+  // query (by original index, before any reordering) so the index alignment
+  // between orgSubscriptions and queries never breaks, then stable-sort so
+  // running pipelines float to the top while preserving the watch order
+  // within each group. Array.prototype.sort is stable per spec (ES2019+).
+  const boardRows = useMemo(
+    () =>
+      orgSubscriptions
+        .map((sub, index) => {
+          const key = subscriptionKey(sub.organizationId, sub.projectId, sub.definitionId);
+          const query = queries[index];
+          const runs = query?.data ?? [];
+          const latest = runs[0];
+          const visual = pipelineRunVisual(latest?.status, latest?.result);
+          const isRunning = latest != null && visual.tone === "active";
+          return { sub, key, query, runs, latest, visual, isRunning };
+        })
+        .sort((a, b) => Number(b.isRunning) - Number(a.isRunning)),
+    [orgSubscriptions, queries],
+  );
+
   function toggle(key: string) {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -275,13 +296,7 @@ export function PipelineSubscriptionsBoard({
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {orgSubscriptions.map((sub, index) => {
-          const key = subscriptionKey(sub.organizationId, sub.projectId, sub.definitionId);
-          const query = queries[index];
-          const runs = query?.data ?? [];
-          const latest = runs[0];
-          const visual = pipelineRunVisual(latest?.status, latest?.result);
-          const isRunning = latest != null && visual.tone === "active";
+        {boardRows.map(({ sub, key, query, runs, latest, visual, isRunning }) => {
           const isOpen = expanded.has(key);
           // Roving tabindex: the selected run is the Tab entry point, falling
           // back to the first row when the selection is in another pipeline.

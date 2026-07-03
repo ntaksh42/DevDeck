@@ -13,6 +13,10 @@ export type SelectOption = { value: string; label: string };
 
 // A select that also accepts free typing to narrow the option list. Used for
 // the Project and Pipeline pickers, which can grow long.
+//
+// `allowCustomValue` additionally lets the typed text itself be committed when
+// it doesn't match any option (e.g. a branch name not yet fetched into the
+// list). It is opt-in so existing pick-from-list-only callers are unaffected.
 export function FilterableSelect({
   value,
   options,
@@ -20,6 +24,7 @@ export function FilterableSelect({
   disabled,
   placeholder,
   ariaLabel,
+  allowCustomValue,
 }: {
   value: string;
   options: SelectOption[];
@@ -27,6 +32,7 @@ export function FilterableSelect({
   disabled?: boolean;
   placeholder?: string;
   ariaLabel: string;
+  allowCustomValue?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   // The typed filter text. Empty while the list is open but untouched, so the
@@ -38,7 +44,11 @@ export function FilterableSelect({
   const listboxId = useId();
   const optionId = (index: number) => `${listboxId}-option-${index}`;
 
-  const selectedLabel = options.find((option) => option.value === value)?.label ?? "";
+  // Custom (not-in-list) values have no option label, so fall back to the raw
+  // value itself when free typing is allowed.
+  const selectedLabel =
+    options.find((option) => option.value === value)?.label ??
+    (allowCustomValue ? value : "");
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -52,12 +62,15 @@ export function FilterableSelect({
     setActiveIndex(0);
   }, [filtered]);
 
-  // Close when a click lands outside the widget.
+  // Close when a click lands outside the widget. Routed through a ref so the
+  // listener (subscribed only when `open` changes) always calls the latest
+  // `closeList`, which closes over the current `query`.
+  const closeListRef = useRef<(commitTyped: boolean) => void>(() => {});
   useEffect(() => {
     if (!open) return;
     function onPointerDown(event: PointerEvent) {
       if (!containerRef.current?.contains(event.target as Node)) {
-        setOpen(false);
+        closeListRef.current(true);
       }
     }
     document.addEventListener("pointerdown", onPointerDown);
@@ -78,6 +91,19 @@ export function FilterableSelect({
     setQuery("");
   }
 
+  // Closes the list. When `commitTyped` is set and free typing is allowed,
+  // a typed value that wasn't picked from the list is committed as-is (e.g.
+  // clicking away or tabbing off after typing a custom branch name).
+  function closeList(commitTyped: boolean) {
+    const typed = query.trim();
+    if (commitTyped && allowCustomValue && typed) {
+      onChange(typed);
+    }
+    setOpen(false);
+    setQuery("");
+  }
+  closeListRef.current = closeList;
+
   function handleKeyDown(event: ReactKeyboardEvent) {
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -90,6 +116,9 @@ export function FilterableSelect({
       if (open && filtered[activeIndex]) {
         event.preventDefault();
         commit(filtered[activeIndex]);
+      } else if (open && allowCustomValue && query.trim()) {
+        event.preventDefault();
+        closeList(true);
       }
     } else if (event.key === "Escape") {
       if (open) {
@@ -107,8 +136,7 @@ export function FilterableSelect({
   function handleBlur(event: ReactFocusEvent<HTMLDivElement>) {
     const next = event.relatedTarget as Node | null;
     if (next && containerRef.current?.contains(next)) return;
-    setOpen(false);
-    setQuery("");
+    closeList(true);
   }
 
   return (
@@ -129,7 +157,7 @@ export function FilterableSelect({
           placeholder={open && selectedLabel ? selectedLabel : placeholder}
           onMouseDown={() => {
             // Toggle on click so a second click closes the list.
-            if (open) setOpen(false);
+            if (open) closeList(true);
             else openList();
           }}
           onChange={(event) => {
