@@ -170,6 +170,7 @@ export function useQueueRunForm({
     queueError,
     setQueueError,
     queueNotice,
+    setQueueNotice,
     showQueueBranchSelect,
     queueBranchOptions,
     queueBranchesQuery,

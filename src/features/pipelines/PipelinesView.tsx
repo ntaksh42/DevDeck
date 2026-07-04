@@ -74,17 +74,23 @@ export function PipelinesView() {
   });
   const projectOptions = projectsQuery.data ?? [];
 
-  // Auto-select the first project so the view loads runs without manual setup.
+  // Auto-select a valid project for the active connection so the view loads
+  // runs without manual setup and never queries a previous connection's id.
   useEffect(() => {
-    if (!projectId && projectOptions.length > 0) {
+    if (projectOptions.length === 0) return;
+    if (!projectOptions.some((project) => project.id === projectId)) {
       setProjectId(projectOptions[0].id);
+      setDefinitionId(null);
+      setDetailTarget(null);
     }
   }, [projectId, projectOptions]);
+
+  const selectedProject = projectOptions.find((project) => project.id === projectId);
 
   const definitionsQuery = useQuery({
     queryKey: ["pipelineDefinitions", selectedOrganizationId, projectId],
     queryFn: () => listPipelineDefinitions({ organizationId: selectedOrganizationId, projectId }),
-    enabled: !!selectedOrganizationId && !!projectId,
+    enabled: !!selectedOrganizationId && !!selectedProject,
     staleTime: 5 * 60_000,
   });
   const definitionOptions = definitionsQuery.data ?? [];
@@ -94,7 +100,7 @@ export function PipelinesView() {
     queryKey: ["pipelineApprovals", selectedOrganizationId, projectId],
     queryFn: () =>
       listPipelineApprovals({ organizationId: selectedOrganizationId, projectId }),
-    enabled: !!selectedOrganizationId && !!projectId,
+    enabled: !!selectedOrganizationId && !!selectedProject,
     staleTime: 30_000,
   });
   const approvalMutation = useMutation({
@@ -109,7 +115,6 @@ export function PipelinesView() {
     ? (approvalMutation.variables?.approvalId ?? null)
     : null;
 
-  const selectedProject = projectOptions.find((project) => project.id === projectId);
   const selectedDefinition =
     definitionId != null
       ? definitionOptions.find((definition) => definition.id === definitionId)
@@ -175,6 +180,7 @@ export function PipelinesView() {
     queueError,
     setQueueError,
     queueNotice,
+    setQueueNotice,
     showQueueBranchSelect,
     queueBranchOptions,
     queueBranchesQuery,
@@ -189,6 +195,16 @@ export function PipelinesView() {
     definitionName: selectedDefinition?.name,
   });
 
+  useEffect(() => {
+    setDefinitionId(null);
+    setDetailTarget(null);
+    setQueueOpen(false);
+    setQueueError(null);
+    setQueueParams("");
+    setQueueParamValues({});
+    setQueueBranch("main");
+    setQueueNotice(null);
+  }, [selectedOrganizationId]);
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="shrink-0 rounded-md border border-border bg-card">

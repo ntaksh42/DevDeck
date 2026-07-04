@@ -42,6 +42,14 @@ export function subscriptionKey(
   return `${organizationId} ${projectId} ${definitionId}`;
 }
 
+export function pipelineSubscriptionHistoryQueryKey(
+  organizationId: string,
+  projectId: string,
+  definitionId: number,
+) {
+  return ["pipelineSubscriptionHistory", organizationId, projectId, definitionId] as const;
+}
+
 function keyOf(sub: PipelineSubscription): string {
   return subscriptionKey(sub.organizationId, sub.projectId, sub.definitionId);
 }

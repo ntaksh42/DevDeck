@@ -38,8 +38,11 @@ export function CommitSearch({
   onExternalSearchHandled?: () => void;
   onOpenPullRequest?: (query: string, organizationId?: string) => void;
 }) {
-  const initialViewState = useMemo(() => loadCommitSearchViewState(), []);
   const selectedOrganizationId = useActiveOrganizationId();
+  const initialViewState = useMemo(
+    () => loadCommitSearchViewState(selectedOrganizationId),
+    [selectedOrganizationId],
+  );
   // The search text intentionally resets when the view is left (remount on nav).
   const [query, setQuery] = useState("");
   const [author, setAuthor] = useState(initialViewState.author);
@@ -120,6 +123,7 @@ export function CommitSearch({
     (repositoryIds.length > 0 ? 1 : 0);
 
   useEffect(() => {
+    if (!selectedOrganizationId) return;
     storeCommitSearchViewState({
       author,
       branch,
@@ -146,6 +150,16 @@ export function CommitSearch({
       return next.length === prev.length ? prev : next;
     });
   }, [filteredRepositoryOptions, repositoriesQuery.isLoading, repositoryOptions.length]);
+
+  useEffect(() => {
+    if (!selectedOrganizationId) return;
+    const scopedViewState = loadCommitSearchViewState(selectedOrganizationId);
+    setProjectIds(scopedViewState.projectIds);
+    setRepositoryIds(scopedViewState.repositoryIds);
+    setAllCommits([]);
+    mutation.reset();
+    lastSearchInputRef.current = null;
+  }, [selectedOrganizationId]);
 
   useEffect(() => {
     if (!externalSearch) return;
@@ -483,4 +497,3 @@ export function CommitSearch({
     </div>
   );
 }
-
