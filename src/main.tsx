@@ -5,7 +5,7 @@ import App from "./App";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 // Self-hosted variable font (bundled by Vite) so the desktop app renders the
 // brand typeface offline without a webfont CDN.
-import "@fontsource-variable/hanken-grotesk";
+import "@fontsource-variable/hanken-grotesk/index.css";
 import "./index.css";
 import { applyTheme, loadThemePreference } from "./lib/theme";
 

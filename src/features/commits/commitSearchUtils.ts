@@ -48,7 +48,7 @@ export function loadCommitVisibleColumns(): CommitColumnKey[] {
   }
 }
 
-export function loadCommitSearchViewState(): CommitSearchViewState {
+export function loadCommitSearchViewState(organizationId?: string): CommitSearchViewState {
   const fallback: CommitSearchViewState = {
     author: "",
     branch: "",
@@ -61,13 +61,16 @@ export function loadCommitSearchViewState(): CommitSearchViewState {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(COMMIT_SEARCH_VIEW_STORAGE_KEY) ?? "null");
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return fallback;
+    const storedOrganizationId =
+      typeof parsed.organizationId === "string" ? parsed.organizationId : "";
+    const sameOrganization = !organizationId || storedOrganizationId === organizationId;
     return {
       author: typeof parsed.author === "string" ? parsed.author : "",
       branch: typeof parsed.branch === "string" ? parsed.branch : "",
       fromDate: typeof parsed.fromDate === "string" ? parsed.fromDate : "",
-      organizationId: typeof parsed.organizationId === "string" ? parsed.organizationId : "",
-      projectIds: stringArray(parsed.projectIds),
-      repositoryIds: stringArray(parsed.repositoryIds),
+      organizationId: storedOrganizationId,
+      projectIds: sameOrganization ? stringArray(parsed.projectIds) : [],
+      repositoryIds: sameOrganization ? stringArray(parsed.repositoryIds) : [],
       toDate: typeof parsed.toDate === "string" ? parsed.toDate : "",
     };
   } catch {

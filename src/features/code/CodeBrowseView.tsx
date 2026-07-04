@@ -61,6 +61,9 @@ export function CodeBrowseView() {
   );
   useEffect(() => {
     setFavorites(organizationId ? getFavoriteRepositoryIds(organizationId) : []);
+    setRepositoryId("");
+    setRestoredBranch(null);
+    pendingSelectionRef.current = null;
   }, [organizationId]);
 
   // Restore the last opened repository once the repository list loads, if the
@@ -475,4 +478,3 @@ export function CodeBrowseView() {
     </div>
   );
 }
-

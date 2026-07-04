@@ -5,6 +5,7 @@ import { showPipelineWatchNotification } from "@/lib/desktopNotifications";
 import { isInProgressStatus, pipelineRunVisual, shortBranch } from "./pipelineStatus";
 import {
   loadPipelineSubscriptions,
+  pipelineSubscriptionHistoryQueryKey,
   PIPELINE_SUBSCRIPTIONS_CHANGED_EVENT,
   type PipelineSubscription,
   subscriptionKey,
@@ -61,12 +62,11 @@ export function usePipelineWatchNotifications(settings: AppSettings | null): voi
 
   const queries = useQueries({
     queries: subscriptions.map((sub) => ({
-      queryKey: [
-        "pipelineSubscriptionHistory",
+      queryKey: pipelineSubscriptionHistoryQueryKey(
         sub.organizationId,
         sub.projectId,
         sub.definitionId,
-      ],
+      ),
       queryFn: () =>
         listPipelineRuns({
           organizationId: sub.organizationId,

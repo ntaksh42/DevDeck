@@ -11,7 +11,11 @@ import {
   runToneClasses,
   shortBranch,
 } from "./pipelineStatus";
-import { subscriptionKey, type PipelineSubscription } from "./pipelineSubscriptionsStorage";
+import {
+  pipelineSubscriptionHistoryQueryKey,
+  subscriptionKey,
+  type PipelineSubscription,
+} from "./pipelineSubscriptionsStorage";
 
 const ACTIVE_REFRESH_INTERVAL_MS = 15_000;
 const IDLE_REFRESH_INTERVAL_MS = 60_000;
@@ -83,15 +87,23 @@ export function PipelineSubscriptionsBoard({
       const key = subscriptionKey(sub.organizationId, sub.projectId, sub.definitionId);
       const isOpen = expanded.has(key);
       return {
-        queryKey: [
-          "pipelineSubscriptionHistory",
-          organizationId,
-          sub.projectId,
-          sub.definitionId,
-          branchCriterion ?? null,
-          resultCriterion ?? null,
-          requestedForMe,
-        ],
+        queryKey:
+          branchCriterion || resultCriterion || requestedForMe
+            ? [
+                ...pipelineSubscriptionHistoryQueryKey(
+                  organizationId,
+                  sub.projectId,
+                  sub.definitionId,
+                ),
+                branchCriterion ?? null,
+                resultCriterion ?? null,
+                requestedForMe,
+              ]
+            : pipelineSubscriptionHistoryQueryKey(
+                organizationId,
+                sub.projectId,
+                sub.definitionId,
+              ),
         queryFn: () =>
           listPipelineRuns({
             organizationId,

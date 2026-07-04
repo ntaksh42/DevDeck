@@ -25,6 +25,7 @@ import { QUICK_PIPELINES_CHANGED_EVENT } from "@/features/pipelines/quickPipelin
 import { sendPipelineRunNotification } from "@/lib/desktopNotifications";
 import { readStoredJson, writeStoredJson, writeStoredString } from "@/lib/storage";
 import { applyTheme, loadThemePreference, THEME_CHANGED_EVENT, watchSystemTheme } from "@/lib/theme";
+import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { storedNumber, focusPrimaryGrid } from "@/lib/utils";
 import { HelpDialog } from "@/components/HelpDialog";
 import { CommandPalette } from "@/components/CommandPalette";
@@ -134,10 +135,8 @@ function AppShell() {
   // regardless of the active view.
   usePipelineWatchNotifications(appSettingsQuery.data ?? null);
 
-  // Sidebar count badges. Queried for the first organization (the default the
-  // views open to) and kept fresh by the same sync:updated invalidation the
-  // grids use, so the cache is shared rather than double-fetched.
-  const badgeOrganizationId = organizations[0]?.id ?? "";
+  // Sidebar count badges follow the active connection, matching the grids.
+  const badgeOrganizationId = useActiveOrganizationId();
   const myReviewsCountQuery = useQuery({
     queryKey: ["myReviews", badgeOrganizationId],
     queryFn: () => listMyReviewPullRequests({ organizationId: badgeOrganizationId }),
