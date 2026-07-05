@@ -63,6 +63,34 @@ describe("renderMarkdownHtml", () => {
     const html = renderMarkdownHtml("`@<guid>`");
     expect(html).toContain("<code>@&lt;guid&gt;</code>");
   });
+
+  it("renders PR attachment image markdown with a raw space as an <img>, encoding the space", () => {
+    const html = renderMarkdownHtml(
+      "![image.png](https://dev.azure.com/org/proj/_apis/git/repositories/repo/pullRequests/1/attachments/Screenshot 2026-07-05 122334.png)",
+    );
+    expect(html).toContain(
+      'src="https://dev.azure.com/org/proj/_apis/git/repositories/repo/pullRequests/1/attachments/Screenshot%202026-07-05%20122334.png"',
+    );
+    expect(html).toContain('alt="image.png"');
+    expect(html).not.toContain("![image.png]");
+  });
+
+  it("leaves the same image syntax inside a code span untouched", () => {
+    const html = renderMarkdownHtml("`![x](https://a b.png)`");
+    expect(html).toContain("<code>![x](https://a b.png)</code>");
+  });
+
+  it("does not turn a non-URL link destination with a space into an image", () => {
+    const html = renderMarkdownHtml("![x](not a url)");
+    expect(html).not.toContain("<img");
+    expect(html).toContain("![x](not a url)");
+  });
+
+  it("still renders a titled image link without a raw space as before", () => {
+    const html = renderMarkdownHtml('![alt](https://example.com/a.png "title")');
+    expect(html).toContain('src="https://example.com/a.png"');
+    expect(html).toContain('alt="alt"');
+  });
 });
 
 describe("MarkdownView", () => {
@@ -128,5 +156,21 @@ describe("MarkdownView", () => {
   it("drops protocol-relative image sources during sanitization", () => {
     const html = renderMarkdownHtml('<img src="//evil.example/x.png">');
     expect(html).not.toContain("evil.example");
+  });
+
+  it("hydrates PR attachment image URLs that contain an encoded space", async () => {
+    const attachmentUrl =
+      "https://dev.azure.com/contoso/proj/_apis/git/repositories/repo-1/pullRequests/42/attachments/Screenshot 2026-07-05 122334.png";
+    const resolveImageSource = vi.fn().mockResolvedValue("data:image/png;base64,AAAA");
+    const { container } = render(
+      <MarkdownView
+        text={`![image.png](${attachmentUrl})`}
+        resolveImageSource={resolveImageSource}
+      />,
+    );
+    await waitFor(() =>
+      expect(container.querySelector("img")?.getAttribute("src")).toBe("data:image/png;base64,AAAA"),
+    );
+    expect(resolveImageSource).toHaveBeenCalledWith(attachmentUrl.replace(/ /g, "%20"));
   });
 });

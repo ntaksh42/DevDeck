@@ -30,7 +30,54 @@ function escapeMentionText(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-marked.use({ extensions: [azdoMentionExtension] });
+// Azure DevOps pastes images into PR descriptions/comments as
+// "![name](https://.../attachments/Screenshot 2026-07-05.png)" without
+// percent-encoding the space in the attachment file name. Strict CommonMark
+// terminates the link destination at the first raw space, so marked drops the
+// image and leaves the raw "![alt](..." text visible in the preview. This
+// extension only takes over destinations that contain a raw space and are
+// http(s) or root-relative (not title syntax, which the standard parser
+// already handles), and encodes the space so the image renders. It runs as a
+// real marked token, so it never fires inside code spans or fenced code
+// blocks.
+const azdoImageExtension: TokenizerAndRendererExtension = {
+  name: "azdoImage",
+  level: "inline",
+  start(src) {
+    const index = src.indexOf("![");
+    return index < 0 ? undefined : index;
+  },
+  tokenizer(src) {
+    const match = /^!\[([^\]\n]*)\]\(([^)\n]*)\)/.exec(src);
+    if (!match) return undefined;
+    const dest = match[2].trim();
+    // No raw space means the standard parser already handles this correctly.
+    if (!dest.includes(" ")) return undefined;
+    // "<url>" and 'url "title"' forms are handled correctly by the standard parser.
+    if (dest.startsWith("<")) return undefined;
+    if (/^\S+\s+("[^"]*"|'[^']*')$/.test(dest)) return undefined;
+    // Only treat http(s) or root-relative (protocol-relative "//" excluded) as an image.
+    if (!/^(https?:\/\/|\/(?!\/))/i.test(dest)) return undefined;
+    return {
+      type: "azdoImage",
+      raw: match[0],
+      text: match[1],
+      href: dest.replace(/ /g, "%20"),
+    };
+  },
+  renderer(token) {
+    // The output passes through DOMPurify in renderMarkdownHtml, but escape
+    // quotes and & up front so nothing can break out of the attributes.
+    const href = String(token.href).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+    const alt = String(token.text)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/"/g, "&quot;");
+    return `<img src="${href}" alt="${alt}">`;
+  },
+};
+
+marked.use({ extensions: [azdoMentionExtension, azdoImageExtension] });
 
 // Image sources are restricted to schemes that cannot exfiltrate beyond a plain
 // image fetch. https/data match the project's existing rich-text handling, and
