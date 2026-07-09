@@ -186,6 +186,45 @@ fn summarize_preview_uses_repro_steps_as_description_fallback() {
     );
 }
 
+#[test]
+fn image_content_type_from_url_reads_file_name_query_param() {
+    assert_eq!(
+        image_content_type_from_url(
+            "https://dev.azure.com/org/proj/_apis/wit/attachments/guid?fileName=foo.png"
+        ),
+        Some("image/png")
+    );
+    // Case and trailing query params are tolerated.
+    assert_eq!(
+        image_content_type_from_url(
+            "https://dev.azure.com/org/proj/_apis/wit/attachments/guid?fileName=foo.PNG&download=true"
+        ),
+        Some("image/png")
+    );
+}
+
+#[test]
+fn image_content_type_from_url_rejects_non_image_or_missing_file_name() {
+    // Non-image extension in fileName.
+    assert_eq!(
+        image_content_type_from_url(
+            "https://dev.azure.com/org/proj/_apis/wit/attachments/guid?fileName=notes.txt"
+        ),
+        None
+    );
+    // No fileName query param at all.
+    assert_eq!(
+        image_content_type_from_url(
+            "https://dev.azure.com/org/proj/_apis/wit/attachments/guid?download=true"
+        ),
+        None
+    );
+    assert_eq!(
+        image_content_type_from_url("https://dev.azure.com/org/proj/_apis/wit/attachments/guid"),
+        None
+    );
+}
+
 fn area_node(name: &str, children: Vec<ClassificationNode>) -> ClassificationNode {
     ClassificationNode {
         name: name.to_string(),
