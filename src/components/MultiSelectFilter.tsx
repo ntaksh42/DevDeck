@@ -132,7 +132,7 @@ export function MultiSelectFilter({
   }
 
   return (
-    <div ref={wrapperRef} className="relative">
+    <div ref={wrapperRef} className="relative min-w-0">
       <button
         ref={triggerRef}
         type="button"
