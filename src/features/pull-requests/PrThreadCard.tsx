@@ -215,8 +215,8 @@ function ThreadStatusPopup({
 
 /**
  * Shared thread card used by the Review tab and the inline diff view.
- * Replies go through CommentComposer (Write/Preview + mentions), which keeps
- * the draft when a post fails.
+ * Replies go through CommentComposer (plain-text editor with mentions), which
+ * keeps the draft when a post fails.
  */
 export function PrThreadCard({
   thread,

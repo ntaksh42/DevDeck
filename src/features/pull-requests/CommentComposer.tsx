@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { type MentionCandidate } from "@/lib/azdoCommands";
+import {
+  activeMentionAt,
+  addSelectedMention,
+  mentionTokenDeletionStart,
+  renderAzureMentionMarkdown,
+  type SelectedMention,
+} from "@/features/work-items/workItemMentions";
 
 /**
  * Reusable comment editor with optional @mention autocomplete. Owns its own
@@ -35,15 +42,21 @@ export function CommentComposer({
   const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
   const [candidates, setCandidates] = useState<MentionCandidate[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
+  // Mentions chosen from the picker, kept so their plain "@Name" text can be
+  // converted back to the "@<guid>" markdown Azure DevOps needs to create a
+  // real (notifying) mention instead of leaving inert text.
+  const [selectedMentions, setSelectedMentions] = useState<SelectedMention[]>([]);
 
   async function submit() {
     const trimmed = text.trim();
     if (!trimmed || submitting) return;
+    const content = renderAzureMentionMarkdown(trimmed, selectedMentions);
     setSubmitting(true);
     try {
-      await onSubmit(trimmed);
+      await onSubmit(content);
       setText("");
       setMention(null);
+      setSelectedMentions([]);
       onSubmitted?.();
     } catch {
       // Keep the draft; the caller surfaces the error.
@@ -52,16 +65,12 @@ export function CommentComposer({
     }
   }
 
-  // Detect a `@token` immediately before the caret.
+  // Detect a `@token` immediately before the caret. Shared with the work item
+  // composer so non-ASCII display names (e.g. Japanese names) also trigger
+  // the picker.
   function refreshMention(value: string, caret: number) {
     if (!mentionSearch) return;
-    const before = value.slice(0, caret);
-    const match = /(^|\s)@([\w.\-]*)$/.exec(before);
-    if (match) {
-      setMention({ start: caret - match[2].length - 1, query: match[2] });
-    } else {
-      setMention(null);
-    }
+    setMention(activeMentionAt(value, caret));
   }
 
   const mentionQuery = mention?.query;
@@ -96,6 +105,7 @@ export function CommentComposer({
     const after = text.slice(caret);
     const inserted = `@${candidate.displayName} `;
     setText(before + inserted + after);
+    setSelectedMentions((current) => addSelectedMention(current, candidate));
     setMention(null);
     setCandidates([]);
     const pos = before.length + inserted.length;
@@ -123,6 +133,26 @@ export function CommentComposer({
               refreshMention(target.value, target.selectionStart ?? target.value.length);
             }}
             onKeyDown={(event) => {
+              if (
+                event.key === "Backspace" &&
+                event.currentTarget.selectionStart === event.currentTarget.selectionEnd
+              ) {
+                const textarea = event.currentTarget;
+                const cursor = textarea.selectionStart;
+                const start = mentionTokenDeletionStart(
+                  text,
+                  cursor,
+                  selectedMentions.map((selected) => selected.displayName),
+                );
+                if (start !== null) {
+                  event.preventDefault();
+                  const next = text.slice(0, start) + text.slice(cursor);
+                  setText(next);
+                  refreshMention(next, start);
+                  window.setTimeout(() => textarea.setSelectionRange(start, start), 0);
+                  return;
+                }
+              }
               if (showMentions) {
                 if (event.key === "ArrowDown") {
                   event.preventDefault();
