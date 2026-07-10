@@ -261,8 +261,8 @@ find-next) は、入力欄以外では抑止し、ネイティブ動作が素通
 
 ### Go-To チェーン (`G` リーダー + 第 2 キー)
 
-`R` My Reviews / `P` PR Search / `W` My Work Items / `I` Work Item Search /
-`V` Work Item Views / `C` Commits / `B` Pipelines / `D` Code / `S` Settings。
+`R` My Reviews / `Q` PR Search / `W` My Work Items / `I` Work Item Search /
+`V` Work Item Views / `C` Commits / `P` Pipelines / `D` Code / `S` Settings。
 
 ### グリッド内
 
