@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight, ExternalLink, Loader2, X } from "lucide-reac
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useState } from "react";
 import { listPipelineRuns, type PipelineRunSummary } from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
-import { formatDate, formatRelativeDate } from "@/lib/utils";
+import { formatDate, formatRelativeDate, handleSearchInputEscape } from "@/lib/utils";
 import {
   formatDuration,
   isInProgressStatus,
@@ -280,6 +280,7 @@ export function PipelineSubscriptionsBoard({
             type="text"
             value={branchFilter}
             onChange={(event) => setBranchFilter(event.target.value)}
+            onKeyDown={(event) => handleSearchInputEscape(event, () => setBranchFilter(""))}
             placeholder="Branch…"
             aria-label="Filter runs by branch"
             className="h-7 w-32 rounded-md border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"

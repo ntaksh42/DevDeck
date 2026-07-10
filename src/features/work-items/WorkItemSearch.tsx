@@ -8,6 +8,7 @@ import {
 } from "@/lib/azdoCommands";
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { matchesWorkItemQuery, parseSearchQuery } from "@/lib/searchQuery";
+import { handleSearchInputEscape } from "@/lib/utils";
 import { ErrorState } from "@/components/StateDisplay";
 import { MultiSelectFilter } from "@/components/MultiSelectFilter";
 import { WorkItemsGrid } from "./WorkItemsGrid";
@@ -96,6 +97,7 @@ export function WorkItemSearch({
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={handleSearchInputEscape}
             placeholder="Search work items…"
             aria-label="Search"
             autoFocus
@@ -159,6 +161,7 @@ export function WorkItemSearch({
             <input
               value={resultFilter}
               onChange={(event) => setResultFilter(event.target.value)}
+              onKeyDown={(event) => handleSearchInputEscape(event, () => setResultFilter(""))}
               placeholder="Filter results… #1234, p:1, @user, s:active, t:bug"
               aria-label="Filter results"
               title="Smart filter: #1234 id, p:1–4 priority, @user assignee, s:active state, t:bug type. Unknown prefixes are searched as text."

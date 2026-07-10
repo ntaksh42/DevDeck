@@ -15,6 +15,7 @@ import {
   type CommitSummary,
 } from "@/lib/azdoCommands";
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
+import { handleSearchInputEscape } from "@/lib/utils";
 import { MultiSelectFilter } from "@/components/MultiSelectFilter";
 import { ErrorState } from "@/components/StateDisplay";
 import { CommitActivityHeatmap } from "./CommitActivityHeatmap";
@@ -327,6 +328,7 @@ export function CommitSearch({
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
+                  onKeyDown={handleSearchInputEscape}
                   placeholder="message, author, SHA — or path:src/auth"
                   aria-label="Filter"
                   autoFocus
@@ -379,6 +381,7 @@ export function CommitSearch({
               <input
                 value={author}
                 onChange={(event) => setAuthor(event.target.value)}
+                onKeyDown={handleSearchInputEscape}
                 placeholder="email or name"
                 list={authorSuggestions.length > 0 ? "commit-author-suggestions" : undefined}
                 className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
@@ -395,6 +398,7 @@ export function CommitSearch({
               <input
                 value={branch}
                 onChange={(event) => setBranch(event.target.value)}
+                onKeyDown={handleSearchInputEscape}
                 placeholder="main"
                 className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               />

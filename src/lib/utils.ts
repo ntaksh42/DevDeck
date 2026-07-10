@@ -1,3 +1,5 @@
+import type { KeyboardEvent } from "react";
+
 export type SortDirection = "asc" | "desc";
 
 export function clamp(value: number, min: number, max: number): number {
@@ -69,6 +71,23 @@ export function gridColumnsMinWidth(
 export function isEditableTarget(target: EventTarget | null): boolean {
   const element = target instanceof HTMLElement ? target : null;
   return !!element?.closest("input, textarea, select, [contenteditable='true']");
+}
+
+/**
+ * Escape moves focus out of a search/filter input. Pass `onClear` for live
+ * filters so Escape also resets the filter text; omit it for submitted search
+ * queries where the typed text should survive the focus-out. Grid screens rely
+ * on `useGridFocusRestoration` to send focus back to the selected row after the
+ * blur; plain search forms simply release focus to the document body.
+ */
+export function handleSearchInputEscape(
+  event: KeyboardEvent<HTMLInputElement>,
+  onClear?: () => void,
+): void {
+  if (event.key !== "Escape") return;
+  event.preventDefault();
+  onClear?.();
+  event.currentTarget.blur();
 }
 
 export function focusWorkItemCommentInput(): boolean {

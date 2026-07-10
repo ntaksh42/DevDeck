@@ -362,7 +362,19 @@ export function MyPullRequestsGrid() {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card">
       {/* Toolbar */}
-      <div className="flex items-center gap-2 border-b border-border px-2 py-1.5">
+      <div
+        className="flex items-center gap-2 border-b border-border px-2 py-1.5"
+        onKeyDown={(e) => {
+          if (e.key === "Escape" && isEditableTarget(e.target)) {
+            e.preventDefault();
+            setTextFilter("");
+            setSelectedIndex(0);
+            const firstRow = rowRefs.current[0];
+            if (firstRow) firstRow.focus();
+            else (e.target as HTMLElement).blur();
+          }
+        }}
+      >
         <FilterAutocomplete
           value={textFilter}
           onChange={(value) => {

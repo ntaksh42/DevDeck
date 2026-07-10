@@ -4,6 +4,7 @@ import { Plus, Search } from 'lucide-react';
 import { listMyWorkItems, commandErrorMessage } from '@/lib/azdoCommands';
 import { useActiveOrganizationId } from '@/lib/useActiveConnection';
 import { matchesWorkItemQuery, parseSearchQuery } from '@/lib/searchQuery';
+import { handleSearchInputEscape } from '@/lib/utils';
 import { ErrorState } from '@/components/StateDisplay';
 import { WorkItemsGrid } from './WorkItemsGrid';
 import { WorkItemTemplatesPanel } from './WorkItemTemplatesPanel';
@@ -46,6 +47,7 @@ export function MyWorkItemsPanel() {
           <input
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
+            onKeyDown={(event) => handleSearchInputEscape(event, () => setFilter(""))}
             placeholder="Filter… try #1234, p:1, @user, s:active, t:bug"
             aria-label="Filter"
             title="Smart search: #1234 jumps to an id, p:1–4 priority, @user assignee, s:active state, t:bug type. Unknown prefixes are searched as text."
