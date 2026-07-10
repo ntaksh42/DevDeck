@@ -155,10 +155,7 @@ export function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSe
   );
   const projectFilter = new Set((input?.projectIds ?? []).filter(Boolean));
   const repositoryFilter = new Set((input?.repositoryIds ?? []).filter(Boolean));
-  const targetBranch = input?.targetBranch
-    ?.trim()
-    .replace(/^refs\/heads\//, "")
-    .toLowerCase();
+  const targetBranches = new Set((input?.targetBranches ?? []).map((branch) => branch.trim().toLowerCase()).filter(Boolean));
   const fromDate = input?.fromDate?.trim() || undefined;
   const toDate = input?.toDate?.trim() || undefined;
   // The close-date basis only applies when no active rows are in scope, since
@@ -180,7 +177,7 @@ export function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSe
     if (projectFilter.size > 0 && !projectFilter.has(pr.projectId)) return false;
     if (repositoryFilter.size > 0 && !repositoryFilter.has(pr.repositoryId)) return false;
     if (!statusFilter.has(pr.status)) return false;
-    if (targetBranch && pr.targetRefName.toLowerCase() !== targetBranch) return false;
+    if (targetBranches.size > 0 && !targetBranches.has(pr.targetRefName.toLowerCase())) return false;
     if (!inWindow(useClosedBasis ? pr.closedDate : pr.creationDate)) return false;
     if (excludeDrafts && pr.isDraft) return false;
     if (query) {

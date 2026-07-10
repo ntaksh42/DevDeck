@@ -69,8 +69,8 @@ pub struct SearchPullRequestsInput {
     pub project_ids: Option<Vec<String>>,
     /// Repositories to include. Empty/omitted means all repositories.
     pub repository_ids: Option<Vec<String>>,
-    /// Target branch to filter by, e.g. `main` or `refs/heads/main`.
-    pub target_branch: Option<String>,
+    /// Target branches to filter by, e.g. `main` or `refs/heads/main`.
+    pub target_branches: Option<Vec<String>>,
     /// Inclusive date window (`YYYY-MM-DD`) interpreted against `date_basis`.
     pub from_date: Option<String>,
     pub to_date: Option<String>,
