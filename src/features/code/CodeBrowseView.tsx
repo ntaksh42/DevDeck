@@ -191,7 +191,8 @@ export function CodeBrowseView() {
       setSearchQuery(filterText.trim());
     } else if (event.key === "Escape") {
       if (searchQuery) setSearchQuery("");
-      else setFilterText("");
+      else if (filterText) setFilterText("");
+      else event.currentTarget.blur();
     }
   }
 

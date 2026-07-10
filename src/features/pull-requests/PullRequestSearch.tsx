@@ -14,6 +14,7 @@ import {
   type SearchPullRequestsInput,
 } from '@/lib/azdoCommands';
 import { useActiveOrganizationId } from '@/lib/useActiveConnection';
+import { handleSearchInputEscape } from '@/lib/utils';
 import { ErrorState } from '@/components/StateDisplay';
 import { MultiSelectFilter } from '@/components/MultiSelectFilter';
 import { PullRequestResults } from './PrSearchResults';
@@ -217,6 +218,7 @@ export function PullRequestSearch({
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={handleSearchInputEscape}
                   placeholder="title, author, branch…"
                   autoFocus
                   className="min-w-0 flex-1 bg-transparent text-sm outline-none"

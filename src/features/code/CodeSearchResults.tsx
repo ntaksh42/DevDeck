@@ -8,6 +8,7 @@ import {
   searchCode,
 } from "@/lib/azdoCommands";
 import { ErrorState } from "@/components/StateDisplay";
+import { handleSearchInputEscape } from "@/lib/utils";
 import { type RepoOption } from "./codeBrowseShared";
 
 const PAGE_SIZE = 50;
@@ -99,6 +100,7 @@ export function CodeSearchResults({
           type="text"
           value={pathFilter}
           onChange={(event) => setPathFilter(event.target.value)}
+          onKeyDown={(event) => handleSearchInputEscape(event, () => setPathFilter(""))}
           placeholder="Filter by path (e.g. src/components)"
           aria-label="Filter results by path"
           className="h-7 w-full rounded border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
