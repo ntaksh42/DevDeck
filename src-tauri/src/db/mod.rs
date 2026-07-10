@@ -8,6 +8,7 @@ use crate::error::Result;
 mod commits;
 mod commits_query;
 mod migrate;
+mod notifications;
 mod organizations;
 mod prs;
 mod settings;
@@ -26,12 +27,15 @@ mod tests_migrations;
 #[cfg(test)]
 mod tests_misc;
 #[cfg(test)]
+mod tests_notifications;
+#[cfg(test)]
 mod tests_prs;
 #[cfg(test)]
 mod tests_work_items;
 
 pub use commits::*;
 pub use migrate::migrate;
+pub use notifications::*;
 pub use organizations::*;
 pub use prs::*;
 pub use settings::*;
@@ -41,7 +45,7 @@ pub use work_items::*;
 pub(crate) use commits_query::*;
 pub(crate) use work_items_query::*;
 
-pub(crate) const SCHEMA_VERSION: i64 = 18;
+pub(crate) const SCHEMA_VERSION: i64 = 19;
 
 /// Max rows kept in the my_work_items snapshot queries; sync notification
 /// diffing must know this cap to avoid treating re-entering rows as new.

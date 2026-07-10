@@ -38,6 +38,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
     combo("gotoWorkItemSearch"),
     combo("gotoWorkItemViews"),
     combo("gotoCommits"),
+    combo("gotoNotifications"),
     combo("gotoSettings"),
   ].join("/");
 
@@ -142,6 +143,12 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Move run row</span><kbd className={kbd}>J/K ↑ ↓ Home End</kbd></div>
           <div className={row}><span>Open run preview</span><kbd className={kbd}>Enter</kbd></div>
           <div className={row}><span>Open run in browser</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
+
+          <p className={section}>Notifications</p>
+          <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ Home End PgUp PgDn</kbd></div>
+          <div className={row}><span>Open / jump to item (marks read)</span><kbd className={kbd}>Enter</kbd></div>
+          <div className={row}><span>Open in Azure DevOps (marks read)</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
+          <div className={row}><span>Mark selected read</span><kbd className={kbd}>R</kbd></div>
 
           <p className={section}>General</p>
           <div className={row}><span>Go to view</span><kbd className={kbd}>{combo("gotoLeader")} then {gotoKeys}</kbd></div>

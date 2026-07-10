@@ -16,6 +16,7 @@ import {
   SetupPanel,
   PullRequestSearch,
   MyPullRequestsGrid,
+  NotificationsView,
 } from "./lazyViews";
 import type { View, ExternalSearchRequest } from "./types";
 
@@ -37,6 +38,7 @@ export interface AppContentProps {
   onWorkItemNavViewsChange: (views: WorkItemQueryView[]) => void;
   onOpenSettings: () => void;
   onOpenPullRequest: (query: string, organizationId?: string) => void;
+  onOpenView: (view: "pipelines" | "settings") => void;
 }
 
 export function AppContent({
@@ -57,6 +59,7 @@ export function AppContent({
   onWorkItemNavViewsChange,
   onOpenSettings,
   onOpenPullRequest,
+  onOpenView,
 }: AppContentProps) {
   return (
     <section
@@ -111,6 +114,8 @@ export function AppContent({
           <PipelinesView />
         ) : activeView === "codeSearch" ? (
           <CodeBrowseView />
+        ) : activeView === "notifications" ? (
+          <NotificationsView onOpenPullRequest={onOpenPullRequest} onOpenView={onOpenView} />
         ) : organizations.length === 0 ? (
           <SetupPanel />
         ) : (

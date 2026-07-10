@@ -1,5 +1,6 @@
 pub mod code;
 pub mod commits;
+pub mod notifications;
 pub mod orgs;
 pub mod pipelines;
 pub mod pr_review;
