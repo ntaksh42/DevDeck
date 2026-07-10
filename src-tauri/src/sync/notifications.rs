@@ -1,10 +1,14 @@
 use std::collections::{HashMap, HashSet};
 
 use serde::Serialize;
+use serde_json::json;
 
 use crate::db::{
-    AppSettings, CachedReviewPr, CachedWorkItem, NotificationRule, MY_WORK_ITEMS_LIMIT,
+    AppSettings, CachedReviewPr, CachedWorkItem, NewNotification, NotificationRule,
+    MY_WORK_ITEMS_LIMIT,
 };
+
+use super::SyncFailedEvent;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -76,6 +80,15 @@ impl PrNotificationKind {
             PrNotificationKind::CommentReply => "commentReply",
         }
     }
+
+    // Kind stored in the notification history table.
+    fn history_kind(self) -> &'static str {
+        match self {
+            PrNotificationKind::ReviewRequested => "prReviewRequested",
+            PrNotificationKind::VoteReset => "prVoteReset",
+            PrNotificationKind::CommentReply => "prCommentReply",
+        }
+    }
 }
 
 impl WorkItemNotificationKind {
@@ -83,6 +96,14 @@ impl WorkItemNotificationKind {
         match self {
             WorkItemNotificationKind::Assigned => "assigned",
             WorkItemNotificationKind::StateChanged => "stateChanged",
+        }
+    }
+
+    // Kind stored in the notification history table.
+    fn history_kind(self) -> &'static str {
+        match self {
+            WorkItemNotificationKind::Assigned => "wiAssigned",
+            WorkItemNotificationKind::StateChanged => "wiStateChanged",
         }
     }
 }
@@ -134,6 +155,24 @@ fn notification_rule_matches(
         }
     }
     true
+}
+
+/// Whether PR notification items should be collected this pass. Deliberately
+/// independent of `desktop_notifications_enabled`: that setting only gates
+/// whether the frontend shows a toast (see `desktopNotifications.ts`), while
+/// the persisted notification history is recorded whenever at least one PR
+/// notification type is enabled.
+pub(super) fn should_collect_pr_notifications(settings: &AppSettings) -> bool {
+    settings.notify_pr_review_requests
+        || settings.notify_pr_vote_resets
+        || settings.notify_pr_comment_replies
+}
+
+/// Whether work item notification items should be collected this pass. Same
+/// independence from `desktop_notifications_enabled` as
+/// `should_collect_pr_notifications`.
+pub(super) fn should_collect_work_item_notifications(settings: &AppSettings) -> bool {
+    settings.notify_work_item_assignments || settings.notify_work_item_state_changes
 }
 
 fn pr_review_item(pr: &CachedReviewPr, kind: PrNotificationKind) -> PrNotificationItem {
@@ -271,5 +310,134 @@ fn work_item_notification_item(
         previous_state,
         assigned_to: item.assigned_to.clone(),
         web_url: item.web_url.clone(),
+    }
+}
+
+/// Builds notification-history rows for a batch of PR notification items,
+/// mirroring the toast copy the frontend shows (`desktopNotifications.ts`) so
+/// the persisted history reads the same as what the user saw.
+pub(super) fn pr_notification_records(
+    org_id: &str,
+    org_name: &str,
+    items: &[PrNotificationItem],
+) -> Vec<NewNotification> {
+    items
+        .iter()
+        .map(|item| pr_notification_record(org_id, org_name, item))
+        .collect()
+}
+
+fn pr_notification_record(
+    org_id: &str,
+    org_name: &str,
+    item: &PrNotificationItem,
+) -> NewNotification {
+    let title = match item.kind {
+        PrNotificationKind::ReviewRequested => {
+            format!("Review requested: !{}", item.pull_request_id)
+        }
+        PrNotificationKind::VoteReset => format!("Vote reset: !{}", item.pull_request_id),
+        PrNotificationKind::CommentReply => format!("New reply: !{}", item.pull_request_id),
+    };
+    let body = if matches!(item.kind, PrNotificationKind::CommentReply) {
+        let author = item.comment_author.as_deref().unwrap_or("Someone");
+        let snippet_line = item
+            .snippet
+            .as_deref()
+            .map(|snippet| format!("\n{snippet}"))
+            .unwrap_or_default();
+        format!(
+            "{author} on \"{}\"{snippet_line}\n{} / {org_name}",
+            item.title, item.repository_name
+        )
+    } else {
+        format!("{}\n{} / {org_name}", item.title, item.repository_name)
+    };
+    NewNotification {
+        organization_id: Some(org_id.to_string()),
+        kind: item.kind.history_kind().to_string(),
+        title,
+        body: Some(body),
+        payload: json!({
+            "pullRequestId": item.pull_request_id,
+            "repositoryId": item.repository_id,
+            "repositoryName": item.repository_name,
+            "projectName": item.project_name,
+            "webUrl": item.web_url,
+            "commentAuthor": item.comment_author,
+            "snippet": item.snippet,
+        }),
+    }
+}
+
+/// Builds notification-history rows for a batch of work item notification
+/// items, mirroring the toast copy in `desktopNotifications.ts`.
+pub(super) fn work_item_notification_records(
+    org_id: &str,
+    org_name: &str,
+    items: &[WorkItemNotificationItem],
+) -> Vec<NewNotification> {
+    items
+        .iter()
+        .map(|item| work_item_notification_record(org_id, org_name, item))
+        .collect()
+}
+
+fn work_item_notification_record(
+    org_id: &str,
+    org_name: &str,
+    item: &WorkItemNotificationItem,
+) -> NewNotification {
+    let title = match item.kind {
+        WorkItemNotificationKind::Assigned => format!("Assigned: #{}", item.id),
+        WorkItemNotificationKind::StateChanged => format!("State changed: #{}", item.id),
+    };
+    let body = match item.kind {
+        WorkItemNotificationKind::StateChanged => {
+            let from = item.previous_state.as_deref().unwrap_or("Unknown");
+            let to = item.state.as_deref().unwrap_or("Unknown");
+            format!("{}\n{from} -> {to} / {org_name}", item.title)
+        }
+        WorkItemNotificationKind::Assigned => {
+            format!("{}\n{} / {org_name}", item.title, item.project_name)
+        }
+    };
+    NewNotification {
+        organization_id: Some(org_id.to_string()),
+        kind: item.kind.history_kind().to_string(),
+        title,
+        body: Some(body),
+        payload: json!({
+            "workItemId": item.id,
+            "projectName": item.project_name,
+            "state": item.state,
+            "previousState": item.previous_state,
+            "webUrl": item.web_url,
+        }),
+    }
+}
+
+/// Builds the notification-history row for a sync-failure alert, mirroring the
+/// toast copy in `desktopNotifications.ts::showSyncFailedNotificationEvent`.
+pub(super) fn sync_failed_notification_record(event: &SyncFailedEvent) -> NewNotification {
+    let retry_minutes = ((event.retry_in_secs as f64) / 60.0).round().max(1.0) as u64;
+    let error_suffix = event
+        .last_error
+        .as_deref()
+        .map(|error| format!("\n{error}"))
+        .unwrap_or_default();
+    NewNotification {
+        organization_id: None,
+        kind: "syncFailed".to_string(),
+        title: "Sync is failing".to_string(),
+        body: Some(format!(
+            "DevDeck could not sync after {} attempts. Retrying in about {retry_minutes} min.{error_suffix}",
+            event.consecutive_failures
+        )),
+        payload: json!({
+            "consecutiveFailures": event.consecutive_failures,
+            "retryInSecs": event.retry_in_secs,
+            "lastError": event.last_error,
+        }),
     }
 }

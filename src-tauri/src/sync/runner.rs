@@ -8,6 +8,7 @@ use tokio::time::{interval_at, Instant, MissedTickBehavior};
 
 use crate::db::AppSettings;
 
+use super::notifications::sync_failed_notification_record;
 use super::org::sync_org;
 use super::*;
 
@@ -65,6 +66,14 @@ impl SyncRunner {
                         retry_in_secs: retry_in,
                         last_error: self.latest_sync_error(),
                     };
+                    let record = sync_failed_notification_record(&event);
+                    if let Err(e) = self.db.insert_notifications(&[record]) {
+                        tracing::warn!(error = ?e, "sync: failed to record sync-failed notification");
+                    } else if let Err(e) =
+                        handle.emit("notifications:inbox-updated", serde_json::json!({}))
+                    {
+                        tracing::warn!(error = ?e, "sync: failed to emit notification inbox update");
+                    }
                     if let Err(e) = handle.emit("notifications:sync-failed", event) {
                         tracing::warn!(error = ?e, "sync: failed to emit sync-failed event");
                     }

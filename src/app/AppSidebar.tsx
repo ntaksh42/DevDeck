@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import {
+  Bell,
   BookOpen,
   Code,
   GitBranch,
@@ -43,6 +44,7 @@ export interface AppSidebarProps {
   activeWorkItemViewId: string | null;
   myReviewsBadge: number | null;
   myWorkItemsBadge: number | null;
+  notificationsBadge: number | null;
   onNavigate: (view: View) => void;
   onOpenHelp: () => void;
   onSetActiveWorkItemViewId: (id: string | null) => void;
@@ -61,6 +63,7 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
     activeWorkItemViewId,
     myReviewsBadge,
     myWorkItemsBadge,
+    notificationsBadge,
     onNavigate,
     onOpenHelp,
     onSetActiveWorkItemViewId,
@@ -428,6 +431,16 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
               {navEntries[id]}
             </div>
           ))}
+        </div>
+        <div className="mt-1 space-y-1 border-t border-border pt-1">
+          <NavButton
+            active={activeView === "notifications"}
+            disabled={organizationsLength === 0}
+            icon={<Bell className="h-4 w-4" aria-hidden="true" />}
+            label="Notifications"
+            badge={notificationsBadge}
+            onClick={() => onNavigate("notifications")}
+          />
         </div>
         <div className="mt-auto space-y-1 border-t border-border pt-2">
           <NavButton

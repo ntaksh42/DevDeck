@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { useQueries } from "@tanstack/react-query";
-import { type AppSettings, listPipelineRuns } from "@/lib/azdoCommands";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
+import { type AppSettings, listPipelineRuns, recordNotification } from "@/lib/azdoCommands";
 import { showPipelineWatchNotification } from "@/lib/desktopNotifications";
 import { isInProgressStatus, pipelineRunVisual, shortBranch } from "./pipelineStatus";
 import {
@@ -46,6 +46,7 @@ export function detectPipelineTransition(
 // request — whenever the Pipelines view is open.
 export function usePipelineWatchNotifications(settings: AppSettings | null): void {
   const enabled = !!settings?.desktopNotificationsEnabled;
+  const queryClient = useQueryClient();
   const [subscriptions, setSubscriptions] = useState<PipelineSubscription[]>(() =>
     loadPipelineSubscriptions(),
   );
@@ -126,6 +127,32 @@ export function usePipelineWatchNotifications(settings: AppSettings | null): voi
         },
         settingsValue,
       );
+      // Persisted alongside the toast so the Notifications view has a history
+      // of the same start/finish events, even after the toast disappears.
+      const runDetail = [
+        latest.buildNumber ? `#${latest.buildNumber}` : null,
+        latest.sourceBranch ? shortBranch(latest.sourceBranch) : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      recordNotification({
+        organizationId: sub.organizationId,
+        kind: transition === "started" ? "pipelineWatchStarted" : "pipelineWatchFinished",
+        title:
+          transition === "started"
+            ? `Pipeline started: ${sub.definitionName}`
+            : `Pipeline ${visual.label.toLowerCase()}: ${sub.definitionName}`,
+        body: runDetail ? `${runDetail}\n${sub.projectName}` : sub.projectName,
+        payload: {
+          definitionName: sub.definitionName,
+          projectName: sub.projectName,
+          buildNumber: latest.buildNumber,
+          sourceBranch: latest.sourceBranch,
+          webUrl: latest.webUrl,
+        },
+      })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["notifications"] }))
+        .catch((error) => console.error("Failed to record pipeline notification", error));
     });
     // `subscriptions`/`queries` are read fresh each render and are consistent
     // with `fingerprint`, so depending on the fingerprint is sufficient.

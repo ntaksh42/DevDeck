@@ -515,5 +515,28 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         }
         conn.execute_batch("PRAGMA user_version = 18;")?;
     }
+    if current < 19 {
+        // Notification history: sync now persists desktop-notification-worthy
+        // events so the frontend can show a durable inbox, not just a
+        // fire-and-forget toast.
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS notifications(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL,
+                organization_id TEXT,
+                kind TEXT NOT NULL,
+                title TEXT NOT NULL,
+                body TEXT,
+                payload TEXT NOT NULL,
+                is_read INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_notifications_unread
+                ON notifications(is_read, id DESC);
+
+            PRAGMA user_version = 19;
+            "#,
+        )?;
+    }
     Ok(())
 }

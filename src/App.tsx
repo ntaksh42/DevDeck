@@ -7,13 +7,15 @@ import {
   useRef,
   useState,
 } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getAppSettings,
   getProviderCapabilities,
+  getUnreadNotificationsCount,
   listMyReviewPullRequests,
   listMyWorkItems,
   listOrganizations,
+  recordNotification,
   rerunPipelineRun,
   commandErrorMessage,
 } from "@/lib/azdoCommands";
@@ -48,6 +50,7 @@ import {
   type NavigateWorkItemDetail,
   type NavigatePullRequestDetail,
 } from "@/lib/crossLinks";
+import { subscribeTauriEvent } from "@/lib/tauriEvents";
 import { AppSidebar, type AppSidebarHandle } from "./app/AppSidebar";
 import { AppHeader } from "./app/AppHeader";
 import { AppContent } from "./app/AppContent";
@@ -108,6 +111,7 @@ function AppShell() {
   );
 
   const keybindings = useKeybindings();
+  const queryClient = useQueryClient();
 
   const organizationsQuery = useQuery({
     queryKey: ["organizations"],
@@ -154,6 +158,15 @@ function AppShell() {
     ? myReviewsCountQuery.data.filter((pr) => pr.myVote === 0 && !pr.isDraft).length
     : null;
   const myWorkItemsBadge = myWorkItemsCountQuery.data?.length ?? null;
+
+  // The notifications badge is cross-org, so it stays enabled independent of
+  // the active connection (unlike the badges above).
+  const notificationsUnreadQuery = useQuery({
+    queryKey: ["notifications", "unreadCount"],
+    queryFn: getUnreadNotificationsCount,
+    staleTime: 30_000,
+  });
+  const notificationsBadge = notificationsUnreadQuery.data ?? null;
 
   const activeView = organizations.length === 0 ? "settings" : view;
 
@@ -240,6 +253,15 @@ function AppShell() {
     };
   }, []);
 
+  // The notification history inbox changes app-wide (sync loop, frontend-recorded
+  // pipeline events), so the badge and any open Notifications view stay current
+  // regardless of which view is active.
+  useEffect(() => {
+    return subscribeTauriEvent("notifications:inbox-updated", () => {
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    });
+  }, [queryClient]);
+
   useEffect(() => {
     writeStoredString(SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(sidebarWidth)));
   }, [sidebarWidth]);
@@ -305,14 +327,28 @@ function AppShell() {
         definitionId: pipeline.definitionId,
         sourceBranch: pipeline.sourceBranch,
       });
+      const detail = run.buildNumber ? `Build ${run.buildNumber} queued.` : "A new run was queued.";
       void sendPipelineRunNotification({
         ok: true,
         pipelineName: pipeline.name,
-        detail: run.buildNumber
-          ? `Build ${run.buildNumber} queued.`
-          : "A new run was queued.",
+        detail,
         webUrl: run.webUrl,
       });
+      recordNotification({
+        organizationId: pipeline.organizationId,
+        kind: "pipelineRunQueued",
+        title: `Pipeline queued: ${pipeline.name}`,
+        body: detail,
+        payload: {
+          definitionName: pipeline.definitionName,
+          projectName: pipeline.projectName,
+          buildNumber: run.buildNumber,
+          sourceBranch: run.sourceBranch,
+          webUrl: run.webUrl,
+        },
+      })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["notifications"] }))
+        .catch((error) => console.error("Failed to record pipeline notification", error));
     } catch (error) {
       void sendPipelineRunNotification({
         ok: false,
@@ -372,6 +408,7 @@ function AppShell() {
         activeWorkItemViewId={activeWorkItemViewId}
         myReviewsBadge={myReviewsBadge}
         myWorkItemsBadge={myWorkItemsBadge}
+        notificationsBadge={notificationsBadge}
         onNavigate={setView}
         onOpenHelp={openHelp}
         onSetActiveWorkItemViewId={setActiveWorkItemViewId}
@@ -408,6 +445,7 @@ function AppShell() {
           onWorkItemNavViewsChange={setWorkItemNavViews}
           onOpenSettings={() => setView("settings")}
           onOpenPullRequest={openPullRequestSearch}
+          onOpenView={setView}
         />
       </main>
       {helpOpen && <HelpDialog onClose={() => closeHelp()} />}

@@ -3,6 +3,8 @@
 // Returns `undefined` for unrecognised commands so the caller can fall through.
 import type {
   CommitActivityInput,
+  ListNotificationsInput,
+  RecordNotificationInput,
   SearchCommitsInput,
 } from "@/lib/azdoCommands";
 import {
@@ -29,6 +31,13 @@ import {
   demoRepoTree,
   demoSearchCode,
 } from "@/lib/demo/commits";
+import {
+  demoListNotifications,
+  demoMarkAllNotificationsRead,
+  demoMarkNotificationsRead,
+  demoRecordNotification,
+  demoUnreadNotificationsCount,
+} from "@/lib/demo/notifications";
 
 export function dispatchExt(command: string, args: unknown): unknown {
   switch (command) {
@@ -176,6 +185,26 @@ export function dispatchExt(command: string, args: unknown): unknown {
     }
     case "list_repo_paths":
       return demoRepoPaths();
+    // ── Notification history ──────────────────────────────────────────────
+    case "list_notifications": {
+      const input = (args as { input?: ListNotificationsInput } | undefined)?.input;
+      return demoListNotifications(input);
+    }
+    case "get_unread_notifications_count":
+      return demoUnreadNotificationsCount();
+    case "mark_notifications_read": {
+      const input = (args as { input?: { ids?: number[] } } | undefined)?.input;
+      demoMarkNotificationsRead(input?.ids ?? []);
+      return null;
+    }
+    case "mark_all_notifications_read":
+      demoMarkAllNotificationsRead();
+      return null;
+    case "record_notification": {
+      const input = (args as { input?: RecordNotificationInput } | undefined)?.input;
+      if (input) demoRecordNotification(input);
+      return null;
+    }
     default:
       return undefined;
   }

@@ -42,3 +42,8 @@ export const MyPullRequestsGrid = lazy(() =>
     default: m.MyPullRequestsGrid,
   })),
 );
+export const NotificationsView = lazy(() =>
+  import("@/features/notifications/NotificationsView").then((m) => ({
+    default: m.NotificationsView,
+  })),
+);

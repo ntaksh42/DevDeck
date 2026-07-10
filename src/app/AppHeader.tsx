@@ -13,6 +13,7 @@ const VIEW_TITLES: Record<View, string> = {
   commits: "Commits",
   pipelines: "Pipelines",
   codeSearch: "Code",
+  notifications: "Notifications",
   settings: "Settings",
 };
 
@@ -26,6 +27,7 @@ const VIEW_DESCRIPTIONS: Record<View, string> = {
   commits: "Search Azure DevOps commits across repositories",
   pipelines: "Azure DevOps build runs by project",
   codeSearch: "Browse repository files and search code",
+  notifications: "History of review requests, work item updates, and pipeline alerts",
   settings: "Local Azure DevOps organization setup",
 };
 

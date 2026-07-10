@@ -6,16 +6,17 @@ use tauri::{AppHandle, Emitter};
 
 use crate::auth::client_for_organization;
 use crate::commits::sync_commits_for_org;
-use crate::db::{AppSettings, Organization};
+use crate::db::{AppSettings, NewNotification, Organization};
 use crate::prs::sync_prs_for_org;
 use crate::secrets::SecretStore;
 use crate::snooze::SnoozeService;
 use crate::work_items::sync_work_items_for_org;
 
 use super::notifications::{
-    notification_allowed, pr_review_notification_items, still_snoozed_pr_keys,
-    still_snoozed_work_item_ids, work_item_notification_items, PullRequestNotificationEvent,
-    WorkItemNotificationEvent,
+    notification_allowed, pr_notification_records, pr_review_notification_items,
+    should_collect_pr_notifications, should_collect_work_item_notifications, still_snoozed_pr_keys,
+    still_snoozed_work_item_ids, work_item_notification_items, work_item_notification_records,
+    PullRequestNotificationEvent, WorkItemNotificationEvent,
 };
 use super::*;
 
@@ -88,10 +89,7 @@ async fn sync_org_prs(
     ) {
         return outcome;
     }
-    let should_collect = settings.desktop_notifications_enabled
-        && (settings.notify_pr_review_requests
-            || settings.notify_pr_vote_resets
-            || settings.notify_pr_comment_replies);
+    let should_collect = should_collect_pr_notifications(settings);
     let previous_reviews = if should_collect {
         db.list_review_pull_requests(&org.id).unwrap_or_default()
     } else {
@@ -136,6 +134,12 @@ async fn sync_org_prs(
             )
         });
         if !items.is_empty() {
+            record_notifications(
+                db,
+                handle,
+                &org.name,
+                pr_notification_records(&org.id, &org.name, &items),
+            );
             let event = PullRequestNotificationEvent {
                 organization_id: org.id.clone(),
                 organization_name: org.name.clone(),
@@ -169,8 +173,7 @@ async fn sync_org_work_items(
     ) {
         return outcome;
     }
-    let should_collect = settings.desktop_notifications_enabled
-        && (settings.notify_work_item_assignments || settings.notify_work_item_state_changes);
+    let should_collect = should_collect_work_item_notifications(settings);
     let previous_my_work_items = if should_collect {
         match db.list_my_work_items(&org.id) {
             Ok(items) => items,
@@ -220,6 +223,12 @@ async fn sync_org_work_items(
                     )
                 });
                 if !items.is_empty() {
+                    record_notifications(
+                        db,
+                        handle,
+                        &org.name,
+                        work_item_notification_records(&org.id, &org.name, &items),
+                    );
                     let event = WorkItemNotificationEvent {
                         organization_id: org.id.clone(),
                         organization_name: org.name.clone(),
@@ -270,5 +279,23 @@ fn emit_sync_updated(handle: &AppHandle, org_id: &str, scopes: Vec<SyncScope>) {
         },
     ) {
         tracing::warn!(error = ?e, "failed to emit sync:updated");
+    }
+}
+
+/// Persists notification-history rows and, on success, notifies the frontend
+/// inbox. A DB failure only logs a warning: notification history is
+/// best-effort and must never block the sync pass.
+fn record_notifications(
+    db: &AppDatabase,
+    handle: &AppHandle,
+    org_name: &str,
+    records: Vec<NewNotification>,
+) {
+    if let Err(e) = db.insert_notifications(&records) {
+        tracing::warn!(org = %org_name, error = ?e, "sync: failed to record notification history");
+        return;
+    }
+    if let Err(e) = handle.emit("notifications:inbox-updated", serde_json::json!({})) {
+        tracing::warn!(org = %org_name, error = ?e, "sync: failed to emit notification inbox update");
     }
 }

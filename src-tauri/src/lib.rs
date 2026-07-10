@@ -230,7 +230,12 @@ pub fn run() {
             commands::pipelines::cancel_pipeline_run,
             commands::pipelines::list_pipeline_approvals,
             commands::pipelines::update_pipeline_approval,
-            commands::sync::trigger_sync
+            commands::sync::trigger_sync,
+            commands::notifications::list_notifications,
+            commands::notifications::get_unread_notifications_count,
+            commands::notifications::mark_notifications_read,
+            commands::notifications::mark_all_notifications_read,
+            commands::notifications::record_notification
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

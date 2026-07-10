@@ -7,6 +7,7 @@ export function NavButton({
   icon,
   label,
   shortcut,
+  badge,
   onClick,
 }: {
   active: boolean;
@@ -14,6 +15,7 @@ export function NavButton({
   icon: ReactNode;
   label: string;
   shortcut?: string;
+  badge?: number | null;
   onClick: () => void;
 }) {
   return (
@@ -21,7 +23,7 @@ export function NavButton({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      aria-label={label}
+      aria-label={navItemAriaLabel(label, badge)}
       aria-keyshortcuts={shortcut}
       data-nav-item="true"
       data-nav-active={active ? "true" : undefined}
@@ -32,6 +34,7 @@ export function NavButton({
     >
       <span className="shrink-0">{icon}</span>
       <span className="min-w-0 truncate">{label}</span>
+      <NavBadge count={badge} />
     </button>
   );
 }

@@ -1,6 +1,6 @@
 use super::notifications::{
-    notification_allowed, pr_review_notification_items, work_item_notification_items,
-    WorkItemNotificationKind,
+    notification_allowed, pr_review_notification_items, should_collect_pr_notifications,
+    should_collect_work_item_notifications, work_item_notification_items, WorkItemNotificationKind,
 };
 use super::*;
 use crate::db::{
@@ -147,6 +147,43 @@ fn notification_allowed_mute_takes_precedence_over_allow() {
         "Platform",
         Some("Noisy")
     ));
+}
+
+#[test]
+fn should_collect_notifications_ignores_desktop_notifications_enabled() {
+    // Notification history must be recorded even when desktop toasts are off:
+    // that setting only gates the frontend's toast, applied separately in
+    // desktopNotifications.ts.
+    let pr_settings = AppSettings {
+        desktop_notifications_enabled: false,
+        notify_pr_review_requests: true,
+        notify_pr_vote_resets: false,
+        notify_pr_comment_replies: false,
+        ..AppSettings::default()
+    };
+    assert!(should_collect_pr_notifications(&pr_settings));
+
+    let wi_settings = AppSettings {
+        desktop_notifications_enabled: false,
+        notify_work_item_assignments: false,
+        notify_work_item_state_changes: true,
+        ..AppSettings::default()
+    };
+    assert!(should_collect_work_item_notifications(&wi_settings));
+
+    // All type toggles off still suppresses collection, independent of
+    // desktop_notifications_enabled.
+    let none_settings = AppSettings {
+        desktop_notifications_enabled: true,
+        notify_pr_review_requests: false,
+        notify_pr_vote_resets: false,
+        notify_pr_comment_replies: false,
+        notify_work_item_assignments: false,
+        notify_work_item_state_changes: false,
+        ..AppSettings::default()
+    };
+    assert!(!should_collect_pr_notifications(&none_settings));
+    assert!(!should_collect_work_item_notifications(&none_settings));
 }
 
 #[test]
