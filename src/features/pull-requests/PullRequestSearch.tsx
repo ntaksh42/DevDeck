@@ -16,7 +16,6 @@ import {
 import { useActiveOrganizationId } from '@/lib/useActiveConnection';
 import { ErrorState } from '@/components/StateDisplay';
 import { MultiSelectFilter } from '@/components/MultiSelectFilter';
-import { FilterAutocomplete } from '@/components/FilterAutocomplete';
 import { PullRequestResults } from './PrSearchResults';
 import {
   PR_SEARCH_STATUS_OPTIONS,
@@ -46,7 +45,7 @@ export function PullRequestSearch({
   const [statuses, setStatuses] = useState<PrSearchStatus[]>(loadPrSearchStatuses);
   const [projectIds, setProjectIds] = useState<string[]>([]);
   const [repositoryIds, setRepositoryIds] = useState<string[]>([]);
-  const [targetBranch, setTargetBranch] = useState("");
+  const [targetBranches, setTargetBranches] = useState<string[]>([]);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [dateBasis, setDateBasis] = useState<PrSearchDateBasis>(loadPrSearchDateBasis);
@@ -121,7 +120,7 @@ export function PullRequestSearch({
     (query.trim() ? 1 : 0) +
     (projectIds.length > 0 ? 1 : 0) +
     (repositoryIds.length > 0 ? 1 : 0) +
-    (targetBranch.trim() ? 1 : 0) +
+    (targetBranches.length > 0 ? 1 : 0) +
     (fromDate ? 1 : 0) +
     (toDate ? 1 : 0) +
     (excludeDrafts ? 1 : 0);
@@ -129,7 +128,7 @@ export function PullRequestSearch({
   // Bundles the advanced filter state shared by every search trigger.
   function advancedFilters(): Partial<SearchPullRequestsInput> {
     return {
-      targetBranch: targetBranch.trim() || undefined,
+      targetBranches: targetBranches.length > 0 ? targetBranches : undefined,
       fromDate: fromDate || undefined,
       toDate: toDate || undefined,
       dateBasis,
@@ -158,7 +157,7 @@ export function PullRequestSearch({
     setStatuses(["active"]);
     setProjectIds([]);
     setRepositoryIds([]);
-    setTargetBranch("");
+    setTargetBranches([]);
     setFromDate("");
     setToDate("");
     setExcludeDrafts(false);
@@ -189,7 +188,7 @@ export function PullRequestSearch({
     setQuery("");
     setProjectIds([]);
     setRepositoryIds([]);
-    setTargetBranch("");
+    setTargetBranches([]);
     setFromDate("");
     setToDate("");
     setExcludeDrafts(false);
@@ -284,15 +283,15 @@ export function PullRequestSearch({
 
           <div className="grid gap-3 lg:grid-cols-[1fr_150px_150px_150px_170px_auto]">
             <div className="grid gap-2">
-              <span className="text-sm font-medium">Target branch</span>
-              <FilterAutocomplete
-                value={targetBranch}
-                onChange={setTargetBranch}
-                onClear={() => setTargetBranch("")}
-                placeholder="e.g. main"
-                suggestionPool={branchSuggestions}
+              <span className="text-sm font-medium">Target branches</span>
+              <MultiSelectFilter
+                options={branchSuggestions.map((branch) => ({ value: branch, label: branch }))}
+                selected={targetBranches}
+                onChange={setTargetBranches}
+                placeholder="All branches"
                 ariaLabel="Filter by target branch"
-                showAllOnFocus
+                searchable
+                disabled={branchQueries.length === 0 || branchSuggestions.length === 0}
               />
             </div>
 

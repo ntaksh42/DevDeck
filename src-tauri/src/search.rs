@@ -90,7 +90,7 @@ pub async fn search_all(
                     statuses: None,
                     project_ids: None,
                     repository_ids: None,
-                    target_branch: None,
+                    target_branches: None,
                     from_date: None,
                     to_date: None,
                     date_basis: None,

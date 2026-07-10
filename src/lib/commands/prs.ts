@@ -94,8 +94,8 @@ export type SearchPullRequestsInput = {
   projectIds?: string[];
   /** Repositories to include. Empty/omitted means all repositories. */
   repositoryIds?: string[];
-  /** Branch name, e.g. "main" or "refs/heads/main". */
-  targetBranch?: string;
+  /** Target branches to include, e.g. ["main", "release"]. */
+  targetBranches?: string[];
   /** Inclusive date window as "YYYY-MM-DD". */
   fromDate?: string;
   toDate?: string;

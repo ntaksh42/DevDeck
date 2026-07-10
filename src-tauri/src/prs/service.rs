@@ -121,8 +121,14 @@ impl PullRequestService {
 
         // Stored target refs are short (no refs/heads/ prefix), so normalize the
         // input the same way for comparison and rebuild the full ref for the API.
-        let target_branch =
-            normalize_optional(input.target_branch).map(|branch| short_ref(&branch).to_string());
+        let target_branches: Vec<String> = input
+            .target_branches
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|branch| {
+                normalize_optional(Some(branch)).map(|value| short_ref(&value).to_string())
+            })
+            .collect();
         let from_rfc = parse_date_bound(input.from_date.as_deref(), false)?;
         let to_rfc = parse_date_bound(input.to_date.as_deref(), true)?;
         if let (Some(from), Some(to)) = (&from_rfc, &to_rfc) {
@@ -159,9 +165,10 @@ impl PullRequestService {
             results.extend(cached.into_iter().map(cached_pr_to_summary).filter(|pr| {
                 // Active rows have no close date, so the window always applies
                 // to creation date here regardless of basis.
-                target_branch
-                    .as_deref()
-                    .is_none_or(|branch| pr.target_ref_name.eq_ignore_ascii_case(branch))
+                (target_branches.is_empty()
+                    || target_branches
+                        .iter()
+                        .any(|branch| pr.target_ref_name.eq_ignore_ascii_case(branch)))
                     && within_window(
                         pr.creation_date.as_str(),
                         from_rfc.as_deref(),
@@ -171,22 +178,29 @@ impl PullRequestService {
         }
 
         for status in live_statuses {
-            let target_ref_full = target_branch
-                .as_deref()
-                .map(|branch| format!("refs/heads/{branch}"));
-            let fetched = self
-                .fetch_live_prs(
-                    &organization,
-                    status,
-                    project_set.as_ref(),
-                    repository_set.as_ref(),
-                    target_ref_full.as_deref(),
-                    from_rfc.as_deref(),
-                    to_rfc.as_deref(),
-                    date_basis,
-                )
-                .await?;
-            results.extend(fetched);
+            let target_refs: Vec<Option<String>> = if target_branches.is_empty() {
+                vec![None]
+            } else {
+                target_branches
+                    .iter()
+                    .map(|branch| Some(format!("refs/heads/{branch}")))
+                    .collect()
+            };
+            for target_ref_full in target_refs {
+                let fetched = self
+                    .fetch_live_prs(
+                        &organization,
+                        status,
+                        project_set.as_ref(),
+                        repository_set.as_ref(),
+                        target_ref_full.as_deref(),
+                        from_rfc.as_deref(),
+                        to_rfc.as_deref(),
+                        date_basis,
+                    )
+                    .await?;
+                results.extend(fetched);
+            }
         }
 
         // Project/repository scoping is applied in memory so the cache path and
