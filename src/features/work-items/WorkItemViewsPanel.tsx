@@ -2,10 +2,12 @@ import {
   type ChangeEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Search } from 'lucide-react';
 import {
   countWorkItemQuery,
   listWorkItemProjects,
@@ -14,9 +16,11 @@ import {
 } from '@/lib/azdoCommands';
 import { useActiveOrganizationId } from '@/lib/useActiveConnection';
 import { clamp, isEditableTarget } from '@/lib/utils';
+import { matchesWorkItemQuery, parseSearchQuery } from '@/lib/searchQuery';
 import { ErrorState } from '@/components/StateDisplay';
 import { WorkItemsGrid } from './WorkItemsGrid';
 import { WorkItemBoard } from './WorkItemBoard';
+import { toMatchTarget } from './workItemMatchTarget';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from './queryKeys';
 import {
   createWorkItemQueryViewsExport,
@@ -58,6 +62,7 @@ export function WorkItemViewsPanel({
   const initialSelectedView = firstCustomView(views);
   const [selectedViewId, setSelectedViewId] = useState<string | null>(initialSelectedView?.id ?? null);
   const [viewMessage, setViewMessage] = useState<string | null>(null);
+  const [filter, setFilter] = useState("");
   const [layout, setLayout] = useState<WorkItemViewLayout>(() =>
     initialSelectedView ? loadWorkItemViewLayout(initialSelectedView.id) : "list",
   );
@@ -167,6 +172,11 @@ export function WorkItemViewsPanel({
       : false,
   });
   const selectedResults = selectedQuery?.data ?? [];
+  const filteredResults = useMemo(() => {
+    const parsed = parseSearchQuery(filter);
+    if (parsed.filters.length === 0 && parsed.text.length === 0) return selectedResults;
+    return selectedResults.filter((item) => matchesWorkItemQuery(toMatchTarget(item), parsed));
+  }, [selectedResults, filter]);
   const selectedQueryInitialLoading =
     !!selectedQuery && selectedQuery.isFetching && selectedQuery.data === undefined;
 
@@ -389,21 +399,35 @@ export function WorkItemViewsPanel({
             />
           ) : null}
 
+          <div className="flex h-8 shrink-0 items-center rounded-md border border-input bg-background px-2 focus-within:ring-2 focus-within:ring-ring">
+            <Search className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <input
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+              placeholder="Filter… try #1234, p:1, @user, s:active, t:bug"
+              aria-label="Filter"
+              title="Smart search: #1234 jumps to an id, p:1–4 priority, @user assignee, s:active state, t:bug type. Unknown prefixes are searched as text."
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+            />
+          </div>
+
           {layout === "board" ? (
             <WorkItemBoard
               key={`board-${selectedView.id}`}
               organizationId={selectedOrganizationId}
               projectId={selectedViewProjectId}
-              results={selectedResults}
+              results={filteredResults}
               autoFocus
             />
           ) : (
             <WorkItemsGrid
               key={selectedView.id}
+              activeExternalFilterCount={filter.trim() ? 1 : 0}
+              onClearExternalFilters={() => setFilter("")}
               dataUpdatedAt={selectedQuery?.dataUpdatedAt}
               isFetching={!!selectedQuery?.isFetching && selectedQuery.data !== undefined}
               loading={selectedQueryInitialLoading}
-              results={selectedResults}
+              results={filteredResults}
               searched={!!selectedQuery}
               autoFocus
               emptyMessage="Select or save a WIQL view to load work items."
