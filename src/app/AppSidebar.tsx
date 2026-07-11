@@ -432,7 +432,7 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
             </div>
           ))}
         </div>
-        <div className="mt-1 space-y-1 border-t border-border pt-1">
+        <div className="mt-auto space-y-1 border-t border-border pt-2">
           <NavButton
             active={activeView === "notifications"}
             disabled={organizationsLength === 0}
@@ -441,8 +441,6 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
             badge={notificationsBadge}
             onClick={() => onNavigate("notifications")}
           />
-        </div>
-        <div className="mt-auto space-y-1 border-t border-border pt-2">
           <NavButton
             active={false}
             icon={<BookOpen className="h-4 w-4" aria-hidden="true" />}
