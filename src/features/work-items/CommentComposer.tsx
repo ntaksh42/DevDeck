@@ -321,7 +321,7 @@ export function CommentComposer({
             aria-keyshortcuts="M Control+M Control+Enter Meta+Enter"
             placeholder="Add a comment..."
             rows={2}
-            className="min-h-[36px] w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none transition-[border-color,box-shadow,min-height] focus:min-h-[64px] focus:border-primary focus:ring-4 focus:ring-primary/20"
+            className="min-h-[36px] w-full resize-y rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none transition-[border-color,box-shadow,min-height] focus:min-h-[64px] focus:border-primary focus:ring-4 focus:ring-primary/20"
           />
           {showMentionOptions ? (
             <div className="absolute bottom-full left-0 z-20 mb-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-popover py-1 shadow-lg">
@@ -387,4 +387,3 @@ export function CommentComposer({
     </div>
   );
 }
-
