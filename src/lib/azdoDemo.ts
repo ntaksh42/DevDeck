@@ -67,17 +67,19 @@ import {
   demoSetPrThreadStatus,
 } from "@/lib/demo/prReview";
 import {
-  deleteDemoWorkItemComment,
   demoCreateWorkItem,
   demoMyWorkItems,
   demoRunWorkItemQuery,
   demoUpdateWorkItemFields,
-  demoWorkItemComment,
   demoWorkItemPreview,
   demoWorkItems,
   demoWorkItemProjects,
-  toggleDemoReaction,
 } from "@/lib/demo/workItems";
+import {
+  deleteDemoWorkItemComment,
+  demoWorkItemComment,
+  toggleDemoReaction,
+} from "@/lib/demo/workItemComments";
 import {
   demoAssigneeCandidates,
   demoClassificationNodes,

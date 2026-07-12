@@ -13,7 +13,8 @@ import {
 import { focusPrimaryGrid, isEditableTarget } from "@/lib/utils";
 import { LoadingState, PreviewEmptyState } from "@/components/StateDisplay";
 import { PrReviewHeader } from "./PrReviewHeader";
-import { ReviewTab, CommitsTab } from "./PrReviewTabContents";
+import { ReviewTab } from "./PrReviewTabContents";
+import { CommitsTab } from "./PrCommitsTab";
 import { ResultTab } from "./PrSecondaryTabs";
 
 // The Files tab is not the default tab and pulls in the `diff` library, so it

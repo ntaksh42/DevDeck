@@ -125,7 +125,7 @@ XService {
 `settings.rs` only needs the database. `AppDatabase` is a cloneable path wrapper that opens SQLite connections per call
 via `rusqlite`. Schema migrations live in `src-tauri/src/db.rs:migrate()` and
 use `PRAGMA user_version`; the current schema version is the `SCHEMA_VERSION`
-constant at the top of `db.rs` (currently `15`). `migrate()` applies each
+constant in `src-tauri/src/db/mod.rs` (currently `19`). `migrate()` applies each
 `if current < N` step in order and must stay repeatable; add a new numbered
 step rather than editing an existing one.
 
