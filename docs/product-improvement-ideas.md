@@ -4,7 +4,7 @@ This backlog summarizes ideas from a quick review of adjacent tools such as
 Azure DevOps Boards, GitHub Issues and Projects, Jira, Linear, YouTrack,
 Trello, GitLab, and GitKraken.
 
-## Implemented Or In Progress
+## Implemented
 
 - Keyboard shortcut help with `?` / `F1`.
 - Command palette with `Ctrl+K`.
@@ -33,8 +33,16 @@ Trello, GitLab, and GitKraken.
 - Reviewer-action sections and merge-conflict badges in My Reviews.
 - Command palette cross-entity search across organizations with recent items.
 - GitHub-style two-key navigation (`G` then a view key).
+- Back and forward history with `Alt+Left` and `Alt+Right`.
 
-## Requires Azure DevOps API Expansion
+## Planned / Spec Exists
+
+- Reliability foundation work is specified in `docs/spec-reliability-foundation.md`:
+  incremental synchronization, retry UI, diagnostic export, and local usage statistics.
+- Cross-cutting efficiency work is specified in `docs/spec-cross-cutting-efficiency.md`:
+  notification improvements, synchronization visibility, expanded search, and cross-organization views.
+
+## Blocked By Azure DevOps API Coverage
 
 These remain product ideas because they need additional Azure DevOps endpoints,
 data modeling, or event history support beyond the current command surface.
@@ -53,7 +61,7 @@ data modeling, or event history support beyond the current command surface.
 - Relation sections for parent, children, related work, linked PRs, branches, and commits.
 - Shared Azure DevOps query folder import.
 
-## Pull Request Review
+## Candidate: Pull Request Review
 
 - Add review inbox states for waiting on me, waiting on author, updated since last view, and CI failed.
 - Show unresolved thread count, policy status, build status, and reviewer vote in the grid.
@@ -61,19 +69,17 @@ data modeling, or event history support beyond the current command surface.
 - Add keyboard actions for approve, reject, and wait for author.
 - Highlight files or commits changed since the last time the PR was viewed.
 
-## Navigation And Keyboard
+## Candidate: Navigation And Keyboard
 
 - Show only context-relevant shortcuts in a compact status bar.
 - Teach shortcuts opportunistically after mouse actions.
-- Add back and forward history with `Alt+Left` and `Alt+Right`.
-
-## Scale And Reliability
+## Candidate: Scale And Reliability
 
 - Add paged or incremental query result fetching for very large WIQL results.
 - Keep the last successful list visible during API failures.
 - Add background bulk operation progress for long-running multi-project updates.
 - Centralize retry and backoff display for throttling and transient Azure DevOps errors.
 
-## Azure DevOps Integration
+## Candidate: Azure DevOps Integration
 
 - Move "Open in Azure DevOps" into a compact icon or context menu where possible.
