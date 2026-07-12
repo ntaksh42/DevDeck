@@ -12,6 +12,12 @@ const candidate: MentionCandidate = {
 describe("CommentComposer mentions", () => {
   afterEach(cleanup);
 
+  it("allows vertical resizing", () => {
+    render(<CommentComposer placeholder="Reply…" onSubmit={async () => {}} />);
+
+    expect(screen.getByRole("textbox").className).toContain("resize-y");
+  });
+
   it("opens the mention picker for a non-ASCII display name", async () => {
     const mentionSearch = vi.fn().mockResolvedValue([candidate]);
     render(

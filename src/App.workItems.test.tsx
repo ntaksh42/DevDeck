@@ -292,6 +292,7 @@ describe("App — Work Items", () => {
 
     fireEvent.keyDown(workItemsGrid, { key: "m" });
     let commentBox = screen.getByLabelText("Comment");
+    expect(commentBox.className).toContain("resize-y");
     expect(document.activeElement).toBe(commentBox);
     (commentBox as HTMLTextAreaElement).blur();
     fireEvent.keyDown(window, { key: "m", ctrlKey: true });
