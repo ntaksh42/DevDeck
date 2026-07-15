@@ -188,10 +188,20 @@ impl AdoClient {
         reviewer_id: &str,
         vote: i32,
     ) -> Result<IdentityRefWithVote> {
+        let detail = self
+            .get_pull_request_detail(project_id, repository_id, pull_request_id)
+            .await?;
+        let is_required = detail
+            .reviewers
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .find(|reviewer| reviewer.id.as_deref() == Some(reviewer_id))
+            .is_some_and(|reviewer| reviewer.is_required);
         let path = format!(
             "{project_id}/_apis/git/repositories/{repository_id}/pullRequests/{pull_request_id}/reviewers/{reviewer_id}"
         );
-        let body = json!({ "vote": vote, "id": reviewer_id });
+        let body = json!({ "vote": vote, "id": reviewer_id, "isRequired": is_required });
         self.put_json(&path, &[("api-version", "7.1-preview")], &body)
             .await
     }
