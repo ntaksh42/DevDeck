@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Check, Loader2, Pencil, SmilePlus, Trash2, X } from "lucide-react";
 import { formatRelativeDate } from "@/lib/utils";
+import type { MentionCandidate, Organization } from "@/lib/azdoCommands";
 import { commentAuthorInitials } from "./workItemHtml";
 import { RichHtmlFrame } from "./RichHtmlFrame";
+import { renderAzureMentionMarkdown } from "./workItemMentions";
+import {
+  useWorkItemMentionPicker,
+  type WorkItemMentionScope,
+} from "./useWorkItemMentionPicker";
+import { MentionPickerDropdown } from "./MentionPickerDropdown";
 
 // Azure DevOps comment reaction types, in display order, with their emoji.
 const COMMENT_REACTIONS: { type: string; emoji: string; label: string }[] = [
@@ -27,6 +34,11 @@ export function CollapsibleComment({
   editing,
   editPending,
   id,
+  mentionScope,
+  recentMentionOptions,
+  mentionPriorityNames,
+  selfOrg,
+  onMentionApplied,
   onDelete,
   onEdit,
   onImageOpen,
@@ -45,6 +57,11 @@ export function CollapsibleComment({
   editing: boolean;
   editPending: boolean;
   id: number;
+  mentionScope: WorkItemMentionScope;
+  recentMentionOptions: MentionCandidate[];
+  mentionPriorityNames: string[];
+  selfOrg: Organization | undefined;
+  onMentionApplied: (candidate: MentionCandidate) => void;
   onDelete: (commentId: number) => void;
   onEdit: (commentId: number, markdown: string) => void;
   onImageOpen: (src: string) => void;
@@ -61,8 +78,23 @@ export function CollapsibleComment({
   const [draft, setDraft] = useState(commentText ?? "");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [contentHeight, setContentHeight] = useState<number | null>(null);
+  const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const reactionTriggerRef = useRef<HTMLButtonElement>(null);
   const reactionMenuRef = useRef<HTMLDivElement>(null);
+
+  // The same @mention autocomplete the composer uses, wired to the edit draft.
+  // scope is null unless editing so a closed comment never runs an identity
+  // search.
+  const mentionPicker = useWorkItemMentionPicker({
+    value: draft,
+    setValue: setDraft,
+    textareaRef: editTextareaRef,
+    scope: editMode ? mentionScope : null,
+    recentMentionOptions,
+    mentionPriorityNames,
+    selfOrg,
+    onMentionApplied,
+  });
   // Headroom over the max-h-32 (128px) clamp so a comment barely past it doesn't
   // sprout a toggle for a few pixels.
   const collapsible =
@@ -124,12 +156,14 @@ export function CollapsibleComment({
 
   function startEdit() {
     setDraft(commentText ?? "");
+    mentionPicker.resetMentions();
     setEditMode(true);
   }
 
   function cancelEdit() {
     setEditMode(false);
     setDraft(commentText ?? "");
+    mentionPicker.resetMentions();
   }
 
   function saveEdit() {
@@ -138,7 +172,9 @@ export function CollapsibleComment({
       cancelEdit();
       return;
     }
-    onEdit(id, trimmed);
+    // Resolve any @Name inserted from the picker to Azure DevOps' @<guid> form
+    // so the edited comment actually notifies the mentioned identity.
+    onEdit(id, renderAzureMentionMarkdown(trimmed, mentionPicker.selectedMentions));
   }
 
   // Leave edit mode once the in-flight save for this comment resolves.
@@ -195,24 +231,49 @@ export function CollapsibleComment({
       <div className="px-1.5 py-1">
         {editMode ? (
           <div className="grid gap-1">
-            <textarea
-              aria-label={`Edit comment ${id}`}
-              value={draft}
-              autoFocus
-              disabled={editPending}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  cancelEdit();
-                } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-                  event.preventDefault();
-                  saveEdit();
-                }
-              }}
-              rows={Math.min(10, Math.max(3, draft.split("\n").length + 1))}
-              className="w-full resize-y rounded border border-input bg-background px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-            />
+            <div ref={mentionPicker.containerRef} className="relative">
+              <textarea
+                ref={editTextareaRef}
+                aria-label={`Edit comment ${id}`}
+                value={draft}
+                autoFocus
+                disabled={editPending}
+                onChange={(event) => {
+                  setDraft(event.target.value);
+                  mentionPicker.handleTextChange(
+                    event.target.value,
+                    event.target.selectionStart,
+                  );
+                }}
+                onClick={(event) => {
+                  mentionPicker.handleSelectionChange(event.currentTarget.selectionStart);
+                }}
+                onKeyDown={(event) => {
+                  // Ctrl+Enter always saves, matching the composer, even with the
+                  // picker open; then the picker consumes its own keys; a second
+                  // Escape (picker already closed) cancels the edit.
+                  if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+                    event.preventDefault();
+                    saveEdit();
+                    return;
+                  }
+                  if (mentionPicker.handleKeyDown(event)) return;
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    cancelEdit();
+                  }
+                }}
+                rows={Math.min(10, Math.max(3, draft.split("\n").length + 1))}
+                className="w-full resize-y rounded border border-input bg-background px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+              />
+              <MentionPickerDropdown
+                options={mentionPicker.dropdown.options}
+                activeIndex={mentionPicker.dropdown.activeIndex}
+                query={mentionPicker.dropdown.query}
+                errorMessage={mentionPicker.dropdown.errorMessage}
+                onSelect={mentionPicker.applyMention}
+              />
+            </div>
             <div className="flex items-center gap-1.5">
               <button
                 type="button"

@@ -300,6 +300,10 @@ export function WorkItemPreviewPanel({
                 editingCommentId={editingCommentId}
                 editPending={editPending}
                 mentionDisplayNames={commentMentionDisplayNames}
+                recentMentionOptions={recentMentionOptions}
+                mentionPriorityNames={mentionPriorityNames}
+                selfOrg={selfOrg}
+                onMentionApplied={handleMentionApplied}
                 onCustomPreviewFieldsChange={onCustomPreviewFieldsChange}
                 onDeleteComment={deleteComment}
                 onEditComment={editComment}
