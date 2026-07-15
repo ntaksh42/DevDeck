@@ -75,6 +75,16 @@ describe("renderMarkdownHtml", () => {
     expect(html).not.toContain("![image.png]");
   });
 
+  it("keeps balanced parentheses in an attachment file name with raw spaces", () => {
+    const html = renderMarkdownHtml(
+      "![image.png](https://dev.azure.com/org/proj/_apis/git/repositories/repo/pullRequests/1/attachments/Screenshot (1).png)",
+    );
+    expect(html).toContain(
+      'src="https://dev.azure.com/org/proj/_apis/git/repositories/repo/pullRequests/1/attachments/Screenshot%20(1).png"',
+    );
+    expect(html).not.toContain(".png)");
+  });
+
   it("leaves the same image syntax inside a code span untouched", () => {
     const html = renderMarkdownHtml("`![x](https://a b.png)`");
     expect(html).toContain("<code>![x](https://a b.png)</code>");
@@ -172,5 +182,21 @@ describe("MarkdownView", () => {
       expect(container.querySelector("img")?.getAttribute("src")).toBe("data:image/png;base64,AAAA"),
     );
     expect(resolveImageSource).toHaveBeenCalledWith(attachmentUrl.replace(/ /g, "%20"));
+  });
+
+  it("hydrates PR attachment file names containing raw spaces and balanced parentheses", async () => {
+    const attachmentUrl =
+      "https://dev.azure.com/contoso/proj/_apis/git/repositories/repo-1/pullRequests/42/attachments/Screenshot (1).png";
+    const resolveImageSource = vi.fn().mockResolvedValue("data:image/png;base64,AAAA");
+    const { container } = render(
+      <MarkdownView
+        text={`![image.png](${attachmentUrl})`}
+        resolveImageSource={resolveImageSource}
+      />,
+    );
+    await waitFor(() =>
+      expect(container.querySelector("img")?.getAttribute("src")).toBe("data:image/png;base64,AAAA"),
+    );
+    expect(resolveImageSource).toHaveBeenCalledWith(attachmentUrl.replace(" ", "%20"));
   });
 });

@@ -12,7 +12,26 @@ pub(crate) fn normalize_image_content_type(content_type: &str) -> Option<&'stati
         "image/webp" => Some("image/webp"),
         "image/svg+xml" => Some("image/svg+xml"),
         "image/bmp" => Some("image/bmp"),
+        "image/x-icon" | "image/vnd.microsoft.icon" => Some("image/x-icon"),
         _ => None,
+    }
+}
+
+pub(crate) fn image_content_type_from_bytes(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some("image/png")
+    } else if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
+        Some("image/jpeg")
+    } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        Some("image/gif")
+    } else if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
+        Some("image/webp")
+    } else if bytes.starts_with(b"BM") {
+        Some("image/bmp")
+    } else if bytes.starts_with(&[0x00, 0x00, 0x01, 0x00]) {
+        Some("image/x-icon")
+    } else {
+        None
     }
 }
 
@@ -43,6 +62,8 @@ fn extension_content_type(value: &str) -> Option<&'static str> {
         Some("image/svg+xml")
     } else if value.ends_with(".bmp") {
         Some("image/bmp")
+    } else if value.ends_with(".ico") {
+        Some("image/x-icon")
     } else {
         None
     }

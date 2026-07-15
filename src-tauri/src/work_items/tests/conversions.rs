@@ -201,6 +201,45 @@ fn image_content_type_from_url_reads_file_name_query_param() {
         ),
         Some("image/png")
     );
+    assert_eq!(
+        image_content_type_from_url(
+            "https://dev.azure.com/org/proj/_apis/wit/attachments/guid?fileName=favicon.ico"
+        ),
+        Some("image/x-icon")
+    );
+}
+
+#[test]
+fn image_content_type_from_bytes_detects_generic_attachment_responses() {
+    assert_eq!(
+        image_content_type_from_bytes(b"\x89PNG\r\n\x1a\nrest"),
+        Some("image/png")
+    );
+    assert_eq!(
+        image_content_type_from_bytes(b"\xff\xd8\xffrest"),
+        Some("image/jpeg")
+    );
+    assert_eq!(
+        image_content_type_from_bytes(b"RIFF\x04\x00\x00\x00WEBPrest"),
+        Some("image/webp")
+    );
+    assert_eq!(
+        image_content_type_from_bytes(b"\x00\x00\x01\x00rest"),
+        Some("image/x-icon")
+    );
+    assert_eq!(image_content_type_from_bytes(b"plain text"), None);
+}
+
+#[test]
+fn normalize_image_content_type_accepts_icon_media_types() {
+    assert_eq!(
+        normalize_image_content_type("image/vnd.microsoft.icon"),
+        Some("image/x-icon")
+    );
+    assert_eq!(
+        normalize_image_content_type("image/x-icon; charset=binary"),
+        Some("image/x-icon")
+    );
 }
 
 #[test]
