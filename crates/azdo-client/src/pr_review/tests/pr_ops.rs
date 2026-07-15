@@ -1,4 +1,4 @@
-use wiremock::matchers::{body_partial_json, method, path, query_param};
+use wiremock::matchers::{body_json, body_partial_json, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use super::test_client;
@@ -78,13 +78,34 @@ async fn update_pull_request_patches_title_and_description() {
 }
 
 #[tokio::test]
-async fn submit_pull_request_vote_puts_vote_for_reviewer() {
+async fn submit_pull_request_vote_preserves_required_reviewer() {
     let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(
+            "/project-1/_apis/git/repositories/repo-1/pullrequests/42",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "pullRequestId": 42,
+            "title": "Add dashboard",
+            "sourceRefName": "refs/heads/feature",
+            "targetRefName": "refs/heads/main",
+            "reviewers": [{
+                "id": "user-42",
+                "vote": 0,
+                "isRequired": true
+            }]
+        })))
+        .mount(&server)
+        .await;
     Mock::given(method("PUT"))
         .and(path(
             "/project-1/_apis/git/repositories/repo-1/pullRequests/42/reviewers/user-42",
         ))
-        .and(body_partial_json(serde_json::json!({ "vote": 10 })))
+        .and(body_json(serde_json::json!({
+            "vote": 10,
+            "id": "user-42",
+            "isRequired": true
+        })))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "id": "user-42",
             "displayName": "Me",
@@ -100,6 +121,7 @@ async fn submit_pull_request_vote_puts_vote_for_reviewer() {
         .await
         .unwrap();
     assert_eq!(reviewer.vote, 10);
+    assert!(reviewer.is_required);
 }
 
 #[tokio::test]
