@@ -48,9 +48,26 @@ const azdoImageExtension: TokenizerAndRendererExtension = {
     return index < 0 ? undefined : index;
   },
   tokenizer(src) {
-    const match = /^!\[([^\]\n]*)\]\(([^)\n]*)\)/.exec(src);
-    if (!match) return undefined;
-    const dest = match[2].trim();
+    const prefix = /^!\[([^\]\n]*)\]\(/.exec(src);
+    if (!prefix) return undefined;
+    const destinationStart = prefix[0].length;
+    let nestedParens = 0;
+    let destinationEnd = -1;
+    for (let index = destinationStart; index < src.length && src[index] !== "\n"; index += 1) {
+      if (src[index] === "\\") {
+        index += 1;
+      } else if (src[index] === "(") {
+        nestedParens += 1;
+      } else if (src[index] === ")") {
+        if (nestedParens === 0) {
+          destinationEnd = index;
+          break;
+        }
+        nestedParens -= 1;
+      }
+    }
+    if (destinationEnd < 0) return undefined;
+    const dest = src.slice(destinationStart, destinationEnd).trim();
     // No raw space means the standard parser already handles this correctly.
     if (!dest.includes(" ")) return undefined;
     // "<url>" and 'url "title"' forms are handled correctly by the standard parser.
@@ -60,8 +77,8 @@ const azdoImageExtension: TokenizerAndRendererExtension = {
     if (!/^(https?:\/\/|\/(?!\/))/i.test(dest)) return undefined;
     return {
       type: "azdoImage",
-      raw: match[0],
-      text: match[1],
+      raw: src.slice(0, destinationEnd + 1),
+      text: prefix[1],
       href: dest.replace(/ /g, "%20"),
     };
   },

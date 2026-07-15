@@ -406,6 +406,7 @@ impl WorkItemService {
             .content_type
             .as_deref()
             .and_then(normalize_image_content_type)
+            .or_else(|| image_content_type_from_bytes(&response.bytes))
             .or_else(|| image_content_type_from_url(url))
             .ok_or_else(|| {
                 AppError::InvalidInput("attachment is not a supported preview image".to_string())
