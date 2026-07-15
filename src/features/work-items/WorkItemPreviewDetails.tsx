@@ -5,7 +5,11 @@ import {
   useRef,
   useState,
 } from "react";
-import type { WorkItemPreview } from "@/lib/azdoCommands";
+import type {
+  MentionCandidate,
+  Organization,
+  WorkItemPreview,
+} from "@/lib/azdoCommands";
 import { commentRichHtml, richFieldHtml } from "./workItemHtml";
 import { focusPrimaryGrid, formatRelativeDate, isEditableTarget } from "@/lib/utils";
 import { navigateToPullRequest } from "@/lib/crossLinks";
@@ -43,6 +47,10 @@ export function WorkItemPreviewDetails({
   actionsControl,
   deletePending,
   mentionDisplayNames,
+  recentMentionOptions,
+  mentionPriorityNames,
+  selfOrg,
+  onMentionApplied,
   onCustomPreviewFieldsChange,
   onDeleteComment,
   onEditComment,
@@ -75,6 +83,10 @@ export function WorkItemPreviewDetails({
   editPending: boolean;
   deletePending: boolean;
   mentionDisplayNames: ReadonlyMap<string, string>;
+  recentMentionOptions: MentionCandidate[];
+  mentionPriorityNames: string[];
+  selfOrg: Organization | undefined;
+  onMentionApplied: (candidate: MentionCandidate) => void;
   onCustomPreviewFieldsChange: (fields: CustomPreviewField[]) => void;
   onDeleteComment: (commentId: number) => void;
   onEditComment: (commentId: number, markdown: string) => void;
@@ -299,6 +311,15 @@ export function WorkItemPreviewDetails({
                   editPending={editPending}
                   id={comment.id}
                   key={comment.id}
+                  mentionScope={{
+                    organizationId: preview.organizationId,
+                    projectId: preview.projectId,
+                    id: preview.id,
+                  }}
+                  recentMentionOptions={recentMentionOptions}
+                  mentionPriorityNames={mentionPriorityNames}
+                  selfOrg={selfOrg}
+                  onMentionApplied={onMentionApplied}
                   onDelete={onDeleteComment}
                   onEdit={onEditComment}
                   onImageOpen={setLightboxSrc}

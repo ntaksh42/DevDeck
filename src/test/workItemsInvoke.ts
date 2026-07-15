@@ -193,6 +193,19 @@ export function workItemsSearchInvoke(
           createdDate: "2026-05-24T00:00:00Z",
         });
       }
+      if (command === "update_work_item_comment") {
+        const input =
+          (args as { input?: { commentId?: number; markdown?: string } } | undefined)
+            ?.input ?? {};
+        const markdown = input.markdown ?? "";
+        return Promise.resolve({
+          id: input.commentId ?? 7,
+          text: markdown,
+          renderedText: `<p>${markdown}</p>`,
+          createdBy: "Creator",
+          createdDate: "2026-05-23T12:00:00Z",
+        });
+      }
       if (command === "list_work_item_type_states") {
         return Promise.resolve(["Active", "Resolved", "Closed"]);
       }

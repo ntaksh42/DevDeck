@@ -387,4 +387,54 @@ describe("App — Work Items", () => {
       );
     });
   });
+
+  it("offers mention autocomplete when editing a posted comment", async () => {
+    invokeMock.mockImplementation(workItemsSearchInvoke);
+
+    renderApp();
+    const main = within(await screen.findByRole("main"));
+
+    await screen.findByText("No pull requests assigned to you.");
+    fireEvent.click(
+      within(
+        screen.getByRole("navigation", { name: "Primary navigation" }),
+      ).getAllByRole("button", { name: "Search" })[1],
+    );
+    const projectFilter = await main.findByRole("button", { name: "Filter by project" });
+    await waitFor(() => expect(projectFilter.hasAttribute("disabled")).toBe(false));
+    fireEvent.change(await main.findByPlaceholderText("Search work items…"), {
+      target: { value: "save" },
+    });
+    fireEvent.click(main.getByRole("button", { name: "Search" }));
+
+    // The preview (with its comments) loads once results arrive.
+    await screen.findByLabelText("Comment");
+
+    // Open the inline editor for the "Older context" comment (id 5).
+    fireEvent.click(await screen.findByRole("button", { name: "Edit comment 5" }));
+    const editBox = (await screen.findByLabelText(
+      "Edit comment 5",
+    )) as HTMLTextAreaElement;
+
+    // Typing @ opens the same autocomplete the composer uses; pick a candidate.
+    fireEvent.change(editBox, { target: { value: "@" } });
+    editBox.setSelectionRange(1, 1);
+    fireEvent.click(editBox);
+    fireEvent.click(await screen.findByRole("button", { name: /Creator/ }));
+    fireEvent.change(editBox, { target: { value: "@Creator please review" } });
+    fireEvent.keyDown(editBox, { key: "Enter", ctrlKey: true });
+
+    // Saving resolves the picked mention to Azure DevOps' @<guid> markdown.
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith(
+        "update_work_item_comment",
+        expect.objectContaining({
+          input: expect.objectContaining({
+            commentId: 5,
+            markdown: "@<9ce68702-0694-6ef4-b9fa-0f3143502233> please review",
+          }),
+        }),
+      );
+    });
+  });
 });
