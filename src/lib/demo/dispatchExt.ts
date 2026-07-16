@@ -48,7 +48,14 @@ export function dispatchExt(command: string, args: unknown): unknown {
       return demoPipelineDefinitions();
     case "list_pipeline_runs": {
       const input = (
-        args as { input?: { branch?: string; result?: string; requestedForMe?: boolean } } | undefined
+        args as {
+          input?: {
+            definitionId?: number;
+            branch?: string;
+            result?: string;
+            requestedForMe?: boolean;
+          };
+        } | undefined
       )?.input;
       return demoPipelineRunsFiltered(input);
     }

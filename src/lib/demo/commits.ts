@@ -451,7 +451,7 @@ export function demoSearchCode(query: string) {
         repositoryName: "azdo-dashboard",
         branch: "main",
         webUrl:
-          "https://dev.azure.com/demo/Demo%20Project/_git/azdo-dashboard?path=/src/lib/azdoCommands.ts&_a=contents&version=GBmain",
+          "https://dev.azure.com/contoso/Demo%20Project/_git/azdo-dashboard?path=/src/lib/azdoCommands.ts&_a=contents&version=GBmain",
       },
       {
         fileName: "App.tsx",
@@ -460,7 +460,7 @@ export function demoSearchCode(query: string) {
         repositoryName: "azdo-dashboard",
         branch: "main",
         webUrl:
-          "https://dev.azure.com/demo/Demo%20Project/_git/azdo-dashboard?path=/src/App.tsx&_a=contents&version=GBmain",
+          "https://dev.azure.com/contoso/Demo%20Project/_git/azdo-dashboard?path=/src/App.tsx&_a=contents&version=GBmain",
       },
     ],
   };
