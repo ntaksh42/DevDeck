@@ -1,6 +1,6 @@
 [package]
 name = "azdo-dashboard"
-version = "0.1.16"
+version = "0.1.43"
 description = "DevDeck — developer desktop dashboard"
 authors.workspace = true
 edition.workspace = true
@@ -39,3 +39,4 @@ base64 = "0.22"
 tempfile = "3"
 url = { workspace = true }
 wiremock = "0.6"
+
