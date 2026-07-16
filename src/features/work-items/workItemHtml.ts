@@ -176,9 +176,15 @@ export function commentRichHtml(
 ): string {
   // Substitute mention tokens on the final HTML so both the rendered-HTML
   // path and the escaped plain-text path produce the same styled mention.
+  const renderedHtml = normalizeRichHtml(renderedText);
+  const sourceHtml = normalizeRichHtml(plainText);
+  // Azure DevOps can replace attachment URLs in renderedText with a U+0006
+  // placeholder. The source HTML still contains the authenticated WIT URL.
   const html =
-    normalizeRichHtml(renderedText) ??
-    normalizeRichHtml(plainText) ??
+    (renderedHtml?.includes('src="\u0006/') && sourceHtml?.includes("/_apis/wit/attachments/")
+      ? sourceHtml
+      : renderedHtml) ??
+    sourceHtml ??
     markdownishTextToHtml(plainText) ??
     "No text";
   return replaceAzureMentionDisplayNamesInHtml(html, mentionDisplayNames) ?? html;
@@ -351,4 +357,3 @@ function escapeHtml(value: string | null | undefined): string | null {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
-

@@ -70,6 +70,19 @@ describe("commentRichHtml", () => {
     expect(commentRichHtml(null, "just text", new Map())).toContain("just text");
     expect(commentRichHtml(null, null, new Map())).toBe("No text");
   });
+
+  it("uses the source HTML when rendered image URLs contain Azure DevOps placeholders", () => {
+    const attachmentUrl =
+      "https://dev.azure.com/contoso/project/_apis/wit/attachments/image-id?fileName=image.png";
+    const html = commentRichHtml(
+      '<p><span>@Alice</span><img src="\u0006/image-id?fileName=image.png" alt="Image"></p>',
+      `<p><span>@Alice</span><img src="${attachmentUrl}" alt="Image"></p>`,
+      new Map(),
+    );
+
+    expect(html).toContain(`src="${attachmentUrl}"`);
+    expect(html).not.toContain("\u0006/");
+  });
 });
 
 describe("buildRichHtmlDocument sanitization", () => {
