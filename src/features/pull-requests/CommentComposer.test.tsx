@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CommentComposer } from "./CommentComposer";
 import type { MentionCandidate } from "@/lib/azdoCommands";
+import { PULL_REQUEST_COMMENT_HEIGHT_STORAGE_KEY } from "@/lib/usePersistedTextareaHeight";
 
 const candidate: MentionCandidate = {
   id: "11111111-2222-3333-4444-555555555555",
@@ -10,12 +11,18 @@ const candidate: MentionCandidate = {
 };
 
 describe("CommentComposer mentions", () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    window.localStorage.clear();
+  });
 
   it("allows vertical resizing", () => {
+    window.localStorage.setItem(PULL_REQUEST_COMMENT_HEIGHT_STORAGE_KEY, "180");
     render(<CommentComposer placeholder="Reply…" onSubmit={async () => {}} />);
 
-    expect(screen.getByRole("textbox").className).toContain("resize-y");
+    const textarea = screen.getByRole("textbox");
+    expect(textarea.className).toContain("resize-y");
+    expect(textarea.style.height).toBe("180px");
   });
 
   it("opens the mention picker for a non-ASCII display name", async () => {

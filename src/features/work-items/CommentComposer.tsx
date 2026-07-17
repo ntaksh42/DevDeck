@@ -15,6 +15,10 @@ import {
   type Organization,
   type WorkItemSummary,
 } from "@/lib/azdoCommands";
+import {
+  usePersistedTextareaHeight,
+  WORK_ITEM_COMMENT_HEIGHT_STORAGE_KEY,
+} from "@/lib/usePersistedTextareaHeight";
 import { workItemQueryKeys } from "./queryKeys";
 import {
   isMentionResolvableId,
@@ -54,7 +58,9 @@ export function CommentComposer({
   const mentionsToRecordRef = useRef<
     Array<{ id: string; displayName: string; uniqueName: string; organizationId: string }>
   >([]);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const textareaRef = usePersistedTextareaHeight(
+    WORK_ITEM_COMMENT_HEIGHT_STORAGE_KEY,
+  );
   const handledFocusCommentRequest = useRef(0);
 
   const mentionPicker = useWorkItemMentionPicker({

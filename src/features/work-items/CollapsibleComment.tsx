@@ -2,6 +2,10 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Check, Loader2, Pencil, SmilePlus, Trash2, X } from "lucide-react";
 import { formatRelativeDate } from "@/lib/utils";
 import type { MentionCandidate, Organization } from "@/lib/azdoCommands";
+import {
+  usePersistedTextareaHeight,
+  WORK_ITEM_COMMENT_HEIGHT_STORAGE_KEY,
+} from "@/lib/usePersistedTextareaHeight";
 import { commentAuthorInitials } from "./workItemHtml";
 import { RichHtmlFrame } from "./RichHtmlFrame";
 import { renderAzureMentionMarkdown } from "./workItemMentions";
@@ -78,7 +82,9 @@ export function CollapsibleComment({
   const [draft, setDraft] = useState(commentText ?? "");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [contentHeight, setContentHeight] = useState<number | null>(null);
-  const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const editTextareaRef = usePersistedTextareaHeight(
+    WORK_ITEM_COMMENT_HEIGHT_STORAGE_KEY,
+  );
   const reactionTriggerRef = useRef<HTMLButtonElement>(null);
   const reactionMenuRef = useRef<HTMLDivElement>(null);
 
