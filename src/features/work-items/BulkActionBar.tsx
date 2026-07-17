@@ -110,6 +110,8 @@ export function BulkActionBar({
   onPrioritySelect,
   tagsPending,
   onTagsApply,
+  snoozePending,
+  onSnoozeOpen,
 }: {
   count: number;
   typeBreakdown: { label: string; count: number }[];
@@ -135,6 +137,8 @@ export function BulkActionBar({
   onPrioritySelect: (priority: number) => void;
   tagsPending: boolean;
   onTagsApply: (tag: string, mode: "add" | "remove") => void;
+  snoozePending: boolean;
+  onSnoozeOpen: (anchorRect: DOMRect) => void;
 }) {
   const stateListRef = useRef<HTMLDivElement>(null);
   const priorityListRef = useRef<HTMLDivElement>(null);
@@ -166,6 +170,15 @@ export function BulkActionBar({
         </span>
       ) : null}
       <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          disabled={snoozePending}
+          onClick={(event) => onSnoozeOpen(event.currentTarget.getBoundingClientRect())}
+          className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-xs font-medium hover:bg-secondary disabled:opacity-60"
+        >
+          {snoozePending ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : null}
+          Snooze
+        </button>
         {/* State picker */}
         <div className="relative">
           <button

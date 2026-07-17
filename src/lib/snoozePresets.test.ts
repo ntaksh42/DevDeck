@@ -40,6 +40,19 @@ describe("snooze presets", () => {
     expect(result.getDate()).toBe(22);
   });
 
+  it("one month later preserves the day or clamps to month end", () => {
+    const regular = new Date("2026-06-17T15:00:00");
+    const regularResult = new Date(presetToIso(preset("in-one-month"), regular));
+    expect(regularResult.getMonth()).toBe(6);
+    expect(regularResult.getDate()).toBe(17);
+    expect(regularResult.getHours()).toBe(9);
+
+    const monthEnd = new Date("2026-01-31T15:00:00");
+    const monthEndResult = new Date(presetToIso(preset("in-one-month"), monthEnd));
+    expect(monthEndResult.getMonth()).toBe(1);
+    expect(monthEndResult.getDate()).toBe(28);
+  });
+
   it("localInputToIso rejects empty and invalid input", () => {
     expect(localInputToIso("")).toBeNull();
     expect(localInputToIso("not-a-date")).toBeNull();

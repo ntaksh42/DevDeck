@@ -93,7 +93,7 @@ export function MyReviewsGrid({
       e.preventDefault();
       const pr = g.sortedPrs[g.selectedIndex];
       if (pr) {
-        g.snoozeTargetRef.current = pr;
+        g.snoozeTargetRef.current = [...g.selectedPrs];
         const rowEl = g.rowRefs.current[g.selectedIndex];
         g.setSnoozeAnchorRect(
           (rowEl ?? g.containerRef.current)?.getBoundingClientRect() ?? null,
@@ -323,6 +323,10 @@ export function MyReviewsGrid({
             onToggleShowSnoozed={() => g.setShowSnoozed((v) => !v)}
             onClearAllFilters={g.clearAllFilters}
             onOpenColumnMenu={(rect) => g.setColumnMenuRect(rect)}
+            onSnoozeSelected={(rect) => {
+              g.snoozeTargetRef.current = [...g.selectedPrs];
+              g.setSnoozeAnchorRect(rect);
+            }}
           />
         </div>
         <ResizeHandle
@@ -368,15 +372,15 @@ export function MyReviewsGrid({
         <SnoozeMenu
           anchorRect={g.snoozeAnchorRect}
           onSnooze={(snoozeUntil) => {
-            const target = g.snoozeTargetRef.current;
-            if (target) {
-              g.snoozeMutation.mutate({
+            const targets = g.snoozeTargetRef.current;
+            if (targets.length > 0) {
+              g.snoozeMutation.mutate(targets.map((target) => ({
                 organizationId: g.organizationId,
                 itemType: 'pull_request',
                 itemKey: `${target.repositoryId}:${target.pullRequestId}`,
                 snoozeUntil,
-              });
-              g.setCopyToast('Snoozed');
+              })));
+              g.setCopyToast(`Snoozed ${targets.length} PR${targets.length === 1 ? '' : 's'}`);
               setTimeout(() => g.setCopyToast(null), 1500);
             }
             g.setSnoozeAnchorRect(null);

@@ -18,7 +18,7 @@ export interface WiKeyHandlerDeps {
   openFilterCol: FilterableColumn | null;
   triageScope: string | undefined;
   snoozeEnabled: boolean;
-  snoozeTargetRef: React.RefObject<WorkItemSummary | null>;
+  snoozeTargetRef: React.RefObject<WorkItemSummary[]>;
   rowRefs: React.RefObject<(HTMLDivElement | null)[]>;
   moveSelection: (index: number) => void;
   setOpenFilterCol: (col: FilterableColumn | null) => void;
@@ -154,7 +154,7 @@ export function createWiKeyHandler(deps: WiKeyHandlerDeps): (e: React.KeyboardEv
       e.preventDefault();
       const item = displayed[selectedIndex];
       if (item) {
-        snoozeTargetRef.current = item;
+        snoozeTargetRef.current = checkedItems.length > 0 ? [...checkedItems] : [item];
         const rowEl = rowRefs.current[selectedIndex];
         setSnoozeAnchorRect(rowEl?.getBoundingClientRect() ?? null);
       }
