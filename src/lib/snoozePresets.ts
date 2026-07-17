@@ -15,6 +15,17 @@ function atLocalHour(now: Date, dayOffset: number, hour: number): Date {
   return result;
 }
 
+function oneMonthLater(now: Date): Date {
+  const result = new Date(now);
+  const day = result.getDate();
+  result.setDate(1);
+  result.setMonth(result.getMonth() + 1);
+  const lastDay = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
+  result.setDate(Math.min(day, lastDay));
+  result.setHours(9, 0, 0, 0);
+  return result;
+}
+
 // Days until the next Monday (1-7); today-if-Monday rolls to next week so the
 // snooze always lands in the future.
 function daysUntilNextMonday(now: Date): number {
@@ -46,6 +57,11 @@ export const SNOOZE_PRESETS: SnoozePreset[] = [
     id: "next-week",
     label: "Next Monday (09:00)",
     compute: (now) => atLocalHour(now, daysUntilNextMonday(now), 9),
+  },
+  {
+    id: "in-one-month",
+    label: "In 1 month",
+    compute: oneMonthLater,
   },
 ];
 

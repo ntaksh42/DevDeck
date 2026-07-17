@@ -3,6 +3,13 @@ import { invokeCommand } from "./runtime";
 
 export type SnoozeItemType = "pull_request" | "work_item";
 
+export type SnoozeItemInput = {
+  organizationId?: string;
+  itemType: SnoozeItemType;
+  itemKey: string;
+  snoozeUntil: string;
+};
+
 const snoozedItemSummarySchema = z.object({
   itemType: z.string(),
   itemKey: z.string(),
@@ -16,13 +23,12 @@ const snoozedItemSummariesSchema = z.array(snoozedItemSummarySchema);
 
 export type SnoozedItemSummary = z.infer<typeof snoozedItemSummarySchema>;
 
-export async function snoozeItem(input: {
-  organizationId?: string;
-  itemType: SnoozeItemType;
-  itemKey: string;
-  snoozeUntil: string;
-}): Promise<void> {
+export async function snoozeItem(input: SnoozeItemInput): Promise<void> {
   await invokeCommand("snooze_item", { input });
+}
+
+export async function snoozeItems(inputs: SnoozeItemInput[]): Promise<void> {
+  await Promise.all(inputs.map((input) => snoozeItem(input)));
 }
 
 export async function unsnoozeItem(input: {

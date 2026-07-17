@@ -139,6 +139,11 @@ export function WorkItemsGrid({
           onPrioritySelect={(priority) => g.bulk.bulkPriorityMutation.mutate(priority)}
           tagsPending={g.bulk.bulkTagsMutation.isPending}
           onTagsApply={(tag, mode) => g.bulk.bulkTagsMutation.mutate({ tag, mode })}
+          snoozePending={state.snoozeMutation.isPending}
+          onSnoozeOpen={(anchorRect) => {
+            state.snoozeTargetRef.current = [...g.checkedItems];
+            state.setSnoozeAnchorRect(anchorRect);
+          }}
         />
       ) : null}
       {g.bulk.bulkFailures.length > 0 ? (
@@ -316,14 +321,16 @@ export function WorkItemsGrid({
         <SnoozeMenu
           anchorRect={state.snoozeAnchorRect}
           onSnooze={(snoozeUntil) => {
-            const target = state.snoozeTargetRef.current;
-            if (target) {
-              state.snoozeMutation.mutate({
+            const targets = state.snoozeTargetRef.current;
+            if (targets.length > 0) {
+              state.snoozeMutation.mutate(targets.map((target) => ({
                 organizationId: snoozeOrganizationId,
                 itemType: "work_item",
                 itemKey: String(target.id),
                 snoozeUntil,
-              });
+              })));
+              state.setCopyToast(`Snoozed ${targets.length} item${targets.length === 1 ? "" : "s"}`);
+              window.setTimeout(() => state.setCopyToast(null), 1500);
             }
             state.setSnoozeAnchorRect(null);
           }}

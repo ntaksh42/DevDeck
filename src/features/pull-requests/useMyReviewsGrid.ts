@@ -5,7 +5,7 @@ import {
   getAppSettings,
   listMyReviewPullRequests,
   prLocator,
-  snoozeItem,
+  snoozeItems,
   submitPullRequestVote,
   type ReviewPullRequestSummary,
 } from '@/lib/azdoCommands';
@@ -72,7 +72,7 @@ export function useMyReviewsGrid({
   const organizationId = useActiveOrganizationId();
   const [showSnoozed, setShowSnoozed] = useState(false);
   const [snoozeAnchorRect, setSnoozeAnchorRect] = useState<DOMRect | null>(null);
-  const snoozeTargetRef = useRef<ReviewPullRequestSummary | null>(null);
+  const snoozeTargetRef = useRef<ReviewPullRequestSummary[]>([]);
   // The filter text intentionally resets when the view is left (remount on nav).
   const [textFilter, setTextFilter] = useState('');
   const [collapsedSections, setCollapsedSections] = useState<Set<ReviewSection>>(
@@ -125,7 +125,7 @@ export function useMyReviewsGrid({
     },
   });
   const snoozeMutation = useMutation({
-    mutationFn: snoozeItem,
+    mutationFn: snoozeItems,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['myReviews'] });
       void queryClient.invalidateQueries({ queryKey: ['snoozedItems', 'pull_request'] });

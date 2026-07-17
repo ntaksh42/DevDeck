@@ -30,7 +30,7 @@ function makeDeps(overrides: Partial<WiKeyHandlerDeps> = {}): WiKeyHandlerDeps {
     openFilterCol: null,
     triageScope: undefined,
     snoozeEnabled: false,
-    snoozeTargetRef: { current: null },
+    snoozeTargetRef: { current: [] },
     rowRefs: { current: [] },
     moveSelection: vi.fn(),
     setOpenFilterCol: vi.fn(),
@@ -94,5 +94,23 @@ describe("createWiKeyHandler — copy as Markdown link", () => {
     fireKey("L", makeDeps({ displayed: [makeItem({ webUrl: null })] }));
 
     expect(writeText).not.toHaveBeenCalled();
+  });
+});
+
+describe("createWiKeyHandler — snooze", () => {
+  it("opens snooze for every checked work item", () => {
+    const checkedItems = [makeItem({ id: 456 }), makeItem({ id: 789 })];
+    const snoozeTargetRef = { current: [] as WorkItemSummary[] };
+    const setSnoozeAnchorRect = vi.fn();
+
+    fireKey("z", makeDeps({
+      checkedItems,
+      snoozeEnabled: true,
+      snoozeTargetRef,
+      setSnoozeAnchorRect,
+    }));
+
+    expect(snoozeTargetRef.current).toEqual(checkedItems);
+    expect(setSnoozeAnchorRect).toHaveBeenCalledTimes(1);
   });
 });

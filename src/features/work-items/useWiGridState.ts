@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { snoozeItem, type WorkItemSummary } from '@/lib/azdoCommands';
+import { snoozeItems, type WorkItemSummary } from '@/lib/azdoCommands';
 import { storedNumber } from '@/lib/utils';
 import { useGridColumns } from '@/lib/useGridColumns';
 import type { CustomPreviewField } from './previewFieldsStorage';
@@ -119,9 +119,9 @@ export function useWiGridState({
   const snoozeEnabled = !!snoozeOrganizationId;
   const [showSnoozed, setShowSnoozed] = useState(false);
   const [snoozeAnchorRect, setSnoozeAnchorRect] = useState<DOMRect | null>(null);
-  const snoozeTargetRef = useRef<WorkItemSummary | null>(null);
+  const snoozeTargetRef = useRef<WorkItemSummary[]>([]);
   const snoozeMutation = useMutation({
-    mutationFn: snoozeItem,
+    mutationFn: snoozeItems,
     onSuccess: () => {
       if (snoozeOrganizationId) {
         void queryClient.invalidateQueries({
