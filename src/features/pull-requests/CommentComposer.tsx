@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { type MentionCandidate } from "@/lib/azdoCommands";
 import {
@@ -8,6 +8,10 @@ import {
   renderAzureMentionMarkdown,
   type SelectedMention,
 } from "@/features/work-items/workItemMentions";
+import {
+  PULL_REQUEST_COMMENT_HEIGHT_STORAGE_KEY,
+  usePersistedTextareaHeight,
+} from "@/lib/usePersistedTextareaHeight";
 
 /**
  * Reusable comment editor with optional @mention autocomplete. Owns its own
@@ -37,7 +41,9 @@ export function CommentComposer({
 }) {
   const [text, setText] = useState(initialValue);
   const [submitting, setSubmitting] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const textareaRef = usePersistedTextareaHeight(
+    PULL_REQUEST_COMMENT_HEIGHT_STORAGE_KEY,
+  );
 
   const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
   const [candidates, setCandidates] = useState<MentionCandidate[]>([]);

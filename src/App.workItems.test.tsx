@@ -2,6 +2,7 @@ import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderApp } from "./test/appTestHelpers";
 import { workItemsSearchInvoke } from "./test/workItemsInvoke";
+import { WORK_ITEM_COMMENT_HEIGHT_STORAGE_KEY } from "./lib/usePersistedTextareaHeight";
 
 const invokeMock = vi.fn();
 const openUrlMock = vi.fn();
@@ -62,6 +63,7 @@ describe("App — Work Items", () => {
 
   it("searches work items and renders results", async () => {
     invokeMock.mockImplementation(workItemsSearchInvoke);
+    window.localStorage.setItem(WORK_ITEM_COMMENT_HEIGHT_STORAGE_KEY, "168");
 
     renderApp();
     const main = within(await screen.findByRole("main"));
@@ -293,6 +295,7 @@ describe("App — Work Items", () => {
     fireEvent.keyDown(workItemsGrid, { key: "m" });
     let commentBox = screen.getByLabelText("Comment");
     expect(commentBox.className).toContain("resize-y");
+    expect(commentBox.style.height).toBe("168px");
     expect(document.activeElement).toBe(commentBox);
     (commentBox as HTMLTextAreaElement).blur();
     fireEvent.keyDown(window, { key: "m", ctrlKey: true });
