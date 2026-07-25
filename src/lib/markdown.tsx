@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import DOMPurify from "dompurify";
 import { marked, type TokenizerAndRendererExtension } from "marked";
 import { openExternalUrl } from "@/lib/openExternal";
+import { toAzdoAttachmentUrl } from "@/lib/azdoAttachmentUrl";
 
 // Azure DevOps stores @mentions as "@<identity-guid>" markdown. The browser has
 // no display name for the guid, and without help marked parses "<guid>" as
@@ -157,29 +158,6 @@ const MARKDOWN_CLASSES = [
   "[&_hr]:my-2 [&_hr]:border-border",
 ].join(" ");
 
-// Azure DevOps embeds description/comment images as authenticated attachment
-// URLs: either the rich-text editor's shared `_apis/wit/attachments/` store, or
-// (for images pasted into a PR description/comment) the PR-scoped
-// `_apis/git/repositories/{repoId}/pullRequests/{prId}/attachments/{fileName}`
-// endpoint. A plain <img> fetch from the webview omits the PAT/bearer auth, so
-// the image 401s and renders broken. Resolve those to data URLs through the
-// backend instead. Other schemes (data/blob) and non-attachment URLs (e.g.
-// README images) are left untouched.
-const PR_ATTACHMENT_PATH =
-  /\/_apis\/git\/repositories\/[^/]+\/pullrequests\/[^/]+\/attachments\/[^/]+/;
-
-function toAzdoAttachmentUrl(src: string, baseUrl: string | null | undefined): string | null {
-  try {
-    const url = new URL(src, baseUrl || window.location.href);
-    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
-    const path = url.pathname.toLowerCase();
-    if (!path.includes("/_apis/wit/attachments/") && !PR_ATTACHMENT_PATH.test(path)) return null;
-    return url.href;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Renders sanitized markdown. Links open in the external browser instead of
  * navigating the app webview. When `resolveImageSource` is provided,
@@ -212,18 +190,26 @@ export function MarkdownView({
       const attachmentUrl = toAzdoAttachmentUrl(rawSrc, baseUrl);
       if (!attachmentUrl) continue;
       image.dataset.azdoImageHydrated = "true";
+      const showError = () => {
+        if (cancelled || !image.isConnected) return;
+        const fallback = document.createElement("span");
+        fallback.textContent = "Image could not be loaded.";
+        fallback.className = "text-xs italic text-muted-foreground";
+        image.replaceWith(fallback);
+      };
       void resolveImageSource(attachmentUrl)
         .then((dataUrl) => {
-          if (cancelled || !dataUrl || !image.isConnected) return;
+          if (cancelled || !image.isConnected) return;
+          // Without a data URL the original authenticated src stays in place and
+          // 401s, leaving the browser to render only the alt text. Show the
+          // explicit failure instead.
+          if (!dataUrl) {
+            showError();
+            return;
+          }
           image.src = dataUrl;
         })
-        .catch(() => {
-          if (cancelled || !image.isConnected) return;
-          const fallback = document.createElement("span");
-          fallback.textContent = "Image could not be loaded.";
-          fallback.className = "text-xs italic text-muted-foreground";
-          image.replaceWith(fallback);
-        });
+        .catch(showError);
     }
     return () => {
       cancelled = true;

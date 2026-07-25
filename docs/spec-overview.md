@@ -373,8 +373,18 @@ format!(
   webview から直接取得すると認証ヘッダが付かず 401 になるため、バックエンド (`fetch_work_item_image`、
   同一組織の上記 2 形態の添付 URL のみ許可・LRU キャッシュ) 経由で取得して data URL に差し替えてから
   表示する。相対パスの添付 src は PR の webUrl を基準に絶対 URL へ解決してから同じ経路で取得する。
+  この添付 URL 判定は `src/lib/azdoAttachmentUrl.ts` に集約し、Work Item プレビューの iframe
+  (`workItemHtml.ts`) と markdown ビュー (`markdown.tsx`) の両方が同じ判定を使う。判定が片方に
+  偏ると、Work Item コメントに貼られた PR 添付画像のように一方の画面だけ hydration されず
+  alt テキスト ("Image") だけが表示される。判定範囲はバックエンドの許可リスト
+  (`is_allowed_attachment_path`) と一致させる。取得に失敗した場合・data URL が得られなかった場合は
+  認証なしで 401 になる元の src を残さず、明示的なエラー表示に置き換える。
   添付 API が `application/octet-stream` を返す場合や URL にファイル名がない場合は、PNG/JPEG/GIF/WebP/
   BMP/ICO のファイルシグネチャから画像種別を判定する。
+  Azure DevOps はコメントの rendered HTML で添付 URL を U+0006 制御文字に置き換えることがある
+  (先頭のみの置換・URL 全体の置換の両方がある)。rendered HTML に U+0006 が含まれ、かつ元の
+  plain text 側に取得可能な添付 URL があれば plain text 側を採用する。採用できない場合は先頭の
+  U+0006 を除去してから組織の base URL に対して解決する。
   Azure DevOps が挿入する添付ファイル名に生の空白を含む画像 markdown (`![alt](url with space.png)`)
   は、空白をパーセントエンコードした上で画像として描画する。ファイル名内の対応する丸括弧も URL の
   一部として保持する (strict CommonMark は生空白でリンク先を打ち切るため、無変換だと生テキストとして漏れる)。
