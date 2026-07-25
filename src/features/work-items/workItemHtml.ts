@@ -6,6 +6,24 @@
  */
 
 import DOMPurify from "dompurify";
+import { isAbsoluteAzdoAttachmentUrl, toAzdoAttachmentUrl } from "@/lib/azdoAttachmentUrl";
+
+// Azure DevOps substitutes attachment URLs in rendered comment HTML with a
+// U+0006 control character. It appears both as a bare prefix on an otherwise
+// usable path and as a whole-URL replacement.
+const ATTACHMENT_PLACEHOLDER = "\u0006";
+const PLACEHOLDER_PREFIX = /^\u0006+/;
+
+// True when the HTML carries an attachment URL the backend can fetch, i.e. one
+// `toAzdoAttachmentUrl` accepts. Used to decide whether the source HTML is worth
+// preferring over rendered HTML whose src was replaced by the placeholder.
+function hasAzdoAttachmentUrl(html: string): boolean {
+  const matches = html.match(/src\s*=\s*["'][^"']+["']/gi) ?? [];
+  return matches.some((attribute) => {
+    const src = attribute.replace(/^src\s*=\s*["']/i, "").replace(/["']$/, "");
+    return isAbsoluteAzdoAttachmentUrl(src);
+  });
+}
 
 export function hydrateAuthenticatedImages(
   doc: Document,
@@ -21,50 +39,49 @@ export function hydrateAuthenticatedImages(
       continue;
     }
 
-    const absoluteUrl = toAbsoluteHttpUrl(rawSrc, baseUrl);
-    if (!absoluteUrl) continue;
-    if (!isWorkItemAttachmentUrl(absoluteUrl)) continue;
+    const attachmentUrl = toAzdoAttachmentUrl(stripPlaceholderPrefix(rawSrc), baseUrl);
+    if (!attachmentUrl) continue;
 
     image.dataset.azdoImageHydrated = "true";
-    void resolveImageSource(absoluteUrl)
+    void resolveImageSource(attachmentUrl)
       .then((dataUrl) => {
-        if (!dataUrl || !image.isConnected) return;
+        if (!image.isConnected) return;
+        // A resolver that yields no data URL leaves the original authenticated
+        // src in place, which the iframe cannot fetch — show the error instead
+        // of a broken image rendering only its alt text.
+        if (!dataUrl) {
+          replaceWithImageError(doc, image, syncHeight);
+          return;
+        }
         image.src = dataUrl;
         syncHeight();
       })
       .catch(() => {
-        image.dataset.azdoImageError = "true";
-        const fallback = doc.createElement("span");
-        fallback.textContent = "Image could not be loaded. Check Azure DevOps auth or attachment permissions.";
-        fallback.className = "azdo-image-error";
-        image.replaceWith(fallback);
-        syncHeight();
+        if (!image.isConnected) return;
+        replaceWithImageError(doc, image, syncHeight);
       });
   }
 }
 
-function isWorkItemAttachmentUrl(src: string): boolean {
-  try {
-    return new URL(src).pathname.toLowerCase().includes("/_apis/wit/attachments/");
-  } catch {
-    return false;
-  }
+function replaceWithImageError(doc: Document, image: HTMLImageElement, syncHeight: () => void) {
+  image.dataset.azdoImageError = "true";
+  const fallback = doc.createElement("span");
+  fallback.textContent = "Image could not be loaded. Check Azure DevOps auth or attachment permissions.";
+  fallback.className = "azdo-image-error";
+  image.replaceWith(fallback);
+  syncHeight();
+}
+
+// Azure DevOps sometimes emits attachment srcs prefixed with a U+0006 control
+// character (see `commentRichHtml`). When the source HTML is unavailable to
+// swap in, drop the prefix so the remaining path can still resolve against the
+// organization base URL instead of failing as an unfetchable src.
+function stripPlaceholderPrefix(src: string): string {
+  return src.replace(PLACEHOLDER_PREFIX, "");
 }
 
 function isInlineImageSource(src: string): boolean {
   return /^(data|blob):/i.test(src);
-}
-
-function toAbsoluteHttpUrl(src: string, baseUrl: string | null | undefined): string | null {
-  try {
-    const url = new URL(src, baseUrl || window.location.href);
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-      return null;
-    }
-    return url.href;
-  } catch {
-    return null;
-  }
 }
 
 // Strip raw Azure DevOps service HTML to a safe subset before it reaches the
@@ -179,9 +196,13 @@ export function commentRichHtml(
   const renderedHtml = normalizeRichHtml(renderedText);
   const sourceHtml = normalizeRichHtml(plainText);
   // Azure DevOps can replace attachment URLs in renderedText with a U+0006
-  // placeholder. The source HTML still contains the authenticated WIT URL.
+  // placeholder. The source HTML still holds the authenticated attachment URL,
+  // so prefer it whenever it carries one. Match on the placeholder character
+  // itself rather than one exact src=" spelling: the quote style and the
+  // leading slash both vary by response shape, and the attachment may be a PR
+  // attachment rather than a work item one.
   const html =
-    (renderedHtml?.includes('src="\u0006/') && sourceHtml?.includes("/_apis/wit/attachments/")
+    (renderedHtml?.includes(ATTACHMENT_PLACEHOLDER) && sourceHtml && hasAzdoAttachmentUrl(sourceHtml)
       ? sourceHtml
       : renderedHtml) ??
     sourceHtml ??
