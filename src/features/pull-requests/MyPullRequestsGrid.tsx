@@ -421,7 +421,7 @@ export function MyPullRequestsGrid() {
                 You have no active pull requests in this organization.
               </div>
             ) : (
-              <div role="grid" aria-label="My pull requests" tabIndex={-1}>
+              <div role="grid" aria-label="My pull requests" data-primary-grid="true" tabIndex={-1}>
                 {rows.map((pr, index) => (
                   <CreatedPrRow
                     key={`${pr.repositoryId}-${pr.pullRequestId}`}

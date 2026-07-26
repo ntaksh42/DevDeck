@@ -54,20 +54,26 @@ export function ReviewStatusBar({
   return (
     <div className="flex items-center justify-between border-t border-border px-2 py-1 text-xs text-muted-foreground">
       <span className="flex items-center gap-3">
-        <span>
-          {visiblePrs.length} total,{' '}
-          <span className="font-medium text-foreground">{noVoteCount}</span> not voted
-          {returnedKeys.size > 0 ? (
-            <>
-              {', '}
-              <span className="font-medium text-purple-700 dark:text-purple-300">
-                {returnedKeys.size}
-              </span>{' '}
-              returned
-            </>
-          ) : null}
-        </span>
-        {isMultiSelect ? (
+        {/* The snoozed panel replaces the inbox grid, so inbox-derived counts
+            and selection state would describe rows that are not on screen. */}
+        {showSnoozed ? (
+          <span>Showing snoozed pull requests</span>
+        ) : (
+          <span>
+            {visiblePrs.length} total,{' '}
+            <span className="font-medium text-foreground">{noVoteCount}</span> not voted
+            {returnedKeys.size > 0 ? (
+              <>
+                {', '}
+                <span className="font-medium text-purple-700 dark:text-purple-300">
+                  {returnedKeys.size}
+                </span>{' '}
+                returned
+              </>
+            ) : null}
+          </span>
+        )}
+        {!showSnoozed && isMultiSelect ? (
           <>
             {changesLoading ? (
               <span>Checking {selectedPrs.length} PRs for overlapping files…</span>
@@ -96,7 +102,7 @@ export function ReviewStatusBar({
               Snooze selected
             </button>
           </>
-        ) : singleFileCount != null ? (
+        ) : !showSnoozed && singleFileCount != null ? (
           <span>
             {singleFileCount} changed file{singleFileCount === 1 ? '' : 's'}
           </span>

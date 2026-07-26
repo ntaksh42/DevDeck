@@ -81,11 +81,23 @@ export function ViewEditorDialog({
   onClose,
 }: ViewEditorDialogProps) {
   const viewFormRef = useRef<HTMLFormElement | null>(null);
+  // Focus returns to whatever opened the dialog (button, preview pane, grid),
+  // mirroring CreateWorkItemDialog, so keyboard navigation is not stranded on
+  // <body> after the dialog closes.
+  const restoreFocusRef = useRef<HTMLElement | null>(
+    document.activeElement instanceof HTMLElement ? document.activeElement : null,
+  );
+
+  function close() {
+    const target = restoreFocusRef.current;
+    onClose();
+    window.setTimeout(() => target?.focus(), 0);
+  }
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={onClose}
+      onClick={close}
     >
       <div
         role="dialog"
@@ -94,6 +106,14 @@ export function ViewEditorDialog({
         className="relative w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-popover shadow-xl"
         style={{ maxHeight: "90vh" }}
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={(event) => {
+          // On the outer dialog rather than the form so Escape also works from
+          // the header close button, and never reaches the grid behind it.
+          if (event.key === "Escape") {
+            event.stopPropagation();
+            close();
+          }
+        }}
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h2 id="view-dialog-title" className="text-sm font-semibold">
@@ -102,7 +122,7 @@ export function ViewEditorDialog({
           <button
             type="button"
             aria-label="Close dialog"
-            onClick={onClose}
+            onClick={close}
             className="rounded p-1 text-muted-foreground hover:bg-muted"
           >
             <X className="h-4 w-4" aria-hidden="true" />
@@ -117,10 +137,6 @@ export function ViewEditorDialog({
             if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
               event.preventDefault();
               viewFormRef.current?.requestSubmit();
-            }
-            if (event.key === "Escape") {
-              event.stopPropagation();
-              onClose();
             }
           }}
         >
@@ -370,7 +386,7 @@ export function ViewEditorDialog({
           <div className="flex items-center justify-between gap-2 pt-1">
             <button
               type="button"
-              onClick={onClose}
+              onClick={close}
               className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium hover:bg-secondary"
             >
               Cancel

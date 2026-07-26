@@ -211,7 +211,10 @@ pub(crate) fn commit_activity(
     from_date: Option<&str>,
     to_date: Option<&str>,
 ) -> Result<Vec<(String, i64)>> {
-    let author_like = author.map(|a| format!("%{}%", a.to_lowercase()));
+    // Escaped like search_commits above, so `%` and `_` in an author filter
+    // stay literal instead of acting as wildcards; otherwise the heatmap and
+    // the commit list disagree for the same input.
+    let author_like = author.map(|a| format!("%{}%", escape_like_pattern(&a.to_lowercase())));
     let mut stmt = conn.prepare(
         r#"
         SELECT date(author_date) AS day, COUNT(*) AS count
@@ -221,8 +224,8 @@ pub(crate) fn commit_activity(
           AND (?2 IS NULL OR project_id = ?2)
           AND (?3 IS NULL OR repository_id = ?3)
           AND (?4 IS NULL
-               OR lower(IFNULL(author_name, '')) LIKE ?4
-               OR lower(IFNULL(author_email, '')) LIKE ?4)
+               OR lower(IFNULL(author_name, '')) LIKE ?4 ESCAPE '\'
+               OR lower(IFNULL(author_email, '')) LIKE ?4 ESCAPE '\')
           AND (?5 IS NULL OR author_date >= ?5)
           AND (?6 IS NULL OR author_date <= ?6)
         GROUP BY day

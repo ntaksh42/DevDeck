@@ -138,6 +138,13 @@ export function PullRequestResults({
     setSelectedIndex((index) => Math.min(index, Math.max(filteredResults.length - 1, 0)));
   }, [filteredResults.length]);
 
+  // Clamping on length alone leaves the old index in place when a new search
+  // happens to return the same number of rows, so the preview pane would show a
+  // different pull request than the highlighted row.
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [results]);
+
   const countLabel = useMemo(() => {
     if (loading) return "Searching";
     if (!searched) return "Ready";

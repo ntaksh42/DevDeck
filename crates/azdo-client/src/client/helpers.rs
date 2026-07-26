@@ -114,3 +114,19 @@ pub(crate) fn parse_retry_after(headers: &HeaderMap) -> Option<Duration> {
     let delta = target.signed_duration_since(chrono::Utc::now());
     Some(delta.to_std().unwrap_or(Duration::ZERO))
 }
+
+/// Joins an API path onto `base_url`.
+///
+/// Callers build paths with `format!()` from Azure DevOps project, repository
+/// and branch *names*, which may legally contain `#` and `?`. `Url::join`
+/// treats those as fragment/query delimiters and would silently truncate the
+/// path (`Team#1/_apis/...` requests `/Team`), so they are percent-encoded
+/// first. `%` is deliberately left alone: some callers pre-encode segments
+/// with `encode_path_segment`, and escaping it here would double-encode them.
+/// `/` must also stay literal because it separates the path segments.
+pub(crate) fn join_api_path(base_url: &Url, path: &str) -> Result<Url> {
+    let escaped = path.replace('#', "%23").replace('?', "%3F");
+    base_url
+        .join(&escaped)
+        .map_err(|e| AdoError::Auth(e.to_string()))
+}

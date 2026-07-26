@@ -65,6 +65,7 @@ export const workItemQueryKeys = {
     projectId?: string,
     workItemId?: number,
   ) => ['workItemUpdates', organizationId, projectId, workItemId] as const,
+  updatesRoot: () => ['workItemUpdates'] as const,
   typeStates: (
     organizationId?: string,
     projectId?: string,
@@ -120,4 +121,7 @@ export function invalidateWorkItemMutationCaches(queryClient: QueryClient): void
   invalidateWorkItemQueryViews(queryClient);
   void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
   void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.assigneesRoot() });
+  // Field edits and comments both add revisions, so the History section would
+  // otherwise keep serving its cached (pre-mutation) list until it goes stale.
+  void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.updatesRoot() });
 }

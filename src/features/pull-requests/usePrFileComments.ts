@@ -32,6 +32,10 @@ export function usePrFileComments(pr: ReviewPullRequestSummary) {
     void queryClient.invalidateQueries({
       queryKey: ["prReview", pr.organizationId, pr.repositoryId, pr.pullRequestId],
     });
+    // Commenting/resolving from the diff changes the same grid columns as the
+    // Conversation tab, so refresh My Reviews here too (usePrReviewActions
+    // already does this for the equivalent actions).
+    void queryClient.invalidateQueries({ queryKey: ["myReviews", pr.organizationId] });
   }
 
   const commentMutation = useMutation({

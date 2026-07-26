@@ -447,3 +447,64 @@ async fn retries_put_after_transient_500() {
 
     assert_eq!(value["ok"], serde_json::json!(true));
 }
+
+// Azure DevOps allows `#` and `?` in project names. `Url::join` would treat
+// them as fragment/query delimiters and truncate the path, so the request has
+// to arrive percent-encoded instead of as a request for `/Team`.
+#[tokio::test]
+async fn api_path_encodes_hash_in_project_name() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/Team%231/_apis/git/repositories"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "count": 0,
+            "value": []
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server).await;
+    client.list_repositories("Team#1").await.unwrap();
+}
+
+#[tokio::test]
+async fn api_path_encodes_question_mark_in_project_name() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/Team%3Fx/_apis/git/repositories"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "count": 0,
+            "value": []
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server).await;
+    client.list_repositories("Team?x").await.unwrap();
+}
+
+// Segments pre-encoded by `encode_path_segment` must not be double-encoded:
+// a work item type of "Bug & Feature" arrives as `%20%26%20`, not `%2520%2526`.
+#[tokio::test]
+async fn api_path_does_not_double_encode_pre_encoded_segments() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(
+            "/proj/_apis/wit/workitemtypes/Bug%20%26%20Feature/states",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "count": 0,
+            "value": []
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = test_client(&server).await;
+    client
+        .list_work_item_type_states("proj", "Bug & Feature")
+        .await
+        .unwrap();
+}

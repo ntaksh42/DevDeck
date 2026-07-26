@@ -11,7 +11,8 @@ use crate::error::{AdoError, Result};
 
 use super::helpers::{
     almsearch_base_url, decode_json, is_allowed_attachment_path, is_legacy_visualstudio_org_url,
-    parse_retry_after, same_azure_devops_organization_url, url_path_is_within_base, vssps_base_url,
+    join_api_path, parse_retry_after, same_azure_devops_organization_url, url_path_is_within_base,
+    vssps_base_url,
 };
 use super::{AdoClient, BinaryResponse};
 
@@ -65,9 +66,7 @@ impl AdoClient {
         path: &str,
         query: &[(&str, &str)],
     ) -> Result<T> {
-        let url = base_url
-            .join(path)
-            .map_err(|e| AdoError::Auth(e.to_string()))?;
+        let url = join_api_path(&base_url, path)?;
 
         self.send_with_retry(
             "GET",
@@ -86,10 +85,7 @@ impl AdoClient {
         path: &str,
         query: &[(&str, &str)],
     ) -> Result<BinaryResponse> {
-        let url = self
-            .base_url
-            .join(path)
-            .map_err(|e| AdoError::Auth(e.to_string()))?;
+        let url = join_api_path(&self.base_url, path)?;
 
         self.send_with_retry(
             "GET",
@@ -112,10 +108,7 @@ impl AdoClient {
     }
 
     pub(crate) async fn get_text(&self, path: &str, query: &[(&str, &str)]) -> Result<String> {
-        let url = self
-            .base_url
-            .join(path)
-            .map_err(|e| AdoError::Auth(e.to_string()))?;
+        let url = join_api_path(&self.base_url, path)?;
 
         self.send_with_retry(
             "GET",
@@ -209,10 +202,7 @@ impl AdoClient {
         query: &[(&str, &str)],
         body: &B,
     ) -> Result<T> {
-        let url = self
-            .base_url
-            .join(path)
-            .map_err(|e| AdoError::Auth(e.to_string()))?;
+        let url = join_api_path(&self.base_url, path)?;
         self.post_json_to_url(url, query, body).await
     }
 
@@ -225,10 +215,7 @@ impl AdoClient {
         content_type: &str,
         body: &B,
     ) -> Result<T> {
-        let url = self
-            .base_url
-            .join(path)
-            .map_err(|e| AdoError::Auth(e.to_string()))?;
+        let url = join_api_path(&self.base_url, path)?;
         self.send_with_retry(
             "POST",
             url.as_str(),
@@ -255,9 +242,7 @@ impl AdoClient {
         query: &[(&str, &str)],
         body: &B,
     ) -> Result<T> {
-        let url = almsearch_base_url(&self.base_url)?
-            .join(path)
-            .map_err(|e| AdoError::Auth(e.to_string()))?;
+        let url = join_api_path(&almsearch_base_url(&self.base_url)?, path)?;
         self.post_json_to_url(url, query, body).await
     }
 
@@ -283,10 +268,7 @@ impl AdoClient {
         query: &[(&str, &str)],
         body: &B,
     ) -> Result<T> {
-        let url = self
-            .base_url
-            .join(path)
-            .map_err(|e| AdoError::Auth(e.to_string()))?;
+        let url = join_api_path(&self.base_url, path)?;
 
         self.send_with_retry(
             "PUT",
@@ -299,10 +281,7 @@ impl AdoClient {
     }
 
     pub(crate) async fn delete(&self, path: &str, query: &[(&str, &str)]) -> Result<()> {
-        let url = self
-            .base_url
-            .join(path)
-            .map_err(|e| AdoError::Auth(e.to_string()))?;
+        let url = join_api_path(&self.base_url, path)?;
 
         self.send_with_retry(
             "DELETE",
@@ -321,10 +300,7 @@ impl AdoClient {
         content_type: &str,
         body: &B,
     ) -> Result<T> {
-        let url = self
-            .base_url
-            .join(path)
-            .map_err(|e| AdoError::Auth(e.to_string()))?;
+        let url = join_api_path(&self.base_url, path)?;
 
         self.send_with_retry(
             "PATCH",

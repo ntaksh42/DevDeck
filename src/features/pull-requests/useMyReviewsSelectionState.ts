@@ -177,7 +177,11 @@ export function useMyReviewsSelectionState({
       restoreFocus: () => {
         scrollPrIntoView(selectedIndex);
         const node = rowRefs.current[selectedIndex];
-        if (!node) return false;
+        // Rows are stored by absolute index and the array is never shortened,
+        // so a shrinking list leaves detached nodes behind. Focusing one is a
+        // silent no-op that would still report success, stranding focus on
+        // <body> with no retry.
+        if (!node?.isConnected) return false;
         node.focus();
         return true;
       },

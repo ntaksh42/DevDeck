@@ -85,6 +85,9 @@ test.describe("browser preview", () => {
     await main.getByPlaceholder("message, author, SHA — or path:src/auth").fill("dashboard");
     await expect(main.getByLabel("Project")).toBeVisible();
     await expect(main.getByLabel("Repository")).toBeVisible();
+    // Author/branch/date live behind the collapsed "Filters" panel, which only
+    // starts open when one of those filters already has a value.
+    await main.getByRole("button", { name: /^Filters/ }).click();
     await main.getByLabel("From", { exact: true }).fill("2026-05-01");
     await main.getByLabel("To", { exact: true }).fill("2026-05-28");
     await main.getByRole("button", { name: "Search" }).click();
@@ -97,7 +100,7 @@ test.describe("browser preview", () => {
     await expect(main.getByRole("textbox", { name: "Filter" })).toBeFocused();
 
     await page.getByRole("button", { name: "Settings" }).click();
-    await expect(main.getByRole("heading", { name: "Organizations" })).toBeVisible();
+    await expect(main.getByRole("heading", { name: "Connections" })).toBeVisible();
     await expect(main.getByRole("heading", { name: "Review result previews" })).toBeVisible();
     await expect(main.getByRole("heading", { name: "Sync health" })).toBeVisible();
     await expect(main.getByText("Pull requests / My Reviews")).toBeVisible();

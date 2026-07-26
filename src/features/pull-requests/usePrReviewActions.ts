@@ -21,7 +21,7 @@ export function usePrReviewActions(pr: ReviewPullRequestSummary) {
   // Reset error state when another PR is selected.
   useEffect(() => {
     setActionError(null);
-  }, [pr.pullRequestId, pr.repositoryId]);
+  }, [pr.organizationId, pr.pullRequestId, pr.repositoryId]);
 
   function invalidateReview() {
     void queryClient.invalidateQueries({

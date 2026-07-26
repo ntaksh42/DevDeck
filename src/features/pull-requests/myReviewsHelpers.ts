@@ -23,8 +23,11 @@ export function reviewSectionOf(pr: ReviewPullRequestSummary): ReviewSection {
   return 'needsReview';
 }
 
+// Org-qualified like workItemSummaryKey: two organizations can hold the same
+// repositoryId (e.g. an on-prem/cloud pair), and an unscoped key would let one
+// org's selection and overlap state bleed onto the other's rows.
 export function reviewTriageKey(pr: ReviewPullRequestSummary): string {
-  return `${pr.repositoryId}:${pr.pullRequestId}`;
+  return `${pr.organizationId}:${pr.repositoryId}:${pr.pullRequestId}`;
 }
 
 export function reviewTriageSnapshot(pr: ReviewPullRequestSummary): string {

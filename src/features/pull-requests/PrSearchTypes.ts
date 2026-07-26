@@ -17,7 +17,6 @@ export function toReviewSummary(pr: PullRequestSummary): ReviewPullRequestSummar
     myVote: 0,
     myVoteLabel: "No Vote",
     myIsRequired: false,
-    isDraft: false,
     mergeStatus: null,
     ciStatus: null,
     ciContext: null,
