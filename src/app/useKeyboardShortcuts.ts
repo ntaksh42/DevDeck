@@ -140,8 +140,11 @@ export function useKeyboardShortcuts({
       }
 
       if (!event.defaultPrevented && matchesCombo(keybindings.applyStaged, event)) {
+        // The app claims this combo everywhere, so always suppress the WebView
+        // default (Ctrl+S opens "save page"); only the action itself is limited
+        // to views that have staged changes to apply.
+        event.preventDefault();
         if (isWorkItemView) {
-          event.preventDefault();
           dispatchWorkItemCommand("apply-staged");
         }
         return;
@@ -163,8 +166,13 @@ export function useKeyboardShortcuts({
       }
 
       if (event.key === "Escape" && !event.altKey) {
-        if (isEditableTarget(event.target) && focusPrimaryGrid()) {
-          event.preventDefault();
+        // Escape from an editor means "leave this field". On a screen with a
+        // grid that hands focus back to it; on one without (Settings, an empty
+        // Notifications list) there is nowhere to go, but the event still must
+        // not fall through to the overlay handlers below — that closed help and
+        // the palette behind the user's back and stranded focus on <body>.
+        if (isEditableTarget(event.target)) {
+          if (focusPrimaryGrid()) event.preventDefault();
           return;
         }
         closeHelp();
@@ -211,7 +219,10 @@ export function useKeyboardShortcuts({
         return;
       }
 
-      if (matchesCombo(keybindings.syncNow, event)) {
+      // These are Ctrl-based like the focus moves above, so they collide with
+      // ordinary text editing keys (Ctrl+E is end-of-line in many editors) and
+      // must stay out of the way while an input or rich-text editor is focused.
+      if (!inEditableTarget && matchesCombo(keybindings.syncNow, event)) {
         event.preventDefault();
         if (organizationsLength > 0 && !syncPending) {
           syncAllRef.current();
@@ -219,13 +230,13 @@ export function useKeyboardShortcuts({
         return;
       }
 
-      if (matchesCombo(keybindings.openSettings, event)) {
+      if (!inEditableTarget && matchesCombo(keybindings.openSettings, event)) {
         event.preventDefault();
         setView("settings");
         return;
       }
 
-      if (matchesCombo(keybindings.toggleSidebar, event)) {
+      if (!inEditableTarget && matchesCombo(keybindings.toggleSidebar, event)) {
         event.preventDefault();
         setSidebarCollapsed((collapsed) => !collapsed);
         return;

@@ -1,6 +1,34 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Loader2, X } from 'lucide-react';
 import type { BulkWorkItemResult, WorkItemAssigneeCandidate } from '@/lib/azdoCommands';
+
+/**
+ * Returns focus to the popover's trigger once it closes, however it was
+ * dismissed. Without this the focused option unmounts and focus falls to
+ * `<body>`, which strands keyboard users: the grid stops responding to j/k
+ * until they tab back in from the top of the page.
+ */
+function usePopoverFocusReturn(open: boolean) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const wasOpenRef = useRef(false);
+  useEffect(() => {
+    if (wasOpenRef.current && !open) triggerRef.current?.focus();
+    wasOpenRef.current = open;
+  }, [open]);
+  return triggerRef;
+}
+
+/**
+ * Escape inside a bulk popover must close only the popover. Letting it bubble
+ * would also reach the grid's key handler, which reacts to the same key.
+ */
+function closeOnEscape(event: React.KeyboardEvent, close: () => void): boolean {
+  if (event.key !== 'Escape') return false;
+  event.preventDefault();
+  event.stopPropagation();
+  close();
+  return true;
+}
 
 /**
  * Counts non-empty values and returns them ordered by frequency (ties broken
@@ -144,6 +172,9 @@ export function BulkActionBar({
   const priorityListRef = useRef<HTMLDivElement>(null);
   const assignInputRef = useRef<HTMLInputElement>(null);
   const assignListRef = useRef<HTMLDivElement>(null);
+  const stateTriggerRef = usePopoverFocusReturn(stateOpen);
+  const assignTriggerRef = usePopoverFocusReturn(assignOpen);
+  const priorityTriggerRef = usePopoverFocusReturn(priorityOpen);
   const [tagDraft, setTagDraft] = useState("");
 
   function applyTag(mode: "add" | "remove") {
@@ -182,6 +213,7 @@ export function BulkActionBar({
         {/* State picker */}
         <div className="relative">
           <button
+            ref={stateTriggerRef}
             type="button"
             disabled={statePending}
             onClick={() => onStateOpenChange(!stateOpen)}
@@ -205,8 +237,8 @@ export function BulkActionBar({
                     autoFocus={index === 0}
                     onClick={() => { onStateSelect(s); onStateOpenChange(false); }}
                     onKeyDown={(e) => {
-                      if (e.key === "Escape") onStateOpenChange(false);
-                      else if (e.key === "Enter") { e.stopPropagation(); }
+                      if (closeOnEscape(e, () => onStateOpenChange(false))) return;
+                      if (e.key === "Enter") { e.stopPropagation(); }
                       else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
                         e.preventDefault();
                         const buttons = Array.from(stateListRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? []);
@@ -227,6 +259,7 @@ export function BulkActionBar({
         {/* Assignee picker */}
         <div className="relative">
           <button
+            ref={assignTriggerRef}
             type="button"
             disabled={assignPending}
             onClick={() => onAssignOpenChange(!assignOpen)}
@@ -244,8 +277,8 @@ export function BulkActionBar({
                 value={assignQuery}
                 onChange={(e) => onAssignQueryChange(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Escape") onAssignOpenChange(false);
-                  else if (e.key === "ArrowDown") {
+                  if (closeOnEscape(e, () => onAssignOpenChange(false))) return;
+                  if (e.key === "ArrowDown") {
                     e.preventDefault();
                     assignListRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
                   }
@@ -263,8 +296,8 @@ export function BulkActionBar({
                       type="button"
                       onClick={() => onAssignSelect(c)}
                       onKeyDown={(e) => {
-                        if (e.key === "Escape") onAssignOpenChange(false);
-                        else if (e.key === "Enter") { e.stopPropagation(); }
+                        if (closeOnEscape(e, () => onAssignOpenChange(false))) return;
+                        if (e.key === "Enter") { e.stopPropagation(); }
                         else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
                           e.preventDefault();
                           const buttons = Array.from(assignListRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? []);
@@ -293,6 +326,7 @@ export function BulkActionBar({
         </div>
         <div className="relative">
           <button
+            ref={priorityTriggerRef}
             type="button"
             disabled={priorityPending}
             onClick={() => onPriorityOpenChange(!priorityOpen)}
@@ -314,8 +348,8 @@ export function BulkActionBar({
                     onPriorityOpenChange(false);
                   }}
                   onKeyDown={(e) => {
-                    if (e.key === "Escape") onPriorityOpenChange(false);
-                    else if (e.key === "Enter") { e.stopPropagation(); }
+                    if (closeOnEscape(e, () => onPriorityOpenChange(false))) return;
+                    if (e.key === "Enter") { e.stopPropagation(); }
                     else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
                       e.preventDefault();
                       const buttons = Array.from(priorityListRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? []);

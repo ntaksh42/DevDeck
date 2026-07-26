@@ -16,9 +16,16 @@ export function OverlapPopup({
 }: OverlapPopupProps) {
   const popupRef = useRef<HTMLDivElement>(null);
 
+  // Take focus on open and hand it back to the trigger on close, whichever way
+  // the popup was dismissed. Doing this in the cleanup rather than in `onClose`
+  // covers the outside-click path too, which otherwise left focus on <body> and
+  // stopped the grid from responding to j/k.
   useEffect(() => {
     popupRef.current?.focus();
-  }, []);
+    return () => {
+      if (anchorEl?.isConnected) anchorEl.focus();
+    };
+  }, [anchorEl]);
 
   useEffect(() => {
     function onMouseDown(e: MouseEvent) {

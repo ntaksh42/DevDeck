@@ -78,6 +78,15 @@ pub(super) struct SyncWorkItemFetchResult {
     queried_count: usize,
 }
 
+impl SyncWorkItemFetchResult {
+    /// A WIQL result that filled `$top` may have dropped rows that still exist
+    /// in Azure DevOps, so it must not be treated as an authoritative snapshot
+    /// when reconciling deletions.
+    fn is_truncated(&self) -> bool {
+        self.queried_count >= SYNC_WORK_ITEM_QUERY_TOP
+    }
+}
+
 /// Outcome of syncing one project's work items. `result` is `Ok(None)` for a
 /// 404 (skip silently, preserve cache), `Ok(Some((all, my)))` on success, and
 /// `Err` for a real error (skip and remember).
@@ -121,7 +130,20 @@ async fn fetch_project_work_items(
     );
     let result = match (all_result, my_result) {
         (Err(e), _) | (_, Err(e)) => Err(e),
-        (Ok(None), _) | (_, Ok(None)) => Ok(None),
+        // A 404 on the "all" query means the project itself is unreachable, so
+        // skip it entirely and let its cached rows survive.
+        (Ok(None), _) => Ok(None),
+        // The "my" query can 404 on its own (process template or permissions)
+        // while "all" succeeded. Keep the rows we did fetch instead of dropping
+        // the whole project, and treat "my" as truncated so the assignment
+        // snapshot is merged rather than used to delete rows.
+        (Ok(Some(all)), Ok(None)) => Ok(Some((
+            all,
+            SyncWorkItemFetchResult {
+                items: Vec::new(),
+                queried_count: SYNC_WORK_ITEM_QUERY_TOP,
+            },
+        ))),
         (Ok(Some(all)), Ok(Some(my))) => Ok(Some((all, my))),
     };
     ProjectWorkItemFetch {
@@ -197,6 +219,9 @@ pub(super) async fn do_sync_work_items(
     let mut all_cached: Vec<CachedWorkItem> = Vec::new();
     let mut my_cached: Vec<CachedWorkItem> = Vec::new();
     let mut synced_project_ids: Vec<String> = Vec::new();
+    // Deletions are reconciled only for projects whose snapshot was complete.
+    let mut reconcilable_project_ids: Vec<String> = Vec::new();
+    let mut my_reconcilable_project_ids: Vec<String> = Vec::new();
     let mut skipped_projects: Vec<String> = Vec::new();
     let mut last_skip_error: Option<AppError> = None;
     let mut large_query_count = 0usize;
@@ -224,6 +249,15 @@ pub(super) async fn do_sync_work_items(
             // its cached rows survive.
             Ok(None) => continue,
             Ok(Some((project_all, project_my))) => {
+                // Only projects whose snapshot came back complete may drive
+                // deletions; a truncated result would delete rows that simply
+                // did not fit under `$top`.
+                if !project_all.is_truncated() {
+                    reconcilable_project_ids.push(fetch.project_id.clone());
+                }
+                if !project_my.is_truncated() {
+                    my_reconcilable_project_ids.push(fetch.project_id.clone());
+                }
                 synced_project_ids.push(fetch.project_id);
                 if project_all.queried_count > SYNC_WORK_ITEM_BATCH_SIZE {
                     large_query_count += 1;
@@ -257,12 +291,25 @@ pub(super) async fn do_sync_work_items(
         }
     }
 
-    let synced_ids: Vec<&str> = synced_project_ids.iter().map(String::as_str).collect();
+    let reconcile_ids: Vec<&str> = reconcilable_project_ids
+        .iter()
+        .map(String::as_str)
+        .collect();
+    let my_reconcile_ids: Vec<&str> = my_reconcilable_project_ids
+        .iter()
+        .map(String::as_str)
+        .collect();
     let was_full_sync = delta_since.is_none();
     if was_full_sync {
-        db.replace_work_items(&org.id, &synced_ids, &all_cached, &my_cached)?;
+        db.replace_work_items(
+            &org.id,
+            &reconcile_ids,
+            &my_reconcile_ids,
+            &all_cached,
+            &my_cached,
+        )?;
     } else {
-        db.apply_work_items_delta(&org.id, &synced_ids, &all_cached, &my_cached)?;
+        db.apply_work_items_delta(&org.id, &my_reconcile_ids, &all_cached, &my_cached)?;
     }
 
     let mut warning_parts: Vec<String> = Vec::new();

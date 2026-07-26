@@ -39,6 +39,7 @@ import { PresetMenu } from './PreviewPresetMenu';
 import { StagedStatusChip } from './StagedStatusChip';
 import { useWorkItemStagedChanges } from './useWorkItemStagedChanges';
 import { useWorkItemPickerState } from './useWorkItemPickerState';
+import { customPreviewFieldsSignature } from './queryKeys';
 
 // Re-exported so existing importers (and the unit tests) keep a single entry
 // point; the implementations live in the sibling modules linked below.
@@ -93,7 +94,7 @@ export function WorkItemPreviewPanel({
   const panelRef = useRef<HTMLElement | null>(null);
 
   const customFieldsSignature = useMemo(
-    () => customPreviewFields.map((field) => field.referenceName).join("|"),
+    () => customPreviewFieldsSignature(customPreviewFields.map((field) => field.referenceName)),
     [customPreviewFields],
   );
 

@@ -25,7 +25,7 @@ import {
 } from './workItemsGridHelpers';
 import { useRowColorRules } from './WorkItemGridRow';
 import { useBulkActions } from './useBulkActions';
-import { workItemQueryKeys } from './queryKeys';
+import { customPreviewFieldsSignature, workItemQueryKeys } from './queryKeys';
 import { createWiKeyHandler } from './wiGridKeyHandler';
 import type { WiGridState } from './useWiGridState';
 
@@ -149,7 +149,7 @@ export function useWiGridLogic(
     () => customPreviewFields.map((field) => field.referenceName),
     [customPreviewFields],
   );
-  const customPreviewFieldSignature = customPreviewFieldRefs.join("|");
+  const customPreviewFieldSignature = customPreviewFieldsSignature(customPreviewFieldRefs);
   const selectedItemKey = selectedItem ? workItemSummaryKey(selectedItem) : null;
   const resultKeysSignature = useMemo(
     () => results.map((item) => workItemSummaryKey(item)).join("|"),
