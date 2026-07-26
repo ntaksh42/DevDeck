@@ -36,6 +36,11 @@ export function MyReviewsGrid({
     const editable = isEditableTarget(e.target);
     const buttonTarget = (e.target instanceof HTMLElement ? e.target : null)?.closest('button');
 
+    // The snoozed panel replaces the inbox grid, but this handler still sits on
+    // the shared container. Without this guard the shortcuts below would act on
+    // `sortedPrs` — voting on or archiving a PR the user cannot see.
+    if (g.showSnoozed) return;
+
     if (editable) {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -94,10 +99,12 @@ export function MyReviewsGrid({
       const pr = g.sortedPrs[g.selectedIndex];
       if (pr) {
         g.snoozeTargetRef.current = [...g.selectedPrs];
+        // rowRefs keeps entries for rows that have since unmounted (the array
+        // is indexed absolutely and never shortened), and a detached node
+        // measures as an all-zero rect that would pin the menu to the corner.
         const rowEl = g.rowRefs.current[g.selectedIndex];
-        g.setSnoozeAnchorRect(
-          (rowEl ?? g.containerRef.current)?.getBoundingClientRect() ?? null,
-        );
+        const anchorEl = rowEl?.isConnected ? rowEl : g.containerRef.current;
+        g.setSnoozeAnchorRect(anchorEl?.getBoundingClientRect() ?? null);
       }
       return;
     }

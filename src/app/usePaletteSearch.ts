@@ -120,6 +120,9 @@ export function usePaletteSearch(
       })
         .then(() => {
           void queryClient.invalidateQueries({ queryKey: ["myReviews"] });
+          // The palette's own rows come from this query; without it the voted
+          // row keeps offering the same vote action and invites a double vote.
+          void queryClient.invalidateQueries({ queryKey: ["searchAll"] });
         })
         .catch((error) => {
           console.error("Failed to submit pull request vote from palette", error);

@@ -94,7 +94,10 @@ export function PrFilesTab({
     });
   }
 
-  // Reset selection state when switching PRs.
+  // Reset selection state when switching PRs. Depend on the identity fields
+  // rather than the `pr` object: callers such as PrSearchResults rebuild the
+  // summary on every render, and resetting on that identity would wipe the
+  // filter, collapsed folders and scroll position mid-review.
   useEffect(() => {
     setSelectedPath(null);
     setFilterQuery("");
@@ -103,7 +106,8 @@ export function PrFilesTab({
     setCollapsedFolders(new Set());
     setViewedKeys(loadViewedKeys(viewedStorageKey(pr)));
     sectionRefs.current.clear();
-  }, [pr]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pr.organizationId, pr.repositoryId, pr.pullRequestId]);
 
   // Default to the first file once the change list loads, so the continuous
   // scroll view opens with a section already active.

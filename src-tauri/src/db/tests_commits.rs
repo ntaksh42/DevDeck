@@ -421,6 +421,51 @@ fn commit_activity_groups_by_day_and_filters_by_author() {
 }
 
 #[test]
+fn commit_activity_treats_like_wildcards_in_author_as_literal() {
+    let tf = NamedTempFile::new().unwrap();
+    let db = AppDatabase::new(tf.path().to_path_buf());
+    db.initialize().unwrap();
+    db.upsert_organization(make_org_draft("org1")).unwrap();
+
+    let make = |commit_id: &str, name: &str, email: &str| CachedCommit {
+        org_id: "org1".to_string(),
+        project_id: "p1".to_string(),
+        project_name: "P1".to_string(),
+        repository_id: "repo1".to_string(),
+        repository_name: "Repo1".to_string(),
+        commit_id: commit_id.to_string(),
+        comment: "msg".to_string(),
+        author_name: Some(name.to_string()),
+        author_email: Some(email.to_string()),
+        author_date: Some("2026-05-01T08:00:00+00:00".to_string()),
+        web_url: None,
+    };
+
+    db.replace_commits_for_repo(
+        "org1",
+        "repo1",
+        &[
+            make("a", "j_doe", "j_doe@x.com"),
+            make("b", "jane", "jane@x.com"),
+        ],
+    )
+    .unwrap();
+
+    // `_` is a single-character LIKE wildcard; unescaped, "j_doe" would also
+    // match "jXdoe"-style authors. Only the literal author must be counted.
+    let underscore = db
+        .commit_activity("org1", None, None, Some("j_doe"), None, None)
+        .unwrap();
+    assert_eq!(underscore, vec![("2026-05-01".to_string(), 1)]);
+
+    // A bare `%` must match nothing rather than acting as "match everything".
+    let percent = db
+        .commit_activity("org1", None, None, Some("%"), None, None)
+        .unwrap();
+    assert!(percent.is_empty());
+}
+
+#[test]
 fn commit_prs_cache_round_trips_and_respects_freshness() {
     let db_file = NamedTempFile::new().unwrap();
     let db = AppDatabase::new(db_file.path().to_path_buf());

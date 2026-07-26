@@ -12,6 +12,7 @@ import {
   listRepoBranches,
   commandErrorMessage,
   type SearchPullRequestsInput,
+  type PullRequestSummary,
 } from '@/lib/azdoCommands';
 import { useActiveOrganizationId } from '@/lib/useActiveConnection';
 import { handleSearchInputEscape } from '@/lib/utils';
@@ -32,6 +33,11 @@ import {
   type PrSearchDateBasis,
   type PrSearchSortBy,
 } from './PrSearchTypes';
+
+// Shared empty fallback so `results` keeps a stable identity between renders
+// while no search has run; PrSearchResults resets its selection when the
+// results array changes.
+const NO_RESULTS: PullRequestSummary[] = [];
 
 export function PullRequestSearch({
   externalSearch,
@@ -114,7 +120,7 @@ export function PullRequestSearch({
   }
 
   const mutation = useMutation({ mutationFn: searchPullRequests });
-  const results = mutation.data?.pullRequests ?? [];
+  const results = mutation.data?.pullRequests ?? NO_RESULTS;
   const truncated = mutation.data?.truncated ?? false;
   const total = mutation.data?.total ?? 0;
   const activeSearchFilterCount =

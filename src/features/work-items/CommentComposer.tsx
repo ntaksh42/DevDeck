@@ -89,6 +89,8 @@ export function CommentComposer({
       setCommentText("");
       mentionPicker.resetMentions();
       void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
+      // A new comment is a new revision, so the History section must refetch too.
+      void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.updatesRoot() });
     },
   });
 

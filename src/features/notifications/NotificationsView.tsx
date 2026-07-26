@@ -110,11 +110,23 @@ export function NotificationsView({
   }, [items.length]);
 
   // Rows outside the virtual window unmount, so roving focus is restored once
-  // the row for the new selection is mounted again.
+  // the row for the new selection is mounted again. This effect runs on every
+  // render (the row may mount on any of them), so it must not steal focus that
+  // the user has since moved elsewhere — e.g. to the organization select while
+  // a background notification refresh re-renders the view.
   useEffect(() => {
     if (!restoreFocusRef.current) return;
     const row = rowRefs.current[selectedIndex];
     if (!row) return;
+    const active = document.activeElement;
+    const focusMovedOffGrid =
+      active instanceof HTMLElement &&
+      active !== document.body &&
+      !active.closest('[role="grid"], [role="row"]');
+    if (focusMovedOffGrid) {
+      restoreFocusRef.current = false;
+      return;
+    }
     restoreFocusRef.current = false;
     row.focus({ preventScroll: true });
   });
