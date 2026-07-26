@@ -8,7 +8,11 @@ use super::{CachedWorkItem, MY_WORK_ITEMS_LIMIT};
 pub(crate) fn upsert_work_items(conn: &Connection, items: &[CachedWorkItem]) -> Result<()> {
     // Azure DevOps bumps System.ChangedDate on every revision, so it works as
     // a version stamp: rows with an unchanged date are skipped entirely and
-    // the FTS update trigger never fires for them.
+    // the FTS update trigger never fires for them. The stamp alone is not
+    // enough to gate on, though — a response missing System.ChangedDate stores
+    // NULL, and `NULL IS NOT NULL` is false, which would strand the row at its
+    // stale values forever. Fall back to comparing the data columns so an edit
+    // still lands when the stamp is absent or unchanged.
     let mut stmt = conn.prepare_cached(
         r#"
         INSERT INTO work_items(
@@ -28,6 +32,13 @@ pub(crate) fn upsert_work_items(conn: &Connection, items: &[CachedWorkItem]) -> 
             assigned_to_unique_name = excluded.assigned_to_unique_name,
             tags = excluded.tags
         WHERE excluded.changed_date IS NOT work_items.changed_date
+           OR excluded.title IS NOT work_items.title
+           OR excluded.state IS NOT work_items.state
+           OR excluded.assigned_to IS NOT work_items.assigned_to
+           OR excluded.assigned_to_unique_name IS NOT work_items.assigned_to_unique_name
+           OR excluded.work_item_type IS NOT work_items.work_item_type
+           OR excluded.project_id IS NOT work_items.project_id
+           OR excluded.tags IS NOT work_items.tags
         "#,
     )?;
     for item in items {

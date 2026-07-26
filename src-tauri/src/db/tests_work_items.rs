@@ -149,6 +149,7 @@ fn replace_work_items_skips_unchanged_rows_and_deletes_stale() {
     db.replace_work_items(
         "org1",
         &["p1"],
+        &["p1"],
         &[
             make_cached_wi(1, "first item", "2026-06-01T00:00:00Z"),
             make_cached_wi(2, "second item", "2026-06-01T00:00:00Z"),
@@ -164,6 +165,7 @@ fn replace_work_items_skips_unchanged_rows_and_deletes_stale() {
     // Re-sync: item 1 is unchanged, item 2 has a new revision.
     db.replace_work_items(
         "org1",
+        &["p1"],
         &["p1"],
         &[
             make_cached_wi(1, "first item", "2026-06-01T00:00:00Z"),
@@ -186,6 +188,7 @@ fn replace_work_items_skips_unchanged_rows_and_deletes_stale() {
     db.replace_work_items(
         "org1",
         &["p1"],
+        &["p1"],
         &[make_cached_wi(1, "first item", "2026-06-01T00:00:00Z")],
         &[],
     )
@@ -201,6 +204,95 @@ fn replace_work_items_skips_unchanged_rows_and_deletes_stale() {
     assert!(search_work_items_fts(&conn, "org1", "second")
         .unwrap()
         .is_empty());
+}
+
+#[test]
+fn upsert_work_items_updates_rows_without_a_changed_date_stamp() {
+    let db_file = tempfile::NamedTempFile::new().unwrap();
+    let db = AppDatabase::new(db_file.path().to_path_buf());
+    db.initialize().unwrap();
+    db.upsert_organization(make_org_draft("org1")).unwrap();
+
+    let mut seed = make_cached_wi(7, "original title", "2026-06-01T00:00:00Z");
+    seed.changed_date = None;
+    db.upsert_work_items(std::slice::from_ref(&seed)).unwrap();
+
+    // A response without System.ChangedDate stores NULL. `NULL IS NOT NULL` is
+    // false, so gating on the stamp alone would silently drop the edit.
+    let mut edited = seed.clone();
+    edited.title = "edited title".to_string();
+    edited.state = Some("Closed".to_string());
+    db.upsert_work_items(std::slice::from_ref(&edited)).unwrap();
+
+    let conn = db.open().unwrap();
+    let (title, state): (String, Option<String>) = conn
+        .query_row(
+            "SELECT title, state FROM work_items WHERE org_id = 'org1' AND id = 7",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(title, "edited title");
+    assert_eq!(state.as_deref(), Some("Closed"));
+    assert_eq!(
+        search_work_items_fts(&conn, "org1", "edited")
+            .unwrap()
+            .len(),
+        1,
+        "the FTS index must follow the updated title"
+    );
+}
+
+#[test]
+fn replace_work_items_keeps_rows_for_projects_left_out_of_reconciliation() {
+    let db_file = tempfile::NamedTempFile::new().unwrap();
+    let db = AppDatabase::new(db_file.path().to_path_buf());
+    db.initialize().unwrap();
+    db.upsert_organization(make_org_draft("org1")).unwrap();
+
+    db.replace_work_items(
+        "org1",
+        &["p1"],
+        &["p1"],
+        &[
+            make_cached_wi(1, "first item", "2026-06-01T00:00:00Z"),
+            make_cached_wi(2, "second item", "2026-06-01T00:00:00Z"),
+        ],
+        &[],
+    )
+    .unwrap();
+
+    // A WIQL result capped by `$top` is not an authoritative snapshot, so the
+    // project is left out of the reconcile scope. Rows missing from the partial
+    // snapshot must survive instead of being deleted as stale.
+    db.replace_work_items(
+        "org1",
+        &[],
+        &[],
+        &[make_cached_wi(1, "first item", "2026-06-01T00:00:00Z")],
+        &[],
+    )
+    .unwrap();
+
+    let conn = db.open().unwrap();
+    let count: i64 = conn
+        .query_row(
+            "SELECT count(*) FROM work_items WHERE org_id = 'org1'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        count, 2,
+        "a truncated snapshot must not delete rows that did not fit under $top"
+    );
+    assert_eq!(
+        search_work_items_fts(&conn, "org1", "second")
+            .unwrap()
+            .len(),
+        1,
+        "surviving rows must keep their FTS entries"
+    );
 }
 
 #[test]
@@ -226,6 +318,7 @@ fn update_my_work_item_removes_row_when_reassigned_away() {
     };
     db.replace_work_items(
         "org1",
+        &["p1"],
         &["p1"],
         std::slice::from_ref(&mine),
         std::slice::from_ref(&mine),
@@ -271,6 +364,7 @@ fn update_my_work_item_keeps_row_when_still_mine() {
     db.replace_work_items(
         "org1",
         &["p1"],
+        &["p1"],
         std::slice::from_ref(&mine),
         std::slice::from_ref(&mine),
     )
@@ -311,7 +405,7 @@ fn apply_work_item_updates_batches_upsert_and_my_items() {
     };
 
     let seed = [mine(1, "Active"), mine(2, "Active")];
-    db.replace_work_items("org1", &["p1"], &seed, &seed)
+    db.replace_work_items("org1", &["p1"], &["p1"], &seed, &seed)
         .unwrap();
     assert_eq!(db.list_my_work_items("org1").unwrap().len(), 2);
 
@@ -381,6 +475,7 @@ fn replace_work_items_clears_and_repopulates_both_tables() {
     db.replace_work_items(
         "org1",
         &["p1"],
+        &["p1"],
         &[make_item(1, "all-A")],
         &[make_item(10, "my-A")],
     )
@@ -389,6 +484,7 @@ fn replace_work_items_clears_and_repopulates_both_tables() {
     // Replace with B-rows (work=2, my=20); A-rows must disappear
     db.replace_work_items(
         "org1",
+        &["p1"],
         &["p1"],
         &[make_item(2, "all-B")],
         &[make_item(20, "my-B")],
@@ -432,6 +528,7 @@ fn replace_work_items_preserves_unsynced_project_rows() {
     db.replace_work_items(
         "org1",
         &["p1", "p2"],
+        &["p1", "p2"],
         &[make_item(1, "p1"), make_item(2, "p2")],
         &[make_item(10, "p1"), make_item(20, "p2")],
     )
@@ -440,6 +537,7 @@ fn replace_work_items_preserves_unsynced_project_rows() {
     // Re-sync only p1 — p2 must be preserved
     db.replace_work_items(
         "org1",
+        &["p1"],
         &["p1"],
         &[make_item(3, "p1")],
         &[make_item(30, "p1")],

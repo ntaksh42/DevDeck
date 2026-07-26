@@ -28,9 +28,19 @@ type LogSeverity = "error" | "warning" | null;
 
 // Classifies an Azure Pipelines log line by its severity markers so the UI can
 // highlight failures and optionally filter to just them.
-function logLineSeverity(line: string): LogSeverity {
-  if (/##\[error\]/i.test(line) || /\berror\b/i.test(line)) return "error";
-  if (/##\[warning\]/i.test(line) || /\bwarning\b/i.test(line)) return "warning";
+//
+// Only explicit markers count. Matching a bare `error`/`warning` anywhere in the
+// line swept up ordinary output — package names, paths, and passing test titles
+// that merely contain the word — which made "Errors/warnings only" useless for
+// finding the real failure. Azure Pipelines emits `##[error]`/`##[warning]` for
+// anything it considers a problem, and the common toolchains prefix their own
+// diagnostics at the start of the line.
+const ERROR_LINE = /##\[error\]|^\s*(?:npm ERR!|error(?:\s+\w+)?\s*:|\S+:\s*error[\s:])/i;
+const WARNING_LINE = /##\[warning\]|^\s*(?:npm WARN|warning(?:\s+\w+)?\s*:|\S+:\s*warning[\s:])/i;
+
+export function logLineSeverity(line: string): LogSeverity {
+  if (ERROR_LINE.test(line)) return "error";
+  if (WARNING_LINE.test(line)) return "warning";
   return null;
 }
 

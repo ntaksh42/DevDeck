@@ -19,7 +19,7 @@ mod work_items;
 mod work_items_query;
 
 #[cfg(test)]
-mod test_support;
+pub(crate) mod test_support;
 #[cfg(test)]
 mod tests_commits;
 #[cfg(test)]

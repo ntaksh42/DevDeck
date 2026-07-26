@@ -24,7 +24,11 @@ import {
   storeCustomPreviewFields,
   type CustomPreviewField,
 } from './previewFieldsStorage';
-import { invalidateWorkItemMutationCaches, workItemQueryKeys } from './queryKeys';
+import {
+  customPreviewFieldsSignature,
+  invalidateWorkItemMutationCaches,
+  workItemQueryKeys,
+} from './queryKeys';
 import {
   type BoardColumn,
   buildColumns,
@@ -135,7 +139,7 @@ export function WorkItemBoard({
     () => customPreviewFields.map((field) => field.referenceName),
     [customPreviewFields],
   );
-  const customPreviewFieldSignature = customPreviewFieldRefs.join(",");
+  const customPreviewFieldSignature = customPreviewFieldsSignature(customPreviewFieldRefs);
   const previewQuery = useQuery({
     queryKey: workItemQueryKeys.preview(
       selectedItem?.organizationId,

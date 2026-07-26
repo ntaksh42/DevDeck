@@ -113,10 +113,15 @@ impl AppDatabase {
         Ok(())
     }
 
+    /// `reconcile_project_ids` / `my_reconcile_project_ids` list the projects
+    /// whose snapshot came back complete. A WIQL result capped by `$top` is not
+    /// authoritative, so those projects are merged without deleting rows that
+    /// merely did not fit under the cap.
     pub fn replace_work_items(
         &self,
         org_id: &str,
-        synced_project_ids: &[&str],
+        reconcile_project_ids: &[&str],
+        my_reconcile_project_ids: &[&str],
         all_items: &[CachedWorkItem],
         my_items: &[CachedWorkItem],
     ) -> Result<()> {
@@ -132,11 +137,13 @@ impl AppDatabase {
                 insert.execute([item.id])?;
             }
         }
-        for &project_id in synced_project_ids {
+        for &project_id in reconcile_project_ids {
             tx.execute(
                 "DELETE FROM work_items WHERE org_id = ?1 AND project_id = ?2 AND id NOT IN (SELECT id FROM sync_work_item_ids)",
                 rusqlite::params![org_id, project_id],
             )?;
+        }
+        for &project_id in my_reconcile_project_ids {
             tx.execute(
                 "DELETE FROM my_work_items WHERE org_id = ?1 AND project_id = ?2",
                 rusqlite::params![org_id, project_id],
@@ -156,14 +163,14 @@ impl AppDatabase {
     pub fn apply_work_items_delta(
         &self,
         org_id: &str,
-        synced_project_ids: &[&str],
+        my_reconcile_project_ids: &[&str],
         delta_items: &[CachedWorkItem],
         my_items: &[CachedWorkItem],
     ) -> Result<()> {
         let conn = self.open()?;
         let tx = conn.unchecked_transaction()?;
         upsert_work_items(&tx, delta_items)?;
-        for &project_id in synced_project_ids {
+        for &project_id in my_reconcile_project_ids {
             tx.execute(
                 "DELETE FROM my_work_items WHERE org_id = ?1 AND project_id = ?2",
                 rusqlite::params![org_id, project_id],

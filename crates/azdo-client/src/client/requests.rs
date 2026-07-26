@@ -203,7 +203,22 @@ impl AdoClient {
         body: &B,
     ) -> Result<T> {
         let url = join_api_path(&self.base_url, path)?;
-        self.post_json_to_url(url, query, body).await
+        self.post_json_to_url(url, query, body, false).await
+    }
+
+    /// POST for endpoints that only read (WIQL, search, PR queries).
+    ///
+    /// These carry no side effect, so a retry cannot duplicate anything and
+    /// they get the same 429/5xx retry treatment as GET. Never use this for a
+    /// POST that creates or changes something.
+    pub(crate) async fn post_json_read_only<B: Serialize + ?Sized, T: DeserializeOwned>(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        body: &B,
+    ) -> Result<T> {
+        let url = join_api_path(&self.base_url, path)?;
+        self.post_json_to_url(url, query, body, true).await
     }
 
     /// POST with an explicit Content-Type. Work item creation requires
@@ -242,8 +257,9 @@ impl AdoClient {
         query: &[(&str, &str)],
         body: &B,
     ) -> Result<T> {
+        // Search is read-only, so retrying a 429 or 5xx is safe.
         let url = join_api_path(&almsearch_base_url(&self.base_url)?, path)?;
-        self.post_json_to_url(url, query, body).await
+        self.post_json_to_url(url, query, body, true).await
     }
 
     async fn post_json_to_url<B: Serialize + ?Sized, T: DeserializeOwned>(
@@ -251,11 +267,12 @@ impl AdoClient {
         url: Url,
         query: &[(&str, &str)],
         body: &B,
+        idempotent: bool,
     ) -> Result<T> {
         self.send_with_retry(
             "POST",
             url.as_str(),
-            false,
+            idempotent,
             || self.http.post(url.clone()).query(query).json(body),
             |resp| async move { decode_json(resp).await },
         )
@@ -320,19 +337,17 @@ impl AdoClient {
 
     /// Decides whether a non-success status should be retried.
     ///
-    /// `idempotent` must be `false` for non-idempotent requests (POST). A 5xx
-    /// response to a POST is ambiguous: the server may have already applied the
-    /// effect (e.g. created a PR comment or queued a build) before failing, so
-    /// retrying risks a duplicate. We therefore only retry POST on `429 Too Many
-    /// Requests`, which means the request was rejected before processing.
+    /// `idempotent` must be `false` for requests that change state (a PR
+    /// comment, a queued build, a created work item). Both 5xx and 429 are
+    /// ambiguous for those: Azure DevOps meters throughput after handling a
+    /// request, so a 429 can arrive with the effect already applied, and
+    /// retrying then posts the comment or queues the build twice. Read-only
+    /// POSTs (WIQL, search, PR queries) opt in by passing `idempotent: true`.
     fn should_retry_status(&self, status: StatusCode, attempt: usize, idempotent: bool) -> bool {
         if attempt >= self.retry_policy.attempts() {
             return false;
         }
-        if status == StatusCode::TOO_MANY_REQUESTS {
-            return true;
-        }
-        idempotent && status.is_server_error()
+        idempotent && (status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error())
     }
 
     /// Decides whether a transport error should be retried.

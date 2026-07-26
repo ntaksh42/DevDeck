@@ -55,8 +55,9 @@ export function ColumnFilterDropdown({
     };
   }, [restoreFocusRef]);
 
-  // Move focus between the dropdown's controls (search box, (All), value
-  // checkboxes), wrapping at the ends.
+  // Move focus between the dropdown's controls (search box, (All), Uncheck
+  // all, value checkboxes), wrapping at the ends. Disabled controls are
+  // skipped, so Uncheck all drops out of the cycle when nothing is checked.
   function moveFocus(delta: number) {
     const items = Array.from(
       dropdownRef.current?.querySelectorAll<HTMLElement>('[data-filter-item="true"]') ?? [],
@@ -123,6 +124,7 @@ export function ColumnFilterDropdown({
         </button>
         <button
           type="button"
+          data-filter-item="true"
           onClick={onUncheckAll}
           disabled={!anyChecked}
           className="rounded px-2 py-0.5 text-xs text-muted-foreground hover:bg-secondary disabled:cursor-default disabled:opacity-40"

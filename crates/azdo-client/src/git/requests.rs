@@ -50,19 +50,68 @@ struct PullRequestQueryResponse {
 }
 
 impl AdoClient {
+    /// Lists every project in the organization, paging with `$skip`/`$top`.
+    ///
+    /// Without paging the server applies a default page size of 100 and drops
+    /// the rest with no error, so organizations past that lost projects from
+    /// every project picker.
     pub async fn list_projects(&self) -> Result<Vec<TeamProject>> {
-        let response: ListResponse<TeamProject> = self
-            .get_json("_apis/projects", &[("api-version", "7.1-preview")])
-            .await?;
-        Ok(response.value)
+        const PAGE_SIZE: u32 = 200;
+        let top_str = PAGE_SIZE.to_string();
+        let mut all = Vec::new();
+        let mut skip: u32 = 0;
+        loop {
+            let skip_str = skip.to_string();
+            let response: ListResponse<TeamProject> = self
+                .get_json(
+                    "_apis/projects",
+                    &[
+                        ("api-version", "7.1-preview"),
+                        ("$top", &top_str),
+                        ("$skip", &skip_str),
+                    ],
+                )
+                .await?;
+            let page_len = response.value.len() as u32;
+            all.extend(response.value);
+            // A short page means the server has no more results to return.
+            if page_len < PAGE_SIZE {
+                break;
+            }
+            skip += PAGE_SIZE;
+        }
+        Ok(all)
     }
 
+    /// Lists every repository in a project, paging with `$skip`/`$top` for the
+    /// same reason as `list_projects`. A truncated list silently excluded
+    /// repositories from commit sync, so their commits never appeared.
     pub async fn list_repositories(&self, project_id: &str) -> Result<Vec<GitRepository>> {
+        const PAGE_SIZE: u32 = 200;
         let path = format!("{project_id}/_apis/git/repositories");
-        let response: ListResponse<GitRepository> = self
-            .get_json(&path, &[("api-version", "7.1-preview")])
-            .await?;
-        Ok(response.value)
+        let top_str = PAGE_SIZE.to_string();
+        let mut all = Vec::new();
+        let mut skip: u32 = 0;
+        loop {
+            let skip_str = skip.to_string();
+            let response: ListResponse<GitRepository> = self
+                .get_json(
+                    &path,
+                    &[
+                        ("api-version", "7.1-preview"),
+                        ("$top", &top_str),
+                        ("$skip", &skip_str),
+                    ],
+                )
+                .await?;
+            let page_len = response.value.len() as u32;
+            all.extend(response.value);
+            if page_len < PAGE_SIZE {
+                break;
+            }
+            skip += PAGE_SIZE;
+        }
+        Ok(all)
     }
 
     /// Lists the branch refs (`refs/heads/*`) of a repository.
@@ -391,7 +440,7 @@ impl AdoClient {
             }],
         };
         let response: PullRequestQueryResponse = self
-            .post_json(&path, &[("api-version", "7.1-preview")], &body)
+            .post_json_read_only(&path, &[("api-version", "7.1-preview")], &body)
             .await?;
         let prs = response
             .results

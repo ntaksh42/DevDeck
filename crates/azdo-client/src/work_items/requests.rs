@@ -31,7 +31,7 @@ impl AdoClient {
             params.push(("$top", &top_string));
         }
         let response: WiqlResponse = self
-            .post_json(
+            .post_json_read_only(
                 &path,
                 &params,
                 &WiqlRequest {
@@ -70,7 +70,7 @@ impl AdoClient {
             params.push(("$top", &top_string));
         }
         let response: WiqlResponse = self
-            .post_json(
+            .post_json_read_only(
                 &path,
                 &params,
                 &WiqlRequest {
@@ -115,7 +115,7 @@ impl AdoClient {
         let mut items = Vec::with_capacity(ids.len());
         for chunk in ids.chunks(WORK_ITEMS_BATCH_LIMIT) {
             let response: crate::git::ListResponse<WorkItem> = self
-                .post_json(
+                .post_json_read_only(
                     &path,
                     &[("api-version", "7.1-preview")],
                     &WorkItemsBatchRequest {

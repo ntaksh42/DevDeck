@@ -9,6 +9,18 @@ type WorkItemQueryViewKeyInput = {
   extraFieldsSignature?: string;
 };
 
+/**
+ * Builds the custom-field part of the preview query key.
+ *
+ * Every screen that reads or writes a preview entry must derive this the same
+ * way. When the board and the preview panel disagreed on the separator, the
+ * panel wrote edits under one key while the board read another, so applied
+ * changes never appeared on screen.
+ */
+export function customPreviewFieldsSignature(referenceNames: readonly string[]): string {
+  return referenceNames.join('|');
+}
+
 export const workItemQueryKeys = {
   myItems: (organizationId?: string) => ['myWorkItems', organizationId] as const,
   myItemsRoot: () => ['myWorkItems'] as const,

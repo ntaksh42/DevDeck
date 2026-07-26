@@ -21,6 +21,22 @@ function queueParamDefault(variable: PipelineVariable): string {
   return variable.isSecret ? "" : (variable.value ?? "");
 }
 
+/**
+ * Picks the branch to show once the branch list loads.
+ *
+ * A refetch hands back a new array even when the branches are unchanged, so the
+ * effect that applies this reruns while the form is open. Overwriting
+ * unconditionally would snap a deliberately chosen branch back to the default
+ * and queue the run against the wrong branch, so a still-valid choice wins.
+ */
+export function resolveQueueBranch(
+  current: string,
+  branches: { name: string; isDefault: boolean }[],
+): string {
+  if (current && branches.some((branch) => branch.name === current)) return current;
+  return branches.find((branch) => branch.isDefault)?.name ?? current;
+}
+
 interface UseQueueRunFormParams {
   organizationId: string;
   projectId: string;
@@ -71,6 +87,17 @@ export function useQueueRunForm({
     [queueDefinitionDetailQuery.data],
   );
 
+  // Identify the variable set by content, not by array identity: a refetch
+  // rebuilds the array even when the definition is unchanged, and resetting on
+  // that would wipe values the user has already typed into the queue form.
+  const overridableVariablesSignature = useMemo(
+    () =>
+      overridableVariables
+        .map((variable) => `${variable.name}=${queueParamDefault(variable)}`)
+        .join("\n"),
+    [overridableVariables],
+  );
+
   // Reset entered values to each variable's default when the set of
   // overridable variables changes (a different definition was selected, or
   // its detail just loaded).
@@ -80,7 +107,8 @@ export function useQueueRunForm({
       defaults[variable.name] = queueParamDefault(variable);
     }
     setQueueParamValues(defaults);
-  }, [overridableVariables]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by content, see above
+  }, [overridableVariablesSignature]);
 
   const queueBranchesQuery = useQuery({
     queryKey: ["pipelineQueueBranches", organizationId, projectId, queueRepository?.id],
@@ -108,8 +136,9 @@ export function useQueueRunForm({
   // Default the branch to the repository's default branch once it loads.
   useEffect(() => {
     if (!queueOpen || !canPickQueueBranch) return;
-    const defaultBranch = queueBranchesQuery.data?.find((branch) => branch.isDefault)?.name;
-    if (defaultBranch) setQueueBranch(defaultBranch);
+    const branches = queueBranchesQuery.data;
+    if (!branches) return;
+    setQueueBranch((current) => resolveQueueBranch(current, branches));
   }, [queueOpen, canPickQueueBranch, queueBranchesQuery.data]);
 
   const queueMutation = useMutation({
