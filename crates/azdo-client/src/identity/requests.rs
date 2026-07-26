@@ -74,7 +74,7 @@ impl AdoClient {
 
         let max_results = top.clamp(5, 40);
         let response: Value = self
-            .post_json(
+            .post_json_read_only(
                 "_apis/IdentityPicker/Identities",
                 &[("api-version", "5.0-preview.1")],
                 &IdentityPickerRequest {

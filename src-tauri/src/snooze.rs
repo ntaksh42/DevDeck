@@ -51,6 +51,12 @@ pub struct SnoozedItemSummary {
 pub struct SnoozeReconcile {
     pub revived: Vec<String>,
     pub still_snoozed: Vec<String>,
+    /// Keys revived because new activity arrived, not because the deadline
+    /// passed. The activity that revives a PR is the very comment the caller is
+    /// about to notify about, and the user asked not to be told about this item
+    /// yet — so that first notification stays suppressed. The item is back in
+    /// the normal list either way, and later activity notifies as usual.
+    pub revived_by_activity: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -173,6 +179,12 @@ impl SnoozeService {
             if should_revive(now, &row.snooze_until, new_activity) {
                 self.db
                     .delete_snoozed_item(org_id, ITEM_TYPE_PULL_REQUEST, &row.item_key)?;
+                // Distinguish the two reasons: a deadline that simply elapsed
+                // means notifications resume, while activity-driven revival
+                // must not fire for the comment that caused it.
+                if new_activity && !deadline_passed(now, &row.snooze_until) {
+                    result.revived_by_activity.push(row.item_key.clone());
+                }
                 result.revived.push(row.item_key);
             } else {
                 result.still_snoozed.push(row.item_key);
@@ -265,7 +277,13 @@ impl SnoozeService {
 /// PRs via [`pr_activity_advanced`]; ChangedDate is ISO8601 and orders
 /// lexicographically.
 pub fn should_revive(now: &str, snooze_until: &str, new_activity: bool) -> bool {
-    new_activity || now >= snooze_until
+    new_activity || deadline_passed(now, snooze_until)
+}
+
+/// The deadline half of [`should_revive`], so callers can tell an elapsed
+/// snooze apart from one cut short by new activity.
+pub fn deadline_passed(now: &str, snooze_until: &str) -> bool {
+    now >= snooze_until
 }
 
 /// True while a snooze is still in effect at `now`. The read paths (My Reviews /
@@ -349,6 +367,80 @@ mod tests {
         assert!(!should_revive(now, "2026-06-20T09:00:00Z", false));
         // Deadline in the future but new activity: revive early.
         assert!(should_revive(now, "2026-06-20T09:00:00Z", true));
+    }
+
+    /// Snoozes one PR and reconciles at `now`, returning the outcome.
+    fn reconcile_with_seen_comment(
+        snooze_until: &str,
+        now: &str,
+        seen_after_snooze: Option<i64>,
+    ) -> SnoozeReconcile {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        let db = crate::db::AppDatabase::new(file.path().to_path_buf());
+        db.initialize().unwrap();
+        db.upsert_organization(crate::db::test_support::make_org_draft("org1"))
+            .unwrap();
+        db.set_pr_comment_seen("org1", "repo-1", 7, 100).unwrap();
+
+        let service = SnoozeService::new(db.clone());
+        service
+            .snooze_item(SnoozeItemInput {
+                organization_id: Some("org1".to_string()),
+                item_type: ITEM_TYPE_PULL_REQUEST.to_string(),
+                item_key: "repo-1:7".to_string(),
+                snooze_until: snooze_until.to_string(),
+            })
+            .unwrap();
+        if let Some(seen) = seen_after_snooze {
+            db.set_pr_comment_seen("org1", "repo-1", 7, seen).unwrap();
+        }
+        service.reconcile_pull_requests("org1", now).unwrap()
+    }
+
+    // Regression: collecting comment notifications advances the seen cursor
+    // before reconcile runs, so a reply revived the PR and the notification for
+    // that same reply escaped suppression — the snooze fired a toast instead of
+    // silencing one.
+    #[test]
+    fn reconcile_reports_activity_revival_separately_from_a_deadline() {
+        let revived =
+            reconcile_with_seen_comment("2026-06-20T09:00:00Z", "2026-06-17T12:00:00Z", Some(101));
+        assert_eq!(revived.still_snoozed, Vec::<String>::new());
+        assert_eq!(revived.revived, vec!["repo-1:7".to_string()]);
+        assert_eq!(
+            revived.revived_by_activity,
+            vec!["repo-1:7".to_string()],
+            "a reply inside the snooze window must be reported so its notification stays suppressed"
+        );
+    }
+
+    #[test]
+    fn reconcile_leaves_a_deadline_revival_free_to_notify() {
+        let expired =
+            reconcile_with_seen_comment("2026-06-17T09:00:00Z", "2026-06-17T12:00:00Z", None);
+        assert_eq!(expired.revived, vec!["repo-1:7".to_string()]);
+        assert!(
+            expired.revived_by_activity.is_empty(),
+            "an elapsed snooze resumes notifications normally"
+        );
+    }
+
+    #[test]
+    fn reconcile_keeps_a_quiet_pr_snoozed() {
+        let quiet =
+            reconcile_with_seen_comment("2026-06-20T09:00:00Z", "2026-06-17T12:00:00Z", None);
+        assert_eq!(quiet.still_snoozed, vec!["repo-1:7".to_string()]);
+        assert!(quiet.revived.is_empty());
+    }
+
+    #[test]
+    fn deadline_passed_separates_the_two_revival_reasons() {
+        let now = "2026-06-17T12:00:00Z";
+        // Elapsed deadline: notifications resume normally.
+        assert!(deadline_passed(now, "2026-06-17T09:00:00Z"));
+        // Still within the snooze window, so a revival here came from activity
+        // and its triggering notification must stay suppressed.
+        assert!(!deadline_passed(now, "2026-06-20T09:00:00Z"));
     }
 
     #[test]

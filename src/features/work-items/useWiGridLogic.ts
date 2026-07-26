@@ -29,6 +29,29 @@ import { customPreviewFieldsSignature, workItemQueryKeys } from './queryKeys';
 import { createWiKeyHandler } from './wiGridKeyHandler';
 import type { WiGridState } from './useWiGridState';
 
+/**
+ * Focuses a virtualized row once it exists in the DOM.
+ *
+ * Jumping outside the virtual window (End, PageDown, Home) scrolls first and
+ * only renders the destination row on the scroll event that follows. A single
+ * deferred focus lands while the row ref is still empty, and the optional chain
+ * swallows it, leaving focus on `<body>` so j/k stop working. Retry for a few
+ * frames until the row is mounted.
+ */
+export function focusRowWhenRendered(
+  getRow: () => HTMLElement | null | undefined,
+  remaining = 5,
+): void {
+  window.setTimeout(() => {
+    const row = getRow();
+    if (row) {
+      row.focus();
+      return;
+    }
+    if (remaining > 0) focusRowWhenRendered(getRow, remaining - 1);
+  }, 16);
+}
+
 export interface WiGridLogicProps {
   results: WorkItemSummary[];
   loading: boolean;
@@ -361,7 +384,7 @@ export function useWiGridLogic(
         scroller.scrollTop = rowBottom - scroller.clientHeight;
       }
     }
-    window.setTimeout(() => rowRefs.current[next]?.focus(), 0);
+    focusRowWhenRendered(() => rowRefs.current[next]);
   }
 
   function handleCheckboxChange(index: number, checked: boolean, shiftKey: boolean) {

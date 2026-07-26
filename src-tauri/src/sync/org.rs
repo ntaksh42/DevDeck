@@ -114,8 +114,16 @@ async fn sync_org_prs(
     }
     // Revive snoozed PRs past their deadline or with new activity, and learn
     // which PRs remain snoozed so their notifications can be suppressed.
+    // Suppress notifications for PRs still snoozed, and also for those this
+    // pass revived *because of* the very comment we are about to report: the
+    // user snoozed the PR, so that first notification would defeat the snooze.
+    // They return to the normal list regardless, and later activity notifies.
     let snoozed_pr_keys = match snooze.reconcile_pull_requests(&org.id, now) {
-        Ok(reconcile) => still_snoozed_pr_keys(&reconcile.still_snoozed),
+        Ok(reconcile) => {
+            let mut keys = still_snoozed_pr_keys(&reconcile.still_snoozed);
+            keys.extend(still_snoozed_pr_keys(&reconcile.revived_by_activity));
+            keys
+        }
         Err(e) => {
             tracing::warn!(org = %org.name, error = ?e, "sync: PR snooze reconcile failed");
             HashSet::new()

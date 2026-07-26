@@ -349,6 +349,32 @@ async fn retries_get_after_transient_500() {
     assert_eq!(data.authenticated_user.id, "user-after-retry");
 }
 
+/// A rate-limited POST that changes state must not be retried: Azure DevOps
+/// meters throughput after handling the request, so the comment may already
+/// exist and a retry would post it twice.
+#[tokio::test]
+async fn does_not_retry_state_changing_post_after_rate_limit() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/project-1/_apis/wit/workItems/5/comments"))
+        .respond_with(ResponseTemplate::new(429).insert_header("Retry-After", "1"))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = retrying_test_client(&server).await;
+    let result: Result<serde_json::Value> = client
+        .post_json(
+            "project-1/_apis/wit/workItems/5/comments",
+            &[("api-version", "7.1-preview")],
+            &serde_json::json!({ "text": "looks good" }),
+        )
+        .await;
+
+    assert!(matches!(result, Err(AdoError::RateLimited(_))));
+    // `expect(1)` above fails the test on drop if a retry was sent.
+}
+
 #[tokio::test]
 async fn retries_post_after_rate_limit() {
     let server = MockServer::start().await;
@@ -369,8 +395,10 @@ async fn retries_post_after_rate_limit() {
         .await;
 
     let client = retrying_test_client(&server).await;
+    // WIQL is a read-only POST, so it opts in to the same retry treatment GET
+    // gets — there is no side effect a retry could duplicate.
     let value: serde_json::Value = client
-        .post_json(
+        .post_json_read_only(
             "project-1/_apis/wit/wiql",
             &[("api-version", "7.1-preview")],
             &serde_json::json!({ "query": "SELECT [System.Id] FROM WorkItems" }),
