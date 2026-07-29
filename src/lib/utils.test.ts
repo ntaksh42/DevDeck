@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleSearchInputEscape, markdownLink } from "./utils";
+import { formatRelativeDate, handleSearchInputEscape, markdownLink } from "./utils";
 
 describe("markdownLink", () => {
   it("wraps the text and url in Markdown link syntax", () => {
@@ -12,6 +12,27 @@ describe("markdownLink", () => {
     expect(markdownLink("Fix [urgent] bug", "https://example.com")).toBe(
       "[Fix urgent bug](https://example.com)",
     );
+  });
+});
+
+describe("formatRelativeDate", () => {
+  it("formats past timestamps by elapsed time", () => {
+    const now = Date.now();
+    expect(formatRelativeDate(new Date(now - 5 * 60_000).toISOString())).toBe("5m ago");
+    expect(formatRelativeDate(new Date(now - 3 * 3_600_000).toISOString())).toBe("3h ago");
+    expect(formatRelativeDate(new Date(now - 2 * 86_400_000).toISOString())).toBe("2d ago");
+  });
+
+  it("does not report a future timestamp as an elapsed duration", () => {
+    // Clock skew between the service and this machine can hand us a timestamp
+    // ahead of `Date.now()`. A negative difference must not fall through the
+    // minute/hour/day branches, which would render a negative age.
+    const future = new Date(Date.now() + 3 * 3_600_000).toISOString();
+    expect(formatRelativeDate(future)).toBe("just now");
+  });
+
+  it("returns a placeholder for an unparseable value", () => {
+    expect(formatRelativeDate("not-a-date")).toBe("—");
   });
 });
 

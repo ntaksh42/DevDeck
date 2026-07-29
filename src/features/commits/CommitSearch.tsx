@@ -62,6 +62,9 @@ export function CommitSearch({
   const [allCommits, setAllCommits] = useState<CommitSummary[]>([]);
   // True when the pending mutation is a "load more" append rather than a new search.
   const isLoadMoreRef = useRef(false);
+  // Same signal as `isLoadMoreRef`, but as state so the results grid re-renders
+  // and can keep the already-loaded rows on screen while the next page loads.
+  const [loadingMore, setLoadingMore] = useState(false);
   // Last search params saved so Load more can re-issue the same query with a higher offset.
   const lastSearchInputRef = useRef<SearchCommitsInput | null>(null);
 
@@ -74,6 +77,11 @@ export function CommitSearch({
         setAllCommits(data.commits);
       }
       isLoadMoreRef.current = false;
+    },
+    // Clear the append flag on failure too, so a failed "load more" does not
+    // leave the grid stuck in its loading-more state.
+    onSettled() {
+      setLoadingMore(false);
     },
   });
 
@@ -248,7 +256,11 @@ export function CommitSearch({
 
   function handleLoadMore() {
     if (!lastSearchInputRef.current || !resultsTruncated) return;
+    // Guard against a second click while the previous page is still in flight,
+    // which would request the same offset twice and duplicate rows.
+    if (mutation.isPending) return;
     isLoadMoreRef.current = true;
+    setLoadingMore(true);
     mutation.mutate({ ...lastSearchInputRef.current, offset: allCommits.length });
   }
 
@@ -482,7 +494,8 @@ export function CommitSearch({
       ) : (
         <CommitResults
           activeExternalFilterCount={activeSearchFilterCount}
-          loading={mutation.isPending}
+          loading={mutation.isPending && !loadingMore}
+          loadingMore={loadingMore}
           onClearExternalFilters={clearSearchFilters}
           onLoadMore={resultsTruncated ? handleLoadMore : undefined}
           onOpenPullRequest={onOpenPullRequest}

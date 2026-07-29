@@ -8,6 +8,7 @@ export function WiColumnFilterDropdown({
   onClearAll,
   onUncheckAll,
   onClose,
+  restoreFocusRef,
 }: {
   anchorRect: DOMRect;
   allValues: string[];
@@ -16,6 +17,7 @@ export function WiColumnFilterDropdown({
   onClearAll: () => void;
   onUncheckAll: () => void;
   onClose: () => void;
+  restoreFocusRef?: React.RefObject<HTMLElement | null>;
 }) {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState("");
@@ -36,6 +38,46 @@ export function WiColumnFilterDropdown({
     return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [onClose]);
 
+  // On close, return focus to the filter button that opened the dropdown so
+  // keyboard navigation resumes there instead of being stranded on <body>.
+  // Deferred a frame so it wins over any post-close re-render focus.
+  useEffect(() => {
+    const restore = restoreFocusRef;
+    return () => {
+      window.setTimeout(() => restore?.current?.focus(), 0);
+    };
+  }, [restoreFocusRef]);
+
+  // Move focus between the dropdown's controls (search box, (All), Uncheck all,
+  // value checkboxes), wrapping at the ends.
+  function moveFocus(delta: number) {
+    const items = Array.from(
+      dropdownRef.current?.querySelectorAll<HTMLElement>('[data-filter-item="true"]') ?? [],
+    ).filter((el) => !el.hasAttribute("disabled"));
+    if (items.length === 0) return;
+    const active = document.activeElement as HTMLElement | null;
+    const current = active ? items.indexOf(active) : -1;
+    const next = (current + delta + items.length) % items.length;
+    items[next]?.focus();
+  }
+
+  // Keep navigation/activation inside the dropdown; otherwise arrows reach the
+  // grid behind it (its key handler moves the row selection) while the popup is
+  // open.
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      e.stopPropagation();
+      moveFocus(1);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      e.stopPropagation();
+      moveFocus(-1);
+    } else if (e.key === "Enter" || e.key === " ") {
+      e.stopPropagation();
+    }
+  }
+
   const isAllChecked = activeValues === undefined;
   const anyChecked = isAllChecked || (activeValues?.size ?? 0) > 0;
   const filteredValues = search.trim()
@@ -48,12 +90,14 @@ export function WiColumnFilterDropdown({
   return (
     <div
       ref={dropdownRef}
+      onKeyDown={handleKeyDown}
       className="fixed z-50 w-52 rounded-md border border-border bg-popover shadow-lg"
       style={{ top, left }}
     >
       <div className="border-b border-border p-1.5">
         <input
           autoFocus
+          data-filter-item="true"
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search…"
@@ -63,6 +107,7 @@ export function WiColumnFilterDropdown({
       <div className="flex items-center gap-1 border-b border-border p-1">
         <button
           type="button"
+          data-filter-item="true"
           onClick={onClearAll}
           className={`flex-1 rounded px-2 py-0.5 text-left text-xs hover:bg-secondary ${
             isAllChecked ? "font-medium text-foreground" : "text-muted-foreground"
@@ -72,6 +117,7 @@ export function WiColumnFilterDropdown({
         </button>
         <button
           type="button"
+          data-filter-item="true"
           onClick={onUncheckAll}
           disabled={!anyChecked}
           className="rounded px-2 py-0.5 text-xs text-muted-foreground hover:bg-secondary disabled:cursor-default disabled:opacity-40"
@@ -92,6 +138,7 @@ export function WiColumnFilterDropdown({
               >
                 <input
                   type="checkbox"
+                  data-filter-item="true"
                   checked={checked}
                   onChange={() => onToggle(value)}
                   className="h-3 w-3"

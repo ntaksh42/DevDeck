@@ -294,6 +294,7 @@ export function WorkItemsGrid({
           onClearAll={() => g.clearColumnFilter(state.openFilterCol!)}
           onUncheckAll={() => g.uncheckAllColumnFilter(state.openFilterCol!)}
           onClose={() => { state.setOpenFilterCol(null); state.setFilterAnchorRect(null); }}
+          restoreFocusRef={state.filterButtonRef}
         />
       ) : null}
       {state.columnMenuRect ? (

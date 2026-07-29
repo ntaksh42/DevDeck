@@ -57,6 +57,9 @@ export function WorkItemBoard({
   const [dropColumn, setDropColumn] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const focusKeyRef = useRef<string | null>(null);
+  // A card just moved to another column; its new row index is only known once
+  // `columns` has been rebuilt from the optimistic override.
+  const movedCardKeyRef = useRef<string | null>(null);
 
   const effectiveResults = useMemo(
     () =>
@@ -108,8 +111,23 @@ export function WorkItemBoard({
     [effectiveResults, orderedStates],
   );
 
-  // Keep the selection in range as columns/cards change.
+  // Keep the selection in range as columns/cards change, and follow a card that
+  // was just moved to another column to wherever that column ordered it.
   useEffect(() => {
+    const movedKey = movedCardKeyRef.current;
+    if (movedKey) {
+      for (const [columnIndex, column] of columns.entries()) {
+        const cardIndex = column.items.findIndex((item) => workItemKey(item) === movedKey);
+        if (cardIndex >= 0) {
+          movedCardKeyRef.current = null;
+          setSelected({ column: columnIndex, card: cardIndex });
+          return;
+        }
+      }
+      // The card is not in the rebuilt columns (e.g. the move was rolled back);
+      // fall through to the range clamp rather than holding a stale key.
+      movedCardKeyRef.current = null;
+    }
     setSelected((current) => {
       if (columns.length === 0) return { column: 0, card: 0 };
       const column = Math.min(current.column, columns.length - 1);
@@ -246,7 +264,15 @@ export function WorkItemBoard({
     const targetIndex = selected.column + delta;
     const target = columns[targetIndex];
     if (!target) return;
+    const movedKey = workItemKey(selectedItem);
     void moveItemToState(selectedItem, target.state);
+    // The moved card lands wherever the target column's ordering puts it, which
+    // is not the row index it occupied in the old column. Carrying the old index
+    // over would highlight (and then move) a different work item, and would also
+    // disagree with `focusKeyRef`, which follows the card by key. Track the card
+    // itself instead; `movedCardKeyRef` resolves to an index once the optimistic
+    // override has rebuilt the columns.
+    movedCardKeyRef.current = movedKey;
     setSelected((current) => ({ column: targetIndex, card: current.card }));
   }
 

@@ -107,16 +107,31 @@ impl SyncRunner {
         }
     }
 
-    /// Reads the most recent persisted sync error across scopes so the failure
-    /// notification can carry a human-readable reason.
+    /// Reads a persisted sync error so the failure notification can carry a
+    /// human-readable reason.
+    ///
+    /// `list_sync_states()` is ordered by `(org_id, scope)`, not by time, so
+    /// taking the first failing row reported whichever scope sorted first
+    /// alphabetically — often a stale error from an unrelated scope rather than
+    /// the one currently failing. There is no per-row error timestamp to sort
+    /// on (`last_synced_at` only advances on success), so pick the scope with
+    /// the most consecutive failures, which is the one the notification is
+    /// actually about. On a tie the first row in `(org_id, scope)` order wins,
+    /// keeping the choice deterministic.
     fn latest_sync_error(&self) -> Option<String> {
         self.db
             .list_sync_states()
             .ok()?
             .into_iter()
-            .filter(|state| state.error_count > 0)
-            .filter_map(|state| state.last_error)
-            .next()
+            .filter(|state| state.error_count > 0 && state.last_error.is_some())
+            .reduce(|best, state| {
+                if state.error_count > best.error_count {
+                    state
+                } else {
+                    best
+                }
+            })
+            .and_then(|state| state.last_error)
     }
 
     async fn sync_once(&self, handle: &AppHandle, scope: SyncScope) -> SyncPassOutcome {

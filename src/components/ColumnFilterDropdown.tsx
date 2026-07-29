@@ -123,6 +123,7 @@ export function ColumnFilterDropdown({
         </button>
         <button
           type="button"
+          data-filter-item="true"
           onClick={onUncheckAll}
           disabled={!anyChecked}
           className="rounded px-2 py-0.5 text-xs text-muted-foreground hover:bg-secondary disabled:cursor-default disabled:opacity-40"

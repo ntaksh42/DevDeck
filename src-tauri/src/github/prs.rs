@@ -1,13 +1,108 @@
+use chrono::NaiveDate;
 use github_client::IssueSearchItem;
 
 use crate::auth::github_client_for_organization;
 use crate::db::Organization;
-use crate::error::Result;
-use crate::prs::{MyCreatedPullRequestSummary, PullRequestSummary, ReviewPullRequestSummary};
+use crate::error::{AppError, Result};
+use crate::prs::{
+    MyCreatedPullRequestSummary, PullRequestSummary, ReviewPullRequestSummary,
+    SearchPullRequestsInput,
+};
 use crate::secrets::SecretStore;
 
 /// Upper bound on PRs fetched for the list views.
 const MY_CREATED_LIMIT: u32 = 100;
+
+/// The subset of [`SearchPullRequestsInput`] that maps onto GitHub search
+/// qualifiers. Built once so the query string and the search call stay in sync.
+///
+/// `project_ids` carries the repository owner (see `item_to_search_summary`,
+/// which sets `project_id` to the owner), and `repository_ids` carries the
+/// `owner/name` slug, so both become `repo:`/`user:` qualifiers.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct PrSearchQualifiers {
+    repositories: Vec<String>,
+    owners: Vec<String>,
+    target_branches: Vec<String>,
+    /// `created` or `closed`, matching the requested date basis.
+    date_field: &'static str,
+    from_date: Option<String>,
+    to_date: Option<String>,
+}
+
+impl PrSearchQualifiers {
+    pub fn from_input(input: &SearchPullRequestsInput) -> Result<Self> {
+        let clean = |values: &Option<Vec<String>>| -> Vec<String> {
+            values
+                .as_deref()
+                .unwrap_or_default()
+                .iter()
+                .map(|value| value.trim())
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+                .collect()
+        };
+        Ok(Self {
+            repositories: clean(&input.repository_ids),
+            owners: clean(&input.project_ids),
+            // Azure DevOps sends full ref names; GitHub wants the bare branch.
+            target_branches: clean(&input.target_branches)
+                .into_iter()
+                .map(|branch| {
+                    branch
+                        .strip_prefix("refs/heads/")
+                        .unwrap_or(&branch)
+                        .to_string()
+                })
+                .collect(),
+            date_field: match input.date_basis.as_deref().map(str::trim) {
+                Some("closed") => "closed",
+                _ => "created",
+            },
+            from_date: parse_search_date(input.from_date.as_deref())?,
+            to_date: parse_search_date(input.to_date.as_deref())?,
+        })
+    }
+
+    /// Appends the qualifiers to a GitHub search query string.
+    fn append_to(&self, q: &mut String) {
+        // `repo:` already pins the owner, so adding `user:` alongside it would
+        // AND two qualifiers that cannot both match.
+        if !self.repositories.is_empty() {
+            for repository in &self.repositories {
+                q.push_str(" repo:");
+                q.push_str(repository);
+            }
+        } else {
+            for owner in &self.owners {
+                q.push_str(" user:");
+                q.push_str(owner);
+            }
+        }
+        for branch in &self.target_branches {
+            q.push_str(" base:");
+            q.push_str(branch);
+        }
+        match (self.from_date.as_deref(), self.to_date.as_deref()) {
+            (Some(from), Some(to)) => {
+                q.push_str(&format!(" {}:{from}..{to}", self.date_field));
+            }
+            (Some(from), None) => q.push_str(&format!(" {}:>={from}", self.date_field)),
+            (None, Some(to)) => q.push_str(&format!(" {}:<={to}", self.date_field)),
+            (None, None) => {}
+        }
+    }
+}
+
+/// Validates a `YYYY-MM-DD` filter bound for use in a GitHub date qualifier.
+fn parse_search_date(value: Option<&str>) -> Result<Option<String>> {
+    let Some(trimmed) = value.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(None);
+    };
+    NaiveDate::parse_from_str(trimmed, "%Y-%m-%d")
+        .map_err(|_| AppError::InvalidInput(format!("invalid date: {trimmed}")))?;
+    Ok(Some(trimmed.to_string()))
+}
 
 /// Searches pull requests the authenticated user is involved in (authored,
 /// assigned, mentioned, or review-requested), mapped to the search DTO. GitHub
@@ -18,6 +113,7 @@ pub async fn search_pull_requests(
     secrets: &SecretStore,
     query: &str,
     active_only: bool,
+    qualifiers: &PrSearchQualifiers,
     limit: u32,
 ) -> Result<Vec<PullRequestSummary>> {
     let client = github_client_for_organization(organization, secrets)?;
@@ -25,6 +121,7 @@ pub async fn search_pull_requests(
     if active_only {
         q.push_str(" is:open");
     }
+    qualifiers.append_to(&mut q);
     let trimmed = query.trim();
     if !trimmed.is_empty() {
         q.push(' ');
@@ -172,5 +269,99 @@ fn item_to_summary(org_id: &str, item: IssueSearchItem) -> MyCreatedPullRequestS
         is_draft: item.draft,
         approvals: 0,
         reviewer_count: 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn input() -> SearchPullRequestsInput {
+        SearchPullRequestsInput {
+            organization_id: None,
+            query: None,
+            statuses: None,
+            project_ids: None,
+            repository_ids: None,
+            target_branches: None,
+            from_date: None,
+            to_date: None,
+            date_basis: None,
+            exclude_drafts: None,
+            sort_by: None,
+        }
+    }
+
+    fn query_for(input: &SearchPullRequestsInput) -> String {
+        let mut q = String::from("is:pr involves:@me");
+        PrSearchQualifiers::from_input(input)
+            .unwrap()
+            .append_to(&mut q);
+        q
+    }
+
+    #[test]
+    fn no_filters_leave_the_base_query_untouched() {
+        assert_eq!(query_for(&input()), "is:pr involves:@me");
+    }
+
+    #[test]
+    fn repositories_and_branches_become_qualifiers() {
+        let mut i = input();
+        i.repository_ids = Some(vec!["octo/hello".into(), "  ".into()]);
+        i.target_branches = Some(vec!["refs/heads/main".into(), "release".into()]);
+        let q = query_for(&i);
+        assert!(q.contains("repo:octo/hello"), "{q}");
+        // Blank entries are dropped and refs/heads/ is stripped for GitHub.
+        assert!(!q.contains("repo: "), "{q}");
+        assert!(q.contains("base:main"), "{q}");
+        assert!(q.contains("base:release"), "{q}");
+    }
+
+    #[test]
+    fn owner_qualifier_is_dropped_when_a_repository_pins_it() {
+        let mut i = input();
+        i.project_ids = Some(vec!["octo".into()]);
+        i.repository_ids = Some(vec!["octo/hello".into()]);
+        let q = query_for(&i);
+        // `repo:` already scopes to the owner; ANDing `user:` matches nothing.
+        assert!(q.contains("repo:octo/hello"), "{q}");
+        assert!(!q.contains("user:"), "{q}");
+    }
+
+    #[test]
+    fn owner_qualifier_is_used_without_a_repository_filter() {
+        let mut i = input();
+        i.project_ids = Some(vec!["octo".into()]);
+        assert!(query_for(&i).contains("user:octo"));
+    }
+
+    #[test]
+    fn date_window_maps_to_the_requested_basis() {
+        let mut i = input();
+        i.from_date = Some("2026-01-01".into());
+        i.to_date = Some("2026-02-01".into());
+        assert!(query_for(&i).contains("created:2026-01-01..2026-02-01"));
+
+        i.date_basis = Some("closed".into());
+        assert!(query_for(&i).contains("closed:2026-01-01..2026-02-01"));
+    }
+
+    #[test]
+    fn open_ended_date_bounds_use_comparison_qualifiers() {
+        let mut i = input();
+        i.from_date = Some("2026-01-01".into());
+        assert!(query_for(&i).contains("created:>=2026-01-01"));
+
+        let mut i = input();
+        i.to_date = Some("2026-02-01".into());
+        assert!(query_for(&i).contains("created:<=2026-02-01"));
+    }
+
+    #[test]
+    fn an_unparseable_date_is_rejected_rather_than_silently_dropped() {
+        let mut i = input();
+        i.from_date = Some("01/02/2026".into());
+        assert!(PrSearchQualifiers::from_input(&i).is_err());
     }
 }

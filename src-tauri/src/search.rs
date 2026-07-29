@@ -1,3 +1,6 @@
+use std::cmp::Ordering;
+
+use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 
 use crate::commits::{CommitService, CommitSummary, SearchCommitsInput};
@@ -8,6 +11,28 @@ use crate::work_items::{SearchWorkItemsInput, WorkItemService, WorkItemSummary};
 
 const DEFAULT_LIMIT_PER_KIND: usize = 5;
 const MAX_LIMIT_PER_KIND: usize = 50;
+
+/// Orders two RFC3339 timestamps that may use different spellings of the same
+/// instant (`+00:00` vs `Z`, with or without sub-second digits). Values that
+/// cannot be parsed fall back to a string comparison, and absent values sort
+/// last. Callers pass the arguments already swapped for a descending sort.
+fn compare_timestamps_desc(left: Option<&str>, right: Option<&str>) -> Ordering {
+    match (left, right) {
+        (Some(left), Some(right)) => {
+            match (
+                DateTime::parse_from_rfc3339(left),
+                DateTime::parse_from_rfc3339(right),
+            ) {
+                (Ok(left), Ok(right)) => left.cmp(&right),
+                _ => left.cmp(right),
+            }
+        }
+        // `None` is "no timestamp"; keep those at the end of a newest-first list.
+        (Some(_), None) => Ordering::Greater,
+        (None, Some(_)) => Ordering::Less,
+        (None, None) => Ordering::Equal,
+    }
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -119,9 +144,20 @@ pub async fn search_all(
         );
     }
     if org_ids.len() > 1 {
-        work_item_results.sort_by(|a, b| b.changed_date.cmp(&a.changed_date));
-        pull_request_results.sort_by(|a, b| b.creation_date.cmp(&a.creation_date));
-        commit_results.sort_by(|a, b| b.author_date.cmp(&a.author_date));
+        // Results from different providers spell the same instant differently:
+        // Azure DevOps emits `to_rfc3339()` (`+00:00`) while GitHub passes its
+        // `...Z` timestamps through untouched. Comparing those as raw strings
+        // orders `.500+00:00` before `Z` within the same second, so parse to an
+        // instant and fall back to the string only when a value cannot be read.
+        work_item_results.sort_by(|a, b| {
+            compare_timestamps_desc(b.changed_date.as_deref(), a.changed_date.as_deref())
+        });
+        pull_request_results.sort_by(|a, b| {
+            compare_timestamps_desc(Some(&b.creation_date), Some(&a.creation_date))
+        });
+        commit_results.sort_by(|a, b| {
+            compare_timestamps_desc(b.author_date.as_deref(), a.author_date.as_deref())
+        });
     }
 
     // Totals are bounded by each underlying search's own cap, not exact counts.
@@ -429,5 +465,56 @@ mod tests {
 
         assert_eq!(result.work_items.len(), 3);
         assert_eq!(result.totals.work_items, 11);
+    }
+
+    #[test]
+    fn compare_timestamps_orders_mixed_rfc3339_spellings_by_instant() {
+        // Azure DevOps emits `+00:00`, GitHub emits `Z`. Within the same second
+        // a raw string comparison puts `.500+00:00` before `Z` even though it
+        // is the later instant.
+        let azdo = "2026-06-17T12:00:00.500+00:00";
+        let github = "2026-06-17T12:00:00Z";
+        assert_eq!(
+            compare_timestamps_desc(Some(azdo), Some(github)),
+            Ordering::Greater
+        );
+        assert_eq!(
+            compare_timestamps_desc(Some(github), Some(azdo)),
+            Ordering::Less
+        );
+        // Same instant written two ways compares equal.
+        assert_eq!(
+            compare_timestamps_desc(Some("2026-06-17T12:00:00+00:00"), Some(github)),
+            Ordering::Equal
+        );
+    }
+
+    #[test]
+    fn compare_timestamps_sorts_missing_values_last_in_a_newest_first_list() {
+        let mut values = vec![
+            None,
+            Some("2026-06-17T12:00:00Z"),
+            None,
+            Some("2026-06-18T12:00:00Z"),
+        ];
+        // Mirrors the call shape used for the descending sorts above.
+        values.sort_by(|a, b| compare_timestamps_desc(*b, *a));
+        assert_eq!(
+            values,
+            vec![
+                Some("2026-06-18T12:00:00Z"),
+                Some("2026-06-17T12:00:00Z"),
+                None,
+                None
+            ]
+        );
+    }
+
+    #[test]
+    fn compare_timestamps_falls_back_to_string_order_for_unparseable_values() {
+        assert_eq!(
+            compare_timestamps_desc(Some("b"), Some("a")),
+            Ordering::Greater
+        );
     }
 }

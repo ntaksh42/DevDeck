@@ -95,18 +95,30 @@ impl Provider for GithubProvider {
             .as_ref()
             .map(|s| s.is_empty() || s.iter().all(|s| s.eq_ignore_ascii_case("active")))
             .unwrap_or(true);
-        let query = input.query.unwrap_or_default();
+        let query = input.query.clone().unwrap_or_default();
+        // The repository / target-branch / date filters translate into GitHub
+        // search qualifiers. Previously every field except `query`, `statuses`
+        // and `exclude_drafts` was dropped on the floor, so the search screen's
+        // filters silently did nothing on a GitHub connection.
+        let qualifiers = github::prs::PrSearchQualifiers::from_input(&input)?;
         let mut results = github::prs::search_pull_requests(
             &self.org,
             &self.secrets,
             &query,
             active_only,
+            &qualifiers,
             PR_RESULT_LIMIT,
         )
         .await?;
         if input.exclude_drafts.unwrap_or(false) {
             results.retain(|pr| !pr.is_draft);
         }
+        // `sort_by` is applied locally: GitHub's `sort:` qualifier has no
+        // equivalent for the "title" ordering the UI offers.
+        crate::prs::sort_summaries(
+            &mut results,
+            crate::prs::parse_sort_by(input.sort_by.as_deref()),
+        );
         let total = results.len();
         Ok(PullRequestSearchResult {
             pull_requests: results,

@@ -75,8 +75,13 @@ export function BulkFailurePanel({
         </button>
       </div>
       <ul className="mt-1 max-h-24 overflow-auto">
-        {failures.map((failure) => (
-          <li key={failure.id} className="truncate">
+        {/* A bulk action can span several projects/organizations and
+            BulkWorkItemResult only carries the work item id, which is unique
+            per project — not across them. Pair it with the index so two
+            same-numbered items from different projects render as two rows
+            instead of colliding on one React key. */}
+        {failures.map((failure, index) => (
+          <li key={`${failure.id}:${index}`} className="truncate">
             #{failure.id}: {failure.error}
           </li>
         ))}
