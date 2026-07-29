@@ -25,7 +25,7 @@ fn flatten_work_item_links_computes_depths_in_tree_order() {
             target_id: 2,
         },
     ];
-    let (ids, depths) = flatten_work_item_links(links, 10);
+    let (ids, depths) = flatten_work_item_links(links, Some(10));
     assert_eq!(ids, vec![1, 2, 3, 4]);
     assert_eq!(depths[&1], 0);
     assert_eq!(depths[&2], 1);
@@ -50,8 +50,28 @@ fn flatten_work_item_links_respects_limit() {
             target_id: 3,
         },
     ];
-    let (ids, _) = flatten_work_item_links(links, 2);
+    let (ids, _) = flatten_work_item_links(links, Some(2));
     assert_eq!(ids, vec![1, 2]);
+}
+
+#[test]
+fn flatten_work_item_links_without_limit_keeps_every_edge() {
+    use azdo_client::WorkItemLink;
+    let links: Vec<WorkItemLink> = (1..=1000)
+        .map(|id| WorkItemLink {
+            source_id: None,
+            target_id: id,
+        })
+        .collect();
+    let (ids, _) = flatten_work_item_links(links, None);
+    assert_eq!(ids.len(), 1000);
+}
+
+#[test]
+fn work_item_query_limit_treats_missing_and_zero_as_unlimited() {
+    assert_eq!(work_item_query_limit(None), None);
+    assert_eq!(work_item_query_limit(Some(0)), None);
+    assert_eq!(work_item_query_limit(Some(750)), Some(750));
 }
 
 #[test]

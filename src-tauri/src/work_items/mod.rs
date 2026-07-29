@@ -141,20 +141,19 @@ impl WorkItemService {
             .project(&client, &organization.id, &input.project_id)
             .await?;
 
+        // `None` runs the query unbounded, so every matching work item is returned.
         let limit = work_item_query_limit(input.limit);
         let (ids, depths) = if is_link_wiql(wiql) {
             let links = client
-                .query_work_item_links(&project.id, wiql, Some(limit + 1))
+                .query_work_item_links(&project.id, wiql, limit)
                 .await?;
             let (ids, depth_by_id) = flatten_work_item_links(links, limit);
             (ids, Some(depth_by_id))
         } else {
-            let ids = client
-                .query_work_item_ids(&project.id, wiql, Some(limit))
-                .await?
-                .into_iter()
-                .take(limit)
-                .collect::<Vec<_>>();
+            let mut ids = client.query_work_item_ids(&project.id, wiql, limit).await?;
+            if let Some(limit) = limit {
+                ids.truncate(limit);
+            }
             (ids, None)
         };
         if ids.is_empty() {
@@ -197,20 +196,19 @@ impl WorkItemService {
         let wiql = validate_work_item_wiql(&input.wiql)?;
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let limit = work_item_query_limit(input.limit);
-        // Fetch one extra id so the frontend can render "limit+" when results overflow.
+        // With a limit, fetch one extra id so the frontend can render "limit+"
+        // when results overflow. Without one, the exact count is returned.
+        let probe = work_item_query_limit(input.limit).map(|limit| limit + 1);
         let count = if is_link_wiql(wiql) {
             let links = client
-                .query_work_item_links(&input.project_id, wiql, Some(limit + 1))
+                .query_work_item_links(&input.project_id, wiql, probe)
                 .await?;
-            flatten_work_item_links(links, limit + 1).0.len()
+            flatten_work_item_links(links, probe).0.len()
         } else {
-            client
-                .query_work_item_ids(&input.project_id, wiql, Some(limit + 1))
-                .await?
-                .into_iter()
-                .take(limit + 1)
-                .count()
+            let ids = client
+                .query_work_item_ids(&input.project_id, wiql, probe)
+                .await?;
+            probe.map_or(ids.len(), |probe| ids.len().min(probe))
         };
         Ok(count)
     }

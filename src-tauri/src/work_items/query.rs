@@ -102,15 +102,17 @@ pub(crate) fn is_link_wiql(wiql: &str) -> bool {
     wiql_queries_source(wiql, "workitemlinks")
 }
 
-pub(crate) fn work_item_query_limit(limit: Option<usize>) -> usize {
-    limit.unwrap_or(200).clamp(1, 500)
+/// `None` means the query is unbounded and every matching work item is fetched.
+pub(crate) fn work_item_query_limit(limit: Option<usize>) -> Option<usize> {
+    limit.filter(|limit| *limit > 0)
 }
 
 /// Flattens `FROM WorkItemLinks` edges into a deduplicated id list in tree
-/// order plus the depth of each id (roots have depth 0).
+/// order plus the depth of each id (roots have depth 0). A `None` limit keeps
+/// every edge.
 pub(crate) fn flatten_work_item_links(
     links: Vec<azdo_client::WorkItemLink>,
-    limit: usize,
+    limit: Option<usize>,
 ) -> (Vec<i64>, HashMap<i64, u32>) {
     let mut ids: Vec<i64> = Vec::new();
     let mut depth_by_id: HashMap<i64, u32> = HashMap::new();
@@ -125,7 +127,7 @@ pub(crate) fn flatten_work_item_links(
             .unwrap_or(0);
         depth_by_id.insert(link.target_id, depth);
         ids.push(link.target_id);
-        if ids.len() >= limit {
+        if limit.is_some_and(|limit| ids.len() >= limit) {
             break;
         }
     }

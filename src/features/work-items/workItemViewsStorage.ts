@@ -5,6 +5,10 @@ import { isValidFieldReferenceName } from "./previewFieldsStorage";
 // `storageKey(name, version)` from "@/lib/storage" instead of a hand-spelled
 // `:vN` suffix.
 const WI_QUERY_VIEWS_STORAGE_KEY = "azdodeck:workItemQueryViews";
+// Views saved before the result cap was removed all carry the old default of
+// 200. Dropping that value on load makes them unbounded like new views; an
+// explicitly chosen limit is only kept when it differs from that default.
+const LEGACY_DEFAULT_VIEW_LIMIT = 200;
 const WI_QUERY_VIEWS_EXPORT_SCHEMA = "azdodeck.workItemViews";
 export const WI_VIEW_COUNT_BASELINES_STORAGE_KEY = "azdodeck:workItems:viewCountBaselines";
 
@@ -20,7 +24,8 @@ export type WorkItemQueryView = {
   sortDirection?: SortDirection;
   sortKey?: "id" | "workItemType" | "state" | "title" | "projectName" | "assignedTo" | "tags" | "changedDate";
   wiql: string;
-  limit: number;
+  /** Maximum results to fetch. Omitted means the query is unbounded. */
+  limit?: number;
   refreshIntervalSec?: number;
   alertThreshold?: number;
   extraColumns?: string[];
@@ -78,7 +83,6 @@ function defaultWorkItemQueryViews(): WorkItemQueryView[] {
         "WHERE [System.AssignedTo] = @Me",
         "ORDER BY [System.ChangedDate] DESC",
       ].join("\n"),
-      limit: 200,
     },
     {
       id: "builtin-following",
@@ -94,7 +98,6 @@ function defaultWorkItemQueryViews(): WorkItemQueryView[] {
         "WHERE [System.Id] IN (@Follows)",
         "ORDER BY [System.ChangedDate] DESC",
       ].join("\n"),
-      limit: 200,
     },
     {
       id: "builtin-mentioned",
@@ -109,7 +112,6 @@ function defaultWorkItemQueryViews(): WorkItemQueryView[] {
         "WHERE [System.History] CONTAINS WORDS @Me",
         "ORDER BY [System.ChangedDate] DESC",
       ].join("\n"),
-      limit: 200,
     },
     {
       id: "builtin-my-activity",
@@ -124,7 +126,6 @@ function defaultWorkItemQueryViews(): WorkItemQueryView[] {
         "WHERE [System.ChangedBy] = @Me OR [System.CreatedBy] = @Me",
         "ORDER BY [System.ChangedDate] DESC",
       ].join("\n"),
-      limit: 200,
     },
   ];
 }
@@ -156,7 +157,10 @@ export function normalizeWorkItemQueryView(value: unknown): WorkItemQueryView | 
       : "desc",
     sortKey: isWorkItemSortKey(view.sortKey) ? view.sortKey : "changedDate",
     wiql: view.wiql,
-    limit: Number.isFinite(limit) ? clamp(limit, 1, 500) : 200,
+    limit:
+      Number.isFinite(limit) && limit > 0 && Math.round(limit) !== LEGACY_DEFAULT_VIEW_LIMIT
+        ? Math.round(limit)
+        : undefined,
     refreshIntervalSec:
       Number.isFinite(refreshIntervalSec) && refreshIntervalSec > 0
         ? clamp(
