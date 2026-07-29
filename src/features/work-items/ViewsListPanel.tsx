@@ -278,7 +278,11 @@ export function ViewsListPanel({
           {views.map((view, index) => {
             const query = viewCountQueries[index];
             const count = query?.data ?? 0;
-            const overflow = typeof query?.data === "number" && query.data > view.limit;
+            // An unbounded view reports its exact count, so there is no overflow marker.
+            const overflow =
+              view.limit !== undefined &&
+              typeof query?.data === "number" &&
+              query.data > view.limit;
             const displayCount = overflow ? `${view.limit}+` : count;
             const baseline = viewCountBaseline(view.id);
             const delta =
@@ -348,7 +352,9 @@ export function ViewsListPanel({
                 <p className="mt-1 truncate text-xs text-muted-foreground">
                   {query?.isError
                     ? commandErrorMessage(query.error)
-                    : `${view.limit} max results`}
+                    : view.limit !== undefined
+                      ? `${view.limit} max results`
+                      : "no result limit"}
                 </p>
                 <p className="mt-1 truncate text-[11px] text-muted-foreground/80">
                   {(view.sortKey ?? "changedDate")} {(view.sortDirection ?? "desc").toUpperCase()}

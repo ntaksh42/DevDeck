@@ -199,11 +199,14 @@ export function ViewEditorDialog({
             </label>
 
             <label className="grid gap-1.5">
-              <span className="text-xs font-medium text-muted-foreground">Limit</span>
+              <span className="text-xs font-medium text-muted-foreground">
+                Limit
+                <span className="ml-1 font-normal text-muted-foreground/70">(empty = no limit)</span>
+              </span>
               <input
                 type="number"
                 min={1}
-                max={500}
+                placeholder="no limit"
                 value={draftLimit}
                 onChange={(event) => onLimitChange(event.target.value)}
                 className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"

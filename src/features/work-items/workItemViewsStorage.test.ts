@@ -51,6 +51,20 @@ describe("normalizeWorkItemQueryView", () => {
   it("keeps a zero alert threshold", () => {
     expect(normalizeWorkItemQueryView({ ...baseView, alertThreshold: 0 })?.alertThreshold).toBe(0);
   });
+
+  it("makes views unbounded when no usable limit is stored", () => {
+    expect(normalizeWorkItemQueryView({ ...baseView, limit: undefined })?.limit).toBeUndefined();
+    expect(normalizeWorkItemQueryView({ ...baseView, limit: 0 })?.limit).toBeUndefined();
+    expect(normalizeWorkItemQueryView({ ...baseView, limit: "abc" })?.limit).toBeUndefined();
+  });
+
+  it("drops the legacy 200 cap so old views become unbounded", () => {
+    expect(normalizeWorkItemQueryView(baseView)?.limit).toBeUndefined();
+  });
+
+  it("keeps an explicit limit above the old 500 ceiling", () => {
+    expect(normalizeWorkItemQueryView({ ...baseView, limit: 5000 })?.limit).toBe(5000);
+  });
 });
 
 describe("view count baselines", () => {

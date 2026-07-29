@@ -49,7 +49,10 @@ export function useViewEditorDraft({
   const [draftName, setDraftName] = useState(initialSelectedView?.name ?? "");
   const [draftProjectId, setDraftProjectId] = useState(initialSelectedView?.projectId ?? "");
   const [draftWiql, setDraftWiql] = useState(initialSelectedView?.wiql ?? defaultWorkItemWiql());
-  const [draftLimit, setDraftLimit] = useState(String(initialSelectedView?.limit ?? 200));
+  // Empty means no limit, so an unbounded view starts with a blank input.
+  const [draftLimit, setDraftLimit] = useState(
+    initialSelectedView?.limit !== undefined ? String(initialSelectedView.limit) : "",
+  );
   const [draftRefreshInterval, setDraftRefreshInterval] = useState(
     initialSelectedView?.refreshIntervalSec ? String(initialSelectedView.refreshIntervalSec) : "",
   );
@@ -168,8 +171,9 @@ export function useViewEditorDraft({
     setDraftWiql(view.wiql);
     draftWiqlRef.current = view.wiql;
     setWiqlCursor(view.wiql.length);
-    setDraftLimit(String(view.limit));
-    draftLimitRef.current = String(view.limit);
+    const limit = view.limit !== undefined ? String(view.limit) : "";
+    setDraftLimit(limit);
+    draftLimitRef.current = limit;
     const refreshInterval = view.refreshIntervalSec ? String(view.refreshIntervalSec) : "";
     setDraftRefreshInterval(refreshInterval);
     draftRefreshIntervalRef.current = refreshInterval;
@@ -259,17 +263,18 @@ export function useViewEditorDraft({
     const name = draftNameRef.current.trim();
     const projectId = draftProjectIdRef.current;
     const wiql = draftWiqlRef.current.trim();
-    const limitInput = draftLimitRef.current;
-    const limit = clamp(Number(limitInput), 1, 500);
+    // A blank limit runs the query unbounded.
+    const limitInput = draftLimitRef.current.trim();
     if (!name) { setFormError("View name is required."); return; }
     if (!projectId) { setFormError("Project is required."); return; }
     if (!wiql) { setFormError("WIQL query is required."); return; }
     const validation = validateWiql(wiql);
     if (validation.errors.length > 0) { setFormError(validation.errors[0]); return; }
-    if (!Number.isFinite(Number(limitInput))) {
+    if (limitInput && !Number.isFinite(Number(limitInput))) {
       setFormError("Limit must be a number.");
       return;
     }
+    const limit = limitInput ? Math.max(1, Math.round(Number(limitInput))) : undefined;
     const refreshIntervalInput = draftRefreshIntervalRef.current.trim();
     if (refreshIntervalInput && !Number.isFinite(Number(refreshIntervalInput))) {
       setFormError("Auto refresh must be a number of seconds.");
