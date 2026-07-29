@@ -6,7 +6,11 @@
  */
 
 import DOMPurify from "dompurify";
-import { isAbsoluteAzdoAttachmentUrl, toAzdoAttachmentUrl } from "@/lib/azdoAttachmentUrl";
+import {
+  applyHydratedImageSource,
+  isAbsoluteAzdoAttachmentUrl,
+  toAzdoAttachmentUrl,
+} from "@/lib/azdoAttachmentUrl";
 
 // Azure DevOps substitutes attachment URLs in rendered comment HTML with a
 // U+0006 control character. It appears both as a bare prefix on an otherwise
@@ -39,7 +43,17 @@ export function hydrateAuthenticatedImages(
       continue;
     }
 
-    const attachmentUrl = toAzdoAttachmentUrl(stripPlaceholderPrefix(rawSrc), baseUrl);
+    const strippedSrc = stripPlaceholderPrefix(rawSrc);
+    // A src that was *only* the placeholder leaves nothing to resolve. Skipping
+    // it would leave an unfetchable img rendering just its alt text, so report
+    // it like any other attachment that cannot be loaded.
+    if (!strippedSrc) {
+      image.dataset.azdoImageHydrated = "true";
+      replaceWithImageError(doc, image, syncHeight);
+      continue;
+    }
+
+    const attachmentUrl = toAzdoAttachmentUrl(strippedSrc, baseUrl);
     if (!attachmentUrl) continue;
 
     image.dataset.azdoImageHydrated = "true";
@@ -53,7 +67,7 @@ export function hydrateAuthenticatedImages(
           replaceWithImageError(doc, image, syncHeight);
           return;
         }
-        image.src = dataUrl;
+        applyHydratedImageSource(image, dataUrl);
         syncHeight();
       })
       .catch(() => {

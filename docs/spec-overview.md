@@ -381,10 +381,15 @@ format!(
   認証なしで 401 になる元の src を残さず、明示的なエラー表示に置き換える。
   添付 API が `application/octet-stream` を返す場合や URL にファイル名がない場合は、PNG/JPEG/GIF/WebP/
   BMP/ICO のファイルシグネチャから画像種別を判定する。
+  data URL への差し替えでは `src` だけでなく `srcset` / `sizes` も除去する
+  (`applyHydratedImageSource`)。ブラウザは候補選択で `srcset` を `src` より優先するため、
+  高 DPI のスクリーンショット貼り付けで Azure DevOps が付与した `srcset` を残すと、
+  hydration 済みの `src` が無視されて認証なしの URL が 401 になり alt テキストだけが表示される。
   Azure DevOps はコメントの rendered HTML で添付 URL を U+0006 制御文字に置き換えることがある
   (先頭のみの置換・URL 全体の置換の両方がある)。rendered HTML に U+0006 が含まれ、かつ元の
   plain text 側に取得可能な添付 URL があれば plain text 側を採用する。採用できない場合は先頭の
-  U+0006 を除去してから組織の base URL に対して解決する。
+  U+0006 を除去してから組織の base URL に対して解決する。除去した結果 src が空になる
+  (U+0006 のみだった) 場合は解決対象がないため、素通りさせずエラー表示に置き換える。
   Azure DevOps が挿入する添付ファイル名に生の空白を含む画像 markdown (`![alt](url with space.png)`)
   は、空白をパーセントエンコードした上で画像として描画する。ファイル名内の対応する丸括弧も URL の
   一部として保持する (strict CommonMark は生空白でリンク先を打ち切るため、無変換だと生テキストとして漏れる)。

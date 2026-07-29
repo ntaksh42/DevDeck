@@ -62,6 +62,21 @@ export function isAbsoluteAzdoAttachmentUrl(src: string): boolean {
 }
 
 /**
+ * Points `image` at a hydrated data URL.
+ *
+ * `srcset` takes precedence over `src` when the browser picks a candidate, so
+ * swapping only `src` leaves the authenticated URL in play: it 401s and the
+ * image falls back to rendering its alt text. Azure DevOps emits `srcset` for
+ * high-DPI pasted screenshots, which is why the image only failed sometimes.
+ * Dropping the responsive attributes leaves the data URL as the only candidate.
+ */
+export function applyHydratedImageSource(image: HTMLImageElement, dataUrl: string) {
+  image.removeAttribute("srcset");
+  image.removeAttribute("sizes");
+  image.src = dataUrl;
+}
+
+/**
  * Resolves `src` against `baseUrl` and returns the absolute URL when it is an
  * authenticated Azure DevOps attachment that needs backend hydration, or null
  * when the image can be fetched directly (data:/blob:, non-http schemes,

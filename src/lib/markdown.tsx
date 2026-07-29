@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import DOMPurify from "dompurify";
 import { marked, type TokenizerAndRendererExtension } from "marked";
 import { openExternalUrl } from "@/lib/openExternal";
-import { toAzdoAttachmentUrl } from "@/lib/azdoAttachmentUrl";
+import { applyHydratedImageSource, toAzdoAttachmentUrl } from "@/lib/azdoAttachmentUrl";
 
 // Azure DevOps stores @mentions as "@<identity-guid>" markdown. The browser has
 // no display name for the guid, and without help marked parses "<guid>" as
@@ -207,7 +207,7 @@ export function MarkdownView({
             showError();
             return;
           }
-          image.src = dataUrl;
+          applyHydratedImageSource(image, dataUrl);
         })
         .catch(showError);
     }
