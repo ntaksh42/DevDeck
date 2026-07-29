@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toAzdoAttachmentUrl } from "./azdoAttachmentUrl";
+import { applyHydratedImageSource, toAzdoAttachmentUrl } from "./azdoAttachmentUrl";
 
 const BASE = "https://dev.azure.com/contoso/project/_git/repo/pullrequest/42";
 
@@ -58,5 +58,41 @@ describe("toAzdoAttachmentUrl", () => {
 
   it("returns null for unparseable input", () => {
     expect(toAzdoAttachmentUrl("", null)).toBeNull();
+  });
+});
+
+describe("applyHydratedImageSource", () => {
+  function imageWith(attributes: string): HTMLImageElement {
+    const doc = new DOMParser().parseFromString(
+      `<html><body><img ${attributes}></body></html>`,
+      "text/html",
+    );
+    const image = doc.querySelector("img");
+    if (!image) throw new Error("expected an img");
+    return image;
+  }
+
+  // srcset outranks src when the browser chooses a candidate. Leaving it in
+  // place kept the authenticated URL in play, so the image 401'd and rendered
+  // its alt text even though src had been hydrated.
+  it("removes srcset and sizes so the data URL is the only candidate", () => {
+    const attachment =
+      "https://dev.azure.com/contoso/project/_apis/wit/attachments/abc?fileName=a.png";
+    const image = imageWith(`src="${attachment}" srcset="${attachment} 2x" sizes="100vw"`);
+
+    applyHydratedImageSource(image, "data:image/png;base64,AAAA");
+
+    expect(image.getAttribute("src")).toBe("data:image/png;base64,AAAA");
+    expect(image.getAttribute("srcset")).toBeNull();
+    expect(image.getAttribute("sizes")).toBeNull();
+  });
+
+  it("leaves an image without responsive attributes untouched apart from src", () => {
+    const image = imageWith('src="https://dev.azure.com/a.png" alt="Image"');
+
+    applyHydratedImageSource(image, "data:image/png;base64,BBBB");
+
+    expect(image.getAttribute("src")).toBe("data:image/png;base64,BBBB");
+    expect(image.getAttribute("alt")).toBe("Image");
   });
 });

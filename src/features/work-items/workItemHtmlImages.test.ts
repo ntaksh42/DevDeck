@@ -119,6 +119,36 @@ describe("hydrateAuthenticatedImages", () => {
     expect(doc.querySelector(".azdo-image-error")).not.toBeNull();
   });
 
+  it("drops srcset so the hydrated data URL is the only candidate", async () => {
+    // srcset outranks src when the browser picks a candidate, so leaving it in
+    // place kept the authenticated URL in play: it 401s and the image renders
+    // as its alt text even though src was hydrated.
+    const doc = docWith(`<img src="${WIT_URL}" srcset="${WIT_URL} 2x" sizes="100vw" alt="Image">`);
+    const resolve = vi.fn().mockResolvedValue("data:image/png;base64,EEE");
+
+    hydrateAuthenticatedImages(doc, BASE, resolve, () => {});
+    await flush();
+
+    const image = doc.querySelector("img");
+    expect(image?.getAttribute("src")).toBe("data:image/png;base64,EEE");
+    expect(image?.getAttribute("srcset")).toBeNull();
+    expect(image?.getAttribute("sizes")).toBeNull();
+  });
+
+  it("shows an error when the src is nothing but the placeholder", async () => {
+    // Stripping the placeholder leaves an empty src with nothing to resolve.
+    // Skipping it left an unfetchable img rendering only its alt text.
+    const doc = docWith(`<img src="${PLACEHOLDER}" alt="Image">`);
+    const resolve = vi.fn();
+
+    hydrateAuthenticatedImages(doc, BASE, resolve, () => {});
+    await flush();
+
+    expect(resolve).not.toHaveBeenCalled();
+    expect(doc.querySelector("img")).toBeNull();
+    expect(doc.querySelector(".azdo-image-error")).not.toBeNull();
+  });
+
   it("leaves ordinary images untouched", async () => {
     const doc = docWith(`<img src="https://example.test/logo.png" alt="Logo">`);
     const resolve = vi.fn();
