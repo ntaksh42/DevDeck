@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
+  countWorkItemQuery,
   getSavedQuery,
   listWorkItemFields,
   commandErrorMessage,
@@ -35,6 +36,11 @@ type UseViewEditorDraftParams = {
 };
 
 export type ViewEditorDraftReturn = ReturnType<typeof useViewEditorDraft>;
+
+export type ViewTestResult =
+  | { status: "running" }
+  | { status: "ok"; count: number }
+  | { status: "error"; message: string };
 
 export function useViewEditorDraft({
   selectedOrganizationId,
@@ -72,9 +78,15 @@ export function useViewEditorDraft({
   const draftWiqlTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [wiqlCursor, setWiqlCursor] = useState(draftWiql.length);
   const [wiqlCompletionsOpen, setWiqlCompletionsOpen] = useState(false);
+  const [activeCompletionIndex, setActiveCompletionIndex] = useState(0);
+  const [wiqlExpanded, setWiqlExpanded] = useState(false);
   const [draftUrl, setDraftUrl] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [testResult, setTestResult] = useState<ViewTestResult | null>(null);
+  // Only the newest test run may write its result, so a slow earlier run cannot
+  // overwrite the answer for the query the user is looking at now.
+  const testRunIdRef = useRef(0);
 
   const wiqlValidation = useMemo(() => validateWiql(draftWiql), [draftWiql]);
 
@@ -105,6 +117,13 @@ export function useViewEditorDraft({
     () => wiqlCompletionMatches(draftWiql, wiqlCursor, wiqlCompletionPool),
     [draftWiql, wiqlCursor, wiqlCompletionPool],
   );
+
+  // A shorter candidate list must not leave the highlight past its end.
+  useEffect(() => {
+    setActiveCompletionIndex((index) =>
+      index >= wiqlCompletions.length ? 0 : index,
+    );
+  }, [wiqlCompletions.length]);
 
   const urlParsed = useMemo(() => parseAzdoQueryUrl(draftUrl), [draftUrl]);
   const urlQueryId = urlParsed.queryId ?? null;
@@ -185,6 +204,8 @@ export function useViewEditorDraft({
     draftExtraColumnsRef.current = extraColumns;
     setDraftUrl("");
     setFormError(null);
+    setTestResult(null);
+    setActiveCompletionIndex(0);
   }
 
   function resetDraft() {
@@ -208,6 +229,8 @@ export function useViewEditorDraft({
     draftExtraColumnsRef.current = [];
     setDraftUrl("");
     setFormError(null);
+    setTestResult(null);
+    setActiveCompletionIndex(0);
   }
 
   function openAddDialog() {
@@ -326,6 +349,49 @@ export function useViewEditorDraft({
     setDraftWiql(value);
     draftWiqlRef.current = value;
     if (typeof cursor === "number") setWiqlCursor(cursor);
+    // The previous count no longer describes the query on screen.
+    setTestResult(null);
+  }
+
+  /**
+   * Runs the draft query for its count only, so the user can confirm a WIQL edit
+   * before saving the view. Validation errors are reported without a round trip.
+   */
+  async function runTestQuery() {
+    const wiql = draftWiqlRef.current.trim();
+    const projectId = draftProjectIdRef.current;
+    if (!wiql) {
+      setTestResult({ status: "error", message: "WIQL query is required." });
+      return;
+    }
+    const validation = validateWiql(wiql);
+    if (validation.errors.length > 0) {
+      setTestResult({ status: "error", message: validation.errors[0] });
+      return;
+    }
+    if (!projectId) {
+      setTestResult({ status: "error", message: "Project is required." });
+      return;
+    }
+
+    const runId = testRunIdRef.current + 1;
+    testRunIdRef.current = runId;
+    setTestResult({ status: "running" });
+    try {
+      const limitInput = draftLimitRef.current.trim();
+      const limit = limitInput ? Math.max(1, Math.round(Number(limitInput))) : undefined;
+      const count = await countWorkItemQuery({
+        organizationId: selectedOrganizationId,
+        projectId,
+        wiql,
+        limit: Number.isFinite(limit) ? limit : undefined,
+      });
+      if (testRunIdRef.current !== runId) return;
+      setTestResult({ status: "ok", count });
+    } catch (error) {
+      if (testRunIdRef.current !== runId) return;
+      setTestResult({ status: "error", message: commandErrorMessage(error) });
+    }
   }
 
   function insertWiqlText(value: string) {
@@ -357,6 +423,7 @@ export function useViewEditorDraft({
     const nextCursor = prefix.length + separator.length + completion.value.length + trailing.length;
     updateDraftWiql(next, nextCursor);
     setWiqlCompletionsOpen(false);
+    setActiveCompletionIndex(0);
     window.setTimeout(() => {
       draftWiqlTextareaRef.current?.focus();
       draftWiqlTextareaRef.current?.setSelectionRange(nextCursor, nextCursor);
@@ -389,6 +456,9 @@ export function useViewEditorDraft({
     draftExtraColumns,
     wiqlCursor,
     wiqlCompletionsOpen,
+    activeCompletionIndex,
+    wiqlExpanded,
+    testResult,
     formError,
     // Computed display values
     urlStatus,
@@ -409,9 +479,12 @@ export function useViewEditorDraft({
     onExtraColumnsChange: handleExtraColumnsChange,
     setWiqlCursor,
     setWiqlCompletionsOpen,
+    setActiveCompletionIndex,
+    setWiqlExpanded,
     updateDraftWiql,
     insertWiqlText,
     applyWiqlCompletion,
+    runTestQuery,
     // Form submit
     saveView,
     // Draft loaders (called from parent)
