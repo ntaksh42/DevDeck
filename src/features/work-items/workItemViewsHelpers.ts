@@ -33,6 +33,117 @@ export function firstCustomView(views: WorkItemQueryView[]): WorkItemQueryView |
   return views.find((view) => !view.id.startsWith("builtin-")) ?? null;
 }
 
+const WIQL_KEYWORDS = [
+  "SELECT",
+  "FROM",
+  "WHERE",
+  "ORDER BY",
+  "GROUP BY",
+  "ASOF",
+  "MODE",
+  "AND",
+  "OR",
+  "NOT",
+  "IN GROUP",
+  "IN",
+  "UNDER",
+  "EVER",
+  "CONTAINS WORDS",
+  "CONTAINS",
+  "ASC",
+  "DESC",
+];
+
+export type WiqlToken = {
+  text: string;
+  kind: "keyword" | "field" | "macro" | "string" | "number" | "plain";
+};
+
+// Keywords first (longest form first, so "ORDER BY" wins over "OR"), then the
+// bracketed field references, macros, quoted strings, and bare numbers.
+const WIQL_TOKEN_PATTERN = new RegExp(
+  [
+    `\\b(?:${WIQL_KEYWORDS.map((keyword) => keyword.replace(/ /g, "\\s+")).join("|")})\\b`,
+    "\\[[^\\]]*\\]",
+    "@[A-Za-z][\\w.]*",
+    "'(?:[^']|'')*'",
+    '"(?:[^"]|"")*"',
+    "\\b\\d+(?:\\.\\d+)?\\b",
+  ].join("|"),
+  "gi",
+);
+
+function wiqlTokenKind(text: string): Exclude<WiqlToken["kind"], "plain"> {
+  const first = text[0];
+  if (first === "[") return "field";
+  if (first === "@") return "macro";
+  if (first === "'" || first === '"') return "string";
+  if (first >= "0" && first <= "9") return "number";
+  return "keyword";
+}
+
+/**
+ * Splits WIQL into tokens for the read-only highlight layer rendered behind the
+ * textarea. Every character of the input appears in exactly one token so the
+ * overlay stays character-aligned with the textarea it sits under.
+ */
+export function tokenizeWiql(value: string): WiqlToken[] {
+  const tokens: WiqlToken[] = [];
+  let lastIndex = 0;
+  for (const match of value.matchAll(WIQL_TOKEN_PATTERN)) {
+    const start = match.index;
+    if (start > lastIndex) {
+      tokens.push({ text: value.slice(lastIndex, start), kind: "plain" });
+    }
+    tokens.push({ text: match[0], kind: wiqlTokenKind(match[0]) });
+    lastIndex = start + match[0].length;
+  }
+  if (lastIndex < value.length) {
+    tokens.push({ text: value.slice(lastIndex), kind: "plain" });
+  }
+  return tokens;
+}
+
+// Clauses that start a new line at the outer indent level.
+const WIQL_CLAUSE_PATTERN = /\b(SELECT|FROM|WHERE|ORDER\s+BY|GROUP\s+BY|ASOF|MODE)\b/gi;
+// Boolean connectors inside WHERE start a new indented line.
+const WIQL_CONNECTOR_PATTERN = /\s+\b(AND|OR)\b\s+/gi;
+
+/**
+ * Reflows a WIQL query so each clause starts on its own line and boolean
+ * connectors inside WHERE are indented. Text inside quoted strings and bracketed
+ * field names is never touched, so a value like 'To Do And Review' survives.
+ */
+export function formatWiql(value: string): string {
+  const literals: string[] = [];
+  // Park quoted strings and bracketed fields so the clause split can never
+  // break a literal that happens to contain a keyword. The placeholder uses a
+  // character pair that cannot appear in WIQL outside of the literals we just
+  // removed, so restoring it afterwards is unambiguous.
+  const masked = value.replace(/'(?:[^']|'')*'|"(?:[^"]|"")*"|\[[^\]]*\]/g, (literal) => {
+    literals.push(literal);
+    return `{{${literals.length - 1}}}`;
+  });
+
+  let normalized = masked.replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+
+  normalized = normalized.replace(WIQL_CLAUSE_PATTERN, (clause, _keyword, offset: number) => {
+    const canonical = clause.replace(/\s+/g, " ").toUpperCase();
+    return offset === 0 ? canonical : `\n${canonical}`;
+  });
+  normalized = normalized.replace(
+    WIQL_CONNECTOR_PATTERN,
+    (_match, keyword: string) => `\n  ${keyword.toUpperCase()} `,
+  );
+
+  return normalized
+    .split("\n")
+    .map((line) => line.replace(/\s+$/, ""))
+    .join("\n")
+    .replace(/\{\{(\d+)\}\}/g, (_match, index: string) => literals[Number(index)]);
+}
+
 export function newWorkItemViewId(): string {
   return `wi-view-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }

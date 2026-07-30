@@ -1,85 +1,65 @@
-import { type FormEvent, useRef } from 'react';
-import { Plus, X } from 'lucide-react';
-import { type WorkItemProjectOption, type WorkItemFieldOption } from '@/lib/azdoCommands';
+import { useRef } from 'react';
+import { CheckCircle2, Loader2, Play, Plus, TriangleAlert, X } from 'lucide-react';
+import { type WorkItemProjectOption } from '@/lib/azdoCommands';
 import {
   MAX_VIEW_REFRESH_INTERVAL_SEC,
   MIN_VIEW_REFRESH_INTERVAL_SEC,
   normalizeViewExtraColumns,
 } from './workItemViewsStorage';
-import type { WiqlCompletion } from './workItemViewsHelpers';
+import type { ViewEditorDraftReturn } from './useViewEditorDraft';
+import { WiqlEditor } from './WiqlEditor';
 
 export type ViewEditorDialogProps = {
-  editingViewId: string | null;
-  draftUrl: string;
-  onUrlChange: (url: string) => void;
-  urlStatus: { text: string; severity: "success" | "error" | "info" } | null;
-  draftName: string;
-  onNameChange: (v: string) => void;
-  draftProjectId: string;
-  onProjectChange: (v: string) => void;
+  draft: ViewEditorDraftReturn;
   projectOptions: WorkItemProjectOption[];
   projectsLoading: boolean;
-  draftLimit: string;
-  onLimitChange: (v: string) => void;
-  draftRefreshInterval: string;
-  onRefreshIntervalChange: (v: string) => void;
-  draftAlertThreshold: string;
-  onAlertThresholdChange: (v: string) => void;
-  draftWiql: string;
-  updateDraftWiql: (v: string, cursor: number) => void;
-  draftWiqlTextareaRef: React.RefObject<HTMLTextAreaElement | null>;
-  wiqlCursor: number;
-  setWiqlCursor: (cursor: number) => void;
-  wiqlCompletionsOpen: boolean;
-  setWiqlCompletionsOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  wiqlCompletions: WiqlCompletion[];
-  onApplyCompletion: (completion: WiqlCompletion) => void;
-  onInsertWiqlText: (text: string) => void;
-  wiqlValidation: { errors: string[]; warnings: string[] };
-  draftExtraColumns: string[];
-  onExtraColumnsChange: (cols: string[]) => void;
-  fields: WorkItemFieldOption[];
-  fieldsLoading: boolean;
-  formError: string | null;
-  onSave: (event: FormEvent<HTMLFormElement>) => void;
   onClose: () => void;
 };
 
 export function ViewEditorDialog({
-  editingViewId,
-  draftUrl,
-  onUrlChange,
-  urlStatus,
-  draftName,
-  onNameChange,
-  draftProjectId,
-  onProjectChange,
+  draft,
   projectOptions,
   projectsLoading,
-  draftLimit,
-  onLimitChange,
-  draftRefreshInterval,
-  onRefreshIntervalChange,
-  draftAlertThreshold,
-  onAlertThresholdChange,
-  draftWiql,
-  updateDraftWiql,
-  draftWiqlTextareaRef,
-  setWiqlCursor,
-  wiqlCompletionsOpen,
-  setWiqlCompletionsOpen,
-  wiqlCompletions,
-  onApplyCompletion,
-  onInsertWiqlText,
-  wiqlValidation,
-  draftExtraColumns,
-  onExtraColumnsChange,
-  fields,
-  fieldsLoading,
-  formError,
-  onSave,
   onClose,
 }: ViewEditorDialogProps) {
+  const {
+    editingViewId,
+    draftUrl,
+    onUrlChange,
+    urlStatus,
+    draftName,
+    onNameChange,
+    draftProjectId,
+    onProjectChange,
+    draftLimit,
+    onLimitChange,
+    draftRefreshInterval,
+    onRefreshIntervalChange,
+    draftAlertThreshold,
+    onAlertThresholdChange,
+    draftWiql,
+    updateDraftWiql,
+    draftWiqlTextareaRef,
+    setWiqlCursor,
+    wiqlCompletionsOpen,
+    setWiqlCompletionsOpen,
+    wiqlCompletions,
+    activeCompletionIndex,
+    setActiveCompletionIndex,
+    wiqlExpanded,
+    setWiqlExpanded,
+    testResult,
+    applyWiqlCompletion: onApplyCompletion,
+    insertWiqlText: onInsertWiqlText,
+    wiqlValidation,
+    draftExtraColumns,
+    onExtraColumnsChange,
+    fields,
+    fieldsLoading,
+    formError,
+    saveView: onSave,
+  } = draft;
+  const onTestRun = () => void draft.runTestQuery();
   const viewFormRef = useRef<HTMLFormElement | null>(null);
   // Focus returns to whatever opened the dialog (button, preview pane, grid),
   // mirroring CreateWorkItemDialog, so keyboard navigation is not stranded on
@@ -103,7 +83,9 @@ export function ViewEditorDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="view-dialog-title"
-        className="relative w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-popover shadow-xl"
+        className={`relative w-full overflow-y-auto rounded-lg border border-border bg-popover shadow-xl ${
+          wiqlExpanded ? "max-w-4xl" : "max-w-2xl"
+        }`}
         style={{ maxHeight: "90vh" }}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(event) => {
@@ -170,17 +152,17 @@ export function ViewEditorDialog({
             ) : null}
           </div>
 
-          <label className="grid gap-1.5">
-            <span className="text-xs font-medium text-muted-foreground">Name</span>
-            <input
-              value={draftName}
-              onChange={(event) => onNameChange(event.target.value)}
-              placeholder="Active bugs"
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-            />
-          </label>
+          <div className="grid gap-3 sm:grid-cols-[1fr_1fr_90px]">
+            <label className="grid gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">Name</span>
+              <input
+                value={draftName}
+                onChange={(event) => onNameChange(event.target.value)}
+                placeholder="Active bugs"
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </label>
 
-          <div className="grid gap-3 sm:grid-cols-[1fr_90px]">
             <label className="grid gap-1.5">
               <span className="text-xs font-medium text-muted-foreground">Project</span>
               <select
@@ -201,7 +183,7 @@ export function ViewEditorDialog({
             <label className="grid gap-1.5">
               <span className="text-xs font-medium text-muted-foreground">
                 Limit
-                <span className="ml-1 font-normal text-muted-foreground/70">(empty = no limit)</span>
+                <span className="ml-1 font-normal text-muted-foreground/70">(empty = none)</span>
               </span>
               <input
                 type="number"
@@ -248,13 +230,7 @@ export function ViewEditorDialog({
           </div>
 
           <div className="grid gap-1.5">
-            <div className="flex items-center justify-between gap-2">
-              <label
-                className="text-xs font-medium text-muted-foreground"
-                htmlFor="view-wiql-input"
-              >
-                WIQL
-              </label>
+            <div className="flex items-center justify-end">
               <span className="flex flex-wrap justify-end gap-1">
                 {["@Me", "@Today", "@CurrentIteration", "@Follows"].map((macro) => (
                   <button
@@ -268,51 +244,20 @@ export function ViewEditorDialog({
                 ))}
               </span>
             </div>
-            <textarea
-              ref={draftWiqlTextareaRef}
-              id="view-wiql-input"
+            <WiqlEditor
               value={draftWiql}
-              onChange={(event) => {
-                updateDraftWiql(event.target.value, event.target.selectionStart);
-                setWiqlCompletionsOpen(true);
-              }}
-              onClick={(event) => setWiqlCursor(event.currentTarget.selectionStart)}
-              onKeyUp={(event) => setWiqlCursor(event.currentTarget.selectionStart)}
-              onFocus={(event) => {
-                setWiqlCursor(event.currentTarget.selectionStart);
-                setWiqlCompletionsOpen(true);
-              }}
-              onKeyDown={(event) => {
-                if (event.ctrlKey && event.key === " ") {
-                  event.preventDefault();
-                  setWiqlCompletionsOpen((open) => !open);
-                }
-                if (event.key === "Escape" && wiqlCompletionsOpen) {
-                  event.stopPropagation();
-                  setWiqlCompletionsOpen(false);
-                }
-              }}
-              rows={7}
-              spellCheck={false}
-              className="min-h-[120px] resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-xs leading-5 outline-none focus:ring-2 focus:ring-ring"
+              onChange={updateDraftWiql}
+              textareaRef={draftWiqlTextareaRef}
+              onCursorChange={setWiqlCursor}
+              completionsOpen={wiqlCompletionsOpen}
+              setCompletionsOpen={setWiqlCompletionsOpen}
+              completions={wiqlCompletions}
+              activeCompletionIndex={activeCompletionIndex}
+              setActiveCompletionIndex={setActiveCompletionIndex}
+              onApplyCompletion={onApplyCompletion}
+              expanded={wiqlExpanded}
+              onExpandedChange={setWiqlExpanded}
             />
-            {wiqlCompletionsOpen && wiqlCompletions.length > 0 ? (
-              <div className="flex max-h-24 flex-wrap gap-1 overflow-auto rounded-md border border-border bg-muted p-1.5">
-                {wiqlCompletions.map((completion) => (
-                  <button
-                    key={`${completion.label}:${completion.value}`}
-                    type="button"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => onApplyCompletion(completion)}
-                    className="rounded border border-border bg-card px-1.5 py-0.5 text-left text-[11px] hover:bg-secondary"
-                    title={completion.detail}
-                  >
-                    <span className="font-mono">{completion.label}</span>
-                    <span className="ml-1 text-muted-foreground">{completion.detail}</span>
-                  </button>
-                ))}
-              </div>
-            ) : null}
             {wiqlValidation.errors.length > 0 || wiqlValidation.warnings.length > 0 ? (
               <div className="space-y-0.5 text-xs">
                 {wiqlValidation.errors.map((error) => (
@@ -321,6 +266,35 @@ export function ViewEditorDialog({
                 {wiqlValidation.warnings.map((warning) => (
                   <p key={warning} className="text-amber-700 dark:text-amber-400">{warning}</p>
                 ))}
+              </div>
+            ) : null}
+            {testResult ? (
+              <div
+                role="status"
+                className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs font-medium ${
+                  testResult.status === "error"
+                    ? "border-destructive/40 bg-destructive/10 text-destructive"
+                    : testResult.status === "ok"
+                      ? "border-emerald-600/40 bg-emerald-600/10 text-emerald-700 dark:text-emerald-400"
+                      : "border-border bg-muted text-muted-foreground"
+                }`}
+              >
+                {testResult.status === "running" ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                    Running test query…
+                  </>
+                ) : testResult.status === "ok" ? (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                    {testResult.count} matching work item{testResult.count === 1 ? "" : "s"}
+                  </>
+                ) : (
+                  <>
+                    <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span className="min-w-0 break-words">{testResult.message}</span>
+                  </>
+                )}
               </div>
             ) : null}
           </div>
@@ -394,13 +368,25 @@ export function ViewEditorDialog({
             >
               Cancel
             </button>
-            <button
-              type="submit"
-              className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-            >
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              {editingViewId ? "Update" : "Save"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onTestRun}
+                disabled={testResult?.status === "running"}
+                title="Run the query and show how many work items match"
+                className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Play className="h-3.5 w-3.5" aria-hidden="true" />
+                Test
+              </button>
+              <button
+                type="submit"
+                className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+              >
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                {editingViewId ? "Update" : "Save"}
+              </button>
+            </div>
           </div>
         </form>
       </div>
