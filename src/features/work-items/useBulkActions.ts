@@ -103,12 +103,19 @@ export function useBulkActions({
     enabled: bulkAssignOpen && !!firstCheckedItem,
     staleTime: 60_000,
   });
-  const bulkAssignOptions = bulkAssignQuery.trim()
+  // Switch on the debounced query, not the raw one: the search query is only
+  // enabled once the debounce settles, so keying off the raw value pointed at an
+  // idle query for the first ~200ms of typing and blanked the candidate list.
+  const bulkAssignSearching = debouncedBulkAssignQuery.trim().length > 0;
+  const bulkAssignOptions = bulkAssignSearching
     ? (bulkAssigneesQuery.data ?? [])
     : (bulkDefaultAssigneesQuery.data ?? []);
-  const bulkAssignLoading = bulkAssignQuery.trim()
+  // While the user has typed something the debounce has not caught up with yet,
+  // the search request is still pending, so keep showing the loading state
+  // instead of an empty "no matches" list.
+  const bulkAssignLoading = bulkAssignSearching
     ? bulkAssigneesQuery.isLoading
-    : bulkDefaultAssigneesQuery.isLoading;
+    : bulkAssignQuery.trim().length > 0 || bulkDefaultAssigneesQuery.isLoading;
 
   function showBulkToast(results: BulkWorkItemResult[]) {
     const failed = results.filter((r) => r.error).length;

@@ -53,7 +53,7 @@ export function useWiGridLogic(
     lastCheckedIndex, setLastCheckedIndex,
     columnFilters, setColumnFilters,
     openFilterCol, setOpenFilterCol,
-    setFilterAnchorRect,
+    setFilterAnchorRect, filterButtonRef,
     itemOverrides, setItemOverrides,
     setColumnMenuRect,
     setCopyToast,
@@ -388,6 +388,7 @@ export function useWiGridLogic(
   }
 
   function openFilter(col: FilterableColumn, anchorEl: HTMLButtonElement) {
+    filterButtonRef.current = anchorEl;
     setFilterAnchorRect(anchorEl.getBoundingClientRect());
     setOpenFilterCol(col);
   }

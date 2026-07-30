@@ -184,6 +184,11 @@ export function formatRelativeDate(isoString: string): string {
   const then = new Date(isoString).getTime();
   if (!Number.isFinite(then)) return "—";
   const diffMs = now - then;
+  // A timestamp ahead of the local clock (clock skew between the service and
+  // this machine) would otherwise floor to a negative minute count and fall
+  // into the "just now" branch of every later comparison. Say "just now"
+  // deliberately rather than by accident, and never render a negative age.
+  if (diffMs < 0) return "just now";
   const mins = Math.floor(diffMs / 60_000);
   if (mins < 60) return mins <= 1 ? "just now" : `${mins}m ago`;
   const hrs = Math.floor(mins / 60);

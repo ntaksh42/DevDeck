@@ -107,6 +107,9 @@ export function useWiGridState({
   );
   const [openFilterCol, setOpenFilterCol] = useState<FilterableColumn | null>(null);
   const [filterAnchorRect, setFilterAnchorRect] = useState<DOMRect | null>(null);
+  // The filter button that opened the dropdown, so focus can return to it on
+  // close instead of being stranded on <body>.
+  const filterButtonRef = useRef<HTMLElement | null>(null);
   const [staleOnly, setStaleOnly] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const gridScrollRef = useRef<HTMLDivElement | null>(null);
@@ -223,6 +226,7 @@ export function useWiGridState({
     columnFilters, setColumnFilters,
     openFilterCol, setOpenFilterCol,
     filterAnchorRect, setFilterAnchorRect,
+    filterButtonRef,
     staleOnly, setStaleOnly,
     containerRef, gridScrollRef, rowRefs, previousResultKeysRef,
     gridViewport, setGridViewport,

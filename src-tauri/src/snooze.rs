@@ -258,14 +258,32 @@ impl SnoozeService {
 /// revives when its deadline has passed or when its live activity marker has
 /// moved past the baseline captured at snooze time.
 ///
-/// `now` and `snooze_until` are ISO8601 strings; `baseline` and `current` are
-/// the activity markers (PR: comment id; work item: ChangedDate). Both marker
-/// kinds compare correctly with a plain string comparison: zero-padded decimals
-/// are not used for comment ids, so callers pass numeric comparison results for
-/// PRs via [`pr_activity_advanced`]; ChangedDate is ISO8601 and orders
-/// lexicographically.
+/// `now` and `snooze_until` are RFC3339 instants that come from two different
+/// producers with different spellings: `now` is `Utc::now().to_rfc3339()`
+/// (`+00:00`, sub-second precision) while `snooze_until` is the frontend's
+/// `Date.toISOString()` (`Z`, milliseconds). A plain string comparison of the
+/// two is wrong — `+` (0x2B) sorts before `Z` (0x5A), so a deadline that has
+/// just passed still compares as being in the future and the item never
+/// revives. Parse both and compare as instants, mirroring [`snooze_is_active`].
+///
+/// An unparseable deadline revives the item rather than pinning it forever;
+/// this matches `snooze_is_active`, which also treats a garbage deadline as
+/// "not snoozed" so the two views cannot disagree.
 pub fn should_revive(now: &str, snooze_until: &str, new_activity: bool) -> bool {
-    new_activity || now >= snooze_until
+    if new_activity {
+        return true;
+    }
+    match (
+        DateTime::parse_from_rfc3339(now),
+        DateTime::parse_from_rfc3339(snooze_until),
+    ) {
+        (Ok(now), Ok(until)) => now.with_timezone(&Utc) >= until.with_timezone(&Utc),
+        // Deadline we cannot read: revive instead of hiding the item forever.
+        (_, Err(_)) => true,
+        // `now` is produced internally and always parses; if it somehow does
+        // not, keep the item snoozed until its deadline can be evaluated.
+        (Err(_), Ok(_)) => false,
+    }
 }
 
 /// True while a snooze is still in effect at `now`. The read paths (My Reviews /
@@ -349,6 +367,27 @@ mod tests {
         assert!(!should_revive(now, "2026-06-20T09:00:00Z", false));
         // Deadline in the future but new activity: revive early.
         assert!(should_revive(now, "2026-06-20T09:00:00Z", true));
+    }
+
+    #[test]
+    fn should_revive_compares_mixed_rfc3339_spellings_as_instants() {
+        // The real callers mix spellings: `now` comes from
+        // `Utc::now().to_rfc3339()` (`+00:00`) and `snooze_until` from the
+        // frontend's `Date.toISOString()` (`Z`). A raw string comparison sorts
+        // `+` before `Z` and would report "not yet expired" here.
+        let now = "2026-08-17T09:00:00.123456789+00:00";
+        assert!(should_revive(now, "2026-08-17T09:00:00.000Z", false));
+        // Same instant on both sides still counts as expired.
+        assert!(should_revive(
+            "2026-08-17T09:00:00+00:00",
+            "2026-08-17T09:00:00.000Z",
+            false
+        ));
+        // A genuinely future deadline is still respected across spellings.
+        assert!(!should_revive(now, "2026-08-18T09:00:00.000Z", false));
+        // An unreadable deadline revives rather than hiding the item forever,
+        // matching how `snooze_is_active` treats it.
+        assert!(should_revive(now, "not-a-date", false));
     }
 
     #[test]

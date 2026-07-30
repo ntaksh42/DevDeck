@@ -53,6 +53,7 @@ import { CommitPreviewPanel } from "./CommitPreviewPanel";
 export function CommitResults({
   activeExternalFilterCount = 0,
   loading,
+  loadingMore = false,
   onClearExternalFilters,
   onLoadMore,
   onOpenPullRequest,
@@ -63,6 +64,8 @@ export function CommitResults({
 }: {
   activeExternalFilterCount?: number;
   loading: boolean;
+  /** A "Load more" page is in flight. The already-loaded rows stay on screen. */
+  loadingMore?: boolean;
   onClearExternalFilters?: () => void;
   onLoadMore?: () => void;
   onOpenPullRequest?: (query: string, organizationId?: string) => void;
@@ -396,12 +399,16 @@ export function CommitResults({
       )}
       {onLoadMore && truncated && searched && !loading ? (
         <div className="shrink-0 border-t border-border px-3 py-2 text-center">
+          {/* Stays mounted while a page is loading so the button does not
+              disappear under the pointer mid-click; disabling it also blocks a
+              second request for the same offset. */}
           <button
             type="button"
             onClick={onLoadMore}
-            className="rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+            disabled={loadingMore}
+            className="rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-default disabled:opacity-60"
           >
-            Load more commits
+            {loadingMore ? "Loading…" : "Load more commits"}
           </button>
         </div>
       ) : null}
