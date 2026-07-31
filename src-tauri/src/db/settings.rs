@@ -50,6 +50,14 @@ pub struct AppSettings {
     pub notify_pr_review_requests: bool,
     pub notify_pr_vote_resets: bool,
     pub notify_pr_comment_replies: bool,
+    /// When enabled, desktop notifications are suppressed during the local-time
+    /// window [quiet_hours_start, quiet_hours_end). The in-app cache still
+    /// refreshes, so badges and views stay current.
+    pub quiet_hours_enabled: bool,
+    /// Local wall-clock window bounds as "HH:MM". A window whose start is later
+    /// than its end (e.g. 22:00-08:00) wraps across midnight.
+    pub quiet_hours_start: String,
+    pub quiet_hours_end: String,
     pub review_stale_threshold_days: i64,
     pub work_item_stale_threshold_days: i64,
     pub notification_rules: Vec<NotificationRule>,
@@ -59,6 +67,8 @@ pub const DEFAULT_REVIEW_STALE_THRESHOLD_DAYS: i64 = 3;
 pub const REVIEW_STALE_THRESHOLD_DAY_OPTIONS: [i64; 4] = [2, 3, 5, 7];
 pub const DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS: i64 = 7;
 pub const WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS: [i64; 3] = [7, 14, 30];
+pub const DEFAULT_QUIET_HOURS_START: &str = "22:00";
+pub const DEFAULT_QUIET_HOURS_END: &str = "08:00";
 
 impl Default for AppSettings {
     fn default() -> Self {
@@ -73,6 +83,9 @@ impl Default for AppSettings {
             notify_pr_review_requests: true,
             notify_pr_vote_resets: true,
             notify_pr_comment_replies: true,
+            quiet_hours_enabled: false,
+            quiet_hours_start: DEFAULT_QUIET_HOURS_START.to_string(),
+            quiet_hours_end: DEFAULT_QUIET_HOURS_END.to_string(),
             review_stale_threshold_days: DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
             work_item_stale_threshold_days: DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
             notification_rules: Vec::new(),
@@ -159,6 +172,13 @@ pub(crate) fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
         notify_pr_review_requests: get_bool_setting(conn, "notify_pr_review_requests", true)?,
         notify_pr_vote_resets: get_bool_setting(conn, "notify_pr_vote_resets", true)?,
         notify_pr_comment_replies: get_bool_setting(conn, "notify_pr_comment_replies", true)?,
+        quiet_hours_enabled: get_bool_setting(conn, "quiet_hours_enabled", false)?,
+        quiet_hours_start: get_setting(conn, "quiet_hours_start")?
+            .filter(|raw| is_valid_hh_mm(raw))
+            .unwrap_or_else(|| DEFAULT_QUIET_HOURS_START.to_string()),
+        quiet_hours_end: get_setting(conn, "quiet_hours_end")?
+            .filter(|raw| is_valid_hh_mm(raw))
+            .unwrap_or_else(|| DEFAULT_QUIET_HOURS_END.to_string()),
         review_stale_threshold_days: get_review_stale_threshold_days(conn)?,
         work_item_stale_threshold_days: get_work_item_stale_threshold_days(conn)?,
         notification_rules: get_notification_rules(conn)?,
@@ -171,6 +191,15 @@ fn get_review_stale_threshold_days(conn: &Connection) -> Result<i64> {
         .filter(|days| REVIEW_STALE_THRESHOLD_DAY_OPTIONS.contains(days))
         .unwrap_or(DEFAULT_REVIEW_STALE_THRESHOLD_DAYS);
     Ok(value)
+}
+
+// Accepts a zero-padded "HH:MM" string with valid hour/minute ranges. Used to
+// reject corrupt or legacy values read back from the key-value store.
+fn is_valid_hh_mm(value: &str) -> bool {
+    let Some((h, m)) = value.trim().split_once(':') else {
+        return false;
+    };
+    matches!((h.parse::<u32>(), m.parse::<u32>()), (Ok(hour), Ok(minute)) if hour < 24 && minute < 60)
 }
 
 fn get_work_item_stale_threshold_days(conn: &Connection) -> Result<i64> {
@@ -241,6 +270,9 @@ pub(crate) fn update_app_settings(conn: &Connection, settings: AppSettings) -> R
         "notify_pr_comment_replies",
         settings.notify_pr_comment_replies,
     )?;
+    set_bool_setting(conn, "quiet_hours_enabled", settings.quiet_hours_enabled)?;
+    set_setting(conn, "quiet_hours_start", Some(&settings.quiet_hours_start))?;
+    set_setting(conn, "quiet_hours_end", Some(&settings.quiet_hours_end))?;
     let stale_days =
         if REVIEW_STALE_THRESHOLD_DAY_OPTIONS.contains(&settings.review_stale_threshold_days) {
             settings.review_stale_threshold_days

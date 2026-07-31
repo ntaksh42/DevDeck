@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const isPermissionGranted = vi.fn();
 const requestPermission = vi.fn();
@@ -24,6 +24,23 @@ import {
   showWorkItemNotificationEvent,
 } from "./desktopNotifications";
 import type { AppSettings } from "@/lib/azdoCommands";
+
+const workItemEvent = {
+  organizationId: "org",
+  organizationName: "Org",
+  items: [
+    {
+      kind: "assigned" as const,
+      id: 1,
+      title: "Item",
+      projectName: "Proj",
+      state: null,
+      previousState: null,
+      assignedTo: null,
+      webUrl: null,
+    },
+  ],
+};
 
 const settings = {
   desktopNotificationsEnabled: true,
@@ -236,6 +253,60 @@ describe("showPipelineWatchNotification", () => {
       ...settings,
       desktopNotificationsEnabled: false,
     } as AppSettings);
+
+    expect(result).toBe("skipped");
+    expect(sendNotification).not.toHaveBeenCalled();
+  });
+});
+
+describe("quiet hours gating", () => {
+  const quietHoursSettings = {
+    ...settings,
+    quietHoursEnabled: true,
+    quietHoursStart: "22:00",
+    quietHoursEnd: "08:00",
+  } as AppSettings;
+
+  beforeEach(() => {
+    isPermissionGranted.mockReset().mockResolvedValue(true);
+    requestPermission.mockReset();
+    sendNotification.mockReset();
+    isTauriRuntime.mockReset().mockReturnValue(true);
+    onAction.mockReset().mockResolvedValue({});
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("skips work item notifications during the configured window", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 1, 23, 0, 0));
+
+    const result = await showWorkItemNotificationEvent(workItemEvent, quietHoursSettings);
+
+    expect(result).toBe("skipped");
+    expect(sendNotification).not.toHaveBeenCalled();
+  });
+
+  it("still sends work item notifications outside the configured window", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 1, 12, 0, 0));
+
+    const result = await showWorkItemNotificationEvent(workItemEvent, quietHoursSettings);
+
+    expect(result).toBe("sent");
+    expect(sendNotification).toHaveBeenCalled();
+  });
+
+  it("skips sync-failed notifications during the configured window", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 0, 1, 23, 0, 0));
+
+    const result = await showSyncFailedNotificationEvent(
+      { consecutiveFailures: 1, retryInSecs: 60, lastError: null },
+      quietHoursSettings,
+    );
 
     expect(result).toBe("skipped");
     expect(sendNotification).not.toHaveBeenCalled();

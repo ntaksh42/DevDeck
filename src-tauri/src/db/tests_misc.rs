@@ -168,6 +168,9 @@ fn app_settings_can_be_saved_and_cleared() {
             notify_pr_review_requests: false,
             notify_pr_vote_resets: true,
             notify_pr_comment_replies: false,
+            quiet_hours_enabled: true,
+            quiet_hours_start: "23:30".to_string(),
+            quiet_hours_end: "06:15".to_string(),
             review_stale_threshold_days: 7,
             work_item_stale_threshold_days: 14,
             notification_rules: vec![NotificationRule {
@@ -197,6 +200,9 @@ fn app_settings_can_be_saved_and_cleared() {
     assert!(!saved.notify_pr_review_requests);
     assert!(saved.notify_pr_vote_resets);
     assert!(!saved.notify_pr_comment_replies);
+    assert!(saved.quiet_hours_enabled);
+    assert_eq!(saved.quiet_hours_start, "23:30");
+    assert_eq!(saved.quiet_hours_end, "06:15");
 
     let cleared = update_app_settings(
         &conn,
