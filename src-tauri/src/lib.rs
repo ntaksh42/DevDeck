@@ -197,6 +197,7 @@ pub fn run() {
             commands::work_items::list_work_item_type_states,
             commands::work_items::list_work_item_types,
             commands::work_items::list_work_item_fields,
+            commands::work_items::fetch_work_item_extra_fields,
             commands::work_items::list_classification_nodes,
             commands::work_items::get_saved_query,
             commands::work_items::set_work_items_state,

@@ -164,4 +164,51 @@ test.describe("browser preview", () => {
     await main.getByRole("button", { name: "Post comment" }).click();
     await expect(main.getByText("Comment posted")).toBeVisible();
   });
+
+  test("adds an Azure DevOps field as an extra work item grid column", async ({ page }) => {
+    await page.goto("/");
+    const main = page.getByRole("main");
+    const sidebar = page.getByRole("complementary").first();
+
+    await sidebar.getByRole("button", { name: "Search" }).nth(1).click();
+    await main.getByRole("button", { name: "Search" }).click();
+    await expect(main.getByRole("grid", { name: "Work items" })).toBeVisible();
+
+    // The picker lives behind the status bar's "Fields" button on screens with
+    // no saved view to store the choice.
+    await main.getByRole("button", { name: "Fields" }).click();
+    const picker = page.getByRole("dialog", { name: "Extra columns" });
+    await expect(picker.getByRole("textbox", { name: "Filter fields" })).toBeFocused();
+
+    // Driven entirely from the keyboard: filter, Down into the list, Enter to add.
+    await picker.getByRole("textbox", { name: "Filter fields" }).fill("Story Points");
+    const option = picker.getByRole("button", {
+      name: /Microsoft\.VSTS\.Scheduling\.StoryPoints/,
+    });
+    await expect(option).toBeVisible();
+    await page.keyboard.press("ArrowDown");
+    await expect(option).toBeFocused();
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Escape");
+    await expect(picker).toHaveCount(0);
+    // Escape hands focus back to the grid rather than stranding it on <body>.
+    await expect(main.getByRole("grid", { name: "Work items" })).toBeFocused();
+
+    // The column shows up after the standard ones, is sortable, and the button
+    // reflects how many extra columns are active.
+    const header = main.getByRole("columnheader", { name: "StoryPoints" });
+    await expect(header).toBeVisible();
+    await expect(main.getByRole("button", { name: "Fields (1)" })).toBeVisible();
+
+    await header.getByRole("button", { name: "Sort by StoryPoints" }).click();
+    await expect(header).toHaveAttribute("aria-sort", "ascending");
+    await header.getByRole("button", { name: "Sort by StoryPoints" }).click();
+    await expect(header).toHaveAttribute("aria-sort", "descending");
+
+    // The selection survives a reload because it is stored per screen.
+    await page.reload();
+    await sidebar.getByRole("button", { name: "Search" }).nth(1).click();
+    await main.getByRole("button", { name: "Search" }).click();
+    await expect(main.getByRole("columnheader", { name: "StoryPoints" })).toBeVisible();
+  });
 });

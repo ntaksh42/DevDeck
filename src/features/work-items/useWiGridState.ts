@@ -1,8 +1,18 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { snoozeItems, type WorkItemSummary } from '@/lib/azdoCommands';
 import { storedNumber } from '@/lib/utils';
-import { useGridColumns } from '@/lib/useGridColumns';
+import { useGridColumns, type ColumnResizeProps } from '@/lib/useGridColumns';
+import {
+  clampExtraColumnWidth,
+  extraColumnWidth,
+  loadExtraColumnWidths,
+  storeExtraColumnWidths,
+  DEFAULT_EXTRA_COLUMN_WIDTH,
+  MIN_EXTRA_COLUMN_WIDTH,
+  MAX_EXTRA_COLUMN_WIDTH,
+  type ExtraColumn,
+} from './extraColumns';
 import type { CustomPreviewField } from './previewFieldsStorage';
 import { loadCustomPreviewFields } from './previewFieldsStorage';
 import { workItemQueryKeys } from './queryKeys';
@@ -25,6 +35,7 @@ import {
   loadWorkItemColumnFilters,
   storeWorkItemColumnFilters,
   type WiSortKey,
+  type WiGridSortKey,
   type WiSortState,
   type FilterableColumn,
 } from './workItemsGridHelpers';
@@ -38,7 +49,7 @@ export function useWiGridState({
 }: {
   storageKeyScope?: string;
   initialSort?: WiSortState;
-  extraColumns: string[];
+  extraColumns: ExtraColumn[];
   onSortChange?: (sort: WiSortState) => void;
   snoozeOrganizationId?: string;
 }) {
@@ -65,6 +76,11 @@ export function useWiGridState({
   const [visibleColumns, setVisibleColumns] = useState<WiSortKey[]>(() =>
     loadVisibleWorkItemColumns(visibleColumnsStorageKey),
   );
+  // Widths are keyed by field reference name, not by view, so the same field
+  // keeps the width the user gave it wherever it appears.
+  const [extraColumnWidths, setExtraColumnWidths] = useState<Record<string, number>>(
+    () => loadExtraColumnWidths(),
+  );
   const {
     template: wiColTemplate,
     minWidth: gridMinWidth,
@@ -79,7 +95,9 @@ export function useWiGridState({
     max: WI_COLUMN_MAX_WIDTHS,
     storageKey: columnWidthsStorageKey,
     prefixColumns: ["28px"],
-    suffixColumns: extraColumns.map(() => "120px"),
+    suffixColumns: extraColumns.map(
+      (column) => `${extraColumnWidth(extraColumnWidths, column.referenceName)}px`,
+    ),
   });
   const [previewWidth, setPreviewWidth] = useState(() =>
     storedNumber(
@@ -177,9 +195,13 @@ export function useWiGridState({
     );
   }, [previewWidth, previewWidthStorageKey]);
 
+  useEffect(() => {
+    storeExtraColumnWidths(extraColumnWidths);
+  }, [extraColumnWidths]);
+
   // ─── Column visibility handlers ───────────────────────────────────────────
 
-  function applyWiSort(column: WiSortKey) {
+  function applyWiSort(column: WiGridSortKey) {
     setWiSort((current) => {
       const next: WiSortState =
         current.key !== column
@@ -203,7 +225,34 @@ export function useWiGridState({
   function resetColumnVisibility() {
     setVisibleColumns([...WI_GRID_KEYS]);
     resetColumnWidths();
+    setExtraColumnWidths({});
   }
+
+  /**
+   * Adapts the per-field width map to the array-based `ColumnResizeHandle`
+   * contract by handing it a single-element array for the field being dragged.
+   */
+  const extraColumnResizeProps = useCallback(
+    (referenceName: string): ColumnResizeProps => ({
+      columnIndex: 0,
+      widths: [extraColumnWidth(extraColumnWidths, referenceName)],
+      setWidths: (update) =>
+        setExtraColumnWidths((current) => {
+          const previous = extraColumnWidth(current, referenceName);
+          const next =
+            typeof update === "function" ? update([previous])[0] : update[0];
+          if (next === undefined) return current;
+          return {
+            ...current,
+            [referenceName.toLowerCase()]: clampExtraColumnWidth(next),
+          };
+        }),
+      min: MIN_EXTRA_COLUMN_WIDTH,
+      max: MAX_EXTRA_COLUMN_WIDTH,
+      defaultWidth: DEFAULT_EXTRA_COLUMN_WIDTH,
+    }),
+    [extraColumnWidths],
+  );
 
   return {
     selectedIndex, setSelectedIndex,
@@ -211,6 +260,7 @@ export function useWiGridState({
     visibleColumns, setVisibleColumns,
     toggleColumnVisibility, resetColumnVisibility,
     wiColTemplate, gridMinWidth, resetColumnWidths, columnResizeProps,
+    extraColumnResizeProps,
     previewWidth, setPreviewWidth,
     copyToast, setCopyToast,
     checkedIds, setCheckedIds,

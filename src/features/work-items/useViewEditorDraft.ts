@@ -13,6 +13,7 @@ import {
   MIN_VIEW_REFRESH_INTERVAL_SEC,
   type WorkItemQueryView,
 } from './workItemViewsStorage';
+import type { ExtraColumn } from './extraColumns';
 import {
   type WiqlCompletion,
   WIQL_COMPLETIONS,
@@ -59,7 +60,7 @@ export function useViewEditorDraft({
   const [draftAlertThreshold, setDraftAlertThreshold] = useState(
     initialSelectedView?.alertThreshold !== undefined ? String(initialSelectedView.alertThreshold) : "",
   );
-  const [draftExtraColumns, setDraftExtraColumns] = useState<string[]>(
+  const [draftExtraColumns, setDraftExtraColumns] = useState<ExtraColumn[]>(
     initialSelectedView?.extraColumns ?? [],
   );
   const draftNameRef = useRef(draftName);
@@ -368,7 +369,7 @@ export function useViewEditorDraft({
   const handleLimitChange = (v: string) => { setDraftLimit(v); draftLimitRef.current = v; };
   const handleRefreshIntervalChange = (v: string) => { setDraftRefreshInterval(v); draftRefreshIntervalRef.current = v; };
   const handleAlertThresholdChange = (v: string) => { setDraftAlertThreshold(v); draftAlertThresholdRef.current = v; };
-  const handleExtraColumnsChange = (cols: string[]) => { setDraftExtraColumns(cols); draftExtraColumnsRef.current = cols; };
+  const handleExtraColumnsChange = (cols: ExtraColumn[]) => { setDraftExtraColumns(cols); draftExtraColumnsRef.current = cols; };
 
   return {
     // Dialog open state

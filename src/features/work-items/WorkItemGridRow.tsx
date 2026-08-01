@@ -14,6 +14,12 @@ import {
   extraFieldValue,
   type WiSortKey,
 } from './workItemsGridHelpers';
+import {
+  extraColumnValueKind,
+  extraColumnValueTitle,
+  formatExtraColumnValue,
+  type ExtraColumn,
+} from './extraColumns';
 
 // Reactively reads the row color rules and refreshes when they change in
 // Settings or another tab (mirrors useKeybindings in App.tsx).
@@ -40,7 +46,7 @@ export const WorkItemGridRow = forwardRef<
     unread: boolean;
     columnTemplate: string;
     visibleColumns: WiSortKey[];
-    extraColumns: string[];
+    extraColumns: ExtraColumn[];
     staleThresholdDays: number;
     rowColorClass: string | null;
     onSelect: () => void;
@@ -134,12 +140,21 @@ export const WorkItemGridRow = forwardRef<
         </div>
       );
     })}
-    {extraColumns.map((referenceName) => {
-      const value = extraFieldValue(item, referenceName);
+    {extraColumns.map((column) => {
+      const raw = extraFieldValue(item, column.referenceName);
+      const text = formatExtraColumnValue(raw, column.fieldType);
+      // Numbers read better right-aligned, the way a spreadsheet shows them.
+      const numeric = extraColumnValueKind(column.fieldType) === "number";
       return (
-        <div key={referenceName} className="min-w-0 truncate">
-          <span className="truncate text-xs text-muted-foreground" title={value ?? undefined}>
-            {value ?? "—"}
+        <div
+          key={column.referenceName}
+          className={`min-w-0 truncate ${numeric ? "text-right" : ""}`}
+        >
+          <span
+            className="truncate text-xs text-muted-foreground"
+            title={extraColumnValueTitle(raw, column.fieldType)}
+          >
+            {text ?? "—"}
           </span>
         </div>
       );

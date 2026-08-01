@@ -33,6 +33,7 @@ import {
   type WorkItemQueryView,
   type WorkItemViewLayout,
 } from './workItemViewsStorage';
+import { extraColumnReferenceNames, type ExtraColumn } from './extraColumns';
 import {
   firstCustomView,
   newWorkItemViewId,
@@ -143,7 +144,17 @@ export function WorkItemViewsPanel({
   );
   const selectedView = views[selectedViewIndex] ?? null;
   const selectedViewProjectId = selectedView?.projectId || projectOptions[0]?.projectId || "";
-  const selectedViewExtraColumns = selectedView?.extraColumns ?? [];
+  const extraColumnsSignature = JSON.stringify(selectedView?.extraColumns ?? []);
+  // Memoized on the serialized columns so the grid's sort memo and this query
+  // are not invalidated by a fresh array on every render.
+  const selectedViewExtraColumns = useMemo<ExtraColumn[]>(
+    () => JSON.parse(extraColumnsSignature) as ExtraColumn[],
+    [extraColumnsSignature],
+  );
+  const selectedViewExtraFields = useMemo(
+    () => extraColumnReferenceNames(selectedViewExtraColumns),
+    [selectedViewExtraColumns],
+  );
   const selectedQuery = useQuery({
     queryKey: workItemQueryKeys.queryView({
       organizationId: selectedOrganizationId,
@@ -151,7 +162,7 @@ export function WorkItemViewsPanel({
       projectId: selectedViewProjectId,
       wiql: selectedView?.wiql,
       limit: selectedView?.limit,
-      extraFieldsSignature: selectedViewExtraColumns.join("|"),
+      extraFieldsSignature: selectedViewExtraFields.join("|"),
     }),
     queryFn: () =>
       runWorkItemQuery({
@@ -159,7 +170,7 @@ export function WorkItemViewsPanel({
         projectId: selectedViewProjectId,
         wiql: selectedView!.wiql,
         limit: selectedView!.limit,
-        extraFields: selectedViewExtraColumns,
+        extraFields: selectedViewExtraFields,
       }),
     enabled:
       !!selectedView &&

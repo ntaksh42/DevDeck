@@ -46,6 +46,15 @@ const workItemFieldOptionsSchema = z.array(workItemFieldOptionSchema);
 
 export type WorkItemFieldOption = z.infer<typeof workItemFieldOptionSchema>;
 
+const workItemExtraFieldsSchema = z.object({
+  id: z.number(),
+  extraFields: z.array(workItemSummaryExtraFieldSchema).default([]),
+});
+
+const workItemExtraFieldsListSchema = z.array(workItemExtraFieldsSchema);
+
+export type WorkItemExtraFields = z.infer<typeof workItemExtraFieldsSchema>;
+
 const classificationNodeOptionSchema = z.object({
   name: z.string(),
   path: z.string(),
@@ -229,6 +238,13 @@ export type RunWorkItemQueryInput = {
 
 export type ListWorkItemProjectsInput = {
   organizationId?: string;
+};
+
+export type FetchWorkItemExtraFieldsInput = {
+  organizationId?: string;
+  /** Work items to fetch, grouped by project on the backend. */
+  items: { projectId: string; id: number }[];
+  extraFields: string[];
 };
 
 export type ListMyWorkItemsInput = {
@@ -420,6 +436,13 @@ export async function listWorkItemFields(
 ): Promise<WorkItemFieldOption[]> {
   const result = await invokeCommand("list_work_item_fields", { input });
   return workItemFieldOptionsSchema.parse(result);
+}
+
+export async function fetchWorkItemExtraFields(
+  input: FetchWorkItemExtraFieldsInput,
+): Promise<WorkItemExtraFields[]> {
+  const result = await invokeCommand("fetch_work_item_extra_fields", { input });
+  return workItemExtraFieldsListSchema.parse(result);
 }
 
 export async function listClassificationNodes(

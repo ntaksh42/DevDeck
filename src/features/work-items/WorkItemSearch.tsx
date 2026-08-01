@@ -14,6 +14,14 @@ import { MultiSelectFilter } from "@/components/MultiSelectFilter";
 import { WorkItemsGrid } from "./WorkItemsGrid";
 import { toMatchTarget } from "./workItemMatchTarget";
 import { workItemQueryKeys } from "./queryKeys";
+import {
+  loadExtraColumnSelection,
+  storeExtraColumnSelection,
+  type ExtraColumn,
+} from "./extraColumns";
+import { useExtraColumnValues } from "./useExtraColumnValues";
+
+const EXTRA_COLUMN_SCOPE = "workItemSearch";
 
 const WORK_ITEM_STATE_OPTIONS = ["New", "Active", "Resolved", "Closed"].map(
   (value) => ({ value, label: value }),
@@ -59,6 +67,22 @@ export function WorkItemSearch({
     if (parsed.filters.length === 0 && parsed.text.length === 0) return results;
     return results.filter((item) => matchesWorkItemQuery(toMatchTarget(item), parsed));
   }, [results, resultFilter]);
+
+  // Search renders from the SQLite cache, which holds only the standard
+  // columns, so any extra column's values are fetched separately for the rows
+  // on screen and merged in.
+  const [extraColumns, setExtraColumns] = useState<ExtraColumn[]>(() =>
+    loadExtraColumnSelection(EXTRA_COLUMN_SCOPE),
+  );
+  const { results: resultsWithExtras } = useExtraColumnValues({
+    organizationId,
+    results: filteredResults,
+    extraColumns,
+  });
+  // The field list is per project; use the filtered project when there is
+  // exactly one, otherwise fall back to the first project in the org.
+  const extraColumnsProjectId =
+    (projectIds.length === 1 ? projectIds[0] : undefined) ?? projects[0]?.projectId;
 
   useEffect(() => {
     if (!externalSearch) return;
@@ -175,7 +199,17 @@ export function WorkItemSearch({
         <ErrorState message={commandErrorMessage(mutation.error)} />
       ) : null}
 
-      <WorkItemsGrid loading={mutation.isPending} results={filteredResults} searched={mutation.isSuccess} />
+      <WorkItemsGrid
+        loading={mutation.isPending}
+        results={resultsWithExtras}
+        searched={mutation.isSuccess}
+        extraColumns={extraColumns}
+        extraColumnsProjectId={extraColumnsProjectId}
+        onExtraColumnsChange={(columns) => {
+          storeExtraColumnSelection(EXTRA_COLUMN_SCOPE, columns);
+          setExtraColumns(columns);
+        }}
+      />
     </div>
   );
 }

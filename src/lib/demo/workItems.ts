@@ -1,9 +1,11 @@
 import type {
   CreateWorkItemInput,
+  FetchWorkItemExtraFieldsInput,
   GetWorkItemPreviewInput,
   RunWorkItemQueryInput,
   SearchWorkItemsInput,
   UpdateWorkItemFieldsInput,
+  WorkItemExtraFields,
   WorkItemPreview,
   WorkItemProjectOption,
   WorkItemSummary,
@@ -324,7 +326,36 @@ function demoExtraFieldValue(referenceName: string, item: WorkItemSummary): stri
   if (lower.endsWith(".severity")) return `${(item.id % 4) + 1} - Medium`;
   if (lower === "system.areapath") return item.projectName;
   if (lower === "system.iterationpath") return `${item.projectName}\\Sprint ${(item.id % 3) + 1}`;
+  if (lower.endsWith(".escalation")) return item.id % 2 === 0 ? "true" : "false";
+  if (lower.endsWith(".releasetrain")) return `2026.${String((item.id % 12) + 1).padStart(2, "0")}`;
+  if (lower.endsWith(".customerimpact")) return item.id % 3 === 0 ? "High" : "Low";
+  if (lower.endsWith("date")) {
+    return new Date(Date.now() - (item.id % 30) * 86_400_000).toISOString();
+  }
   return null;
+}
+
+export function demoFetchWorkItemExtraFields(
+  input?: FetchWorkItemExtraFieldsInput,
+): WorkItemExtraFields[] {
+  const extraFields = input?.extraFields ?? [];
+  if (extraFields.length === 0) return [];
+  const byId = new Map(
+    [...demoWorkItems(), ...demoMyWorkItems()].map((item) => [item.id, item]),
+  );
+  return (input?.items ?? []).flatMap((target) => {
+    const item = byId.get(target.id);
+    if (!item) return [];
+    return [
+      {
+        id: target.id,
+        extraFields: extraFields.map((referenceName) => ({
+          referenceName,
+          value: demoExtraFieldValue(referenceName, item),
+        })),
+      },
+    ];
+  });
 }
 
 export function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPreview {

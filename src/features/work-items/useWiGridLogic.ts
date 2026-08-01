@@ -17,12 +17,13 @@ import {
   WI_GRID_ROW_HEIGHT,
   WI_GRID_OVERSCAN,
   FILTERABLE_COLUMNS,
-  compareWorkItems,
+  compareWorkItemsDirected,
   activeColumnFilterCount,
   workItemSummaryKey,
   workItemTriageSnapshot,
   type FilterableColumn,
 } from './workItemsGridHelpers';
+import type { ExtraColumn } from './extraColumns';
 import { useRowColorRules } from './WorkItemGridRow';
 import { useBulkActions } from './useBulkActions';
 import { workItemQueryKeys } from './queryKeys';
@@ -36,6 +37,7 @@ export interface WiGridLogicProps {
   activeExternalFilterCount?: number;
   onClearExternalFilters?: () => void;
   autoFocus: boolean;
+  extraColumns: ExtraColumn[];
 }
 
 export function useWiGridLogic(
@@ -44,7 +46,7 @@ export function useWiGridLogic(
 ) {
   const {
     results, triageScope, loading, activeExternalFilterCount = 0,
-    onClearExternalFilters, autoFocus,
+    onClearExternalFilters, autoFocus, extraColumns,
   } = props;
   const {
     selectedIndex, setSelectedIndex,
@@ -96,13 +98,13 @@ export function useWiGridLogic(
     () =>
       effectiveResults
         .map((item, index) => ({ item, index }))
-        .sort((a, b) => {
-          const result = compareWorkItems(a.item, b.item, sort.key);
-          const directed = sort.direction === "asc" ? result : -result;
-          return directed || a.index - b.index;
-        })
+        .sort(
+          (a, b) =>
+            compareWorkItemsDirected(a.item, b.item, sort, extraColumns) ||
+            a.index - b.index,
+        )
         .map(({ item }) => item),
-    [effectiveResults, sort],
+    [effectiveResults, extraColumns, sort],
   );
 
   const columnUniqueValues = useMemo(() => {

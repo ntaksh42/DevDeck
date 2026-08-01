@@ -76,8 +76,8 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
 | **My Pull Requests** | 自分が作成した active PR を一覧 (`list_my_created_pull_requests`、`searchCriteria.creatorId` でサーバ側フィルタ、全プロジェクトを並列取得しライブ取得・非キャッシュ)。グリッドは My Reviews と同じ CSS グリッド構成・行スタイル・ステータスバーで、列 (PR# / Repository / Title〔Draft バッジ込み〕/ Created / Target / Approvals〔vote==10 の人数/レビュアー総数〕) はヘッダクリックでソート可能、ドラッグで列幅リサイズ (localStorage 永続化)、Columns メニューで表示列を切替 (PR#/Title は必須)。テキストフィルタは読み込み済みデータの値 (リポジトリ/タイトル/ターゲット) をオートコンプリート候補表示するクライアント側絞り込み (`FilterAutocomplete`)。キーボード操作 (`↑↓`/`J K`/`Home`/`End`、`Enter` でブラウザ、`C` で URL コピー)。複数組織は組織セレクタで切替。ライブ取得のため Sync (キャッシュ同期) の対象外で、データはビュー再訪時に再取得される。 |
 | **Pull Request Search** | プロジェクト/リポジトリ/ステータス (active/completed/abandoned、いずれも複数選択可。空=既定 active)/ターゲットブランチ/期間 (作成日 or 完了日基準)/ドラフト除外で PR を検索。並び替え (作成日・完了日・タイトル)。active はキャッシュ、それ以外はライブ取得 (ターゲットブランチ・期間はサーバ側フィルタ)。ターゲットブランチ欄は選択中のリポジトリの実ブランチ (`list_repo_branches`) を複数選択候補として表示 (`MultiSelectFilter`、候補検索とキーボード操作に対応)。複数選択時は選択ブランチごとの結果を統合する。結果は先頭 100 件で打ち切り、超過時はインジケータ表示。ソート可能グリッド、列リサイズ、`C` で URL コピー。 |
 | **My Work Items** | 自分に割当中の作業項目 (最大 200 件キャッシュ)。状態・種別・割当先・タグ (`System.Tags`、各タグをチップ表示)・更新日時。最後に開いてから変更された項目に未読マーカー (ChangedDate の差分でローカル検出、開くと消える)。 |
-| **Work Item Views** | 保存済み WIQL クエリ。件数表示、ナビへのピン留め、並べ替え、ビュー別ソート/列。テキストフィルタ (`Ctrl+F`/`/` でフォーカス、`parseSearchQuery`/`matchesWorkItemQuery` によるスマート検索、list/board 両レイアウトに適用)。取得件数の上限はなく (ビュー編集の Limit を空欄にすると無制限、既定)、明示的に件数を指定した場合のみ打ち切る。 |
-| **Work Item Search** | キーワード + プロジェクト/状態/種別での作業項目検索。全文検索 (FTS)。グリッドは Tags 列 (`System.Tags` をチップ表示、Columns メニューで表示切替・ソート可) を含む。 |
+| **Work Item Views** | 保存済み WIQL クエリ。件数表示、ナビへのピン留め、並べ替え、ビュー別ソート/列。テキストフィルタ (`Ctrl+F`/`/` でフォーカス、`parseSearchQuery`/`matchesWorkItemQuery` によるスマート検索、list/board 両レイアウトに適用)。取得件数の上限はなく (ビュー編集の Limit を空欄にすると無制限、既定)、明示的に件数を指定した場合のみ打ち切る。ビュー編集の Extra columns で Azure DevOps の任意フィールドを標準列の後ろに追加でき (最大 20、`{referenceName, fieldType}` をビューに保存)、追加列もヘッダクリックでソート・ドラッグで列幅リサイズできる。 |
+| **Work Item Search** | キーワード + プロジェクト/状態/種別での作業項目検索。全文検索 (FTS)。グリッドは Tags 列 (`System.Tags` をチップ表示、Columns メニューで表示切替・ソート可) を含む。ステータスバーの「Fields」から Azure DevOps の任意フィールドを追加列として選択でき (選択は localStorage に画面単位で永続化)、値はキャッシュに無いため表示中の行だけ `fetch_work_item_extra_fields` でオンデマンド取得してマージする。 |
 | **Commits** | キーワード/プロジェクト/リポジトリ/作者/ブランチ/期間でコミット検索。7d/30d/90d プリセット。関連 PR の遅延ルックアップ。 |
 | **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。実行の成果物 (artifacts) を一覧表示しブラウザでダウンロード (`list_pipeline_artifacts`)。 |
 | **Commits** | キーワード/プロジェクト/リポジトリ/作者/ブランチ/期間でコミット検索。7d/30d/90d プリセット。関連 PR の遅延ルックアップ。検索ボックスの `path:src/auth` 構文で変更パス絞り込み（`searchCriteria.itemPath` を使うサーバ側適用のためリポジトリ選択が必須）。 |
@@ -121,6 +121,18 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
   `create_work_item` で作成する。作成後はローカルキャッシュへ即時反映し関連クエリを
   invalidate する。ダイアログはキーボード完結 (タイトルへ初期フォーカス、Ctrl+Enter 送信、
   Escape キャンセル、閉じたら呼び出し元へフォーカス復帰)。
+- **作業項目グリッドの追加列**: Azure DevOps の任意フィールドを標準列 (#/Type/State/Title/
+  Project/Assigned To/Tags/Changed) の後ろに列として追加できる (`src/features/work-items/extraColumns.ts`)。
+  1 列は `{referenceName, fieldType}` で表され、`fieldType` は `list_work_item_fields` が返す
+  フィールド型。セルは型に応じて描画し (dateTime=相対表示 + 絶対時刻ツールチップ、boolean=Yes/No、
+  html=タグ除去したプレーンテキスト、数値=右寄せ)、ソートも型に応じて比較する (数値は数値順、
+  日付は時系列、それ以外は文字列順)。空欄の行は昇順・降順いずれでも末尾に置く
+  (`compareExtraColumnValuesDirected`)。列幅はフィールド参照名ごとに localStorage
+  (`azdodeck:layout:wiExtraColumnWidths:v1`) へ保存するため、同じフィールドは画面をまたいで
+  同じ幅になる。列の選択元は画面によって異なり、Work Item Views はビュー定義
+  (`extraColumns`)、保存ビューを持たない画面 (Work Item Search) はステータスバーの「Fields」
+  ピッカーと画面単位の localStorage キー。旧形式 (参照名の文字列配列) で保存されたビューは
+  読み込み時に型なし列へ移行され、文字列として描画・比較される。
 - **作業項目の一括操作**: 複数項目の状態変更・割当・優先度設定をまとめて適用。
 - **作業項目編集**: state / assignee / priority / フィールドをステージし 1 リクエストで適用。
   タイトルはプレビューヘッダーからインライン編集し即時適用 (System.Title を `update_fields` で更新)。
@@ -186,6 +198,11 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
   (最大 200)、コミット、コミット↔PR 関連、各種 FTS インデックス、同期状態、スヌーズ、
   PR コメント既読、メンション/割当先履歴、通知履歴 (`notifications`)、アプリ設定。
 - ジャーナル: WAL、`synchronous=NORMAL`、外部キー ON。
+- キャッシュは標準列のみを保持する。グリッドの追加列 (任意フィールド) はキャッシュ由来の画面
+  では値を持たないため、同期スコープを広げる代わりに `fetch_work_item_extra_fields` で表示中の
+  行 (先頭 500 件まで) の分だけオンデマンド取得し、`extraFields` にマージする。バックエンドは
+  ID をプロジェクト単位にまとめて `workitemsbatch` を呼ぶ (フィールドは最大 20、標準列と重複する
+  参照名は除去)。作業項目の編集後は `workItemExtraFields` クエリキーも invalidate する。
 
 ### 同期ループ (`sync.rs`)
 

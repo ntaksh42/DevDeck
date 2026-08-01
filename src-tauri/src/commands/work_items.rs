@@ -5,17 +5,17 @@ use crate::error::Result;
 use crate::work_items::{
     AddWorkItemCommentInput, AddWorkItemLinkInput, AssignWorkItemsInput, BulkWorkItemResult,
     ClassificationNodesResult, CreateWorkItemInput, DeleteWorkItemCommentInput,
-    FetchWorkItemImageInput, GetSavedQueryInput, GetWorkItemPreviewInput,
-    ListClassificationNodesInput, ListMyWorkItemsInput, ListWorkItemFieldAllowedValuesInput,
-    ListWorkItemFieldsInput, ListWorkItemProjectsInput, ListWorkItemTypeStatesInput,
-    ListWorkItemTypesInput, ListWorkItemUpdatesInput, MentionCandidate,
-    RecordAssigneeInteractionInput, RecordMentionInteractionInput, RemoveWorkItemLinkInput,
-    RunWorkItemQueryInput, SavedQueryResult, SearchWorkItemAssigneesInput,
+    FetchWorkItemExtraFieldsInput, FetchWorkItemImageInput, GetSavedQueryInput,
+    GetWorkItemPreviewInput, ListClassificationNodesInput, ListMyWorkItemsInput,
+    ListWorkItemFieldAllowedValuesInput, ListWorkItemFieldsInput, ListWorkItemProjectsInput,
+    ListWorkItemTypeStatesInput, ListWorkItemTypesInput, ListWorkItemUpdatesInput,
+    MentionCandidate, RecordAssigneeInteractionInput, RecordMentionInteractionInput,
+    RemoveWorkItemLinkInput, RunWorkItemQueryInput, SavedQueryResult, SearchWorkItemAssigneesInput,
     SearchWorkItemMentionsInput, SearchWorkItemsInput, SetWorkItemCommentReactionInput,
     SetWorkItemsPriorityInput, SetWorkItemsStateInput, SetWorkItemsTagsInput,
     UpdateWorkItemCommentInput, UpdateWorkItemFieldsInput, WorkItemAssigneeCandidate,
-    WorkItemComment, WorkItemFieldOption, WorkItemImage, WorkItemPreview, WorkItemProjectOption,
-    WorkItemSummary, WorkItemUpdateSummary,
+    WorkItemComment, WorkItemExtraFields, WorkItemFieldOption, WorkItemImage, WorkItemPreview,
+    WorkItemProjectOption, WorkItemSummary, WorkItemUpdateSummary,
 };
 
 #[tauri::command]
@@ -298,6 +298,15 @@ pub async fn list_work_item_fields(
     state: State<'_, AppState>,
 ) -> Result<Vec<WorkItemFieldOption>> {
     state.work_items.list_fields(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn fetch_work_item_extra_fields(
+    input: FetchWorkItemExtraFieldsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<WorkItemExtraFields>> {
+    state.work_items.fetch_extra_fields(input).await
 }
 
 #[tauri::command]

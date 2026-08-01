@@ -4,8 +4,8 @@ import { type WorkItemProjectOption, type WorkItemFieldOption } from '@/lib/azdo
 import {
   MAX_VIEW_REFRESH_INTERVAL_SEC,
   MIN_VIEW_REFRESH_INTERVAL_SEC,
-  normalizeViewExtraColumns,
 } from './workItemViewsStorage';
+import { normalizeExtraColumns, type ExtraColumn } from './extraColumns';
 import type { WiqlCompletion } from './workItemViewsHelpers';
 
 export type ViewEditorDialogProps = {
@@ -36,8 +36,8 @@ export type ViewEditorDialogProps = {
   onApplyCompletion: (completion: WiqlCompletion) => void;
   onInsertWiqlText: (text: string) => void;
   wiqlValidation: { errors: string[]; warnings: string[] };
-  draftExtraColumns: string[];
-  onExtraColumnsChange: (cols: string[]) => void;
+  draftExtraColumns: ExtraColumn[];
+  onExtraColumnsChange: (cols: ExtraColumn[]) => void;
   fields: WorkItemFieldOption[];
   fieldsLoading: boolean;
   formError: string | null;
@@ -334,17 +334,23 @@ export function ViewEditorDialog({
             </span>
             {draftExtraColumns.length > 0 ? (
               <div className="flex flex-wrap gap-1">
-                {draftExtraColumns.map((referenceName) => (
+                {draftExtraColumns.map((column) => (
                   <span
-                    key={referenceName}
+                    key={column.referenceName}
                     className="inline-flex items-center gap-1 rounded border border-border bg-secondary px-1.5 py-0.5 font-mono text-[11px]"
-                    title={referenceName}
+                    title={column.referenceName}
                   >
-                    {referenceName}
+                    {column.referenceName}
                     <button
                       type="button"
-                      aria-label={`Remove column ${referenceName}`}
-                      onClick={() => onExtraColumnsChange(draftExtraColumns.filter((c) => c !== referenceName))}
+                      aria-label={`Remove column ${column.referenceName}`}
+                      onClick={() =>
+                        onExtraColumnsChange(
+                          draftExtraColumns.filter(
+                            (c) => c.referenceName !== column.referenceName,
+                          ),
+                        )
+                      }
                       className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                     >
                       <X className="h-3 w-3" aria-hidden="true" />
@@ -360,7 +366,15 @@ export function ViewEditorDialog({
               onChange={(event) => {
                 const referenceName = event.target.value;
                 if (!referenceName) return;
-                onExtraColumnsChange(normalizeViewExtraColumns([...draftExtraColumns, referenceName]));
+                // The field type travels with the column so the grid can format
+                // and sort its cells by type instead of as raw strings.
+                const field = fields.find((f) => f.referenceName === referenceName);
+                onExtraColumnsChange(
+                  normalizeExtraColumns([
+                    ...draftExtraColumns,
+                    { referenceName, fieldType: field?.fieldType },
+                  ]),
+                );
               }}
               className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
             >
@@ -369,7 +383,9 @@ export function ViewEditorDialog({
                 .filter(
                   (field) =>
                     !draftExtraColumns.some(
-                      (existing) => existing.toLowerCase() === field.referenceName.toLowerCase(),
+                      (existing) =>
+                        existing.referenceName.toLowerCase() ===
+                        field.referenceName.toLowerCase(),
                     ),
                 )
                 .map((field) => (

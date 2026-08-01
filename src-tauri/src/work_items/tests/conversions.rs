@@ -298,3 +298,73 @@ fn flatten_classification_node_builds_field_paths_from_names() {
         ]
     );
 }
+
+#[test]
+fn sanitize_extra_query_fields_drops_standard_and_duplicate_fields() {
+    let fields = sanitize_extra_query_fields(Some(&[
+        "  Custom.ReleaseTrain  ".to_string(),
+        // Already fetched as a standard column.
+        "System.Title".to_string(),
+        // Same field in a different case.
+        "custom.releasetrain".to_string(),
+        "not-a-field".to_string(),
+        "Microsoft.VSTS.Common.Priority".to_string(),
+    ]));
+
+    assert_eq!(
+        fields,
+        vec![
+            "Custom.ReleaseTrain".to_string(),
+            "Microsoft.VSTS.Common.Priority".to_string()
+        ]
+    );
+}
+
+#[test]
+fn sanitize_extra_query_fields_caps_the_field_count() {
+    let requested: Vec<String> = (0..30).map(|i| format!("Custom.Field{i}")).collect();
+    assert_eq!(sanitize_extra_query_fields(Some(&requested)).len(), 20);
+}
+
+#[test]
+fn extra_work_item_fields_reads_scalars_and_identities() {
+    let mut fields = HashMap::new();
+    fields.insert("Custom.ReleaseTrain".to_string(), json!("2026.07"));
+    fields.insert("Custom.StoryPoints".to_string(), json!(8));
+    fields.insert("Custom.Escalated".to_string(), json!(true));
+    fields.insert(
+        "Custom.Owner".to_string(),
+        json!({ "displayName": "Test User", "uniqueName": "test@example.com" }),
+    );
+
+    let extra = extra_work_item_fields(
+        &WorkItem {
+            id: 1,
+            fields,
+            links: None,
+        },
+        &[
+            "Custom.ReleaseTrain".to_string(),
+            "Custom.StoryPoints".to_string(),
+            "Custom.Escalated".to_string(),
+            "Custom.Owner".to_string(),
+            // Requested but absent on this item.
+            "Custom.Missing".to_string(),
+        ],
+    );
+
+    let values: Vec<(&str, Option<&str>)> = extra
+        .iter()
+        .map(|field| (field.reference_name.as_str(), field.value.as_deref()))
+        .collect();
+    assert_eq!(
+        values,
+        vec![
+            ("Custom.ReleaseTrain", Some("2026.07")),
+            ("Custom.StoryPoints", Some("8")),
+            ("Custom.Escalated", Some("true")),
+            ("Custom.Owner", Some("Test User")),
+            ("Custom.Missing", None),
+        ]
+    );
+}

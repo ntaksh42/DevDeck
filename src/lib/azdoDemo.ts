@@ -8,6 +8,7 @@ import type {
   DeleteWorkItemCommentInput,
   DeletePullRequestCommentInput,
   EditPullRequestCommentInput,
+  FetchWorkItemExtraFieldsInput,
   GetPullRequestFileDiffInput,
   GetPullRequestReviewInput,
   GetReviewResultPreviewInput,
@@ -68,6 +69,7 @@ import {
 } from "@/lib/demo/prReview";
 import {
   demoCreateWorkItem,
+  demoFetchWorkItemExtraFields,
   demoMyWorkItems,
   demoRunWorkItemQuery,
   demoUpdateWorkItemFields,
@@ -383,6 +385,10 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     case "list_work_item_fields": {
       const input = (args as { input?: ListWorkItemFieldsInput } | undefined)?.input;
       return demoListWorkItemFields(input);
+    }
+    case "fetch_work_item_extra_fields": {
+      const input = (args as { input?: FetchWorkItemExtraFieldsInput } | undefined)?.input;
+      return demoFetchWorkItemExtraFields(input);
     }
     case "list_classification_nodes":
       return demoClassificationNodes();

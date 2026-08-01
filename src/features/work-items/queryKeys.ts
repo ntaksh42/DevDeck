@@ -86,6 +86,13 @@ export const workItemQueryKeys = {
     ] as const,
   fields: (organizationId?: string, projectId?: string | null) =>
     ['workItemFields', organizationId, projectId] as const,
+  extraFields: (
+    organizationId?: string,
+    targetsSignature?: string,
+    fieldsSignature?: string,
+  ) =>
+    ['workItemExtraFields', organizationId, targetsSignature, fieldsSignature] as const,
+  extraFieldsRoot: () => ['workItemExtraFields'] as const,
   mentions: (
     organizationId?: string,
     projectId?: string,
@@ -121,6 +128,9 @@ export function invalidateWorkItemMutationCaches(queryClient: QueryClient): void
   invalidateWorkItemQueryViews(queryClient);
   void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot() });
   void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.assigneesRoot() });
+  // Extra grid columns are fetched separately from the cached rows, so an edit
+  // to one of those fields would otherwise keep showing the stale value.
+  void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.extraFieldsRoot() });
   // Field edits and comments both add revisions, so the History section would
   // otherwise keep serving its cached (pre-mutation) list until it goes stale.
   void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.updatesRoot() });
