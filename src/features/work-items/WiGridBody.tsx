@@ -5,6 +5,7 @@ import { matchRowColorClass, type RowColorRule } from '@/lib/rowColorRules';
 import { workItemUnreadKey } from './workItemUnreadTracking';
 import { WorkItemGridRow } from './WorkItemGridRow';
 import { workItemSummaryKey, type WiSortKey } from './workItemsGridHelpers';
+import type { ExtraColumn } from './extraColumns';
 
 export function WiGridBody({
   showBlockingLoading,
@@ -45,7 +46,7 @@ export function WiGridBody({
   unreadKeys: Set<string>;
   wiColTemplate: string;
   visibleColumns: WiSortKey[];
-  extraColumns: string[];
+  extraColumns: ExtraColumn[];
   staleThresholdDays: number;
   rowColorRules: RowColorRule[];
   rowRefs: React.RefObject<(HTMLDivElement | null)[]>;
@@ -167,7 +168,7 @@ const MemoWiRow = memo(function MemoWiRow({
   unread: boolean;
   columnTemplate: string;
   visibleColumns: WiSortKey[];
-  extraColumns: string[];
+  extraColumns: ExtraColumn[];
   staleThresholdDays: number;
   rowColorRules: RowColorRule[];
   rowRefs: React.RefObject<(HTMLDivElement | null)[]>;

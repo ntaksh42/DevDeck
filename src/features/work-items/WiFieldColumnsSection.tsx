@@ -3,8 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { commandErrorMessage, listWorkItemFields } from "@/lib/azdoCommands";
 import { workItemQueryKeys } from "./queryKeys";
 import { filterCustomFieldOptions } from "./workItemPreviewHelpers";
-import { extraColumnLabel } from "./workItemsGridHelpers";
-import { normalizeViewExtraColumns } from "./workItemViewsStorage";
+import { extraColumnLabel, normalizeExtraColumns, type ExtraColumn } from "./extraColumns";
 
 /**
  * "Field columns" section of the work-item Columns menu: lists the Azure
@@ -20,8 +19,8 @@ export function WiFieldColumnsSection({
 }: {
   organizationId: string;
   projectId: string;
-  extraColumns: string[];
-  onExtraColumnsChange: (columns: string[]) => void;
+  extraColumns: ExtraColumn[];
+  onExtraColumnsChange: (columns: ExtraColumn[]) => void;
 }) {
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
@@ -36,7 +35,7 @@ export function WiFieldColumnsSection({
     () =>
       filterCustomFieldOptions(
         fields,
-        extraColumns.map((referenceName) => ({ referenceName, label: referenceName })),
+        extraColumns.map((column) => ({ referenceName: column.referenceName, label: column.referenceName })),
         search,
       ),
     [fields, extraColumns, search],
@@ -51,14 +50,15 @@ export function WiFieldColumnsSection({
   }
 
   function add(referenceName: string) {
-    onExtraColumnsChange(normalizeViewExtraColumns([...extraColumns, referenceName]));
+    const field = fields.find((entry) => entry.referenceName === referenceName);
+    onExtraColumnsChange(normalizeExtraColumns([...extraColumns, { referenceName, fieldType: field?.fieldType }]));
     setSearch("");
     // The clicked option unmounts; keep focus inside the menu.
     searchRef.current?.focus();
   }
 
   function remove(referenceName: string) {
-    onExtraColumnsChange(extraColumns.filter((column) => column !== referenceName));
+    onExtraColumnsChange(extraColumns.filter((column) => column.referenceName !== referenceName));
     searchRef.current?.focus();
   }
 
@@ -68,7 +68,7 @@ export function WiFieldColumnsSection({
   return (
     <div className="border-t border-border py-1">
       <div className="px-2 py-1 text-xs font-semibold text-foreground">Field columns</div>
-      {extraColumns.map((referenceName) => (
+      {extraColumns.map(({ referenceName }) => (
         <label key={referenceName} className={`${itemClass} cursor-pointer select-none`} title={referenceName}>
           <span className="min-w-0 truncate">{fieldName(referenceName)}</span>
           <input

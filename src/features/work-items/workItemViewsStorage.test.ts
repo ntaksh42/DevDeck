@@ -65,6 +65,34 @@ describe("normalizeWorkItemQueryView", () => {
   it("keeps an explicit limit above the old 500 ceiling", () => {
     expect(normalizeWorkItemQueryView({ ...baseView, limit: 5000 })?.limit).toBe(5000);
   });
+
+  it("migrates extra columns saved as plain reference-name strings", () => {
+    expect(
+      normalizeWorkItemQueryView({ ...baseView, extraColumns: ["Custom.ReleaseTrain"] })
+        ?.extraColumns,
+    ).toEqual([{ referenceName: "Custom.ReleaseTrain" }]);
+  });
+
+  it("keeps the field type on typed extra columns", () => {
+    expect(
+      normalizeWorkItemQueryView({
+        ...baseView,
+        extraColumns: [{ referenceName: "Custom.Due", fieldType: "dateTime" }],
+      })?.extraColumns,
+    ).toEqual([{ referenceName: "Custom.Due", fieldType: "dateTime" }]);
+  });
+
+  it("keeps a sort key pointing at an extra column", () => {
+    expect(
+      normalizeWorkItemQueryView({ ...baseView, sortKey: "extra:custom.due" })?.sortKey,
+    ).toBe("extra:custom.due");
+  });
+
+  it("falls back to changedDate for an unknown sort key", () => {
+    expect(normalizeWorkItemQueryView({ ...baseView, sortKey: "bogus" })?.sortKey).toBe(
+      "changedDate",
+    );
+  });
 });
 
 describe("view count baselines", () => {

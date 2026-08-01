@@ -6,6 +6,12 @@ import {
 import { readStoredJson, writeStoredJson, storageKey } from '@/lib/storage';
 import type { WorkItemSummary } from '@/lib/azdoCommands';
 import { openExternalUrl } from '@/lib/openExternal';
+import {
+  compareExtraColumnValuesDirected,
+  extraColumnForKey,
+  isExtraColumnKey,
+  type ExtraColumn,
+} from './extraColumns';
 
 // ─── Grid layout constants ────────────────────────────────────────────────────
 
@@ -26,6 +32,7 @@ export const WI_GRID_OVERSCAN = 8;
 
 // ─── Sort types ───────────────────────────────────────────────────────────────
 
+/** A standard grid column. Extra field columns use `extra:{referenceName}`. */
 export type WiSortKey =
   | "id"
   | "workItemType"
@@ -35,7 +42,9 @@ export type WiSortKey =
   | "assignedTo"
   | "tags"
   | "changedDate";
-export type WiSortState = { key: WiSortKey; direction: SortDirection };
+/** Anything the grid can sort by: a standard column or an extra field column. */
+export type WiGridSortKey = WiSortKey | string;
+export type WiSortState = { key: WiGridSortKey; direction: SortDirection };
 
 // ─── Row key helpers ──────────────────────────────────────────────────────────
 
@@ -62,8 +71,12 @@ export const wiSortLabels: Record<WiSortKey, string> = {
   changedDate: "Changed",
 };
 
-export function compareWorkItems(a: WorkItemSummary, b: WorkItemSummary, key: WiSortKey): number {
-  switch (key) {
+export function compareWorkItems(
+  a: WorkItemSummary,
+  b: WorkItemSummary,
+  key: WiGridSortKey,
+): number {
+  switch (key as WiSortKey) {
     case "id":
       return a.id - b.id;
     case "workItemType":
@@ -81,7 +94,37 @@ export function compareWorkItems(a: WorkItemSummary, b: WorkItemSummary, key: Wi
       return (a.tags ?? "￿").localeCompare(b.tags ?? "￿");
     case "changedDate":
       return (a.changedDate ?? "").localeCompare(b.changedDate ?? "");
+    default:
+      // An extra column the view no longer defines: leave the order untouched
+      // rather than returning undefined from the switch.
+      return 0;
   }
+}
+
+/**
+ * The grid's row comparison, already oriented for `direction`.
+ *
+ * Extra field columns are compared by their recorded field type and keep empty
+ * cells at the bottom in both directions, which is why direction is applied
+ * here rather than by negating the result at the call site.
+ */
+export function compareWorkItemsDirected(
+  a: WorkItemSummary,
+  b: WorkItemSummary,
+  sort: WiSortState,
+  extraColumns: ExtraColumn[] = [],
+): number {
+  const extra = extraColumnForKey(sort.key, extraColumns);
+  if (extra) {
+    return compareExtraColumnValuesDirected(
+      extraFieldValue(a, extra.referenceName),
+      extraFieldValue(b, extra.referenceName),
+      extra.fieldType,
+      sort.direction,
+    );
+  }
+  const result = compareWorkItems(a, b, sort.key);
+  return sort.direction === "asc" ? result : -result;
 }
 
 // ─── Column registry ──────────────────────────────────────────────────────────
@@ -124,14 +167,16 @@ export function loadWorkItemSort(key: string, fallback: WiSortState): WiSortStat
     key,
     (raw) => {
       const parsed = raw as Partial<WiSortState> | null;
-      if (
-        !parsed ||
-        !WI_GRID_KEYS.includes(parsed.key as WiSortKey) ||
-        (parsed.direction !== "asc" && parsed.direction !== "desc")
-      ) {
+      const key = parsed?.key;
+      // Extra field columns persist as `extra:{referenceName}`; a stored key
+      // whose column the view has since dropped is caught at compare time.
+      const validKey =
+        typeof key === "string" &&
+        (WI_GRID_KEYS.includes(key as WiSortKey) || isExtraColumnKey(key));
+      if (!parsed || !validKey || (parsed.direction !== "asc" && parsed.direction !== "desc")) {
         return undefined;
       }
-      return { key: parsed.key as WiSortKey, direction: parsed.direction };
+      return { key: key as WiGridSortKey, direction: parsed.direction };
     },
     fallback,
   );
@@ -283,10 +328,6 @@ export function extraFieldValue(item: WorkItemSummary, referenceName: string): s
       (field) => field.referenceName.toLowerCase() === referenceName.toLowerCase(),
     )?.value ?? null
   );
-}
-
-export function extraColumnLabel(referenceName: string): string {
-  return referenceName.split(".").pop() || referenceName;
 }
 
 export const PRIORITY_REFERENCE_NAME = "Microsoft.VSTS.Common.Priority";

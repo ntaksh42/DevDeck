@@ -1,5 +1,9 @@
 import { clamp, type SortDirection } from "@/lib/utils";
-import { isValidFieldReferenceName } from "./previewFieldsStorage";
+import {
+  isExtraColumnKey,
+  normalizeExtraColumns,
+  type ExtraColumn,
+} from "./extraColumns";
 
 // Bare keys (no migration to date). On an incompatible shape change, bump with
 // `storageKey(name, version)` from "@/lib/storage" instead of a hand-spelled
@@ -22,30 +26,18 @@ export type WorkItemQueryView = {
   projectId: string;
   previewVisible?: boolean;
   sortDirection?: SortDirection;
-  sortKey?: "id" | "workItemType" | "state" | "title" | "projectName" | "assignedTo" | "tags" | "changedDate";
+  /**
+   * A standard column key, or `extra:{referenceName}` when the view sorts by
+   * one of its `extraColumns`.
+   */
+  sortKey?: string;
   wiql: string;
   /** Maximum results to fetch. Omitted means the query is unbounded. */
   limit?: number;
   refreshIntervalSec?: number;
   alertThreshold?: number;
-  extraColumns?: string[];
+  extraColumns?: ExtraColumn[];
 };
-
-const MAX_VIEW_EXTRA_COLUMNS = 20;
-
-export function normalizeViewExtraColumns(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  const columns: string[] = [];
-  for (const entry of value) {
-    if (typeof entry !== "string") continue;
-    const trimmed = entry.trim();
-    if (!isValidFieldReferenceName(trimmed)) continue;
-    if (columns.some((existing) => existing.toLowerCase() === trimmed.toLowerCase())) continue;
-    columns.push(trimmed);
-    if (columns.length >= MAX_VIEW_EXTRA_COLUMNS) break;
-  }
-  return columns;
-}
 
 export type WorkItemQueryViewsExport = {
   schema: typeof WI_QUERY_VIEWS_EXPORT_SCHEMA;
@@ -54,7 +46,7 @@ export type WorkItemQueryViewsExport = {
   views: WorkItemQueryView[];
 };
 
-function isWorkItemSortKey(value: unknown): value is NonNullable<WorkItemQueryView["sortKey"]> {
+function isWorkItemSortKey(value: unknown): value is string {
   return (
     value === "id" ||
     value === "workItemType" ||
@@ -63,7 +55,10 @@ function isWorkItemSortKey(value: unknown): value is NonNullable<WorkItemQueryVi
     value === "projectName" ||
     value === "assignedTo" ||
     value === "tags" ||
-    value === "changedDate"
+    value === "changedDate" ||
+    // Extra field columns are sortable too; the key survives even if the
+    // column is later removed, and compareWorkItems ignores unknown keys.
+    (typeof value === "string" && isExtraColumnKey(value))
   );
 }
 
@@ -173,7 +168,7 @@ export function normalizeWorkItemQueryView(value: unknown): WorkItemQueryView | 
       Number.isFinite(alertThreshold) && alertThreshold >= 0
         ? Math.round(alertThreshold)
         : undefined,
-    extraColumns: normalizeViewExtraColumns(view.extraColumns),
+    extraColumns: normalizeExtraColumns(view.extraColumns),
   };
 }
 

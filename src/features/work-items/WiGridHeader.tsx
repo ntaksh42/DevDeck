@@ -6,36 +6,42 @@ import type { WorkItemSummary } from '@/lib/azdoCommands';
 import {
   wiSortLabels,
   isFilterableColumn,
-  extraColumnLabel,
   type WiSortKey,
+  type WiGridSortKey,
   type WiSortState,
   type FilterableColumn,
 } from './workItemsGridHelpers';
+import { extraColumnKey, extraColumnLabel, type ExtraColumn } from './extraColumns';
 
 // ─── WiSortHeaderButton ───────────────────────────────────────────────────────
 
 function WiSortHeaderButton({
   column,
+  label,
+  title,
   sort,
   onSort,
   resizeHandle,
   filterActive,
   onFilterOpen,
 }: {
-  column: WiSortKey;
+  column: WiGridSortKey;
+  label: string;
+  /** Tooltip for the header, e.g. the full field reference name. */
+  title?: string;
   sort: WiSortState;
-  onSort: (column: WiSortKey) => void;
+  onSort: (column: WiGridSortKey) => void;
   resizeHandle?: ReactNode;
   filterActive?: boolean;
   onFilterOpen?: (anchorEl: HTMLButtonElement) => void;
 }) {
   const active = sort.key === column;
-  const label = wiSortLabels[column];
   return (
     <div
       role="columnheader"
       aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
       className="relative min-w-0"
+      title={title}
     >
       <div className="flex min-w-0 items-center">
         <button
@@ -92,6 +98,7 @@ export function WiGridHeader({
   onFilterOpen,
   columnResizeProps,
   extraColumns,
+  extraColumnResizeProps,
 }: {
   displayed: WorkItemSummary[];
   checkedIds: Set<string>;
@@ -100,11 +107,12 @@ export function WiGridHeader({
   wiColTemplate: string;
   visibleColumns: WiSortKey[];
   sort: WiSortState;
-  onSort: (column: WiSortKey) => void;
+  onSort: (column: WiGridSortKey) => void;
   columnFilters: Partial<Record<FilterableColumn, Set<string>>>;
   onFilterOpen: (col: FilterableColumn, anchorEl: HTMLButtonElement) => void;
   columnResizeProps: (key: WiSortKey) => ColumnResizeProps;
-  extraColumns: string[];
+  extraColumns: ExtraColumn[];
+  extraColumnResizeProps: (referenceName: string) => ColumnResizeProps;
 }) {
   return (
     <div
@@ -139,26 +147,32 @@ export function WiGridHeader({
         <WiSortHeaderButton
           key={col}
           column={col}
+          label={wiSortLabels[col]}
           sort={sort}
           onSort={onSort}
           filterActive={isFilterableColumn(col) && columnFilters[col] !== undefined}
           onFilterOpen={isFilterableColumn(col) ? (el) => onFilterOpen(col, el) : undefined}
           resizeHandle={
-            i < visibleColumns.length - 1 ? (
+            // The last track before the extra columns still needs a handle, so
+            // only the very last column in the grid goes without one.
+            i < visibleColumns.length - 1 || extraColumns.length > 0 ? (
               <ColumnResizeHandle {...columnResizeProps(col)} />
             ) : undefined
           }
         />
       ))}
-      {extraColumns.map((referenceName) => (
-        <div
-          key={referenceName}
-          role="columnheader"
-          className="min-w-0 truncate px-1 py-0.5"
-          title={referenceName}
-        >
-          {extraColumnLabel(referenceName)}
-        </div>
+      {extraColumns.map((column) => (
+        <WiSortHeaderButton
+          key={column.referenceName}
+          column={extraColumnKey(column.referenceName)}
+          label={extraColumnLabel(column.referenceName)}
+          title={column.referenceName}
+          sort={sort}
+          onSort={onSort}
+          resizeHandle={
+            <ColumnResizeHandle {...extraColumnResizeProps(column.referenceName)} />
+          }
+        />
       ))}
     </div>
   );
