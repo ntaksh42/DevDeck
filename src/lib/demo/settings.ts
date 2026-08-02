@@ -74,6 +74,7 @@ export const DEFAULT_DEMO_SETTINGS: AppSettings = {
   experimentalFeaturesEnabled: false,
   experimentalUsageStats: false,
   experimentalRetryToasts: false,
+  experimentalDiagnosticsExport: false,
   experimentalAutoUpdateCheck: false,
 };
 
@@ -166,10 +167,72 @@ export function applyDemoSettingsUpdate(
       input && "experimentalRetryToasts" in input
         ? Boolean(input.experimentalRetryToasts)
         : current.experimentalRetryToasts,
+    experimentalDiagnosticsExport:
+      input && "experimentalDiagnosticsExport" in input
+        ? Boolean(input.experimentalDiagnosticsExport)
+        : current.experimentalDiagnosticsExport,
     experimentalAutoUpdateCheck:
       input && "experimentalAutoUpdateCheck" in input
         ? Boolean(input.experimentalAutoUpdateCheck)
         : current.experimentalAutoUpdateCheck,
+  };
+}
+
+/**
+ * Browser-mode stand-in for `export_diagnostics`. Mirrors the Rust shape and
+ * redaction behaviour (organization ids replaced everywhere they appear,
+ * including inside sync scopes) but writes nothing and returns a fake path.
+ */
+export function demoDiagnosticsExport(
+  folderPath: string | null,
+  syncStates: SyncState[],
+  redactOrganizations: boolean,
+): { filePath: string; contents: string } {
+  if (!folderPath) {
+    throw new Error(
+      "Set the review result folder in Settings before exporting diagnostics.",
+    );
+  }
+
+  const orgIds: string[] = [];
+  for (const state of syncStates) {
+    if (!orgIds.includes(state.orgId)) orgIds.push(state.orgId);
+  }
+  const label = (orgId: string) => {
+    if (!redactOrganizations) return orgId;
+    const index = orgIds.indexOf(orgId);
+    return index >= 0 ? `<org-${index + 1}>` : "<org>";
+  };
+  const scrub = (text: string) =>
+    redactOrganizations
+      ? orgIds.reduce((acc, id, i) => acc.split(id).join(`<org-${i + 1}>`), text)
+      : text;
+
+  const report = {
+    appVersion: "0.1.16-demo",
+    os: "browser",
+    schemaVersion: 19,
+    connections: [
+      {
+        organization: label(demoOrganization.id),
+        providerKind: demoOrganization.providerKind,
+        authProvider: demoOrganization.authProvider,
+      },
+    ],
+    syncStates: syncStates.map((state) => ({
+      scope: scrub(state.scope),
+      organization: label(state.orgId),
+      lastSyncedAt: state.lastSyncedAt,
+      errorCount: state.errorCount,
+    })),
+    recentErrors: syncStates
+      .filter((state) => state.lastError)
+      .map((state) => `${label(state.orgId)}: ${scrub(state.lastError ?? "")}`),
+  };
+
+  return {
+    filePath: `${folderPath}\\devdeck-diagnostics-demo.json`,
+    contents: JSON.stringify(report, null, 2),
   };
 }
 

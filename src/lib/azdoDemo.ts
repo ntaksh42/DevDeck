@@ -8,6 +8,7 @@ import type {
   DeleteWorkItemCommentInput,
   DeletePullRequestCommentInput,
   EditPullRequestCommentInput,
+  ExportDiagnosticsInput,
   GetPullRequestFileDiffInput,
   GetPullRequestReviewInput,
   GetReviewResultPreviewInput,
@@ -44,6 +45,7 @@ import {
   DEFAULT_DEMO_SETTINGS,
   DEFAULT_DEMO_SYNC_STATES,
   applyDemoSettingsUpdate,
+  demoDiagnosticsExport,
   demoOrganization,
   demoReviewResultPreview,
   DEMO_PREVIEW_IMAGE_DATA_URL,
@@ -146,6 +148,14 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     case "get_review_result_preview": {
       const input = (args as { input?: GetReviewResultPreviewInput } | undefined)?.input;
       return demoReviewResultPreview(demoSettings.reviewResultFolderPath, input?.pullRequestId);
+    }
+    case "export_diagnostics": {
+      const input = (args as { input?: ExportDiagnosticsInput } | undefined)?.input;
+      return demoDiagnosticsExport(
+        demoSettings.reviewResultFolderPath,
+        demoSyncStates,
+        input?.redactOrganizations ?? false,
+      );
     }
     case "add_pat_organization": {
       const input = (args as { input?: AddPatOrganizationInput } | undefined)?.input;

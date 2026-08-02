@@ -4,6 +4,7 @@ import { getAppSettings } from '@/lib/azdoCommands';
 export type ExperimentalFlagName =
   | 'usageStats'
   | 'retryToasts'
+  | 'diagnosticsExport'
   | 'autoUpdateCheck';
 
 export type ExperimentalFlags = Record<ExperimentalFlagName, boolean>;
@@ -11,6 +12,7 @@ export type ExperimentalFlags = Record<ExperimentalFlagName, boolean>;
 const ALL_OFF: ExperimentalFlags = {
   usageStats: false,
   retryToasts: false,
+  diagnosticsExport: false,
   autoUpdateCheck: false,
 };
 
@@ -44,6 +46,7 @@ export function useExperimentalFlags(): ExperimentalFlags {
   return {
     usageStats: settings.experimentalUsageStats,
     retryToasts: settings.experimentalRetryToasts,
+    diagnosticsExport: settings.experimentalDiagnosticsExport,
     autoUpdateCheck: settings.experimentalAutoUpdateCheck,
   };
 }

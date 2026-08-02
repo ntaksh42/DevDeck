@@ -115,6 +115,7 @@ describe("App — Settings", () => {
           experimentalFeaturesEnabled: false,
           experimentalUsageStats: false,
           experimentalRetryToasts: false,
+          experimentalDiagnosticsExport: false,
           experimentalAutoUpdateCheck: false,
         },
       });
@@ -181,6 +182,7 @@ describe("App — Settings", () => {
           experimentalFeaturesEnabled: false,
           experimentalUsageStats: false,
           experimentalRetryToasts: false,
+          experimentalDiagnosticsExport: false,
           experimentalAutoUpdateCheck: false,
         },
       });
@@ -245,6 +247,7 @@ describe("App — Settings", () => {
           experimentalFeaturesEnabled: false,
           experimentalUsageStats: false,
           experimentalRetryToasts: false,
+          experimentalDiagnosticsExport: false,
           experimentalAutoUpdateCheck: false,
         },
       });
@@ -308,6 +311,7 @@ describe("App — Settings", () => {
           experimentalFeaturesEnabled: false,
           experimentalUsageStats: false,
           experimentalRetryToasts: false,
+          experimentalDiagnosticsExport: false,
           experimentalAutoUpdateCheck: false,
         },
       });
@@ -362,6 +366,7 @@ describe("App — Settings", () => {
           experimentalFeaturesEnabled: true,
           experimentalUsageStats: true,
           experimentalRetryToasts: false,
+          experimentalDiagnosticsExport: false,
           experimentalAutoUpdateCheck: true,
         }),
       });

@@ -56,6 +56,7 @@ const appSettingsSchema = z.object({
   experimentalFeaturesEnabled: z.boolean().default(false),
   experimentalUsageStats: z.boolean().default(false),
   experimentalRetryToasts: z.boolean().default(false),
+  experimentalDiagnosticsExport: z.boolean().default(false),
   experimentalAutoUpdateCheck: z.boolean().default(false),
 });
 
@@ -69,6 +70,17 @@ const reviewResultPreviewSchema = z.object({
 });
 
 export type ReviewResultPreview = z.infer<typeof reviewResultPreviewSchema>;
+
+const diagnosticsExportSchema = z.object({
+  filePath: z.string(),
+  contents: z.string(),
+});
+
+export type DiagnosticsExport = z.infer<typeof diagnosticsExportSchema>;
+
+export type ExportDiagnosticsInput = {
+  redactOrganizations?: boolean;
+};
 
 const organizationSchema = z.object({
   id: z.string(),
@@ -170,6 +182,7 @@ export type UpdateAppSettingsInput = {
   experimentalFeaturesEnabled?: boolean;
   experimentalUsageStats?: boolean;
   experimentalRetryToasts?: boolean;
+  experimentalDiagnosticsExport?: boolean;
   experimentalAutoUpdateCheck?: boolean;
 };
 
@@ -250,6 +263,13 @@ export async function getProviderCapabilities(): Promise<ProviderInfo> {
 export async function listSyncStates(): Promise<SyncState[]> {
   const result = await invokeCommand("list_sync_states");
   return syncStatesSchema.parse(result);
+}
+
+export async function exportDiagnostics(
+  input: ExportDiagnosticsInput = {},
+): Promise<DiagnosticsExport> {
+  const result = await invokeCommand("export_diagnostics", { input });
+  return diagnosticsExportSchema.parse(result);
 }
 
 export async function triggerSync(input: TriggerSyncInput = {}): Promise<void> {

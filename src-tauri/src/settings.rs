@@ -3,11 +3,14 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use chrono::Utc;
+
 use crate::db::{
     AppDatabase, AppSettings, NotificationRule, DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
     DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS, REVIEW_STALE_THRESHOLD_DAY_OPTIONS,
     WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS,
 };
+use crate::diagnostics::{build_report, report_to_json, ConnectionFacts, DiagnosticsInput};
 use crate::error::{AppError, Result};
 
 #[derive(Debug, Deserialize)]
@@ -29,6 +32,7 @@ pub struct UpdateAppSettingsInput {
     pub experimental_features_enabled: Option<bool>,
     pub experimental_usage_stats: Option<bool>,
     pub experimental_retry_toasts: Option<bool>,
+    pub experimental_diagnostics_export: Option<bool>,
     pub experimental_auto_update_check: Option<bool>,
 }
 
@@ -36,6 +40,23 @@ pub struct UpdateAppSettingsInput {
 #[serde(rename_all = "camelCase")]
 pub struct GetReviewResultPreviewInput {
     pub pull_request_id: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportDiagnosticsInput {
+    /// Replace organization identifiers with `<org-N>` placeholders.
+    #[serde(default)]
+    pub redact_organizations: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagnosticsExport {
+    pub file_path: String,
+    /// Returned so the user can see exactly what is being shared before
+    /// attaching the file to a bug report.
+    pub contents: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -63,6 +84,63 @@ impl SettingsService {
 
     pub fn update_normalized(&self, settings: AppSettings) -> Result<AppSettings> {
         self.db.update_app_settings(settings)
+    }
+
+    /// Writes a diagnostic report next to the review results, since that folder
+    /// is already a user-chosen location the app is allowed to write to. Using
+    /// it avoids taking a dialog-plugin dependency just for this.
+    pub fn export_diagnostics(
+        &self,
+        input: ExportDiagnosticsInput,
+        app_version: String,
+    ) -> Result<DiagnosticsExport> {
+        let settings = self.db.get_app_settings()?;
+        let Some(folder_path) = settings.review_result_folder_path else {
+            return Err(AppError::InvalidInput(
+                "Set the review result folder in Settings before exporting diagnostics."
+                    .to_string(),
+            ));
+        };
+        let folder = PathBuf::from(&folder_path);
+        if !folder.is_dir() {
+            return Err(AppError::InvalidInput(format!(
+                "review result folder does not exist: {}",
+                folder.display()
+            )));
+        }
+
+        // Only the publishable fields are carried over; `credential_key` and the
+        // authenticated user stay behind.
+        let connections = self
+            .db
+            .list_organizations()?
+            .into_iter()
+            .map(|org| ConnectionFacts {
+                id: org.id,
+                provider_kind: org.provider_kind,
+                auth_provider: org.auth_provider,
+            })
+            .collect();
+
+        let report = build_report(DiagnosticsInput {
+            app_version,
+            os: std::env::consts::OS.to_string(),
+            connections,
+            sync_states: self.db.list_sync_states()?,
+            redact_organizations: input.redact_organizations,
+        });
+        let contents = report_to_json(&report);
+
+        let file_path = folder.join(format!(
+            "devdeck-diagnostics-{}.json",
+            Utc::now().format("%Y%m%d-%H%M%S")
+        ));
+        fs::write(&file_path, &contents)?;
+
+        Ok(DiagnosticsExport {
+            file_path: file_path.display().to_string(),
+            contents,
+        })
     }
 }
 
@@ -98,6 +176,7 @@ pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
         experimental_features_enabled: input.experimental_features_enabled.unwrap_or(false),
         experimental_usage_stats: input.experimental_usage_stats.unwrap_or(false),
         experimental_retry_toasts: input.experimental_retry_toasts.unwrap_or(false),
+        experimental_diagnostics_export: input.experimental_diagnostics_export.unwrap_or(false),
         experimental_auto_update_check: input.experimental_auto_update_check.unwrap_or(false),
     }
 }

@@ -31,6 +31,8 @@ export function settingsInput(
     experimentalFeaturesEnabled: settings?.experimentalFeaturesEnabled ?? false,
     experimentalUsageStats: settings?.experimentalUsageStats ?? false,
     experimentalRetryToasts: settings?.experimentalRetryToasts ?? false,
+    experimentalDiagnosticsExport:
+      settings?.experimentalDiagnosticsExport ?? false,
     experimentalAutoUpdateCheck: settings?.experimentalAutoUpdateCheck ?? false,
     ...input,
   };

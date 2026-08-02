@@ -11,6 +11,7 @@ import { settingsInput } from './settingsHelpers';
 type ExperimentFields = {
   experimentalUsageStats: boolean;
   experimentalRetryToasts: boolean;
+  experimentalDiagnosticsExport: boolean;
   experimentalAutoUpdateCheck: boolean;
 };
 
@@ -32,6 +33,12 @@ const EXPERIMENTS: {
       'Show a dismissible toast with a Retry button when an action fails.',
   },
   {
+    field: 'experimentalDiagnosticsExport',
+    label: 'Diagnostics export',
+    description:
+      'Write a diagnostic report you can attach to a bug report. Never includes tokens or credentials.',
+  },
+  {
     field: 'experimentalAutoUpdateCheck',
     label: 'Automatic update check',
     description: 'Check for a new release on startup instead of only on demand.',
@@ -41,6 +48,7 @@ const EXPERIMENTS: {
 const ALL_OFF: ExperimentFields = {
   experimentalUsageStats: false,
   experimentalRetryToasts: false,
+  experimentalDiagnosticsExport: false,
   experimentalAutoUpdateCheck: false,
 };
 
@@ -60,6 +68,8 @@ export function ExperimentalSettings() {
     setExperiments({
       experimentalUsageStats: settings?.experimentalUsageStats ?? false,
       experimentalRetryToasts: settings?.experimentalRetryToasts ?? false,
+      experimentalDiagnosticsExport:
+        settings?.experimentalDiagnosticsExport ?? false,
       experimentalAutoUpdateCheck:
         settings?.experimentalAutoUpdateCheck ?? false,
     });

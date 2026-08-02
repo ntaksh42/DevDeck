@@ -8,6 +8,7 @@ mod code_search;
 mod commands;
 mod commits;
 mod db;
+mod diagnostics;
 mod error;
 mod github;
 mod orgs;
@@ -145,6 +146,7 @@ pub fn run() {
             commands::settings::update_app_settings,
             commands::settings::get_review_result_preview,
             commands::settings::list_sync_states,
+            commands::settings::export_diagnostics,
             commands::snooze::snooze_item,
             commands::snooze::unsnooze_item,
             commands::snooze::list_snoozed_items,
