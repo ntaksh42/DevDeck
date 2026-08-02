@@ -53,6 +53,13 @@ pub struct AppSettings {
     pub review_stale_threshold_days: i64,
     pub work_item_stale_threshold_days: i64,
     pub notification_rules: Vec<NotificationRule>,
+    /// Master switch for the experimental section. Every `experimental_*` flag
+    /// below is only in effect while this is true, so turning this off disables
+    /// all experiments at once without losing the individual choices.
+    pub experimental_features_enabled: bool,
+    pub experimental_usage_stats: bool,
+    pub experimental_retry_toasts: bool,
+    pub experimental_auto_update_check: bool,
 }
 
 pub const DEFAULT_REVIEW_STALE_THRESHOLD_DAYS: i64 = 3;
@@ -76,6 +83,10 @@ impl Default for AppSettings {
             review_stale_threshold_days: DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
             work_item_stale_threshold_days: DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
             notification_rules: Vec::new(),
+            experimental_features_enabled: false,
+            experimental_usage_stats: false,
+            experimental_retry_toasts: false,
+            experimental_auto_update_check: false,
         }
     }
 }
@@ -162,6 +173,18 @@ pub(crate) fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
         review_stale_threshold_days: get_review_stale_threshold_days(conn)?,
         work_item_stale_threshold_days: get_work_item_stale_threshold_days(conn)?,
         notification_rules: get_notification_rules(conn)?,
+        experimental_features_enabled: get_bool_setting(
+            conn,
+            "experimental_features_enabled",
+            false,
+        )?,
+        experimental_usage_stats: get_bool_setting(conn, "experimental_usage_stats", false)?,
+        experimental_retry_toasts: get_bool_setting(conn, "experimental_retry_toasts", false)?,
+        experimental_auto_update_check: get_bool_setting(
+            conn,
+            "experimental_auto_update_check",
+            false,
+        )?,
     })
 }
 
@@ -267,6 +290,26 @@ pub(crate) fn update_app_settings(conn: &Connection, settings: AppSettings) -> R
     let rules_json =
         serde_json::to_string(&settings.notification_rules).unwrap_or_else(|_| "[]".to_string());
     set_setting(conn, "notification_rules", Some(&rules_json))?;
+    set_bool_setting(
+        conn,
+        "experimental_features_enabled",
+        settings.experimental_features_enabled,
+    )?;
+    set_bool_setting(
+        conn,
+        "experimental_usage_stats",
+        settings.experimental_usage_stats,
+    )?;
+    set_bool_setting(
+        conn,
+        "experimental_retry_toasts",
+        settings.experimental_retry_toasts,
+    )?;
+    set_bool_setting(
+        conn,
+        "experimental_auto_update_check",
+        settings.experimental_auto_update_check,
+    )?;
     get_app_settings(conn)
 }
 

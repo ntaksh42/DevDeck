@@ -255,6 +255,10 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
 | `review_stale_threshold_days` | レビュー PR を stale 扱いする日数 (候補 2/3/5/7、既定 3)。 |
 | `work_item_stale_threshold_days` | 作業項目を stale 扱いする日数 (候補 2/3/5/7、既定 7)。 |
 | `notification_rules` | 通知フィルタルール配列。types / projects / repositories でフィルタし、`mute` が true なら一致時に抑制、false なら一致時のみ通知する。 |
+| `experimental_features_enabled` | 実験的機能のマスタースイッチ。false の間は以下の個別フラグを保存していても無効。既定 false。 |
+| `experimental_usage_stats` | 自分のレビュー投票数・解決スレッド数・状態変更数をローカルに集計して表示する。外部送信は行わない。既定 false。 |
+| `experimental_retry_toasts` | 操作失敗時に再試行ボタン付きトーストを表示する。既定 false。 |
+| `experimental_auto_update_check` | 起動時に自動で更新を確認する。既定 false。 |
 
 ---
 

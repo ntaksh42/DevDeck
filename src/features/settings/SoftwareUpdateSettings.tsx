@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Download, Loader2, RefreshCw } from "lucide-react";
 import { isTauriRuntime } from "@/lib/runtime";
 import {
@@ -6,6 +6,7 @@ import {
   installUpdateAndRelaunch,
   type AvailableUpdate,
 } from "@/lib/softwareUpdate";
+import { useExperimentalFlag } from "./useExperimentalFlags";
 
 type Status =
   | { kind: "idle" }
@@ -18,6 +19,8 @@ type Status =
 export function SoftwareUpdateSettings() {
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const supported = isTauriRuntime();
+  const autoCheck = useExperimentalFlag("autoUpdateCheck");
+  const autoChecked = useRef(false);
 
   async function check() {
     setStatus({ kind: "checking" });
@@ -32,6 +35,16 @@ export function SoftwareUpdateSettings() {
       });
     }
   }
+
+  // Experimental: check once per mount instead of waiting for the button. The
+  // ref keeps a settings refetch from re-triggering the check.
+  useEffect(() => {
+    if (!supported || !autoCheck || autoChecked.current) {
+      return;
+    }
+    autoChecked.current = true;
+    void check();
+  }, [supported, autoCheck]);
 
   async function install() {
     setStatus({ kind: "installing" });

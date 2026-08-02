@@ -176,6 +176,10 @@ fn app_settings_can_be_saved_and_cleared() {
                 repositories: Vec::new(),
                 mute: false,
             }],
+            experimental_features_enabled: true,
+            experimental_usage_stats: true,
+            experimental_retry_toasts: false,
+            experimental_auto_update_check: true,
         },
     )
     .unwrap();
@@ -187,6 +191,10 @@ fn app_settings_can_be_saved_and_cleared() {
     assert_eq!(saved.work_item_stale_threshold_days, 14);
     assert_eq!(saved.notification_rules.len(), 1);
     assert_eq!(saved.notification_rules[0].types, vec!["reviewRequested"]);
+    assert!(saved.experimental_features_enabled);
+    assert!(saved.experimental_usage_stats);
+    assert!(!saved.experimental_retry_toasts);
+    assert!(saved.experimental_auto_update_check);
     assert_eq!(saved.notification_rules[0].projects, vec!["Platform"]);
     assert_eq!(saved.show_window_hotkey.as_deref(), Some("Ctrl+Alt+D"));
     assert!(saved.read_only_validation_mode_enabled);

@@ -112,6 +112,10 @@ describe("App — Settings", () => {
           reviewStaleThresholdDays: 3,
           workItemStaleThresholdDays: 7,
           notificationRules: [],
+          experimentalFeaturesEnabled: false,
+          experimentalUsageStats: false,
+          experimentalRetryToasts: false,
+          experimentalAutoUpdateCheck: false,
         },
       });
     });
@@ -174,6 +178,10 @@ describe("App — Settings", () => {
           reviewStaleThresholdDays: 3,
           workItemStaleThresholdDays: 7,
           notificationRules: [],
+          experimentalFeaturesEnabled: false,
+          experimentalUsageStats: false,
+          experimentalRetryToasts: false,
+          experimentalAutoUpdateCheck: false,
         },
       });
     });
@@ -234,6 +242,10 @@ describe("App — Settings", () => {
           reviewStaleThresholdDays: 3,
           workItemStaleThresholdDays: 7,
           notificationRules: [],
+          experimentalFeaturesEnabled: false,
+          experimentalUsageStats: false,
+          experimentalRetryToasts: false,
+          experimentalAutoUpdateCheck: false,
         },
       });
     });
@@ -293,7 +305,130 @@ describe("App — Settings", () => {
           reviewStaleThresholdDays: 3,
           workItemStaleThresholdDays: 7,
           notificationRules: [],
+          experimentalFeaturesEnabled: false,
+          experimentalUsageStats: false,
+          experimentalRetryToasts: false,
+          experimentalAutoUpdateCheck: false,
         },
+      });
+    });
+    expect(await screen.findByText("Validation mode saved.")).toBeTruthy();
+  });
+
+  function mockSettings(settings: Record<string, unknown> = {}) {
+    invokeMock.mockImplementation((command: string, args?: unknown) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "get_active_organization") {
+        return Promise.resolve(organization);
+      }
+      if (command === "get_app_settings") {
+        return Promise.resolve({
+          reviewResultFolderPath: null,
+          showWindowHotkey: null,
+          ...settings,
+        });
+      }
+      if (command === "update_app_settings") {
+        return Promise.resolve((args as { input: unknown }).input);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+  }
+
+  async function openSettings() {
+    renderApp();
+    await screen.findByText("No pull requests assigned to you.");
+    fireEvent.click(await screen.findByRole("button", { name: "Settings" }));
+    expect(await screen.findByRole("heading", { name: "Experimental" })).toBeTruthy();
+  }
+
+  it("saves experimental settings", async () => {
+    mockSettings();
+    await openSettings();
+
+    fireEvent.click(screen.getByLabelText("Enable experimental features"));
+    fireEvent.click(screen.getByLabelText("Local usage stats"));
+    fireEvent.click(screen.getByLabelText("Automatic update check"));
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[4]);
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("update_app_settings", {
+        input: expect.objectContaining({
+          experimentalFeaturesEnabled: true,
+          experimentalUsageStats: true,
+          experimentalRetryToasts: false,
+          experimentalAutoUpdateCheck: true,
+        }),
+      });
+    });
+    expect(await screen.findByText("Experimental settings saved.")).toBeTruthy();
+  });
+
+  it("disables experimental sub-toggles while the master is off", async () => {
+    mockSettings({ experimentalFeaturesEnabled: false, experimentalUsageStats: true });
+    await openSettings();
+
+    await waitFor(() => {
+      expect((screen.getByLabelText("Local usage stats") as HTMLInputElement).disabled).toBe(true);
+    });
+
+    fireEvent.click(screen.getByLabelText("Enable experimental features"));
+    expect((screen.getByLabelText("Local usage stats") as HTMLInputElement).disabled).toBe(false);
+  });
+
+  // Turning the master off must not discard the individual choices, so they are
+  // still there when experiments are re-enabled.
+  it("keeps individual experimental flags when the master is turned off", async () => {
+    mockSettings({
+      experimentalFeaturesEnabled: true,
+      experimentalUsageStats: true,
+    });
+    await openSettings();
+
+    await waitFor(() => {
+      expect((screen.getByLabelText("Local usage stats") as HTMLInputElement).checked).toBe(true);
+    });
+
+    fireEvent.click(screen.getByLabelText("Enable experimental features"));
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[4]);
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("update_app_settings", {
+        input: expect.objectContaining({
+          experimentalFeaturesEnabled: false,
+          experimentalUsageStats: true,
+        }),
+      });
+    });
+  });
+
+  // update_app_settings is a full replace, so every section must send the whole
+  // settings object. Without the experimental fallbacks in settingsInput(),
+  // saving an unrelated section silently resets the experimental flags.
+  it("keeps experimental flags when another section is saved", async () => {
+    mockSettings({
+      experimentalFeaturesEnabled: true,
+      experimentalUsageStats: true,
+      experimentalAutoUpdateCheck: true,
+    });
+    await openSettings();
+
+    fireEvent.click(screen.getByLabelText("Read-only validation mode"));
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[3]);
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("update_app_settings", {
+        input: expect.objectContaining({
+          readOnlyValidationModeEnabled: true,
+          experimentalFeaturesEnabled: true,
+          experimentalUsageStats: true,
+          experimentalAutoUpdateCheck: true,
+        }),
       });
     });
     expect(await screen.findByText("Validation mode saved.")).toBeTruthy();

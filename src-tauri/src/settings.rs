@@ -26,6 +26,10 @@ pub struct UpdateAppSettingsInput {
     pub review_stale_threshold_days: Option<i64>,
     pub work_item_stale_threshold_days: Option<i64>,
     pub notification_rules: Option<Vec<NotificationRule>>,
+    pub experimental_features_enabled: Option<bool>,
+    pub experimental_usage_stats: Option<bool>,
+    pub experimental_retry_toasts: Option<bool>,
+    pub experimental_auto_update_check: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -91,6 +95,10 @@ pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
             .map(normalize_notification_rule)
             .filter(|rule| !rule.is_empty())
             .collect(),
+        experimental_features_enabled: input.experimental_features_enabled.unwrap_or(false),
+        experimental_usage_stats: input.experimental_usage_stats.unwrap_or(false),
+        experimental_retry_toasts: input.experimental_retry_toasts.unwrap_or(false),
+        experimental_auto_update_check: input.experimental_auto_update_check.unwrap_or(false),
     }
 }
 

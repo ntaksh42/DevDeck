@@ -50,6 +50,13 @@ const appSettingsSchema = z.object({
     .int()
     .default(DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS),
   notificationRules: z.array(notificationRuleSchema).default([]),
+  // Master switch for the experimental section. Individual experimental flags
+  // below only take effect while this is on; read them through
+  // useExperimentalFlags so the master switch cannot be bypassed.
+  experimentalFeaturesEnabled: z.boolean().default(false),
+  experimentalUsageStats: z.boolean().default(false),
+  experimentalRetryToasts: z.boolean().default(false),
+  experimentalAutoUpdateCheck: z.boolean().default(false),
 });
 
 export type AppSettings = z.infer<typeof appSettingsSchema>;
@@ -160,6 +167,10 @@ export type UpdateAppSettingsInput = {
   reviewStaleThresholdDays?: number;
   workItemStaleThresholdDays?: number;
   notificationRules?: NotificationRule[];
+  experimentalFeaturesEnabled?: boolean;
+  experimentalUsageStats?: boolean;
+  experimentalRetryToasts?: boolean;
+  experimentalAutoUpdateCheck?: boolean;
 };
 
 export type GetReviewResultPreviewInput = {

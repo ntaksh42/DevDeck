@@ -28,6 +28,10 @@ export function settingsInput(
       settings?.workItemStaleThresholdDays ??
       DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
     notificationRules: settings?.notificationRules ?? [],
+    experimentalFeaturesEnabled: settings?.experimentalFeaturesEnabled ?? false,
+    experimentalUsageStats: settings?.experimentalUsageStats ?? false,
+    experimentalRetryToasts: settings?.experimentalRetryToasts ?? false,
+    experimentalAutoUpdateCheck: settings?.experimentalAutoUpdateCheck ?? false,
     ...input,
   };
 }

@@ -71,6 +71,10 @@ export const DEFAULT_DEMO_SETTINGS: AppSettings = {
   reviewStaleThresholdDays: DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
   workItemStaleThresholdDays: DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
   notificationRules: [],
+  experimentalFeaturesEnabled: false,
+  experimentalUsageStats: false,
+  experimentalRetryToasts: false,
+  experimentalAutoUpdateCheck: false,
 };
 
 export const DEFAULT_DEMO_SYNC_STATES: SyncState[] = [
@@ -150,6 +154,22 @@ export function applyDemoSettingsUpdate(
       input && "notificationRules" in input
         ? (input.notificationRules ?? [])
         : current.notificationRules,
+    experimentalFeaturesEnabled:
+      input && "experimentalFeaturesEnabled" in input
+        ? Boolean(input.experimentalFeaturesEnabled)
+        : current.experimentalFeaturesEnabled,
+    experimentalUsageStats:
+      input && "experimentalUsageStats" in input
+        ? Boolean(input.experimentalUsageStats)
+        : current.experimentalUsageStats,
+    experimentalRetryToasts:
+      input && "experimentalRetryToasts" in input
+        ? Boolean(input.experimentalRetryToasts)
+        : current.experimentalRetryToasts,
+    experimentalAutoUpdateCheck:
+      input && "experimentalAutoUpdateCheck" in input
+        ? Boolean(input.experimentalAutoUpdateCheck)
+        : current.experimentalAutoUpdateCheck,
   };
 }
 
