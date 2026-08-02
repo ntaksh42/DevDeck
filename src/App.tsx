@@ -31,6 +31,7 @@ import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { storedNumber, focusPrimaryGrid } from "@/lib/utils";
 import { HelpDialog } from "@/components/HelpDialog";
 import { CommandPalette } from "@/components/CommandPalette";
+import { ToastHost } from "@/components/ToastHost";
 import {
   loadWorkItemQueryViews,
   type WorkItemQueryView,
@@ -448,6 +449,7 @@ function AppShell() {
           onOpenView={setView}
         />
       </main>
+      <ToastHost />
       {helpOpen && <HelpDialog onClose={() => closeHelp()} />}
       {commandPaletteOpen && (
         <CommandPalette

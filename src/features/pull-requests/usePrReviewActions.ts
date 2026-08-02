@@ -13,9 +13,12 @@ import {
   type PullRequestAction,
   type ReviewPullRequestSummary,
 } from "@/lib/azdoCommands";
+import { recordUsage } from "@/lib/usageStats";
+import { useExperimentalFlags } from "@/features/settings/useExperimentalFlags";
 
 export function usePrReviewActions(pr: ReviewPullRequestSummary) {
   const queryClient = useQueryClient();
+  const experimental = useExperimentalFlags();
   const [actionError, setActionError] = useState<string | null>(null);
 
   // Reset error state when another PR is selected.
@@ -44,7 +47,14 @@ export function usePrReviewActions(pr: ReviewPullRequestSummary) {
 
   const statusMutation = useMutation({
     mutationFn: setPullRequestThreadStatus,
-    onSuccess: () => { setActionError(null); invalidateReview(); },
+    onSuccess: (_data, variables) => {
+      // Only closing a thread counts as resolving one; reopening does not.
+      if (variables.status === "closed") {
+        recordUsage("resolvedThreads", experimental.usageStats);
+      }
+      setActionError(null);
+      invalidateReview();
+    },
     onError: (mutationError) => setActionError(commandErrorMessage(mutationError)),
   });
 

@@ -15,6 +15,8 @@ import {
   type WorkItemSummary,
 } from '@/lib/azdoCommands';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
+import { recordUsage } from '@/lib/usageStats';
+import { useExperimentalFlags } from '@/features/settings/useExperimentalFlags';
 import { invalidateWorkItemMutationCaches, workItemQueryKeys } from './queryKeys';
 import { workItemSummaryKey, setPriorityExtraField } from './workItemsGridHelpers';
 import { summarizeBy } from './BulkActionBar';
@@ -34,6 +36,7 @@ export function useBulkActions({
   setCheckedIds: React.Dispatch<React.SetStateAction<Set<string>>>;
   setLastCheckedIndex: React.Dispatch<React.SetStateAction<number | null>>;
 }) {
+  const experimental = useExperimentalFlags();
   const [bulkStateOpen, setBulkStateOpen] = useState(false);
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [bulkPriorityOpen, setBulkPriorityOpen] = useState(false);
@@ -159,6 +162,7 @@ export function useBulkActions({
       return { results: allResults, succeededKeys };
     },
     onSuccess: ({ results, succeededKeys }, state) => {
+      recordUsage('stateChanges', experimental.usageStats, succeededKeys.size);
       if (succeededKeys.size > 0) {
         setItemOverrides((current) => {
           const next = new Map(current);

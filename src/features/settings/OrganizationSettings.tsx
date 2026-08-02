@@ -18,6 +18,7 @@ import { ThemeSettings } from './ThemeSettings';
 import { DataCacheSettings } from './DataCacheSettings';
 import { ValidationModeSettings } from './ValidationModeSettings';
 import { ExperimentalSettings } from './ExperimentalSettings';
+import { ExperimentalUsageStats } from './ExperimentalUsageStats';
 import { DesktopNotificationSettings } from './DesktopNotificationSettings';
 import { NotificationRulesSettings } from './NotificationRulesSettings';
 import { ReviewResultFolderSettings } from './ReviewResultFolderSettings';
@@ -77,6 +78,7 @@ export function OrganizationSettings({
       <SoftwareUpdateSettings />
       <ValidationModeSettings />
       <ExperimentalSettings />
+      <ExperimentalUsageStats />
       <div className="overflow-hidden rounded-md border border-border bg-card">
         <div className="border-b border-border px-3 py-2">
           <h2 className="text-base font-semibold">Connections</h2>

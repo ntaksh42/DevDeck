@@ -10,6 +10,9 @@ import {
   type ReviewPullRequestSummary,
 } from '@/lib/azdoCommands';
 import { useActiveOrganizationId } from '@/lib/useActiveConnection';
+import { pushToast } from '@/lib/toast';
+import { recordUsage } from '@/lib/usageStats';
+import { useExperimentalFlags } from '@/features/settings/useExperimentalFlags';
 import { matchesAllSearchTerms, splitSearchTerms, storedNumber } from '@/lib/utils';
 import { useGridColumns } from '@/lib/useGridColumns';
 import { useColumnVisibility } from '@/lib/useColumnVisibility';
@@ -118,6 +121,7 @@ export function useMyReviewsGrid({
   const staleThresholdDays =
     settingsQuery.data?.reviewStaleThresholdDays ?? DEFAULT_REVIEW_STALE_THRESHOLD_DAYS;
   const queryClient = useQueryClient();
+  const experimental = useExperimentalFlags();
   const voteMutation = useMutation({
     mutationFn: submitPullRequestVote,
     onSuccess: () => {
@@ -363,11 +367,19 @@ export function useMyReviewsGrid({
       { ...prLocator(pr), vote },
       {
         onSuccess: () => {
+          recordUsage('votes', experimental.usageStats);
           setCopyToast(`Voted: ${label}`);
           setTimeout(() => setCopyToast(null), 1500);
         },
         onError: (error) => {
-          setCopyToast(`Vote failed: ${commandErrorMessage(error)}`);
+          const message = `Vote failed: ${commandErrorMessage(error)}`;
+          // Experimental: a retryable toast replaces the transient message so
+          // the vote can be reissued without finding the row again.
+          if (experimental.retryToasts) {
+            pushToast(message, () => voteSelected(vote, label));
+            return;
+          }
+          setCopyToast(message);
           setTimeout(() => setCopyToast(null), 3000);
         },
       },
