@@ -43,7 +43,7 @@ export const WorkItemGridRow = forwardRef<
     extraColumns: string[];
     staleThresholdDays: number;
     rowColorClass: string | null;
-    onSelect: () => void;
+    onSelect: (modifiers: { shiftKey: boolean; ctrlKey: boolean }) => void;
     onCheckedChange: (checked: boolean, shiftKey: boolean) => void;
   }
 >(({ item, selected, checked, unread, columnTemplate, visibleColumns, extraColumns, staleThresholdDays, rowColorClass, onSelect, onCheckedChange }, ref) => {
@@ -54,8 +54,8 @@ export const WorkItemGridRow = forwardRef<
     ref={ref}
     tabIndex={selected ? 0 : -1}
     role="row"
-    aria-selected={selected}
-    onClick={onSelect}
+    aria-selected={selected || checked}
+    onClick={(e) => onSelect({ shiftKey: e.shiftKey, ctrlKey: e.ctrlKey || e.metaKey })}
     onKeyDown={(e) => {
       if ((e.target as HTMLElement).closest("button,input")) return;
       if (e.key === "Enter") {

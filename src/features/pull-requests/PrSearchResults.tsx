@@ -12,6 +12,8 @@ import {
 import { useGridColumns } from '@/lib/useGridColumns';
 import { useColumnVisibility } from '@/lib/useColumnVisibility';
 import { useGridVirtualizer } from '@/lib/useGridVirtualizer';
+import { useRangeSelection } from '@/lib/useRangeSelection';
+import { copyRowUrls } from '@/lib/copyUrls';
 import { openExternalUrl } from '@/lib/openExternal';
 import { recordRecentPullRequest } from '@/lib/recentItems';
 import { ColumnResizeHandle, ResizeHandle } from '@/components/ResizeHandle';
@@ -158,11 +160,21 @@ export function PullRequestResults({
     return `${shown} pull request${results.length === 1 ? "" : "s"}${suffix}`;
   }, [filteredResults.length, hasActiveColumnFilters, loading, results.length, searched, total, truncated]);
 
-  function moveSelectionTo(index: number) {
+  const selection = useRangeSelection({
+    rows: filteredResults,
+    keyOf: (pr) => `${pr.repositoryId}:${pr.pullRequestId}`,
+    selectedIndex,
+  });
+
+  // `extend` grows the multi-selection from its anchor; otherwise the move
+  // starts a fresh single-row selection.
+  function moveSelectionTo(index: number, extend = false) {
     const next = clamp(index, 0, filteredResults.length - 1);
     restoreFocusRef.current = true;
     scrollRowIntoView(next);
     setSelectedIndex(next);
+    if (extend) selection.extendTo(next);
+    else selection.clear();
   }
 
   function moveSelection(delta: number) {
@@ -224,6 +236,9 @@ export function PullRequestResults({
         e.preventDefault();
         const pr = filteredResults[selectedIndex];
         if (pr?.webUrl) openExternalUrl(pr.webUrl);
+      } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "c" || e.key === "C")) {
+        e.preventDefault();
+        void copyRowUrls(selection.selectedRows, setCopyToast);
       }
       return;
     }
@@ -231,6 +246,11 @@ export function PullRequestResults({
       e.preventDefault();
       setOpenFilterCol(null);
       setFilterAnchorRect(null);
+      return;
+    }
+    if (e.key === "Escape" && selection.selectedKeys.size > 0) {
+      e.preventDefault();
+      selection.clear();
       return;
     }
     if (e.key === "/") {
@@ -244,6 +264,11 @@ export function PullRequestResults({
       return;
     }
     if (filteredResults.length === 0) return;
+    if (e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      e.preventDefault();
+      moveSelectionTo(selectedIndex + (e.key === "ArrowDown" ? 1 : -1), true);
+      return;
+    }
     if (e.key === "ArrowDown" || e.key === "j" || e.key === "J") { e.preventDefault(); moveSelection(1); }
     else if (e.key === "ArrowUp" || e.key === "k" || e.key === "K") { e.preventDefault(); moveSelection(-1); }
     else if (e.key === "Home") { e.preventDefault(); moveSelectionTo(0); }
@@ -305,6 +330,7 @@ export function PullRequestResults({
         <h2 className="text-base font-semibold">Results</h2>
         <span className="flex items-center gap-2 text-sm text-muted-foreground">
           {countLabel}
+          {selection.isMultiSelect ? `· ${selection.selectedKeys.size} selected` : ""}
           <ActiveFilters count={activeFilterCount} onClear={clearAllFilters} />
           <button
             type="button"
@@ -392,9 +418,14 @@ export function PullRequestResults({
                     ref={(el) => { rowRefs.current[index] = el; }}
                     pr={pr}
                     selected={index === selectedIndex}
+                    inMultiSelection={selection.selectedKeys.has(
+                      `${pr.repositoryId}:${pr.pullRequestId}`,
+                    )}
                     columnTemplate={columnTemplate}
                     visibleColumns={visibleColumns}
-                    onSelect={() => setSelectedIndex(index)}
+                    onSelect={(modifiers) =>
+                      selection.handleRowClick(index, modifiers, setSelectedIndex)
+                    }
                   />
                 );
               })}
@@ -425,7 +456,11 @@ export function PullRequestResults({
       />
 
       {copyToast && (
-        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1 text-xs text-background shadow-lg">
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1 text-xs text-background shadow-lg"
+        >
           {copyToast}
         </div>
       )}

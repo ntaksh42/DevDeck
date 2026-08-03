@@ -11,6 +11,7 @@ import { ColumnFilterDropdown } from '@/components/ColumnFilterDropdown';
 import { SortHeaderButton } from '@/components/SortHeaderButton';
 import { LoadingState, ErrorState } from '@/components/StateDisplay';
 import { openExternalUrl } from '@/lib/openExternal';
+import { copyRowUrls } from '@/lib/copyUrls';
 import { toggleTriageArchived } from '@/lib/triage';
 import { PrReviewPanel } from './PrReviewPanel';
 import { ReviewPrRow } from './ReviewPrRow';
@@ -57,11 +58,24 @@ export function MyReviewsGrid({
 
     if (buttonTarget && (e.key === 'Enter' || e.key === ' ')) return;
 
+    // Escape drops the row multi-selection first — it is the most recent thing
+    // the user built up. Handled before the filter/vote shortcuts below so a
+    // multi-selection never survives an Escape.
+    if (e.key === 'Escape' && !g.openFilterCol && g.selectedKeys.size > 0) {
+      e.preventDefault();
+      g.clearMultiSelection();
+      return;
+    }
+
     if (e.ctrlKey || e.metaKey || e.altKey) {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key === 'Enter') {
         e.preventDefault();
         const pr = g.sortedPrs[g.selectedIndex];
         if (pr?.webUrl) openExternalUrl(pr.webUrl);
+      } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'c' || e.key === 'C')) {
+        // Copies the whole shift-selection; `c` alone stays the single-row copy.
+        e.preventDefault();
+        void copyRowUrls(g.selectedPrs, g.setCopyToast, 1500);
       }
       return;
     }
@@ -290,11 +304,14 @@ export function MyReviewsGrid({
                           returned={g.returnedKeys.has(reviewTriageKey(row.pr))}
                           visibleColumns={g.visibleColumns}
                           staleThresholdDays={g.staleThresholdDays}
-                          onSelect={({ shiftKey }) => {
+                          onSelect={({ shiftKey, ctrlKey }) => {
                             if (shiftKey) {
                               const anchorKey = g.selectionAnchor ?? reviewTriageKey(g.sortedPrs[g.selectedIndex] ?? row.pr);
                               g.setSelectedIndex(row.prIndex);
                               g.extendSelectionToIndex(row.prIndex, anchorKey);
+                            } else if (ctrlKey) {
+                              g.toggleSelectionAt(row.prIndex);
+                              g.setSelectedIndex(row.prIndex);
                             } else {
                               g.clearMultiSelection();
                               g.setSelectedIndex(row.prIndex);
