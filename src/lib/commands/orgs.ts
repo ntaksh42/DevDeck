@@ -57,6 +57,7 @@ const appSettingsSchema = z.object({
   experimentalUsageStats: z.boolean().default(false),
   experimentalRetryToasts: z.boolean().default(false),
   experimentalDiagnosticsExport: z.boolean().default(false),
+  experimentalCrossOrgSummary: z.boolean().default(false),
   experimentalAutoUpdateCheck: z.boolean().default(false),
 });
 
@@ -183,6 +184,7 @@ export type UpdateAppSettingsInput = {
   experimentalUsageStats?: boolean;
   experimentalRetryToasts?: boolean;
   experimentalDiagnosticsExport?: boolean;
+  experimentalCrossOrgSummary?: boolean;
   experimentalAutoUpdateCheck?: boolean;
 };
 

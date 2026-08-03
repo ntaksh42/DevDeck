@@ -5,6 +5,7 @@ export type ExperimentalFlagName =
   | 'usageStats'
   | 'retryToasts'
   | 'diagnosticsExport'
+  | 'crossOrgSummary'
   | 'autoUpdateCheck';
 
 export type ExperimentalFlags = Record<ExperimentalFlagName, boolean>;
@@ -13,6 +14,7 @@ const ALL_OFF: ExperimentalFlags = {
   usageStats: false,
   retryToasts: false,
   diagnosticsExport: false,
+  crossOrgSummary: false,
   autoUpdateCheck: false,
 };
 
@@ -47,6 +49,7 @@ export function useExperimentalFlags(): ExperimentalFlags {
     usageStats: settings.experimentalUsageStats,
     retryToasts: settings.experimentalRetryToasts,
     diagnosticsExport: settings.experimentalDiagnosticsExport,
+    crossOrgSummary: settings.experimentalCrossOrgSummary,
     autoUpdateCheck: settings.experimentalAutoUpdateCheck,
   };
 }

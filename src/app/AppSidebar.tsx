@@ -14,6 +14,7 @@ import {
   Code,
   GitBranch,
   GitPullRequest,
+  Layers,
   ListChecks,
   Settings,
 } from "lucide-react";
@@ -45,6 +46,7 @@ export interface AppSidebarProps {
   myReviewsBadge: number | null;
   myWorkItemsBadge: number | null;
   notificationsBadge: number | null;
+  crossOrgSummaryEnabled: boolean;
   onNavigate: (view: View) => void;
   onOpenHelp: () => void;
   onSetActiveWorkItemViewId: (id: string | null) => void;
@@ -64,6 +66,7 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
     myReviewsBadge,
     myWorkItemsBadge,
     notificationsBadge,
+    crossOrgSummaryEnabled,
     onNavigate,
     onOpenHelp,
     onSetActiveWorkItemViewId,
@@ -433,6 +436,15 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
           ))}
         </div>
         <div className="mt-auto space-y-1 border-t border-border pt-2">
+          {crossOrgSummaryEnabled ? (
+            <NavButton
+              active={activeView === "crossOrgSummary"}
+              disabled={organizationsLength === 0}
+              icon={<Layers className="h-4 w-4" aria-hidden="true" />}
+              label="Cross-org summary"
+              onClick={() => onNavigate("crossOrgSummary")}
+            />
+          ) : null}
           <NavButton
             active={activeView === "notifications"}
             disabled={organizationsLength === 0}

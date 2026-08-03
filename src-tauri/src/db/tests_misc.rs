@@ -180,6 +180,7 @@ fn app_settings_can_be_saved_and_cleared() {
             experimental_usage_stats: true,
             experimental_retry_toasts: false,
             experimental_diagnostics_export: true,
+            experimental_cross_org_summary: true,
             experimental_auto_update_check: true,
         },
     )
@@ -196,6 +197,7 @@ fn app_settings_can_be_saved_and_cleared() {
     assert!(saved.experimental_usage_stats);
     assert!(!saved.experimental_retry_toasts);
     assert!(saved.experimental_diagnostics_export);
+    assert!(saved.experimental_cross_org_summary);
     assert!(saved.experimental_auto_update_check);
     assert_eq!(saved.notification_rules[0].projects, vec!["Platform"]);
     assert_eq!(saved.show_window_hotkey.as_deref(), Some("Ctrl+Alt+D"));

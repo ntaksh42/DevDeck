@@ -12,6 +12,7 @@ type ExperimentFields = {
   experimentalUsageStats: boolean;
   experimentalRetryToasts: boolean;
   experimentalDiagnosticsExport: boolean;
+  experimentalCrossOrgSummary: boolean;
   experimentalAutoUpdateCheck: boolean;
 };
 
@@ -39,6 +40,12 @@ const EXPERIMENTS: {
       'Write a diagnostic report you can attach to a bug report. Never includes tokens or credentials.',
   },
   {
+    field: 'experimentalCrossOrgSummary',
+    label: 'Cross-organization summary',
+    description:
+      'Add a view totalling reviews and work items across every connection. Press G then O to open it.',
+  },
+  {
     field: 'experimentalAutoUpdateCheck',
     label: 'Automatic update check',
     description: 'Check for a new release on startup instead of only on demand.',
@@ -49,6 +56,7 @@ const ALL_OFF: ExperimentFields = {
   experimentalUsageStats: false,
   experimentalRetryToasts: false,
   experimentalDiagnosticsExport: false,
+  experimentalCrossOrgSummary: false,
   experimentalAutoUpdateCheck: false,
 };
 
@@ -70,6 +78,8 @@ export function ExperimentalSettings() {
       experimentalRetryToasts: settings?.experimentalRetryToasts ?? false,
       experimentalDiagnosticsExport:
         settings?.experimentalDiagnosticsExport ?? false,
+      experimentalCrossOrgSummary:
+        settings?.experimentalCrossOrgSummary ?? false,
       experimentalAutoUpdateCheck:
         settings?.experimentalAutoUpdateCheck ?? false,
     });

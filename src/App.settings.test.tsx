@@ -116,6 +116,7 @@ describe("App — Settings", () => {
           experimentalUsageStats: false,
           experimentalRetryToasts: false,
           experimentalDiagnosticsExport: false,
+          experimentalCrossOrgSummary: false,
           experimentalAutoUpdateCheck: false,
         },
       });
@@ -183,6 +184,7 @@ describe("App — Settings", () => {
           experimentalUsageStats: false,
           experimentalRetryToasts: false,
           experimentalDiagnosticsExport: false,
+          experimentalCrossOrgSummary: false,
           experimentalAutoUpdateCheck: false,
         },
       });
@@ -248,6 +250,7 @@ describe("App — Settings", () => {
           experimentalUsageStats: false,
           experimentalRetryToasts: false,
           experimentalDiagnosticsExport: false,
+          experimentalCrossOrgSummary: false,
           experimentalAutoUpdateCheck: false,
         },
       });
@@ -312,6 +315,7 @@ describe("App — Settings", () => {
           experimentalUsageStats: false,
           experimentalRetryToasts: false,
           experimentalDiagnosticsExport: false,
+          experimentalCrossOrgSummary: false,
           experimentalAutoUpdateCheck: false,
         },
       });
@@ -367,6 +371,7 @@ describe("App — Settings", () => {
           experimentalUsageStats: true,
           experimentalRetryToasts: false,
           experimentalDiagnosticsExport: false,
+          experimentalCrossOrgSummary: false,
           experimentalAutoUpdateCheck: true,
         }),
       });

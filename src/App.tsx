@@ -32,6 +32,7 @@ import { storedNumber, focusPrimaryGrid } from "@/lib/utils";
 import { HelpDialog } from "@/components/HelpDialog";
 import { CommandPalette } from "@/components/CommandPalette";
 import { ToastHost } from "@/components/ToastHost";
+import { useExperimentalFlag } from "@/features/settings/useExperimentalFlags";
 import {
   loadWorkItemQueryViews,
   type WorkItemQueryView,
@@ -169,7 +170,13 @@ function AppShell() {
   });
   const notificationsBadge = notificationsUnreadQuery.data ?? null;
 
-  const activeView = organizations.length === 0 ? "settings" : view;
+  // Experimental: the cross-org summary only exists while its flag is on.
+  // Falling back here (rather than only hiding the nav entry) keeps the app out
+  // of a blank view if the flag is turned off while the summary is open.
+  const crossOrgSummaryEnabled = useExperimentalFlag("crossOrgSummary");
+  const requestedView =
+    view === "crossOrgSummary" && !crossOrgSummaryEnabled ? "myReviews" : view;
+  const activeView = organizations.length === 0 ? "settings" : requestedView;
 
   const { syncMutation, refreshCurrentView } = useSyncManager(
     organizations.length,
@@ -410,6 +417,7 @@ function AppShell() {
         myReviewsBadge={myReviewsBadge}
         myWorkItemsBadge={myWorkItemsBadge}
         notificationsBadge={notificationsBadge}
+        crossOrgSummaryEnabled={crossOrgSummaryEnabled}
         onNavigate={setView}
         onOpenHelp={openHelp}
         onSetActiveWorkItemViewId={setActiveWorkItemViewId}

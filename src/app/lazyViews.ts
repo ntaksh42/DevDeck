@@ -42,6 +42,11 @@ export const MyPullRequestsGrid = lazy(() =>
     default: m.MyPullRequestsGrid,
   })),
 );
+export const CrossOrgSummaryView = lazy(() =>
+  import("@/features/cross-org/CrossOrgSummaryView").then((m) => ({
+    default: m.CrossOrgSummaryView,
+  })),
+);
 export const NotificationsView = lazy(() =>
   import("@/features/notifications/NotificationsView").then((m) => ({
     default: m.NotificationsView,

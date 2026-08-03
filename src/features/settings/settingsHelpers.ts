@@ -33,6 +33,7 @@ export function settingsInput(
     experimentalRetryToasts: settings?.experimentalRetryToasts ?? false,
     experimentalDiagnosticsExport:
       settings?.experimentalDiagnosticsExport ?? false,
+    experimentalCrossOrgSummary: settings?.experimentalCrossOrgSummary ?? false,
     experimentalAutoUpdateCheck: settings?.experimentalAutoUpdateCheck ?? false,
     ...input,
   };

@@ -60,6 +60,7 @@ pub struct AppSettings {
     pub experimental_usage_stats: bool,
     pub experimental_retry_toasts: bool,
     pub experimental_diagnostics_export: bool,
+    pub experimental_cross_org_summary: bool,
     pub experimental_auto_update_check: bool,
 }
 
@@ -88,6 +89,7 @@ impl Default for AppSettings {
             experimental_usage_stats: false,
             experimental_retry_toasts: false,
             experimental_diagnostics_export: false,
+            experimental_cross_org_summary: false,
             experimental_auto_update_check: false,
         }
     }
@@ -185,6 +187,11 @@ pub(crate) fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
         experimental_diagnostics_export: get_bool_setting(
             conn,
             "experimental_diagnostics_export",
+            false,
+        )?,
+        experimental_cross_org_summary: get_bool_setting(
+            conn,
+            "experimental_cross_org_summary",
             false,
         )?,
         experimental_auto_update_check: get_bool_setting(
@@ -316,6 +323,11 @@ pub(crate) fn update_app_settings(conn: &Connection, settings: AppSettings) -> R
         conn,
         "experimental_diagnostics_export",
         settings.experimental_diagnostics_export,
+    )?;
+    set_bool_setting(
+        conn,
+        "experimental_cross_org_summary",
+        settings.experimental_cross_org_summary,
     )?;
     set_bool_setting(
         conn,

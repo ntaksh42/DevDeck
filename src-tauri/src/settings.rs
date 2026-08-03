@@ -33,6 +33,7 @@ pub struct UpdateAppSettingsInput {
     pub experimental_usage_stats: Option<bool>,
     pub experimental_retry_toasts: Option<bool>,
     pub experimental_diagnostics_export: Option<bool>,
+    pub experimental_cross_org_summary: Option<bool>,
     pub experimental_auto_update_check: Option<bool>,
 }
 
@@ -177,6 +178,7 @@ pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
         experimental_usage_stats: input.experimental_usage_stats.unwrap_or(false),
         experimental_retry_toasts: input.experimental_retry_toasts.unwrap_or(false),
         experimental_diagnostics_export: input.experimental_diagnostics_export.unwrap_or(false),
+        experimental_cross_org_summary: input.experimental_cross_org_summary.unwrap_or(false),
         experimental_auto_update_check: input.experimental_auto_update_check.unwrap_or(false),
     }
 }

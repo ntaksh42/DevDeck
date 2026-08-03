@@ -14,6 +14,7 @@ const VIEW_TITLES: Record<View, string> = {
   pipelines: "Pipelines",
   codeSearch: "Code",
   notifications: "Notifications",
+  crossOrgSummary: "Cross-organization summary",
   settings: "Settings",
 };
 
@@ -28,6 +29,7 @@ const VIEW_DESCRIPTIONS: Record<View, string> = {
   pipelines: "Azure DevOps build runs by project",
   codeSearch: "Browse repository files and search code",
   notifications: "History of review requests, work item updates, and pipeline alerts",
+  crossOrgSummary: "Reviews and work items totalled across every connection",
   settings: "Local Azure DevOps organization setup",
 };
 

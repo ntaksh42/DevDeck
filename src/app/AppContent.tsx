@@ -16,6 +16,7 @@ import {
   SetupPanel,
   PullRequestSearch,
   MyPullRequestsGrid,
+  CrossOrgSummaryView,
   NotificationsView,
 } from "./lazyViews";
 import type { View, ExternalSearchRequest } from "./types";
@@ -38,7 +39,7 @@ export interface AppContentProps {
   onWorkItemNavViewsChange: (views: WorkItemQueryView[]) => void;
   onOpenSettings: () => void;
   onOpenPullRequest: (query: string, organizationId?: string) => void;
-  onOpenView: (view: "pipelines" | "settings") => void;
+  onOpenView: (view: "pipelines" | "settings" | "myReviews" | "myWorkItems") => void;
 }
 
 export function AppContent({
@@ -116,6 +117,8 @@ export function AppContent({
           <CodeBrowseView />
         ) : activeView === "notifications" ? (
           <NotificationsView onOpenPullRequest={onOpenPullRequest} onOpenView={onOpenView} />
+        ) : activeView === "crossOrgSummary" ? (
+          <CrossOrgSummaryView onOpenView={onOpenView} />
         ) : organizations.length === 0 ? (
           <SetupPanel />
         ) : (

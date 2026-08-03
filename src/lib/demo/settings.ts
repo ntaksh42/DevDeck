@@ -75,6 +75,7 @@ export const DEFAULT_DEMO_SETTINGS: AppSettings = {
   experimentalUsageStats: false,
   experimentalRetryToasts: false,
   experimentalDiagnosticsExport: false,
+  experimentalCrossOrgSummary: false,
   experimentalAutoUpdateCheck: false,
 };
 
@@ -171,6 +172,10 @@ export function applyDemoSettingsUpdate(
       input && "experimentalDiagnosticsExport" in input
         ? Boolean(input.experimentalDiagnosticsExport)
         : current.experimentalDiagnosticsExport,
+    experimentalCrossOrgSummary:
+      input && "experimentalCrossOrgSummary" in input
+        ? Boolean(input.experimentalCrossOrgSummary)
+        : current.experimentalCrossOrgSummary,
     experimentalAutoUpdateCheck:
       input && "experimentalAutoUpdateCheck" in input
         ? Boolean(input.experimentalAutoUpdateCheck)
