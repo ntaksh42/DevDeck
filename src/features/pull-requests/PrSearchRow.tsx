@@ -65,18 +65,19 @@ export const PrSearchRow = forwardRef<
   {
     pr: PullRequestSummary;
     selected: boolean;
+    inMultiSelection: boolean;
     columnTemplate: string;
     visibleColumns: PrSearchColumnKey[];
-    onSelect: () => void;
+    onSelect: (modifiers: { shiftKey: boolean; ctrlKey: boolean }) => void;
   }
->(({ pr, selected, columnTemplate, visibleColumns, onSelect }, ref) => {
+>(({ pr, selected, inMultiSelection, columnTemplate, visibleColumns, onSelect }, ref) => {
   return (
     <div
       ref={ref}
       tabIndex={selected ? 0 : -1}
       role="row"
-      aria-selected={selected}
-      onClick={onSelect}
+      aria-selected={selected || inMultiSelection}
+      onClick={(e) => onSelect({ shiftKey: e.shiftKey, ctrlKey: e.ctrlKey || e.metaKey })}
       onKeyDown={(e) => {
         if ((e.target as HTMLElement).closest("button")) return;
         if (e.key === "Enter") {
@@ -86,7 +87,7 @@ export const PrSearchRow = forwardRef<
         }
       }}
       className={`grid h-[29px] cursor-pointer select-none items-center gap-2 border-b border-border px-2 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
-        selected ? "bg-secondary" : "hover:bg-muted/50"
+        selected ? "bg-secondary" : inMultiSelection ? "bg-secondary/50" : "hover:bg-muted/50"
       }`}
       style={{ gridTemplateColumns: columnTemplate }}
     >
