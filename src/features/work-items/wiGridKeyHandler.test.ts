@@ -48,6 +48,8 @@ function makeDeps(overrides: Partial<WiKeyHandlerDeps> = {}): WiKeyHandlerDeps {
     setOpenPriorityRequest: vi.fn(),
     setOpenFieldRequest: vi.fn(),
     handleCheckboxChange: vi.fn(),
+    clearCheckedIds: vi.fn(),
+    selectRangeTo: vi.fn(),
     ...overrides,
   };
 }
@@ -94,6 +96,56 @@ describe("createWiKeyHandler — copy as Markdown link", () => {
     fireKey("L", makeDeps({ displayed: [makeItem({ webUrl: null })] }));
 
     expect(writeText).not.toHaveBeenCalled();
+  });
+});
+
+describe("createWiKeyHandler — Ctrl+C copies the selection", () => {
+  function fireCtrlC(deps: WiKeyHandlerDeps) {
+    const handler = createWiKeyHandler(deps);
+    handler({
+      key: "c",
+      target: document.body,
+      defaultPrevented: false,
+      ctrlKey: true,
+      metaKey: false,
+      altKey: false,
+      preventDefault: vi.fn(),
+    } as unknown as React.KeyboardEvent);
+  }
+
+  it("copies every checked work item's URL, one per line", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    const setCopyToast = vi.fn();
+    const checkedItems = [
+      makeItem({ id: 456, webUrl: "https://dev.azure.com/a/_workitems/edit/456" }),
+      makeItem({ id: 789, webUrl: "https://dev.azure.com/a/_workitems/edit/789" }),
+    ];
+
+    fireCtrlC(makeDeps({ checkedItems, setCopyToast }));
+
+    expect(writeText).toHaveBeenCalledWith(
+      "https://dev.azure.com/a/_workitems/edit/456\nhttps://dev.azure.com/a/_workitems/edit/789",
+    );
+    await Promise.resolve();
+    expect(setCopyToast).toHaveBeenCalledWith("2 URLs copied");
+  });
+
+  it("falls back to the focused row when nothing is checked", () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    fireCtrlC(makeDeps({ checkedItems: [] }));
+
+    expect(writeText).toHaveBeenCalledWith(
+      "https://dev.azure.com/contoso/Platform/_workitems/edit/456",
+    );
   });
 });
 

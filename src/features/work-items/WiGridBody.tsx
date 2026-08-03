@@ -27,6 +27,9 @@ export function WiGridBody({
   virtualBottomPadding,
   setSelectedIndex,
   handleCheckboxChange,
+  onShiftRangeSelect,
+  onCtrlToggleSelect,
+  onClearSelection,
 }: {
   showBlockingLoading: boolean;
   searched: boolean;
@@ -49,6 +52,9 @@ export function WiGridBody({
   virtualBottomPadding: number;
   setSelectedIndex: (i: number) => void;
   handleCheckboxChange: (index: number, checked: boolean, shiftKey: boolean) => void;
+  onShiftRangeSelect: (index: number, anchorIndex?: number) => void;
+  onCtrlToggleSelect: (index: number, focusedIndex: number) => void;
+  onClearSelection: () => void;
 }) {
   if (showBlockingLoading) {
     return <LoadingState />;
@@ -116,7 +122,28 @@ export function WiGridBody({
               },
               rowColorRules,
             )}
-            onSelect={() => setSelectedIndex(i)}
+            onSelect={({ shiftKey, ctrlKey }) => {
+              // Shift/Ctrl+click drives the same checkbox selection the bulk
+              // actions and Ctrl+C already read from, so the row body and the
+              // checkbox never disagree about what is selected.
+              if (shiftKey) {
+                // Anchor the range on the row that was focused *before* this
+                // click, so the first Shift+click still selects a range. The
+                // anchor is passed explicitly because `selectedIndex` has
+                // already moved to the clicked row by the time this runs.
+                onShiftRangeSelect(i, selectedIndex);
+              } else if (ctrlKey) {
+                // Seed from the focused row so the first Ctrl+click grows the
+                // selection to two rows rather than leaving just the clicked one.
+                onCtrlToggleSelect(i, selectedIndex);
+              } else if (checkedIds.size > 0) {
+                // A plain click on the row body starts a fresh selection, the
+                // same as the other grids. The checkbox column is untouched, so
+                // deliberate checkbox picking still survives a click elsewhere.
+                onClearSelection();
+              }
+              setSelectedIndex(i);
+            }}
             onCheckedChange={(checked, shiftKey) => handleCheckboxChange(i, checked, shiftKey)}
           />
         );

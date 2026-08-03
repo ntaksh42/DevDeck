@@ -90,7 +90,11 @@ export function WorkItemsGrid({
       onBlurCapture={g.handleGridBlurCapture}
     >
       {state.copyToast || g.bulk.bulkToast ? (
-        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1 text-xs text-background shadow-lg">
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1 text-xs text-background shadow-lg"
+        >
           {state.copyToast ?? g.bulk.bulkToast}
         </div>
       ) : null}
@@ -210,6 +214,9 @@ export function WorkItemsGrid({
                 virtualBottomPadding={g.virtualBottomPadding}
                 setSelectedIndex={state.setSelectedIndex}
                 handleCheckboxChange={g.handleCheckboxChange}
+                onShiftRangeSelect={g.selectRangeTo}
+                onCtrlToggleSelect={g.toggleSelectionAt}
+                onClearSelection={g.clearCheckedIds}
               />
             </div>
           </div>

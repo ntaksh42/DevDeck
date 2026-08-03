@@ -122,11 +122,12 @@ export const CommitGridRow = forwardRef<
   {
     commit: CommitSummary;
     selected: boolean;
+    inMultiSelection: boolean;
     columnTemplate: string;
     visibleColumns: CommitColumnKey[];
-    onSelect: () => void;
+    onSelect: (modifiers: { shiftKey: boolean; ctrlKey: boolean }) => void;
   }
->(({ commit, selected, columnTemplate, visibleColumns, onSelect }, ref) => {
+>(({ commit, selected, inMultiSelection, columnTemplate, visibleColumns, onSelect }, ref) => {
   // Reflects the related-PR lookup that the preview triggers on selection;
   // reads cached query data only, so the grid never fans out N requests.
   const prQuery = useQuery({
@@ -140,8 +141,8 @@ export const CommitGridRow = forwardRef<
       ref={ref}
       tabIndex={selected ? 0 : -1}
       role="row"
-      aria-selected={selected}
-      onClick={onSelect}
+      aria-selected={selected || inMultiSelection}
+      onClick={(e) => onSelect({ shiftKey: e.shiftKey, ctrlKey: e.ctrlKey || e.metaKey })}
       onKeyDown={(e: ReactKeyboardEvent<HTMLDivElement>) => {
         if ((e.target as HTMLElement).closest("button")) return;
         if (e.key === "Enter") {
@@ -153,7 +154,9 @@ export const CommitGridRow = forwardRef<
       className={`grid h-[29px] cursor-pointer select-none items-center gap-2 border-b border-border px-2 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
         selected
           ? "bg-secondary shadow-[inset_3px_0_0_hsl(var(--primary))]"
-          : "hover:bg-muted/50"
+          : inMultiSelection
+            ? "bg-secondary/50"
+            : "hover:bg-muted/50"
       }`}
       style={{ gridTemplateColumns: columnTemplate }}
     >

@@ -7,6 +7,7 @@ import {
   markdownLink,
 } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
+import { copyRowUrls } from '@/lib/copyUrls';
 import { toggleTriageArchived } from '@/lib/triage';
 import { workItemSummaryKey, workItemTriageSnapshot, type FilterableColumn } from './workItemsGridHelpers';
 
@@ -36,6 +37,8 @@ export interface WiKeyHandlerDeps {
   setOpenPriorityRequest: React.Dispatch<React.SetStateAction<number>>;
   setOpenFieldRequest: React.Dispatch<React.SetStateAction<number>>;
   handleCheckboxChange: (index: number, checked: boolean, shiftKey: boolean) => void;
+  clearCheckedIds: () => void;
+  selectRangeTo: (index: number, anchorIndex?: number) => void;
 }
 
 export function createWiKeyHandler(deps: WiKeyHandlerDeps): (e: React.KeyboardEvent) => void {
@@ -47,7 +50,8 @@ export function createWiKeyHandler(deps: WiKeyHandlerDeps): (e: React.KeyboardEv
       setFilterAnchorRect, setBulkAssignOpen, setBulkStateOpen, setBulkPriorityOpen,
       setColumnMenuRect, setCopyToast, setFocusCommentRequest, setTriageVersion,
       setSnoozeAnchorRect, setOpenAssigneeRequest, setOpenStateRequest,
-      setOpenPriorityRequest, setOpenFieldRequest, handleCheckboxChange,
+      setOpenPriorityRequest, setOpenFieldRequest, handleCheckboxChange, clearCheckedIds,
+      selectRangeTo,
     } = deps;
     if (isEditableTarget(e.target)) {
       if (e.key === "Escape") {
@@ -60,6 +64,13 @@ export function createWiKeyHandler(deps: WiKeyHandlerDeps): (e: React.KeyboardEv
       if (openFilterCol) {
         setOpenFilterCol(null);
         setFilterAnchorRect(null);
+        return;
+      }
+      // Drop the row multi-selection before the popups/filters, since it is the
+      // most recent thing the user built up.
+      if (checkedIds.size > 0) {
+        e.preventDefault();
+        clearCheckedIds();
         return;
       }
       setBulkAssignOpen(false);
@@ -75,6 +86,17 @@ export function createWiKeyHandler(deps: WiKeyHandlerDeps): (e: React.KeyboardEv
         e.preventDefault();
         const item = displayed[selectedIndex];
         if (item?.webUrl) openExternalUrl(item.webUrl);
+      } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "c" || e.key === "C")) {
+        // Copies every checked row, falling back to the focused row when the
+        // user has not checked anything. `c` alone stays the single-row copy.
+        e.preventDefault();
+        const targets =
+          checkedItems.length > 0
+            ? checkedItems
+            : displayed[selectedIndex]
+              ? [displayed[selectedIndex]]
+              : [];
+        void copyRowUrls(targets, setCopyToast);
       }
       return;
     }
@@ -84,6 +106,18 @@ export function createWiKeyHandler(deps: WiKeyHandlerDeps): (e: React.KeyboardEv
       return;
     }
     if (displayed.length === 0) return;
+    if (e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      e.preventDefault();
+      const next = Math.max(
+        0,
+        Math.min(selectedIndex + (e.key === "ArrowDown" ? 1 : -1), displayed.length - 1),
+      );
+      // With nothing checked yet the focused row is the anchor; afterwards the
+      // stored anchor keeps successive presses growing the same range.
+      selectRangeTo(next, checkedIds.size === 0 ? selectedIndex : undefined);
+      moveSelection(next);
+      return;
+    }
     if (e.key === "ArrowDown" || e.key === "j" || e.key === "J") {
       e.preventDefault();
       moveSelection(selectedIndex + 1);

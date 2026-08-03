@@ -295,7 +295,17 @@ find-next) は、入力欄以外では抑止し、ネイティブ動作が素通
 `↑ ↓ / J K / Home / End / PageUp / PageDown` で移動、`Enter` でプレビュー/オープン、
 `Ctrl+Enter` でブラウザを開く、`C` で URL コピー、`L` で Markdown 形式のリンク
 (`[!123 タイトル](url)` / 作業項目は `[#123 タイトル](url)` / コミットは短縮 SHA
-+ 件名) をコピー。作業項目グリッドでは
++ 件名) をコピー。
+
+複数行の選択は全グリッド共通で `Shift+↑ ↓` / `Shift+クリック` による範囲選択と
+`Ctrl+クリック` による個別追加/解除に対応し、`Ctrl+C` で選択行の URL を改行区切りで
+まとめてコピーする (選択が無い場合はフォーカス行 1 件)。コピー結果はトーストで通知する
+(`URL copied` / `N URLs copied` / `Copy failed`)。`Escape` で複数選択を解除。
+My Reviews は既存の `selectedKeys` (ファイル重複検知と共有)、作業項目グリッドは既存の
+チェックボックス選択 (一括操作と共有。選択ロジックは
+`src/features/work-items/wiRowSelection.ts`) を選択状態として使い、My Pull Requests /
+PR 検索 / Commits は共通フック `src/lib/useRangeSelection.ts` を使う。コピー処理は
+`src/lib/copyUrls.ts` に集約。作業項目グリッドでは
 `S` 状態 / `A` 割当 / `P` 優先度 / `F` フィールド循環、`Ctrl+S` で適用、`M` でコメント。
 プレビューの `D` は選択中の作業項目を複製ドラフト (タイトル `[Copy] ` 接頭辞 + 種別・
 優先度・エリア/イテレーション・タグ・担当者) として作成ダイアログに引き継ぐ。

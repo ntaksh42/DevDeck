@@ -17,6 +17,8 @@ import {
 } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
 import { useGridColumns } from "@/lib/useGridColumns";
+import { useRangeSelection } from "@/lib/useRangeSelection";
+import { copyRowUrls } from "@/lib/copyUrls";
 import { ColumnResizeHandle, ResizeHandle } from "@/components/ResizeHandle";
 import { ColumnVisibilityMenu } from "@/components/ColumnVisibilityMenu";
 import { ActiveFilters } from "@/components/ActiveFilters";
@@ -186,11 +188,21 @@ export function CommitResults({
     }
   }
 
-  function moveSelectionTo(index: number) {
+  const selection = useRangeSelection({
+    rows: sorted,
+    keyOf: (commit) => `${commit.repositoryId}:${commit.commitId}`,
+    selectedIndex,
+  });
+
+  // `extend` grows the multi-selection from its anchor; otherwise the move
+  // starts a fresh single-row selection.
+  function moveSelectionTo(index: number, extend = false) {
     const next = clamp(index, 0, sorted.length - 1);
     restoreFocusRef.current = true;
     scrollRowIntoView(next);
     setSelectedIndex(next);
+    if (extend) selection.extendTo(next);
+    else selection.clear();
   }
 
   function moveSelection(delta: number) {
@@ -216,11 +228,24 @@ export function CommitResults({
         e.preventDefault();
         const commit = sorted[selectedIndex];
         if (commit?.webUrl) openExternalUrl(commit.webUrl);
+      } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "c" || e.key === "C")) {
+        e.preventDefault();
+        void copyRowUrls(selection.selectedRows, setCopyToast);
       }
       return;
     }
     if (e.key === "/") { e.preventDefault(); focusFilterInput(); return; }
     if (e.key === "\\") { e.preventDefault(); setMaximized((value) => !value); return; }
+    if (e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      e.preventDefault();
+      moveSelectionTo(selectedIndex + (e.key === "ArrowDown" ? 1 : -1), true);
+      return;
+    }
+    if (e.key === "Escape" && selection.selectedKeys.size > 0) {
+      e.preventDefault();
+      selection.clear();
+      return;
+    }
     if (e.key === "ArrowDown" || e.key === "j" || e.key === "J") { e.preventDefault(); moveSelection(1); }
     else if (e.key === "ArrowUp" || e.key === "k" || e.key === "K") { e.preventDefault(); moveSelection(-1); }
     else if (e.key === "Home") { e.preventDefault(); moveSelectionTo(0); }
@@ -300,6 +325,7 @@ export function CommitResults({
         <h2 className="text-base font-semibold">Results</h2>
         <span className="flex items-center gap-2 text-sm text-muted-foreground">
           {countLabel}
+          {selection.isMultiSelect ? `· ${selection.selectedKeys.size} selected` : ""}
           <ActiveFilters count={activeFilterCount} onClear={onClearExternalFilters ?? (() => {})} />
           <button
             type="button"
@@ -384,9 +410,14 @@ export function CommitResults({
                       ref={(el) => { rowRefs.current[index] = el; }}
                       commit={commit}
                       selected={index === selectedIndex}
+                      inMultiSelection={selection.selectedKeys.has(
+                        `${commit.repositoryId}:${commit.commitId}`,
+                      )}
                       columnTemplate={commitColTemplate}
                       visibleColumns={visibleColumns}
-                      onSelect={() => setSelectedIndex(index)}
+                      onSelect={(modifiers) =>
+                        selection.handleRowClick(index, modifiers, setSelectedIndex)
+                      }
                     />
                   );
                 })}

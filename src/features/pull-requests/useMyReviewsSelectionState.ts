@@ -101,6 +101,25 @@ export function useMyReviewsSelectionState({
     setSelectedKeys(keys);
   }
 
+  // Ctrl+click adds or removes one row, seeding from the focused row so the
+  // first Ctrl+click grows the selection instead of replacing it.
+  function toggleSelectionAt(targetIndex: number) {
+    const target = sortedPrs[targetIndex];
+    if (!target) return;
+    const key = reviewTriageKey(target);
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.size === 0) {
+        const current = sortedPrs[selectedIndex];
+        if (current) next.add(reviewTriageKey(current));
+      }
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+    setSelectionAnchor(key);
+  }
+
   function clearMultiSelection() {
     if (selectedKeys.size > 0) setSelectedKeys(new Set());
     setSelectionAnchor(null);
@@ -253,6 +272,7 @@ export function useMyReviewsSelectionState({
     selectVisiblePosition,
     moveSelectionBy,
     extendSelectionToIndex,
+    toggleSelectionAt,
     clearMultiSelection,
   };
 }
