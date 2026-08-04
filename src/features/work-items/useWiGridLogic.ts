@@ -27,6 +27,7 @@ import { useRowColorRules } from './WorkItemGridRow';
 import { useBulkActions } from './useBulkActions';
 import { workItemQueryKeys } from './queryKeys';
 import { createWiKeyHandler } from './wiGridKeyHandler';
+import { createWiRowSelection } from './wiRowSelection';
 import type { WiGridState } from './useWiGridState';
 
 export interface WiGridLogicProps {
@@ -364,28 +365,14 @@ export function useWiGridLogic(
     window.setTimeout(() => rowRefs.current[next]?.focus(), 0);
   }
 
-  function handleCheckboxChange(index: number, checked: boolean, shiftKey: boolean) {
-    const item = displayed[index];
-    if (!item) return;
-    const key = `${item.organizationId}:${item.projectId}:${item.id}`;
-    setCheckedIds((prev) => {
-      const next = new Set(prev);
-      if (shiftKey && lastCheckedIndex !== null) {
-        const from = Math.min(lastCheckedIndex, index);
-        const to = Math.max(lastCheckedIndex, index);
-        for (let i = from; i <= to; i++) {
-          const it = displayed[i];
-          if (!it) continue;
-          const k = `${it.organizationId}:${it.projectId}:${it.id}`;
-          if (checked) next.add(k); else next.delete(k);
-        }
-      } else {
-        if (checked) next.add(key); else next.delete(key);
-      }
-      return next;
+  const { handleCheckboxChange, selectRangeTo, toggleSelectionAt, clearCheckedIds } =
+    createWiRowSelection({
+      displayed,
+      selectedIndex,
+      lastCheckedIndex,
+      setCheckedIds,
+      setLastCheckedIndex,
     });
-    setLastCheckedIndex(index);
-  }
 
   function openFilter(col: FilterableColumn, anchorEl: HTMLButtonElement) {
     filterButtonRef.current = anchorEl;
@@ -460,6 +447,8 @@ export function useWiGridLogic(
     setOpenPriorityRequest,
     setOpenFieldRequest,
     handleCheckboxChange,
+    clearCheckedIds,
+    selectRangeTo,
   });
 
   // ─── Virtual scroll ───────────────────────────────────────────────────────
@@ -490,7 +479,7 @@ export function useWiGridLogic(
     selectedItem, previewQuery, checkedItems, bulk, unreadKeys,
     activeFilterCount, hasActiveColumnFilters, showBlockingLoading,
     handleKeyDown, handleGridFocusCapture, handleGridBlurCapture,
-    moveSelection, handleCheckboxChange,
+    moveSelection, handleCheckboxChange, selectRangeTo, toggleSelectionAt, clearCheckedIds,
     openFilter, toggleFilter, clearColumnFilter, uncheckAllColumnFilter, clearAllFilters,
     handlePreviewUpdated, firstVirtualRow, virtualRows, virtualTopPadding, virtualBottomPadding,
   };

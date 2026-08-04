@@ -13,7 +13,7 @@ type ReviewPrRowProps = {
   columnTemplate: string;
   visibleColumns: SortKey[];
   staleThresholdDays: number;
-  onSelect: (event: { shiftKey: boolean }) => void;
+  onSelect: (event: { shiftKey: boolean; ctrlKey: boolean }) => void;
 };
 
 export const ReviewPrRow = forwardRef<HTMLDivElement, ReviewPrRowProps>(
@@ -40,7 +40,7 @@ export const ReviewPrRow = forwardRef<HTMLDivElement, ReviewPrRowProps>(
         tabIndex={selected ? 0 : -1}
         role="row"
         aria-selected={selected || inMultiSelection}
-        onClick={(e) => onSelect({ shiftKey: e.shiftKey })}
+        onClick={(e) => onSelect({ shiftKey: e.shiftKey, ctrlKey: e.ctrlKey || e.metaKey })}
         onKeyDown={(e) => {
           if ((e.target as HTMLElement).closest('button')) {
             return;

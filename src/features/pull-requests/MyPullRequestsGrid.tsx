@@ -1,245 +1,34 @@
-import {
-  type ReactNode,
-  Fragment,
-  forwardRef,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
-import {
-  commandErrorMessage,
-  listMyCreatedPullRequests,
-  type MyCreatedPullRequestSummary,
-} from "@/lib/azdoCommands";
+import { commandErrorMessage, listMyCreatedPullRequests } from "@/lib/azdoCommands";
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import {
-  formatDate,
-  formatRelativeDate,
   isEditableTarget,
   matchesAllSearchTerms,
   splitSearchTerms,
-  type SortDirection,
 } from "@/lib/utils";
 import { FilterAutocomplete } from "@/components/FilterAutocomplete";
 import { ColumnResizeHandle } from "@/components/ResizeHandle";
 import { ColumnVisibilityMenu } from "@/components/ColumnVisibilityMenu";
 import { useGridColumns } from "@/lib/useGridColumns";
 import { useColumnVisibility } from "@/lib/useColumnVisibility";
-import { openExternalUrl } from "@/lib/openExternal";
-
-type SortKey =
-  | "pullRequestId"
-  | "repositoryName"
-  | "title"
-  | "creationDate"
-  | "targetRefName"
-  | "approvals";
-
-type SortState = { key: SortKey; direction: SortDirection };
-
-const sortLabels: Record<SortKey, string> = {
-  pullRequestId: "PR#",
-  repositoryName: "Repository",
-  title: "Title",
-  creationDate: "Created",
-  targetRefName: "Target",
-  approvals: "Approvals",
-};
-
-// Column order; the width arrays below are indexed by this list.
-const GRID_KEYS: SortKey[] = [
-  "pullRequestId",
-  "repositoryName",
-  "title",
-  "creationDate",
-  "targetRefName",
-  "approvals",
-];
-const REQUIRED_COLUMNS: SortKey[] = ["pullRequestId", "title"];
-const DEFAULT_COLUMN_WIDTHS = [52, 130, 220, 90, 120, 76];
-const COLUMN_MIN_WIDTHS = [48, 96, 150, 72, 72, 60];
-const COLUMN_MAX_WIDTHS = [120, 520, 960, 160, 240, 160];
-const COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:myPullRequestsGridColumnWidths:v1";
-const VISIBLE_COLUMNS_STORAGE_KEY = "azdodeck:view:myPullRequestsGridColumns:v1";
-
-function defaultSortDirection(key: SortKey): SortDirection {
-  return key === "creationDate" ? "desc" : "asc";
-}
-
-function compareStrings(a: string, b: string): number {
-  return a.localeCompare(b, undefined, { sensitivity: "base" });
-}
-
-function comparePrs(
-  a: MyCreatedPullRequestSummary,
-  b: MyCreatedPullRequestSummary,
-  key: SortKey,
-): number {
-  switch (key) {
-    case "pullRequestId":
-      return a.pullRequestId - b.pullRequestId;
-    case "repositoryName":
-      return compareStrings(a.repositoryName, b.repositoryName);
-    case "title":
-      return compareStrings(a.title, b.title);
-    case "creationDate":
-      return a.creationDate.localeCompare(b.creationDate);
-    case "targetRefName":
-      return compareStrings(a.targetRefName, b.targetRefName);
-    case "approvals":
-      return a.approvals - b.approvals;
-  }
-}
-
-function renderCell(key: SortKey, pr: MyCreatedPullRequestSummary): ReactNode {
-  switch (key) {
-    case "pullRequestId":
-      return (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            if (pr.webUrl) openExternalUrl(pr.webUrl);
-          }}
-          className="truncate text-left font-mono text-xs text-primary hover:underline"
-          title={`PR #${pr.pullRequestId}`}
-        >
-          #{pr.pullRequestId}
-        </button>
-      );
-    case "repositoryName":
-      return (
-        <span className="truncate text-sm text-foreground" title={pr.repositoryName}>
-          {pr.repositoryName}
-        </span>
-      );
-    case "title":
-      return (
-        <div className="flex min-w-0 items-center gap-1.5">
-          {pr.isDraft && (
-            <span className="inline-flex shrink-0 items-center rounded border border-input bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-              Draft
-            </span>
-          )}
-          <span className="truncate font-medium text-foreground" title={pr.title}>
-            {pr.title}
-          </span>
-        </div>
-      );
-    case "creationDate":
-      return (
-        <span className="text-xs text-muted-foreground" title={formatDate(pr.creationDate)}>
-          {formatRelativeDate(pr.creationDate)}
-        </span>
-      );
-    case "targetRefName":
-      return (
-        <span className="truncate text-xs text-muted-foreground" title={pr.targetRefName}>
-          {pr.targetRefName}
-        </span>
-      );
-    case "approvals": {
-      const complete = pr.reviewerCount > 0 && pr.approvals >= pr.reviewerCount;
-      return (
-        <span
-          className="inline-flex items-center gap-1 text-xs tabular-nums text-muted-foreground"
-          title={`${pr.approvals} of ${pr.reviewerCount} reviewers approved`}
-        >
-          <CheckCircle2
-            className={`h-3.5 w-3.5 ${complete ? "text-green-600 dark:text-green-400" : "text-muted-foreground/50"}`}
-            aria-hidden="true"
-          />
-          {pr.approvals}/{pr.reviewerCount}
-        </span>
-      );
-    }
-  }
-}
-
-function SortHeaderButton({
-  column,
-  sort,
-  onSort,
-  resizeHandle,
-}: {
-  column: SortKey;
-  sort: SortState;
-  onSort: (column: SortKey) => void;
-  resizeHandle?: ReactNode;
-}) {
-  const active = sort.key === column;
-  const label = sortLabels[column];
-  return (
-    <div
-      role="columnheader"
-      aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
-      className="relative min-w-0"
-    >
-      <div className="flex min-w-0 items-center">
-        <button
-          type="button"
-          aria-label={`Sort by ${label}`}
-          onClick={() => onSort(column)}
-          className={`flex min-w-0 flex-1 items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring ${
-            active ? "text-foreground" : ""
-          }`}
-        >
-          <span className="truncate">{label}</span>
-          {active ? (
-            sort.direction === "asc" ? (
-              <ChevronUp className="h-3 w-3 shrink-0" aria-hidden="true" />
-            ) : (
-              <ChevronDown className="h-3 w-3 shrink-0" aria-hidden="true" />
-            )
-          ) : (
-            <span className="h-3 w-3 shrink-0" aria-hidden="true" />
-          )}
-        </button>
-      </div>
-      {resizeHandle}
-    </div>
-  );
-}
-
-const CreatedPrRow = forwardRef<
-  HTMLDivElement,
-  {
-    pr: MyCreatedPullRequestSummary;
-    selected: boolean;
-    columnTemplate: string;
-    visibleColumns: SortKey[];
-    onSelect: () => void;
-  }
->(({ pr, selected, columnTemplate, visibleColumns, onSelect }, ref) => {
-  return (
-    <div
-      ref={ref}
-      tabIndex={selected ? 0 : -1}
-      role="row"
-      aria-selected={selected}
-      onClick={onSelect}
-      onKeyDown={(e) => {
-        if ((e.target as HTMLElement).closest("button")) return;
-        if (e.key === "Enter") {
-          e.stopPropagation();
-          if (pr.webUrl) openExternalUrl(pr.webUrl);
-        }
-      }}
-      className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
-        selected ? "bg-secondary" : "hover:bg-muted/50"
-      }`}
-      style={{ gridTemplateColumns: columnTemplate }}
-    >
-      {visibleColumns.map((key) => (
-        <Fragment key={key}>{renderCell(key, pr)}</Fragment>
-      ))}
-    </div>
-  );
-});
-CreatedPrRow.displayName = "CreatedPrRow";
+import { useRangeSelection } from "@/lib/useRangeSelection";
+import { copyRowUrls } from "@/lib/copyUrls";
+import { CreatedPrRow, SortHeaderButton } from "./MyPullRequestsRow";
+import {
+  comparePrs,
+  defaultSortDirection,
+  sortLabels,
+  GRID_KEYS,
+  REQUIRED_COLUMNS,
+  DEFAULT_COLUMN_WIDTHS,
+  COLUMN_MIN_WIDTHS,
+  COLUMN_MAX_WIDTHS,
+  COLUMN_WIDTHS_STORAGE_KEY,
+  VISIBLE_COLUMNS_STORAGE_KEY,
+  type SortKey,
+  type SortState,
+} from "./myPullRequestsTypes";
 
 // Active pull requests the authenticated user authored. Fetched live from Azure
 // DevOps (not from the local sync cache), so data refreshes on view re-entry
@@ -257,6 +46,7 @@ export function MyPullRequestsGrid() {
     storageKey: VISIBLE_COLUMNS_STORAGE_KEY,
   });
   const [columnMenuRect, setColumnMenuRect] = useState<DOMRect | null>(null);
+  const [copyToast, setCopyToast] = useState<string | null>(null);
   const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
 
   const {
@@ -313,6 +103,12 @@ export function MyPullRequestsGrid() {
     setSelectedIndex((index) => Math.min(index, Math.max(0, rows.length - 1)));
   }, [rows.length]);
 
+  const selection = useRangeSelection({
+    rows,
+    keyOf: (pr) => `${pr.repositoryId}:${pr.pullRequestId}`,
+    selectedIndex,
+  });
+
   const applySort = (key: SortKey) => {
     setSort((current) =>
       current.key === key
@@ -321,15 +117,33 @@ export function MyPullRequestsGrid() {
     );
   };
 
-  const moveSelection = (next: number) => {
+  // `extend` grows the multi-selection from its anchor; otherwise the move
+  // starts a fresh single-row selection.
+  const moveSelection = (next: number, extend = false) => {
     const clamped = Math.max(0, Math.min(next, rows.length - 1));
     setSelectedIndex(clamped);
     rowRefs.current[clamped]?.focus();
+    if (extend) selection.extendTo(clamped);
+    else selection.clear();
   };
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (isEditableTarget(event.target)) return;
     const pr = rows[selectedIndex];
+    // Ctrl+C copies the whole selection; other chords belong to the app.
+    if (event.ctrlKey || event.metaKey) {
+      if ((event.key === "c" || event.key === "C") && !event.altKey) {
+        event.preventDefault();
+        void copyRowUrls(selection.selectedRows, setCopyToast);
+      }
+      return;
+    }
+    if (event.altKey) return;
+    if (event.shiftKey && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+      event.preventDefault();
+      moveSelection(selectedIndex + (event.key === "ArrowDown" ? 1 : -1), true);
+      return;
+    }
     switch (event.key) {
       case "ArrowDown":
       case "j":
@@ -349,6 +163,12 @@ export function MyPullRequestsGrid() {
         event.preventDefault();
         moveSelection(rows.length - 1);
         break;
+      case "Escape":
+        if (selection.selectedKeys.size > 0) {
+          event.preventDefault();
+          selection.clear();
+        }
+        break;
       case "c":
       case "C":
         event.preventDefault();
@@ -361,6 +181,15 @@ export function MyPullRequestsGrid() {
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card">
+      {copyToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-4 right-4 z-50 rounded-md bg-foreground px-3 py-2 text-sm text-background shadow-lg"
+        >
+          {copyToast}
+        </div>
+      )}
       {/* Toolbar */}
       <div
         className="flex items-center gap-2 border-b border-border px-2 py-1.5"
@@ -432,7 +261,12 @@ export function MyPullRequestsGrid() {
                     columnTemplate={template}
                     visibleColumns={visibleColumns}
                     selected={index === selectedIndex}
-                    onSelect={() => setSelectedIndex(index)}
+                    inMultiSelection={selection.selectedKeys.has(
+                      `${pr.repositoryId}:${pr.pullRequestId}`,
+                    )}
+                    onSelect={(modifiers) =>
+                      selection.handleRowClick(index, modifiers, setSelectedIndex)
+                    }
                   />
                 ))}
               </div>
@@ -445,6 +279,7 @@ export function MyPullRequestsGrid() {
       <div className="flex items-center justify-between border-t border-border px-2 py-1 text-xs text-muted-foreground">
         <span>
           {textFilter.trim() ? `${rows.length} of ${allPrs.length}` : `${rows.length} total`}
+          {selection.isMultiSelect ? ` · ${selection.selectedKeys.size} selected` : ""}
           {query.isFetching ? " · refreshing…" : ""}
         </span>
         <button
