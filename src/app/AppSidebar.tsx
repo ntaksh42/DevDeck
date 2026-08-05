@@ -11,6 +11,7 @@ import {
 import {
   Bell,
   BookOpen,
+  ChartLine,
   Code,
   GitBranch,
   GitPullRequest,
@@ -393,6 +394,16 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
           onClick={() => onNavigate("commits")}
         />
       </NavSection>
+    ),
+    analyze: (
+      <NavButton
+        key="analyze"
+        active={activeView === "analyze"}
+        disabled={organizationsLength === 0}
+        icon={<ChartLine className="h-4 w-4" aria-hidden="true" />}
+        label="Analyze"
+        onClick={() => onNavigate("analyze")}
+      />
     ),
   };
 

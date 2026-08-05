@@ -11,6 +11,7 @@ use base64::Engine;
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 use tokio::sync::Mutex;
+use tokio::task::JoinSet;
 
 use crate::auth::client_for_organization;
 use crate::commits::encode_path_segment;
@@ -37,6 +38,12 @@ mod tests;
 
 const UPDATE_CANDIDATES_TTL: Duration = Duration::from_secs(60);
 const UPDATE_CANDIDATES_CACHE_CAP: usize = 200;
+
+/// Concurrent WIQL round trips while sampling a query's history.
+const COUNT_HISTORY_CONCURRENCY: usize = 4;
+/// Upper bound on points per call, so a malformed request cannot fan out into
+/// an unbounded number of API calls. Covers the widest UI window (90 days).
+const COUNT_HISTORY_MAX_POINTS: usize = 90;
 
 // People recently involved in a work item, derived from its update history.
 // Mention and assignee search both need them for every (debounced) keystroke,
@@ -211,6 +218,92 @@ impl WorkItemService {
             probe.map_or(ids.len(), |probe| ids.len().min(probe))
         };
         Ok(count)
+    }
+
+    /// Counts the query at each requested instant by appending an `ASOF`
+    /// clause, so a saved query yields a history without anything having been
+    /// recorded locally beforehand.
+    ///
+    /// A point Azure DevOps cannot answer is returned with `count: None` and
+    /// the message, leaving the rest of the series usable; only a failure that
+    /// applies to every point (an invalid query, an unreachable organization)
+    /// fails the whole call.
+    pub async fn count_query_history(
+        &self,
+        input: CountWorkItemQueryHistoryInput,
+    ) -> Result<Vec<WorkItemQueryCountPoint>> {
+        let wiql = validate_work_item_wiql(&input.wiql)?;
+        if azdo_client::has_asof_clause(wiql) {
+            return Err(AppError::InvalidInput(
+                "WIQL must not contain an ASOF clause; the analyze view adds one per point"
+                    .to_string(),
+            ));
+        }
+        if input.timestamps.len() > COUNT_HISTORY_MAX_POINTS {
+            return Err(AppError::InvalidInput(format!(
+                "at most {COUNT_HISTORY_MAX_POINTS} points can be requested at once"
+            )));
+        }
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let link_query = is_link_wiql(wiql);
+
+        let mut points: Vec<Option<WorkItemQueryCountPoint>> =
+            (0..input.timestamps.len()).map(|_| None).collect();
+        // Bounded concurrency: each point is its own WIQL round trip, so a
+        // 90-day window would otherwise open 90 connections at once. Tasks
+        // carry their index because they complete out of order.
+        for (offset, chunk) in input
+            .timestamps
+            .chunks(COUNT_HISTORY_CONCURRENCY)
+            .enumerate()
+        {
+            let mut tasks: JoinSet<(usize, String, Result<usize>)> = JoinSet::new();
+            for (index, timestamp) in chunk.iter().enumerate() {
+                let index = offset * COUNT_HISTORY_CONCURRENCY + index;
+                let timestamp = timestamp.clone();
+                let client = client.clone();
+                let project_id = input.project_id.clone();
+                let prepared = azdo_client::with_asof(wiql, &timestamp);
+                tasks.spawn(async move {
+                    let sampled = match prepared {
+                        Ok(sampled) => sampled,
+                        Err(error) => return (index, timestamp, Err(AppError::from(error))),
+                    };
+                    let count = if link_query {
+                        client
+                            .query_work_item_links(&project_id, &sampled, None)
+                            .await
+                            .map(|links| flatten_work_item_links(links, None).0.len())
+                    } else {
+                        client
+                            .query_work_item_ids(&project_id, &sampled, None)
+                            .await
+                            .map(|ids| ids.len())
+                    };
+                    (index, timestamp, count.map_err(AppError::from))
+                });
+            }
+
+            while let Some(joined) = tasks.join_next().await {
+                let (index, timestamp, result) = joined.map_err(|error| {
+                    AppError::AzureDevOps(format!("query history task failed: {error}"))
+                })?;
+                points[index] = Some(match result {
+                    Ok(count) => WorkItemQueryCountPoint {
+                        timestamp,
+                        count: Some(count),
+                        error: None,
+                    },
+                    Err(error) => WorkItemQueryCountPoint {
+                        timestamp,
+                        count: None,
+                        error: Some(error.to_string()),
+                    },
+                });
+            }
+        }
+        Ok(points.into_iter().flatten().collect())
     }
 
     pub async fn preview(&self, input: GetWorkItemPreviewInput) -> Result<WorkItemPreview> {

@@ -47,6 +47,11 @@ export const CrossOrgSummaryView = lazy(() =>
     default: m.CrossOrgSummaryView,
   })),
 );
+export const AnalyzeView = lazy(() =>
+  import("@/features/analyze/AnalyzeView").then((m) => ({
+    default: m.AnalyzeView,
+  })),
+);
 export const NotificationsView = lazy(() =>
   import("@/features/notifications/NotificationsView").then((m) => ({
     default: m.NotificationsView,

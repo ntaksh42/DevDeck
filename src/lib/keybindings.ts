@@ -36,6 +36,7 @@ export type KeybindingId =
   | "gotoCodeSearch"
   | "gotoNotifications"
   | "gotoCrossOrgSummary"
+  | "gotoAnalyze"
   | "gotoSettings";
 
 export type Keybinding = {
@@ -87,6 +88,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   { id: "gotoCodeSearch", label: "Code", group: "Go to view", defaultCombo: "D", scope: "goto" },
   { id: "gotoNotifications", label: "Notifications", group: "Go to view", defaultCombo: "N", scope: "goto" },
   { id: "gotoCrossOrgSummary", label: "Cross-organization summary", group: "Go to view", defaultCombo: "O", scope: "goto" },
+  { id: "gotoAnalyze", label: "Analyze", group: "Go to view", defaultCombo: "A", scope: "goto" },
   { id: "gotoSettings", label: "Settings", group: "Go to view", defaultCombo: "S", scope: "goto" },
 ] as const;
 

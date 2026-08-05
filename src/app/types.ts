@@ -12,6 +12,7 @@ export type View =
   | "codeSearch"
   | "notifications"
   | "crossOrgSummary"
+  | "analyze"
   | "settings";
 
 export type NavSectionId = "pullRequests" | "workItems" | "code";
@@ -39,6 +40,7 @@ export const GOTO_BINDING_VIEWS = {
   gotoCodeSearch: "codeSearch",
   gotoNotifications: "notifications",
   gotoCrossOrgSummary: "crossOrgSummary",
+  gotoAnalyze: "analyze",
   gotoSettings: "settings",
 } satisfies Partial<Record<keyof KeybindingMap, View>>;
 

@@ -65,7 +65,7 @@ crates/azdo-client/                            — Tauri 非依存の独立 ADO 
 My Items (割当件数)、ピン留めした Work Item View (最後に取得した件数)、
 Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非表示。
 
-最上位ナビ項目 (Pull Requests / Work Items / Commits / Pipelines / Code) はドラッグ&ドロップ
+最上位ナビ項目 (Pull Requests / Work Items / Commits / Pipelines / Code / Analyze) はドラッグ&ドロップ
 またはキーボード (`Alt+↑` / `Alt+↓`) で並べ替えできる。順序は localStorage
 (`azdodeck:layout:navOrder`) に永続化される。Help / Settings は下部固定で対象外。
 
@@ -99,6 +99,7 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
 | **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。定義パネル (`PipelineDefinitionPanel`) の Edit ボタンから編集フォーム (`PipelineDefinitionEditForm`) を開き、非シークレット変数を行単位で追加/変更/削除 (name / value / allowOverride チェックボックス) できる。シークレット変数は "(secret)" 表示の読み取り専用行として並び、編集・削除操作を提供しない。CI トリガーは有効/無効チェックボックスと branch/path filters (1 行 1 件のテキストエリア) を編集でき、セクションを触っていなければ保存時に `ciTrigger: null` を送りトリガーを変更しない。Save は `update_pipeline_definition` を呼び、成功時は返却された定義でクエリキャッシュを更新して閲覧モードに戻り、失敗時はパネル内にエラーを表示したまま編集状態を維持する。編集モードは Edit ボタンから開始 (最初の入力にフォーカス)、Escape または Cancel/Save で終了しフォーカスを Edit ボタンへ戻す、キー操作はフォーム内に閉じ込めて背後のビューに伝播しない。 |
 | **Settings** | 組織設定 (PAT / Azure CLI)、通知設定、フォルダパス、グローバルホットキー、キーバインド上書き。Software update パネル (opt-in: 手動で更新確認→適用、失敗時は安全にスキップ。`tauri-plugin-updater`、ブラウザでは無効)。Experimental パネル (マスタースイッチ + 個別フラグ。マスターが false の間は個別フラグの保存値を保持したまま無効化する)。Usage stats パネル (`experimental_usage_stats` が有効なときのみ表示。localStorage `azdodeck:experimental:usageStats` に投票数・解決スレッド数・状態変更数を集計、リセット可能、外部送信なし)。 |
 | **Notifications** | 通知履歴 (`notifications` テーブル) 専用ビュー。サイドバー最上位に固定表示 (ドラッグ並べ替え対象外)、未読件数バッジ付き。フィルタ: Unread only トグル、種別の複数選択 (`MultiSelectFilter`)、組織が2件以上のときのみ表示される単一選択の組織セレクト。一覧は `list_notifications` (`limit=100`、`beforeId` カーソルで「Load more」) を `useInfiniteQuery` で取得し、共有 `useGridVirtualizer` で仮想化。行は未読ドット・タイトル・相対時刻・種別ラベル+詳細+本文冒頭、webUrl があれば行内に外部ブラウザで開くボタン。キーボード: `↑↓`/`J K`/`Home`/`End`/`PageUp`/`PageDown` で行移動、`Enter` でジャンプ (種別ごとに PR Search / Work Item Search / Pipelines / Settings のいずれかへ遷移、または `webUrl` を外部ブラウザで開く。対象を特定できない場合は何もしない) と同時に既読化、`Ctrl+Enter` は `webUrl` を外部ブラウザで開いて既読化、`R` で選択行を既読化 (バックエンドに未読へ戻す手段が無いため、未読の行を既読にするだけの片方向操作)。ヘッダーの「Mark all read」で全既読。既読操作は `mark_notifications_read` / `mark_all_notifications_read` を呼び関連クエリを invalidate。`notifications:inbox-updated` イベント (App 直下で購読) を受けて一覧・未読バッジの両方を invalidate するため、ビューを開いていなくてもバッジは最新化される。パイプライン監視の開始/終了通知 (`usePipelineWatchNotifications`) とパイプライン手動実行のキュー投入 (App の `runQuickPipeline`) は、デスクトップ通知トーストと同じタイミングで `record_notification` を呼び、同じ履歴に記録する (kind: `pipelineWatchStarted` / `pipelineWatchFinished` / `pipelineRunQueued`)。`G` チェーンは `N`。 |
+| **Analyze** | 登録したクエリとブランチを**グループ**単位でまとめ、Day / Week の粒度で推移を見るビュー。1 グループにクエリ複数 + ブランチ複数を登録でき、どちらか片方だけでもよい (両方 0 件のときのみ保存を拒否)。左のグループ一覧 + 右の詳細。クエリは WIQL に `ASOF` を付けて各時点の件数を取得し (`count_work_item_query_history`、バックエンドで並列度 4・1 回あたり最大 90 点)、1 本ごとに小さな折れ線 + 現在値 + 前期比を並べる。`ASOF` は `ORDER BY` の前に挿入し、文字列リテラル内の同名語は誤検出しない。ブランチは既存の `search_commits` で期間内のコミットを取り、日別の縦棒 (最新バケットを強調色) で件数を示す。行を開くとクエリは数値テーブル (期間 / 件数 / 前期比 / 備考)、ブランチは日・週バケットのコミット一覧 (既定は最新 3 バケット展開、見出しに件数の横棒、`truncated` 時は「Showing N of M commits」) に展開し、`Esc` で一覧へ戻る。Azure DevOps が答えられなかった時点は 0 ではなく欠測 (`count: null`) として扱い、テーブルに理由を出しつつ折れ線は前後をつないで線を途切れさせない。粒度と期間 (Day: 7/30/90 日、Week: 4/12/26 週) はグループ単位の設定で、週は既存のヒートマップと同じ月曜起点・UTC。グループは localStorage (`azdodeck:analyze:groups`) に保存する (グループ 20 件、1 グループあたりメンバー 12 件が上限)。`ASOF` を含む WIQL は登録時に拒否し、保存済み Work Item View からの取り込みでも候補から除外する。ブランチ欄は選択中リポジトリの実ブランチ (`list_repo_branches`) をキーボード操作対応の候補選択欄 (`FilterableSelect`) で提示し、既定ブランチを初期選択にする (取得失敗時は自由入力へフォールバック、リポジトリ変更で選択をリセット)。キーボード: 一覧で `↑↓`/`J K`/`Home`/`End` 移動、`Enter` で詳細へ、`N` 追加 / `E` 編集 / `Delete` 削除、詳細で `D`/`W` 粒度切替。`G` チェーンは `A`。 |
 
 ### 横断機能
 
@@ -305,7 +306,7 @@ find-next) は、入力欄以外では抑止し、ネイティブ動作が素通
 
 `R` My Reviews / `P` PR Search / `W` My Work Items / `I` Work Item Search /
 `V` Work Item Views / `C` Commits / `B` Pipelines / `D` Code / `N` Notifications /
-`S` Settings。
+`A` Analyze / `S` Settings。
 `R` My Reviews / `Q` PR Search / `W` My Work Items / `I` Work Item Search /
 `V` Work Item Views / `C` Commits / `P` Pipelines / `D` Code / `S` Settings。
 
