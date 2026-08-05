@@ -134,6 +134,7 @@ export function AnalyzeGroupDialog({
           name: view.name,
           projectId: view.projectId,
           wiql: view.wiql,
+          milestones: [],
         },
       ],
     });
@@ -161,6 +162,7 @@ export function AnalyzeGroupDialog({
           name: wiqlName.trim() || `Query ${draft.queries.length + 1}`,
           projectId: "",
           wiql,
+          milestones: [],
         },
       ],
     });

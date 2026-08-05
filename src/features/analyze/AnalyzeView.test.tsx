@@ -37,7 +37,13 @@ function group(overrides: Partial<AnalyzeGroup> = {}): AnalyzeGroup {
     organizationId: "contoso",
     projectId: "proj1",
     queries: [
-      { id: "q1", name: "Bugs — Core", projectId: "", wiql: "SELECT [System.Id] FROM WorkItems" },
+      {
+        id: "q1",
+        name: "Bugs — Core",
+        projectId: "",
+        wiql: "SELECT [System.Id] FROM WorkItems",
+        milestones: [],
+      },
     ],
     branches: [
       {
@@ -51,13 +57,16 @@ function group(overrides: Partial<AnalyzeGroup> = {}): AnalyzeGroup {
     ],
     granularity: "day",
     rangeCount: 7,
+    rangePreset: "count",
+    rangeFrom: "",
+    rangeTo: "",
     ...overrides,
   };
 }
 
-function points(counts: (number | null)[]): WorkItemQueryCountPoint[] {
+function points(counts: (number | null)[], offset = 0): WorkItemQueryCountPoint[] {
   return counts.map((count, index) => ({
-    timestamp: `2026-08-0${index + 1}T00:00:00Z`,
+    timestamp: `2026-08-${String(offset + index + 1).padStart(2, "0")}T00:00:00Z`,
     count,
     error: count === null ? "no snapshot" : null,
   }));
@@ -84,18 +93,34 @@ function commitResult(count: number): CommitSearchResult {
   };
 }
 
-function renderView() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function renderView(client?: QueryClient) {
+  const queryClient =
+    client ?? new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={queryClient}>
       <AnalyzeView />
     </QueryClientProvider>,
   );
 }
 
+/**
+ * The hook splits a series into a cached "settled" request and a live "open"
+ * one for the trailing bucket, so a mock has to answer per-request rather than
+ * returning the whole series twice.
+ */
+function mockHistory(counts: (number | null)[]): void {
+  countWorkItemQueryHistory.mockImplementation((input: { timestamps: string[] }) => {
+    const requested = input.timestamps.length;
+    // The open request always asks for the single trailing point.
+    return requested === 1
+      ? Promise.resolve(points(counts.slice(-1), counts.length - 1))
+      : Promise.resolve(points(counts.slice(0, requested)));
+  });
+}
+
 beforeEach(() => {
   window.localStorage.clear();
-  countWorkItemQueryHistory.mockResolvedValue(points([10, 12, 15]));
+  mockHistory([10, 12, 15]);
   searchCommits.mockResolvedValue(commitResult(3));
   listWorkItemProjects.mockResolvedValue([{ projectId: "proj1", projectName: "Payments" }]);
   listCommitRepositories.mockResolvedValue([
@@ -129,8 +154,9 @@ describe("AnalyzeView", () => {
 
     expect(await screen.findByText("クエリの推移")).toBeTruthy();
     expect(screen.getByText("ブランチのコミット")).toBeTruthy();
-    expect(screen.getByText("Bugs — Core")).toBeTruthy();
-    await waitFor(() => expect(screen.getByText("15")).toBeTruthy());
+    expect(screen.getAllByText("Bugs — Core").length).toBeGreaterThan(0);
+    // The latest count reaches both the chart legend and the summary row.
+    await waitFor(() => expect(screen.getAllByText("15").length).toBeGreaterThan(0));
   });
 
   it("renders a branch-only group without a query section", async () => {
@@ -155,10 +181,34 @@ describe("AnalyzeView", () => {
     saveAnalyzeGroups([group({ rangeCount: 7 })]);
     renderView();
 
-    await waitFor(() => expect(countWorkItemQueryHistory).toHaveBeenCalled());
-    const input = countWorkItemQueryHistory.mock.calls[0][0];
-    expect(input.timestamps).toHaveLength(7);
-    expect(input.wiql).toBe("SELECT [System.Id] FROM WorkItems");
+    await waitFor(() => expect(countWorkItemQueryHistory.mock.calls.length).toBe(2));
+    // The settled points and the trailing open one are fetched separately so
+    // the closed half can be cached, but together they still cover the window.
+    const totals = countWorkItemQueryHistory.mock.calls
+      .map((call) => call[0].timestamps.length)
+      .sort((a, b) => a - b);
+    expect(totals).toEqual([1, 6]);
+    expect(countWorkItemQueryHistory.mock.calls[0][0].wiql).toBe(
+      "SELECT [System.Id] FROM WorkItems",
+    );
+  });
+
+  it("caches the settled points and only refetches the open one", async () => {
+    saveAnalyzeGroups([group({ branches: [], rangeCount: 7 })]);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { unmount } = renderView(client);
+
+    await waitFor(() => expect(countWorkItemQueryHistory.mock.calls.length).toBe(2));
+    const settledCalls = () =>
+      countWorkItemQueryHistory.mock.calls.filter((call) => call[0].timestamps.length > 1);
+    expect(settledCalls()).toHaveLength(1);
+
+    // Remounting against the same cache must not re-ask for the closed points,
+    // which is the whole point of splitting the request.
+    unmount();
+    renderView(client);
+    await waitFor(() => expect(screen.getByText("クエリの推移")).toBeTruthy());
+    expect(settledCalls()).toHaveLength(1);
   });
 
   it("opens a query's detail table and returns to the summary", async () => {
@@ -175,8 +225,30 @@ describe("AnalyzeView", () => {
     await waitFor(() => expect(screen.getByText("クエリの推移")).toBeTruthy());
   });
 
+  it("waits for both halves before plotting, so the newest point keeps its slot", async () => {
+    let releaseSettled: (value: WorkItemQueryCountPoint[]) => void = () => {};
+    countWorkItemQueryHistory.mockImplementation((input: { timestamps: string[] }) => {
+      if (input.timestamps.length === 1) return Promise.resolve(points([15], 6));
+      // Hold the settled half open so only the trailing point has resolved.
+      return new Promise<WorkItemQueryCountPoint[]>((resolve) => {
+        releaseSettled = resolve;
+      });
+    });
+
+    saveAnalyzeGroups([group({ branches: [], rangeCount: 7 })]);
+    renderView();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Bugs — Core の明細を開く" }));
+    // With only the open half in hand the series must stay empty rather than
+    // rendering 15 as though it were the oldest bucket.
+    expect(screen.queryByText("15")).toBeNull();
+
+    releaseSettled(points([30, 28, 26, 24, 22, 20]));
+    await waitFor(() => expect(screen.getAllByText("15").length).toBeGreaterThan(0));
+  });
+
   it("marks a point Azure DevOps could not answer instead of showing zero", async () => {
-    countWorkItemQueryHistory.mockResolvedValue(points([10, null, 12]));
+    mockHistory([10, null, 12]);
     saveAnalyzeGroups([group({ branches: [] })]);
     renderView();
 
@@ -193,9 +265,31 @@ describe("AnalyzeView", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Week" }));
 
+    // Week defaults to 12 buckets, not the 7 that "day" was showing, so the
+    // settled half now asks for 11. The trailing point is always sampled at
+    // "now", so its key is unchanged and it stays served from cache.
+    await waitFor(() =>
+      expect(countWorkItemQueryHistory.mock.calls.map((call) => call[0].timestamps.length)).toEqual(
+        [11],
+      ),
+    );
+  });
+
+  it("switches to the month granularity", async () => {
+    saveAnalyzeGroups([group({ branches: [] })]);
+    renderView();
+
     await waitFor(() => expect(countWorkItemQueryHistory).toHaveBeenCalled());
-    // Week defaults to 12 buckets, not the 7 that "day" was showing.
-    expect(countWorkItemQueryHistory.mock.calls[0][0].timestamps).toHaveLength(12);
+    countWorkItemQueryHistory.mockClear();
+
+    fireEvent.click(screen.getByRole("button", { name: "Month" }));
+
+    // Month defaults to 6 buckets, so 5 settled points.
+    await waitFor(() =>
+      expect(countWorkItemQueryHistory.mock.calls.map((call) => call[0].timestamps.length)).toEqual(
+        [5],
+      ),
+    );
   });
 
   it("expands the newest buckets that actually have commits", async () => {
@@ -224,8 +318,155 @@ describe("AnalyzeView", () => {
     saveAnalyzeGroups([group({ queries: [], rangeCount: 30 })]);
     renderView();
 
-    fireEvent.click(await screen.findByRole("button", { name: /main のコミット一覧を開く/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /main の明細を開く/ }));
     expect(await screen.findByText("feat: an older change")).toBeTruthy();
+  });
+
+  it("hides a series from the chart when its legend entry is toggled off", async () => {
+    saveAnalyzeGroups([group({ branches: [] })]);
+    renderView();
+
+    await screen.findByRole("group", { name: "系列の表示" });
+    const entry = () =>
+      within(screen.getByRole("group", { name: "系列の表示" })).getByRole("button", {
+        name: /Bugs — Core/,
+      });
+    expect(entry().getAttribute("aria-pressed")).toBe("true");
+
+    fireEvent.click(entry());
+    await waitFor(() => expect(entry().getAttribute("aria-pressed")).toBe("false"));
+
+    // Toggling back restores it rather than dropping the member.
+    fireEvent.click(entry());
+    await waitFor(() => expect(entry().getAttribute("aria-pressed")).toBe("true"));
+  });
+
+  it("moves between summary rows with the arrow keys", async () => {
+    saveAnalyzeGroups([group()]);
+    renderView();
+
+    const queryRow = await screen.findByRole("button", { name: "Bugs — Core の明細を開く" });
+    queryRow.focus();
+    fireEvent.keyDown(queryRow, { key: "ArrowDown" });
+
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: "main の明細を開く" }),
+      ),
+    );
+  });
+
+  it("shows the view's shortcuts so they can be discovered", async () => {
+    saveAnalyzeGroups([group()]);
+    renderView();
+
+    expect(await screen.findByText("D / W / M")).toBeTruthy();
+    expect(screen.getByText("[ / ]")).toBeTruthy();
+  });
+
+  it("widens the counted window with the ] key", async () => {
+    saveAnalyzeGroups([group({ branches: [], rangeCount: 7 })]);
+    renderView();
+
+    await waitFor(() => expect(countWorkItemQueryHistory).toHaveBeenCalled());
+    countWorkItemQueryHistory.mockClear();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Bugs — Core の明細を開く" }));
+    fireEvent.click(screen.getByRole("button", { name: "一覧へ" }));
+    fireEvent.keyDown(screen.getByText("クエリの推移").closest("div")!, { key: "]" });
+
+    // 7 days steps up to the next option, 30, so 29 settled points.
+    await waitFor(() =>
+      expect(countWorkItemQueryHistory.mock.calls.map((call) => call[0].timestamps.length)).toContain(
+        29,
+      ),
+    );
+  });
+
+  it("switches to a custom date range", async () => {
+    saveAnalyzeGroups([group({ branches: [] })]);
+    renderView();
+
+    fireEvent.change(await screen.findByLabelText("期間の種類"), {
+      target: { value: "custom" },
+    });
+
+    fireEvent.change(await screen.findByLabelText("開始日"), {
+      target: { value: "2026-07-01" },
+    });
+    fireEvent.change(screen.getByLabelText("終了日"), { target: { value: "2026-07-10" } });
+
+    await waitFor(() => expect(screen.getByText("2026-07-01 – 2026-07-10")).toBeTruthy());
+  });
+
+  it("adds and removes a milestone on a query", async () => {
+    saveAnalyzeGroups([group({ branches: [] })]);
+    renderView();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Bugs — Core の明細を開く" }));
+    expect(await screen.findByText(/その日までに何件にするか/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "マイルストーンを追加" }));
+    expect(await screen.findByLabelText("MS1 の日付")).toBeTruthy();
+
+    // The target survives a reload because it is stored on the member.
+    const stored = JSON.parse(window.localStorage.getItem("azdodeck:analyze:groups")!);
+    expect(stored[0].queries[0].milestones).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "MS1 を削除" }));
+    await waitFor(() => expect(screen.queryByLabelText("MS1 の日付")).toBeNull());
+  });
+
+  it("judges a past milestone against the actual on that day", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    // One count per bucket so the trailing point lines up with today.
+    mockHistory([30, 28, 26, 24, 22, 20, 15]);
+    saveAnalyzeGroups([
+      group({
+        branches: [],
+        rangeCount: 7,
+        queries: [
+          {
+            id: "q1",
+            name: "Bugs — Core",
+            projectId: "",
+            wiql: "SELECT [System.Id] FROM WorkItems",
+            // Today's actual is 15, so a target of 5 is missed.
+            milestones: [{ date: today, count: 5 }],
+          },
+        ],
+      }),
+    ]);
+    renderView();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Bugs — Core の明細を開く" }));
+    expect(await screen.findByText("未達")).toBeTruthy();
+    expect(screen.getByText(/実績 15 \/ 目標 5/)).toBeTruthy();
+  });
+
+  it("exports the stored groups as a JSON download", async () => {
+    const click = vi.fn();
+    const createObjectURL = vi.fn(() => "blob:analyze");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", { ...URL, createObjectURL, revokeObjectURL });
+    const createElement = document.createElement.bind(document);
+    vi.spyOn(document, "createElement").mockImplementation((tag: string) => {
+      const element = createElement(tag);
+      if (tag === "a") element.click = click;
+      return element;
+    });
+
+    saveAnalyzeGroups([group()]);
+    renderView();
+
+    fireEvent.click(await screen.findByRole("button", { name: "書き出し" }));
+
+    expect(click).toHaveBeenCalled();
+    expect(createObjectURL).toHaveBeenCalled();
+    expect(await screen.findByText("1 件のグループを書き出しました。")).toBeTruthy();
+
+    vi.unstubAllGlobals();
+    vi.mocked(document.createElement).mockRestore();
   });
 
   it("moves between groups with the arrow keys", async () => {
