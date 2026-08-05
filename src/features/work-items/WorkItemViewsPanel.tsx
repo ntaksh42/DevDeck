@@ -6,10 +6,9 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import {
-  countWorkItemQuery,
   listWorkItemProjects,
   runWorkItemQuery,
   commandErrorMessage,
@@ -23,22 +22,27 @@ import { WorkItemBoard } from './WorkItemBoard';
 import { toMatchTarget } from './workItemMatchTarget';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from './queryKeys';
 import {
-  createWorkItemQueryViewsExport,
   loadWorkItemQueryViews,
-  parseWorkItemQueryViewsImport,
-  recordViewCount,
   saveWorkItemQueryViews,
   loadWorkItemViewLayout,
   saveWorkItemViewLayout,
   type WorkItemQueryView,
   type WorkItemViewLayout,
 } from './workItemViewsStorage';
+import { firstCustomView, viewCardColumnCount } from './workItemViewsHelpers';
 import {
-  firstCustomView,
-  newWorkItemViewId,
-  viewExportFileName,
-  viewCardColumnCount,
-} from './workItemViewsHelpers';
+  loadWorkItemViewsCardMode,
+  loadWorkItemViewsCollapsed,
+  saveWorkItemViewsCardMode,
+  saveWorkItemViewsCollapsed,
+  type WorkItemViewsCardMode,
+} from './workItemViewsDisplayStorage';
+import {
+  copyViewShareJson,
+  downloadViewsExport,
+  readViewsImportFile,
+} from './workItemViewsTransfer';
+import { useViewCountQueries } from './useViewCountQueries';
 import { useViewEditorDraft } from './useViewEditorDraft';
 import { ViewEditorDialog } from './ViewEditorDialog';
 import { ViewsListPanel } from './ViewsListPanel';
@@ -66,9 +70,13 @@ export function WorkItemViewsPanel({
   const [layout, setLayout] = useState<WorkItemViewLayout>(() =>
     initialSelectedView ? loadWorkItemViewLayout(initialSelectedView.id) : "list",
   );
+  const [listCollapsed, setListCollapsed] = useState<boolean>(loadWorkItemViewsCollapsed);
+  const [cardMode, setCardMode] = useState<WorkItemViewsCardMode>(loadWorkItemViewsCardMode);
   const viewButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const restoreViewFocusIndexRef = useRef<number | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const collapseToggleRef = useRef<HTMLButtonElement | null>(null);
+  const restoreFocusAfterCollapseRef = useRef<"toggle" | "list" | null>(null);
 
   const projectsQuery = useQuery({
     queryKey: workItemQueryKeys.projects(selectedOrganizationId),
@@ -102,40 +110,11 @@ export function WorkItemViewsPanel({
     }
   }, [selectedViewId, views]);
 
-  const viewCountQueries = useQueries({
-    queries: views.map((view) => ({
-      queryKey: workItemQueryKeys.queryCount({
-        organizationId: selectedOrganizationId,
-        viewId: view.id,
-        projectId: view.projectId || projectOptions[0]?.projectId,
-        wiql: view.wiql,
-        limit: view.limit,
-      }),
-      queryFn: () =>
-        countWorkItemQuery({
-          organizationId: selectedOrganizationId,
-          projectId: view.projectId || projectOptions[0]?.projectId || "",
-          wiql: view.wiql,
-          limit: view.limit,
-        }),
-      enabled: !!selectedOrganizationId && !!(view.projectId || projectOptions[0]?.projectId) && !!view.wiql.trim(),
-      staleTime: 5 * 60_000,
-      refetchInterval: view.refreshIntervalSec ? view.refreshIntervalSec * 1000 : (false as const),
-    })),
+  const viewCountQueries = useViewCountQueries({
+    views,
+    selectedOrganizationId,
+    projectOptions,
   });
-
-  const viewCountsSignature = views
-    .map((view, index) => `${view.id}:${viewCountQueries[index]?.data ?? ""}`)
-    .join("|");
-  useEffect(() => {
-    const ids = views.map((view) => view.id);
-    views.forEach((view, index) => {
-      const count = viewCountQueries[index]?.data;
-      if (typeof count === "number") recordViewCount(view.id, count, ids);
-    });
-    // viewCountQueries is a fresh array each render; the signature captures the inputs.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewCountsSignature]);
 
   const selectedViewIndex = Math.max(
     0,
@@ -193,12 +172,42 @@ export function WorkItemViewsPanel({
     if (selectedView) saveWorkItemViewLayout(selectedView.id, next);
   }
 
+  function toggleListCollapsed() {
+    setListCollapsed((collapsed) => {
+      const next = !collapsed;
+      saveWorkItemViewsCollapsed(next);
+      // Collapsing unmounts the list the keyboard was in, so hand focus to the
+      // toggle rather than stranding it on <body>. Expanding returns focus to
+      // the selected view so arrow navigation resumes where it left off.
+      restoreFocusAfterCollapseRef.current = next ? "toggle" : "list";
+      return next;
+    });
+  }
+
+  function changeCardMode(next: WorkItemViewsCardMode) {
+    setCardMode(next);
+    saveWorkItemViewsCardMode(next);
+  }
+
   useEffect(() => {
     const index = restoreViewFocusIndexRef.current;
     if (index === null) return;
     restoreViewFocusIndexRef.current = null;
     window.setTimeout(() => viewButtonRefs.current[index]?.focus(), 0);
   }, [selectedViewId]);
+
+  useEffect(() => {
+    const target = restoreFocusAfterCollapseRef.current;
+    if (!target) return;
+    restoreFocusAfterCollapseRef.current = null;
+    window.setTimeout(() => {
+      if (target === "toggle") {
+        collapseToggleRef.current?.focus();
+      } else {
+        viewButtonRefs.current[selectedViewIndex]?.focus();
+      }
+    }, 0);
+  }, [listCollapsed, selectedViewIndex]);
 
   useEffect(() => {
     if (!selectedViewRequestId) return;
@@ -267,6 +276,7 @@ export function WorkItemViewsPanel({
 
   function handleViewListKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (isEditableTarget(event.target) || views.length === 0) return;
+    // Ctrl+B is handled by the panel wrapper so it also works from the grid.
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     const columnCount = viewCardColumnCount(event.currentTarget);
     if (event.shiftKey && (event.key === "ArrowLeft" || event.key === "ArrowUp")) {
@@ -314,57 +324,54 @@ export function WorkItemViewsPanel({
 
   async function copySelectedViewShareJson() {
     if (!selectedView) return;
-    const text = JSON.stringify(createWorkItemQueryViewsExport([selectedView]), null, 2);
-    try {
-      if (!navigator.clipboard?.writeText) {
-        throw new Error("Clipboard API is not available.");
-      }
-      await navigator.clipboard.writeText(text);
-      setViewMessage("Copied selected view share JSON.");
-    } catch (error) {
-      setViewMessage(error instanceof Error ? error.message : "Failed to copy share JSON.");
-    }
+    setViewMessage(await copyViewShareJson(selectedView));
   }
 
   function exportAllViews() {
-    const text = JSON.stringify(createWorkItemQueryViewsExport(views), null, 2);
-    const blob = new Blob([text], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = viewExportFileName();
-    link.click();
-    URL.revokeObjectURL(url);
-    setViewMessage(`Exported ${views.length} view${views.length === 1 ? "" : "s"}.`);
+    setViewMessage(downloadViewsExport(views));
   }
 
   async function importViewsFromFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = "";
     if (!file) return;
-    try {
-      const imported = parseWorkItemQueryViewsImport(await file.text()).map((view) => ({
-        ...view,
-        id: newWorkItemViewId(),
-      }));
-      setViews((current) => [...current, ...imported]);
-      const firstImported = imported[0];
+    const result = await readViewsImportFile(file);
+    if (result.status === "ok") {
+      setViews((current) => [...current, ...result.views]);
+      const firstImported = result.views[0];
       setSelectedViewId(firstImported.id);
       draft.loadDraft(firstImported);
-      setViewMessage(`Imported ${imported.length} view${imported.length === 1 ? "" : "s"}.`);
-    } catch (error) {
-      setViewMessage(error instanceof Error ? error.message : "Failed to import views.");
     }
+    setViewMessage(result.message);
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div
+      className="flex min-h-0 flex-1 flex-col gap-3"
+      onKeyDown={(event) => {
+        // Ctrl+B works from the grid too, so a collapsed list can always be
+        // brought back without reaching for the mouse.
+        if (
+          (event.ctrlKey || event.metaKey) &&
+          !event.altKey &&
+          (event.key === "b" || event.key === "B")
+        ) {
+          event.preventDefault();
+          toggleListCollapsed();
+        }
+      }}
+    >
       <ViewsListPanel
         views={views}
         selectedView={selectedView}
         selectedViewIndex={selectedViewIndex}
         viewCountQueries={viewCountQueries}
         layout={layout}
+        collapsed={listCollapsed}
+        onCollapsedToggle={toggleListCollapsed}
+        collapseToggleRef={collapseToggleRef}
+        cardMode={cardMode}
+        onCardModeChange={changeCardMode}
         viewMessage={viewMessage}
         viewButtonRefs={viewButtonRefs}
         importInputRef={importInputRef}
@@ -452,39 +459,9 @@ export function WorkItemViewsPanel({
 
       {draft.dialogOpen ? (
         <ViewEditorDialog
-          editingViewId={draft.editingViewId}
-          draftUrl={draft.draftUrl}
-          onUrlChange={draft.onUrlChange}
-          urlStatus={draft.urlStatus}
-          draftName={draft.draftName}
-          onNameChange={draft.onNameChange}
-          draftProjectId={draft.draftProjectId}
-          onProjectChange={draft.onProjectChange}
+          draft={draft}
           projectOptions={projectOptions}
           projectsLoading={projectsQuery.isLoading}
-          draftLimit={draft.draftLimit}
-          onLimitChange={draft.onLimitChange}
-          draftRefreshInterval={draft.draftRefreshInterval}
-          onRefreshIntervalChange={draft.onRefreshIntervalChange}
-          draftAlertThreshold={draft.draftAlertThreshold}
-          onAlertThresholdChange={draft.onAlertThresholdChange}
-          draftWiql={draft.draftWiql}
-          updateDraftWiql={draft.updateDraftWiql}
-          draftWiqlTextareaRef={draft.draftWiqlTextareaRef}
-          wiqlCursor={draft.wiqlCursor}
-          setWiqlCursor={draft.setWiqlCursor}
-          wiqlCompletionsOpen={draft.wiqlCompletionsOpen}
-          setWiqlCompletionsOpen={draft.setWiqlCompletionsOpen}
-          wiqlCompletions={draft.wiqlCompletions}
-          onApplyCompletion={draft.applyWiqlCompletion}
-          onInsertWiqlText={draft.insertWiqlText}
-          wiqlValidation={draft.wiqlValidation}
-          draftExtraColumns={draft.draftExtraColumns}
-          onExtraColumnsChange={draft.onExtraColumnsChange}
-          fields={draft.fields}
-          fieldsLoading={draft.fieldsLoading}
-          formError={draft.formError}
-          onSave={draft.saveView}
           onClose={() => draft.setDialogOpen(false)}
         />
       ) : null}
