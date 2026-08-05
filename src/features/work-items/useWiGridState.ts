@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { snoozeItems, type WorkItemSummary } from '@/lib/azdoCommands';
-import { storedNumber } from '@/lib/utils';
 import { useGridColumns } from '@/lib/useGridColumns';
+import { useAdaptivePreviewWidth } from '@/lib/useAdaptivePreviewWidth';
 import type { CustomPreviewField } from './previewFieldsStorage';
 import { loadCustomPreviewFields } from './previewFieldsStorage';
 import { workItemQueryKeys } from './queryKeys';
@@ -81,14 +81,12 @@ export function useWiGridState({
     prefixColumns: ["28px"],
     suffixColumns: extraColumns.map(() => "120px"),
   });
-  const [previewWidth, setPreviewWidth] = useState(() =>
-    storedNumber(
-      previewWidthStorageKey,
-      DEFAULT_WORK_ITEM_PREVIEW_WIDTH,
-      300,
-      MAX_WORK_ITEM_PREVIEW_WIDTH,
-    ),
-  );
+  const previewLayout = useAdaptivePreviewWidth({
+    defaultWidth: DEFAULT_WORK_ITEM_PREVIEW_WIDTH,
+    maxPreviewWidth: MAX_WORK_ITEM_PREVIEW_WIDTH,
+    minPreviewWidth: 300,
+    storageKey: `${previewWidthStorageKey}:ratio`,
+  });
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [lastCheckedIndex, setLastCheckedIndex] = useState<number | null>(null);
@@ -111,7 +109,7 @@ export function useWiGridState({
   // close instead of being stranded on <body>.
   const filterButtonRef = useRef<HTMLElement | null>(null);
   const [staleOnly, setStaleOnly] = useState(false);
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const { containerRef } = previewLayout;
   const gridScrollRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
   const previousResultKeysRef = useRef<string | null>(null);
@@ -146,15 +144,7 @@ export function useWiGridState({
   useEffect(() => {
     setVisibleColumns(loadVisibleWorkItemColumns(visibleColumnsStorageKey));
     setColumnFilters(loadWorkItemColumnFilters(columnFiltersStorageKey));
-    setPreviewWidth(
-      storedNumber(
-        previewWidthStorageKey,
-        DEFAULT_WORK_ITEM_PREVIEW_WIDTH,
-        300,
-        MAX_WORK_ITEM_PREVIEW_WIDTH,
-      ),
-    );
-  }, [columnFiltersStorageKey, previewWidthStorageKey, visibleColumnsStorageKey]);
+  }, [columnFiltersStorageKey, visibleColumnsStorageKey]);
 
   useEffect(() => {
     localStorage.setItem(visibleColumnsStorageKey, JSON.stringify(visibleColumns));
@@ -169,13 +159,6 @@ export function useWiGridState({
   useEffect(() => {
     storeWorkItemColumnFilters(columnFiltersStorageKey, columnFilters);
   }, [columnFilters, columnFiltersStorageKey]);
-
-  useEffect(() => {
-    localStorage.setItem(
-      previewWidthStorageKey,
-      String(Math.round(previewWidth)),
-    );
-  }, [previewWidth, previewWidthStorageKey]);
 
   // ─── Column visibility handlers ───────────────────────────────────────────
 
@@ -211,7 +194,10 @@ export function useWiGridState({
     visibleColumns, setVisibleColumns,
     toggleColumnVisibility, resetColumnVisibility,
     wiColTemplate, gridMinWidth, resetColumnWidths, columnResizeProps,
-    previewWidth, setPreviewWidth,
+    previewWidth: previewLayout.width,
+    previewMaxWidth: previewLayout.max,
+    setPreviewWidth: previewLayout.setWidth,
+    resetPreviewWidth: previewLayout.resetWidth,
     copyToast, setCopyToast,
     checkedIds, setCheckedIds,
     lastCheckedIndex, setLastCheckedIndex,

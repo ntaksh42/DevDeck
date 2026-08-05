@@ -12,8 +12,6 @@ import {
   WI_GRID_KEYS,
   WI_GRID_REQUIRED_COLUMNS,
   wiSortLabels,
-  DEFAULT_WORK_ITEM_PREVIEW_WIDTH,
-  MAX_WORK_ITEM_PREVIEW_WIDTH,
   type WiSortState,
 } from './workItemsGridHelpers';
 import { BulkActionBar, BulkFailurePanel } from './BulkActionBar';
@@ -253,10 +251,10 @@ export function WorkItemsGrid({
               ariaLabel="Resize work item preview"
               className="hidden xl:flex"
               direction={-1}
-              max={MAX_WORK_ITEM_PREVIEW_WIDTH}
+              max={state.previewMaxWidth}
               min={300}
               onChange={state.setPreviewWidth}
-              onReset={() => state.setPreviewWidth(DEFAULT_WORK_ITEM_PREVIEW_WIDTH)}
+              onReset={state.resetPreviewWidth}
               value={state.previewWidth}
             />
 

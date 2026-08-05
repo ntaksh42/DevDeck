@@ -113,7 +113,7 @@ describe("App — Layout", () => {
     expect(previewResize.getAttribute("aria-valuenow")).toBe("420");
     fireEvent.keyDown(previewResize, { key: "ArrowLeft" });
     expect(previewResize.getAttribute("aria-valuenow")).toBe("436");
-    expect(window.localStorage.getItem("azdodeck:layout:reviewPreviewWidth")).toBe("436");
+    expect(window.localStorage.getItem("azdodeck:layout:reviewPreviewWidth:ratio")).toBe("0.4");
     fireEvent.doubleClick(previewResize);
     expect(previewResize.getAttribute("aria-valuenow")).toBe("420");
   });

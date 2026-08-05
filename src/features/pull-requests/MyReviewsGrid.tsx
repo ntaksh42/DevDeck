@@ -19,7 +19,7 @@ import { ReviewFilterBar } from './ReviewFilterBar';
 import { ReviewStatusBar } from './ReviewStatusBar';
 import { OverlapPopup } from './OverlapPopup';
 import { reviewTriageKey, reviewTriageSnapshot } from './myReviewsHelpers';
-import { isFilterableColumn, sortLabels, PR_GRID_KEYS, PR_GRID_REQUIRED_COLUMNS, MAX_REVIEW_PREVIEW_WIDTH, MIN_REVIEW_PREVIEW_WIDTH, DEFAULT_REVIEW_PREVIEW_WIDTH } from './myReviewsTypes';
+import { isFilterableColumn, sortLabels, PR_GRID_KEYS, PR_GRID_REQUIRED_COLUMNS, MIN_REVIEW_PREVIEW_WIDTH } from './myReviewsTypes';
 import { useMyReviewsGrid } from './useMyReviewsGrid';
 import type { MyReviewsGridProps } from './myReviewsTypes';
 
@@ -357,10 +357,10 @@ export function MyReviewsGrid({
           ariaLabel="Resize review preview"
           className={g.maximized ? 'hidden' : 'hidden xl:flex'}
           direction={-1}
-          max={MAX_REVIEW_PREVIEW_WIDTH}
+          max={g.previewMaxWidth}
           min={MIN_REVIEW_PREVIEW_WIDTH}
           onChange={g.setPreviewWidth}
-          onReset={() => g.setPreviewWidth(DEFAULT_REVIEW_PREVIEW_WIDTH)}
+          onReset={g.resetPreviewWidth}
           value={g.previewWidth}
         />
         <PrReviewPanel

@@ -3,7 +3,6 @@ import { Filter } from 'lucide-react';
 import { type PullRequestSummary } from '@/lib/azdoCommands';
 import {
   clamp,
-  storedNumber,
   isEditableTarget,
   focusFilterInput,
   focusPrimaryPreview,
@@ -28,6 +27,7 @@ import {
   toggleColumnFilterValue,
 } from '@/lib/columnFilters';
 import { PrReviewPanel } from './PrReviewPanel';
+import { useAdaptivePreviewWidth } from '@/lib/useAdaptivePreviewWidth';
 import { PrSearchRow } from './PrSearchRow';
 import {
   type PrSearchFilterableColumn,
@@ -94,20 +94,14 @@ export function PullRequestResults({
   const [columnMenuRect, setColumnMenuRect] = useState<DOMRect | null>(null);
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const [maximized, setMaximized] = useState(false);
-  const [previewWidth, setPreviewWidth] = useState(() =>
-    storedNumber(
-      PR_SEARCH_PREVIEW_WIDTH_STORAGE_KEY,
-      DEFAULT_PR_SEARCH_PREVIEW_WIDTH,
-      MIN_PR_SEARCH_PREVIEW_WIDTH,
-      MAX_PR_SEARCH_PREVIEW_WIDTH,
-    ),
-  );
+  const previewLayout = useAdaptivePreviewWidth({
+    defaultWidth: DEFAULT_PR_SEARCH_PREVIEW_WIDTH,
+    maxPreviewWidth: MAX_PR_SEARCH_PREVIEW_WIDTH,
+    minPreviewWidth: MIN_PR_SEARCH_PREVIEW_WIDTH,
+    storageKey: `${PR_SEARCH_PREVIEW_WIDTH_STORAGE_KEY}:ratio`,
+  });
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
   const restoreFocusRef = useRef(false);
-  useEffect(() => {
-    localStorage.setItem(PR_SEARCH_PREVIEW_WIDTH_STORAGE_KEY, String(Math.round(previewWidth)));
-  }, [previewWidth]);
-
   const columnUniqueValues = useMemo(
     () => columnFilterUniqueValues(results, PR_SEARCH_FILTERABLE_COLUMNS),
     [results],
@@ -314,12 +308,13 @@ export function PullRequestResults({
 
   return (
     <div
+      ref={previewLayout.containerRef}
       className={
         maximized
           ? "flex min-h-0 flex-1"
           : "grid min-h-0 flex-1 items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_8px_minmax(320px,var(--pr-preview-width))]"
       }
-      style={{ "--pr-preview-width": `${previewWidth}px` } as CSSProperties}
+      style={{ "--pr-preview-width": `${previewLayout.width}px` } as CSSProperties}
     >
       <div
         className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card ${
@@ -442,11 +437,11 @@ export function PullRequestResults({
         ariaLabel="Resize pull request preview"
         className={maximized ? "hidden" : "hidden xl:flex"}
         direction={-1}
-        max={MAX_PR_SEARCH_PREVIEW_WIDTH}
+        max={previewLayout.max}
         min={MIN_PR_SEARCH_PREVIEW_WIDTH}
-        onChange={setPreviewWidth}
-        onReset={() => setPreviewWidth(DEFAULT_PR_SEARCH_PREVIEW_WIDTH)}
-        value={previewWidth}
+        onChange={previewLayout.setWidth}
+        onReset={previewLayout.resetWidth}
+        value={previewLayout.width}
       />
 
       <PrReviewPanel
