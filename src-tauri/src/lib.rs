@@ -180,6 +180,7 @@ pub fn run() {
             commands::work_items::list_work_item_projects,
             commands::work_items::run_work_item_query,
             commands::work_items::count_work_item_query,
+            commands::work_items::count_work_item_query_history,
             commands::work_items::get_work_item_preview,
             commands::work_items::search_work_item_mentions,
             commands::work_items::record_mention_interaction,

@@ -28,6 +28,28 @@ pub struct RunWorkItemQueryInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CountWorkItemQueryHistoryInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub wiql: String,
+    /// Instants to sample, each an Azure DevOps-compatible timestamp such as
+    /// `2026-08-05T00:00:00Z`. One result is returned per entry, in order.
+    pub timestamps: Vec<String>,
+}
+
+/// One sampled point of a query's history. `count` is `None` when Azure DevOps
+/// could not answer for that instant (for example, history predating a project
+/// migration), which the UI renders as a gap rather than a zero.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkItemQueryCountPoint {
+    pub timestamp: String,
+    pub count: Option<usize>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListWorkItemProjectsInput {
     pub organization_id: Option<String>,
 }

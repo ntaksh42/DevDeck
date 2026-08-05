@@ -227,6 +227,25 @@ export type RunWorkItemQueryInput = {
   extraFields?: string[];
 };
 
+export type CountWorkItemQueryHistoryInput = {
+  organizationId?: string;
+  projectId: string;
+  wiql: string;
+  /** Instants to sample, as `2026-08-05T00:00:00Z`. One point is returned each. */
+  timestamps: string[];
+};
+
+const workItemQueryCountPointSchema = z.object({
+  timestamp: z.string(),
+  /** Null when that instant could not be sampled; drawn as a gap, not a zero. */
+  count: z.number().nullable(),
+  error: z.string().nullable(),
+});
+
+export type WorkItemQueryCountPoint = z.infer<typeof workItemQueryCountPointSchema>;
+
+const workItemQueryCountPointsSchema = z.array(workItemQueryCountPointSchema);
+
 export type ListWorkItemProjectsInput = {
   organizationId?: string;
 };
@@ -343,6 +362,13 @@ export async function countWorkItemQuery(
 ): Promise<number> {
   const result = await invokeCommand("count_work_item_query", { input });
   return z.number().parse(result);
+}
+
+export async function countWorkItemQueryHistory(
+  input: CountWorkItemQueryHistoryInput,
+): Promise<WorkItemQueryCountPoint[]> {
+  const result = await invokeCommand("count_work_item_query_history", { input });
+  return workItemQueryCountPointsSchema.parse(result);
 }
 
 export async function getWorkItemPreview(

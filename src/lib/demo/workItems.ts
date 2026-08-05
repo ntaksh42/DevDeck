@@ -1,4 +1,5 @@
 import type {
+  CountWorkItemQueryHistoryInput,
   CreateWorkItemInput,
   GetWorkItemPreviewInput,
   RunWorkItemQueryInput,
@@ -6,6 +7,7 @@ import type {
   UpdateWorkItemFieldsInput,
   WorkItemPreview,
   WorkItemProjectOption,
+  WorkItemQueryCountPoint,
   WorkItemSummary,
 } from "@/lib/azdoCommands";
 import {
@@ -315,6 +317,39 @@ export function demoRunWorkItemQuery(input?: RunWorkItemQueryInput): WorkItemSum
     })),
     depth: isLinkQuery ? (index % 3 === 0 ? 0 : 1) : null,
   }));
+}
+
+/**
+ * Fabricates a count history for the analyze view. The walk is derived from the
+ * query text and each timestamp rather than randomised, so the same view redraws
+ * identically across reloads instead of jittering on every render.
+ */
+export function demoCountWorkItemQueryHistory(
+  input?: CountWorkItemQueryHistoryInput,
+): WorkItemQueryCountPoint[] {
+  const timestamps = input?.timestamps ?? [];
+  const current = demoRunWorkItemQuery(
+    input ? { projectId: input.projectId, wiql: input.wiql } : undefined,
+  ).length;
+  const seed = [...(input?.wiql ?? "")].reduce((acc, char) => (acc * 31 + char.charCodeAt(0)) % 9973, 7);
+
+  return timestamps.map((timestamp, index) => {
+    // One gap per series (when long enough) so the UI's missing-point handling
+    // stays visible in browser demo mode.
+    if (timestamps.length >= 8 && index === timestamps.length - 6) {
+      return { timestamp, count: null, error: "Demo: no snapshot for this point" };
+    }
+    const day = Number(timestamp.slice(8, 10)) || index;
+    // Older points drift below the current count and wobble a little.
+    const distance = timestamps.length - 1 - index;
+    const drift = Math.round(distance * (current > 20 ? 0.4 : 0.15));
+    const wobble = ((seed + day * 13 + index * 7) % 7) - 3;
+    return {
+      timestamp,
+      count: Math.max(0, current - drift + wobble),
+      error: null,
+    };
+  });
 }
 
 function demoExtraFieldValue(referenceName: string, item: WorkItemSummary): string | null {

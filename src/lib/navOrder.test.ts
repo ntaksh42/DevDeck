@@ -9,7 +9,7 @@ describe("normalizeNavOrder", () => {
   });
 
   it("preserves a valid reordering of all known ids", () => {
-    const reordered = ["codeSearch", "pipelines", "workItems", "pullRequests"];
+    const reordered = ["codeSearch", "analyze", "pipelines", "workItems", "pullRequests"];
     expect(normalizeNavOrder(reordered)).toEqual(reordered);
   });
 
@@ -21,6 +21,7 @@ describe("normalizeNavOrder", () => {
       // remaining known ids appended in default order
       "workItems",
       "codeSearch",
+      "analyze",
     ]);
   });
 
@@ -31,6 +32,7 @@ describe("normalizeNavOrder", () => {
       "pullRequests",
       "workItems",
       "codeSearch",
+      "analyze",
     ]);
   });
 
@@ -47,6 +49,7 @@ describe("reorderNav", () => {
       "pullRequests",
       "workItems",
       "codeSearch",
+      "analyze",
     ]);
   });
 
@@ -57,6 +60,7 @@ describe("reorderNav", () => {
       "pipelines",
       "pullRequests",
       "codeSearch",
+      "analyze",
     ]);
   });
 

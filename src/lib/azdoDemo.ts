@@ -15,6 +15,7 @@ import type {
   GetSavedQueryInput,
   GetWorkItemPreviewInput,
   ListPullRequestChangesInput,
+  CountWorkItemQueryHistoryInput,
   ListWorkItemFieldAllowedValuesInput,
   ListWorkItemFieldsInput,
   ListWorkItemTypeStatesInput,
@@ -71,6 +72,7 @@ import {
 import {
   demoCreateWorkItem,
   demoMyWorkItems,
+  demoCountWorkItemQueryHistory,
   demoRunWorkItemQuery,
   demoUpdateWorkItemFields,
   demoWorkItemPreview,
@@ -323,6 +325,10 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     case "count_work_item_query": {
       const input = (args as { input?: RunWorkItemQueryInput } | undefined)?.input;
       return demoRunWorkItemQuery(input).length;
+    }
+    case "count_work_item_query_history": {
+      const input = (args as { input?: CountWorkItemQueryHistoryInput } | undefined)?.input;
+      return demoCountWorkItemQueryHistory(input);
     }
     case "get_work_item_preview": {
       const input = (args as { input?: GetWorkItemPreviewInput } | undefined)?.input;

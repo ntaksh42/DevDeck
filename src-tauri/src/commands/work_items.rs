@@ -4,18 +4,18 @@ use crate::app_state::{ensure_write_enabled, run_blocking, AppState};
 use crate::error::Result;
 use crate::work_items::{
     AddWorkItemCommentInput, AddWorkItemLinkInput, AssignWorkItemsInput, BulkWorkItemResult,
-    ClassificationNodesResult, CreateWorkItemInput, DeleteWorkItemCommentInput,
-    FetchWorkItemImageInput, GetSavedQueryInput, GetWorkItemPreviewInput,
-    ListClassificationNodesInput, ListMyWorkItemsInput, ListWorkItemFieldAllowedValuesInput,
-    ListWorkItemFieldsInput, ListWorkItemProjectsInput, ListWorkItemTypeStatesInput,
-    ListWorkItemTypesInput, ListWorkItemUpdatesInput, MentionCandidate,
-    RecordAssigneeInteractionInput, RecordMentionInteractionInput, RemoveWorkItemLinkInput,
-    RunWorkItemQueryInput, SavedQueryResult, SearchWorkItemAssigneesInput,
+    ClassificationNodesResult, CountWorkItemQueryHistoryInput, CreateWorkItemInput,
+    DeleteWorkItemCommentInput, FetchWorkItemImageInput, GetSavedQueryInput,
+    GetWorkItemPreviewInput, ListClassificationNodesInput, ListMyWorkItemsInput,
+    ListWorkItemFieldAllowedValuesInput, ListWorkItemFieldsInput, ListWorkItemProjectsInput,
+    ListWorkItemTypeStatesInput, ListWorkItemTypesInput, ListWorkItemUpdatesInput,
+    MentionCandidate, RecordAssigneeInteractionInput, RecordMentionInteractionInput,
+    RemoveWorkItemLinkInput, RunWorkItemQueryInput, SavedQueryResult, SearchWorkItemAssigneesInput,
     SearchWorkItemMentionsInput, SearchWorkItemsInput, SetWorkItemCommentReactionInput,
     SetWorkItemsPriorityInput, SetWorkItemsStateInput, SetWorkItemsTagsInput,
     UpdateWorkItemCommentInput, UpdateWorkItemFieldsInput, WorkItemAssigneeCandidate,
     WorkItemComment, WorkItemFieldOption, WorkItemImage, WorkItemPreview, WorkItemProjectOption,
-    WorkItemSummary, WorkItemUpdateSummary,
+    WorkItemQueryCountPoint, WorkItemSummary, WorkItemUpdateSummary,
 };
 
 #[tauri::command]
@@ -61,6 +61,15 @@ pub async fn count_work_item_query(
     state: State<'_, AppState>,
 ) -> Result<usize> {
     state.work_items.count_query(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn count_work_item_query_history(
+    input: CountWorkItemQueryHistoryInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<WorkItemQueryCountPoint>> {
+    state.work_items.count_query_history(input).await
 }
 
 #[tauri::command]
