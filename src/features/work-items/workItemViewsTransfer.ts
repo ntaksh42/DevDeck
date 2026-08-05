@@ -3,6 +3,9 @@ import {
   parseWorkItemQueryViewsImport,
   type WorkItemQueryView,
 } from './workItemViewsStorage';
+import { save } from '@tauri-apps/plugin-dialog';
+import { writeTextFile } from '@tauri-apps/plugin-fs';
+import { isTauriRuntime } from '@/lib/runtime';
 import { newWorkItemViewId, viewExportFileName } from './workItemViewsHelpers';
 
 /** Copies a single view's share JSON, returning the status message to show. */
@@ -19,14 +22,31 @@ export async function copyViewShareJson(view: WorkItemQueryView): Promise<string
   }
 }
 
-/** Downloads every view as a JSON file, returning the status message to show. */
-export function downloadViewsExport(views: WorkItemQueryView[]): string {
+/** Saves every view as a JSON file, returning the status message to show. */
+export async function downloadViewsExport(views: WorkItemQueryView[]): Promise<string> {
   const text = JSON.stringify(createWorkItemQueryViewsExport(views), null, 2);
+  const fileName = viewExportFileName();
+
+  if (isTauriRuntime()) {
+    try {
+      const path = await save({
+        title: "Export work item views",
+        defaultPath: fileName,
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (!path) return "Export cancelled.";
+      await writeTextFile(path, text);
+      return `Exported ${views.length} view${views.length === 1 ? "" : "s"}.`;
+    } catch (error) {
+      return error instanceof Error ? error.message : "Failed to export views.";
+    }
+  }
+
   const blob = new Blob([text], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = viewExportFileName();
+  link.download = fileName;
   link.click();
   URL.revokeObjectURL(url);
   return `Exported ${views.length} view${views.length === 1 ? "" : "s"}.`;

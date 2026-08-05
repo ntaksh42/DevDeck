@@ -327,8 +327,8 @@ export function WorkItemViewsPanel({
     setViewMessage(await copyViewShareJson(selectedView));
   }
 
-  function exportAllViews() {
-    setViewMessage(downloadViewsExport(views));
+  async function exportAllViews() {
+    setViewMessage(await downloadViewsExport(views));
   }
 
   async function importViewsFromFile(event: ChangeEvent<HTMLInputElement>) {
@@ -383,7 +383,7 @@ export function WorkItemViewsPanel({
           updateSelectedView({ previewVisible: selectedView?.previewVisible === false })
         }
         onShare={() => void copySelectedViewShareJson()}
-        onExport={exportAllViews}
+        onExport={() => void exportAllViews()}
         onImport={(e) => void importViewsFromFile(e)}
         onEditOpen={() => draft.openEditDialog()}
         onDelete={deleteSelectedView}
