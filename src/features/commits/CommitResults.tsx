@@ -9,7 +9,6 @@ import {
 import { type CommitSummary } from "@/lib/azdoCommands";
 import {
   clamp,
-  storedNumber,
   isEditableTarget,
   focusFilterInput,
   focusPrimaryPreview,
@@ -51,6 +50,7 @@ import {
 } from "./commitSearchUtils";
 import { CommitGridRow, CommitSortHeaderButton } from "./CommitGridRow";
 import { CommitPreviewPanel } from "./CommitPreviewPanel";
+import { useAdaptivePreviewWidth } from "@/lib/useAdaptivePreviewWidth";
 
 export function CommitResults({
   activeExternalFilterCount = 0,
@@ -97,22 +97,16 @@ export function CommitResults({
   const [columnMenuRect, setColumnMenuRect] = useState<DOMRect | null>(null);
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const [maximized, setMaximized] = useState(false);
-  const [previewWidth, setPreviewWidth] = useState(() =>
-    storedNumber(
-      COMMIT_PREVIEW_WIDTH_STORAGE_KEY,
-      DEFAULT_COMMIT_PREVIEW_WIDTH,
-      MIN_COMMIT_PREVIEW_WIDTH,
-      MAX_COMMIT_PREVIEW_WIDTH,
-    ),
-  );
+  const previewLayout = useAdaptivePreviewWidth({
+    defaultWidth: DEFAULT_COMMIT_PREVIEW_WIDTH,
+    maxPreviewWidth: MAX_COMMIT_PREVIEW_WIDTH,
+    minPreviewWidth: MIN_COMMIT_PREVIEW_WIDTH,
+    storageKey: `${COMMIT_PREVIEW_WIDTH_STORAGE_KEY}:ratio`,
+  });
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
   const restoreFocusRef = useRef(false);
   const [scrollerEl, setScrollerEl] = useState<HTMLDivElement | null>(null);
   const [gridViewport, setGridViewport] = useState({ height: 0, scrollTop: 0 });
-
-  useEffect(() => {
-    localStorage.setItem(COMMIT_PREVIEW_WIDTH_STORAGE_KEY, String(Math.round(previewWidth)));
-  }, [previewWidth]);
 
   useEffect(() => {
     if (!scrollerEl) return;
@@ -309,12 +303,13 @@ export function CommitResults({
 
   return (
     <div
+      ref={previewLayout.containerRef}
       className={
         maximized
           ? "flex min-h-0 flex-1"
           : "grid min-h-0 flex-1 items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_8px_minmax(320px,var(--commit-preview-width))]"
       }
-      style={{ "--commit-preview-width": `${previewWidth}px` } as CSSProperties}
+      style={{ "--commit-preview-width": `${previewLayout.width}px` } as CSSProperties}
     >
       <div
         className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card ${
@@ -449,11 +444,11 @@ export function CommitResults({
         ariaLabel="Resize commit preview"
         className={maximized ? "hidden" : "hidden xl:flex"}
         direction={-1}
-        max={MAX_COMMIT_PREVIEW_WIDTH}
+        max={previewLayout.max}
         min={MIN_COMMIT_PREVIEW_WIDTH}
-        onChange={setPreviewWidth}
-        onReset={() => setPreviewWidth(DEFAULT_COMMIT_PREVIEW_WIDTH)}
-        value={previewWidth}
+        onChange={previewLayout.setWidth}
+        onReset={previewLayout.resetWidth}
+        value={previewLayout.width}
       />
 
       <CommitPreviewPanel
