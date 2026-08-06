@@ -1,6 +1,6 @@
 [package]
 name = "azdo-dashboard"
-version = "0.1.16"
+version = "0.1.50"
 description = "DevDeck — developer desktop dashboard"
 authors.workspace = true
 edition.workspace = true
@@ -41,3 +41,4 @@ tauri-plugin-fs = "2"
 tempfile = "3"
 url = { workspace = true }
 wiremock = "0.6"
+
