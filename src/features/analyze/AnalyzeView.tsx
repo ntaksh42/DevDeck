@@ -8,10 +8,11 @@ import {
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { AnalyzeGroupDialog } from "./AnalyzeGroupDialog";
 import { AnalyzeGroupList } from "./AnalyzeGroupList";
-import { AnalyzeSummaryPanel, type AnalyzeSelection } from "./AnalyzeSummaryPanel";
+import type { AnalyzeSelection } from "./AnalyzeSummaryPanel";
 import { BranchDetailPanel, QueryDetailPanel } from "./AnalyzeDetailPanels";
-import { AnalyzeCombinedChart, useSharedCursor } from "./AnalyzeCombinedChart";
-import { AnalyzeChartLegend, AnalyzeChartTooltip } from "./AnalyzeChartLegend";
+import { AnalyzeBreakdownPanel } from "./AnalyzeBreakdownPanel";
+import { AnalyzeTrendPanel } from "./AnalyzeTrendPanel";
+import { useSharedCursor } from "./AnalyzeCombinedChart";
 import { AnalyzeMilestonePanel } from "./AnalyzeMilestonePanel";
 import { AnalyzeRangeControls, AnalyzeShortcutHints } from "./AnalyzeRangeControls";
 import { branchSeriesColor, querySeriesColor } from "./analyzeColors";
@@ -33,7 +34,15 @@ import {
   type AnalyzeGroup,
 } from "./analyzeGroupsStorage";
 import type { AnalyzeMilestone } from "./analyzeMilestones";
-import { useAnalyzeBuckets, useBranchSeries, useQuerySeries } from "./useAnalyzeQueries";
+import {
+  useAnalyzeBuckets,
+  useBranchSeries,
+  useBreakdownItems,
+  useQuerySeries,
+} from "./useAnalyzeQueries";
+
+/** The trend half answers "how did this move"; the breakdown half "who holds what". */
+type AnalyzeTab = "trend" | "breakdown";
 
 function emptyGroup(organizationId: string, projectId: string): AnalyzeGroup {
   return {
@@ -60,6 +69,7 @@ export function AnalyzeView() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [hidden, setHidden] = useState<Set<string>>(() => new Set());
+  const [tab, setTab] = useState<AnalyzeTab>("trend");
   const detailRef = useRef<HTMLDivElement | null>(null);
 
   const selected = useMemo(
@@ -85,6 +95,11 @@ export function AnalyzeView() {
   const querySeries = useQuerySeries(selected, buckets, !!organizationId);
   const branchSeries = useBranchSeries(selected, buckets, !!organizationId);
   const [cursor, setCursor] = useSharedCursor(buckets.length);
+  // Only fetched while the tab is open: it pulls whole rows, not counts.
+  const breakdown = useBreakdownItems(
+    selected,
+    !!organizationId && tab === "breakdown" && !selection,
+  );
 
   const persist = useCallback((next: AnalyzeGroup[]) => {
     setGroups(next);
@@ -239,10 +254,6 @@ export function AnalyzeView() {
     }),
   ];
 
-  // Driven by what the group holds, not by what is currently visible: hiding
-  // the last series must leave the legend on screen to toggle it back.
-  const hasChart = legendEntries.length > 0;
-
   return (
     <div className="grid min-h-0 flex-1 grid-cols-[14rem_1fr] overflow-hidden">
       <AnalyzeGroupList
@@ -369,59 +380,66 @@ export function AnalyzeView() {
                 />
               ) : (
                 <div className="flex flex-col gap-4">
-                  {hasChart && (
-                    <section className="rounded-lg border border-border bg-card">
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
-                        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          推移
-                        </h3>
-                        <AnalyzeChartLegend
-                          entries={legendEntries}
-                          hidden={hidden}
-                          onToggle={toggleSeries}
-                          cursor={cursor}
-                        />
-                      </div>
-                      <div className="relative p-3">
-                        <AnalyzeCombinedChart
-                          buckets={buckets}
-                          granularity={selected.granularity}
-                          lines={chartLines}
-                          bars={chartBars}
-                          cursor={cursor}
-                          onCursorChange={setCursor}
-                        />
-                        {cursor !== null && buckets[cursor] && (
-                          <div
-                            className="pointer-events-none absolute top-4"
-                            style={{
-                              // Follow the cursor but stay inside the panel.
-                              left: `clamp(0.5rem, ${
-                                ((cursor + 0.5) / Math.max(1, buckets.length)) * 100
-                              }%, calc(100% - 12rem))`,
-                            }}
-                          >
-                            <AnalyzeChartTooltip
-                              bucket={buckets[cursor]}
-                              granularity={selected.granularity}
-                              series={legendEntries.filter(
-                                (entry) => !hidden.has(entry.memberId),
-                              )}
-                              cursor={cursor}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </section>
-                  )}
+                  <div
+                    className="flex w-fit overflow-hidden rounded-md border border-border"
+                    role="tablist"
+                    aria-label="表示"
+                  >
+                    {(
+                      [
+                        ["trend", "推移"],
+                        ["breakdown", "内訳"],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        role="tab"
+                        aria-selected={tab === value}
+                        onClick={() => setTab(value)}
+                        onKeyDown={(event) => {
+                          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                          // Arrows move between tabs, as a tablist is expected to.
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setTab(value === "trend" ? "breakdown" : "trend");
+                        }}
+                        className={`px-3 py-1 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
+                          tab === value
+                            ? "bg-secondary font-semibold"
+                            : "bg-card text-muted-foreground hover:bg-muted"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
 
-                  <AnalyzeSummaryPanel
-                    buckets={buckets}
-                    querySeries={querySeries}
-                    branchSeries={branchSeries}
-                    cursor={cursor}
-                    onOpen={setSelection}
-                  />
+                  {tab === "breakdown" ? (
+                    <AnalyzeBreakdownPanel
+                      items={breakdown.items}
+                      truncated={breakdown.truncated}
+                      isFetching={breakdown.isFetching}
+                      isError={breakdown.isError}
+                      error={breakdown.error}
+                      hasQueries={selected.queries.length > 0}
+                    />
+                  ) : (
+                    <AnalyzeTrendPanel
+                      buckets={buckets}
+                      granularity={selected.granularity}
+                      querySeries={querySeries}
+                      branchSeries={branchSeries}
+                      lines={chartLines}
+                      bars={chartBars}
+                      legendEntries={legendEntries}
+                      hidden={hidden}
+                      onToggleSeries={toggleSeries}
+                      cursor={cursor}
+                      onCursorChange={setCursor}
+                      onOpen={setSelection}
+                    />
+                  )}
                 </div>
               )}
             </div>

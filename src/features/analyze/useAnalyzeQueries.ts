@@ -2,10 +2,13 @@ import { useMemo } from "react";
 import { useQueries } from "@tanstack/react-query";
 import {
   countWorkItemQueryHistory,
+  runWorkItemQuery,
   searchCommits,
   type CommitSummary,
   type WorkItemQueryCountPoint,
+  type WorkItemSummary,
 } from "@/lib/azdoCommands";
+import { mergeQueryResults } from "./analyzeBreakdown";
 import {
   analyzeSampleTimestamps,
   bucketRangeEnd,
@@ -25,6 +28,13 @@ import type { AnalyzeGroup } from "./analyzeGroupsStorage";
 const CLOSED_POINT_STALE_TIME = Infinity;
 const CLOSED_POINT_GC_TIME = 60 * 60_000;
 const OPEN_POINT_STALE_TIME = 5 * 60_000;
+
+/**
+ * The breakdown pulls whole work items rather than counts, so it is capped.
+ * A distribution built from a truncated list would be misleading, so the UI
+ * says so when the cap is reached.
+ */
+export const BREAKDOWN_ITEM_LIMIT = 500;
 
 export type QuerySeries = {
   memberId: string;
@@ -156,6 +166,66 @@ export function useQuerySeries(
       error: settledResult?.error ?? openResult?.error,
     };
   });
+}
+
+/**
+ * The items a group's queries return right now, for the breakdown tab.
+ *
+ * Unlike the trend half this runs the WIQL without `ASOF`: the question is
+ * "who holds what today", so there is nothing to sample over time. Only fetched
+ * when the tab is actually open, since it pulls whole rows rather than counts.
+ */
+export function useBreakdownItems(
+  group: AnalyzeGroup | null,
+  enabled: boolean,
+): {
+  items: WorkItemSummary[];
+  /** True when a query hit the cap, so the distribution is only partial. */
+  truncated: boolean;
+  isFetching: boolean;
+  isError: boolean;
+  error: unknown;
+} {
+  const queries = group?.queries ?? [];
+
+  const results = useQueries({
+    queries: queries.map((member) => {
+      const projectId = member.projectId || group?.projectId || "";
+      return {
+        queryKey: [
+          "analyzeBreakdownItems",
+          group?.organizationId ?? "",
+          projectId,
+          member.id,
+          member.wiql,
+        ] as const,
+        queryFn: () =>
+          runWorkItemQuery({
+            organizationId: group?.organizationId,
+            projectId,
+            wiql: member.wiql,
+            limit: BREAKDOWN_ITEM_LIMIT,
+          }),
+        enabled: enabled && !!projectId && !!member.wiql.trim(),
+        staleTime: OPEN_POINT_STALE_TIME,
+      };
+    }),
+  });
+
+  const items = useMemo(
+    () => mergeQueryResults(results.map((result) => result.data)),
+    // Depending on the arrays themselves would rebuild on every render, since
+    // useQueries hands back a fresh wrapper each time.
+    [results.map((result) => result.dataUpdatedAt).join("|")],
+  );
+
+  return {
+    items,
+    truncated: results.some((result) => (result.data?.length ?? 0) >= BREAKDOWN_ITEM_LIMIT),
+    isFetching: results.some((result) => result.isFetching),
+    isError: results.some((result) => result.isError),
+    error: results.find((result) => result.error)?.error,
+  };
 }
 
 /** Fetches the commits for each branch in the group over the same window. */

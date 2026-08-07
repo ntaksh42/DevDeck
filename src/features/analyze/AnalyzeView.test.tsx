@@ -4,11 +4,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type {
   CommitSearchResult,
   WorkItemQueryCountPoint,
+  WorkItemSummary,
 } from "@/lib/azdoCommands";
 import { AnalyzeView } from "./AnalyzeView";
 import { saveAnalyzeGroups, type AnalyzeGroup } from "./analyzeGroupsStorage";
 
 const countWorkItemQueryHistory = vi.fn();
+const runWorkItemQuery = vi.fn();
 const searchCommits = vi.fn();
 const listWorkItemProjects = vi.fn();
 const listCommitRepositories = vi.fn();
@@ -19,6 +21,7 @@ vi.mock("@/lib/azdoCommands", async (importOriginal) => {
   return {
     ...actual,
     countWorkItemQueryHistory: (...args: unknown[]) => countWorkItemQueryHistory(...args),
+    runWorkItemQuery: (...args: unknown[]) => runWorkItemQuery(...args),
     searchCommits: (...args: unknown[]) => searchCommits(...args),
     listWorkItemProjects: (...args: unknown[]) => listWorkItemProjects(...args),
     listCommitRepositories: (...args: unknown[]) => listCommitRepositories(...args),
@@ -72,6 +75,25 @@ function points(counts: (number | null)[], offset = 0): WorkItemQueryCountPoint[
   }));
 }
 
+function workItem(overrides: Partial<WorkItemSummary> = {}): WorkItemSummary {
+  return {
+    organizationId: "contoso",
+    projectId: "proj1",
+    projectName: "Payments",
+    id: 1,
+    title: "Something broke",
+    workItemType: "Bug",
+    state: "Active",
+    assignedTo: "Alice Johnson",
+    changedDate: null,
+    webUrl: null,
+    tags: null,
+    extraFields: [],
+    depth: null,
+    ...overrides,
+  };
+}
+
 function commitResult(count: number): CommitSearchResult {
   return {
     commits: Array.from({ length: count }, (_, index) => ({
@@ -121,6 +143,7 @@ function mockHistory(counts: (number | null)[]): void {
 beforeEach(() => {
   window.localStorage.clear();
   mockHistory([10, 12, 15]);
+  runWorkItemQuery.mockResolvedValue([]);
   searchCommits.mockResolvedValue(commitResult(3));
   listWorkItemProjects.mockResolvedValue([{ projectId: "proj1", projectName: "Payments" }]);
   listCommitRepositories.mockResolvedValue([
@@ -320,6 +343,78 @@ describe("AnalyzeView", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /main の明細を開く/ }));
     expect(await screen.findByText("feat: an older change")).toBeTruthy();
+  });
+
+  it("shows the current breakdown by assignee on the breakdown tab", async () => {
+    runWorkItemQuery.mockResolvedValue([
+      workItem({ id: 1, assignedTo: "Alice Johnson" }),
+      workItem({ id: 2, assignedTo: "Alice Johnson" }),
+      workItem({ id: 3, assignedTo: "Bob Tanaka" }),
+      workItem({ id: 4, assignedTo: null }),
+    ]);
+    saveAnalyzeGroups([group({ branches: [] })]);
+    renderView();
+
+    // The breakdown pulls whole rows, so it must not fetch until asked for.
+    await waitFor(() => expect(countWorkItemQueryHistory).toHaveBeenCalled());
+    expect(runWorkItemQuery).not.toHaveBeenCalled();
+
+    fireEvent.click(await screen.findByRole("tab", { name: "内訳" }));
+
+    const list = await screen.findByRole("list", { name: "担当者別の内訳" });
+    const rows = within(list).getAllByRole("listitem");
+    // Largest first, with unassigned gathered into its own row.
+    expect(rows[0].textContent).toContain("Alice Johnson");
+    expect(rows[0].textContent).toContain("2");
+    expect(rows[0].textContent).toContain("50%");
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining("Alice Johnson"),
+      expect.stringContaining("Bob Tanaka"),
+      expect.stringContaining("未割当"),
+    ]);
+  });
+
+  it("moves down the breakdown rows with the arrow keys", async () => {
+    runWorkItemQuery.mockResolvedValue([
+      workItem({ id: 1, assignedTo: "Alice Johnson" }),
+      workItem({ id: 2, assignedTo: "Bob Tanaka" }),
+    ]);
+    saveAnalyzeGroups([group({ branches: [] })]);
+    renderView();
+
+    fireEvent.click(await screen.findByRole("tab", { name: "内訳" }));
+    const list = await screen.findByRole("list", { name: "担当者別の内訳" });
+
+    // The first row starts current; the arrow key moves that marker down.
+    await waitFor(() =>
+      expect(within(list).getAllByRole("listitem")[0].getAttribute("aria-current")).toBe("true"),
+    );
+    fireEvent.keyDown(list, { key: "ArrowDown" });
+    await waitFor(() =>
+      expect(within(list).getAllByRole("listitem")[1].getAttribute("aria-current")).toBe("true"),
+    );
+  });
+
+  it("warns when the breakdown is built from a truncated result", async () => {
+    runWorkItemQuery.mockResolvedValue(
+      Array.from({ length: 500 }, (_, index) =>
+        workItem({ id: index, assignedTo: `Person ${index % 3}` }),
+      ),
+    );
+    saveAnalyzeGroups([group({ branches: [] })]);
+    renderView();
+
+    fireEvent.click(await screen.findByRole("tab", { name: "内訳" }));
+    expect(await screen.findByText(/取得上限に達したため/)).toBeTruthy();
+  });
+
+  it("asks for a query before it can show a breakdown", async () => {
+    saveAnalyzeGroups([group({ queries: [] })]);
+    renderView();
+
+    fireEvent.click(await screen.findByRole("tab", { name: "内訳" }));
+    expect(await screen.findByText(/内訳を出すにはグループにクエリを登録/)).toBeTruthy();
+    expect(runWorkItemQuery).not.toHaveBeenCalled();
   });
 
   it("hides a series from the chart when its legend entry is toggled off", async () => {
