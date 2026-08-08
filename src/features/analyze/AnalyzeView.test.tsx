@@ -7,7 +7,7 @@ import type {
   WorkItemSummary,
 } from "@/lib/azdoCommands";
 import { AnalyzeView } from "./AnalyzeView";
-import { saveAnalyzeGroups, type AnalyzeGroup } from "./analyzeGroupsStorage";
+import { loadAnalyzeGroups, saveAnalyzeGroups, type AnalyzeGroup } from "./analyzeGroupsStorage";
 
 const countWorkItemQueryHistory = vi.fn();
 const runWorkItemQuery = vi.fn();
@@ -63,6 +63,7 @@ function group(overrides: Partial<AnalyzeGroup> = {}): AnalyzeGroup {
     rangePreset: "count",
     rangeFrom: "",
     rangeTo: "",
+    breakdownAxis: "assignedTo",
     ...overrides,
   };
 }
@@ -393,6 +394,78 @@ describe("AnalyzeView", () => {
     await waitFor(() =>
       expect(within(list).getAllByRole("listitem")[1].getAttribute("aria-current")).toBe("true"),
     );
+  });
+
+  it("regroups the breakdown by state when the axis is switched", async () => {
+    runWorkItemQuery.mockResolvedValue([
+      workItem({ id: 1, state: "Active", assignedTo: "Alice Johnson" }),
+      workItem({ id: 2, state: "Active", assignedTo: "Bob Tanaka" }),
+      workItem({ id: 3, state: "Blocked", assignedTo: "Alice Johnson" }),
+    ]);
+    saveAnalyzeGroups([group({ branches: [] })]);
+    renderView();
+
+    fireEvent.click(await screen.findByRole("tab", { name: "内訳" }));
+    await screen.findByRole("list", { name: "担当者別の内訳" });
+
+    fireEvent.change(screen.getByLabelText("集計軸"), { target: { value: "state" } });
+
+    // The same items now split by state rather than by who holds them.
+    const list = await screen.findByRole("list", { name: "状態別の内訳" });
+    const rows = within(list).getAllByRole("listitem");
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining("Active"),
+      expect.stringContaining("Blocked"),
+    ]);
+    expect(rows[0].textContent).toContain("2");
+  });
+
+  it("groups the breakdown by work item type", async () => {
+    runWorkItemQuery.mockResolvedValue([
+      workItem({ id: 1, workItemType: "Bug" }),
+      workItem({ id: 2, workItemType: "Task" }),
+      workItem({ id: 3, workItemType: "Bug" }),
+    ]);
+    saveAnalyzeGroups([group({ branches: [] })]);
+    renderView();
+
+    fireEvent.click(await screen.findByRole("tab", { name: "内訳" }));
+    fireEvent.change(await screen.findByLabelText("集計軸"), {
+      target: { value: "workItemType" },
+    });
+
+    const list = await screen.findByRole("list", { name: "種別別の内訳" });
+    expect(within(list).getAllByRole("listitem")[0].textContent).toContain("Bug");
+  });
+
+  it("remembers the breakdown axis per group", async () => {
+    runWorkItemQuery.mockResolvedValue([workItem({ id: 1, state: "Active" })]);
+    saveAnalyzeGroups([group(), group({ id: "g2", name: "Portal" })]);
+    renderView();
+
+    fireEvent.click(await screen.findByRole("tab", { name: "内訳" }));
+    fireEvent.change(await screen.findByLabelText("集計軸"), { target: { value: "state" } });
+    await screen.findByRole("list", { name: "状態別の内訳" });
+
+    // The axis belongs to the group, so it survives being stored and reloaded.
+    const stored = JSON.parse(window.localStorage.getItem("azdodeck:analyze:groups")!);
+    expect(stored[0].breakdownAxis).toBe("state");
+    expect(stored[1].breakdownAxis).toBe("assignedTo");
+
+    // Switching to the other group shows its own axis, not the one just chosen.
+    fireEvent.click(screen.getByRole("button", { name: /Portal/ }));
+    fireEvent.click(await screen.findByRole("tab", { name: "内訳" }));
+    expect(await screen.findByRole("list", { name: "担当者別の内訳" })).toBeTruthy();
+  });
+
+  it("defaults a group saved before the axis existed to the assignee view", () => {
+    // Groups written by an older build have no breakdownAxis at all.
+    window.localStorage.setItem(
+      "azdodeck:analyze:groups",
+      JSON.stringify([{ ...group(), breakdownAxis: undefined }]),
+    );
+    const [restored] = loadAnalyzeGroups();
+    expect(restored.breakdownAxis).toBe("assignedTo");
   });
 
   it("warns when the breakdown is built from a truncated result", async () => {

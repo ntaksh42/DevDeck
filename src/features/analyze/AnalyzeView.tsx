@@ -57,6 +57,7 @@ function emptyGroup(organizationId: string, projectId: string): AnalyzeGroup {
     rangePreset: "count",
     rangeFrom: "",
     rangeTo: "",
+    breakdownAxis: "assignedTo",
   };
 }
 
@@ -423,6 +424,8 @@ export function AnalyzeView() {
                       isError={breakdown.isError}
                       error={breakdown.error}
                       hasQueries={selected.queries.length > 0}
+                      axis={selected.breakdownAxis}
+                      onAxisChange={(breakdownAxis) => updateSelected({ breakdownAxis })}
                     />
                   ) : (
                     <AnalyzeTrendPanel

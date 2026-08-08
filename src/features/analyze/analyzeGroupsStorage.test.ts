@@ -28,6 +28,7 @@ function group(overrides: Partial<AnalyzeGroup> = {}): AnalyzeGroup {
       },
     ],
     branches: [],
+    breakdownAxis: "assignedTo",
     granularity: "day",
     rangeCount: 30,
     rangePreset: "count",
