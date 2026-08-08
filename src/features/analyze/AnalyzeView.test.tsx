@@ -534,6 +534,66 @@ describe("AnalyzeView", () => {
     );
   });
 
+  it("names the commits behind the bucket the cursor sits on", async () => {
+    // All commits land today, so the cursor's last bucket holds them.
+    searchCommits.mockResolvedValue({
+      commits: [
+        {
+          organizationId: "contoso",
+          projectId: "proj1",
+          projectName: "Payments",
+          repositoryId: "repo1",
+          repositoryName: "payments-api",
+          commitId: "c1",
+          shortCommitId: "a3f91c",
+          comment: "fix: 認証リトライの修正\n\n詳細は本文",
+          authorName: "Demo User",
+          authorEmail: "demo@example.com",
+          authorDate: new Date().toISOString(),
+          webUrl: null,
+        },
+      ],
+      total: 1,
+      truncated: false,
+    });
+    saveAnalyzeGroups([group({ queries: [], rangeCount: 7 })]);
+    renderView();
+
+    const chart = await screen.findByRole("img", { name: /重ねたチャート/ });
+    fireEvent.keyDown(chart, { key: "End" });
+
+    // The subject line only, taken from data the bars already used.
+    expect(await screen.findByText("fix: 認証リトライの修正")).toBeTruthy();
+    expect(screen.getByText("a3f91c")).toBeTruthy();
+    expect(screen.getByText(/この期間のコミット/)).toBeTruthy();
+  });
+
+  it("leaves a hidden branch's commits out of the tooltip", async () => {
+    saveAnalyzeGroups([group({ queries: [], rangeCount: 7 })]);
+    renderView();
+
+    const legend = await screen.findByRole("group", { name: "系列の表示" });
+    const chart = screen.getByRole("img", { name: /重ねたチャート/ });
+    fireEvent.keyDown(chart, { key: "End" });
+    expect(await screen.findByText(/この期間のコミット/)).toBeTruthy();
+
+    // Hiding the series must also retract what the tooltip claims about it.
+    fireEvent.click(within(legend).getByRole("button", { name: /main/ }));
+    await waitFor(() => expect(screen.queryByText(/この期間のコミット/)).toBeNull());
+  });
+
+  it("omits the commit section for a bucket with no commits", async () => {
+    searchCommits.mockResolvedValue({ commits: [], total: 0, truncated: false });
+    saveAnalyzeGroups([group({ queries: [], rangeCount: 7 })]);
+    renderView();
+
+    const chart = await screen.findByRole("img", { name: /重ねたチャート/ });
+    fireEvent.keyDown(chart, { key: "End" });
+
+    // An empty heading would be worse than no heading.
+    await waitFor(() => expect(screen.queryByText(/この期間のコミット/)).toBeNull());
+  });
+
   it("keeps chart arrow keys from also moving the summary rows", async () => {
     saveAnalyzeGroups([group({ rangeCount: 7 })]);
     renderView();
