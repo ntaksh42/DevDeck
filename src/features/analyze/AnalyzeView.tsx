@@ -8,15 +8,24 @@ import {
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { AnalyzeGroupDialog } from "./AnalyzeGroupDialog";
 import { AnalyzeGroupList } from "./AnalyzeGroupList";
-import { AnalyzeSummaryPanel, type AnalyzeSelection } from "./AnalyzeSummaryPanel";
+import type { AnalyzeSelection } from "./AnalyzeSummaryPanel";
 import { BranchDetailPanel, QueryDetailPanel } from "./AnalyzeDetailPanels";
+import { AnalyzeBreakdownPanel } from "./AnalyzeBreakdownPanel";
+import { AnalyzeTrendPanel } from "./AnalyzeTrendPanel";
+import { useSharedCursor } from "./AnalyzeCombinedChart";
+import { AnalyzeMilestonePanel } from "./AnalyzeMilestonePanel";
+import { AnalyzeRangeControls, AnalyzeShortcutHints } from "./AnalyzeRangeControls";
+import { branchSeriesColor, querySeriesColor } from "./analyzeColors";
+import { groupByBucket } from "./analyzeDateRange";
+import { describeRange } from "./analyzeRange";
 import {
-  bucketRangeEnd,
-  bucketRangeStart,
-} from "./analyzeDateRange";
+  downloadAnalyzeGroupsExport,
+  readAnalyzeGroupsImportFile,
+} from "./analyzeGroupsTransfer";
 import {
   createAnalyzeGroupId,
   defaultRangeCount,
+  granularityLabel,
   loadAnalyzeGroups,
   MAX_ANALYZE_GROUPS,
   rangeOptions,
@@ -24,7 +33,16 @@ import {
   type AnalyzeGranularity,
   type AnalyzeGroup,
 } from "./analyzeGroupsStorage";
-import { useAnalyzeBuckets, useBranchSeries, useQuerySeries } from "./useAnalyzeQueries";
+import type { AnalyzeMilestone } from "./analyzeMilestones";
+import {
+  useAnalyzeBuckets,
+  useBranchSeries,
+  useBreakdownItems,
+  useQuerySeries,
+} from "./useAnalyzeQueries";
+
+/** The trend half answers "how did this move"; the breakdown half "who holds what". */
+type AnalyzeTab = "trend" | "breakdown";
 
 function emptyGroup(organizationId: string, projectId: string): AnalyzeGroup {
   return {
@@ -36,6 +54,10 @@ function emptyGroup(organizationId: string, projectId: string): AnalyzeGroup {
     branches: [],
     granularity: "day",
     rangeCount: defaultRangeCount("day"),
+    rangePreset: "count",
+    rangeFrom: "",
+    rangeTo: "",
+    breakdownAxis: "assignedTo",
   };
 }
 
@@ -46,6 +68,9 @@ export function AnalyzeView() {
   const [selection, setSelection] = useState<AnalyzeSelection | null>(null);
   const [editing, setEditing] = useState<{ group: AnalyzeGroup; isNew: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [hidden, setHidden] = useState<Set<string>>(() => new Set());
+  const [tab, setTab] = useState<AnalyzeTab>("trend");
   const detailRef = useRef<HTMLDivElement | null>(null);
 
   const selected = useMemo(
@@ -70,6 +95,12 @@ export function AnalyzeView() {
   const buckets = useAnalyzeBuckets(selected);
   const querySeries = useQuerySeries(selected, buckets, !!organizationId);
   const branchSeries = useBranchSeries(selected, buckets, !!organizationId);
+  const [cursor, setCursor] = useSharedCursor(buckets.length);
+  // Only fetched while the tab is open: it pulls whole rows, not counts.
+  const breakdown = useBreakdownItems(
+    selected,
+    !!organizationId && tab === "breakdown" && !selection,
+  );
 
   const persist = useCallback((next: AnalyzeGroup[]) => {
     setGroups(next);
@@ -79,6 +110,7 @@ export function AnalyzeView() {
   // Selecting a different group leaves any drilled-in member behind.
   useEffect(() => {
     setSelection(null);
+    setHidden(new Set());
   }, [selectedId]);
 
   function openAdd() {
@@ -120,9 +152,53 @@ export function AnalyzeView() {
   }
 
   function setGranularity(granularity: AnalyzeGranularity) {
-    // Day and week ranges are different units, so reset to the matching default
-    // instead of reading "30" as thirty weeks.
+    // Day, week and month ranges are different units, so reset to the matching
+    // default instead of reading "30" as thirty weeks.
     updateSelected({ granularity, rangeCount: defaultRangeCount(granularity) });
+  }
+
+  /** Widens or narrows the counted window without leaving the keyboard. */
+  function stepRange(direction: 1 | -1) {
+    if (!selected || selected.rangePreset !== "count") return;
+    const options = rangeOptions(selected.granularity);
+    const index = options.indexOf(selected.rangeCount as (typeof options)[number]);
+    const next = options[Math.min(options.length - 1, Math.max(0, index + direction))];
+    if (next !== undefined && next !== selected.rangeCount) updateSelected({ rangeCount: next });
+  }
+
+  function setMilestones(memberId: string, milestones: AnalyzeMilestone[]) {
+    if (!selected) return;
+    updateSelected({
+      queries: selected.queries.map((member) =>
+        member.id === memberId ? { ...member, milestones } : member,
+      ),
+    });
+  }
+
+  function toggleSeries(memberId: string) {
+    setHidden((current) => {
+      const next = new Set(current);
+      if (next.has(memberId)) next.delete(memberId);
+      else next.add(memberId);
+      return next;
+    });
+  }
+
+  function exportGroups() {
+    setStatus(downloadAnalyzeGroupsExport(groups));
+  }
+
+  async function importGroups(file: File) {
+    const result = await readAnalyzeGroupsImportFile(file);
+    if (result.status === "error") {
+      setError(result.message);
+      return;
+    }
+    const next = [...groups, ...result.groups].slice(0, MAX_ANALYZE_GROUPS);
+    persist(next);
+    setSelectedId(result.groups[0]?.id ?? selectedId);
+    setError(null);
+    setStatus(result.message);
   }
 
   const activeQuery = selection?.kind === "query"
@@ -131,6 +207,53 @@ export function AnalyzeView() {
   const activeBranch = selection?.kind === "branch"
     ? branchSeries.find((series) => series.memberId === selection.memberId)
     : undefined;
+
+  // The chart draws whichever members the legend has left visible.
+  const chartLines = querySeries
+    .map((series, index) => ({
+      memberId: series.memberId,
+      name: series.name,
+      color: querySeriesColor(index),
+      values: series.points.map((point) => point.count),
+      milestones: series.milestones,
+    }))
+    .filter((series) => !hidden.has(series.memberId));
+
+  const chartBars = branchSeries
+    .map((series, index) => {
+      const grouped = groupByBucket(series.commits, buckets, (commit) => commit.authorDate);
+      return {
+        memberId: series.memberId,
+        name: series.name,
+        color: branchSeriesColor(index),
+        counts: buckets.map((bucket) => grouped.get(bucket.key)?.length ?? 0),
+      };
+    })
+    .filter((series) => !hidden.has(series.memberId));
+
+  const legendEntries = [
+    ...querySeries.map((series, index) => ({
+      memberId: series.memberId,
+      name: series.name,
+      color: querySeriesColor(index),
+      values: series.points.map((point) => point.count),
+      kind: "query" as const,
+      milestones: series.milestones,
+    })),
+    ...branchSeries.map((series, index) => {
+      const grouped = groupByBucket(series.commits, buckets, (commit) => commit.authorDate);
+      return {
+        memberId: series.memberId,
+        name: series.name,
+        color: branchSeriesColor(index),
+        values: buckets.map(
+          (bucket) => (grouped.get(bucket.key)?.length ?? 0) as number | null,
+        ),
+        kind: "branch" as const,
+        milestones: [] as AnalyzeMilestone[],
+      };
+    }),
+  ];
 
   return (
     <div className="grid min-h-0 flex-1 grid-cols-[14rem_1fr] overflow-hidden">
@@ -142,6 +265,8 @@ export function AnalyzeView() {
         onAdd={openAdd}
         onEdit={openEdit}
         onDelete={removeGroup}
+        onExport={exportGroups}
+        onImport={importGroups}
       />
 
       <div className="flex min-h-0 flex-col overflow-hidden">
@@ -172,11 +297,9 @@ export function AnalyzeView() {
                   <span className="rounded-full border border-border bg-muted/60 px-2 py-0.5">
                     ブランチ {selected.branches.length}
                   </span>
-                  {buckets.length > 0 && (
-                    <span className="tabular-nums">
-                      {bucketRangeStart(buckets)} – {bucketRangeEnd(buckets)}
-                    </span>
-                  )}
+                  <span className="tabular-nums">
+                    {describeRange(selected, granularityLabel(selected.granularity))}
+                  </span>
                 </div>
               </div>
 
@@ -191,39 +314,11 @@ export function AnalyzeView() {
                     一覧へ
                   </button>
                 )}
-                <div
-                  className="flex overflow-hidden rounded-md border border-border"
-                  role="group"
-                  aria-label="粒度"
-                >
-                  {(["day", "week"] as const).map((value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      aria-pressed={selected.granularity === value}
-                      onClick={() => setGranularity(value)}
-                      className={`px-3 py-1 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
-                        selected.granularity === value
-                          ? "bg-secondary font-semibold"
-                          : "bg-card text-muted-foreground hover:bg-muted"
-                      }`}
-                    >
-                      {value === "day" ? "Day" : "Week"}
-                    </button>
-                  ))}
-                </div>
-                <select
-                  aria-label="期間"
-                  value={selected.rangeCount}
-                  onChange={(event) => updateSelected({ rangeCount: Number(event.target.value) })}
-                  className="rounded-md border border-border bg-card px-2 py-1 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {rangeOptions(selected.granularity).map((option) => (
-                    <option key={option} value={option}>
-                      直近 {option} {selected.granularity === "day" ? "日" : "週"}
-                    </option>
-                  ))}
-                </select>
+                <AnalyzeRangeControls
+                  group={selected}
+                  onGranularityChange={setGranularity}
+                  onPatch={updateSelected}
+                />
                 <button
                   type="button"
                   aria-label="グループを編集"
@@ -243,6 +338,8 @@ export function AnalyzeView() {
               </div>
             </div>
 
+            <AnalyzeShortcutHints hasSelection={!!selection} />
+
             <div
               ref={detailRef}
               tabIndex={-1}
@@ -254,16 +351,28 @@ export function AnalyzeView() {
                 }
                 if (event.key === "d" || event.key === "D") setGranularity("day");
                 if (event.key === "w" || event.key === "W") setGranularity("week");
+                if (event.key === "m" || event.key === "M") setGranularity("month");
+                if (event.key === "]") stepRange(1);
+                if (event.key === "[") stepRange(-1);
               }}
               className="min-h-0 flex-1 overflow-y-auto px-4 py-4 focus:outline-none"
             >
               {error && <p className="mb-3 text-xs text-destructive">{error}</p>}
+              {status && <p className="mb-3 text-xs text-muted-foreground">{status}</p>}
+
               {activeQuery ? (
-                <QueryDetailPanel
-                  series={activeQuery}
-                  buckets={buckets}
-                  granularity={selected.granularity}
-                />
+                <div className="flex flex-col gap-4">
+                  <AnalyzeMilestonePanel
+                    series={activeQuery}
+                    buckets={buckets}
+                    onChange={(milestones) => setMilestones(activeQuery.memberId, milestones)}
+                  />
+                  <QueryDetailPanel
+                    series={activeQuery}
+                    buckets={buckets}
+                    granularity={selected.granularity}
+                  />
+                </div>
               ) : activeBranch ? (
                 <BranchDetailPanel
                   series={activeBranch}
@@ -271,12 +380,70 @@ export function AnalyzeView() {
                   granularity={selected.granularity}
                 />
               ) : (
-                <AnalyzeSummaryPanel
-                  buckets={buckets}
-                  querySeries={querySeries}
-                  branchSeries={branchSeries}
-                  onOpen={setSelection}
-                />
+                <div className="flex flex-col gap-4">
+                  <div
+                    className="flex w-fit overflow-hidden rounded-md border border-border"
+                    role="tablist"
+                    aria-label="表示"
+                  >
+                    {(
+                      [
+                        ["trend", "推移"],
+                        ["breakdown", "内訳"],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        role="tab"
+                        aria-selected={tab === value}
+                        onClick={() => setTab(value)}
+                        onKeyDown={(event) => {
+                          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                          // Arrows move between tabs, as a tablist is expected to.
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setTab(value === "trend" ? "breakdown" : "trend");
+                        }}
+                        className={`px-3 py-1 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
+                          tab === value
+                            ? "bg-secondary font-semibold"
+                            : "bg-card text-muted-foreground hover:bg-muted"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {tab === "breakdown" ? (
+                    <AnalyzeBreakdownPanel
+                      items={breakdown.items}
+                      truncated={breakdown.truncated}
+                      isFetching={breakdown.isFetching}
+                      isError={breakdown.isError}
+                      error={breakdown.error}
+                      hasQueries={selected.queries.length > 0}
+                      axis={selected.breakdownAxis}
+                      onAxisChange={(breakdownAxis) => updateSelected({ breakdownAxis })}
+                    />
+                  ) : (
+                    <AnalyzeTrendPanel
+                      buckets={buckets}
+                      granularity={selected.granularity}
+                      querySeries={querySeries}
+                      branchSeries={branchSeries}
+                      lines={chartLines}
+                      bars={chartBars}
+                      legendEntries={legendEntries}
+                      hidden={hidden}
+                      onToggleSeries={toggleSeries}
+                      cursor={cursor}
+                      onCursorChange={setCursor}
+                      onOpen={setSelection}
+                    />
+                  )}
+                </div>
               )}
             </div>
           </>

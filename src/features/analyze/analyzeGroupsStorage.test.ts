@@ -18,10 +18,22 @@ function group(overrides: Partial<AnalyzeGroup> = {}): AnalyzeGroup {
     name: "Payments",
     organizationId: "org1",
     projectId: "proj1",
-    queries: [{ id: "q1", name: "Bugs", projectId: "", wiql: "SELECT [System.Id] FROM WorkItems" }],
+    queries: [
+      {
+        id: "q1",
+        name: "Bugs",
+        projectId: "",
+        wiql: "SELECT [System.Id] FROM WorkItems",
+        milestones: [],
+      },
+    ],
     branches: [],
+    breakdownAxis: "assignedTo",
     granularity: "day",
     rangeCount: 30,
+    rangePreset: "count",
+    rangeFrom: "",
+    rangeTo: "",
     ...overrides,
   };
 }
@@ -59,7 +71,7 @@ describe("normalizeAnalyzeGroup", () => {
 
   it("drops query members with an empty WIQL", () => {
     const normalized = normalizeAnalyzeGroup(
-      group({ queries: [{ id: "q1", name: "x", projectId: "", wiql: "  " }] }),
+      group({ queries: [{ id: "q1", name: "x", projectId: "", wiql: "  ", milestones: [] }] }),
     );
     expect(normalized?.queries).toHaveLength(0);
   });
@@ -102,6 +114,7 @@ describe("normalizeAnalyzeGroup", () => {
       name: `Q${index}`,
       projectId: "",
       wiql: "SELECT [System.Id] FROM WorkItems",
+      milestones: [],
     }));
     const branches = Array.from({ length: 10 }, (_, index) => ({
       id: `b${index}`,
@@ -132,8 +145,54 @@ describe("normalizeAnalyzeGroup", () => {
   });
 
   it("treats an unknown granularity as day", () => {
-    const normalized = normalizeAnalyzeGroup({ ...group(), granularity: "month" });
+    const normalized = normalizeAnalyzeGroup({ ...group(), granularity: "fortnight" });
     expect(normalized?.granularity).toBe("day");
+  });
+
+  it("keeps the month granularity", () => {
+    const normalized = normalizeAnalyzeGroup({
+      ...group(),
+      granularity: "month",
+      rangeCount: 6,
+    });
+    expect(normalized?.granularity).toBe("month");
+    expect(normalized?.rangeCount).toBe(6);
+  });
+
+  it("keeps milestones sorted and drops unusable ones", () => {
+    const normalized = normalizeAnalyzeGroup(
+      group({
+        queries: [
+          {
+            id: "q1",
+            name: "Bugs",
+            projectId: "",
+            wiql: "SELECT [System.Id] FROM WorkItems",
+            milestones: [
+              { date: "2026-08-03", count: 12 },
+              { date: "2026-07-14", count: 24 },
+              { date: "bogus", count: 5 },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(normalized?.queries[0].milestones).toEqual([
+      { date: "2026-07-14", count: 24 },
+      { date: "2026-08-03", count: 12 },
+    ]);
+  });
+
+  it("defaults the range preset and custom dates", () => {
+    const normalized = normalizeAnalyzeGroup({
+      ...group(),
+      rangePreset: "bogus",
+      rangeFrom: "nope",
+      rangeTo: "2026-08-05",
+    });
+    expect(normalized?.rangePreset).toBe("count");
+    expect(normalized?.rangeFrom).toBe("");
+    expect(normalized?.rangeTo).toBe("2026-08-05");
   });
 });
 
