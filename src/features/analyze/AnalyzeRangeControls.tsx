@@ -114,6 +114,7 @@ export function AnalyzeShortcutHints({ hasSelection }: { hasSelection: boolean }
     ["[ / ]", "期間"],
     ["↑ / ↓", "行移動"],
     ["Enter", "明細"],
+    ["← / →", "チャートの期間"],
   ];
   if (hasSelection) hints.push(["Esc", "一覧へ"]);
 

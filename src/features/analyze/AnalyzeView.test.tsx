@@ -436,6 +436,62 @@ describe("AnalyzeView", () => {
     await waitFor(() => expect(entry().getAttribute("aria-pressed")).toBe("true"));
   });
 
+  it("moves the shared cursor with the arrow keys, without a pointer", async () => {
+    mockHistory([30, 28, 26, 24, 22, 20, 15]);
+    saveAnalyzeGroups([group({ branches: [], rangeCount: 7 })]);
+    renderView();
+
+    const chart = await screen.findByRole("img", { name: /重ねたチャート/ });
+    // Wait for the series to arrive so the cursor lands on real values.
+    await waitFor(() => expect(screen.getAllByText("15").length).toBeGreaterThan(0));
+
+    // Entering from the keyboard starts at the newest bucket, so stepping left
+    // reads the one before it rather than the far end of the window.
+    fireEvent.keyDown(chart, { key: "ArrowLeft" });
+
+    // The tooltip is the only place the previous bucket's 20 is reported.
+    await waitFor(() => expect(screen.getAllByText("20").length).toBeGreaterThan(0));
+
+    // Escape clears it again, leaving no cursor reading behind.
+    fireEvent.keyDown(chart, { key: "Escape" });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("img", { name: /重ねたチャート/ }).getAttribute("aria-label"),
+      ).not.toContain("現在"),
+    );
+  });
+
+  it("keeps chart arrow keys from also moving the summary rows", async () => {
+    saveAnalyzeGroups([group({ rangeCount: 7 })]);
+    renderView();
+
+    const chart = await screen.findByRole("img", { name: /重ねたチャート/ });
+    const firstRow = screen.getByRole("button", { name: "Bugs — Core の明細を開く" });
+    firstRow.focus();
+
+    // The chart owns the arrow keys while it is focused; the roving tabindex in
+    // the summary list must not advance at the same time.
+    fireEvent.keyDown(chart, { key: "ArrowDown" });
+    fireEvent.keyDown(chart, { key: "ArrowRight" });
+
+    expect(document.activeElement).toBe(firstRow);
+  });
+
+  it("announces the cursor position for screen readers", async () => {
+    saveAnalyzeGroups([group({ branches: [], rangeCount: 7 })]);
+    renderView();
+
+    const chart = await screen.findByRole("img", { name: /重ねたチャート/ });
+    expect(chart.getAttribute("aria-label")).toContain("矢印キーで期間を移動");
+
+    fireEvent.keyDown(chart, { key: "End" });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("img", { name: /重ねたチャート/ }).getAttribute("aria-label"),
+      ).toContain("現在"),
+    );
+  });
+
   it("moves between summary rows with the arrow keys", async () => {
     saveAnalyzeGroups([group()]);
     renderView();

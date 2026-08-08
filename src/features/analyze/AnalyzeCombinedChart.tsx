@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import {
   axisTicks,
   chartLayout,
@@ -85,6 +85,45 @@ export function AnalyzeCombinedChart({
     [buckets.length, bandWidth, layout.width, padding.left],
   );
 
+  /**
+   * The cursor has to be reachable without a pointer, so the same reading the
+   * tooltip gives on hover is available from the keyboard.
+   */
+  function handleKeyDown(event: ReactKeyboardEvent<SVGSVGElement>) {
+    if (buckets.length === 0) return;
+    const last = buckets.length - 1;
+    // Entering from the keyboard starts at the newest bucket, which is the one
+    // being read in practice.
+    const current = cursor ?? last;
+    let next: number | null = null;
+    switch (event.key) {
+      case "ArrowLeft":
+        next = Math.max(0, current - 1);
+        break;
+      case "ArrowRight":
+        next = Math.min(last, current + 1);
+        break;
+      case "Home":
+        next = 0;
+        break;
+      case "End":
+        next = last;
+        break;
+      case "Escape":
+        // Nothing to clear: let the pane handle Escape as it normally would.
+        if (cursor === null) return;
+        next = null;
+        break;
+      default:
+        return;
+    }
+    // Movement keys belong to the chart: the surrounding pane also listens for
+    // them, and the group list must not scroll underneath.
+    event.preventDefault();
+    event.stopPropagation();
+    onCursorChange(next);
+  }
+
   if (buckets.length === 0) {
     return (
       <p className="py-6 text-center text-xs text-muted-foreground">
@@ -107,8 +146,16 @@ export function AnalyzeCombinedChart({
       width="100%"
       preserveAspectRatio="none"
       role="img"
-      aria-label={`${lines.length} 件のクエリの推移と ${bars.length} 件のブランチのコミットを同じ期間で重ねたチャート`}
-      className="block h-[15rem] touch-none"
+      tabIndex={0}
+      aria-label={
+        `${lines.length} 件のクエリの推移と ${bars.length} 件のブランチのコミットを同じ期間で重ねたチャート。` +
+        `矢印キーで期間を移動できます。` +
+        (cursor !== null && buckets[cursor]
+          ? ` 現在 ${formatBucketLabel(buckets[cursor], granularity)}。`
+          : "")
+      }
+      className="block h-[15rem] touch-none focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      onKeyDown={handleKeyDown}
       onPointerMove={(event) => onCursorChange(indexFromClientX(event.clientX))}
       onPointerLeave={() => onCursorChange(null)}
     >
