@@ -7,7 +7,7 @@ import type {
   WorkItemSummary,
 } from "@/lib/azdoCommands";
 import { AnalyzeView } from "./AnalyzeView";
-import { saveAnalyzeGroups, type AnalyzeGroup } from "./analyzeGroupsStorage";
+import { loadAnalyzeGroups, saveAnalyzeGroups, type AnalyzeGroup } from "./analyzeGroupsStorage";
 
 const countWorkItemQueryHistory = vi.fn();
 const runWorkItemQuery = vi.fn();
@@ -63,6 +63,7 @@ function group(overrides: Partial<AnalyzeGroup> = {}): AnalyzeGroup {
     rangePreset: "count",
     rangeFrom: "",
     rangeTo: "",
+    breakdownAxis: "assignedTo",
     ...overrides,
   };
 }
@@ -395,6 +396,78 @@ describe("AnalyzeView", () => {
     );
   });
 
+  it("regroups the breakdown by state when the axis is switched", async () => {
+    runWorkItemQuery.mockResolvedValue([
+      workItem({ id: 1, state: "Active", assignedTo: "Alice Johnson" }),
+      workItem({ id: 2, state: "Active", assignedTo: "Bob Tanaka" }),
+      workItem({ id: 3, state: "Blocked", assignedTo: "Alice Johnson" }),
+    ]);
+    saveAnalyzeGroups([group({ branches: [] })]);
+    renderView();
+
+    fireEvent.click(await screen.findByRole("tab", { name: "内訳" }));
+    await screen.findByRole("list", { name: "担当者別の内訳" });
+
+    fireEvent.change(screen.getByLabelText("集計軸"), { target: { value: "state" } });
+
+    // The same items now split by state rather than by who holds them.
+    const list = await screen.findByRole("list", { name: "状態別の内訳" });
+    const rows = within(list).getAllByRole("listitem");
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining("Active"),
+      expect.stringContaining("Blocked"),
+    ]);
+    expect(rows[0].textContent).toContain("2");
+  });
+
+  it("groups the breakdown by work item type", async () => {
+    runWorkItemQuery.mockResolvedValue([
+      workItem({ id: 1, workItemType: "Bug" }),
+      workItem({ id: 2, workItemType: "Task" }),
+      workItem({ id: 3, workItemType: "Bug" }),
+    ]);
+    saveAnalyzeGroups([group({ branches: [] })]);
+    renderView();
+
+    fireEvent.click(await screen.findByRole("tab", { name: "内訳" }));
+    fireEvent.change(await screen.findByLabelText("集計軸"), {
+      target: { value: "workItemType" },
+    });
+
+    const list = await screen.findByRole("list", { name: "種別別の内訳" });
+    expect(within(list).getAllByRole("listitem")[0].textContent).toContain("Bug");
+  });
+
+  it("remembers the breakdown axis per group", async () => {
+    runWorkItemQuery.mockResolvedValue([workItem({ id: 1, state: "Active" })]);
+    saveAnalyzeGroups([group(), group({ id: "g2", name: "Portal" })]);
+    renderView();
+
+    fireEvent.click(await screen.findByRole("tab", { name: "内訳" }));
+    fireEvent.change(await screen.findByLabelText("集計軸"), { target: { value: "state" } });
+    await screen.findByRole("list", { name: "状態別の内訳" });
+
+    // The axis belongs to the group, so it survives being stored and reloaded.
+    const stored = JSON.parse(window.localStorage.getItem("azdodeck:analyze:groups")!);
+    expect(stored[0].breakdownAxis).toBe("state");
+    expect(stored[1].breakdownAxis).toBe("assignedTo");
+
+    // Switching to the other group shows its own axis, not the one just chosen.
+    fireEvent.click(screen.getByRole("button", { name: /Portal/ }));
+    fireEvent.click(await screen.findByRole("tab", { name: "内訳" }));
+    expect(await screen.findByRole("list", { name: "担当者別の内訳" })).toBeTruthy();
+  });
+
+  it("defaults a group saved before the axis existed to the assignee view", () => {
+    // Groups written by an older build have no breakdownAxis at all.
+    window.localStorage.setItem(
+      "azdodeck:analyze:groups",
+      JSON.stringify([{ ...group(), breakdownAxis: undefined }]),
+    );
+    const [restored] = loadAnalyzeGroups();
+    expect(restored.breakdownAxis).toBe("assignedTo");
+  });
+
   it("warns when the breakdown is built from a truncated result", async () => {
     runWorkItemQuery.mockResolvedValue(
       Array.from({ length: 500 }, (_, index) =>
@@ -434,6 +507,122 @@ describe("AnalyzeView", () => {
     // Toggling back restores it rather than dropping the member.
     fireEvent.click(entry());
     await waitFor(() => expect(entry().getAttribute("aria-pressed")).toBe("true"));
+  });
+
+  it("moves the shared cursor with the arrow keys, without a pointer", async () => {
+    mockHistory([30, 28, 26, 24, 22, 20, 15]);
+    saveAnalyzeGroups([group({ branches: [], rangeCount: 7 })]);
+    renderView();
+
+    const chart = await screen.findByRole("img", { name: /重ねたチャート/ });
+    // Wait for the series to arrive so the cursor lands on real values.
+    await waitFor(() => expect(screen.getAllByText("15").length).toBeGreaterThan(0));
+
+    // Entering from the keyboard starts at the newest bucket, so stepping left
+    // reads the one before it rather than the far end of the window.
+    fireEvent.keyDown(chart, { key: "ArrowLeft" });
+
+    // The tooltip is the only place the previous bucket's 20 is reported.
+    await waitFor(() => expect(screen.getAllByText("20").length).toBeGreaterThan(0));
+
+    // Escape clears it again, leaving no cursor reading behind.
+    fireEvent.keyDown(chart, { key: "Escape" });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("img", { name: /重ねたチャート/ }).getAttribute("aria-label"),
+      ).not.toContain("現在"),
+    );
+  });
+
+  it("names the commits behind the bucket the cursor sits on", async () => {
+    // All commits land today, so the cursor's last bucket holds them.
+    searchCommits.mockResolvedValue({
+      commits: [
+        {
+          organizationId: "contoso",
+          projectId: "proj1",
+          projectName: "Payments",
+          repositoryId: "repo1",
+          repositoryName: "payments-api",
+          commitId: "c1",
+          shortCommitId: "a3f91c",
+          comment: "fix: 認証リトライの修正\n\n詳細は本文",
+          authorName: "Demo User",
+          authorEmail: "demo@example.com",
+          authorDate: new Date().toISOString(),
+          webUrl: null,
+        },
+      ],
+      total: 1,
+      truncated: false,
+    });
+    saveAnalyzeGroups([group({ queries: [], rangeCount: 7 })]);
+    renderView();
+
+    const chart = await screen.findByRole("img", { name: /重ねたチャート/ });
+    fireEvent.keyDown(chart, { key: "End" });
+
+    // The subject line only, taken from data the bars already used.
+    expect(await screen.findByText("fix: 認証リトライの修正")).toBeTruthy();
+    expect(screen.getByText("a3f91c")).toBeTruthy();
+    expect(screen.getByText(/この期間のコミット/)).toBeTruthy();
+  });
+
+  it("leaves a hidden branch's commits out of the tooltip", async () => {
+    saveAnalyzeGroups([group({ queries: [], rangeCount: 7 })]);
+    renderView();
+
+    const legend = await screen.findByRole("group", { name: "系列の表示" });
+    const chart = screen.getByRole("img", { name: /重ねたチャート/ });
+    fireEvent.keyDown(chart, { key: "End" });
+    expect(await screen.findByText(/この期間のコミット/)).toBeTruthy();
+
+    // Hiding the series must also retract what the tooltip claims about it.
+    fireEvent.click(within(legend).getByRole("button", { name: /main/ }));
+    await waitFor(() => expect(screen.queryByText(/この期間のコミット/)).toBeNull());
+  });
+
+  it("omits the commit section for a bucket with no commits", async () => {
+    searchCommits.mockResolvedValue({ commits: [], total: 0, truncated: false });
+    saveAnalyzeGroups([group({ queries: [], rangeCount: 7 })]);
+    renderView();
+
+    const chart = await screen.findByRole("img", { name: /重ねたチャート/ });
+    fireEvent.keyDown(chart, { key: "End" });
+
+    // An empty heading would be worse than no heading.
+    await waitFor(() => expect(screen.queryByText(/この期間のコミット/)).toBeNull());
+  });
+
+  it("keeps chart arrow keys from also moving the summary rows", async () => {
+    saveAnalyzeGroups([group({ rangeCount: 7 })]);
+    renderView();
+
+    const chart = await screen.findByRole("img", { name: /重ねたチャート/ });
+    const firstRow = screen.getByRole("button", { name: "Bugs — Core の明細を開く" });
+    firstRow.focus();
+
+    // The chart owns the arrow keys while it is focused; the roving tabindex in
+    // the summary list must not advance at the same time.
+    fireEvent.keyDown(chart, { key: "ArrowDown" });
+    fireEvent.keyDown(chart, { key: "ArrowRight" });
+
+    expect(document.activeElement).toBe(firstRow);
+  });
+
+  it("announces the cursor position for screen readers", async () => {
+    saveAnalyzeGroups([group({ branches: [], rangeCount: 7 })]);
+    renderView();
+
+    const chart = await screen.findByRole("img", { name: /重ねたチャート/ });
+    expect(chart.getAttribute("aria-label")).toContain("矢印キーで期間を移動");
+
+    fireEvent.keyDown(chart, { key: "End" });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("img", { name: /重ねたチャート/ }).getAttribute("aria-label"),
+      ).toContain("現在"),
+    );
   });
 
   it("moves between summary rows with the arrow keys", async () => {

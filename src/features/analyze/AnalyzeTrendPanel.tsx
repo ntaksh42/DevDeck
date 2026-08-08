@@ -5,7 +5,7 @@ import {
   type ChartLineSeries,
 } from "./AnalyzeCombinedChart";
 import { AnalyzeSummaryPanel, type AnalyzeSelection } from "./AnalyzeSummaryPanel";
-import type { AnalyzeBucket } from "./analyzeDateRange";
+import { groupByBucket, type AnalyzeBucket } from "./analyzeDateRange";
 import type { AnalyzeGranularity } from "./analyzeGroupsStorage";
 import type { AnalyzeMilestone } from "./analyzeMilestones";
 import type { BranchSeries, QuerySeries } from "./useAnalyzeQueries";
@@ -44,6 +44,20 @@ export function AnalyzeTrendPanel({
   // the last series must leave the legend on screen to toggle it back.
   const hasChart = legendEntries.length > 0;
   const visibleSeries = legendEntries.filter((entry) => !hidden.has(entry.memberId));
+
+  // The commits behind the bar the cursor sits on. Hidden branches are left out
+  // so the tooltip never reports work the chart is not currently drawing.
+  const cursorCommits =
+    cursor !== null && buckets[cursor]
+      ? branchSeries
+          .filter((series) => !hidden.has(series.memberId))
+          .flatMap(
+            (series) =>
+              groupByBucket(series.commits, buckets, (commit) => commit.authorDate).get(
+                buckets[cursor].key,
+              ) ?? [],
+          )
+      : [];
 
   return (
     <>
@@ -84,6 +98,8 @@ export function AnalyzeTrendPanel({
                   granularity={granularity}
                   series={visibleSeries}
                   cursor={cursor}
+                  commits={cursorCommits}
+                  commitTotal={cursorCommits.length}
                 />
               </div>
             )}

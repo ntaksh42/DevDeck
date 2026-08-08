@@ -59,6 +59,19 @@ export function AnalyzeChartLegend({
 
 export type TooltipSeries = LegendEntry & { milestones: AnalyzeMilestone[] };
 
+/** A commit worth naming under the numbers, from the same bucket. */
+export type TooltipCommit = {
+  commitId: string;
+  shortCommitId: string;
+  comment: string;
+};
+
+/**
+ * Enough to say what the bucket contained without turning the tooltip into a
+ * list; the branch detail panel is where the full set is read.
+ */
+const TOOLTIP_COMMIT_LIMIT = 3;
+
 /**
  * Every visible series at the hovered bucket, so the reading is one glance
  * rather than one hover per line.
@@ -68,12 +81,19 @@ export function AnalyzeChartTooltip({
   granularity,
   series,
   cursor,
+  commits = [],
+  commitTotal = 0,
 }: {
   bucket: AnalyzeBucket;
   granularity: AnalyzeGranularity;
   series: TooltipSeries[];
   cursor: number;
+  /** Commits landing in this bucket, already limited by the caller's window. */
+  commits?: TooltipCommit[];
+  /** How many there were in total, so the tooltip can say what it left out. */
+  commitTotal?: number;
 }) {
+  const shown = commits.slice(0, TOOLTIP_COMMIT_LIMIT);
   return (
     <div className="pointer-events-none flex min-w-[11rem] flex-col gap-0.5 rounded-md border border-border bg-card p-2 text-xs shadow-md">
       <p className="pb-0.5 font-semibold tabular-nums">
@@ -124,6 +144,33 @@ export function AnalyzeChartTooltip({
           </div>
         );
       })}
+
+      {/*
+        The commits are already in hand for the bars above, so naming them here
+        turns "the line jumped" into "the line jumped, and this is what landed"
+        without another request. Skipped entirely for a quiet bucket rather than
+        leaving an empty heading.
+      */}
+      {shown.length > 0 && (
+        <div className="mt-1 flex flex-col gap-0.5 border-t border-border pt-1">
+          <p className="font-semibold">この期間のコミット（{commitTotal}）</p>
+          {shown.map((commit) => (
+            <p key={commit.commitId} className="flex items-baseline gap-1.5">
+              <span className="shrink-0 font-mono text-[0.68rem] text-primary">
+                {commit.shortCommitId}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                {commit.comment.split("\n")[0]}
+              </span>
+            </p>
+          ))}
+          {commitTotal > shown.length && (
+            <p className="text-[0.68rem] text-muted-foreground">
+              ほか {commitTotal - shown.length} 件（明細で確認できます）
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@
 // person watches is a personal working list rather than shared configuration.
 
 import { clamp } from "@/lib/utils";
+import type { BreakdownAxis } from "./analyzeBreakdown";
 import {
   isValidMilestoneDate,
   normalizeMilestones,
@@ -63,6 +64,8 @@ export type AnalyzeGroup = {
   /** `YYYY-MM-DD`, only meaningful when `rangePreset` is "custom". */
   rangeFrom: string;
   rangeTo: string;
+  /** Field the breakdown tab groups by. Per group, so switching keeps context. */
+  breakdownAxis: BreakdownAxis;
 };
 
 export function defaultRangeCount(granularity: AnalyzeGranularity): number {
@@ -155,11 +158,17 @@ export function normalizeAnalyzeGroup(value: unknown): AnalyzeGroup | null {
     rangePreset: normalizeRangePreset(group.rangePreset),
     rangeFrom: normalizeRangeDate(group.rangeFrom),
     rangeTo: normalizeRangeDate(group.rangeTo),
+    breakdownAxis: normalizeBreakdownAxis(group.breakdownAxis),
   };
 }
 
 function normalizeRangePreset(value: unknown): AnalyzeRangePreset {
   return value === "thisMonth" || value === "lastMonth" || value === "custom" ? value : "count";
+}
+
+/** Groups saved before the axis was selectable fall back to the assignee view. */
+function normalizeBreakdownAxis(value: unknown): BreakdownAxis {
+  return value === "state" || value === "workItemType" ? value : "assignedTo";
 }
 
 function normalizeRangeDate(value: unknown): string {

@@ -8,8 +8,8 @@ import {
   type BreakdownAxis,
 } from "./analyzeBreakdown";
 
-/** Axes offered in the UI. The module supports more; this is what is exposed. */
-const AXES: BreakdownAxis[] = ["assignedTo"];
+/** Axes offered in the UI, in the order they are most often reached for. */
+const AXES: BreakdownAxis[] = ["assignedTo", "state", "workItemType"];
 
 /**
  * Who holds what, right now.
@@ -24,6 +24,8 @@ export function AnalyzeBreakdownPanel({
   isError,
   error,
   hasQueries,
+  axis,
+  onAxisChange,
 }: {
   items: WorkItemSummary[];
   truncated: boolean;
@@ -31,8 +33,9 @@ export function AnalyzeBreakdownPanel({
   isError: boolean;
   error: unknown;
   hasQueries: boolean;
+  axis: BreakdownAxis;
+  onAxisChange: (axis: BreakdownAxis) => void;
 }) {
-  const [axis, setAxis] = useState<BreakdownAxis>("assignedTo");
   const [focusIndex, setFocusIndex] = useState(0);
   const breakdown = useMemo(() => buildBreakdown(items, axis), [items, axis]);
 
@@ -96,7 +99,8 @@ export function AnalyzeBreakdownPanel({
               aria-label="集計軸"
               value={axis}
               onChange={(event) => {
-                setAxis(event.target.value as BreakdownAxis);
+                onAxisChange(event.target.value as BreakdownAxis);
+                // The new axis has different rows, so start from the top again.
                 setFocusIndex(0);
               }}
               className="rounded-md border border-border bg-card px-2 py-1 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"

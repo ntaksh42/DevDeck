@@ -62,6 +62,47 @@ describe("buildBreakdown", () => {
     expect(breakdown.slices[0].ratio).toBe(0.75);
   });
 
+  it("counts per state", () => {
+    const breakdown = buildBreakdown(
+      [
+        item({ id: 1, state: "Active" }),
+        item({ id: 2, state: "Blocked" }),
+        item({ id: 3, state: "Active" }),
+      ],
+      "state",
+    );
+    expect(breakdown.slices.map((slice) => [slice.key, slice.count])).toEqual([
+      ["Active", 2],
+      ["Blocked", 1],
+    ]);
+  });
+
+  it("counts per work item type", () => {
+    const breakdown = buildBreakdown(
+      [
+        item({ id: 1, workItemType: "Bug" }),
+        item({ id: 2, workItemType: "Task" }),
+        item({ id: 3, workItemType: "Bug" }),
+      ],
+      "workItemType",
+    );
+    expect(breakdown.slices.map((slice) => [slice.key, slice.count])).toEqual([
+      ["Bug", 2],
+      ["Task", 1],
+    ]);
+  });
+
+  it("labels items with no state as unassigned rather than dropping them", () => {
+    const breakdown = buildBreakdown(
+      [item({ id: 1, state: null }), item({ id: 2, state: "Active" })],
+      "state",
+    );
+    expect(breakdown.total).toBe(2);
+    expect(breakdown.slices.map((slice) => slice.key).sort()).toEqual(
+      ["Active", UNASSIGNED_LABEL].sort(),
+    );
+  });
+
   it("gathers unassigned items into one row", () => {
     const breakdown = buildBreakdown(
       [item({ id: 1, assignedTo: null }), item({ id: 2, assignedTo: "  " })],
