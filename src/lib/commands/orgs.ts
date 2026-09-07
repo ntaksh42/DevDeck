@@ -45,6 +45,9 @@ const appSettingsSchema = z.object({
   notifyPrReviewRequests: z.boolean().default(true),
   notifyPrVoteResets: z.boolean().default(true),
   notifyPrCommentReplies: z.boolean().default(true),
+  quietHoursEnabled: z.boolean().default(false),
+  quietHoursStart: z.string().default("22:00"),
+  quietHoursEnd: z.string().default("08:00"),
   reviewStaleThresholdDays: z.number().int().default(DEFAULT_REVIEW_STALE_THRESHOLD_DAYS),
   workItemStaleThresholdDays: z
     .number()
@@ -188,6 +191,9 @@ export type UpdateAppSettingsInput = {
   notifyPrReviewRequests?: boolean;
   notifyPrVoteResets?: boolean;
   notifyPrCommentReplies?: boolean;
+  quietHoursEnabled?: boolean;
+  quietHoursStart?: string;
+  quietHoursEnd?: string;
   reviewStaleThresholdDays?: number;
   workItemStaleThresholdDays?: number;
   notificationRules?: NotificationRule[];
