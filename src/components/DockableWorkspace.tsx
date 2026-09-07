@@ -352,9 +352,20 @@ export function DockableWorkspace({
       }
 
       if (restored) {
-        // Size constraints (min/max width) are only applied at panel creation
-        // below, not restored from the serialized layout; a saved layout keeps
-        // whatever arrangement the user last left it in.
+        // `fromJSON` restores each panel's *size* but not the min/max
+        // constraints passed to the original `addPanel` call -- left
+        // unset, a restored panel can be dragged past its configured
+        // bounds, and since dockview then has to shrink some *other*
+        // panel to compensate, the drag can visibly bounce/snap as the
+        // constraint on that other panel kicks in first. Re-apply them
+        // here so a restored layout enforces the same bounds as a fresh
+        // one; the saved *size* itself is left alone.
+        for (const spec of initialPanels) {
+          api.getPanel(spec.id)?.api.setConstraints({
+            minimumWidth: spec.minWidth,
+            maximumWidth: spec.position ? spec.maxWidth : undefined,
+          });
+        }
         syncPanelContent();
       } else {
         for (const spec of initialPanels) {
