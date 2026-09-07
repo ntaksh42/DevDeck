@@ -3,6 +3,12 @@
 // person watches is a personal working list rather than shared configuration.
 
 import { clamp } from "@/lib/utils";
+import type { BreakdownAxis } from "./analyzeBreakdown";
+import {
+  isValidMilestoneDate,
+  normalizeMilestones,
+  type AnalyzeMilestone,
+} from "./analyzeMilestones";
 
 const ANALYZE_GROUPS_STORAGE_KEY = "azdodeck:analyze:groups";
 const ANALYZE_GROUPS_EXPORT_SCHEMA = "azdodeck.analyzeGroups";
@@ -10,11 +16,17 @@ const ANALYZE_GROUPS_EXPORT_SCHEMA = "azdodeck.analyzeGroups";
 export const MAX_ANALYZE_GROUPS = 20;
 /** Queries plus branches within a single group. */
 export const MAX_ANALYZE_GROUP_MEMBERS = 12;
+/** Enough to describe a plan without letting the target line become noise. */
+export const MAX_ANALYZE_MILESTONES = 8;
 
 export const ANALYZE_DAY_RANGES = [7, 30, 90] as const;
 export const ANALYZE_WEEK_RANGES = [4, 12, 26] as const;
+export const ANALYZE_MONTH_RANGES = [3, 6, 12] as const;
 
-export type AnalyzeGranularity = "day" | "week";
+export type AnalyzeGranularity = "day" | "week" | "month";
+
+/** Relative windows that are easier to ask for than a bucket count. */
+export type AnalyzeRangePreset = "count" | "thisMonth" | "lastMonth" | "custom";
 
 export type AnalyzeQueryMember = {
   id: string;
@@ -22,6 +34,8 @@ export type AnalyzeQueryMember = {
   /** Empty means the group's project is used. */
   projectId: string;
   wiql: string;
+  /** "By this date, get to this count." Sorted ascending, deduplicated. */
+  milestones: AnalyzeMilestone[];
 };
 
 export type AnalyzeBranchMember = {
@@ -43,16 +57,31 @@ export type AnalyzeGroup = {
   queries: AnalyzeQueryMember[];
   branches: AnalyzeBranchMember[];
   granularity: AnalyzeGranularity;
-  /** Days when granularity is "day", weeks when "week". */
+  /** Buckets back from now, in the unit the granularity implies. */
   rangeCount: number;
+  /** How the window is chosen; "count" uses `rangeCount`. */
+  rangePreset: AnalyzeRangePreset;
+  /** `YYYY-MM-DD`, only meaningful when `rangePreset` is "custom". */
+  rangeFrom: string;
+  rangeTo: string;
+  /** Field the breakdown tab groups by. Per group, so switching keeps context. */
+  breakdownAxis: BreakdownAxis;
 };
 
 export function defaultRangeCount(granularity: AnalyzeGranularity): number {
-  return granularity === "day" ? 30 : 12;
+  return granularity === "day" ? 30 : granularity === "week" ? 12 : 6;
 }
 
 export function rangeOptions(granularity: AnalyzeGranularity): readonly number[] {
-  return granularity === "day" ? ANALYZE_DAY_RANGES : ANALYZE_WEEK_RANGES;
+  return granularity === "day"
+    ? ANALYZE_DAY_RANGES
+    : granularity === "week"
+      ? ANALYZE_WEEK_RANGES
+      : ANALYZE_MONTH_RANGES;
+}
+
+export function granularityLabel(granularity: AnalyzeGranularity): string {
+  return granularity === "day" ? "日" : granularity === "week" ? "週" : "月";
 }
 
 function normalizeRangeCount(value: unknown, granularity: AnalyzeGranularity): number {
@@ -72,6 +101,7 @@ function normalizeQueryMember(value: unknown): AnalyzeQueryMember | null {
     name: typeof member.name === "string" && member.name.trim() ? member.name : "Query",
     projectId: typeof member.projectId === "string" ? member.projectId : "",
     wiql: member.wiql,
+    milestones: normalizeMilestones(member.milestones).slice(0, MAX_ANALYZE_MILESTONES),
   };
 }
 
@@ -105,7 +135,8 @@ export function normalizeAnalyzeGroup(value: unknown): AnalyzeGroup | null {
   if (typeof group.id !== "string" || !group.id) return null;
   if (typeof group.name !== "string" || !group.name.trim()) return null;
 
-  const granularity: AnalyzeGranularity = group.granularity === "week" ? "week" : "day";
+  const granularity: AnalyzeGranularity =
+    group.granularity === "week" ? "week" : group.granularity === "month" ? "month" : "day";
   const queries = Array.isArray(group.queries)
     ? group.queries.map(normalizeQueryMember).filter((m): m is AnalyzeQueryMember => m !== null)
     : [];
@@ -124,7 +155,24 @@ export function normalizeAnalyzeGroup(value: unknown): AnalyzeGroup | null {
     branches: branches.slice(0, Math.max(0, MAX_ANALYZE_GROUP_MEMBERS - queries.length)),
     granularity,
     rangeCount: normalizeRangeCount(group.rangeCount, granularity),
+    rangePreset: normalizeRangePreset(group.rangePreset),
+    rangeFrom: normalizeRangeDate(group.rangeFrom),
+    rangeTo: normalizeRangeDate(group.rangeTo),
+    breakdownAxis: normalizeBreakdownAxis(group.breakdownAxis),
   };
+}
+
+function normalizeRangePreset(value: unknown): AnalyzeRangePreset {
+  return value === "thisMonth" || value === "lastMonth" || value === "custom" ? value : "count";
+}
+
+/** Groups saved before the axis was selectable fall back to the assignee view. */
+function normalizeBreakdownAxis(value: unknown): BreakdownAxis {
+  return value === "state" || value === "workItemType" ? value : "assignedTo";
+}
+
+function normalizeRangeDate(value: unknown): string {
+  return typeof value === "string" && isValidMilestoneDate(value) ? value : "";
 }
 
 export function loadAnalyzeGroups(): AnalyzeGroup[] {

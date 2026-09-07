@@ -62,12 +62,16 @@ export function TrendSparkline({
 export function CommitBars({
   counts,
   label,
+  highlight = null,
 }: {
   counts: number[];
   label: string;
+  /** Bucket under the shared cursor; falls back to the latest one. */
+  highlight?: number | null;
 }) {
   const heights = barHeights(counts);
   const total = counts.reduce((sum, count) => sum + count, 0);
+  const marked = highlight ?? heights.length - 1;
 
   return (
     <span
@@ -79,7 +83,7 @@ export function CommitBars({
         <span
           key={index}
           className={`block flex-1 rounded-t-[1px] ${
-            index === heights.length - 1 ? "bg-primary" : "bg-muted-foreground/50"
+            index === marked ? "bg-primary" : "bg-muted-foreground/50"
           }`}
           // A zero-commit bucket keeps a hairline so the gap stays visible.
           style={{ height: `${Math.max(height * 100, counts[index] > 0 ? 6 : 2)}%` }}
