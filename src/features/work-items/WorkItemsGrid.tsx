@@ -106,7 +106,7 @@ export function WorkItemsGrid({
           }
         />
       ) : (
-      <div ref={state.gridScrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
+      <div ref={state.setGridScrollNode} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
         <div style={{ minWidth: state.gridMinWidth }}>
           <WiGridHeader
             displayed={g.displayed}

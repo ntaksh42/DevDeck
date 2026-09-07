@@ -61,7 +61,7 @@ export function useWiGridLogic(
     setFocusCommentRequest,
     setOpenAssigneeRequest, setOpenStateRequest, setOpenPriorityRequest, setOpenFieldRequest,
     setTriageVersion, triageVersion, showDone,
-    containerRef, gridScrollRef, rowRefs, previousResultKeysRef,
+    containerRef, gridScrollRef, scrollerAttached, rowRefs, previousResultKeysRef,
     setGridViewport,
     queryClient,
     snoozeEnabled, snoozeTargetRef, setSnoozeAnchorRect,
@@ -279,7 +279,12 @@ export function useWiGridLogic(
   }, [displayed, displayed.length, selectedItemKey, setSelectedIndex]);
 
   useEffect(() => {
-    const scroller = gridScrollRef.current;
+    // Depends on `scrollerAttached` (not just `gridScrollRef`, which never
+    // changes identity) so this re-runs when the ref (re)attaches -- the grid
+    // mounts through dockview's own React portal, a commit deferred past this
+    // hook's own mount effect, so on the very first run `gridScrollRef.current`
+    // can still be null and this would otherwise wire up nothing, forever.
+    const scroller = scrollerAttached;
     if (!scroller) return;
     const scrollerElement = scroller;
     function updateViewport() {
@@ -294,7 +299,7 @@ export function useWiGridLogic(
       scrollerElement.removeEventListener("scroll", updateViewport);
       resizeObserver?.disconnect();
     };
-  }, [gridScrollRef, setGridViewport]);
+  }, [scrollerAttached, setGridViewport]);
 
   useEffect(() => {
     const previous = previousResultKeysRef.current;

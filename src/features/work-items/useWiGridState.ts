@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { snoozeItems, type WorkItemSummary } from '@/lib/azdoCommands';
 import { useGridColumns } from '@/lib/useGridColumns';
@@ -97,6 +97,19 @@ export function useWiGridState({
   const [staleOnly, setStaleOnly] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const gridScrollRef = useRef<HTMLDivElement | null>(null);
+  // The grid now mounts through dockview's own React portal (one extra,
+  // deferred commit beyond the panel's first render), so the scroller div's
+  // ref attaches on a *later* commit than this hook's own mount effect --
+  // a plain ref object gives no signal when that happens. `scrollerAttached`
+  // is bumped by `setGridScrollNode` below whenever the ref (re)attaches, so
+  // the viewport-measuring effect (which needs to depend on *something* that
+  // changes at that moment) can pick a real, non-zero height instead of being
+  // permanently stuck at its initial 0.
+  const [scrollerAttached, setScrollerAttached] = useState<HTMLDivElement | null>(null);
+  const setGridScrollNode = useCallback((node: HTMLDivElement | null) => {
+    gridScrollRef.current = node;
+    setScrollerAttached(node);
+  }, []);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
   const previousResultKeysRef = useRef<string | null>(null);
   const [gridViewport, setGridViewport] = useState({ height: 0, scrollTop: 0 });
@@ -196,7 +209,7 @@ export function useWiGridState({
     filterAnchorRect, setFilterAnchorRect,
     filterButtonRef,
     staleOnly, setStaleOnly,
-    containerRef, gridScrollRef, rowRefs, previousResultKeysRef,
+    containerRef, gridScrollRef, setGridScrollNode, scrollerAttached, rowRefs, previousResultKeysRef,
     gridViewport, setGridViewport,
     queryClient,
     showDone, setShowDone,
