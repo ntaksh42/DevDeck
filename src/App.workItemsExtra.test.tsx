@@ -361,6 +361,97 @@ describe("App — Work Items (extra)", () => {
     expect(writeClipboardTextMock.mock.calls[0][0]).toContain("azdodeck.workItemViews");
   });
 
+  it("renders far into a large view's result set, not just an initial window of rows", async () => {
+    // The grid mounts through dockview's own React portal (a commit deferred
+    // past the grid's own mount effect), so the scroller ref can still be
+    // null when the viewport-measuring effect first runs. That effect used
+    // to depend only on a `useRef` object (which never changes identity), so
+    // it silently wired up nothing and `gridViewport.height` stayed stuck at
+    // 0 forever -- capping the virtualized window at a small fixed row count
+    // regardless of the container's real (here: mocked) height. Small views
+    // never showed enough rows to expose it. With the mocked 800px height,
+    // a working effect renders rows 0-43 (WI_GRID_ROW_HEIGHT=29,
+    // WI_GRID_OVERSCAN=8: ceil(800/29) + 8*2 = 44); the pre-fix bug caps it
+    // at 0-16 (height stuck at 0: 1 + 8*2 = 17) regardless of the mock -- so
+    // item 30 renders only once the fix actually takes effect.
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(800);
+
+    const viewResults = Array.from({ length: 60 }, (_, i) => ({
+      organizationId: "contoso",
+      projectId: "project-1",
+      projectName: "Platform",
+      id: 300 + i,
+      title: `Large view item ${i}`,
+      workItemType: "Bug",
+      state: "Active",
+      assignedTo: "Test User",
+      changedDate: "2026-05-24T00:00:00Z",
+      webUrl: `https://dev.azure.com/contoso/project/_workitems/edit/${300 + i}`,
+    }));
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "get_active_organization") {
+        return Promise.resolve(organization);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
+      if (command === "list_work_item_projects") {
+        return Promise.resolve([{ projectId: "project-1", projectName: "Platform" }]);
+      }
+      if (command === "run_work_item_query") {
+        return Promise.resolve(viewResults);
+      }
+      if (command === "get_work_item_preview") {
+        return Promise.resolve({
+          organizationId: "contoso",
+          projectId: "project-1",
+          projectName: "Platform",
+          id: 300,
+          title: "Large view item 0",
+          workItemType: "Bug",
+          state: "Active",
+          assignedTo: "Test User",
+          assignedToUniqueName: null,
+          createdBy: "Creator",
+          createdDate: "2026-05-23T00:00:00Z",
+          changedDate: "2026-05-24T00:00:00Z",
+          areaPath: "Platform\\Product",
+          iterationPath: "Platform\\Sprint 24",
+          reason: "Work started",
+          tags: null,
+          priority: "1",
+          severity: "2 - High",
+          storyPoints: null,
+          remainingWork: null,
+          descriptionHtml: "<p>Large view item.</p>",
+          acceptanceCriteriaHtml: null,
+          webUrl: "https://dev.azure.com/contoso/project/_workitems/edit/300",
+        });
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+    await screen.findByText("No pull requests assigned to you.");
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Primary navigation" })).getByRole("button", { name: "Views" }));
+    fireEvent.click(await within(screen.getByRole("main")).findByRole("button", { name: /Add/ }));
+    await screen.findByRole("dialog", { name: "Add View" });
+    await within(screen.getByRole("main")).findByText("Platform");
+
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Big View" } });
+    fireEvent.change(screen.getByLabelText("Project"), { target: { value: "project-1" } });
+    fireEvent.change(screen.getByLabelText("WIQL"), {
+      target: { value: "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project" },
+    });
+    fireEvent.keyDown(screen.getByLabelText("WIQL"), { key: "Enter", ctrlKey: true });
+
+    expect((await screen.findAllByText("Large view item 0")).length).toBeGreaterThan(0);
+    expect(screen.getByText("Large view item 30")).toBeTruthy();
+  });
+
   it("nests pinned work item views under Views and toggles their visibility", async () => {
     invokeMock.mockImplementation((command: string) => {
       if (command === "list_organizations") {
