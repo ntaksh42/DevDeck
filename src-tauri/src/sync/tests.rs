@@ -92,6 +92,41 @@ fn notification_allowed_repository_filter_is_pr_only() {
 }
 
 #[test]
+fn notification_allowed_matches_project_and_repository_case_insensitively() {
+    // Projects and repositories are typed by hand into a comma-separated text
+    // field, not picked from a list, while Azure DevOps treats those names as
+    // case-insensitive. Matching them exactly meant a rule written "platform"
+    // for the project "Platform" silently never fired, with nothing in the UI
+    // to say why. Branch names in PR search are already compared with
+    // `eq_ignore_ascii_case` for the same reason.
+    let rules = vec![rule(&["reviewRequested"], &["platform"], &["web-app"])];
+    assert!(notification_allowed(
+        &rules,
+        "reviewRequested",
+        "Platform",
+        Some("Web-App")
+    ));
+
+    // A mute rule has to be just as forgiving, or a repository the user tried
+    // to silence keeps notifying.
+    let muted = vec![mute_rule(&[], &[], &["WEB-APP"])];
+    assert!(!notification_allowed(
+        &muted,
+        "reviewRequested",
+        "Platform",
+        Some("web-app")
+    ));
+
+    // Genuinely different names still do not match.
+    assert!(!notification_allowed(
+        &rules,
+        "reviewRequested",
+        "Mobile",
+        Some("Web-App")
+    ));
+}
+
+#[test]
 fn notification_allowed_matches_any_of_several_rules() {
     let rules = vec![
         rule(&["reviewRequested"], &[], &[]),
