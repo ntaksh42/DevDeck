@@ -33,7 +33,11 @@ const notificationRuleSchema = z.object({
 
 export type NotificationRule = z.infer<typeof notificationRuleSchema>;
 
-const appSettingsSchema = z.object({
+// Exported so tests can enumerate the settings fields at runtime: because
+// `update_app_settings` is a full replace, `settingsInput()` has to carry
+// every field forward, and a field missing from it is silently reset to its
+// default whenever an unrelated settings section is saved.
+export const appSettingsSchema = z.object({
   reviewResultFolderPath: z.string().nullable(),
   workItemResultFolderPath: z.string().nullable().default(null),
   showWindowHotkey: z.string().nullable().default(null),

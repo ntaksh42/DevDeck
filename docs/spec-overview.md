@@ -296,6 +296,15 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
 | `experimental_cross_org_summary` | 全接続を横断したサマリービュー (`crossOrgSummary`) を有効化する。G→O で遷移。既定 false。 |
 | `experimental_auto_update_check` | 起動時に自動で更新を確認する。既定 false。 |
 
+`update_app_settings` は**フル置換**である。バックエンドの `normalize_app_settings` は
+各フィールドを `Option` として読み、省略されていればそのフィールドの既定値に戻す。
+そのため設定セクションは自分が変更した項目だけでなく、設定オブジェクト全体を送る必要が
+あり、各セクションは `settingsInput()` に自分のパッチを通してこれを行う。
+新しい設定を追加したら `settingsInput()` にも必ず追記すること。追記を忘れると、無関係な
+セクションを保存するたびにその設定が既定値へ黙って戻る。`settingsHelpers.test.ts` が
+`appSettingsSchema` のキーを実行時に列挙して全フィールドの往復を検証するため、追記漏れは
+テストで検出される。
+
 ---
 
 ## 7. キーボード操作
