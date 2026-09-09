@@ -13,20 +13,56 @@ function beginHorizontalResize(
     min: number;
     max: number;
     direction: 1 | -1;
-    onChange: (value: number) => void;
+    /**
+     * Applies the new value. May return the value actually applied when that
+     * can differ from what was requested; returning nothing means "applied as
+     * requested".
+     */
+    onChange: (value: number) => number | void;
   },
 ) {
   event.preventDefault();
   event.stopPropagation();
   const target = event.currentTarget;
   const pointerId = event.pointerId;
-  const startX = event.clientX;
-  const startValue = options.value;
+
+  // The gesture is tracked as an offset from an anchor -- a known-good
+  // (pointerX, value) pair -- rather than by summing per-move deltas, so the
+  // panel follows the pointer exactly however fast it moves.
+  //
+  // The anchor is reset whenever the consumer does not apply what we asked for.
+  // `onChange` returns the width actually applied (dockview clamps a group to
+  // what the surrounding layout allows -- a sibling panel's own minWidth stops
+  // the drag long before this handle's `max`). Re-anchoring onto that wall is
+  // what lets a drag back off it respond on the very next move: without it the
+  // request keeps climbing past anything that was granted, and dragging back
+  // has to unwind the whole phantom overshoot before the panel moves at all --
+  // the dead zone that reads as resizing being broken.
+  //
+  // The applied width has to come back from `onChange` itself. Sampling it from
+  // a prop or state instead cannot work: that value is updated asynchronously,
+  // so a clamp and a not-yet-delivered echo look exactly alike at any single
+  // moment, and guessing between them either reintroduces the dead zone or
+  // makes a fast drag crawl.
+  let anchorX = event.clientX;
+  let anchorValue = options.value;
+  let requested = options.value;
 
   function onPointerMove(moveEvent: PointerEvent) {
     if (moveEvent.pointerId !== pointerId) return;
-    const delta = (moveEvent.clientX - startX) * options.direction;
-    options.onChange(clamp(startValue + delta, options.min, options.max));
+
+    const delta = (moveEvent.clientX - anchorX) * options.direction;
+    const next = clamp(anchorValue + delta, options.min, options.max);
+    if (next === requested) return;
+
+    requested = next;
+    const applied = options.onChange(next);
+
+    if (typeof applied === "number" && applied !== next) {
+      anchorX = moveEvent.clientX;
+      anchorValue = applied;
+      requested = applied;
+    }
   }
 
   function cleanup() {
@@ -118,7 +154,13 @@ export function ResizeHandle({
   direction: 1 | -1;
   max: number;
   min: number;
-  onChange: (value: number) => void;
+  /**
+   * Applies the new value. Return the value actually applied when it can differ
+   * from what was requested (e.g. a surrounding layout clamps it), so a drag
+   * can re-anchor onto that limit; returning nothing means "applied as
+   * requested".
+   */
+  onChange: (value: number) => number | void;
   onReset: () => void;
   value: number;
 }) {

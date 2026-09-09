@@ -349,4 +349,59 @@ describe("DockableWorkspace", () => {
       expect(document.activeElement).toBe(items[0]);
     });
   });
+
+  it("pins a tabbed group's width bounds so they don't flip with the active tab", () => {
+    // Mirrors Work Items: "Result" is tabbed into "Preview"'s own group but
+    // declares a different minWidth and no maxWidth at all. A dockview group
+    // with no explicit constraints of its own derives them from whichever
+    // panel is currently ACTIVE (DockviewGroupPanel.minimumWidth /
+    // maximumWidth), so the pane's own resize limits change as the user
+    // switches tabs -- the same drag stops somewhere else, which reads as the
+    // width adjustment being unstable.
+    const panels: DockablePanelSpec[] = [
+      { id: "grid", title: "Grid", content: <div>grid content</div>, minWidth: 480 },
+      {
+        id: "preview",
+        title: "Preview",
+        content: <div>preview content</div>,
+        position: { relativeTo: "grid", direction: "right" },
+        initialWidth: 420,
+        minWidth: 300,
+        maxWidth: 8192,
+      },
+      {
+        id: "result",
+        title: "Result",
+        content: <div>result content</div>,
+        position: { relativeTo: "preview", direction: "within" },
+        minWidth: 320,
+      },
+    ];
+
+    render(<DockableWorkspace storageKey="test:dockable-workspace:tab-bounds" panels={panels} />);
+    const resize = screen.getByRole("separator", { name: "Resize Preview" });
+
+    // Squeeze the pane against its floor through dockview's own sizing (the
+    // handle asks via api.setSize; aria-valuenow reports what dockview
+    // granted), then read where it came to rest.
+    function floorWidth(pointerId: number) {
+      fireEvent.pointerDown(resize, { clientX: 900, pointerId });
+      fireEvent.pointerMove(window, { clientX: 3000, pointerId });
+      fireEvent.pointerUp(window, { clientX: 3000, pointerId });
+      return Number(resize.getAttribute("aria-valuenow"));
+    }
+
+    fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
+    const floorWithPreview = floorWidth(1);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Result" }));
+    const floorWithResult = floorWidth(2);
+
+    // The floor must not move when the active tab changes.
+    expect(floorWithResult).toBe(floorWithPreview);
+    // It is the widest floor any panel in the group needs (Result's 320),
+    // so switching tabs can never force dockview to widen the pane out from
+    // under the user.
+    expect(floorWithPreview).toBe(320);
+  });
 });
