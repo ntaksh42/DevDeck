@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use azdo_client::{AdoClient, GitPullRequest, PullRequestStatus};
-use chrono::{NaiveDate, NaiveTime, TimeZone, Utc};
+use chrono::{DateTime, NaiveDate, NaiveTime, TimeZone, Utc};
 
 use super::*;
 use crate::commits::encode_path_segment;
@@ -114,7 +114,17 @@ pub(crate) fn sort_summaries(results: &mut [PullRequestSummary], sort_by: SortBy
 }
 
 /// Parses a `YYYY-MM-DD` filter bound into an RFC3339 instant. `end_of_day`
-/// pushes the bound to 23:59:59 so the `to` date is inclusive.
+/// pushes the bound to the very last instant of that day so the `to` date is
+/// inclusive.
+///
+/// The bound has to cover the whole final second, not just `23:59:59.000`:
+/// Azure DevOps timestamps carry sub-second precision, so a PR created at
+/// `23:59:59.913` on the `to` date sits after a whole-second bound and was
+/// silently dropped -- from the in-memory active-cache filter and from the
+/// live query alike, since this same value is sent as `maxTime`.
+///
+/// 100ns ("tick") precision, not nanoseconds: Azure DevOps receives this value
+/// directly, and ticks are the finest resolution its own .NET timestamps use.
 pub(crate) fn parse_date_bound(value: Option<&str>, end_of_day: bool) -> Result<Option<String>> {
     let Some(trimmed) = value.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(None);
@@ -122,7 +132,7 @@ pub(crate) fn parse_date_bound(value: Option<&str>, end_of_day: bool) -> Result<
     let date = NaiveDate::parse_from_str(trimmed, "%Y-%m-%d")
         .map_err(|_| AppError::InvalidInput(format!("invalid date: {trimmed}")))?;
     let time = if end_of_day {
-        NaiveTime::from_hms_opt(23, 59, 59)
+        NaiveTime::from_hms_nano_opt(23, 59, 59, 999_999_900)
     } else {
         NaiveTime::from_hms_opt(0, 0, 0)
     }
@@ -132,10 +142,28 @@ pub(crate) fn parse_date_bound(value: Option<&str>, end_of_day: bool) -> Result<
     ))
 }
 
-/// Inclusive RFC3339 range check by lexicographic comparison; both bounds and
-/// `value` are produced by `to_rfc3339()` so the string order matches time order.
+/// Inclusive RFC3339 range check, comparing parsed instants rather than the
+/// raw strings.
+///
+/// The two sides come from different producers and are not spelled the same
+/// way: the bounds are built here, while `value` is an Azure DevOps timestamp
+/// that may use a `Z` offset and carries sub-second digits. As text, `Z`
+/// (0x5A) sorts after `+` (0x2B), so the same instant written the other way
+/// round compares as later -- the same class of defect already handled in
+/// `snooze::should_revive` and `search::compare_timestamps_desc`. An
+/// unparsable value is kept rather than dropped, so a row with an odd
+/// timestamp is never silently hidden.
 pub(crate) fn within_window(value: &str, from: Option<&str>, to: Option<&str>) -> bool {
-    from.is_none_or(|f| value >= f) && to.is_none_or(|t| value <= t)
+    fn instant(value: &str) -> Option<DateTime<Utc>> {
+        DateTime::parse_from_rfc3339(value)
+            .ok()
+            .map(|parsed| parsed.with_timezone(&Utc))
+    }
+    let Some(value) = instant(value) else {
+        return true;
+    };
+    from.and_then(instant).is_none_or(|f| value >= f)
+        && to.and_then(instant).is_none_or(|t| value <= t)
 }
 
 pub(crate) async fn project_id_name_pairs(client: &AdoClient) -> Result<Vec<(String, String)>> {

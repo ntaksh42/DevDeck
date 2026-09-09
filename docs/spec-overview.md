@@ -452,6 +452,12 @@ format!(
   スコープして API 呼び出しを抑える)。ターゲットブランチと期間はライブ取得ではサーバ側
   (`searchCriteria.targetRefName` / `minTime`・`maxTime`・`queryTimeRangeType`) で、active
   キャッシュでは creation_date を対象にメモリ内で絞り込む。active 行は完了日を持たないため期間は常に作成日基準。
+  期間の下限/上限は `YYYY-MM-DD` を UTC の 00:00:00 / 23:59:59.9999999 に展開した RFC3339 で表す。
+  上限は最終秒を丸ごと含める必要がある (Azure DevOps の日時は秒未満の精度を持つため、
+  23:59:59 ちょうどを上限にすると当日 23:59:59.xxx 作成分が漏れる)。精度は Azure DevOps 自身の
+  .NET 日時と同じ 100ns (tick) 単位に揃える。メモリ内の絞り込み (`within_window`) は文字列比較
+  ではなく RFC3339 をパースした瞬時値で比較する (`Z` と `+00:00` の表記差で順序が狂うため)。
+  Commits 検索の期間 (`normalize_date`) も同じ上限規則に従う。
   ドラフト除外用に active キャッシュ (`pull_requests.is_draft`) が draft 状態を保持する。
 - Azure DevOps のリッチテキストは表示前にサニタイズ・正規化し、生の HTML を可視テキストに漏らさない。
   本文中の認証必須な添付画像 (Work Item 添付ストアの `_apis/wit/attachments/`、および PR の説明・
