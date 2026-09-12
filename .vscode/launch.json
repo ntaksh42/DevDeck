@@ -1,0 +1,32 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Tauri Development Debug (Rust)",
+      "cargo": {
+        "args": [
+          "build",
+          "--manifest-path=./src-tauri/Cargo.toml",
+          "--no-default-features"
+        ]
+      },
+      "preLaunchTask": "ui:dev"
+    },
+    {
+      "type": "lldb",
+      "request": "attach",
+      "name": "Attach to azdo-dashboard (Rust)",
+      "program": "${workspaceFolder}/src-tauri/target/debug/azdo-dashboard.exe"
+    },
+    {
+      "type": "chrome",
+      "request": "launch",
+      "name": "Frontend (Vite Browser)",
+      "url": "http://localhost:1420",
+      "webRoot": "${workspaceFolder}",
+      "preLaunchTask": "ui:dev"
+    }
+  ]
+}
