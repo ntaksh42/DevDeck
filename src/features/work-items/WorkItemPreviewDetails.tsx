@@ -70,6 +70,7 @@ export function WorkItemPreviewDetails({
   onTitleChange,
   titlePending,
   zoom,
+  zoomControl,
 }: {
   customPreviewFields: CustomPreviewField[];
   preview: WorkItemPreview;
@@ -107,6 +108,7 @@ export function WorkItemPreviewDetails({
   onTitleChange: (title: string) => void;
   titlePending: boolean;
   zoom: number;
+  zoomControl?: ReactNode;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
@@ -192,6 +194,7 @@ export function WorkItemPreviewDetails({
           <div className="flex shrink-0 items-center gap-1">
             {actionsControl}
             {presetsControl}
+            {zoomControl}
             <FieldConfigMenu
               organizationId={preview.organizationId}
               projectId={preview.projectId}

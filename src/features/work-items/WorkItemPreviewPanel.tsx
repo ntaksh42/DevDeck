@@ -260,18 +260,6 @@ export function WorkItemPreviewPanel({
       className="flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-border bg-card shadow-sm transition-[border-color,box-shadow] focus-within:border-primary focus-within:ring-4 focus-within:ring-inset focus-within:ring-primary/25"
       onKeyDown={handlePreviewPanelKeyDown}
     >
-      {selectedItem && preview ? (
-        <div className="flex shrink-0 items-center justify-end border-b border-border px-2 py-1">
-          <PreviewZoomControls
-            canZoomIn={canZoomIn}
-            canZoomOut={canZoomOut}
-            zoom={zoom}
-            onZoomIn={zoomIn}
-            onZoomOut={zoomOut}
-            onReset={resetZoom}
-          />
-        </div>
-      ) : null}
       {!selectedItem ? (
         <PreviewEmptyState message="Select a work item." />
       ) : (
@@ -310,6 +298,16 @@ export function WorkItemPreviewPanel({
                     onSave={savePresetFromStaged}
                     presets={presets}
                     stagedCount={stagedEntries.length}
+                  />
+                }
+                zoomControl={
+                  <PreviewZoomControls
+                    canZoomIn={canZoomIn}
+                    canZoomOut={canZoomOut}
+                    zoom={zoom}
+                    onZoomIn={zoomIn}
+                    onZoomOut={zoomOut}
+                    onReset={resetZoom}
                   />
                 }
                 deleteCommentError={deleteCommentError}
