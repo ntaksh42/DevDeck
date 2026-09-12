@@ -200,8 +200,17 @@ export function ResizeHandle({
           onReset();
         }
       }}
-      className={`z-20 w-2 cursor-col-resize items-center justify-center text-muted-foreground outline-none hover:bg-secondary focus:bg-secondary focus:ring-2 focus:ring-ring ${className ?? ""}`}
+      className={`relative z-20 w-2 cursor-col-resize items-center justify-center text-muted-foreground outline-none hover:bg-secondary focus:bg-secondary focus:ring-2 focus:ring-ring ${className ?? ""}`}
     >
+      {/*
+        The visible w-2 (8px) strip is easy to miss with the pointer -- a drag
+        that lands just outside it falls through to dockview's own group sash
+        underneath, which resizes without this handle's clamp/re-anchor logic
+        and reproduces the same dead zone bug this component exists to fix.
+        This invisible pad widens the hit area without widening what's drawn,
+        so the grip still reads as a thin line.
+      */}
+      <div className="absolute inset-y-0 -left-1.5 -right-1.5 cursor-col-resize" aria-hidden="true" />
       <GripVertical className="h-4 w-4" aria-hidden="true" />
     </div>
   );
