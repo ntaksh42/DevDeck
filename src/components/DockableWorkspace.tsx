@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowDownToLine,
   ArrowLeftToLine,
@@ -208,10 +209,65 @@ function PanelMoveMenu({
 }
 
 /**
- * Combines the keyboard-accessible move menu and resize handle into one
- * `rightHeaderActionsComponent`. The move menu shows for any group's active
- * panel; the resize handle only for panels with size constraints (i.e. every
- * panel but the anchor).
+ * Renders `ResizeHandle` full-height over the group's *right edge*, via a
+ * portal into `group.element` rather than inline in the header row.
+ *
+ * dockview draws its own group-boundary drag handle (`.dv-sash`) the full
+ * height of the panel, next to it -- CSS in index.css turns off pointer
+ * events on that so it can't intercept a drag, but that leaves nothing to
+ * grab there unless something else covers the same height. A header-row-only
+ * `ResizeHandle` used to leave the rest of the boundary dead. Sizing this to
+ * the group's own height keeps the whole boundary draggable through the one
+ * handle that carries the clamp/re-anchor logic.
+ */
+function GroupResizeOverlay({
+  group,
+  resizeSpec,
+  width,
+}: {
+  group: IDockviewHeaderActionsProps["group"];
+  resizeSpec: { min: number; max: number; defaultWidth: number; title: string };
+  width: number;
+}) {
+  const [height, setHeight] = useState(() => group.element.clientHeight);
+
+  useEffect(() => {
+    const observer = new ResizeObserver(() => setHeight(group.element.clientHeight));
+    observer.observe(group.element);
+    return () => observer.disconnect();
+  }, [group]);
+
+  return createPortal(
+    <ResizeHandle
+      ariaLabel={`Resize ${resizeSpec.title}`}
+      direction={-1}
+      min={resizeSpec.min}
+      max={resizeSpec.max}
+      value={width}
+      // Report back the width dockview actually applied. It clamps a group to
+      // what the surrounding layout allows (the sibling grid's own minWidth
+      // stops the drag well before this panel's `max`), and `api.width`
+      // reflects that synchronously -- unlike the `width` state above, which
+      // only catches up a render later via `onDidDimensionsChange`. Handing
+      // the handle the real width lets it re-anchor on the limit instead of
+      // accumulating a request that runs away past it.
+      onChange={(next) => {
+        group.api.setSize({ width: next });
+        return group.api.width;
+      }}
+      onReset={() => group.api.setSize({ width: resizeSpec.defaultWidth })}
+      className="absolute right-0 top-0 z-20 w-2"
+      style={{ height }}
+    />,
+    group.element,
+  );
+}
+
+/**
+ * The keyboard-accessible move menu, shown in every group's header for its
+ * active panel. The resize handle itself now renders full-height via
+ * `GroupResizeOverlay` (a portal into the group element) rather than inline
+ * here, so it can cover the whole boundary instead of just the header row.
  */
 function createHeaderActions(
   resizeSpecs: Map<string, { min: number; max: number; defaultWidth: number; title: string }>,
@@ -233,29 +289,7 @@ function createHeaderActions(
         {activePanel ? (
           <PanelMoveMenu panel={activePanel} containerApi={containerApi} panelsRef={panelsRef} />
         ) : null}
-        {resizeSpec ? (
-          <ResizeHandle
-            ariaLabel={`Resize ${resizeSpec.title}`}
-            direction={-1}
-            min={resizeSpec.min}
-            max={resizeSpec.max}
-            value={width}
-            // Report back the width dockview actually applied. It clamps a
-            // group to what the surrounding layout allows (the sibling grid's
-            // own minWidth stops the drag well before this panel's `max`), and
-            // `api.width` reflects that synchronously -- unlike the `width`
-            // state above, which only catches up a render later via
-            // `onDidDimensionsChange`. Handing the handle the real width lets
-            // it re-anchor on the limit instead of accumulating a request that
-            // runs away past it.
-            onChange={(next) => {
-              api.setSize({ width: next });
-              return api.width;
-            }}
-            onReset={() => api.setSize({ width: resizeSpec.defaultWidth })}
-            className="flex h-5 w-4 shrink-0"
-          />
-        ) : null}
+        {resizeSpec ? <GroupResizeOverlay group={group} resizeSpec={resizeSpec} width={width} /> : null}
       </div>
     );
   };

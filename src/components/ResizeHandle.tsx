@@ -1,4 +1,5 @@
 import {
+  type CSSProperties,
   type Dispatch,
   type SetStateAction,
   type PointerEvent as ReactPointerEvent,
@@ -142,6 +143,7 @@ export function ColumnResizeHandle({
 export function ResizeHandle({
   ariaLabel,
   className,
+  style,
   direction,
   max,
   min,
@@ -151,6 +153,7 @@ export function ResizeHandle({
 }: {
   ariaLabel: string;
   className?: string;
+  style?: CSSProperties;
   direction: 1 | -1;
   max: number;
   min: number;
@@ -200,7 +203,8 @@ export function ResizeHandle({
           onReset();
         }
       }}
-      className={`relative z-20 w-2 cursor-col-resize items-center justify-center text-muted-foreground outline-none hover:bg-secondary focus:bg-secondary focus:ring-2 focus:ring-ring ${className ?? ""}`}
+      className={`relative z-20 flex w-2 cursor-col-resize items-center justify-center text-muted-foreground outline-none hover:bg-secondary focus:bg-secondary focus:ring-2 focus:ring-ring ${className ?? ""}`}
+      style={style}
     >
       {/*
         The visible w-2 (8px) strip is easy to miss with the pointer -- a drag
@@ -210,8 +214,8 @@ export function ResizeHandle({
         This invisible pad widens the hit area without widening what's drawn,
         so the grip still reads as a thin line.
       */}
-      <div className="absolute inset-y-0 -left-1.5 -right-1.5 cursor-col-resize" aria-hidden="true" />
-      <GripVertical className="h-4 w-4" aria-hidden="true" />
+      <div className="absolute inset-y-0 -left-1.5 -right-1.5 z-0 cursor-col-resize" aria-hidden="true" />
+      <GripVertical className="relative z-10 h-4 w-4 shrink-0" aria-hidden="true" />
     </div>
   );
 }
