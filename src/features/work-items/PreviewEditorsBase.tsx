@@ -89,7 +89,7 @@ export function TitleEditor({
           }
         }}
         aria-label="Edit title"
-        className="mt-0.5 w-full rounded border border-input bg-background px-1 py-0.5 text-sm font-semibold leading-5 text-foreground outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+        className="mt-0.5 w-full rounded border border-input bg-background px-1 py-0.5 text-sm font-extrabold leading-5 text-foreground outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
       />
     );
   }
@@ -101,7 +101,7 @@ export function TitleEditor({
       onClick={open}
       aria-label="Edit title"
       title={current}
-      className="mt-0.5 line-clamp-2 w-full rounded px-1 text-left text-sm font-semibold leading-5 text-foreground hover:bg-secondary"
+      className="mt-0.5 line-clamp-2 w-full rounded px-1 text-left text-sm font-extrabold leading-5 text-foreground hover:bg-secondary"
     >
       {current}
     </button>
@@ -148,7 +148,7 @@ export function ReasonEditor({
         aria-keyshortcuts={shortcut}
         disabled={pending}
         onClick={() => onOpenChange(!open)}
-        className="max-w-full truncate rounded px-1 text-left text-xs leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+        className="max-w-full truncate rounded px-1 text-left text-[11px] font-semibold leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
         title={current ?? "—"}
       >
         {pending ? "Updating..." : (current ?? "—")}

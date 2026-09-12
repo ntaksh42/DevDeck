@@ -34,10 +34,10 @@ export function workItemStateDotClass(state: string): string {
 
 export function WorkItemTypeBadge({ type }: { type: string }) {
   return (
-    <span className="inline-flex min-w-0 items-center gap-1 rounded border border-border bg-card px-1.5 text-[11px] font-medium leading-[18px] text-foreground">
+    <span className="inline-flex min-w-0 items-center gap-1 rounded border border-border bg-card px-1.5 text-[11px] font-semibold leading-[18px] text-foreground">
       <span
         aria-hidden="true"
-        className="h-2 w-2 shrink-0 rounded-[2px]"
+        className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
         style={{ backgroundColor: workItemTypeColor(type) }}
       />
       <span className="truncate">{type}</span>
@@ -47,10 +47,10 @@ export function WorkItemTypeBadge({ type }: { type: string }) {
 
 export function WorkItemStatePill({ state }: { state: string }) {
   return (
-    <span className="inline-flex min-w-0 items-center gap-1 rounded-full border border-border bg-card px-1.5 text-[11px] leading-[18px] text-foreground">
+    <span className="inline-flex min-w-0 items-center gap-1 rounded-full border border-border bg-card px-1.5 text-[11px] font-semibold leading-[18px] text-foreground">
       <span
         aria-hidden="true"
-        className={`h-2 w-2 shrink-0 rounded-full ${workItemStateDotClass(state)}`}
+        className={`h-2.5 w-2.5 shrink-0 rounded-full ${workItemStateDotClass(state)}`}
       />
       <span className="truncate">{state}</span>
     </span>

@@ -195,13 +195,13 @@ export function CollapsibleComment({
         <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[10px] font-semibold text-blue-700 dark:bg-blue-500/25 dark:text-blue-200">
           {commentAuthorInitials(createdBy)}
         </span>
-        <span className="min-w-0 truncate font-semibold">
+        <span className="min-w-0 truncate font-extrabold">
           {createdBy ?? "Unknown"}
         </span>
-        <span className="hidden text-[11px] text-muted-foreground sm:inline">commented</span>
+        <span className="hidden text-[11px] font-medium text-slate-500 dark:text-slate-400 sm:inline">commented</span>
         {createdDate ? (
           <span
-            className="shrink-0 text-[11px] text-muted-foreground"
+            className="shrink-0 text-[11px] font-medium text-slate-500 dark:text-slate-400"
             title={new Date(createdDate).toLocaleString()}
           >
             {formatRelativeDate(createdDate)}

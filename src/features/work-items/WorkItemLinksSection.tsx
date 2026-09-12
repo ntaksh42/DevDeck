@@ -66,7 +66,7 @@ export function WorkItemLinksSection({ preview }: { preview: WorkItemPreview }) 
               className="flex min-w-0 flex-1 items-center gap-1.5 rounded border border-border bg-card px-1.5 py-1 text-left text-xs hover:bg-secondary"
               title={relation.webUrl ?? undefined}
             >
-              <span className="w-16 shrink-0 truncate text-[11px] text-muted-foreground">
+              <span className="w-16 shrink-0 truncate text-[11px] font-bold text-slate-500 dark:text-slate-400">
                 {relation.relationType}
               </span>
               {relation.workItemType ? (

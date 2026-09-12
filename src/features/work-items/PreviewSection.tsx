@@ -33,11 +33,11 @@ export function PreviewControl({
   shortcut?: string;
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-1.5">
-      <span className="shrink-0 text-[10px] font-semibold uppercase leading-4 text-muted-foreground">
+    <div className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-full border border-border bg-card py-0.5 pl-1.5 pr-1">
+      <span className="shrink-0 text-[9px] font-extrabold uppercase tracking-wide leading-4 text-slate-500 dark:text-slate-400">
         {label}
       </span>
-      <div className="flex min-w-0 flex-1 items-center leading-4">{children}</div>
+      <div className="flex min-w-0 items-center leading-4">{children}</div>
       {shortcut ? <ShortcutHint>{shortcut}</ShortcutHint> : null}
     </div>
   );
@@ -54,15 +54,15 @@ export function PreviewField({
 }) {
   return (
     <div
-      className={`flex min-w-0 items-baseline gap-1.5 ${
-        wide ? "sm:col-span-2 2xl:col-span-3" : ""
+      className={`inline-flex max-w-full items-baseline gap-1 rounded-full border border-border bg-card py-0.5 pl-1.5 pr-2 ${
+        wide ? "w-full" : "min-w-0"
       }`}
     >
-      <dt className="shrink-0 text-[10px] font-semibold uppercase leading-4 text-muted-foreground">
+      <dt className="shrink-0 text-[9px] font-extrabold uppercase tracking-wide leading-4 text-slate-500 dark:text-slate-400">
         {label}
       </dt>
       <dd
-        className={`min-w-0 flex-1 text-[12px] font-semibold leading-4 text-foreground ${
+        className={`min-w-0 text-[11px] font-bold leading-4 text-foreground ${
           wide ? "break-words" : "truncate"
         }`}
         title={value}
@@ -74,11 +74,15 @@ export function PreviewField({
 }
 
 export function PreviewSection({
+  accentColor = "border-l-slate-400 dark:border-l-slate-500",
   children,
   className = "",
   collapseId,
   title,
 }: {
+  /** Tailwind `border-l-*` class(es) used for the band's left accent stripe,
+      so each section reads as its own kind at a glance while scrolling. */
+  accentColor?: string;
   children: ReactNode;
   className?: string;
   collapseId?: string;
@@ -110,20 +114,22 @@ export function PreviewSection({
             type="button"
             aria-expanded={!collapsed}
             onClick={toggleCollapsed}
-            className="flex w-full items-center gap-1 rounded bg-slate-200 px-1.5 py-1 text-left hover:bg-slate-300 focus:outline-none focus:ring-1 focus:ring-ring dark:bg-muted dark:hover:bg-muted/80"
+            className={`flex w-full items-center gap-1 rounded border-l-4 bg-slate-200 px-1.5 py-1 text-left hover:bg-slate-300 focus:outline-none focus:ring-1 focus:ring-ring dark:bg-slate-700 dark:hover:bg-slate-600 ${accentColor}`}
           >
             <ChevronRight
-              className={`h-3 w-3 shrink-0 text-muted-foreground transition-transform ${
+              className={`h-3 w-3 shrink-0 text-slate-600 transition-transform dark:text-slate-300 ${
                 collapsed ? "" : "rotate-90"
               }`}
               aria-hidden="true"
             />
-            <h3 className="text-[10px] font-semibold uppercase tracking-wide leading-4 text-muted-foreground">
+            <h3 className="text-[10px] font-extrabold uppercase tracking-wider leading-4 text-slate-800 dark:text-slate-100">
               {title}
             </h3>
           </button>
         ) : (
-          <h3 className="rounded bg-slate-200 px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wide leading-4 text-muted-foreground dark:bg-muted">
+          <h3
+            className={`rounded border-l-4 bg-slate-200 px-1.5 py-1 text-[10px] font-extrabold uppercase tracking-wider leading-4 text-slate-800 dark:bg-slate-700 dark:text-slate-100 ${accentColor}`}
+          >
             {title}
           </h3>
         )}
@@ -156,18 +162,18 @@ export function PreviewTagsField({
   }
 
   return (
-    <div className="flex min-w-0 items-baseline gap-1.5 sm:col-span-2 2xl:col-span-3">
-      <dt className="shrink-0 text-[10px] font-semibold uppercase leading-4 text-muted-foreground">
+    <div className="flex w-full min-w-0 items-baseline gap-1.5">
+      <dt className="shrink-0 text-[9px] font-extrabold uppercase tracking-wide leading-4 text-slate-500 dark:text-slate-400">
         {label}
       </dt>
       <dd className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
         {tags.length === 0 && !onChange ? (
-          <span className="text-[12px] font-semibold leading-4 text-foreground">—</span>
+          <span className="text-[11px] font-bold leading-4 text-foreground">—</span>
         ) : (
           tags.map((tag) => (
             <span
               key={tag}
-              className="inline-flex max-w-full items-center gap-0.5 truncate rounded-sm border border-border bg-secondary px-1 text-[10px] font-medium leading-4 text-secondary-foreground"
+              className="inline-flex max-w-full items-center gap-0.5 truncate rounded-full border border-border bg-secondary px-2 py-px text-[10px] font-semibold leading-4 text-secondary-foreground"
               title={tag}
             >
               {tag}

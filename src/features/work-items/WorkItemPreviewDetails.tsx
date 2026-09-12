@@ -12,7 +12,6 @@ import type {
 } from "@/lib/azdoCommands";
 import { commentRichHtml, richFieldHtml } from "./workItemHtml";
 import { focusPrimaryGrid, formatRelativeDate, isEditableTarget } from "@/lib/utils";
-import { navigateToPullRequest } from "@/lib/crossLinks";
 import { openExternalUrl } from "@/lib/openExternal";
 import type { CustomPreviewField, PreviewFieldKey } from "./previewFieldsStorage";
 import { TitleEditor } from "./PreviewEditors";
@@ -171,10 +170,10 @@ export function WorkItemPreviewDetails({
       }}
       tabIndex={-1}
     >
-      <div className="border-b border-border pb-1.5">
+      <div className="border-b-2 border-border pb-1.5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-1.5">
-            <span className="shrink-0 font-mono text-[11px] leading-5 text-muted-foreground">
+            <span className="shrink-0 font-mono text-[11px] font-bold leading-5 text-slate-600 dark:text-slate-300">
               #{preview.id}
             </span>
             {preview.workItemType ? (
@@ -183,7 +182,7 @@ export function WorkItemPreviewDetails({
             {preview.state ? <WorkItemStatePill state={preview.state} /> : null}
             {preview.changedDate ? (
               <span
-                className="hidden shrink-0 truncate text-[10px] text-muted-foreground sm:inline"
+                className="hidden shrink-0 truncate text-[10px] font-medium text-slate-500 dark:text-slate-400 sm:inline"
                 title={preview.changedDate}
               >
                 updated {formatRelativeDate(preview.changedDate)}
@@ -206,7 +205,11 @@ export function WorkItemPreviewDetails({
           </div>
         </div>
         <TitleEditor current={preview.title} onSubmit={onTitleChange} pending={titlePending} />
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-x-2 gap-y-0.5 pt-1">
+        {/* Chips instead of a fixed-column grid: a short value (e.g. Priority
+            "2") only takes the width its own text needs rather than a forced
+            minmax(120px,...) column, so more fields pack per row and the
+            block doesn't leave dead space when values are short. */}
+        <div className="flex flex-wrap items-center gap-1 pt-1.5">
           {selectedFieldDefinitions.map((field) =>
             field.editable === "state" ? (
               <PreviewControl key={field.key} label={field.label} shortcut={field.shortcut}>
@@ -221,9 +224,13 @@ export function WorkItemPreviewDetails({
                 {priorityControl}
               </PreviewControl>
             ) : field.editable === "reason" ? (
-              <PreviewControl key={field.key} label={field.label} shortcut={field.shortcut}>
-                {reasonControl}
-              </PreviewControl>
+              // An unset Reason ("—") is common (only certain states use it)
+              // and not worth a whole chip's worth of dead space.
+              previewFieldValue(preview, field.key) ? (
+                <PreviewControl key={field.key} label={field.label} shortcut={field.shortcut}>
+                  {reasonControl}
+                </PreviewControl>
+              ) : null
             ) : field.key === "areaPath" && areaControl ? (
               <PreviewControl key={field.key} label={field.label}>
                 {areaControl}
@@ -260,7 +267,11 @@ export function WorkItemPreviewDetails({
       {(descriptionHtml || acceptanceCriteriaHtml) && (
         <div className="mt-2 grid gap-2">
           {descriptionHtml ? (
-            <PreviewSection collapseId="description" title="Description">
+            <PreviewSection
+              accentColor="border-l-primary"
+              collapseId="description"
+              title="Description"
+            >
               <RichHtmlFrame
                 baseUrl={preview.webUrl}
                 html={descriptionHtml}
@@ -271,7 +282,11 @@ export function WorkItemPreviewDetails({
             </PreviewSection>
           ) : null}
           {acceptanceCriteriaHtml ? (
-            <PreviewSection collapseId="acceptanceCriteria" title="Acceptance Criteria">
+            <PreviewSection
+              accentColor="border-l-primary"
+              collapseId="acceptanceCriteria"
+              title="Acceptance Criteria"
+            >
               <RichHtmlFrame
                 baseUrl={preview.webUrl}
                 html={acceptanceCriteriaHtml}
@@ -285,7 +300,12 @@ export function WorkItemPreviewDetails({
       )}
 
       {preview.comments.length > 0 ? (
-        <PreviewSection className="mt-2" collapseId="comments" title={`Comments (${preview.comments.length})`}>
+        <PreviewSection
+          accentColor="border-l-slate-400 dark:border-l-slate-500"
+          className="mt-2"
+          collapseId="comments"
+          title={`Comments (${preview.comments.length})`}
+        >
           {deleteCommentError ? (
             <p className="mb-1 text-[11px] leading-4 text-destructive">
               {deleteCommentError}
@@ -348,7 +368,12 @@ export function WorkItemPreviewDetails({
           </div>
         </PreviewSection>
       ) : preview.commentsUnavailable ? (
-        <PreviewSection className="mt-2" collapseId="comments" title="Comments">
+        <PreviewSection
+          accentColor="border-l-slate-400 dark:border-l-slate-500"
+          className="mt-2"
+          collapseId="comments"
+          title="Comments"
+        >
           <p className="text-[11px] leading-4 text-destructive">
             Comments could not be loaded. Try refreshing.
           </p>
@@ -359,6 +384,7 @@ export function WorkItemPreviewDetails({
 
       {preview.pullRequests.length > 0 ? (
         <PreviewSection
+          accentColor="border-l-violet-400 dark:border-l-violet-500"
           className="mt-2"
           collapseId="pullRequests"
           title={`Pull Requests (${preview.pullRequests.length})`}
@@ -371,28 +397,16 @@ export function WorkItemPreviewDetails({
                   key={pr.pullRequestId}
                   type="button"
                   onClick={() => {
-                    if (inReviews) {
-                      navigateToPullRequest({
-                        organizationId: preview.organizationId,
-                        repositoryId: pr.repositoryId,
-                        pullRequestId: pr.pullRequestId,
-                      });
-                    } else if (pr.webUrl) {
-                      openExternalUrl(pr.webUrl);
-                    }
+                    if (pr.webUrl) openExternalUrl(pr.webUrl);
                   }}
-                  disabled={!inReviews && !pr.webUrl}
+                  disabled={!pr.webUrl}
                   className="flex w-full min-w-0 items-center gap-1.5 rounded border border-border bg-card px-1.5 py-1 text-left text-xs hover:bg-secondary disabled:cursor-default disabled:opacity-60"
-                  title={
-                    inReviews
-                      ? "Open in My Reviews"
-                      : pr.webUrl ?? "Pull request not in My Reviews"
-                  }
+                  title={pr.webUrl ?? "Pull request not in My Reviews"}
                 >
-                  <span className="w-16 shrink-0 truncate text-[11px] text-muted-foreground">
+                  <span className="w-16 shrink-0 truncate text-[11px] font-bold text-slate-500 dark:text-slate-400">
                     {inReviews ? "Review" : "PR"}
                   </span>
-                  <span className="shrink-0 font-mono text-[11px] text-primary">
+                  <span className="shrink-0 font-mono text-[11px] font-extrabold text-primary">
                     !{pr.pullRequestId}
                   </span>
                   <span className="min-w-0 flex-1 truncate">
@@ -413,6 +427,7 @@ export function WorkItemPreviewDetails({
 
       {preview.attachments.length > 0 ? (
         <PreviewSection
+          accentColor="border-l-amber-400 dark:border-l-amber-500"
           className="mt-2"
           collapseId="attachments"
           title={`Attachments (${preview.attachments.length})`}
