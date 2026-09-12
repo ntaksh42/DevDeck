@@ -166,15 +166,20 @@
 }
 
 /* dockview draws its own group-boundary drag handle (`.dv-sash`) the full
-   height of the panel, independent of ResizeHandle in DockableWorkspace.tsx.
-   The two overlap along the boundary, and which one a drag actually lands on
-   comes down to pixel-level hit-testing luck between them -- read as the
-   width adjustment being unstable, since only ResizeHandle carries the
-   clamp/re-anchor logic that keeps a drag from overshooting past what
-   dockview actually grants. Disabling pointer events here leaves dockview's
-   own sash purely as a paint (still visible, still marks the boundary) and
-   makes ResizeHandle -- rendered full-height via a portal -- the only thing
-   that can receive the drag. */
+   length of the boundary, independent of ResizeHandle in
+   DockableWorkspace.tsx. The two overlap along the boundary, and which one a
+   drag actually lands on comes down to pixel-level hit-testing luck between
+   them -- read as the size adjustment being unstable, since only
+   ResizeHandle carries the clamp/re-anchor logic that keeps a drag from
+   overshooting past what dockview actually grants. Disabling pointer events
+   here leaves dockview's own sash purely as a paint (still visible, still
+   marks the boundary) and makes ResizeHandle -- rendered full-length via a
+   portal -- the only thing that can receive the drag.
+
+   Both orientations: GroupResizeOverlay covers left/right splits (width) and
+   above/below ones (height, reachable via the "Move panel" menu's Split
+   above/below even though no default layout uses it) alike, so both native
+   sashes would otherwise compete with it the same way. */
 .dv-sash {
   pointer-events: none;
 }

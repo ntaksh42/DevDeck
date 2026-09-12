@@ -4,16 +4,19 @@ import {
   type SetStateAction,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { GripVertical } from "lucide-react";
+import { GripHorizontal, GripVertical } from "lucide-react";
 import { clamp } from "@/lib/utils";
 
-function beginHorizontalResize(
+function beginAxisResize(
   event: ReactPointerEvent,
   options: {
     value: number;
     min: number;
     max: number;
     direction: 1 | -1;
+    /** Which pointer coordinate drives the drag: `clientX` for a left/right
+        split's handle, `clientY` for an above/below one. */
+    axis: "x" | "y";
     /**
      * Applies the new value. May return the value actually applied when that
      * can differ from what was requested; returning nothing means "applied as
@@ -26,13 +29,15 @@ function beginHorizontalResize(
   event.stopPropagation();
   const target = event.currentTarget;
   const pointerId = event.pointerId;
+  const pointerPos = (pointerEvent: { clientX: number; clientY: number }) =>
+    options.axis === "y" ? pointerEvent.clientY : pointerEvent.clientX;
 
   // The gesture is tracked as an offset from an anchor -- a known-good
-  // (pointerX, value) pair -- rather than by summing per-move deltas, so the
+  // (pointerPos, value) pair -- rather than by summing per-move deltas, so the
   // panel follows the pointer exactly however fast it moves.
   //
   // The anchor is reset whenever the consumer does not apply what we asked for.
-  // `onChange` returns the width actually applied (dockview clamps a group to
+  // `onChange` returns the size actually applied (dockview clamps a group to
   // what the surrounding layout allows -- a sibling panel's own minWidth stops
   // the drag long before this handle's `max`). Re-anchoring onto that wall is
   // what lets a drag back off it respond on the very next move: without it the
@@ -40,19 +45,19 @@ function beginHorizontalResize(
   // has to unwind the whole phantom overshoot before the panel moves at all --
   // the dead zone that reads as resizing being broken.
   //
-  // The applied width has to come back from `onChange` itself. Sampling it from
+  // The applied size has to come back from `onChange` itself. Sampling it from
   // a prop or state instead cannot work: that value is updated asynchronously,
   // so a clamp and a not-yet-delivered echo look exactly alike at any single
   // moment, and guessing between them either reintroduces the dead zone or
   // makes a fast drag crawl.
-  let anchorX = event.clientX;
+  let anchorPos = pointerPos(event);
   let anchorValue = options.value;
   let requested = options.value;
 
   function onPointerMove(moveEvent: PointerEvent) {
     if (moveEvent.pointerId !== pointerId) return;
 
-    const delta = (moveEvent.clientX - anchorX) * options.direction;
+    const delta = (pointerPos(moveEvent) - anchorPos) * options.direction;
     const next = clamp(anchorValue + delta, options.min, options.max);
     if (next === requested) return;
 
@@ -60,7 +65,7 @@ function beginHorizontalResize(
     const applied = options.onChange(next);
 
     if (typeof applied === "number" && applied !== next) {
-      anchorX = moveEvent.clientX;
+      anchorPos = pointerPos(moveEvent);
       anchorValue = applied;
       requested = applied;
     }
@@ -142,6 +147,7 @@ export function ColumnResizeHandle({
 
 export function ResizeHandle({
   ariaLabel,
+  axis = "x",
   className,
   style,
   direction,
@@ -152,6 +158,10 @@ export function ResizeHandle({
   value,
 }: {
   ariaLabel: string;
+  /** Which edge this handle sits on and which way it drags: `"x"` (default)
+      for a left/right split's vertical-line handle, `"y"` for an above/below
+      split's horizontal-line one. */
+  axis?: "x" | "y";
   className?: string;
   style?: CSSProperties;
   direction: 1 | -1;
@@ -167,6 +177,8 @@ export function ResizeHandle({
   onReset: () => void;
   value: number;
 }) {
+  const vertical = axis === "y";
+
   function nudge(delta: number) {
     onChange(clamp(value + delta * direction, min, max));
   }
@@ -176,20 +188,22 @@ export function ResizeHandle({
       role="separator"
       aria-label={ariaLabel}
       title="Drag to resize · double-click or Escape to reset to the default width"
-      aria-orientation="vertical"
+      aria-orientation={vertical ? "horizontal" : "vertical"}
       aria-valuemin={min}
       aria-valuemax={max}
       aria-valuenow={Math.round(value)}
       tabIndex={0}
       onPointerDown={(event) =>
-        beginHorizontalResize(event, { value, min, max, direction, onChange })
+        beginAxisResize(event, { value, min, max, direction, axis, onChange })
       }
       onDoubleClick={onReset}
       onKeyDown={(event) => {
-        if (event.key === "ArrowLeft") {
+        const decreaseKey = vertical ? "ArrowUp" : "ArrowLeft";
+        const increaseKey = vertical ? "ArrowDown" : "ArrowRight";
+        if (event.key === decreaseKey) {
           event.preventDefault();
           nudge(-16);
-        } else if (event.key === "ArrowRight") {
+        } else if (event.key === increaseKey) {
           event.preventDefault();
           nudge(16);
         } else if (event.key === "Home") {
@@ -203,19 +217,38 @@ export function ResizeHandle({
           onReset();
         }
       }}
-      className={`relative z-20 flex w-2 cursor-col-resize items-center justify-center text-muted-foreground outline-none hover:bg-secondary focus:bg-secondary focus:ring-2 focus:ring-ring ${className ?? ""}`}
+      // No position utility here: every caller supplies one (`absolute ...`)
+      // via `className`, and Tailwind's generated CSS defines `.relative`
+      // after `.absolute`, so a base `relative` class would win the position
+      // property regardless of class order in the string -- silently turning
+      // the portaled full-height overlay (GroupResizeOverlay) into a normal
+      // in-flow flex item that steals height from its sibling content.
+      className={`z-20 flex items-center justify-center text-muted-foreground outline-none hover:bg-secondary focus:bg-secondary focus:ring-2 focus:ring-ring ${
+        vertical ? "h-2 cursor-row-resize" : "w-2 cursor-col-resize"
+      } ${className ?? ""}`}
       style={style}
     >
       {/*
-        The visible w-2 (8px) strip is easy to miss with the pointer -- a drag
-        that lands just outside it falls through to dockview's own group sash
+        The visible 8px strip is easy to miss with the pointer -- a drag that
+        lands just outside it falls through to dockview's own group sash
         underneath, which resizes without this handle's clamp/re-anchor logic
         and reproduces the same dead zone bug this component exists to fix.
         This invisible pad widens the hit area without widening what's drawn,
         so the grip still reads as a thin line.
       */}
-      <div className="absolute inset-y-0 -left-1.5 -right-1.5 z-0 cursor-col-resize" aria-hidden="true" />
-      <GripVertical className="relative z-10 h-4 w-4 shrink-0" aria-hidden="true" />
+      <div
+        className={
+          vertical
+            ? "absolute inset-x-0 -top-1.5 -bottom-1.5 z-0 cursor-row-resize"
+            : "absolute inset-y-0 -left-1.5 -right-1.5 z-0 cursor-col-resize"
+        }
+        aria-hidden="true"
+      />
+      {vertical ? (
+        <GripHorizontal className="relative z-10 h-4 w-4 shrink-0" aria-hidden="true" />
+      ) : (
+        <GripVertical className="relative z-10 h-4 w-4 shrink-0" aria-hidden="true" />
+      )}
     </div>
   );
 }

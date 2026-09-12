@@ -208,56 +208,116 @@ function PanelMoveMenu({
   );
 }
 
+// A vertical (above/below) split is only ever created ad hoc through the
+// "Move panel" menu below -- no default layout stacks panels that way -- so
+// no `DockablePanelSpec` declares a height range for it the way `minWidth`/
+// `maxWidth` do for width. These are deliberately generous, fixed fallbacks
+// rather than per-panel config that doesn't exist.
+const VERTICAL_SPLIT_MIN_HEIGHT = 120;
+const VERTICAL_SPLIT_MAX_HEIGHT = Number.MAX_SAFE_INTEGER;
+
 /**
- * Renders `ResizeHandle` full-height over the group's *right edge*, via a
- * portal into `group.element` rather than inline in the header row.
+ * Whether `group` sits in a left/right split or an above/below one, read off
+ * the dockview-internal `.dv-split-view-container` ancestor that actually
+ * lays it out (dockview marks that container `dv-horizontal` or `dv-vertical`
+ * itself, and index.css already keys its own sash-disabling rule off the same
+ * classes). Re-docking a panel via the "Move panel" menu below tears down and
+ * rebuilds its group (`removePanel` + `addPanel`), so this only needs to be
+ * read once at mount -- it can't change out from under an already-mounted
+ * overlay.
+ */
+function groupSplitOrientation(group: IDockviewHeaderActionsProps["group"]): "row" | "column" {
+  const container = group.element.closest(".dv-split-view-container");
+  return container?.classList.contains("dv-vertical") ? "column" : "row";
+}
+
+/**
+ * Renders `ResizeHandle` full-height (or full-width, for a `"column"` split)
+ * over the group's *leading edge*, via a portal into `group.element` rather
+ * than inline in the header row.
  *
  * dockview draws its own group-boundary drag handle (`.dv-sash`) the full
- * height of the panel, next to it -- CSS in index.css turns off pointer
- * events on that so it can't intercept a drag, but that leaves nothing to
- * grab there unless something else covers the same height. A header-row-only
- * `ResizeHandle` used to leave the rest of the boundary dead. Sizing this to
- * the group's own height keeps the whole boundary draggable through the one
- * handle that carries the clamp/re-anchor logic.
+ * length of the boundary, next to it -- CSS in index.css turns off pointer
+ * events on the horizontal-split one so it can't intercept a drag, but that
+ * leaves nothing to grab there unless something else covers the same length.
+ * A header-row-only `ResizeHandle` used to leave the rest of the boundary
+ * dead. Sizing this to the group's own cross-length keeps the whole boundary
+ * draggable through the one handle that carries the clamp/re-anchor logic.
+ *
+ * The leading edge specifically: every resizable panel this app splits off in
+ * a default layout is positioned `direction: 'right'` of its anchor (see the
+ * `panels` arrays in WorkItemsGrid/MyReviewsGrid/PrSearchResults/
+ * PipelinesView/CommitResults), so the boundary shared with its neighbor --
+ * and the edge dockview's own sash actually draws -- is this group's left
+ * edge, not its right. The same reasoning carries over to a `"column"` split
+ * (created via "Split above"/"Split below" in the move menu): the boundary is
+ * this group's top edge. `right-0` used to put the horizontal-split handle
+ * flush against the far/outer edge of the panel (typically the window edge)
+ * instead, far from the visible boundary line and from the little room there
+ * is to drag past that outer edge.
  */
 function GroupResizeOverlay({
   group,
   resizeSpec,
-  width,
+  size,
 }: {
   group: IDockviewHeaderActionsProps["group"];
   resizeSpec: { min: number; max: number; defaultWidth: number; title: string };
-  width: number;
+  /** The group's current size along the axis this handle adjusts: width for
+      a row split, height for a column one. */
+  size: number;
 }) {
-  const [height, setHeight] = useState(() => group.element.clientHeight);
+  const [orientation] = useState(() => groupSplitOrientation(group));
+  const vertical = orientation === "column";
+  const [crossLength, setCrossLength] = useState(() =>
+    vertical ? group.element.clientWidth : group.element.clientHeight,
+  );
 
   useEffect(() => {
-    const observer = new ResizeObserver(() => setHeight(group.element.clientHeight));
+    const observer = new ResizeObserver(() =>
+      setCrossLength(vertical ? group.element.clientWidth : group.element.clientHeight),
+    );
     observer.observe(group.element);
     return () => observer.disconnect();
-  }, [group]);
+  }, [group, vertical]);
+
+  const min = vertical ? VERTICAL_SPLIT_MIN_HEIGHT : resizeSpec.min;
+  const max = vertical ? VERTICAL_SPLIT_MAX_HEIGHT : resizeSpec.max;
+  const defaultSize = vertical ? VERTICAL_SPLIT_MIN_HEIGHT : resizeSpec.defaultWidth;
 
   return createPortal(
     <ResizeHandle
       ariaLabel={`Resize ${resizeSpec.title}`}
+      axis={vertical ? "y" : "x"}
       direction={-1}
-      min={resizeSpec.min}
-      max={resizeSpec.max}
-      value={width}
-      // Report back the width dockview actually applied. It clamps a group to
-      // what the surrounding layout allows (the sibling grid's own minWidth
-      // stops the drag well before this panel's `max`), and `api.width`
-      // reflects that synchronously -- unlike the `width` state above, which
-      // only catches up a render later via `onDidDimensionsChange`. Handing
-      // the handle the real width lets it re-anchor on the limit instead of
-      // accumulating a request that runs away past it.
+      min={min}
+      max={max}
+      value={size}
+      // Report back the size dockview actually applied. It clamps a group to
+      // what the surrounding layout allows (a sibling panel's own minWidth/
+      // minHeight stops the drag well before this handle's `max`), and
+      // `group.api.width`/`.height` reflect that synchronously -- unlike the
+      // `size` prop above, which only catches up a render later via
+      // `onDidDimensionsChange`. Handing the handle the real size lets it
+      // re-anchor on the limit instead of accumulating a request that runs
+      // away past it.
       onChange={(next) => {
+        if (vertical) {
+          group.api.setSize({ height: next });
+          return group.api.height;
+        }
         group.api.setSize({ width: next });
         return group.api.width;
       }}
-      onReset={() => group.api.setSize({ width: resizeSpec.defaultWidth })}
-      className="absolute right-0 top-0 z-20 w-2"
-      style={{ height }}
+      onReset={() =>
+        group.api.setSize(vertical ? { height: defaultSize } : { width: defaultSize })
+      }
+      // Both orientations anchor at the group's top-left corner: a row split's
+      // handle is a vertical line spanning the group's height (h-full comes
+      // from `style` below, thickness `w-2` from ResizeHandle's own base
+      // class); a column split's is a horizontal line spanning its width.
+      className="absolute left-0 top-0 z-20"
+      style={vertical ? { width: crossLength } : { height: crossLength }}
     />,
     group.element,
   );
@@ -265,7 +325,7 @@ function GroupResizeOverlay({
 
 /**
  * The keyboard-accessible move menu, shown in every group's header for its
- * active panel. The resize handle itself now renders full-height via
+ * active panel. The resize handle itself now renders full-length via
  * `GroupResizeOverlay` (a portal into the group element) rather than inline
  * here, so it can cover the whole boundary instead of just the header row.
  */
@@ -275,10 +335,12 @@ function createHeaderActions(
 ) {
   return function HeaderActions({ api, group, containerApi, activePanel }: IDockviewHeaderActionsProps) {
     const resizablePanel = group.panels.find((panel) => resizeSpecs.has(panel.id));
-    const [width, setWidth] = useState(() => api.width);
+    const [dimensions, setDimensions] = useState(() => ({ width: api.width, height: api.height }));
 
     useEffect(() => {
-      const disposable = api.onDidDimensionsChange((event) => setWidth(event.width));
+      const disposable = api.onDidDimensionsChange((event) =>
+        setDimensions({ width: event.width, height: event.height }),
+      );
       return () => disposable.dispose();
     }, [api]);
 
@@ -289,7 +351,13 @@ function createHeaderActions(
         {activePanel ? (
           <PanelMoveMenu panel={activePanel} containerApi={containerApi} panelsRef={panelsRef} />
         ) : null}
-        {resizeSpec ? <GroupResizeOverlay group={group} resizeSpec={resizeSpec} width={width} /> : null}
+        {resizeSpec ? (
+          <GroupResizeOverlay
+            group={group}
+            resizeSpec={resizeSpec}
+            size={groupSplitOrientation(group) === "column" ? dimensions.height : dimensions.width}
+          />
+        ) : null}
       </div>
     );
   };

@@ -149,4 +149,66 @@ describe("ResizeHandle", () => {
 
     expect(within(view.container).getByTestId("width").textContent).toBe("450");
   });
+
+  // axis="y" is what GroupResizeOverlay uses for an above/below split (see
+  // DockableWorkspace.tsx): the handle is a horizontal line and the drag
+  // tracks clientY instead of clientX. It shares the same pointer-tracking
+  // logic as the x axis, so this only needs to confirm the coordinate swap,
+  // the re-anchor-on-clamp behavior, and the accessibility metadata -- not
+  // re-cover every scenario the x-axis tests above already exercise.
+  function ClampedHeightHarness({ layoutMax }: { layoutMax: number }) {
+    const [height, setHeight] = useState(400);
+    return (
+      <>
+        <span data-testid="height">{height}</span>
+        <ResizeHandle
+          ariaLabel="Resize preview"
+          axis="y"
+          direction={-1}
+          min={120}
+          max={8192}
+          value={height}
+          onChange={(next) => {
+            const applied = Math.min(next, layoutMax);
+            setHeight(applied);
+            return applied;
+          }}
+          onReset={() => setHeight(440)}
+        />
+      </>
+    );
+  }
+
+  it("reports a horizontal orientation on axis=\"y\"", () => {
+    const view = render(<ClampedHeightHarness layoutMax={8192} />);
+    const handle = within(view.container).getByRole("separator", { name: "Resize preview" });
+    expect(handle.getAttribute("aria-orientation")).toBe("horizontal");
+  });
+
+  it("tracks clientY on axis=\"y\"", () => {
+    const view = render(<ClampedHeightHarness layoutMax={8192} />);
+    const handle = within(view.container).getByRole("separator", { name: "Resize preview" });
+
+    fireEvent.pointerDown(handle, { clientY: 500, pointerId: 1 });
+    // direction -1: dragging up (clientY decreases) grows the panel, same as
+    // dragging left does on the x axis.
+    fireEvent.pointerMove(window, { clientY: 480, pointerId: 1 });
+    expect(within(view.container).getByTestId("height").textContent).toBe("420");
+  });
+
+  it("re-anchors on a clamp on axis=\"y\"", () => {
+    const view = render(<ClampedHeightHarness layoutMax={500} />);
+    const handle = within(view.container).getByRole("separator", { name: "Resize preview" });
+
+    fireEvent.pointerDown(handle, { clientY: 500, pointerId: 1 });
+    // Ask for far more than the layout can give (400 + 300 = 700), so the
+    // granted height is clamped to 500.
+    fireEvent.pointerMove(window, { clientY: 200, pointerId: 1 });
+    expect(within(view.container).getByTestId("height").textContent).toBe("500");
+
+    // Dragging back down by 50px must shrink from the height actually on
+    // screen (500 -> 450), not from the pointerdown anchor.
+    fireEvent.pointerMove(window, { clientY: 250, pointerId: 1 });
+    expect(within(view.container).getByTestId("height").textContent).toBe("450");
+  });
 });

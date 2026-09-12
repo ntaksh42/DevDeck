@@ -6,7 +6,13 @@ export const PULL_REQUEST_COMMENT_HEIGHT_STORAGE_KEY =
   "azdodeck:commentInputHeight:pullRequests";
 
 const MIN_HEIGHT = 36;
-const MAX_HEIGHT = 1_200;
+// Capped well below typical preview-panel heights: the textarea sits as a
+// fixed-height sibling in a flex column (see WorkItemPreviewPanel /
+// pull-requests/CommentComposer), so an oversized persisted value shrinks
+// everything else in the panel instead of just the comment box. Lowering
+// this also heals an already-persisted oversized value on the next read,
+// since readHeight rejects anything above MAX_HEIGHT.
+const MAX_HEIGHT = 320;
 
 function readHeight(storageKey: string): number | null {
   try {
