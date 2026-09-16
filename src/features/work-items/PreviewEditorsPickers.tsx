@@ -269,14 +269,10 @@ export function ClassificationPicker({
     wasOpenRef.current = open;
   }, [open]);
 
-  // The current value is the full backslash path that always starts with the
-  // project name. Drop that redundant root and join the rest with " › " so the
-  // trigger shows the full classification path compactly; keep the complete
-  // backslash path as the title for disambiguation.
+  // Keep every segment, including the project root, visible in the trigger.
+  // Long paths wrap inside the preview chip rather than being shortened.
   const segments = current?.split("\\").filter(Boolean) ?? [];
-  const display = segments.length
-    ? (segments.length > 1 ? segments.slice(1) : segments).join(" › ")
-    : null;
+  const display = segments.length ? segments.join(" › ") : null;
   const selectedIndex = options.findIndex((option) => option.path === current);
   const autoFocusIndex = selectedIndex >= 0 ? selectedIndex : 0;
 
