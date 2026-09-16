@@ -276,6 +276,9 @@ describe("DockableWorkspace", () => {
           initialWidth: 320,
           minWidth: 200,
           maxWidth: 8192,
+          initialHeight: 280,
+          minHeight: 200,
+          maxHeight: 640,
         },
       ];
     }
@@ -321,6 +324,51 @@ describe("DockableWorkspace", () => {
       // click -- confirming this was a genuine reposition, not a no-op.
       expect(screen.getByRole("separator", { name: "Resize Result" })).toBeTruthy();
       expect(screen.getByText("result content")).toBeTruthy();
+    });
+
+    it("shows a resize handle after moving an unconstrained tab into a split", () => {
+      const panels: DockablePanelSpec[] = [
+        { id: "grid", title: "Grid", content: <div>grid content</div>, minWidth: 480 },
+        {
+          id: "details",
+          title: "Details",
+          content: <div>details content</div>,
+          position: { relativeTo: "grid", direction: "right" },
+        },
+      ];
+      render(<DockableWorkspace storageKey="test:dockable-workspace:move-unconstrained" panels={panels} />);
+
+      fireEvent.click(screen.getByRole("button", { name: "Move Details panel" }));
+      fireEvent.click(
+        within(screen.getByRole("menu", { name: "Move Details" })).getByRole("menuitem", {
+          name: "Split below Grid",
+        }),
+      );
+
+      expect(screen.getByRole("separator", { name: "Resize Details" })).toBeTruthy();
+    });
+
+    it("resizes an above/below split using the panel's height bounds", () => {
+      render(<DockableWorkspace storageKey="test:dockable-workspace:move-height" panels={threePanels()} />);
+
+      fireEvent.click(screen.getByRole("button", { name: "Move Result panel" }));
+      fireEvent.click(
+        within(screen.getByRole("menu", { name: "Move Result" })).getByRole("menuitem", {
+          name: "Split below Grid",
+        }),
+      );
+
+      const resize = screen.getByRole("separator", { name: "Resize Result" });
+      expect(resize.getAttribute("aria-orientation")).toBe("horizontal");
+      expect(resize.getAttribute("aria-valuemin")).toBe("200");
+      expect(resize.getAttribute("aria-valuemax")).toBe("640");
+
+      const before = Number(resize.getAttribute("aria-valuenow"));
+      fireEvent.keyDown(resize, { key: "ArrowUp" });
+      expect(Number(resize.getAttribute("aria-valuenow"))).toBe(before + 16);
+
+      fireEvent.doubleClick(resize);
+      expect(resize.getAttribute("aria-valuenow")).toBe("280");
     });
 
     it("closes the move menu on Escape and returns focus to the trigger button", () => {

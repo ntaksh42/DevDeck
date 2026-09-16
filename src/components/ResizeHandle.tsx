@@ -187,7 +187,7 @@ export function ResizeHandle({
     <div
       role="separator"
       aria-label={ariaLabel}
-      title="Drag to resize · double-click or Escape to reset to the default width"
+      title={`Drag to resize · double-click or Escape to reset to the default ${vertical ? "height" : "width"}`}
       aria-orientation={vertical ? "horizontal" : "vertical"}
       aria-valuemin={min}
       aria-valuemax={max}
