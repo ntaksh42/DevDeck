@@ -244,6 +244,9 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
   `mark_all_notifications_read` / `record_notification` の各コマンドで参照・既読管理する。
 - デスクトップ通知: 設定が有効な場合のみ。初回スナップショットでは過去分を通知しない。
   スヌーズ対象は通知から除外。コメント返信は `pr_comment_seen` で追跡。
+  Quiet hours が有効な間は通知の送出 (`desktopNotifications.ts`) のみ抑止し、フロントのローカル
+  時刻で判定する。同期・キャッシュ更新・`sync:updated` は継続するため、アプリ内バッジ・ビューは
+  最新のまま。
 - 通知ルール (`notification_rules`): 種別/プロジェクト/リポジトリ条件で通知を絞り込む。
   `mute` ルールは一致する通知を抑止し allow ルールより優先するため、特定の
   プロジェクト/リポジトリを個別にミュートできる（allow ルールが無ければミュート以外は通知）。
@@ -286,6 +289,7 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
 | `notify_pr_review_requests` | PR レビュー依頼を通知。 |
 | `notify_pr_vote_resets` | 自分の PR 投票リセットを通知。 |
 | `notify_pr_comment_replies` | 自分の PR コメントへの返信を通知。 |
+| `quiet_hours_enabled` / `quiet_hours_start` / `quiet_hours_end` | Quiet hours。有効時、ローカル時刻 `[start, end)` の間はデスクトップ通知を抑止 (アプリ内バッジ・キャッシュは更新を継続)。`start > end` (例 22:00–08:00) は日跨ぎ。既定 22:00–08:00、無効。 |
 | `review_stale_threshold_days` | レビュー PR を stale 扱いする日数 (候補 2/3/5/7、既定 3)。 |
 | `work_item_stale_threshold_days` | 作業項目を stale 扱いする日数 (候補 2/3/5/7、既定 7)。 |
 | `notification_rules` | 通知フィルタルール配列。types / projects / repositories でフィルタし、`mute` が true なら一致時に抑制、false なら一致時のみ通知する。 |
