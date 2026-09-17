@@ -1,5 +1,5 @@
 import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { Plus } from "lucide-react";
+import { Download, Plus, Upload } from "lucide-react";
 import type { AnalyzeGroup } from "./analyzeGroupsStorage";
 
 export type AnalyzeGroupListProps = {
@@ -11,6 +11,8 @@ export type AnalyzeGroupListProps = {
   onAdd: () => void;
   onEdit: (groupId: string) => void;
   onDelete: (groupId: string) => void;
+  onExport: () => void;
+  onImport: (file: File) => void;
 };
 
 export function AnalyzeGroupList({
@@ -21,7 +23,10 @@ export function AnalyzeGroupList({
   onAdd,
   onEdit,
   onDelete,
+  onExport,
+  onImport,
 }: AnalyzeGroupListProps) {
+  const importRef = useRef<HTMLInputElement | null>(null);
   const rowRefs = useRef<Map<string, HTMLButtonElement | null>>(new Map());
   const selectedIndex = groups.findIndex((group) => group.id === selectedId);
 
@@ -126,14 +131,51 @@ export function AnalyzeGroupList({
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={onAdd}
-        className="m-2 flex items-center gap-1.5 rounded-md border border-dashed border-border px-2.5 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-        グループを追加
-      </button>
+      <div className="flex flex-col gap-1 p-2">
+        <button
+          type="button"
+          onClick={onAdd}
+          className="flex items-center gap-1.5 rounded-md border border-dashed border-border px-2.5 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+          グループを追加
+        </button>
+
+        {/* E1 — the export/import the storage layer already supported. */}
+        <div className="flex gap-1">
+          <button
+            type="button"
+            onClick={onExport}
+            disabled={groups.length === 0}
+            className="flex flex-1 items-center justify-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Download className="h-3 w-3" aria-hidden="true" />
+            書き出し
+          </button>
+          <button
+            type="button"
+            onClick={() => importRef.current?.click()}
+            className="flex flex-1 items-center justify-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Upload className="h-3 w-3" aria-hidden="true" />
+            読み込み
+          </button>
+          <input
+            ref={importRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            aria-hidden="true"
+            tabIndex={-1}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) onImport(file);
+              // Reset so re-picking the same file fires change again.
+              event.target.value = "";
+            }}
+          />
+        </div>
+      </div>
     </div>
   );
 }

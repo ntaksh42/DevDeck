@@ -41,6 +41,9 @@ Trello, GitLab, and GitKraken.
   incremental synchronization, retry UI, diagnostic export, and local usage statistics.
 - Cross-cutting efficiency work is specified in `docs/spec-cross-cutting-efficiency.md`:
   notification improvements, synchronization visibility, expanded search, and cross-organization views.
+- Analyze view improvements are specified in `docs/spec-analyze-improvements.md`:
+  breakdown axes and cross-tabulation, shared cursor keyboard operation, history
+  persistence, and flow/cycle-time metrics.
 
 ## Blocked By Azure DevOps API Coverage
 
