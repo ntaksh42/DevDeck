@@ -219,6 +219,12 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
   `pull_requests` / `work_items` 自体の列を変更しても `shared_cache` 側のマッピングさえ
   追従させれば waypoint 側は壊れない。Work Item は書き込みのみで読み取りゲートは持たない
   (差分/フル同期の込み入った既存ロジックに読み取りスキップを組み込むリスクが高いと判断)。
+  書き込みは `(organization, project)` 単位の delete → insert だが、両テーブルの主キーは
+  `project` を含まない (`pull_requests` は `(organization, repository_id, pull_request_id)`、
+  `work_items` は `(organization, id)`)。プロジェクト名の変更や作業項目のプロジェクト間移動が
+  起きると、旧プロジェクト名で残った行と衝突するため、insert は主キーでの upsert とし
+  `project` 列も書き換える。upsert が無いと UNIQUE 制約違反でトランザクションごと失敗し、
+  そのプロジェクトの共有キャッシュが以後まったく更新されなくなる。
 
 ### 同期ループ (`sync.rs`)
 
