@@ -91,6 +91,7 @@ async fn delta_commit_sync_merges_without_dropping_existing_commits() {
 
     use crate::db::OrganizationDraft;
 
+    let now = Utc::now().to_rfc3339();
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/_apis/projects"))
@@ -117,7 +118,7 @@ async fn delta_commit_sync_merges_without_dropping_existing_commits() {
             "value": [{
                 "commitId": "new-commit",
                 "comment": "New commit",
-                "author": { "name": "Dev", "email": "dev@example.com", "date": "2026-06-20T00:00:00Z" }
+                "author": { "name": "Dev", "email": "dev@example.com", "date": now.clone() }
             }]
         })))
         .mount(&server)
@@ -155,7 +156,7 @@ async fn delta_commit_sync_merges_without_dropping_existing_commits() {
             comment: "Old commit".to_string(),
             author_name: Some("Dev".to_string()),
             author_email: Some("dev@example.com".to_string()),
-            author_date: Some("2026-06-19T00:00:00Z".to_string()),
+            author_date: Some(now.clone()),
             web_url: None,
         }],
     )
@@ -163,7 +164,6 @@ async fn delta_commit_sync_merges_without_dropping_existing_commits() {
 
     // Mark a recent full sync and a recent incremental sync so this pass
     // takes the delta path instead of a full window replace.
-    let now = Utc::now().to_rfc3339();
     db.update_sync_state(
         &commit_full_sync_scope(&org.id),
         &org.id,
