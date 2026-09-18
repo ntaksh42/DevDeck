@@ -180,11 +180,18 @@ impl WorkItemService {
         // Active PRs are already synced org-wide for the My Reviews/PR
         // screens, so a linked work item's PR status is a local cache lookup
         // rather than an extra request per row.
-        let active_pr_ids: HashSet<i64> = self
+        let active_prs = self
             .db
             .search_pull_requests(&organization.id, None, None, Some("active"))
-            .unwrap_or_default()
-            .into_iter()
+            .unwrap_or_default();
+        let active_pr_ids: HashSet<i64> = active_prs
+            .iter()
+            .filter(|pr| !pr.is_draft)
+            .map(|pr| pr.pull_request_id)
+            .collect();
+        let draft_pr_ids: HashSet<i64> = active_prs
+            .iter()
+            .filter(|pr| pr.is_draft)
             .map(|pr| pr.pull_request_id)
             .collect();
 
@@ -216,6 +223,8 @@ impl WorkItemService {
                     .and_then(|depth_by_id| depth_by_id.get(&work_item.id).copied());
                 let has_active_pull_request =
                     work_item_has_active_pull_request(&work_item.relations, &active_pr_ids);
+                let has_draft_pull_request =
+                    work_item_has_active_pull_request(&work_item.relations, &draft_pr_ids);
                 let (item_project_id, item_project_name) =
                     match string_field(&work_item, "System.TeamProject") {
                         Some(name) => projects_by_name
@@ -235,6 +244,7 @@ impl WorkItemService {
                 summary.extra_fields = extra;
                 summary.depth = depth;
                 summary.has_active_pull_request = has_active_pull_request;
+                summary.has_draft_pull_request = has_draft_pull_request;
                 summary
             })
             .collect())

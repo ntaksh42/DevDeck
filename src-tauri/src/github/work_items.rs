@@ -312,5 +312,6 @@ fn item_to_summary(
         extra_fields: Vec::new(),
         depth: None,
         has_active_pull_request: false,
+        has_draft_pull_request: false,
     }
 }

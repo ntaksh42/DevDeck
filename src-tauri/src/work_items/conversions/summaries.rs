@@ -56,6 +56,7 @@ pub(crate) fn summarize_work_item(
         extra_fields: Vec::new(),
         depth: None,
         has_active_pull_request: false,
+        has_draft_pull_request: false,
     }
 }
 
@@ -191,6 +192,7 @@ pub(crate) fn cached_wi_to_summary(wi: CachedWorkItem) -> WorkItemSummary {
         extra_fields: Vec::new(),
         depth: None,
         has_active_pull_request: false,
+        has_draft_pull_request: false,
     }
 }
 

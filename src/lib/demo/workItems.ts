@@ -25,16 +25,18 @@ import {
 // optional so most fixtures can skip it; `withEmptyExtraFields` fills the gaps.
 type WorkItemSeed = Omit<
   WorkItemSummary,
-  "extraFields" | "depth" | "tags" | "hasActivePullRequest"
+  "extraFields" | "depth" | "tags" | "hasActivePullRequest" | "hasDraftPullRequest"
 > & {
   tags?: string | null;
   hasActivePullRequest?: boolean;
+  hasDraftPullRequest?: boolean;
 };
 
 export function withEmptyExtraFields(items: WorkItemSeed[]): WorkItemSummary[] {
   return items.map((item) => ({
     tags: null,
     hasActivePullRequest: false,
+    hasDraftPullRequest: false,
     ...item,
     extraFields: [],
     depth: null,
@@ -70,6 +72,7 @@ export function demoCreateWorkItem(input?: CreateWorkItemInput): WorkItemSummary
     extraFields: [],
     depth: null,
     hasActivePullRequest: false,
+    hasDraftPullRequest: false,
   };
   demoCreatedWorkItems.unshift(created);
   return created;
@@ -89,6 +92,7 @@ export function demoWorkItems(input?: SearchWorkItemsInput): WorkItemSummary[] {
       changedDate: "2026-05-27T08:00:00Z",
       webUrl: "https://dev.azure.com/contoso/Platform/_workitems/edit/123",
       hasActivePullRequest: true,
+      hasDraftPullRequest: false,
     },
     {
       organizationId: "contoso",
@@ -152,6 +156,7 @@ export function demoWorkItems(input?: SearchWorkItemsInput): WorkItemSummary[] {
       changedDate: "2026-05-25T16:00:00Z",
       webUrl: "https://dev.azure.com/contoso/Mobile/_workitems/edit/175",
       hasActivePullRequest: true,
+      hasDraftPullRequest: true,
     },
     {
       organizationId: "contoso",

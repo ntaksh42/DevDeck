@@ -22,6 +22,7 @@ function item(id: number, state: string | null): WorkItemSummary {
     extraFields: [],
     depth: null,
     hasActivePullRequest: false,
+    hasDraftPullRequest: false,
   };
 }
 

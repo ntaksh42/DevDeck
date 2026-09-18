@@ -346,6 +346,9 @@ pub struct WorkItemSummary {
     /// active in the locally synced PR cache. Only populated by `run_query`
     /// (the View grid); always `false` for cache-backed summaries.
     pub has_active_pull_request: bool,
+    /// Whether an `ArtifactLink` relation points at a draft PR in the locally
+    /// synced active PR cache. Only populated by `run_query` (the View grid).
+    pub has_draft_pull_request: bool,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]

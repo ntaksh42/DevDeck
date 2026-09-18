@@ -133,6 +133,15 @@ export const WorkItemGridRow = forwardRef<
               <title>関連PRあり (Active)</title>
             </GitPullRequest>
           ) : null}
+          {isTitle && item.hasDraftPullRequest ? (
+            <GitPullRequest
+              role="img"
+              className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400"
+              aria-label="関連PRあり (Draft)"
+            >
+              <title>関連PRあり (Draft)</title>
+            </GitPullRequest>
+          ) : null}
           {isTitle ? (
             <span className="min-w-0 flex-1 truncate">
               {workItemCellValue(item, column)}
