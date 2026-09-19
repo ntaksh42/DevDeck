@@ -158,12 +158,12 @@ export function ViewCompactRow({
       onClick={onSelect}
       onDoubleClick={onEdit}
       title={metaTitle}
-      className={`grid grid-cols-[14px_1fr_auto_auto] items-center gap-2 rounded border px-2 py-1 text-left outline-none transition-colors focus:ring-2 focus:ring-inset focus:ring-ring ${selectionClasses(
+      className={`inline-flex w-fit max-w-full items-center gap-2 justify-self-start rounded border px-2 py-1 text-left outline-none transition-colors focus:ring-2 focus:ring-inset focus:ring-ring ${selectionClasses(
         selected,
         stats.alerting,
       )}`}
     >
-      <span className="flex h-3.5 w-3.5 items-center justify-center">
+      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
         {query?.isFetching ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden="true" />
         ) : stats.alerting ? (
@@ -172,21 +172,19 @@ export function ViewCompactRow({
           <Pin className="h-3 w-3 text-primary" aria-hidden="true" />
         ) : null}
       </span>
-      <span className="min-w-0 truncate text-xs font-medium" title={view.name}>
+      <span className="min-w-0 max-w-[140px] truncate text-xs font-medium" title={view.name}>
         {view.name}
       </span>
       <span
-        className={`text-xs font-semibold tabular-nums ${stats.alerting ? "text-destructive" : ""}`}
+        className={`shrink-0 text-xs font-semibold tabular-nums ${stats.alerting ? "text-destructive" : ""}`}
       >
         {query?.isError ? "!" : stats.displayCount}
       </span>
-      <span className="w-8 text-right text-[10px] tabular-nums text-muted-foreground">
-        {stats.delta !== null && stats.delta !== 0 && !query?.isError
-          ? stats.delta > 0
-            ? `+${stats.delta}`
-            : stats.delta
-          : ""}
-      </span>
+      {stats.delta !== null && stats.delta !== 0 && !query?.isError ? (
+        <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+          {stats.delta > 0 ? `+${stats.delta}` : stats.delta}
+        </span>
+      ) : null}
     </button>
   );
 }

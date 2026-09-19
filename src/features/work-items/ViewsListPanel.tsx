@@ -363,7 +363,7 @@ export function ViewsListPanel({
           style={
             cardMode === "compact"
               ? {
-                  gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(160px, 220px))",
                   maxHeight: "min(24vh, 200px)",
                 }
               : {
