@@ -134,6 +134,15 @@ pub(super) fn notification_allowed(
         || allow_rules.any(|rule| notification_rule_matches(rule, kind, project, repository))
 }
 
+/// Project and repository names are compared case-insensitively: the user
+/// types them by hand into a comma-separated text field rather than picking
+/// them from a list, and Azure DevOps itself treats those names as
+/// case-insensitive, so a rule written "platform" has to match the project
+/// "Platform" -- otherwise it silently never fires with nothing in the UI to
+/// explain why. Branch names in PR search are compared the same way.
+///
+/// `kind` stays an exact comparison: it is not user-typed but one of the fixed
+/// `rule_key()` values, chosen from checkboxes.
 fn notification_rule_matches(
     rule: &NotificationRule,
     kind: &str,
@@ -143,12 +152,21 @@ fn notification_rule_matches(
     if !rule.types.is_empty() && !rule.types.iter().any(|t| t == kind) {
         return false;
     }
-    if !rule.projects.is_empty() && !rule.projects.iter().any(|p| p == project) {
+    if !rule.projects.is_empty()
+        && !rule
+            .projects
+            .iter()
+            .any(|p| p.eq_ignore_ascii_case(project))
+    {
         return false;
     }
     if !rule.repositories.is_empty() {
         match repository {
-            Some(repo) if rule.repositories.iter().any(|r| r == repo) => {}
+            Some(repo)
+                if rule
+                    .repositories
+                    .iter()
+                    .any(|r| r.eq_ignore_ascii_case(repo)) => {}
             // A repository condition is pull-request specific: a work item (no
             // repository) can never satisfy it.
             _ => return false,
