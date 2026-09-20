@@ -7,10 +7,11 @@ use crate::work_items::{
     ClassificationNodesResult, CountWorkItemQueryHistoryInput, CreateWorkItemInput,
     DeleteWorkItemCommentInput, FetchWorkItemImageInput, GetSavedQueryInput,
     GetWorkItemPreviewInput, ListClassificationNodesInput, ListMyWorkItemsInput,
-    ListWorkItemFieldAllowedValuesInput, ListWorkItemFieldsInput, ListWorkItemProjectsInput,
-    ListWorkItemTypeStatesInput, ListWorkItemTypesInput, ListWorkItemUpdatesInput,
-    MentionCandidate, RecordAssigneeInteractionInput, RecordMentionInteractionInput,
-    RemoveWorkItemLinkInput, RunWorkItemQueryInput, SavedQueryResult, SearchWorkItemAssigneesInput,
+    ListProjectQueriesInput, ListWorkItemFieldAllowedValuesInput, ListWorkItemFieldsInput,
+    ListWorkItemProjectsInput, ListWorkItemTypeStatesInput, ListWorkItemTypesInput,
+    ListWorkItemUpdatesInput, MentionCandidate, ProjectQueryOption,
+    RecordAssigneeInteractionInput, RecordMentionInteractionInput, RemoveWorkItemLinkInput,
+    RunWorkItemQueryInput, SavedQueryResult, SearchWorkItemAssigneesInput,
     SearchWorkItemMentionsInput, SearchWorkItemsInput, SetWorkItemCommentReactionInput,
     SetWorkItemsPriorityInput, SetWorkItemsStateInput, SetWorkItemsTagsInput,
     UpdateWorkItemCommentInput, UpdateWorkItemFieldsInput, WorkItemAssigneeCandidate,
@@ -325,4 +326,13 @@ pub async fn get_saved_query(
     state: State<'_, AppState>,
 ) -> Result<SavedQueryResult> {
     state.work_items.get_saved_query(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn list_project_queries(
+    input: ListProjectQueriesInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<ProjectQueryOption>> {
+    state.work_items.list_project_queries(input).await
 }

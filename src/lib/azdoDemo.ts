@@ -75,6 +75,7 @@ import {
   demoCreateWorkItem,
   demoMyWorkItems,
   demoCountWorkItemQueryHistory,
+  demoProjectQueries,
   demoRunWorkItemQuery,
   demoUpdateWorkItemFields,
   demoWorkItemPreview,
@@ -411,6 +412,8 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     }
     case "list_classification_nodes":
       return demoClassificationNodes();
+    case "list_project_queries":
+      return demoProjectQueries();
     case "set_work_items_state": {
       const input = (args as { input?: SetWorkItemsStateInput } | undefined)?.input;
       return (input?.workItemIds ?? []).map((id) => ({ id, error: null }));

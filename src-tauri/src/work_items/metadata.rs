@@ -78,6 +78,30 @@ impl WorkItemService {
         })
     }
 
+    /// Fetches the project's query hierarchy (Shared Queries / My Queries),
+    /// flattened into its importable leaf queries for the View editor's
+    /// "import from Azure DevOps" picker.
+    pub async fn list_project_queries(
+        &self,
+        input: ListProjectQueriesInput,
+    ) -> Result<Vec<ProjectQueryOption>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let roots = client
+            .list_queries(&input.project_id, PROJECT_QUERY_DEPTH)
+            .await?;
+        let mut queries = Vec::new();
+        for root in &roots {
+            flatten_query_hierarchy(root, "", &mut queries);
+        }
+        queries.sort_by(|a, b| {
+            a.folder_path
+                .cmp(&b.folder_path)
+                .then_with(|| a.name.cmp(&b.name))
+        });
+        Ok(queries)
+    }
+
     /// Fetches the project's area and iteration trees, flattened into ordered
     /// lists whose `path` values can be assigned to `System.AreaPath` /
     /// `System.IterationPath` (via `update_fields`).

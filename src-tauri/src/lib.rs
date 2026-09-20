@@ -206,6 +206,7 @@ pub fn run() {
             commands::work_items::list_work_item_fields,
             commands::work_items::list_classification_nodes,
             commands::work_items::get_saved_query,
+            commands::work_items::list_project_queries,
             commands::work_items::set_work_items_state,
             commands::work_items::assign_work_items,
             commands::work_items::set_work_items_priority,

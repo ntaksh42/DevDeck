@@ -316,6 +316,51 @@ async fn get_saved_query_folder_has_no_wiql() {
 }
 
 #[tokio::test]
+async fn list_queries_flattens_folders_and_leaf_queries() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/project-1/_apis/wit/queries"))
+        .and(query_param("api-version", "7.1"))
+        .and(query_param("$depth", "2"))
+        .and(query_param("$expand", "wiql"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "count": 1,
+            "value": [{
+                "id": "shared-folder-guid",
+                "name": "Shared Queries",
+                "isFolder": true,
+                "isPublic": true,
+                "children": [{
+                    "id": "abc-def-123",
+                    "name": "Active Bugs",
+                    "isFolder": false,
+                    "isPublic": true,
+                    "wiql": "SELECT [System.Id] FROM WorkItems WHERE [System.WorkItemType] = 'Bug'"
+                }]
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    let roots = test_client(&server)
+        .await
+        .list_queries("project-1", 2)
+        .await
+        .unwrap();
+
+    assert_eq!(roots.len(), 1);
+    let folder = &roots[0];
+    assert!(folder.is_folder);
+    assert_eq!(folder.children.len(), 1);
+    let leaf = &folder.children[0];
+    assert_eq!(leaf.id, "abc-def-123");
+    assert_eq!(
+        leaf.wiql.as_deref(),
+        Some("SELECT [System.Id] FROM WorkItems WHERE [System.WorkItemType] = 'Bug'")
+    );
+}
+
+#[tokio::test]
 async fn list_work_item_type_states_returns_names() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
