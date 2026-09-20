@@ -6,7 +6,7 @@ use crate::git::{GitCommitRef, GitVersionType, IdentityRefWithVote, ListResponse
 
 use super::types::{
     GitChangeEntry, GitItemContent, GitIteration, GitIterationChanges, GitPullRequestDetail,
-    GitThread, GitThreadComment, NewThreadContext,
+    GitThread, GitThreadComment, NewThreadContext, ResourceRef,
 };
 
 impl AdoClient {
@@ -301,6 +301,27 @@ impl AdoClient {
             .get_json(&path, &[("api-version", "7.1-preview")])
             .await?;
         Ok(response.value)
+    }
+
+    /// Ids of the work items linked to a pull request (the Development-section
+    /// links). Azure DevOps returns each id as a string.
+    pub async fn list_pull_request_work_item_ids(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        pull_request_id: i64,
+    ) -> Result<Vec<i64>> {
+        let path = format!(
+            "{project_id}/_apis/git/repositories/{repository_id}/pullRequests/{pull_request_id}/workitems"
+        );
+        let response: ListResponse<ResourceRef> = self
+            .get_json(&path, &[("api-version", "7.1-preview")])
+            .await?;
+        Ok(response
+            .value
+            .into_iter()
+            .filter_map(|item| item.id.parse().ok())
+            .collect())
     }
 
     /// Fetches the (text) content of a file at a specific commit.

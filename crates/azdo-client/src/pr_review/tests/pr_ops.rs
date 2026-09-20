@@ -281,6 +281,32 @@ async fn list_pull_request_commits_maps_commit_fields() {
 }
 
 #[tokio::test]
+async fn list_pull_request_work_item_ids_parses_string_ids() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(
+            "/project-1/_apis/git/repositories/repo-1/pullRequests/42/workitems",
+        ))
+        .and(query_param("api-version", "7.1-preview"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "count": 2,
+            "value": [
+                { "id": "101", "url": "https://dev.azure.com/o/_apis/wit/workItems/101" },
+                { "id": "202", "url": "https://dev.azure.com/o/_apis/wit/workItems/202" }
+            ]
+        })))
+        .mount(&server)
+        .await;
+
+    let ids = test_client(&server)
+        .await
+        .list_pull_request_work_item_ids("project-1", "repo-1", 42)
+        .await
+        .unwrap();
+    assert_eq!(ids, vec![101, 202]);
+}
+
+#[tokio::test]
 async fn get_item_content_requests_commit_version() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))

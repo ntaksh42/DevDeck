@@ -132,6 +132,7 @@ export function prLocator(pr: {
 export type GetPullRequestReviewInput = PrLocatorInput;
 export type ListPullRequestChangesInput = PrLocatorInput;
 export type ListPullRequestCommitsInput = PrLocatorInput;
+export type ListPullRequestWorkItemsInput = PrLocatorInput;
 
 export type GetPullRequestFileDiffInput = PrLocatorInput & {
   filePath: string;
@@ -193,6 +194,14 @@ export async function listPullRequestCommits(
 ): Promise<PrCommit[]> {
   const result = await invokeCommand("list_pull_request_commits", { input });
   return prCommitsSchema.parse(result);
+}
+
+/** Ids of the work items linked to the pull request (Development section). */
+export async function listPullRequestWorkItems(
+  input: ListPullRequestWorkItemsInput,
+): Promise<number[]> {
+  const result = await invokeCommand("list_pull_request_work_items", { input });
+  return z.array(z.number()).parse(result);
 }
 
 export async function getPullRequestFileDiff(

@@ -62,6 +62,19 @@ pub async fn list_pull_request_commits(
 
 #[tauri::command]
 #[tracing::instrument(skip(state))]
+pub async fn list_pull_request_work_items(
+    input: PrLocator,
+    state: State<'_, AppState>,
+) -> Result<Vec<i64>> {
+    state
+        .provider()
+        .await?
+        .list_pull_request_work_items(input)
+        .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
 pub async fn post_pull_request_comment(
     input: PostPullRequestCommentInput,
     state: State<'_, AppState>,

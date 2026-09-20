@@ -276,6 +276,10 @@ impl Provider for AzdoProvider {
         self.pr_review.list_commits(input).await
     }
 
+    async fn list_pull_request_work_items(&self, input: PrLocator) -> Result<Vec<i64>> {
+        self.pr_review.list_work_item_ids(input).await
+    }
+
     async fn post_pull_request_comment(
         &self,
         input: PostPullRequestCommentInput,
