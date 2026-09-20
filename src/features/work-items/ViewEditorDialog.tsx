@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useRef } from 'react';
 import { CheckCircle2, Loader2, Play, Plus, TriangleAlert, X } from 'lucide-react';
 import { type WorkItemProjectOption } from '@/lib/azdoCommands';
 import {
@@ -7,6 +7,7 @@ import {
   normalizeViewExtraColumns,
 } from './workItemViewsStorage';
 import type { ViewEditorDraftReturn } from './useViewEditorDraft';
+import { ProjectQueryPicker } from './ProjectQueryPicker';
 import { WiqlEditor } from './WiqlEditor';
 
 export type ViewEditorDialogProps = {
@@ -63,18 +64,6 @@ export function ViewEditorDialog({
     formError,
     saveView: onSave,
   } = draft;
-  const projectQueryGroups = useMemo(() => {
-    const groups = new Map<string, typeof projectQueries>();
-    for (const query of projectQueries) {
-      const group = groups.get(query.folderPath);
-      if (group) {
-        group.push(query);
-      } else {
-        groups.set(query.folderPath, [query]);
-      }
-    }
-    return [...groups.entries()];
-  }, [projectQueries]);
   const onTestRun = () => void draft.runTestQuery();
   const viewFormRef = useRef<HTMLFormElement | null>(null);
   // Focus returns to whatever opened the dialog (button, preview pane, grid),
@@ -212,46 +201,13 @@ export function ViewEditorDialog({
             </label>
           </div>
 
-          <div className="grid gap-1.5">
-            <label
-              className="text-xs font-medium text-muted-foreground"
-              htmlFor="view-project-query-select"
-            >
-              Import an Azure DevOps query
-              <span className="ml-1 font-normal text-muted-foreground/70">
-                (fetches the project's Shared/My Queries and fills Name + WIQL)
-              </span>
-            </label>
-            <select
-              id="view-project-query-select"
-              value=""
-              disabled={!draftProjectId || projectQueriesLoading}
-              onChange={(event) => onProjectQuerySelect(event.target.value)}
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
-            >
-              <option value="">
-                {!draftProjectId
-                  ? "Select a project first"
-                  : projectQueriesLoading
-                    ? "Loading queries…"
-                    : projectQueryGroups.length === 0
-                      ? "No queries found"
-                      : "Select a query…"}
-              </option>
-              {projectQueryGroups.map(([folderPath, queries]) => (
-                <optgroup key={folderPath} label={folderPath}>
-                  {queries.map((query) => (
-                    <option key={query.id} value={query.id}>
-                      {query.name}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-            {projectQueriesError ? (
-              <p className="text-xs text-destructive">{projectQueriesError}</p>
-            ) : null}
-          </div>
+          <ProjectQueryPicker
+            queries={projectQueries}
+            hasProject={Boolean(draftProjectId)}
+            loading={projectQueriesLoading}
+            error={projectQueriesError}
+            onSelect={onProjectQuerySelect}
+          />
 
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="grid gap-1.5">
