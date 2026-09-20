@@ -195,6 +195,18 @@ const savedQueryResultSchema = z.object({
 
 export type SavedQueryResult = z.infer<typeof savedQueryResultSchema>;
 
+const projectQueryOptionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  folderPath: z.string(),
+  isPublic: z.boolean(),
+  wiql: z.string().nullable(),
+});
+
+const projectQueryOptionsSchema = z.array(projectQueryOptionSchema);
+
+export type ProjectQueryOption = z.infer<typeof projectQueryOptionSchema>;
+
 export type BulkWorkItemResult = {
   id: number;
   error: string | null;
@@ -331,6 +343,11 @@ export type GetSavedQueryInput = {
   queryId: string;
 };
 
+export type ListProjectQueriesInput = {
+  organizationId?: string;
+  projectId: string;
+};
+
 export async function searchWorkItems(
   input: SearchWorkItemsInput,
 ): Promise<WorkItemSummary[]> {
@@ -462,4 +479,11 @@ export async function getSavedQuery(
 ): Promise<SavedQueryResult> {
   const result = await invokeCommand("get_saved_query", { input });
   return savedQueryResultSchema.parse(result);
+}
+
+export async function listProjectQueries(
+  input: ListProjectQueriesInput,
+): Promise<ProjectQueryOption[]> {
+  const result = await invokeCommand("list_project_queries", { input });
+  return projectQueryOptionsSchema.parse(result);
 }

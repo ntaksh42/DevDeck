@@ -31,6 +31,6 @@ pub use pr_review::{
 pub use pr_status::{summarize_pr_ci, PrCiState, PrCiSummary, PrStatusCheck, PrStatusContext};
 pub use work_items::{
     has_asof_clause, with_asof, ClassificationNode, ClassificationNodeAttributes, CommentReaction,
-    WorkItem, WorkItemComment, WorkItemFieldDefinition, WorkItemLink, WorkItemReference,
-    WorkItemRelation, WorkItemRelationAttributes, WorkItemUpdate,
+    QueryHierarchyItem, WorkItem, WorkItemComment, WorkItemFieldDefinition, WorkItemLink,
+    WorkItemReference, WorkItemRelation, WorkItemRelationAttributes, WorkItemUpdate,
 };

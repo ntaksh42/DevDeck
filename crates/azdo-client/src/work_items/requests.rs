@@ -526,6 +526,29 @@ impl AdoClient {
             .await
     }
 
+    /// Fetches a project's query hierarchy (the root "Shared Queries" / "My
+    /// Queries" folders and their contents), with WIQL included on leaf
+    /// queries. Azure DevOps caps `$depth` at 2.
+    pub async fn list_queries(
+        &self,
+        project_id: &str,
+        depth: u32,
+    ) -> Result<Vec<QueryHierarchyItem>> {
+        let path = format!("{project_id}/_apis/wit/queries");
+        let depth_string = depth.to_string();
+        let response: crate::git::ListResponse<QueryHierarchyItem> = self
+            .get_json(
+                &path,
+                &[
+                    ("api-version", "7.1"),
+                    ("$depth", depth_string.as_str()),
+                    ("$expand", "wiql"),
+                ],
+            )
+            .await?;
+        Ok(response.value)
+    }
+
     /// Fetches an area or iteration classification tree for a project.
     /// `structure_group` is `"areas"` or `"iterations"`; `depth` expands nested
     /// child nodes in a single request.

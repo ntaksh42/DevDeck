@@ -19,6 +19,8 @@ export const workItemQueryKeys = {
     projectId?: string | null,
     queryId?: string | null,
   ) => ['savedQuery', organizationId, projectId, queryId] as const,
+  projectQueries: (organizationId?: string, projectId?: string | null) =>
+    ['workItemProjectQueries', organizationId, projectId] as const,
   queryCount: ({
     organizationId,
     viewId,

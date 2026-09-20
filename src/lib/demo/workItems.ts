@@ -2,6 +2,7 @@ import type {
   CountWorkItemQueryHistoryInput,
   CreateWorkItemInput,
   GetWorkItemPreviewInput,
+  ProjectQueryOption,
   RunWorkItemQueryInput,
   SearchWorkItemsInput,
   UpdateWorkItemFieldsInput,
@@ -296,6 +297,49 @@ export function demoWorkItemProjects(): WorkItemProjectOption[] {
   return [...projects.entries()]
     .map(([projectId, projectName]) => ({ projectId, projectName }))
     .sort((a, b) => a.projectName.localeCompare(b.projectName));
+}
+
+export function demoProjectQueries(): ProjectQueryOption[] {
+  return [
+    {
+      id: "demo-query-active-bugs",
+      name: "Active Bugs",
+      folderPath: "Shared Queries",
+      isPublic: true,
+      wiql: [
+        "SELECT [System.Id]",
+        "FROM WorkItems",
+        "WHERE [System.WorkItemType] = 'Bug'",
+        "AND [System.State] <> 'Closed'",
+        "ORDER BY [System.ChangedDate] DESC",
+      ].join("\n"),
+    },
+    {
+      id: "demo-query-current-sprint",
+      name: "Current Sprint",
+      folderPath: "Shared Queries/Team A",
+      isPublic: true,
+      wiql: [
+        "SELECT [System.Id]",
+        "FROM WorkItems",
+        "WHERE [System.IterationPath] = @CurrentIteration",
+        "ORDER BY [System.ChangedDate] DESC",
+      ].join("\n"),
+    },
+    {
+      id: "demo-query-my-open-items",
+      name: "My Open Items",
+      folderPath: "My Queries",
+      isPublic: false,
+      wiql: [
+        "SELECT [System.Id]",
+        "FROM WorkItems",
+        "WHERE [System.AssignedTo] = @Me",
+        "AND [System.State] <> 'Closed'",
+        "ORDER BY [System.ChangedDate] DESC",
+      ].join("\n"),
+    },
+  ];
 }
 
 export function demoRunWorkItemQuery(input?: RunWorkItemQueryInput): WorkItemSummary[] {

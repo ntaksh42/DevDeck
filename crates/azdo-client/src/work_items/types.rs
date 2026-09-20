@@ -214,6 +214,24 @@ pub struct SavedQuery {
     pub wiql: Option<String>,
 }
 
+/// A node in a project's query hierarchy (the "Shared Queries" / "My Queries"
+/// tree). Folders never carry `wiql`; leaf queries do once `$expand=wiql` is
+/// requested.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueryHierarchyItem {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub is_folder: bool,
+    #[serde(default)]
+    pub is_public: bool,
+    #[serde(default)]
+    pub wiql: Option<String>,
+    #[serde(default)]
+    pub children: Vec<QueryHierarchyItem>,
+}
+
 /// A node in an area or iteration classification tree. The field-ready path
 /// (e.g. `Project\Team\Sprint 1`) is built by callers from the chain of node
 /// names, which matches the `System.AreaPath` / `System.IterationPath` format.

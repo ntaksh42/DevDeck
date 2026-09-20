@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   countWorkItemQuery,
   getSavedQuery,
+  listProjectQueries,
   listWorkItemFields,
   commandErrorMessage,
   type WorkItemProjectOption,
@@ -150,6 +151,17 @@ export function useViewEditorDraft({
         queryId: urlQueryId!,
       }),
     enabled: dialogOpen && !!selectedOrganizationId && !!resolvedProjectId && !!urlQueryId,
+    staleTime: 5 * 60_000,
+  });
+
+  const projectQueriesFetch = useQuery({
+    queryKey: workItemQueryKeys.projectQueries(selectedOrganizationId, draftProjectId || null),
+    queryFn: () =>
+      listProjectQueries({
+        organizationId: selectedOrganizationId,
+        projectId: draftProjectId,
+      }),
+    enabled: dialogOpen && !!selectedOrganizationId && !!draftProjectId,
     staleTime: 5 * 60_000,
   });
 
@@ -394,6 +406,23 @@ export function useViewEditorDraft({
     }
   }
 
+  function selectProjectQuery(queryId: string) {
+    if (!queryId) return;
+    const query = (projectQueriesFetch.data ?? []).find((q) => q.id === queryId);
+    if (!query) return;
+    if (query.wiql) {
+      setDraftWiql(query.wiql);
+      draftWiqlRef.current = query.wiql;
+      setWiqlCursor(query.wiql.length);
+    }
+    setDraftName((prev) => {
+      if (prev.trim()) return prev;
+      draftNameRef.current = query.name;
+      return query.name;
+    });
+    setTestResult(null);
+  }
+
   function insertWiqlText(value: string) {
     const textarea = draftWiqlTextareaRef.current;
     const cursor = textarea?.selectionStart ?? wiqlCursor;
@@ -467,6 +496,13 @@ export function useViewEditorDraft({
     // Field data for extra columns
     fields: fieldsQuery.data ?? [],
     fieldsLoading: fieldsQuery.isLoading,
+    // Project query picker ("import from Azure DevOps")
+    projectQueries: projectQueriesFetch.data ?? [],
+    projectQueriesLoading: projectQueriesFetch.isLoading,
+    projectQueriesError: projectQueriesFetch.isError
+      ? commandErrorMessage(projectQueriesFetch.error)
+      : null,
+    onProjectQuerySelect: selectProjectQuery,
     // Refs
     draftWiqlTextareaRef,
     // Change handlers

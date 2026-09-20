@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
-use azdo_client::ClassificationNode;
+use azdo_client::{ClassificationNode, QueryHierarchyItem};
 
 use crate::error::{AppError, Result};
 
-use super::ClassificationNodeOption;
+use super::{ClassificationNodeOption, ProjectQueryOption};
 
 pub(crate) const WORK_ITEM_FIELDS: &[&str] = &[
     "System.Id",
@@ -50,6 +50,9 @@ pub(crate) const MAX_PREVIEW_RELATIONS: usize = 50;
 // enough to capture them in a single request.
 pub(crate) const CLASSIFICATION_NODE_DEPTH: u32 = 10;
 
+// Azure DevOps caps the query hierarchy's `$depth` parameter at 2.
+pub(crate) const PROJECT_QUERY_DEPTH: u32 = 2;
+
 /// Flattens a classification tree depth-first, building each node's field-ready
 /// path (`System.AreaPath` form) by backslash-joining ancestor names.
 pub(crate) fn flatten_classification_node(
@@ -78,6 +81,34 @@ pub(crate) fn flatten_classification_node(
     for child in &node.children {
         flatten_classification_node(child, Some(&path), depth + 1, out);
     }
+}
+
+/// Flattens a project's query hierarchy into its leaf (non-folder) queries,
+/// recording the folder path each one lives under. Folders themselves are
+/// dropped since they carry no WIQL to import.
+pub(crate) fn flatten_query_hierarchy(
+    item: &QueryHierarchyItem,
+    folder_path: &str,
+    out: &mut Vec<ProjectQueryOption>,
+) {
+    if item.is_folder {
+        let child_path = if folder_path.is_empty() {
+            item.name.clone()
+        } else {
+            format!("{folder_path}/{}", item.name)
+        };
+        for child in &item.children {
+            flatten_query_hierarchy(child, &child_path, out);
+        }
+        return;
+    }
+    out.push(ProjectQueryOption {
+        id: item.id.clone(),
+        name: item.name.clone(),
+        folder_path: folder_path.to_string(),
+        is_public: item.is_public,
+        wiql: item.wiql.clone(),
+    });
 }
 
 pub(crate) fn validate_work_item_wiql(wiql: &str) -> Result<&str> {

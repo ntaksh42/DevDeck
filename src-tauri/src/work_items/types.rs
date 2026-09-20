@@ -253,6 +253,28 @@ pub struct SavedQueryResult {
     pub wiql: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListProjectQueriesInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+}
+
+/// A leaf query from a project's "Shared Queries" / "My Queries" hierarchy,
+/// flattened for use as an importable View source.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectQueryOption {
+    pub id: String,
+    pub name: String,
+    /// Slash-joined folder names the query lives under (e.g. "Shared
+    /// Queries/Team A"); never empty, since every query sits under at least
+    /// the "Shared Queries" or "My Queries" root folder.
+    pub folder_path: String,
+    pub is_public: bool,
+    pub wiql: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BulkWorkItemResult {
