@@ -134,6 +134,17 @@ impl PrReviewService {
         })
     }
 
+    /// Ids of the work items Azure DevOps has linked to the pull request.
+    pub async fn list_work_item_ids(&self, pr: PrLocator) -> Result<Vec<i64>> {
+        let organization = self
+            .db
+            .resolve_organization(pr.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        Ok(client
+            .list_pull_request_work_item_ids(&pr.project_id, &pr.repository_id, pr.pull_request_id)
+            .await?)
+    }
+
     pub async fn list_commits(&self, pr: PrLocator) -> Result<Vec<PrCommit>> {
         let organization = self
             .db

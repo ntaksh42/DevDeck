@@ -17,6 +17,7 @@ import { PrReviewHeader } from "./PrReviewHeader";
 import { ReviewTab } from "./PrReviewTabContents";
 import { CommitsTab } from "./PrCommitsTab";
 import { ResultTab } from "./PrSecondaryTabs";
+import { LINKED_WORK_ITEMS_PANEL_ID, LinkedWorkItemsPanel } from "./LinkedWorkItemsPanel";
 
 // The Files tab pulls in the `diff` library, so it is code-split to keep that
 // weight out of the startup bundle.
@@ -40,16 +41,21 @@ const PrFilesTab = lazy(() =>
  *
  * `anchor` (Conversation) has no `position`; the caller supplies one
  * (typically split to the right of its grid panel). `secondary` are already
- * positioned `within` the anchor's group as tabs.
+ * positioned `within` the anchor's group as tabs, except the optional linked
+ * Work Items pane, which is docked below the caller's `"grid"` panel as its own
+ * always-visible group.
  */
 export function usePrReviewPanels({
   selectedPr,
   maximized = false,
   onToggleMaximize,
+  onOpenLinkedWorkItems,
 }: {
   selectedPr: ReviewPullRequestSummary | null;
   maximized?: boolean;
   onToggleMaximize?: () => void;
+  /** When set, adds the linked Work Items tab and its header button. */
+  onOpenLinkedWorkItems?: () => void;
 }): { anchor: DockablePanelSpec; secondary: DockablePanelSpec[] } {
   const { canZoomIn, canZoomOut, resetZoom, zoom, zoomIn, zoomOut } = usePreviewZoom();
 
@@ -142,6 +148,7 @@ export function usePrReviewPanels({
           review={reviewQuery.data ?? null}
           maximized={maximized}
           onToggleMaximize={onToggleMaximize}
+          onOpenLinkedWorkItems={onOpenLinkedWorkItems}
           reviewerActionsBusy={reviewerActionsBusy}
           onToggleReviewerRequired={(reviewer) => {
             if (!selectedPr || !reviewer.id) return;
@@ -227,6 +234,22 @@ export function usePrReviewPanels({
       content: withChrome(!selectedPr ? noPrSelected : <ResultTab selectedPr={selectedPr} />),
       position: { relativeTo: "review", direction: "within" },
     },
+    ...(onOpenLinkedWorkItems
+      ? [
+          {
+            id: LINKED_WORK_ITEMS_PANEL_ID,
+            title: "Work Items",
+            // No PR header/zoom chrome: the PR header in the Conversation pane
+            // already covers it. Docked below the caller's "grid" panel (not
+            // below "review") so the Conversation group stays a direct child
+            // of the horizontal split and keeps its width resize handle.
+            content: !selectedPr ? noPrSelected : <LinkedWorkItemsPanel pr={selectedPr} />,
+            position: { relativeTo: "grid", direction: "below" },
+            initialHeight: 400,
+            minHeight: 140,
+          } satisfies DockablePanelSpec,
+        ]
+      : []),
   ];
 
   return { anchor, secondary };

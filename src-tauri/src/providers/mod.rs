@@ -182,6 +182,8 @@ pub(crate) trait Provider: Send + Sync {
         input: GetPullRequestFileDiffInput,
     ) -> Result<PrFileDiff>;
     async fn list_pull_request_commits(&self, input: PrLocator) -> Result<Vec<PrCommit>>;
+    /// Ids of work items linked to the pull request.
+    async fn list_pull_request_work_items(&self, input: PrLocator) -> Result<Vec<i64>>;
     async fn post_pull_request_comment(
         &self,
         input: PostPullRequestCommentInput,

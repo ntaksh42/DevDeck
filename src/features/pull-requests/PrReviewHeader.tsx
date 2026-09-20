@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   CheckCircle2,
+  ClipboardList,
   Loader,
   Maximize2,
   MessageSquare,
@@ -171,6 +172,7 @@ export function PrReviewHeader({
   review,
   maximized,
   onToggleMaximize,
+  onOpenLinkedWorkItems,
   reviewerActionsBusy = false,
   onToggleReviewerRequired,
   onRemoveReviewer,
@@ -185,6 +187,7 @@ export function PrReviewHeader({
   review: PullRequestReview | null;
   maximized: boolean;
   onToggleMaximize?: () => void;
+  onOpenLinkedWorkItems?: () => void;
   reviewerActionsBusy?: boolean;
   onToggleReviewerRequired?: (reviewer: PrReviewer) => void;
   onRemoveReviewer?: (reviewer: PrReviewer) => void;
@@ -219,6 +222,18 @@ export function PrReviewHeader({
       ) : (
         <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
       )}
+    </button>
+  ) : null;
+
+  const linkedWorkItemsButton = onOpenLinkedWorkItems ? (
+    <button
+      type="button"
+      onClick={onOpenLinkedWorkItems}
+      aria-label="Preview linked work items"
+      title="Preview linked work items (T)"
+      className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+    >
+      <ClipboardList className="h-3.5 w-3.5" aria-hidden="true" />
     </button>
   ) : null;
 
@@ -268,6 +283,7 @@ export function PrReviewHeader({
           {branchLabel}
         </span>
         {zoomControl}
+        {linkedWorkItemsButton}
         {maximizeButton}
       </div>
       {/* The grid already shows the title in split view, so only repeat it in the

@@ -221,6 +221,9 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
     }
     case "list_pull_request_commits":
       return demoPrCommits;
+    case "list_pull_request_work_items":
+      // Two ids so the browser preview exercises the multi-item chooser.
+      return [123, 118];
     case "list_pull_request_changes": {
       const input = (args as { input?: ListPullRequestChangesInput } | undefined)?.input;
       const changes: PullRequestChanges = {

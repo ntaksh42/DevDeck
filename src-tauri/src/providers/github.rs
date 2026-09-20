@@ -288,6 +288,11 @@ impl Provider for GithubProvider {
         github::pr_review::list_commits(&self.org, &self.secrets, input).await
     }
 
+    async fn list_pull_request_work_items(&self, _input: PrLocator) -> Result<Vec<i64>> {
+        // GitHub pull requests have no Azure Boards work item links.
+        Ok(Vec::new())
+    }
+
     async fn post_pull_request_comment(
         &self,
         input: PostPullRequestCommentInput,

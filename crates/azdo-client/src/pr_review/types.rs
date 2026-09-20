@@ -121,3 +121,10 @@ pub struct GitItemContent {
 pub struct GitContentMetadata {
     pub is_binary: Option<bool>,
 }
+
+/// Minimal `ResourceRef` (`{ id, url }`) returned by the pull request
+/// work-items endpoint; `id` is a string in the REST payload.
+#[derive(Debug, Deserialize)]
+pub struct ResourceRef {
+    pub id: String,
+}

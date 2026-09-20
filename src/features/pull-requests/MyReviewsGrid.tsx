@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { commandErrorMessage } from '@/lib/azdoCommands';
 import { isEditableTarget, focusPrimaryPreview, markdownLink } from '@/lib/utils';
@@ -13,6 +14,7 @@ import { openExternalUrl } from '@/lib/openExternal';
 import { copyRowUrls } from '@/lib/copyUrls';
 import { toggleTriageArchived } from '@/lib/triage';
 import { usePrReviewPanels } from './usePrReviewPanels';
+import { focusLinkedWorkItems, LINKED_WORK_ITEMS_PANEL_ID } from './LinkedWorkItemsPanel';
 import { MemoReviewPrRow } from './MemoReviewPrRow';
 import { ReviewFilterBar } from './ReviewFilterBar';
 import { ReviewStatusBar } from './ReviewStatusBar';
@@ -40,10 +42,18 @@ export function MyReviewsGrid({
   onSelectRequestHandled,
 }: MyReviewsGridProps) {
   const g = useMyReviewsGrid({ selectRequest, onSelectRequestHandled });
+  // `key` is bumped on every request so re-activating the same tab still fires.
+  const [activateRequest, setActivateRequest] = useState<{ id: string; key: number } | undefined>();
+  function openLinkedWorkItems() {
+    if (!g.selectedPr) return;
+    setActivateRequest((prev) => ({ id: LINKED_WORK_ITEMS_PANEL_ID, key: (prev?.key ?? 0) + 1 }));
+    window.setTimeout(focusLinkedWorkItems, 50);
+  }
   const { anchor: reviewAnchor, secondary: reviewSecondary } = usePrReviewPanels({
     selectedPr: g.selectedPr,
     maximized: g.maximized,
     onToggleMaximize: () => g.setMaximized((v) => !v),
+    onOpenLinkedWorkItems: openLinkedWorkItems,
   });
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -110,6 +120,11 @@ export function MyReviewsGrid({
       e.preventDefault();
       const pr = g.sortedPrs[g.selectedIndex];
       if (pr?.webUrl) openExternalUrl(pr.webUrl);
+      return;
+    }
+    if (e.key === 't' || e.key === 'T') {
+      e.preventDefault();
+      openLinkedWorkItems();
       return;
     }
     if (e.key === 'e' || e.key === 'E') {
@@ -368,6 +383,7 @@ export function MyReviewsGrid({
           ...reviewSecondary,
         ] satisfies DockablePanelSpec[]}
         maximizedId={g.maximized ? 'review' : undefined}
+        activatePanel={activateRequest}
       />
       {g.openFilterCol && g.filterAnchorRect ? (
         <ColumnFilterDropdown
