@@ -141,7 +141,7 @@ export function usePrReviewPanels({
     return (
       <aside
         onKeyDown={handlePreviewKeyDown}
-        className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card focus-within:ring-2 focus-within:ring-inset focus-within:ring-ring"
+        className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card"
       >
         <PrReviewHeader
           selectedPr={selectedPr}

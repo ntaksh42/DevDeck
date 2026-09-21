@@ -521,8 +521,10 @@ export function DockableWorkspace({
           .filter(
             (panel) =>
               panel.position &&
-              ((panel.minWidth !== undefined && panel.maxWidth !== undefined) ||
-                (panel.minHeight !== undefined && panel.maxHeight !== undefined)),
+              panel.minWidth !== undefined ||
+              panel.maxWidth !== undefined ||
+              panel.minHeight !== undefined ||
+              panel.maxHeight !== undefined,
           )
           .map((panel) => [
             panel.id,

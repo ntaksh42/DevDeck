@@ -371,6 +371,25 @@ describe("DockableWorkspace", () => {
       expect(resize.getAttribute("aria-valuenow")).toBe("280");
     });
 
+    it("uses a panel's one-sided height constraint for its resize handle", () => {
+      const panels: DockablePanelSpec[] = [
+        { id: "grid", title: "Grid", content: <div>grid content</div>, minWidth: 480 },
+        {
+          id: "workItems",
+          title: "Work Items",
+          content: <div>work items content</div>,
+          position: { relativeTo: "grid", direction: "below" },
+          initialHeight: 400,
+          minHeight: 140,
+        },
+      ];
+      render(<DockableWorkspace storageKey="test:dockable-workspace:one-sided-height" panels={panels} />);
+
+      const resize = screen.getByRole("separator", { name: "Resize Work Items" });
+      expect(resize.getAttribute("aria-orientation")).toBe("horizontal");
+      expect(resize.getAttribute("aria-valuemin")).toBe("140");
+    });
+
     it("closes the move menu on Escape and returns focus to the trigger button", () => {
       render(<DockableWorkspace storageKey="test:dockable-workspace:move-escape" panels={threePanels()} />);
 

@@ -223,7 +223,7 @@ export function ResizeHandle({
       // property regardless of class order in the string -- silently turning
       // the portaled full-height overlay (GroupResizeOverlay) into a normal
       // in-flow flex item that steals height from its sibling content.
-      className={`z-20 flex items-center justify-center text-muted-foreground outline-none hover:bg-secondary focus:bg-secondary focus:ring-2 focus:ring-ring ${
+      className={`group z-20 flex items-center justify-center text-muted-foreground outline-none hover:bg-secondary focus:bg-secondary focus:ring-2 focus:ring-ring ${
         vertical ? "h-2 cursor-row-resize" : "w-2 cursor-col-resize"
       } ${className ?? ""}`}
       style={style}
@@ -245,9 +245,9 @@ export function ResizeHandle({
         aria-hidden="true"
       />
       {vertical ? (
-        <GripHorizontal className="relative z-10 h-4 w-4 shrink-0" aria-hidden="true" />
+        <GripHorizontal className="relative z-10 h-4 w-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100" aria-hidden="true" />
       ) : (
-        <GripVertical className="relative z-10 h-4 w-4 shrink-0" aria-hidden="true" />
+        <GripVertical className="relative z-10 h-4 w-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100" aria-hidden="true" />
       )}
     </div>
   );
