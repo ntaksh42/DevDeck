@@ -1,5 +1,5 @@
 use azdo_client::AdoClient;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 
 use crate::db::{AppDatabase, CachedCommit, Organization};
 use crate::sync::SyncBudget;
@@ -51,9 +51,30 @@ fn normalize_date_expands_date_only_values() {
             .unwrap()
             .unwrap()
             .to_rfc3339(),
-        "2026-05-24T23:59:59+00:00"
+        "2026-05-24T23:59:59.999999900+00:00"
     );
     assert!(normalize_date(Some("24/05/2026"), false).is_err());
+}
+
+#[test]
+fn end_of_day_bound_covers_the_whole_final_second() {
+    // Commit timestamps carry sub-second precision, so a commit authored at
+    // 23:59:59.913 on the `to` date is still inside that day. A whole-second
+    // 23:59:59 bound sits before it, which dropped the commit from both the
+    // SQLite `author_date <= ?` filter and the live `searchCriteria.toDate`
+    // query. Both sides are `to_rfc3339()` of a `DateTime<Utc>`, so the
+    // string compare SQLite does matches this instant compare.
+    let to = normalize_date(Some("2026-05-24"), true).unwrap().unwrap();
+    let late = DateTime::parse_from_rfc3339("2026-05-24T23:59:59.913333300+00:00")
+        .unwrap()
+        .with_timezone(&Utc);
+    assert!(late <= to);
+    assert!(late.to_rfc3339() <= to.to_rfc3339());
+    // The bound does not spill into the next day.
+    let next_day = DateTime::parse_from_rfc3339("2026-05-25T00:00:00+00:00")
+        .unwrap()
+        .with_timezone(&Utc);
+    assert!(next_day > to);
 }
 
 #[test]

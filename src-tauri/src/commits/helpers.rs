@@ -94,8 +94,16 @@ pub(super) fn normalize_date(
     };
 
     if let Ok(date) = NaiveDate::parse_from_str(value, "%Y-%m-%d") {
+        // The end-of-day bound has to cover the whole final second, not just
+        // `23:59:59.000`: commit timestamps carry sub-second precision, so a
+        // commit authored at `23:59:59.913` on the `to` date sits after a
+        // whole-second bound and would be dropped from the results.
+        //
+        // 100ns ("tick") precision, not nanoseconds: this value is also sent
+        // to Azure DevOps as `searchCriteria.toDate`, and ticks are the finest
+        // resolution its own .NET timestamps use.
         let time = if end_of_day {
-            date.and_hms_opt(23, 59, 59)
+            date.and_hms_nano_opt(23, 59, 59, 999_999_900)
         } else {
             date.and_hms_opt(0, 0, 0)
         }
