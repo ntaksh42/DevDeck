@@ -47,6 +47,14 @@ fn read_work_items(
 }
 
 /// Replaces every work item row for `(organization, project)` with `rows`.
+///
+/// The insert upserts on the `work_items` primary key, `(organization, id)`,
+/// which deliberately does not include `project`: a work item can move between
+/// projects (and a project can be renamed), while the delete above only clears
+/// rows still filed under the project being written. Without the upsert the
+/// first sync after such a move hits a UNIQUE violation, aborts the whole
+/// transaction, and the shared cache stops updating for that project entirely.
+/// [`upsert_work_items`] already resolves the same conflict this way.
 pub fn write_work_items(
     conn: &mut Connection,
     organization: &str,
@@ -63,7 +71,17 @@ pub fn write_work_items(
             "INSERT INTO work_items
              (organization, project, id, title, work_item_type, state, assigned_to,
               assigned_to_unique_name, changed_date, web_url, tags)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+             ON CONFLICT(organization, id) DO UPDATE SET
+                project = excluded.project,
+                title = excluded.title,
+                work_item_type = excluded.work_item_type,
+                state = excluded.state,
+                assigned_to = excluded.assigned_to,
+                assigned_to_unique_name = excluded.assigned_to_unique_name,
+                changed_date = excluded.changed_date,
+                web_url = excluded.web_url,
+                tags = excluded.tags",
         )?;
         for row in rows {
             statement.execute(params![
@@ -204,6 +222,31 @@ mod tests {
         assert_eq!(
             read_work_items(&conn, "org", "proj").unwrap(),
             vec![sample(1)]
+        );
+    }
+
+    #[test]
+    fn a_work_item_moved_to_another_project_replaces_its_old_row() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        schema(&conn);
+        write_work_items(&mut conn, "org", "proj-a", &[sample(1)]).unwrap();
+
+        // The item moves to another project (or its project is renamed), so
+        // the next sync writes it under a different project name. The delete
+        // only clears rows still filed under "proj-b" -- none -- so the insert
+        // collides with the row left behind under "proj-a" on the
+        // (organization, id) primary key. Before the upsert this aborted the
+        // transaction and the shared cache stopped updating for good.
+        write_work_items(&mut conn, "org", "proj-b", &[sample(1)]).unwrap();
+
+        assert_eq!(
+            read_work_items(&conn, "org", "proj-b").unwrap(),
+            vec![sample(1)],
+            "the item should be readable under the project it now belongs to"
+        );
+        assert!(
+            read_work_items(&conn, "org", "proj-a").unwrap().is_empty(),
+            "and should no longer be readable under the old project"
         );
     }
 
