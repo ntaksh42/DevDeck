@@ -38,7 +38,7 @@ export function PreviewZoomControls({
         onClick={onReset}
         aria-label="Reset preview zoom"
         title="Reset zoom (Ctrl+0)"
-        className="w-9 shrink-0 rounded px-0.5 py-0.5 text-center text-[10px] text-muted-foreground tabular-nums hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+        className="w-9 shrink-0 rounded px-0.5 py-0.5 text-center text-[11px] text-muted-foreground tabular-nums hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
       >
         {Math.round(zoom * 100)}%
       </button>

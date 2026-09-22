@@ -182,7 +182,7 @@ export function WorkItemPreviewDetails({
             {preview.state ? <WorkItemStatePill state={preview.state} /> : null}
             {preview.changedDate ? (
               <span
-                className="hidden shrink-0 truncate text-[10px] font-medium text-slate-500 dark:text-slate-400 sm:inline"
+                className="hidden shrink-0 truncate text-[11px] font-medium text-slate-500 dark:text-slate-400 sm:inline"
                 title={preview.changedDate}
               >
                 updated {formatRelativeDate(preview.changedDate)}
@@ -413,7 +413,7 @@ export function WorkItemPreviewDetails({
                     {pr.title ?? "(not in My Reviews)"}
                   </span>
                   {pr.myVoteLabel ? (
-                    <span className="shrink-0 rounded border border-border bg-muted px-1 py-px text-[10px] text-muted-foreground">
+                    <span className="shrink-0 rounded border border-border bg-muted px-1 py-px text-[11px] text-muted-foreground">
                       {pr.myVoteLabel}
                     </span>
                   ) : null}

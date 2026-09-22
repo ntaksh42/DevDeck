@@ -4,6 +4,7 @@ import { focusPrimaryPreview } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
 import { renderPrCell } from './myReviewsCells';
 import type { SortKey } from './myReviewsTypes';
+import { gridRowStateClass } from '@/lib/gridRowState';
 
 type ReviewPrRowProps = {
   pr: ReviewPullRequestSummary;
@@ -53,17 +54,7 @@ export const ReviewPrRow = forwardRef<HTMLDivElement, ReviewPrRowProps>(
         }}
         className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1 text-sm outline-none
         focus:ring-2 focus:ring-inset focus:ring-ring
-        ${
-          selected && isStale
-            ? 'bg-orange-100 dark:bg-orange-900/30'
-            : selected
-              ? 'bg-secondary'
-              : inMultiSelection
-                ? 'bg-primary/10'
-                : isStale
-                  ? 'bg-orange-50 dark:bg-orange-950/20 hover:bg-orange-100/70'
-                  : 'hover:bg-muted/50'
-        }`}
+        ${gridRowStateClass({ selected, inMultiSelection, isStale })}`}
         style={{ gridTemplateColumns: columnTemplate }}
       >
         {visibleColumns.map((key) => (

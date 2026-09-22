@@ -60,7 +60,7 @@ export function AssigneePicker({
         {pending ? "Updating..." : current ?? "Unassigned"}
       </button>
       {mutationError && (
-        <p className="mt-0.5 text-[10px] text-destructive">{mutationError}</p>
+        <p className="mt-0.5 text-[11px] text-destructive">{mutationError}</p>
       )}
       {open ? (
         <div className="absolute left-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-popover p-1 shadow-lg">

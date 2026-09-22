@@ -167,7 +167,7 @@ export function CodeFileView({
         <button
           type="button"
           onClick={onExitVersion}
-          className="font-medium text-primary hover:underline"
+          className="font-medium text-link hover:underline"
         >
           Back to {branch}
         </button>

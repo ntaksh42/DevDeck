@@ -14,6 +14,7 @@ import {
   extraFieldValue,
   type WiSortKey,
 } from './workItemsGridHelpers';
+import { gridRowStateClass } from '@/lib/gridRowState';
 
 // Reactively reads the row color rules and refreshes when they change in
 // Settings or another tab (mirrors useKeybindings in App.tsx).
@@ -67,19 +68,12 @@ export const WorkItemGridRow = forwardRef<
         openExternalUrl(item.webUrl);
       }
     }}
-    className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
-      checked
-        ? "bg-primary/5"
-        : selected && isStale
-          ? "bg-orange-100 dark:bg-orange-900/30"
-          : selected
-            ? "bg-secondary"
-            : rowColorClass
-              ? rowColorClass
-              : isStale
-                ? "bg-orange-50 dark:bg-orange-950/20 hover:bg-orange-100/70"
-                : "hover:bg-muted/50"
-    }`}
+    className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${gridRowStateClass({
+      selected,
+      inMultiSelection: checked,
+      isStale,
+      customClass: rowColorClass,
+    })}`}
     style={{ gridTemplateColumns: columnTemplate }}
   >
     <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>

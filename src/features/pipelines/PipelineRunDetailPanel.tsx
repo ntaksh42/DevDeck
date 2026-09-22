@@ -426,7 +426,7 @@ export function PipelineRunDetailPanel({
                               <button
                                 type="button"
                                 onClick={() => openExternalUrl(run.webUrl)}
-                                className="text-primary hover:underline"
+                                className="text-link hover:underline"
                               >
                                 Full log in Azure DevOps
                               </button>

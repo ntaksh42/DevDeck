@@ -96,7 +96,7 @@ export function CodeHistoryView({
                   type="button"
                   data-history-item
                   onClick={() => openExternalUrl(commitUrl(organization, repo, commit.commitId))}
-                  className="font-mono text-xs text-primary hover:underline"
+                  className="font-mono text-xs text-link hover:underline"
                   title="Open commit in Azure DevOps"
                 >
                   {commit.shortId}
@@ -114,7 +114,7 @@ export function CodeHistoryView({
                   <button
                     type="button"
                     onClick={() => onViewAtCommit(commit)}
-                    className="text-xs text-primary hover:underline"
+                    className="text-xs text-link hover:underline"
                     title="Show the file as of this commit"
                   >
                     View

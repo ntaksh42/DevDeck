@@ -53,7 +53,7 @@ export function ProjectQueryPicker({
         htmlFor="view-project-query-filter"
       >
         Import an Azure DevOps query
-        <span className="ml-1 font-normal text-muted-foreground/70">
+        <span className="ml-1 font-normal text-muted-foreground">
           (fetches the project's Shared/My Queries and fills Name + WIQL)
         </span>
       </label>

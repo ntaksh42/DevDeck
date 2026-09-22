@@ -130,7 +130,7 @@ export function ViewEditorDialog({
           <div className="grid gap-1.5">
             <label className="text-xs font-medium text-muted-foreground" htmlFor="view-url-input">
               Azure DevOps URL
-              <span className="ml-1 font-normal text-muted-foreground/70">
+              <span className="ml-1 font-normal text-muted-foreground">
                 (paste to auto-fill Org / Project / WIQL)
               </span>
             </label>
@@ -188,7 +188,7 @@ export function ViewEditorDialog({
             <label className="grid gap-1.5">
               <span className="text-xs font-medium text-muted-foreground">
                 Limit
-                <span className="ml-1 font-normal text-muted-foreground/70">(empty = none)</span>
+                <span className="ml-1 font-normal text-muted-foreground">(empty = none)</span>
               </span>
               <input
                 type="number"
@@ -213,7 +213,7 @@ export function ViewEditorDialog({
             <label className="grid gap-1.5">
               <span className="text-xs font-medium text-muted-foreground">
                 Auto refresh (sec)
-                <span className="ml-1 font-normal text-muted-foreground/70">(empty = off)</span>
+                <span className="ml-1 font-normal text-muted-foreground">(empty = off)</span>
               </span>
               <input
                 type="number"
@@ -229,7 +229,7 @@ export function ViewEditorDialog({
             <label className="grid gap-1.5">
               <span className="text-xs font-medium text-muted-foreground">
                 Alert when count ≥
-                <span className="ml-1 font-normal text-muted-foreground/70">(empty = off)</span>
+                <span className="ml-1 font-normal text-muted-foreground">(empty = off)</span>
               </span>
               <input
                 type="number"
@@ -250,7 +250,7 @@ export function ViewEditorDialog({
                     key={macro}
                     type="button"
                     onClick={() => onInsertWiqlText(macro)}
-                    className="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[10px] hover:bg-secondary"
+                    className="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] hover:bg-secondary"
                   >
                     {macro}
                   </button>
@@ -315,7 +315,7 @@ export function ViewEditorDialog({
           <div className="grid gap-1.5">
             <span className="text-xs font-medium text-muted-foreground">
               Extra columns
-              <span className="ml-1 font-normal text-muted-foreground/70">
+              <span className="ml-1 font-normal text-muted-foreground">
                 (shown after the standard columns)
               </span>
             </span>

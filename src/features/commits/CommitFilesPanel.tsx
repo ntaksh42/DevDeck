@@ -303,14 +303,14 @@ export function CommitFilesPanel({
                   title={file.path}
                 >
                   <span
-                    className={`inline-flex w-4 shrink-0 items-center justify-center rounded border text-[10px] font-semibold ${badge.cls}`}
+                    className={`inline-flex w-4 shrink-0 items-center justify-center rounded border text-[11px] font-semibold ${badge.cls}`}
                     aria-label={file.changeType}
                   >
                     {badge.label}
                   </span>
                   <span className="min-w-0 flex-1 truncate font-mono">{fileName(file.path)}</span>
                   {stats ? (
-                    <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground">
+                    <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted-foreground">
                       <span className="text-green-700 dark:text-green-400">+{stats.additions}</span>{" "}
                       <span className="text-red-700 dark:text-red-400">-{stats.deletions}</span>
                     </span>

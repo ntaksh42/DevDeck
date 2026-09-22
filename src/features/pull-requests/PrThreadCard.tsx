@@ -31,7 +31,7 @@ function CommentAvatar({ name }: { name: string | null | undefined }) {
   return (
     <span
       aria-hidden="true"
-      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold ${colorClass}`}
+      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${colorClass}`}
     >
       {authorInitials(name)}
     </span>
@@ -72,7 +72,7 @@ function ThreadStatusDropdown({
         aria-expanded={open}
         disabled={busy}
         onClick={() => setOpen((value) => !value)}
-        className={`inline-flex shrink-0 items-center gap-0.5 rounded border px-1.5 py-px text-[10px] font-medium disabled:opacity-50 ${
+        className={`inline-flex shrink-0 items-center gap-0.5 rounded border px-1.5 py-px text-[11px] font-medium disabled:opacity-50 ${
           resolved
             ? "border-border bg-muted text-muted-foreground"
             : "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300"
@@ -271,7 +271,7 @@ export function PrThreadCard({
           </button>
           {showFilePath && thread.filePath ? (
             <span
-              className="truncate font-mono text-[10px] text-muted-foreground"
+              className="truncate font-mono text-[11px] text-muted-foreground"
               title={`${thread.filePath}${thread.rightLine ? `:${thread.rightLine}` : ""}`}
             >
               {thread.filePath}
@@ -303,7 +303,7 @@ export function PrThreadCard({
                   <span className="font-medium text-foreground">{comment.author ?? "Unknown"}</span>
                   {comment.publishedDate ? (
                     <span
-                      className="text-[10px] text-muted-foreground"
+                      className="text-[11px] text-muted-foreground"
                       title={formatDate(comment.publishedDate)}
                     >
                       {formatRelativeDate(comment.publishedDate)}
@@ -315,7 +315,7 @@ export function PrThreadCard({
                         <button
                           type="button"
                           onClick={() => setEditingId(comment.id)}
-                          className="rounded px-1 py-px text-[10px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+                          className="rounded px-1 py-px text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
                         >
                           Edit
                         </button>
@@ -329,7 +329,7 @@ export function PrThreadCard({
                               void onDeleteComment(comment.id);
                             }
                           }}
-                          className="rounded px-1 py-px text-[10px] text-muted-foreground hover:bg-secondary hover:text-destructive disabled:opacity-50"
+                          className="rounded px-1 py-px text-[11px] text-muted-foreground hover:bg-secondary hover:text-destructive disabled:opacity-50"
                         >
                           Delete
                         </button>

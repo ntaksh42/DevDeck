@@ -192,7 +192,7 @@ export function CollapsibleComment({
   return (
     <article className="group min-w-0 overflow-hidden rounded-md border border-border bg-card shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
       <div className="flex min-w-0 items-center gap-1.5 border-b border-border bg-muted px-1.5 py-0.5">
-        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[10px] font-semibold text-blue-700 dark:bg-blue-500/25 dark:text-blue-200">
+        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[11px] font-semibold text-blue-700 dark:bg-blue-500/25 dark:text-blue-200">
           {commentAuthorInitials(createdBy)}
         </span>
         <span className="min-w-0 truncate font-extrabold">
@@ -303,7 +303,7 @@ export function CollapsibleComment({
                 <X aria-hidden="true" className="h-3 w-3" />
                 Cancel
               </button>
-              <span className="text-[10px] text-muted-foreground/70">Ctrl+Enter to save · Esc to cancel</span>
+              <span className="text-[11px] text-muted-foreground">Ctrl+Enter to save · Esc to cancel</span>
             </div>
           </div>
         ) : (

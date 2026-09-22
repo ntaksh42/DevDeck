@@ -401,13 +401,13 @@ const DiffRow = memo(function DiffRow({
   const marker = line.kind === "add" ? "+" : line.kind === "del" ? "-" : " ";
   return (
     <div className={`group grid grid-cols-[3rem_3rem_1fr] ${rowBackground(line.kind)}`}>
-      <span className="relative select-none border-r border-border/60 pr-1 text-right text-muted-foreground/70">
+      <span className="relative select-none border-r border-border/60 pr-1 text-right text-muted-foreground">
         {line.kind === "del" && line.baseLine != null ? (
           <CommentLineButton side="left" line={line.baseLine} onStartComment={onStartComment} />
         ) : null}
         {line.baseLine ?? ""}
       </span>
-      <span className="relative select-none border-r border-border/60 pr-1 text-right text-muted-foreground/70">
+      <span className="relative select-none border-r border-border/60 pr-1 text-right text-muted-foreground">
         {line.kind !== "del" && line.targetLine != null ? (
           <CommentLineButton side="right" line={line.targetLine} onStartComment={onStartComment} />
         ) : null}
@@ -435,7 +435,7 @@ const SplitCell = memo(function SplitCell({
   }
   return (
     <div className={`group grid min-w-0 grid-cols-[3rem_1fr] border-r border-border/60 ${rowBackground(cell.kind)}`}>
-      <span className="relative select-none border-r border-border/60 pr-1 text-right text-muted-foreground/70">
+      <span className="relative select-none border-r border-border/60 pr-1 text-right text-muted-foreground">
         <CommentLineButton side={side} line={cell.line} onStartComment={onStartComment} />
         {cell.line}
       </span>

@@ -12,6 +12,7 @@ import {
   commitSortLabels,
 } from "./commitSearchConstants";
 import { commitPrQueryKey } from "./commitSearchUtils";
+import { gridRowStateClass } from "@/lib/gridRowState";
 
 // Cells stay direct grid items (keyed Fragment) so the column template lines up.
 function renderCommitCell(key: CommitColumnKey, commit: CommitSummary, prCount: number): ReactNode {
@@ -21,7 +22,7 @@ function renderCommitCell(key: CommitColumnKey, commit: CommitSummary, prCount: 
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); if (commit.webUrl) openExternalUrl(commit.webUrl); }}
-          className="truncate text-left font-mono text-xs text-primary hover:underline"
+          className="truncate text-left font-mono text-xs text-link hover:underline"
           title={commit.commitId}
         >
           {commit.shortCommitId}
@@ -151,13 +152,7 @@ export const CommitGridRow = forwardRef<
           else focusPrimaryPreview();
         }
       }}
-      className={`grid h-[29px] cursor-pointer select-none items-center gap-2 border-b border-border px-2 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
-        selected
-          ? "bg-secondary shadow-[inset_3px_0_0_hsl(var(--primary))]"
-          : inMultiSelection
-            ? "bg-secondary/50"
-            : "hover:bg-muted/50"
-      }`}
+      className={`grid h-[29px] cursor-pointer select-none items-center gap-2 border-b border-border px-2 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${gridRowStateClass({ selected, inMultiSelection })}`}
       style={{ gridTemplateColumns: columnTemplate }}
     >
       {visibleColumns.map((key) => (

@@ -162,7 +162,7 @@ export function WiqlEditor({
             onClick={applyFormatting}
             title="Reformat the query (Shift+Alt+F)"
             aria-keyshortcuts="Shift+Alt+F"
-            className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[10px] font-medium hover:bg-secondary"
+            className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[11px] font-medium hover:bg-secondary"
           >
             <WandSparkles className="h-3 w-3" aria-hidden="true" />
             Format
@@ -172,7 +172,7 @@ export function WiqlEditor({
             onClick={() => onExpandedChange(!expanded)}
             aria-pressed={expanded}
             title={expanded ? "Shrink the editor" : "Expand the editor"}
-            className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[10px] font-medium hover:bg-secondary"
+            className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-[11px] font-medium hover:bg-secondary"
           >
             {expanded ? (
               <Minimize2 className="h-3 w-3" aria-hidden="true" />
@@ -268,7 +268,7 @@ export function WiqlEditor({
         </ul>
       ) : null}
 
-      <p id="view-wiql-hint" className="text-[10px] text-muted-foreground">
+      <p id="view-wiql-hint" className="text-[11px] text-muted-foreground">
         Ctrl+Space completions · ↑↓ select · Enter/Tab apply · Esc close
       </p>
     </div>

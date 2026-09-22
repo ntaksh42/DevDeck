@@ -210,7 +210,7 @@ export function CommitActivityHeatmap({
 
       <div className="flex gap-2">
         <div
-          className="grid shrink-0 gap-1 pt-[18px] text-[10px] leading-none text-muted-foreground"
+          className="grid shrink-0 gap-1 pt-[18px] text-[11px] leading-none text-muted-foreground"
           aria-hidden="true"
         >
           {WEEKDAY_LABELS.map((label, index) => (
@@ -255,7 +255,7 @@ export function CommitActivityHeatmap({
         </div>
       </div>
 
-      <div className="mt-3 flex items-center gap-1 text-[10px] text-muted-foreground">
+      <div className="mt-3 flex items-center gap-1 text-[11px] text-muted-foreground">
         <span>Less</span>
         <span className="h-3 w-3 rounded-[2px] bg-muted" />
         <span className="h-3 w-3 rounded-[2px] bg-green-200 dark:bg-green-800" />

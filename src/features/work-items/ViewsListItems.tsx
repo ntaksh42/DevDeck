@@ -120,7 +120,7 @@ export function ViewCard({
             ? `${view.limit} max results`
             : "no result limit"}
       </p>
-      <p className="mt-1 truncate text-[11px] text-muted-foreground/80">
+      <p className="mt-1 truncate text-[11px] text-muted-foreground">
         {(view.sortKey ?? "changedDate")} {(view.sortDirection ?? "desc").toUpperCase()}
         {view.previewVisible === false ? " · preview off" : ""}
         {view.refreshIntervalSec ? ` · auto ${view.refreshIntervalSec}s` : ""}
@@ -181,7 +181,7 @@ export function ViewCompactRow({
         {query?.isError ? "!" : stats.displayCount}
       </span>
       {stats.delta !== null && stats.delta !== 0 && !query?.isError ? (
-        <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
           {stats.delta > 0 ? `+${stats.delta}` : stats.delta}
         </span>
       ) : null}

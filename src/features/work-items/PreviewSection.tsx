@@ -34,7 +34,7 @@ export function PreviewControl({
 }) {
   return (
     <div className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-full border border-border bg-card py-0.5 pl-1.5 pr-1">
-      <span className="shrink-0 text-[9px] font-extrabold uppercase tracking-wide leading-4 text-slate-500 dark:text-slate-400">
+      <span className="shrink-0 text-[11px] font-extrabold uppercase tracking-wide leading-4 text-slate-600 dark:text-slate-300">
         {label}
       </span>
       <div className="flex min-w-0 items-center leading-4">{children}</div>
@@ -58,7 +58,7 @@ export function PreviewField({
         wide ? "w-full" : "min-w-0"
       }`}
     >
-      <dt className="shrink-0 text-[9px] font-extrabold uppercase tracking-wide leading-4 text-slate-500 dark:text-slate-400">
+      <dt className="shrink-0 text-[11px] font-extrabold uppercase tracking-wide leading-4 text-slate-600 dark:text-slate-300">
         {label}
       </dt>
       <dd
@@ -122,13 +122,13 @@ export function PreviewSection({
               }`}
               aria-hidden="true"
             />
-            <h3 className="text-[10px] font-extrabold uppercase tracking-wider leading-4 text-slate-800 dark:text-slate-100">
+            <h3 className="text-[11px] font-extrabold uppercase tracking-wider leading-4 text-slate-800 dark:text-slate-100">
               {title}
             </h3>
           </button>
         ) : (
           <h3
-            className={`rounded border-l-4 bg-slate-200 px-1.5 py-1 text-[10px] font-extrabold uppercase tracking-wider leading-4 text-slate-800 dark:bg-slate-700 dark:text-slate-100 ${accentColor}`}
+            className={`rounded border-l-4 bg-slate-200 px-1.5 py-1 text-[11px] font-extrabold uppercase tracking-wider leading-4 text-slate-800 dark:bg-slate-700 dark:text-slate-100 ${accentColor}`}
           >
             {title}
           </h3>
@@ -163,7 +163,7 @@ export function PreviewTagsField({
 
   return (
     <div className="flex w-full min-w-0 items-baseline gap-1.5">
-      <dt className="shrink-0 text-[9px] font-extrabold uppercase tracking-wide leading-4 text-slate-500 dark:text-slate-400">
+      <dt className="shrink-0 text-[11px] font-extrabold uppercase tracking-wide leading-4 text-slate-600 dark:text-slate-300">
         {label}
       </dt>
       <dd className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
@@ -173,7 +173,7 @@ export function PreviewTagsField({
           tags.map((tag) => (
             <span
               key={tag}
-              className="inline-flex max-w-full items-center gap-0.5 truncate rounded-full border border-border bg-secondary px-2 py-px text-[10px] font-semibold leading-4 text-secondary-foreground"
+              className="inline-flex max-w-full items-center gap-0.5 truncate rounded-full border border-border bg-secondary px-2 py-px text-[11px] font-semibold leading-4 text-secondary-foreground"
               title={tag}
             >
               {tag}
@@ -206,7 +206,7 @@ export function PreviewTagsField({
               }
             }}
             onBlur={addDraftTag}
-            className="w-16 min-w-0 rounded-sm border border-transparent bg-transparent px-1 text-[10px] leading-4 outline-none placeholder:text-muted-foreground/60 focus:border-input focus:bg-background disabled:opacity-50"
+            className="w-16 min-w-0 rounded-sm border border-transparent bg-transparent px-1 text-[11px] leading-4 outline-none placeholder:text-muted-foreground focus:border-input focus:bg-background disabled:opacity-50"
           />
         ) : null}
         {pending ? (

@@ -212,7 +212,7 @@ export function CommentComposer({
                   >
                     <span className="font-medium">{candidate.displayName}</span>
                     {candidate.uniqueName ? (
-                      <span className="text-[10px] text-muted-foreground">{candidate.uniqueName}</span>
+                      <span className="text-[11px] text-muted-foreground">{candidate.uniqueName}</span>
                     ) : null}
                   </button>
                 </li>
@@ -229,7 +229,7 @@ export function CommentComposer({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded border border-border bg-card px-1.5 py-px text-[10px] hover:bg-secondary"
+            className="rounded border border-border bg-card px-1.5 py-px text-[11px] hover:bg-secondary"
           >
             Cancel
           </button>

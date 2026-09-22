@@ -154,7 +154,7 @@ export function ReasonEditor({
         {pending ? "Updating..." : (current ?? "—")}
       </button>
       {error && (
-        <p className="mt-0.5 text-[10px] text-destructive">{error}</p>
+        <p className="mt-0.5 text-[11px] text-destructive">{error}</p>
       )}
       {open ? (
         <div className="absolute left-0 top-full z-30 mt-1 w-64 rounded-md border border-border bg-popover p-2 shadow-lg">
@@ -248,7 +248,7 @@ export function CandidateAvatar({ displayName }: { displayName: string }) {
   return (
     <span
       aria-hidden="true"
-      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold ${colorClass}`}
+      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${colorClass}`}
     >
       {commentAuthorInitials(displayName)}
     </span>

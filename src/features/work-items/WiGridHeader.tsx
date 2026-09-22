@@ -65,7 +65,7 @@ function WiSortHeaderButton({
             className={`shrink-0 rounded p-0.5 focus:outline-none focus:ring-1 focus:ring-ring ${
               filterActive
                 ? "text-primary"
-                : "text-muted-foreground/40 hover:text-muted-foreground"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <Filter className="h-3 w-3" aria-hidden="true" />
