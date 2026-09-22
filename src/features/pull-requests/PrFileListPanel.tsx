@@ -1,7 +1,15 @@
+import { useState } from "react";
 import { ChevronDown, ChevronRight, Folder } from "lucide-react";
+import { ResizeHandle } from "@/components/ResizeHandle";
 import type { PrChangedFile } from "@/lib/azdoCommands";
-import { focusPrimaryPreview } from "@/lib/utils";
+import { writeStoredString } from "@/lib/storage";
+import { focusPrimaryPreview, storedNumber } from "@/lib/utils";
 import { changeTypeMarker, pathKey, type FileTreeRow } from "./PrFilesTabTypes";
+
+const FILE_LIST_WIDTH_STORAGE_KEY = "azdodeck:layout:prFileListWidth";
+const DEFAULT_FILE_LIST_WIDTH = 300;
+const MIN_FILE_LIST_WIDTH = 150;
+const MAX_FILE_LIST_WIDTH = 800;
 
 /** Sum of unresolved-thread counts for every file under a collapsed folder,
  * matched by path prefix so nested subfolders roll up too. */
@@ -58,8 +66,29 @@ export function PrFileListPanel({
   onSetAllViewed: (viewed: boolean) => void;
   fileListRef: React.RefObject<HTMLDivElement | null>;
 }) {
+  const [width, setWidth] = useState(() =>
+    storedNumber(FILE_LIST_WIDTH_STORAGE_KEY, DEFAULT_FILE_LIST_WIDTH, MIN_FILE_LIST_WIDTH, MAX_FILE_LIST_WIDTH),
+  );
+  function changeWidth(next: number) {
+    setWidth(next);
+    writeStoredString(FILE_LIST_WIDTH_STORAGE_KEY, String(Math.round(next)));
+  }
+
   return (
-    <div className="flex w-2/5 min-w-[150px] max-w-[340px] shrink-0 flex-col border-r border-border">
+    <div
+      className="relative flex max-w-[60%] shrink-0 flex-col border-r border-border"
+      style={{ width }}
+    >
+      <ResizeHandle
+        ariaLabel="Resize file list"
+        className="absolute inset-y-0 right-[-5px]"
+        direction={1}
+        max={MAX_FILE_LIST_WIDTH}
+        min={MIN_FILE_LIST_WIDTH}
+        onChange={changeWidth}
+        onReset={() => changeWidth(DEFAULT_FILE_LIST_WIDTH)}
+        value={width}
+      />
       <div className="flex shrink-0 items-center justify-between border-b border-border bg-muted px-2 py-1 text-[11px] text-muted-foreground">
         <span>
           {files.length} file{files.length === 1 ? "" : "s"} ·{" "}
