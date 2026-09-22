@@ -47,10 +47,6 @@ pub(crate) use work_items_query::*;
 
 pub(crate) const SCHEMA_VERSION: i64 = 20;
 
-/// Max rows kept in the my_work_items snapshot queries; sync notification
-/// diffing must know this cap to avoid treating re-entering rows as new.
-pub const MY_WORK_ITEMS_LIMIT: usize = 200;
-
 // ── AppDatabase ───────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]

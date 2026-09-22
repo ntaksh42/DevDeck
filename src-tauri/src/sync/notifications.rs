@@ -3,10 +3,7 @@ use std::collections::{HashMap, HashSet};
 use serde::Serialize;
 use serde_json::json;
 
-use crate::db::{
-    AppSettings, CachedReviewPr, CachedWorkItem, NewNotification, NotificationRule,
-    MY_WORK_ITEMS_LIMIT,
-};
+use crate::db::{AppSettings, CachedReviewPr, CachedWorkItem, NewNotification, NotificationRule};
 
 use super::SyncFailedEvent;
 
@@ -248,17 +245,6 @@ pub(super) fn work_item_notification_items(
     let previous_by_id: HashMap<i64, &CachedWorkItem> =
         previous.iter().map(|item| (item.id, item)).collect();
     let can_notify_assignments = settings.notify_work_item_assignments && !previous.is_empty();
-    // The snapshots are capped at MY_WORK_ITEMS_LIMIT rows. When the previous
-    // snapshot was full, an old item can re-enter the window without being
-    // newly assigned; only treat items changed after the window edge as new.
-    let previous_window_edge = if previous.len() >= MY_WORK_ITEMS_LIMIT {
-        previous
-            .iter()
-            .filter_map(|item| item.changed_date.as_deref())
-            .min()
-    } else {
-        None
-    };
 
     current
         .iter()
@@ -275,20 +261,11 @@ pub(super) fn work_item_notification_items(
             }
 
             if can_notify_assignments {
-                // <= because an item changed exactly at the window edge is
-                // indistinguishable from one that re-entered; prefer missing
-                // that rare notification over a false "Assigned" alert.
-                let reentered_window = match (item.changed_date.as_deref(), previous_window_edge) {
-                    (Some(changed), Some(edge)) => changed <= edge,
-                    _ => false,
-                };
-                if !reentered_window {
-                    return Some(work_item_notification_item(
-                        item,
-                        WorkItemNotificationKind::Assigned,
-                        None,
-                    ));
-                }
+                return Some(work_item_notification_item(
+                    item,
+                    WorkItemNotificationKind::Assigned,
+                    None,
+                ));
             }
             None
         })

@@ -140,6 +140,22 @@ fn make_cached_wi(id: i64, title: &str, changed: &str) -> CachedWorkItem {
 }
 
 #[test]
+fn list_my_work_items_returns_more_than_two_hundred_rows() {
+    let db_file = NamedTempFile::new().unwrap();
+    let db = AppDatabase::new(db_file.path().to_path_buf());
+    db.initialize().unwrap();
+    db.upsert_organization(make_org_draft("org1")).unwrap();
+
+    let items: Vec<_> = (1..=201)
+        .map(|id| make_cached_wi(id, "Assigned item", "2024-01-01T00:00:00Z"))
+        .collect();
+    db.replace_work_items("org1", &["p1"], &items, &items)
+        .unwrap();
+
+    assert_eq!(db.list_my_work_items("org1").unwrap().len(), 201);
+}
+
+#[test]
 fn replace_work_items_skips_unchanged_rows_and_deletes_stale() {
     let db_file = tempfile::NamedTempFile::new().unwrap();
     let db = AppDatabase::new(db_file.path().to_path_buf());

@@ -3,9 +3,7 @@ use super::notifications::{
     should_collect_work_item_notifications, work_item_notification_items, WorkItemNotificationKind,
 };
 use super::*;
-use crate::db::{
-    AppSettings, CachedReviewPr, CachedWorkItem, NotificationRule, MY_WORK_ITEMS_LIMIT,
-};
+use crate::db::{AppSettings, CachedReviewPr, CachedWorkItem, NotificationRule};
 
 fn rule(types: &[&str], projects: &[&str], repositories: &[&str]) -> NotificationRule {
     NotificationRule {
@@ -342,58 +340,6 @@ fn work_item_notification_items_reports_assignment_and_state_changes() {
     assert_eq!(notifications[0].state.as_deref(), Some("Done"));
     assert_eq!(notifications[1].kind, WorkItemNotificationKind::Assigned);
     assert_eq!(notifications[1].id, 3);
-}
-
-#[test]
-fn work_item_notification_items_skips_items_reentering_full_window() {
-    let settings = AppSettings {
-        desktop_notifications_enabled: true,
-        ..AppSettings::default()
-    };
-    // Previous snapshot is at the cap; its oldest change is 2026-06-02.
-    let previous: Vec<CachedWorkItem> = (1..=MY_WORK_ITEMS_LIMIT as i64)
-        .map(|id| work_item_changed(id, "Existing", Some("To Do"), "2026-06-02T00:00:00Z"))
-        .collect();
-    let mut current = previous.clone();
-    current.pop();
-    // Older than the window edge: re-entered, not newly assigned.
-    current.push(work_item_changed(
-        9001,
-        "Re-entered",
-        Some("To Do"),
-        "2026-06-01T00:00:00Z",
-    ));
-    // Exactly at the window edge: also treated as re-entered.
-    current.push(work_item_changed(
-        9003,
-        "At edge",
-        Some("To Do"),
-        "2026-06-02T00:00:00Z",
-    ));
-    // Newer than the window edge: genuinely new assignment.
-    current.push(work_item_changed(
-        9002,
-        "Fresh",
-        Some("To Do"),
-        "2026-06-03T00:00:00Z",
-    ));
-
-    let notifications = work_item_notification_items(&previous, &current, &settings);
-
-    assert_eq!(notifications.len(), 1);
-    assert_eq!(notifications[0].id, 9002);
-}
-
-fn work_item_changed(
-    id: i64,
-    title: &str,
-    state: Option<&str>,
-    changed_date: &str,
-) -> CachedWorkItem {
-    CachedWorkItem {
-        changed_date: Some(changed_date.to_string()),
-        ..work_item(id, title, state)
-    }
 }
 
 fn work_item(id: i64, title: &str, state: Option<&str>) -> CachedWorkItem {

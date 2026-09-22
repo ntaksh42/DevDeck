@@ -3,7 +3,7 @@ use rusqlite::{params, Connection};
 use crate::error::Result;
 
 use super::util::{escape_like_pattern, fts5_query, push_in_clause};
-use super::{CachedWorkItem, MY_WORK_ITEMS_LIMIT};
+use super::CachedWorkItem;
 
 pub(crate) fn upsert_work_items(conn: &Connection, items: &[CachedWorkItem]) -> Result<()> {
     // Azure DevOps bumps System.ChangedDate on every revision, so it works as
@@ -284,13 +284,9 @@ pub(crate) fn list_my_work_items(conn: &Connection, org_id: &str) -> Result<Vec<
         FROM my_work_items
         WHERE org_id = ?1
         ORDER BY changed_date DESC
-        LIMIT ?2
         "#,
     )?;
-    let rows = stmt.query_map(
-        params![org_id, MY_WORK_ITEMS_LIMIT as i64],
-        map_cached_work_item,
-    )?;
+    let rows = stmt.query_map(params![org_id], map_cached_work_item)?;
     let mut result = Vec::new();
     for row in rows {
         result.push(row?);
