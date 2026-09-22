@@ -170,7 +170,7 @@ export function BulkActionBar({
       ) : null}
       {stateBreakdown.length > 0 ? (
         <span className="flex items-center gap-1 text-xs text-muted-foreground">
-          <span className="text-muted-foreground/60" aria-hidden="true">·</span>
+          <span className="text-muted-foreground" aria-hidden="true">·</span>
           <BulkBreakdown entries={stateBreakdown} />
         </span>
       ) : null}

@@ -114,7 +114,7 @@ function BoardCard({
             event.stopPropagation();
             if (item.webUrl) openExternalUrl(item.webUrl);
           }}
-          className="shrink-0 font-mono text-primary hover:underline"
+          className="shrink-0 font-mono text-link hover:underline"
           title={`#${item.id}`}
         >
           #{item.id}

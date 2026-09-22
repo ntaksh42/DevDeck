@@ -23,7 +23,7 @@ function folderThreadCount(
 function ThreadCountBadge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
-    <span className="inline-flex shrink-0 items-center rounded-full border border-blue-200 bg-blue-50 px-1.5 text-[10px] font-medium text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
+    <span className="inline-flex shrink-0 items-center rounded-full border border-blue-200 bg-blue-50 px-1.5 text-[11px] font-medium text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
       {count}
     </span>
   );
@@ -81,7 +81,7 @@ export function PrFileListPanel({
             {viewedCount < files.length ? "Mark all" : "Clear all"}
           </button>
           <span
-            className="text-muted-foreground/70"
+            className="text-muted-foreground"
             title="j/k move files · v toggle viewed · n/p jump comments · [/] jump changed blocks"
           >
             j/k · v · n/p · [/]
@@ -128,7 +128,7 @@ export function PrFileListPanel({
                 ) : (
                   <ChevronDown className="h-3 w-3 shrink-0" aria-hidden="true" />
                 )}
-                <Folder className="h-3 w-3 shrink-0 text-muted-foreground/70" aria-hidden="true" />
+                <Folder className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <span className="min-w-0 flex-1 truncate font-mono">{row.name}</span>
                 <ThreadCountBadge count={threadCount} />
               </button>

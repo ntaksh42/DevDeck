@@ -136,7 +136,7 @@ export function NotificationRulesSettings() {
                     Mute matching notifications
                   </label>
                   <span
-                    className={`rounded px-1.5 py-px text-[10px] font-medium ${
+                    className={`rounded px-1.5 py-px text-[11px] font-medium ${
                       rule.mute
                         ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
                         : "bg-secondary text-muted-foreground"

@@ -157,8 +157,9 @@ function commentsBadge(review: PullRequestReview | null) {
       }, ${unresolved} unresolved`}
     >
       <MessageSquare className="h-3 w-3" aria-hidden="true" />
-      {commentThreads.length}
-      {hasUnresolved ? ` / ${unresolved} unresolved` : ""}
+      {hasUnresolved
+        ? `${unresolved} unresolved`
+        : `${commentThreads.length} resolved`}
     </span>
   );
 }
@@ -256,61 +257,65 @@ export function PrReviewHeader({
   const sourceRef = review?.sourceRefName ?? null;
   const targetRef = review?.targetRefName ?? selectedPr.targetRefName;
   const branchLabel = sourceRef
-    ? shortRef(sourceRef)
-    : `→ ${shortRef(targetRef)}`;
-  const branchTitle = sourceRef
     ? `${shortRef(sourceRef)} → ${shortRef(targetRef)}`
-    : `into ${shortRef(targetRef)}`;
+    : `→ ${shortRef(targetRef)}`;
+  const branchTitle = sourceRef ? branchLabel : `into ${shortRef(targetRef)}`;
 
-  const badges = [
+  // Only state and problems (CI, conflicts, open threads) sit in the colored
+  // badge row; approvals live with the reviewers they summarize.
+  const statusBadges = [
     ciBadge(selectedPr),
     conflictsBadge(selectedPr),
-    approvedBadge(review),
     commentsBadge(review),
   ].filter(Boolean);
+  const reviewers = review?.reviewers ?? [];
 
+  // Read top-down: what the PR is (title), what needs attention (status
+  // badges), then where it came from (id / branch / author) and who reviews.
   return (
-    <div className="flex shrink-0 flex-col gap-1 border-b border-border px-2 py-1">
-      <div className="flex items-center gap-2">
-        <StateBadge isDraft={isDraft} />
-        <span className="shrink-0 font-mono text-xs font-semibold text-muted-foreground">
-          #{selectedPr.pullRequestId}
-        </span>
-        <span
-          className="ml-auto min-w-0 truncate font-mono text-[11px] text-muted-foreground"
-          title={branchTitle}
-        >
-          {branchLabel}
-        </span>
-        {zoomControl}
-        {linkedWorkItemsButton}
-        {maximizeButton}
-      </div>
-      {/* The grid already shows the title in split view, so only repeat it in the
-          header when maximized (grid hidden) to avoid a duplicate on screen. */}
-      {maximized ? (
-        <span
-          className="truncate text-sm font-semibold text-foreground"
+    <div className="flex shrink-0 flex-col gap-1.5 border-b border-border px-2 py-1.5">
+      <div className="flex items-start gap-2">
+        <h2
+          className="line-clamp-2 min-w-0 flex-1 text-sm font-semibold leading-snug text-foreground"
           title={title}
         >
           {title}
-        </span>
-      ) : null}
+        </h2>
+        <div className="flex shrink-0 items-center gap-1">
+          {zoomControl}
+          {linkedWorkItemsButton}
+          {maximizeButton}
+        </div>
+      </div>
       <div
         role="group"
         aria-label="Pull request metadata"
-        className="flex min-w-0 flex-wrap items-center gap-1"
+        className="flex min-w-0 flex-col gap-1"
       >
-        <p className="mr-1 min-w-0 truncate text-xs text-muted-foreground">
+        <div className="flex min-w-0 flex-wrap items-center gap-1">
+          <StateBadge isDraft={isDraft} />
+          {statusBadges}
+        </div>
+        <p className="min-w-0 truncate text-xs text-muted-foreground">
+          <span className="font-mono font-semibold text-foreground">
+            #{selectedPr.pullRequestId}
+          </span>
+          {" · "}
+          <span className="font-mono" title={branchTitle}>
+            {branchLabel}
+          </span>
+          {" · "}
           {createdBy ?? "Unknown"}
           {creationDate ? ` · opened ${formatRelativeDate(creationDate)}` : ""}
         </p>
-        {badges}
-        {review
-          ? review.reviewers.map((reviewer) => (
+        {reviewers.length > 0 ? (
+          <div className="flex min-w-0 flex-wrap items-center gap-1">
+            <span className="mr-0.5 text-xs text-muted-foreground">Reviewers</span>
+            {approvedBadge(review)}
+            {reviewers.map((reviewer) => (
               <span
                 key={reviewer.id ?? `${reviewer.displayName}-${reviewer.isMe}`}
-                className="inline-flex items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
+                className="inline-flex items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5 text-[11px] text-foreground"
                 title={`${reviewer.voteLabel}${reviewer.isRequired ? " (Required)" : ""}`}
               >
                 {reviewer.displayName}
@@ -327,7 +332,7 @@ export function PrReviewHeader({
                       onClick={() => onToggleReviewerRequired(reviewer)}
                       title={reviewer.isRequired ? "Make optional" : "Make required"}
                       aria-label={`${reviewer.isRequired ? "Make optional" : "Make required"}: ${reviewer.displayName}`}
-                      className="rounded px-1 text-[10px] font-medium uppercase tracking-wide hover:bg-background disabled:opacity-50"
+                      className="rounded px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-50"
                     >
                       {reviewer.isRequired ? "Req" : "Opt"}
                     </button>
@@ -337,15 +342,16 @@ export function PrReviewHeader({
                       onClick={() => onRemoveReviewer(reviewer)}
                       aria-label={`Remove reviewer ${reviewer.displayName}`}
                       title="Remove reviewer"
-                      className="rounded p-0.5 hover:bg-background hover:text-destructive disabled:opacity-50"
+                      className="rounded p-0.5 text-muted-foreground hover:bg-background hover:text-destructive disabled:opacity-50"
                     >
                       <X className="h-3 w-3" aria-hidden="true" />
                     </button>
                   </>
                 ) : null}
               </span>
-            ))
-          : null}
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   );

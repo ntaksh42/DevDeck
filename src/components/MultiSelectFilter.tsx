@@ -156,7 +156,7 @@ export function MultiSelectFilter({
         </span>
         <span className="flex shrink-0 items-center gap-1">
           {selected.length > 0 ? (
-            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground">
+            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold leading-none text-primary-foreground">
               {selected.length}
             </span>
           ) : null}

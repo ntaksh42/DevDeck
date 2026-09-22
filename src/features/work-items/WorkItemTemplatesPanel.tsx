@@ -317,7 +317,7 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
                         <div className="flex items-center gap-1 text-sm font-medium">
                           <span className="min-w-0 truncate">{template.name}</span>
                           {template.isDefault ? (
-                            <span className="shrink-0 rounded bg-amber-500/15 px-1 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                            <span className="shrink-0 rounded bg-amber-500/15 px-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
                               Default
                             </span>
                           ) : null}
@@ -394,7 +394,7 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
                 <label className="grid gap-1.5">
                   <span className="text-xs font-medium text-muted-foreground">
                     Title
-                    <span className="ml-1 font-normal text-muted-foreground/70">(optional seed)</span>
+                    <span className="ml-1 font-normal text-muted-foreground">(optional seed)</span>
                   </span>
                   <input
                     value={draft.title}
@@ -439,7 +439,7 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
                 <label className="grid gap-1.5">
                   <span className="text-xs font-medium text-muted-foreground">
                     Tags
-                    <span className="ml-1 font-normal text-muted-foreground/70">(comma separated)</span>
+                    <span className="ml-1 font-normal text-muted-foreground">(comma separated)</span>
                   </span>
                   <input
                     value={draft.tags}

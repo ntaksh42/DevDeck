@@ -4,6 +4,7 @@ import { type MyCreatedPullRequestSummary } from "@/lib/azdoCommands";
 import { formatDate, formatRelativeDate } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
 import { sortLabels, type SortKey, type SortState } from "./myPullRequestsTypes";
+import { gridRowStateClass } from "@/lib/gridRowState";
 
 export function renderCell(key: SortKey, pr: MyCreatedPullRequestSummary): ReactNode {
   switch (key) {
@@ -15,7 +16,7 @@ export function renderCell(key: SortKey, pr: MyCreatedPullRequestSummary): React
             e.stopPropagation();
             if (pr.webUrl) openExternalUrl(pr.webUrl);
           }}
-          className="truncate text-left font-mono text-xs text-primary hover:underline"
+          className="truncate text-left font-mono text-xs text-link hover:underline"
           title={`PR #${pr.pullRequestId}`}
         >
           #{pr.pullRequestId}
@@ -60,7 +61,7 @@ export function renderCell(key: SortKey, pr: MyCreatedPullRequestSummary): React
           title={`${pr.approvals} of ${pr.reviewerCount} reviewers approved`}
         >
           <CheckCircle2
-            className={`h-3.5 w-3.5 ${complete ? "text-green-600 dark:text-green-400" : "text-muted-foreground/50"}`}
+            className={`h-3.5 w-3.5 ${complete ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}
             aria-hidden="true"
           />
           {pr.approvals}/{pr.reviewerCount}
@@ -140,9 +141,7 @@ export const CreatedPrRow = forwardRef<
           if (pr.webUrl) openExternalUrl(pr.webUrl);
         }
       }}
-      className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
-        selected ? "bg-secondary" : inMultiSelection ? "bg-secondary/50" : "hover:bg-muted/50"
-      }`}
+      className={`grid cursor-pointer select-none items-center gap-2 border-b border-border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${gridRowStateClass({ selected, inMultiSelection })}`}
       style={{ gridTemplateColumns: columnTemplate }}
     >
       {visibleColumns.map((key) => (

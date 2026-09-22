@@ -15,14 +15,17 @@
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
     --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted-foreground: 215 20% 38%;
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
+    --border: 214 28% 84%;
+    --input: 214 28% 84%;
     --ring: 210 84% 57%;
+    /* Text-only link blue. \`primary\` stays the brighter fill color for
+       buttons; as small text it is only 3.27:1 on white, this is 5.38:1. */
+    --link: 210 80% 42%;
     --radius: 0.5rem;
   }
 
@@ -38,14 +41,15 @@
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
     --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted-foreground: 215 22% 72%;
     --accent: 217.2 32.6% 17.5%;
     --accent-foreground: 210 40% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
+    --border: 217 28% 26%;
+    --input: 217 28% 26%;
     --ring: 210 90% 70%;
+    --link: 210 95% 76%;
   }
 }
 
@@ -163,6 +167,29 @@
 .dark .hljs-bullet,
 .dark .hljs-meta {
   color: #ffa657;
+}
+
+/* Panel tabs: dockview's stock themes paint background tabs at 35-70% alpha
+   grey, which reads as disabled. Background tabs use the app's muted text and
+   the visible tab gets the foreground color, a heavier weight and a primary
+   underline so the current tab is obvious at a glance. */
+.dockview-theme-light .dv-dockview,
+.dockview-theme-dark .dv-dockview {
+  --dv-group-view-background-color: hsl(var(--background));
+  --dv-tabs-and-actions-container-background-color: hsl(var(--muted));
+  --dv-activegroup-visiblepanel-tab-background-color: hsl(var(--background));
+  --dv-inactivegroup-visiblepanel-tab-background-color: hsl(var(--background));
+  --dv-activegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-activegroup-visiblepanel-tab-color: hsl(var(--foreground));
+  --dv-inactivegroup-visiblepanel-tab-color: hsl(var(--foreground));
+  --dv-activegroup-hiddenpanel-tab-color: hsl(var(--muted-foreground));
+  --dv-inactivegroup-hiddenpanel-tab-color: hsl(var(--muted-foreground));
+}
+
+.dv-tab.dv-active-tab {
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 hsl(var(--primary));
 }
 
 /* dockview draws its own group-boundary drag handle (`.dv-sash`) the full

@@ -260,7 +260,7 @@ export function CreateWorkItemDialog({
           <label className="grid gap-1.5">
             <span className={labelClass}>
               Description
-              <span className="ml-1 font-normal text-muted-foreground/70">(optional)</span>
+              <span className="ml-1 font-normal text-muted-foreground">(optional)</span>
             </span>
             <textarea
               value={description}
@@ -274,7 +274,7 @@ export function CreateWorkItemDialog({
             <label className="grid gap-1.5">
               <span className={labelClass}>
                 Assigned to
-                <span className="ml-1 font-normal text-muted-foreground/70">
+                <span className="ml-1 font-normal text-muted-foreground">
                   (name or email)
                 </span>
               </span>
@@ -340,7 +340,7 @@ export function CreateWorkItemDialog({
           <label className="grid gap-1.5">
             <span className={labelClass}>
               Tags
-              <span className="ml-1 font-normal text-muted-foreground/70">
+              <span className="ml-1 font-normal text-muted-foreground">
                 (semicolon separated)
               </span>
             </span>

@@ -133,7 +133,7 @@ export function PresetMenu({
               </p>
             )}
             {presets.length >= MAX_FIELD_PRESETS ? (
-              <p className="mt-1 text-[10px] text-muted-foreground">
+              <p className="mt-1 text-[11px] text-muted-foreground">
                 Up to {MAX_FIELD_PRESETS} presets.
               </p>
             ) : null}

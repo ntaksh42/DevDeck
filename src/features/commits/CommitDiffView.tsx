@@ -100,10 +100,10 @@ export function CommitDiffView({
           {...(isHunkStart ? { "data-hunk": "true" } : {})}
           className={`grid grid-cols-[3rem_3rem_1fr] ${rowBackground(line.kind)}`}
         >
-          <span className="select-none border-r border-border/60 pr-1 text-right text-muted-foreground/70">
+          <span className="select-none border-r border-border/60 pr-1 text-right text-muted-foreground">
             {line.baseLine ?? ""}
           </span>
-          <span className="select-none border-r border-border/60 pr-1 text-right text-muted-foreground/70">
+          <span className="select-none border-r border-border/60 pr-1 text-right text-muted-foreground">
             {line.targetLine ?? ""}
           </span>
           <span className="whitespace-pre-wrap break-all pl-1">

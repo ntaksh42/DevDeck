@@ -168,7 +168,7 @@ export function FieldConfigMenu({
                 />
                 <span className="min-w-0 flex-1 truncate">{field.label}</span>
                 {field.editable ? (
-                  <span className="rounded border border-border bg-background px-1 text-[10px] text-muted-foreground">
+                  <span className="rounded border border-border bg-background px-1 text-[11px] text-muted-foreground">
                     editable
                   </span>
                 ) : null}
@@ -205,11 +205,11 @@ export function FieldConfigMenu({
                   >
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-medium">{field.name}</span>
-                      <span className="block truncate font-mono text-[10px] text-muted-foreground">
+                      <span className="block truncate font-mono text-[11px] text-muted-foreground">
                         {field.referenceName}
                       </span>
                     </span>
-                    <span className="shrink-0 rounded border border-border bg-card px-1 text-[10px] text-muted-foreground">
+                    <span className="shrink-0 rounded border border-border bg-card px-1 text-[11px] text-muted-foreground">
                       {field.fieldType}
                     </span>
                   </button>
@@ -270,7 +270,7 @@ export function FieldConfigMenu({
                 </button>
               </div>
               {customFieldError ? (
-                <p className="text-[10px] leading-3 text-destructive">{customFieldError}</p>
+                <p className="text-[11px] leading-3 text-destructive">{customFieldError}</p>
               ) : null}
             </form>
           </div>

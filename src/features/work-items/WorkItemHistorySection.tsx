@@ -40,7 +40,7 @@ export function WorkItemHistorySection({ preview }: { preview: WorkItemPreview }
           }`}
           aria-hidden="true"
         />
-        <h3 className="text-[10px] font-extrabold uppercase tracking-wider leading-4 text-slate-800 dark:text-slate-100">
+        <h3 className="text-[11px] font-extrabold uppercase tracking-wider leading-4 text-slate-800 dark:text-slate-100">
           History
         </h3>
         {open && updatesQuery.isFetching ? (

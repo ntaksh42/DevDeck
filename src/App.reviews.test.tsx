@@ -2,6 +2,12 @@ import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { organization, renderApp } from "./test/appTestHelpers";
 
+// The PR preview header repeats the selected PR's title, so title lookups are
+// scoped to the grid.
+async function reviewGrid() {
+  return within(await screen.findByRole("grid", { name: "My review pull requests" }));
+}
+
 const invokeMock = vi.fn();
 const openUrlMock = vi.fn();
 const openPathMock = vi.fn();
@@ -268,7 +274,7 @@ describe("App — Reviews", () => {
     });
 
     renderApp();
-    const rowAlpha = (await screen.findByText("Alpha review")).closest(
+    const rowAlpha = (await (await reviewGrid()).findByText("Alpha review")).closest(
       "[role='row']",
     ) as HTMLElement;
     fireEvent.click(rowAlpha);
@@ -280,10 +286,10 @@ describe("App — Reviews", () => {
     tauriEventHandlers.get("sync:updated")?.({ payload: { scopes: ["myReviews"] } });
 
     await waitFor(() => {
-      expect(screen.queryByText("Alpha review")).toBeNull();
+      expect(within(screen.getByRole("grid", { name: "My review pull requests" })).queryByText("Alpha review")).toBeNull();
     });
     await waitFor(() => {
-      const rowBeta = screen.getByText("Beta review").closest("[role='row']");
+      const rowBeta = within(screen.getByRole("grid", { name: "My review pull requests" })).getByText("Beta review").closest("[role='row']");
       expect(document.activeElement).toBe(rowBeta);
     });
   });
@@ -335,7 +341,7 @@ describe("App — Reviews", () => {
     });
 
     renderApp();
-    const rowAlpha = (await screen.findByText("Alpha review")).closest(
+    const rowAlpha = (await (await reviewGrid()).findByText("Alpha review")).closest(
       "[role='row']",
     ) as HTMLElement;
     fireEvent.click(rowAlpha);
@@ -344,20 +350,20 @@ describe("App — Reviews", () => {
     // E marks the selected row done; it leaves the inbox.
     fireEvent.keyDown(grid, { key: "e" });
     await waitFor(() => {
-      expect(screen.queryByText("Alpha review")).toBeNull();
+      expect(within(grid).queryByText("Alpha review")).toBeNull();
     });
-    expect(screen.getByText("Beta review")).toBeTruthy();
+    expect(within(grid).getByText("Beta review")).toBeTruthy();
 
     // The done view lists it; E restores it back to the inbox.
     fireEvent.click(screen.getByRole("button", { name: "Done (1)" }));
-    expect(await screen.findByText("Alpha review")).toBeTruthy();
-    expect(screen.queryByText("Beta review")).toBeNull();
+    expect(await within(grid).findByText("Alpha review")).toBeTruthy();
+    expect(within(grid).queryByText("Beta review")).toBeNull();
     fireEvent.keyDown(grid, { key: "e" });
     await waitFor(() => {
-      expect(screen.queryByText("Alpha review")).toBeNull();
+      expect(within(grid).queryByText("Alpha review")).toBeNull();
     });
     fireEvent.click(screen.getByRole("button", { name: "Back to inbox" }));
-    expect(await screen.findByText("Alpha review")).toBeTruthy();
-    expect(screen.getByText("Beta review")).toBeTruthy();
+    expect(await within(grid).findByText("Alpha review")).toBeTruthy();
+    expect(within(grid).getByText("Beta review")).toBeTruthy();
   });
 });

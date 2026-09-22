@@ -70,12 +70,12 @@ function VariableRow({ variable }: { variable: PipelineVariable }) {
       <td className="py-1 align-top">
         <div className="flex flex-wrap gap-1">
           {variable.isSecret && (
-            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
               Secret
             </span>
           )}
           {variable.allowOverride && (
-            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+            <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
               Overridable
             </span>
           )}
@@ -183,7 +183,7 @@ export function PipelineDefinitionPanel({
               ) : (
                 <table className="w-full text-left text-xs">
                   <thead>
-                    <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <tr className="border-b border-border text-[11px] uppercase tracking-wide text-muted-foreground">
                       <th className="py-1 pr-3 font-medium">Name</th>
                       <th className="py-1 pr-3 font-medium">Value</th>
                       <th className="py-1 font-medium">Flags</th>

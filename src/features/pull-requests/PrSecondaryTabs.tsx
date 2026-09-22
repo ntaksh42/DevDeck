@@ -95,7 +95,7 @@ export function ResultTab({ selectedPr }: { selectedPr: ReviewPullRequestSummary
         >
           <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
           Open in browser
-          <span className="text-muted-foreground/70">o</span>
+          <span className="text-muted-foreground">o</span>
         </button>
       </div>
       {openError ? (

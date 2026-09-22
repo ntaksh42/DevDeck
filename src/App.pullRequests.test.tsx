@@ -129,7 +129,8 @@ describe("App — Pull Requests", () => {
         },
       });
     });
-    expect(await screen.findByText("Add pull request search")).toBeTruthy();
+    const searchGrid = await screen.findByRole("grid", { name: "Pull request search results" });
+    expect(await within(searchGrid).findByText("Add pull request search")).toBeTruthy();
     expect(screen.getByText("Platform / azdo-dashboard")).toBeTruthy();
 
     // Status is now a multi-select filter: non-active statuses are selectable

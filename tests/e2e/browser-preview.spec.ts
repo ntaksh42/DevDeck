@@ -12,7 +12,7 @@ test.describe("browser preview", () => {
     await expect(main.getByText("Run a search to load pull requests.")).toBeVisible();
 
     await main.getByRole("button", { name: "Search" }).click();
-    await expect(main.getByText("Add pull request search dashboard")).toBeVisible();
+    await expect(main.getByRole("grid", { name: "Pull request search results" }).getByText("Add pull request search dashboard")).toBeVisible();
     await expect(main.getByText("Platform / azdo-dashboard")).toBeVisible();
 
     await page.getByRole("button", { name: "My Reviews" }).click();
@@ -55,8 +55,8 @@ test.describe("browser preview", () => {
     await main.getByRole("button", { name: /Rejected by you/ }).click();
 
     await main.getByPlaceholder("Filter by repo, title, author…").fill("auth");
-    await expect(main.getByText("Migrate token signing to RS256")).toBeVisible();
-    await expect(main.getByText("Add rate limiting middleware to all endpoints")).toHaveCount(0);
+    await expect(reviewGrid.getByText("Migrate token signing to RS256")).toBeVisible();
+    await expect(reviewGrid.getByText("Add rate limiting middleware to all endpoints")).toHaveCount(0);
 
     await main.getByPlaceholder("Filter by repo, title, author…").fill("");
     await main.getByLabel("Show Drafts").check();
@@ -135,7 +135,7 @@ test.describe("browser preview", () => {
     await main.getByRole("button", { name: "Search" }).click();
 
     await expect(
-      main.getByText("Add pull request search dashboard #1", { exact: true }),
+      main.getByRole("grid", { name: "Pull request search results" }).getByText("Add pull request search dashboard #1", { exact: true }),
     ).toBeVisible();
     await expect(
       main.getByText("Refactor authentication flow with OAuth 2.0 PKCE #2", {

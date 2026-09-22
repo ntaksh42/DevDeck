@@ -8,6 +8,7 @@ import {
 import type { ReviewPullRequestSummary } from '@/lib/azdoCommands';
 import { formatDate, formatRelativeDate } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
+import { STALE_TEXT_CLASS } from '@/lib/gridRowState';
 import { VOTE_BADGE_CLASSES, voteTone } from './voteVisual';
 import { reviewAgeDays } from './myReviewsHelpers';
 import type { SortKey, VoteValue } from './myReviewsTypes';
@@ -72,7 +73,7 @@ export function CiBadge({ pr }: { pr: ReviewPullRequestSummary }) {
   } else {
     icon = (
       <CircleDashed
-        className="h-3.5 w-3.5 text-muted-foreground/50"
+        className="h-3.5 w-3.5 text-muted-foreground"
         aria-hidden="true"
       />
     );
@@ -105,7 +106,7 @@ export function renderPrCell(
             e.stopPropagation();
             if (pr.webUrl) openExternalUrl(pr.webUrl);
           }}
-          className="truncate text-left font-mono text-xs text-primary hover:underline"
+          className="truncate text-left font-mono text-xs text-link hover:underline"
           title={`PR #${pr.pullRequestId}`}
         >
           #{pr.pullRequestId}
@@ -122,7 +123,7 @@ export function renderPrCell(
         <div className="flex min-w-0 items-center gap-1.5">
           {returned ? (
             <span
-              className="inline-flex shrink-0 items-center rounded border border-purple-300 bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-800 dark:border-purple-800 dark:bg-purple-950 dark:text-purple-300"
+              className="inline-flex shrink-0 items-center rounded border border-purple-300 bg-purple-100 px-1.5 py-0.5 text-[11px] font-medium text-purple-800 dark:border-purple-800 dark:bg-purple-950 dark:text-purple-300"
               title="The author pushed new changes after your review — returned to you"
             >
               Returned
@@ -138,7 +139,7 @@ export function renderPrCell(
           </span>
           {pr.mergeStatus === 'conflicts' ? (
             <span
-              className="inline-flex shrink-0 items-center rounded border border-red-200 bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+              className="inline-flex shrink-0 items-center rounded border border-red-200 bg-red-100 px-1.5 py-0.5 text-[11px] font-medium text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
               title="This pull request has merge conflicts"
             >
               Conflicts
@@ -158,7 +159,7 @@ export function renderPrCell(
     case 'creationDate':
       return (
         <span
-          className={`text-xs ${isStale ? 'font-medium text-orange-600 dark:text-orange-400' : 'text-muted-foreground'}`}
+          className={`text-xs ${isStale ? STALE_TEXT_CLASS : 'text-muted-foreground'}`}
           title={formatDate(pr.creationDate)}
         >
           {formatRelativeDate(pr.creationDate)}
@@ -168,7 +169,7 @@ export function renderPrCell(
       const days = reviewAgeDays(pr.creationDate);
       return (
         <span
-          className={`text-xs tabular-nums ${isStale ? 'font-medium text-orange-600 dark:text-orange-400' : 'text-muted-foreground'}`}
+          className={`text-xs tabular-nums ${isStale ? STALE_TEXT_CLASS : 'text-muted-foreground'}`}
           title={
             days === null
               ? 'Review age unavailable'

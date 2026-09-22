@@ -130,7 +130,7 @@ export function CodeFolderView({
                       onClick={() =>
                         openExternalUrl(commitUrl(organization, repo, item.lastCommit!.commitId))
                       }
-                      className="shrink-0 font-mono text-xs text-primary hover:underline"
+                      className="shrink-0 font-mono text-xs text-link hover:underline"
                       title="Open commit in Azure DevOps"
                     >
                       {item.lastCommit.shortId}

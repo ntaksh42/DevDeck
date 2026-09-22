@@ -9,8 +9,8 @@ import { openExternalUrl } from '@/lib/openExternal';
 
 // ─── Grid layout constants ────────────────────────────────────────────────────
 
-export const DEFAULT_WI_COLUMN_WIDTHS = [46, 64, 60, 180, 82, 84, 140, 68];
-export const WI_COLUMN_MIN_WIDTHS = [44, 58, 56, 150, 70, 74, 60, 60];
+export const DEFAULT_WI_COLUMN_WIDTHS = [46, 64, 68, 180, 82, 92, 140, 72];
+export const WI_COLUMN_MIN_WIDTHS = [44, 58, 68, 150, 70, 92, 60, 72];
 export const WI_COLUMN_MAX_WIDTHS = [120, 200, 180, 720, 300, 260, 400, 160];
 export const WI_COLUMN_WIDTHS_STORAGE_KEY = storageKey("azdodeck:layout:wiSearchGridColumnWidths", 3);
 export const WI_VISIBLE_COLUMNS_STORAGE_KEY = storageKey("azdodeck:layout:wiSearchGridVisibleColumns", 2);
@@ -57,7 +57,7 @@ export const wiSortLabels: Record<WiSortKey, string> = {
   state: "State",
   title: "Title",
   projectName: "Project",
-  assignedTo: "Assigned To",
+  assignedTo: "Assignee",
   tags: "Tags",
   changedDate: "Changed",
 };
@@ -195,7 +195,7 @@ export function workItemCellValue(item: WorkItemSummary, column: WiSortKey): Rea
             e.stopPropagation();
             if (item.webUrl) openExternalUrl(item.webUrl);
           }}
-          className="truncate text-left font-mono text-xs text-primary hover:underline"
+          className="truncate text-left font-mono text-xs text-link hover:underline"
           title={`#${item.id}`}
         >
           #{item.id}

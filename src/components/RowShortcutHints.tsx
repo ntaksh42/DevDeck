@@ -11,7 +11,7 @@ export function RowShortcutHints({ hints }: { hints: RowShortcut[] }) {
     >
       {hints.map((hint) => (
         <span key={hint.keys} className="inline-flex items-center gap-1">
-          <kbd className="rounded border border-border bg-muted px-1 font-mono text-[10px] leading-4 text-foreground">
+          <kbd className="rounded border border-border bg-muted px-1 font-mono text-[11px] leading-4 text-foreground">
             {hint.keys}
           </kbd>
           {hint.label}

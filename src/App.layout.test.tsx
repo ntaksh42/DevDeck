@@ -2,6 +2,13 @@ import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { organization, renderApp } from "./test/appTestHelpers";
 
+// The PR preview header repeats the selected PR's title, so title lookups are
+// scoped to the grid.
+async function findReviewGridText(text: string) {
+  const grid = await screen.findByRole("grid", { name: "My review pull requests" });
+  return within(grid).findByText(text);
+}
+
 const invokeMock = vi.fn();
 const openUrlMock = vi.fn();
 const openPathMock = vi.fn();
@@ -107,7 +114,7 @@ describe("App — Layout", () => {
 
     renderApp();
 
-    await screen.findByText("Needs review");
+    await findReviewGridText("Needs review");
     const navResize = screen.getByRole("separator", { name: "Resize navigation" });
     expect(navResize.getAttribute("aria-valuenow")).toBe("232");
     fireEvent.keyDown(navResize, { key: "ArrowRight" });
@@ -168,7 +175,7 @@ describe("App — Layout", () => {
 
     renderApp();
 
-    await screen.findByText("Needs review");
+    await findReviewGridText("Needs review");
     const previewResize = screen.getByRole("separator", { name: "Resize Conversation" });
 
     fireEvent.pointerDown(previewResize, { clientX: 100, pointerId: 1 });

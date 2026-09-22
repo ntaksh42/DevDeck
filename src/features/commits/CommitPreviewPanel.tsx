@@ -78,12 +78,12 @@ function CommitRelatedPrsPanel({
               <span className="shrink-0 font-mono text-muted-foreground">!{pr.pullRequestId}</span>
               <span className="min-w-0 flex-1 truncate font-medium text-foreground">{pr.title}</span>
               <span
-                className={`shrink-0 rounded border px-1 py-px text-[10px] font-semibold ${prStatusBadgeClass(pr.status)}`}
+                className={`shrink-0 rounded border px-1 py-px text-[11px] font-semibold ${prStatusBadgeClass(pr.status)}`}
               >
                 {PR_STATUS_LABELS[pr.status.toLowerCase()] ?? pr.status}
               </span>
               {pr.myVote !== 0 ? (
-                <span className="shrink-0 text-[10px] text-muted-foreground" title="Your vote">
+                <span className="shrink-0 text-[11px] text-muted-foreground" title="Your vote">
                   {pr.myVoteLabel}
                 </span>
               ) : null}

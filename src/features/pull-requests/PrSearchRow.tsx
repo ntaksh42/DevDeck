@@ -4,6 +4,7 @@ import { formatDate, formatRelativeDate } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
 import { focusPrimaryPreview } from '@/lib/utils';
 import { PR_STATUS_COLORS, type PrSearchColumnKey } from './PrSearchTypes';
+import { gridRowStateClass } from '@/lib/gridRowState';
 
 // Cells stay direct grid items (keyed Fragment) so the column template lines up.
 export function renderPrSearchCell(key: PrSearchColumnKey, pr: PullRequestSummary): ReactNode {
@@ -13,7 +14,7 @@ export function renderPrSearchCell(key: PrSearchColumnKey, pr: PullRequestSummar
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); if (pr.webUrl) openExternalUrl(pr.webUrl); }}
-          className="truncate text-left font-mono text-xs text-primary hover:underline"
+          className="truncate text-left font-mono text-xs text-link hover:underline"
           title={`PR #${pr.pullRequestId}`}
         >
           #{pr.pullRequestId}
@@ -86,9 +87,7 @@ export const PrSearchRow = forwardRef<
           else focusPrimaryPreview();
         }
       }}
-      className={`grid h-[29px] cursor-pointer select-none items-center gap-2 border-b border-border px-2 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
-        selected ? "bg-secondary" : inMultiSelection ? "bg-secondary/50" : "hover:bg-muted/50"
-      }`}
+      className={`grid h-[29px] cursor-pointer select-none items-center gap-2 border-b border-border px-2 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${gridRowStateClass({ selected, inMultiSelection })}`}
       style={{ gridTemplateColumns: columnTemplate }}
     >
       {visibleColumns.map((key) => (
