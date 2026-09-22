@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 /**
  * Popover for toggling which grid columns are visible. Required columns are
@@ -10,6 +10,8 @@ import { useEffect, useRef } from "react";
  * focus returns to the originating grid (`data-primary-grid="true"`) so keyboard
  * navigation resumes there instead of being stranded (issue #442). Navigation
  * keys are contained so the grid behind the popover does not also react.
+ * `children` render between the toggles and "Show all"; mark their focusable
+ * controls with `data-colvis-item="true"` to join the Up/Down cycle.
  */
 export function ColumnVisibilityMenu<K extends string>({
   anchorRect,
@@ -19,6 +21,7 @@ export function ColumnVisibilityMenu<K extends string>({
   onToggle,
   onReset,
   onClose,
+  children,
 }: {
   anchorRect: DOMRect;
   columns: { key: K; label: string }[];
@@ -27,6 +30,7 @@ export function ColumnVisibilityMenu<K extends string>({
   onToggle: (key: K) => void;
   onReset: () => void;
   onClose: () => void;
+  children?: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -116,8 +120,8 @@ export function ColumnVisibilityMenu<K extends string>({
       role="menu"
       aria-label="Visible columns"
       onKeyDown={handleMenuKeyDown}
-      className="fixed z-50 w-56 rounded-md border border-border bg-popover p-1 shadow-lg"
-      style={{ top, left }}
+      className="fixed z-50 w-56 overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-lg"
+      style={{ top, left, maxHeight: window.innerHeight - top - 8 }}
     >
       <div className="border-b border-border px-2 py-1.5 text-xs font-semibold text-foreground">
         Visible columns
@@ -143,6 +147,7 @@ export function ColumnVisibilityMenu<K extends string>({
           );
         })}
       </div>
+      {children}
       <div className="border-t border-border p-1">
         <button
           type="button"

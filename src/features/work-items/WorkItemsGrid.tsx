@@ -24,6 +24,7 @@ import { WiGridHeader } from './WiGridHeader';
 import { WiGridBody } from './WiGridBody';
 import { WiGridStatusBar } from './WiGridStatusBar';
 import { WiColumnFilterDropdown } from './WiColumnFilterDropdown';
+import { WiFieldColumnsSection } from './WiFieldColumnsSection';
 import { useWiGridState } from './useWiGridState';
 import { useWiGridLogic } from './useWiGridLogic';
 import type { WorkItemSummary } from '@/lib/azdoCommands';
@@ -47,6 +48,8 @@ export function WorkItemsGrid({
   isFetching = false,
   activeExternalFilterCount = 0,
   extraColumns = EMPTY_EXTRA_COLUMNS,
+  fieldColumnsSource,
+  onExtraColumnsChange,
   initialSort,
   onClearExternalFilters,
   onSortChange,
@@ -64,6 +67,10 @@ export function WorkItemsGrid({
   isFetching?: boolean;
   activeExternalFilterCount?: number;
   extraColumns?: string[];
+  /** Org/project whose fields the Columns menu offers as extra columns. */
+  fieldColumnsSource?: { organizationId: string; projectId: string };
+  /** When set, the Columns menu can add/remove extra field columns. */
+  onExtraColumnsChange?: (columns: string[]) => void;
   initialSort?: WiSortState;
   onClearExternalFilters?: () => void;
   onSortChange?: (sort: WiSortState) => void;
@@ -345,7 +352,16 @@ export function WorkItemsGrid({
           onToggle={state.toggleColumnVisibility}
           onReset={state.resetColumnVisibility}
           onClose={() => state.setColumnMenuRect(null)}
-        />
+        >
+          {fieldColumnsSource && onExtraColumnsChange ? (
+            <WiFieldColumnsSection
+              organizationId={fieldColumnsSource.organizationId}
+              projectId={fieldColumnsSource.projectId}
+              extraColumns={extraColumns}
+              onExtraColumnsChange={onExtraColumnsChange}
+            />
+          ) : null}
+        </ColumnVisibilityMenu>
       ) : null}
       {duplicateDraft ? (
         <CreateWorkItemDialog

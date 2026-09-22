@@ -165,3 +165,27 @@ test.describe("browser preview", () => {
     await expect(main.getByText("Comment posted")).toBeVisible();
   });
 });
+
+test("adds a searched field as a Work Item View column from the Columns menu", async ({ page }) => {
+  await page.goto("/");
+  const main = page.getByRole("main");
+  await expect(main.getByRole("heading", { name: "My Reviews" })).toBeVisible();
+  await page.keyboard.press("g");
+  await page.keyboard.press("v");
+
+  await main.getByRole("button", { name: "Columns" }).click();
+  const menu = page.getByRole("menu", { name: "Visible columns" });
+  const search = menu.getByLabel("Search fields to add as columns");
+  await search.focus();
+  await search.fill("prio");
+  await expect(menu.getByRole("button", { name: /Severity/ })).toHaveCount(0);
+  await search.press("Enter");
+
+  await expect(main.getByRole("columnheader", { name: "Priority" })).toBeVisible();
+  await expect(menu.getByLabel("Remove column Microsoft.VSTS.Common.Priority")).toBeChecked();
+  await expect(search).toBeFocused();
+
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(page.locator('[data-primary-grid="true"]')).toBeFocused();
+});

@@ -146,6 +146,10 @@ export function WorkItemViewsPanel({
       !!selectedViewProjectId &&
       !!selectedView.wiql.trim(),
     staleTime: 5 * 60_000,
+    // Adding/removing an extra column changes the key; keep the same view's
+    // rows on screen so the grid (and its focus) isn't swapped for a spinner.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[2] === selectedView?.id ? previous : undefined,
     refetchInterval: selectedView?.refreshIntervalSec
       ? selectedView.refreshIntervalSec * 1000
       : false,
@@ -452,6 +456,11 @@ export function WorkItemViewsPanel({
               previewVisible={selectedView.previewVisible !== false}
               storageKeyScope={selectedView.id}
               extraColumns={selectedViewExtraColumns}
+              fieldColumnsSource={{
+                organizationId: selectedOrganizationId,
+                projectId: selectedViewProjectId,
+              }}
+              onExtraColumnsChange={(extraColumns) => updateSelectedView({ extraColumns })}
             />
           )}
         </div>
