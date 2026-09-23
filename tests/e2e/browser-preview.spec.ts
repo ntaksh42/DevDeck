@@ -189,3 +189,34 @@ test("adds a searched field as a Work Item View column from the Columns menu", a
   await expect(menu).toHaveCount(0);
   await expect(page.locator('[data-primary-grid="true"]')).toBeFocused();
 });
+
+test("snoozes a Work Item View row with Z and lists it under Snoozed", async ({ page }) => {
+  await page.goto("/");
+  const main = page.getByRole("main");
+  await expect(main.getByRole("heading", { name: "My Reviews" })).toBeVisible();
+  await page.keyboard.press("g");
+  await page.keyboard.press("v");
+
+  const grid = page.locator('[data-primary-grid="true"]');
+  const firstRow = grid.getByRole("row").first();
+  await firstRow.click();
+  await expect(firstRow).toBeFocused();
+  const rowCount = await grid.getByRole("row").count();
+
+  await page.keyboard.press("z");
+  const menu = page.getByRole("menu", { name: "Snooze until" });
+  await expect(menu.getByRole("menuitem").first()).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(menu).toHaveCount(0);
+  await expect(grid.getByRole("row")).toHaveCount(rowCount - 1);
+  await expect
+    .poll(() => grid.evaluate((node) => node.contains(document.activeElement)))
+    .toBe(true);
+
+  await main.getByRole("button", { name: "Snoozed" }).click();
+  const unsnooze = main.getByRole("button", { name: "Unsnooze" });
+  await expect(unsnooze).toHaveCount(1);
+  await unsnooze.click();
+  await main.getByRole("button", { name: "Back to inbox" }).click();
+  await expect(grid.getByRole("row")).toHaveCount(rowCount);
+});

@@ -64,7 +64,7 @@ export function useWiGridLogic(
     containerRef, gridScrollRef, scrollerAttached, rowRefs, previousResultKeysRef,
     setGridViewport,
     queryClient,
-    snoozeEnabled, snoozeTargetRef, setSnoozeAnchorRect,
+    snoozeEnabled, snoozeTargetRef, setSnoozeAnchorRect, snoozedKeys,
     customPreviewFields,
   } = state;
 
@@ -84,13 +84,14 @@ export function useWiGridLogic(
       results
         .filter(
           (item) =>
-            !triageScope || archivedKeys.has(workItemSummaryKey(item)) === showDone,
+            (!triageScope || archivedKeys.has(workItemSummaryKey(item)) === showDone) &&
+            !snoozedKeys.has(String(item.id)),
         )
         .map((item) => ({
           ...item,
           ...(itemOverrides.get(workItemSummaryKey(item)) ?? {}),
         })),
-    [archivedKeys, itemOverrides, results, showDone, triageScope],
+    [archivedKeys, itemOverrides, results, showDone, snoozedKeys, triageScope],
   );
 
   const sorted = useMemo(

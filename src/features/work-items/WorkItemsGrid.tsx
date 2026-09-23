@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { commandErrorMessage } from '@/lib/azdoCommands';
 import { CreateWorkItemDialog, type CreateWorkItemDraft } from './CreateWorkItemDialog';
 import { SnoozeMenu } from '@/components/SnoozeMenu';
@@ -96,6 +96,17 @@ export function WorkItemsGrid({
   // the header button) and the create dialog finishes the job.
   const [duplicateDraft, setDuplicateDraft] = useState<CreateWorkItemDraft | null>(null);
 
+  const snoozeFallbackItems = useMemo(
+    () =>
+      new Map(
+        results.map((item) => [
+          String(item.id),
+          { title: item.title, subtitle: item.state, webUrl: item.webUrl },
+        ]),
+      ),
+    [results],
+  );
+
   const previewStorageKey = storageKeyScope
     ? `${WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY}:${storageKeyScope}`
     : WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY;
@@ -106,6 +117,7 @@ export function WorkItemsGrid({
         <SnoozedItemsPanel
           organizationId={snoozeOrganizationId}
           itemType="work_item"
+          fallbackItems={snoozeFallbackItems}
           onUnsnoozed={() =>
             state.queryClient.invalidateQueries({
               queryKey: workItemQueryKeys.myItems(snoozeOrganizationId),

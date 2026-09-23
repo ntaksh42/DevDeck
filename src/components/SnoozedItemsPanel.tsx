@@ -5,6 +5,7 @@ import {
   listSnoozedItems,
   unsnoozeItem,
   type SnoozeItemType,
+  type SnoozedItemSummary,
 } from "@/lib/azdoCommands";
 import { formatSnoozeUntil } from "@/lib/snoozePresets";
 import { openExternalUrl } from "@/lib/openExternal";
@@ -17,11 +18,15 @@ export function SnoozedItemsPanel({
   organizationId,
   itemType,
   onUnsnoozed,
+  fallbackItems,
 }: {
   organizationId: string;
   itemType: SnoozeItemType;
   // Invalidate the owning grid's query so the unsnoozed row reappears.
   onUnsnoozed: () => void;
+  // Details for items the backend cannot resolve from its cache (e.g. work
+  // items snoozed from a view that are not assigned to the user), keyed by itemKey.
+  fallbackItems?: ReadonlyMap<string, Pick<SnoozedItemSummary, "title" | "subtitle" | "webUrl">>;
 }) {
   const queryClient = useQueryClient();
   const query = useQuery({
@@ -45,7 +50,10 @@ export function SnoozedItemsPanel({
   if (query.isLoading) return <LoadingState />;
   if (query.isError) return <ErrorState message={commandErrorMessage(query.error)} onRetry={() => void query.refetch()} />;
 
-  const items = query.data ?? [];
+  const items = (query.data ?? []).map((item) => {
+    const fallback = item.title === null ? fallbackItems?.get(item.itemKey) : undefined;
+    return fallback ? { ...item, ...fallback } : item;
+  });
   if (items.length === 0) {
     return (
       <div className="flex min-h-24 flex-col items-center justify-center gap-1 text-sm text-muted-foreground">

@@ -175,7 +175,12 @@ export function WorkItemSearch({
         <ErrorState message={commandErrorMessage(mutation.error)} />
       ) : null}
 
-      <WorkItemsGrid loading={mutation.isPending} results={filteredResults} searched={mutation.isSuccess} />
+      <WorkItemsGrid
+        loading={mutation.isPending}
+        results={filteredResults}
+        searched={mutation.isSuccess}
+        snoozeOrganizationId={organizationId}
+      />
     </div>
   );
 }

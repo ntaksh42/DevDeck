@@ -27,12 +27,16 @@ export function SnoozeMenu({
   // replace its DOM node. Deferred a frame so it wins over the grid's own
   // post-data-change focus restore.
   useEffect(() => {
-    const first = menuRef.current?.querySelector<HTMLElement>(
+    const menu = menuRef.current;
+    const first = menu?.querySelector<HTMLElement>(
       '[data-snooze-item="true"]',
     );
     first?.focus();
     return () => {
       window.setTimeout(() => {
+        // StrictMode re-runs this effect without unmounting; only a menu that
+        // actually left the DOM should hand focus back to the grid.
+        if (menu?.isConnected) return;
         document
           .querySelector<HTMLElement>('[data-primary-grid="true"]')
           ?.focus();

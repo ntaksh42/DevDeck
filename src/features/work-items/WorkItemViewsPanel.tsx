@@ -461,6 +461,7 @@ export function WorkItemViewsPanel({
                 projectId: selectedViewProjectId,
               }}
               onExtraColumnsChange={(extraColumns) => updateSelectedView({ extraColumns })}
+              snoozeOrganizationId={selectedOrganizationId}
             />
           )}
         </div>

@@ -51,15 +51,18 @@ export function demoListSnoozedItems(itemType: string): SnoozedItemSummary[] {
         webUrl: pr.webUrl,
       }));
   }
-  return demoMyWorkItems()
-    .filter((item) => snoozedKeys.has(String(item.id)))
-    .map((item) => ({
+  // Like the backend, resolve details from My Items only; work items snoozed
+  // from a view or search still list, with null details.
+  const myItems = new Map(demoMyWorkItems().map((item) => [String(item.id), item]));
+  return [...snoozedKeys].map((itemKey) => {
+    const item = myItems.get(itemKey);
+    return {
       itemType,
-      itemKey: String(item.id),
-      snoozeUntil:
-        demoSnoozes.get(demoSnoozeStoreKey(itemType, String(item.id))) ?? "",
-      title: item.title,
-      subtitle: item.state ?? null,
-      webUrl: item.webUrl ?? null,
-    }));
+      itemKey,
+      snoozeUntil: demoSnoozes.get(demoSnoozeStoreKey(itemType, itemKey)) ?? "",
+      title: item?.title ?? null,
+      subtitle: item?.state ?? null,
+      webUrl: item?.webUrl ?? null,
+    };
+  });
 }

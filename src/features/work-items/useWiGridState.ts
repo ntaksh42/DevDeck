@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { snoozeItems, type WorkItemSummary } from '@/lib/azdoCommands';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { listSnoozedItems, snoozeItems, type WorkItemSummary } from '@/lib/azdoCommands';
+import { activeSnoozedKeys } from '@/lib/snoozePresets';
 import { useGridColumns } from '@/lib/useGridColumns';
 import type { CustomPreviewField } from './previewFieldsStorage';
 import { loadCustomPreviewFields } from './previewFieldsStorage';
@@ -120,6 +121,17 @@ export function useWiGridState({
   const [showSnoozed, setShowSnoozed] = useState(false);
   const [snoozeAnchorRect, setSnoozeAnchorRect] = useState<DOMRect | null>(null);
   const snoozeTargetRef = useRef<WorkItemSummary[]>([]);
+  // Same key as SnoozedItemsPanel so a snooze/unsnooze refreshes both at once.
+  const snoozedQuery = useQuery({
+    queryKey: ["snoozedItems", "work_item", snoozeOrganizationId],
+    queryFn: () => listSnoozedItems({ organizationId: snoozeOrganizationId, itemType: "work_item" }),
+    enabled: snoozeEnabled,
+    staleTime: 60_000,
+  });
+  const snoozedKeys = useMemo(
+    () => activeSnoozedKeys(snoozedQuery.data ?? []),
+    [snoozedQuery.data],
+  );
   const snoozeMutation = useMutation({
     mutationFn: snoozeItems,
     onSuccess: () => {
@@ -214,7 +226,7 @@ export function useWiGridState({
     queryClient,
     showDone, setShowDone,
     triageVersion, setTriageVersion,
-    snoozeEnabled, showSnoozed, setShowSnoozed,
+    snoozeEnabled, showSnoozed, setShowSnoozed, snoozedKeys,
     snoozeAnchorRect, setSnoozeAnchorRect,
     snoozeTargetRef, snoozeMutation,
   };

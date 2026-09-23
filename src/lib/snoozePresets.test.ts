@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   SNOOZE_PRESETS,
+  activeSnoozedKeys,
   localInputToIso,
   presetToIso,
 } from "./snoozePresets";
@@ -57,5 +58,20 @@ describe("snooze presets", () => {
     expect(localInputToIso("")).toBeNull();
     expect(localInputToIso("not-a-date")).toBeNull();
     expect(localInputToIso("2026-06-20T09:00")).not.toBeNull();
+  });
+});
+
+describe("activeSnoozedKeys", () => {
+  it("keeps only snoozes whose deadline is still in the future", () => {
+    const now = new Date("2026-06-20T09:00:00Z");
+    const keys = activeSnoozedKeys(
+      [
+        { itemKey: "1", snoozeUntil: "2026-06-21T09:00:00.000Z" },
+        { itemKey: "2", snoozeUntil: "2026-06-19T09:00:00.000Z" },
+        { itemKey: "3", snoozeUntil: "garbage" },
+      ],
+      now,
+    );
+    expect([...keys]).toEqual(["1"]);
   });
 });

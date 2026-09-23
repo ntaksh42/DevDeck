@@ -87,3 +87,17 @@ export function formatSnoozeUntil(iso: string): string {
     minute: "2-digit",
   });
 }
+
+// Keys whose snooze is still in effect at `now`. Mirrors the backend's
+// `snooze_is_active`: an expired or unparseable deadline counts as inactive so
+// the item shows again without waiting for the sync-driven reconcile.
+export function activeSnoozedKeys(
+  items: { itemKey: string; snoozeUntil: string }[],
+  now: Date = new Date(),
+): Set<string> {
+  return new Set(
+    items
+      .filter((item) => new Date(item.snoozeUntil).getTime() > now.getTime())
+      .map((item) => item.itemKey),
+  );
+}
