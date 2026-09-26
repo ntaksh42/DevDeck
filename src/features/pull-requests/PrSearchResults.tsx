@@ -310,23 +310,24 @@ export function PullRequestResults({
     resultCommentRequest,
   });
 
+  // Count, filter state and Columns sit in the dock tab strip, not a row of their own.
+  const resultsHeader = (
+    <span className="flex items-center gap-2 pr-1 text-[11px] text-muted-foreground">
+      {countLabel}
+      {selection.isMultiSelect ? `· ${selection.selectedKeys.size} selected` : ""}
+      <ActiveFilters count={activeFilterCount} onClear={clearAllFilters} />
+      <button
+        type="button"
+        onClick={(event) => setColumnMenuRect(event.currentTarget.getBoundingClientRect())}
+        className="flex h-4 items-center rounded border border-border bg-card px-1.5 text-[11px] hover:bg-secondary"
+      >
+        Columns
+      </button>
+    </span>
+  );
+
   const gridPane = (
       <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card">
-      <div className="flex items-center justify-between border-b border-border px-3 py-2">
-        <h2 className="text-base font-semibold">Results</h2>
-        <span className="flex items-center gap-2 text-sm text-muted-foreground">
-          {countLabel}
-          {selection.isMultiSelect ? `· ${selection.selectedKeys.size} selected` : ""}
-          <ActiveFilters count={activeFilterCount} onClear={clearAllFilters} />
-          <button
-            type="button"
-            onClick={(event) => setColumnMenuRect(event.currentTarget.getBoundingClientRect())}
-            className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary"
-          >
-            Columns
-          </button>
-        </span>
-      </div>
       {!searched && !loading ? (
         <div className="px-3 py-6 text-center text-sm text-muted-foreground">
           Run a search to load pull requests.
@@ -430,7 +431,7 @@ export function PullRequestResults({
       <DockableWorkspace
         storageKey={`${PR_SEARCH_PREVIEW_WIDTH_STORAGE_KEY}:dockview:v2`}
         panels={[
-          { id: 'grid', title: 'Results', content: gridPane, minWidth: 480 },
+          { id: 'grid', title: 'Results', content: gridPane, minWidth: 480, headerActions: resultsHeader },
           {
             ...reviewAnchor,
             position: { relativeTo: 'grid', direction: 'right' },

@@ -97,7 +97,7 @@ export function ViewsListPanel({
 
   return (
     <div className="shrink-0 overflow-hidden rounded-md border border-border bg-card">
-      <div className="flex items-center justify-between border-b border-border px-3 py-2">
+      <div className="flex items-center justify-between border-b border-border px-2 py-1">
         <div className="flex min-w-0 items-center gap-2">
           <button
             ref={collapseToggleRef}
@@ -139,7 +139,7 @@ export function ViewsListPanel({
               ) : null}
             </div>
           ) : (
-            <div className="min-w-0">
+            <div className="flex min-w-0 items-baseline gap-2">
               <h2 className="text-sm font-semibold">Views</h2>
               <p className="text-xs text-muted-foreground">
                 {views.length === 0
@@ -217,21 +217,21 @@ export function ViewsListPanel({
             disabled={!selectedView}
             onClick={onPinToggle}
             title={selectedView?.pinned ? "Unpin selected view" : "Pin selected view"}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
           >
             {selectedView?.pinned ? (
               <PinOff className="h-3.5 w-3.5" aria-hidden="true" />
             ) : (
               <Pin className="h-3.5 w-3.5" aria-hidden="true" />
             )}
-            {selectedView?.pinned ? "Unpin" : "Pin"}
+            <span className="sr-only">{selectedView?.pinned ? "Unpin" : "Pin"}</span>
           </button>
           <button
             type="button"
             disabled={!selectedView || selectedViewIndex <= 0}
             onClick={onMoveLeft}
             title="Move selected view left"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
           >
             <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
@@ -240,7 +240,7 @@ export function ViewsListPanel({
             disabled={!selectedView || selectedViewIndex >= views.length - 1}
             onClick={onMoveRight}
             title="Move selected view right"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
           >
             <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
@@ -253,14 +253,14 @@ export function ViewsListPanel({
                 ? "Show preview for this view"
                 : "Hide preview for this view"
             }
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
           >
             {selectedView?.previewVisible === false ? (
               <Eye className="h-3.5 w-3.5" aria-hidden="true" />
             ) : (
               <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
             )}
-            Preview
+            <span className="sr-only">Preview</span>
           </button>
           <button
             type="button"
@@ -268,29 +268,29 @@ export function ViewsListPanel({
             onClick={onShare}
             aria-label="Copy selected view share JSON"
             title="Copy selected view share JSON"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-            Share
+            <span className="sr-only">Share</span>
           </button>
           <button
             type="button"
             disabled={views.length === 0}
             onClick={onExport}
             title="Export all views as JSON"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Download className="h-3.5 w-3.5" aria-hidden="true" />
-            Export
+            <span className="sr-only">Export</span>
           </button>
           <button
             type="button"
             onClick={() => importInputRef.current?.click()}
             title="Import views from JSON"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary"
           >
             <Upload className="h-3.5 w-3.5" aria-hidden="true" />
-            Import
+            <span className="sr-only">Import</span>
           </button>
           <input
             ref={importInputRef}
@@ -305,7 +305,7 @@ export function ViewsListPanel({
             onClick={onEditOpen}
             aria-keyshortcuts="E"
             title="Edit selected view (E)"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
           >
             Edit
           </button>
@@ -315,7 +315,7 @@ export function ViewsListPanel({
             onClick={onDelete}
             aria-keyshortcuts="Delete"
             title="Delete selected view (Del)"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
@@ -324,7 +324,7 @@ export function ViewsListPanel({
             disabled={views.length === 0}
             onClick={onRun}
             title="Run all views (R)"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Play className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
@@ -333,7 +333,7 @@ export function ViewsListPanel({
             aria-keyshortcuts="N"
             onClick={onAddOpen}
             title="Add new view (N)"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
           >
             <Plus className="h-3.5 w-3.5" aria-hidden="true" />
             Add
@@ -359,7 +359,7 @@ export function ViewsListPanel({
           role="listbox"
           aria-label="Saved work item views"
           data-views-panel="true"
-          className={cardMode === "compact" ? "grid gap-1 overflow-auto p-2" : "grid gap-3 overflow-auto p-3"}
+          className={cardMode === "compact" ? "grid gap-1 overflow-auto p-1.5" : "grid gap-2 overflow-auto p-2"}
           style={
             cardMode === "compact"
               ? {
@@ -367,8 +367,8 @@ export function ViewsListPanel({
                   maxHeight: "min(24vh, 200px)",
                 }
               : {
-                  gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-                  maxHeight: "min(40vh, 320px)",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(180px, 240px))",
+                  maxHeight: "min(30vh, 200px)",
                 }
           }
           onKeyDown={onKeyDown}

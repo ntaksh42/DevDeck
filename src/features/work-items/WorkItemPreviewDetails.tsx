@@ -176,13 +176,20 @@ export function WorkItemPreviewDetails({
             <span className="shrink-0 font-mono text-[11px] font-bold leading-5 text-slate-600 dark:text-slate-300">
               #{preview.id}
             </span>
+            {/* Type and state stay whole; the "updated" text is what gives way. */}
             {preview.workItemType ? (
-              <WorkItemTypeBadge type={preview.workItemType} />
+              <span className="shrink-0">
+                <WorkItemTypeBadge type={preview.workItemType} />
+              </span>
             ) : null}
-            {preview.state ? <WorkItemStatePill state={preview.state} /> : null}
+            {preview.state ? (
+              <span className="shrink-0">
+                <WorkItemStatePill state={preview.state} />
+              </span>
+            ) : null}
             {preview.changedDate ? (
               <span
-                className="hidden shrink-0 truncate text-[11px] font-medium text-slate-500 dark:text-slate-400 sm:inline"
+                className="hidden min-w-0 truncate text-[11px] font-medium text-slate-500 dark:text-slate-400 sm:inline"
                 title={preview.changedDate}
               >
                 updated {formatRelativeDate(preview.changedDate)}

@@ -267,11 +267,12 @@ export function CommitSearch({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="shrink-0 rounded-md border border-border bg-card">
-        <form className="grid gap-3 p-3" onSubmit={onSubmit}>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(200px,1fr)_minmax(220px,1fr)_auto]">
-            <div className="grid gap-2">
-              <span className="text-sm font-medium">Project</span>
+        <form className="grid gap-2 px-3 py-2" onSubmit={onSubmit}>
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-[minmax(200px,1fr)_minmax(220px,1fr)_auto]">
+            <div className="grid gap-0.5">
+              <span className="text-[11px] font-medium text-muted-foreground">Project</span>
               <MultiSelectFilter
+                className="h-8"
                 options={projectOptions.map((project) => ({
                   value: project.projectId,
                   label: project.projectName,
@@ -285,9 +286,10 @@ export function CommitSearch({
               />
             </div>
 
-            <div className="grid gap-2">
-              <span className="text-sm font-medium">Repository</span>
+            <div className="grid gap-0.5">
+              <span className="text-[11px] font-medium text-muted-foreground">Repository</span>
               <MultiSelectFilter
+                className="h-8"
                 options={filteredRepositoryOptions.map((repository) => ({
                   value: repository.repositoryId,
                   label:
@@ -305,7 +307,7 @@ export function CommitSearch({
             </div>
 
             <div className="flex items-end">
-              <p className="pb-2 text-xs text-muted-foreground">
+              <p className="pb-1.5 text-xs text-muted-foreground">
                 {repositoriesQuery.isLoading
                   ? "Loading repositories"
                   : repositoriesQuery.isError
@@ -327,9 +329,9 @@ export function CommitSearch({
           </div>
 
           <div className="flex items-end gap-2">
-            <label className="grid min-w-0 flex-1 gap-2">
-              <span className="text-sm font-medium">Search</span>
-              <div className="flex h-9 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
+            <label className="grid min-w-0 flex-1 gap-0.5">
+              <span className="text-[11px] font-medium text-muted-foreground">Search</span>
+              <div className="flex h-8 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
                 <Search className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
                 <input
                   value={query}
@@ -348,7 +350,7 @@ export function CommitSearch({
               onClick={() => setFiltersOpen((value) => !value)}
               aria-expanded={filtersOpen}
               aria-controls="commit-advanced-filters"
-              className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+              className="inline-flex h-8 shrink-0 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
               Filters
@@ -366,7 +368,7 @@ export function CommitSearch({
             <button
               type="submit"
               disabled={mutation.isPending || !selectedOrganizationId}
-              className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {mutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -380,17 +382,17 @@ export function CommitSearch({
           {filtersOpen ? (
           <div
             id="commit-advanced-filters"
-            className="grid gap-3 border-t border-border pt-3 md:grid-cols-2 xl:grid-cols-[minmax(160px,1fr)_minmax(120px,180px)_150px_150px_auto]"
+            className="grid gap-2 border-t border-border pt-2 md:grid-cols-2 xl:grid-cols-[minmax(160px,1fr)_minmax(120px,180px)_150px_150px_auto]"
           >
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Author</span>
+            <label className="grid gap-0.5">
+              <span className="text-[11px] font-medium text-muted-foreground">Author</span>
               <input
                 value={author}
                 onChange={(event) => setAuthor(event.target.value)}
                 onKeyDown={handleSearchInputEscape}
                 placeholder="email or name"
                 list={authorSuggestions.length > 0 ? "commit-author-suggestions" : undefined}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className="h-8 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
               {authorSuggestions.length > 0 ? (
                 <datalist id="commit-author-suggestions">
@@ -399,39 +401,39 @@ export function CommitSearch({
               ) : null}
             </label>
 
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Branch</span>
+            <label className="grid gap-0.5">
+              <span className="text-[11px] font-medium text-muted-foreground">Branch</span>
               <input
                 value={branch}
                 onChange={(event) => setBranch(event.target.value)}
                 onKeyDown={handleSearchInputEscape}
                 placeholder="main"
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className="h-8 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
             </label>
 
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">From</span>
+            <label className="grid gap-0.5">
+              <span className="text-[11px] font-medium text-muted-foreground">From</span>
               <input
                 type="date"
                 value={fromDate}
                 onChange={(event) => setFromDate(event.target.value)}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className="h-8 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
             </label>
 
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">To</span>
+            <label className="grid gap-0.5">
+              <span className="text-[11px] font-medium text-muted-foreground">To</span>
               <input
                 type="date"
                 value={toDate}
                 onChange={(event) => setToDate(event.target.value)}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className="h-8 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
             </label>
 
-            <div className="grid gap-2">
-              <span className="text-sm font-medium text-muted-foreground">Preset</span>
+            <div className="grid gap-0.5">
+              <span className="text-[11px] font-medium text-muted-foreground">Preset</span>
               <div className="flex items-center gap-1">
                 {([7, 30, 90] as const).map((days) => (
                   <button
@@ -446,7 +448,7 @@ export function CommitSearch({
                       setFromDate(fmt(from));
                       setToDate(fmt(to));
                     }}
-                    className="inline-flex h-9 items-center rounded-md border border-input bg-background px-2.5 text-xs hover:bg-muted"
+                    className="inline-flex h-8 items-center rounded-md border border-input bg-background px-2.5 text-xs hover:bg-muted"
                   >
                     {days}d
                   </button>
@@ -472,10 +474,14 @@ export function CommitSearch({
 
       <div className="flex items-center justify-between gap-3">
         <CommitViewToggle value={viewMode} onChange={setViewMode} />
-        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Info className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
-          Showing locally synced data — refreshed automatically every 5 minutes.
-        </p>
+        <span
+          role="note"
+          className="text-muted-foreground"
+          title="Showing locally synced data — refreshed automatically every 5 minutes."
+          aria-label="Showing locally synced data — refreshed automatically every 5 minutes."
+        >
+          <Info className="h-3.5 w-3.5" aria-hidden="true" />
+        </span>
       </div>
 
       {mutation.isError ? (

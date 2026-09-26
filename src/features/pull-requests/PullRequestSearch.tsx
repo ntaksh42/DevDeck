@@ -5,7 +5,7 @@ import {
   useState,
 } from 'react';
 import { useMutation, useQueries, useQuery } from '@tanstack/react-query';
-import { Loader2, Search } from 'lucide-react';
+import { Info, Loader2, Search } from 'lucide-react';
 import {
   searchPullRequests,
   listCommitRepositories,
@@ -215,11 +215,11 @@ export function PullRequestSearch({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="shrink-0 rounded-md border border-border bg-card">
-        <form className="grid gap-3 p-3" onSubmit={onSubmit}>
-          <div className="grid gap-3 lg:grid-cols-[1fr_140px_160px_200px_auto]">
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Search</span>
-              <div className="flex h-9 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
+        <form className="grid gap-2 px-3 py-2" onSubmit={onSubmit}>
+          <div className="grid gap-2 lg:grid-cols-[1fr_140px_160px_200px_auto]">
+            <label className="grid gap-0.5">
+              <span className="text-[11px] font-medium text-muted-foreground">Search</span>
+              <div className="flex h-8 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
                 <Search className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
                 <input
                   value={query}
@@ -232,9 +232,10 @@ export function PullRequestSearch({
               </div>
             </label>
 
-            <div className="grid gap-2">
-              <span className="text-sm font-medium" id="pr-search-status-label">Status</span>
+            <div className="grid gap-0.5">
+              <span className="text-[11px] font-medium text-muted-foreground" id="pr-search-status-label">Status</span>
               <MultiSelectFilter
+                className="h-8"
                 options={PR_SEARCH_STATUS_OPTIONS}
                 selected={statuses}
                 onChange={(next) => setStatuses(next as PrSearchStatus[])}
@@ -244,9 +245,10 @@ export function PullRequestSearch({
               />
             </div>
 
-            <div className="grid gap-2">
-              <span className="text-sm font-medium">Project</span>
+            <div className="grid gap-0.5">
+              <span className="text-[11px] font-medium text-muted-foreground">Project</span>
               <MultiSelectFilter
+                className="h-8"
                 options={projects.map((p) => ({ value: p.id, label: p.name }))}
                 selected={projectIds}
                 onChange={onProjectsChange}
@@ -257,9 +259,10 @@ export function PullRequestSearch({
               />
             </div>
 
-            <div className="grid gap-2">
-              <span className="text-sm font-medium">Repository</span>
+            <div className="grid gap-0.5">
+              <span className="text-[11px] font-medium text-muted-foreground">Repository</span>
               <MultiSelectFilter
+                className="h-8"
                 options={filteredRepositories.map((r) => ({
                   value: r.repositoryId,
                   label: r.repositoryName,
@@ -277,7 +280,7 @@ export function PullRequestSearch({
               <button
                 type="submit"
                 disabled={mutation.isPending || !organizationId}
-                className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
+                className="inline-flex h-8 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
               >
                 {mutation.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -289,10 +292,11 @@ export function PullRequestSearch({
             </div>
           </div>
 
-          <div className="grid gap-3 lg:grid-cols-[1fr_150px_150px_150px_170px_auto]">
-            <div className="grid gap-2">
-              <span className="text-sm font-medium">Target branches</span>
+          <div className="grid gap-2 lg:grid-cols-[1fr_150px_150px_150px_170px_auto]">
+            <div className="grid gap-0.5">
+              <span className="text-[11px] font-medium text-muted-foreground">Target branches</span>
               <MultiSelectFilter
+                className="h-8"
                 options={branchSuggestions.map((branch) => ({ value: branch, label: branch }))}
                 selected={targetBranches}
                 onChange={setTargetBranches}
@@ -303,37 +307,37 @@ export function PullRequestSearch({
               />
             </div>
 
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">From</span>
+            <label className="grid gap-0.5">
+              <span className="text-[11px] font-medium text-muted-foreground">From</span>
               <input
                 type="date"
                 value={fromDate}
                 max={toDate || undefined}
                 onChange={(e) => setFromDate(e.target.value)}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className="h-8 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
             </label>
 
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">To</span>
+            <label className="grid gap-0.5">
+              <span className="text-[11px] font-medium text-muted-foreground">To</span>
               <input
                 type="date"
                 value={toDate}
                 min={fromDate || undefined}
                 onChange={(e) => setToDate(e.target.value)}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className="h-8 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
             </label>
 
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Date basis</span>
+            <label className="grid gap-0.5">
+              <span className="text-[11px] font-medium text-muted-foreground">Date basis</span>
               <select
                 value={dateBasis}
                 onChange={(e) => setDateBasis(e.target.value as PrSearchDateBasis)}
                 title={statuses.length === 0 || statuses.includes("active")
                   ? "Active PRs have no close date, so the window uses the created date for them."
                   : "Whether the date window filters by created or closed date."}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className="h-8 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               >
                 {PR_SEARCH_DATE_BASIS_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
@@ -341,12 +345,12 @@ export function PullRequestSearch({
               </select>
             </label>
 
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">Sort by</span>
+            <label className="grid gap-0.5">
+              <span className="text-[11px] font-medium text-muted-foreground">Sort by</span>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as PrSearchSortBy)}
-                className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className="h-8 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               >
                 {PR_SEARCH_SORT_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
@@ -354,18 +358,28 @@ export function PullRequestSearch({
               </select>
             </label>
 
-            <label className="flex items-end gap-2 pb-2 lg:pb-0 lg:items-center">
-              <input
-                type="checkbox"
-                checked={excludeDrafts}
-                onChange={(e) => setExcludeDrafts(e.target.checked)}
-                className="h-4 w-4"
-              />
-              <span className="text-sm font-medium">Hide drafts</span>
-            </label>
+            <div className="flex items-center gap-2">
+              <label className="flex items-end gap-2 pb-2 lg:pb-0 lg:items-center">
+                <input
+                  type="checkbox"
+                  checked={excludeDrafts}
+                  onChange={(e) => setExcludeDrafts(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                <span className="text-xs font-medium">Hide drafts</span>
+              </label>
+              <span
+                className="self-center text-muted-foreground"
+                title="Active pull requests are served from the local cache. Completed and abandoned pull requests are fetched live from Azure DevOps, so those statuses may take a moment. Target branch and the date window narrow the live query server-side. Select a repository to get target-branch suggestions."
+                aria-hidden="true"
+              >
+                <Info className="h-3.5 w-3.5" />
+              </span>
+            </div>
           </div>
 
-          <p id="pr-search-status-note" className="text-xs text-muted-foreground">
+          {/* Kept for assistive tech; sighted users get it from the info icon's tooltip. */}
+          <p id="pr-search-status-note" className="sr-only">
             Active pull requests are served from the local cache. Completed and
             abandoned pull requests are fetched live from Azure DevOps, so those
             statuses may take a moment. Target branch and the date window narrow

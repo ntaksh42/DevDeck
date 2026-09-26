@@ -189,11 +189,12 @@ export function PipelinesView() {
     setQueueNotice(null);
   }, [selectedOrganizationId]);
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
       <div className="shrink-0 rounded-md border border-border bg-card">
-        <div className="grid gap-3 p-3 md:grid-cols-2 xl:grid-cols-[minmax(200px,1fr)_auto]">
-          <label className="grid gap-2">
-            <span className="text-sm font-medium">Project</span>
+        {/* One compact row: the selectors carry the view, so they stay, but without a card's worth of height. */}
+        <div className="flex flex-wrap items-center gap-2 px-2 py-1.5">
+          <label className="flex w-72 items-center gap-1.5">
+            <span className="shrink-0 text-xs text-muted-foreground">Project</span>
             <FilterableSelect
               ariaLabel="Project"
               value={projectId}
@@ -207,8 +208,8 @@ export function PipelinesView() {
             />
           </label>
 
-          <label className="grid gap-2">
-            <span className="text-sm font-medium">Pipeline</span>
+          <label className="flex w-72 items-center gap-1.5">
+            <span className="shrink-0 text-xs text-muted-foreground">Pipeline</span>
             <FilterableSelect
               ariaLabel="Pipeline"
               value={definitionId == null ? "" : String(definitionId)}
@@ -219,7 +220,7 @@ export function PipelinesView() {
             />
           </label>
 
-          <div className="flex items-end gap-2">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={handleSubscribe}
@@ -232,7 +233,7 @@ export function PipelinesView() {
                     : "Watch this pipeline's run history"
               }
               aria-pressed={selectedIsSubscribed}
-              className={`flex h-9 items-center gap-1.5 rounded-md border px-2.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 ${
+              className={`flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 ${
                 selectedIsSubscribed
                   ? "border-emerald-500 bg-emerald-50 text-emerald-700"
                   : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -250,7 +251,7 @@ export function PipelinesView() {
               disabled={!canQueue}
               aria-expanded={queueOpen}
               title={canQueue ? "Queue a new run of this pipeline" : "Select a pipeline to queue a run"}
-              className="flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Play className="h-4 w-4" aria-hidden="true" />
               Queue run

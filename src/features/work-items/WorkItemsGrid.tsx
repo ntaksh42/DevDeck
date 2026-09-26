@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { commandErrorMessage } from '@/lib/azdoCommands';
 import { CreateWorkItemDialog, type CreateWorkItemDraft } from './CreateWorkItemDialog';
 import { SnoozeMenu } from '@/components/SnoozeMenu';
@@ -57,6 +57,7 @@ export function WorkItemsGrid({
   storageKeyScope,
   triageScope,
   snoozeOrganizationId,
+  filterBar,
 }: {
   results: WorkItemSummary[];
   loading: boolean;
@@ -78,6 +79,8 @@ export function WorkItemsGrid({
   storageKeyScope?: string;
   triageScope?: string;
   snoozeOrganizationId?: string;
+  /** Rendered in the grid's dock tab strip (see `WorkItemFilterBar`). */
+  filterBar?: ReactNode;
 }) {
   const state = useWiGridState({
     storageKeyScope,
@@ -320,7 +323,7 @@ export function WorkItemsGrid({
         <DockableWorkspace
           storageKey={`${previewStorageKey}:dockview:v1`}
           panels={[
-            { id: 'grid', title: 'Work items', content: gridPane, minWidth: 480 },
+            { id: 'grid', title: 'Work items', content: gridPane, minWidth: 480, headerActions: filterBar },
             {
               id: 'preview',
               title: 'Preview',
@@ -349,7 +352,10 @@ export function WorkItemsGrid({
           }
         />
       ) : (
-        gridPane
+        <>
+          {filterBar ? <div className="flex h-5 shrink-0 justify-end">{filterBar}</div> : null}
+          {gridPane}
+        </>
       )}
       {state.openFilterCol && state.filterAnchorRect ? (
         <WiColumnFilterDropdown

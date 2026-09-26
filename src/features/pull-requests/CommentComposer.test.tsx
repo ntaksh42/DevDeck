@@ -69,3 +69,31 @@ describe("CommentComposer mentions", () => {
     );
   });
 });
+
+describe("CommentComposer collapsible", () => {
+  afterEach(cleanup);
+
+  it("folds to a one-line button until opened, and back on Escape while empty", () => {
+    render(<CommentComposer collapsible placeholder="Add a comment…" onSubmit={async () => {}} />);
+
+    expect(screen.queryByRole("textbox")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Add a comment…" }));
+    const textarea = screen.getByRole("textbox", { name: "Add a comment…" });
+    expect(document.activeElement).toBe(textarea);
+
+    fireEvent.keyDown(textarea, { key: "Escape" });
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.getByRole("button", { name: "Add a comment…" })).toBeTruthy();
+  });
+
+  it("stays open while a draft is in progress", () => {
+    render(<CommentComposer collapsible placeholder="Add a comment…" onSubmit={async () => {}} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add a comment…" }));
+    const textarea = screen.getByRole("textbox", { name: "Add a comment…" });
+    fireEvent.change(textarea, { target: { value: "draft" } });
+    fireEvent.keyDown(textarea, { key: "Escape" });
+    fireEvent.blur(textarea);
+    expect(screen.getByRole("textbox", { name: "Add a comment…" })).toBeTruthy();
+  });
+});

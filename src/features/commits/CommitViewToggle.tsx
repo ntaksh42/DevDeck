@@ -45,7 +45,7 @@ export function CommitViewToggle({
             tabIndex={active ? 0 : -1}
             onClick={() => onChange(tab.id)}
             onKeyDown={(event) => handleKeyDown(event, index)}
-            className={`rounded px-3 py-1 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ring ${
+            className={`rounded px-2.5 py-0.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-ring ${
               active ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground"
             }`}
           >

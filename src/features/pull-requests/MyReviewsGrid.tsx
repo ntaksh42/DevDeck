@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { commandErrorMessage } from '@/lib/azdoCommands';
 import { isEditableTarget, focusPrimaryPreview, markdownLink } from '@/lib/utils';
+import { readStoredJson, writeStoredJson } from '@/lib/storage';
 import { SnoozeMenu } from '@/components/SnoozeMenu';
+import { useDockFilter } from '@/components/DockFilterBar';
 import { SnoozedItemsPanel } from '@/components/SnoozedItemsPanel';
 import { ColumnResizeHandle } from '@/components/ResizeHandle';
 import { DockableWorkspace, type DockablePanelSpec } from '@/components/DockableWorkspace';
@@ -14,7 +16,7 @@ import { openExternalUrl } from '@/lib/openExternal';
 import { copyRowUrls } from '@/lib/copyUrls';
 import { toggleTriageArchived } from '@/lib/triage';
 import { usePrReviewPanels } from './usePrReviewPanels';
-import { focusLinkedWorkItems, LINKED_WORK_ITEMS_PANEL_ID } from './LinkedWorkItemsPanel';
+import { focusLinkedWorkItems, LINKED_WORK_ITEMS_PANEL_ID, LinkedWorkItemsToggle } from './LinkedWorkItemsPanel';
 import { MemoReviewPrRow } from './MemoReviewPrRow';
 import { ReviewFilterBar } from './ReviewFilterBar';
 import { ReviewStatusBar } from './ReviewStatusBar';
@@ -37,6 +39,8 @@ import type { MyReviewsGridProps } from './myReviewsTypes';
 export { reviewAgeDays } from './myReviewsHelpers';
 export type { MyReviewsSelectRequest } from './myReviewsTypes';
 
+const LINKED_COLLAPSED_STORAGE_KEY = 'azdodeck:myReviews:linkedWorkItemsCollapsed';
+
 export function MyReviewsGrid({
   selectRequest,
   onSelectRequestHandled,
@@ -44,8 +48,18 @@ export function MyReviewsGrid({
   const g = useMyReviewsGrid({ selectRequest, onSelectRequestHandled });
   // `key` is bumped on every request so re-activating the same tab still fires.
   const [activateRequest, setActivateRequest] = useState<{ id: string; key: number } | undefined>();
+  // The linked Work Items dock starts folded to its tab strip so the review
+  // list gets the height; `t` (or the strip's toggle) unfolds it.
+  const [linkedCollapsed, setLinkedCollapsedState] = useState(() =>
+    readStoredJson(LINKED_COLLAPSED_STORAGE_KEY, (raw) => raw === true, true),
+  );
+  function setLinkedCollapsed(collapsed: boolean) {
+    setLinkedCollapsedState(collapsed);
+    writeStoredJson(LINKED_COLLAPSED_STORAGE_KEY, collapsed);
+  }
   function openLinkedWorkItems() {
     if (!g.selectedPr) return;
+    setLinkedCollapsed(false);
     setActivateRequest((prev) => ({ id: LINKED_WORK_ITEMS_PANEL_ID, key: (prev?.key ?? 0) + 1 }));
     window.setTimeout(focusLinkedWorkItems, 50);
   }
@@ -56,6 +70,7 @@ export function MyReviewsGrid({
     setResultCommentRequest((v) => v + 1);
     setActivateRequest((prev) => ({ id: 'result', key: (prev?.key ?? 0) + 1 }));
   }
+  const filterBar = useDockFilter(g.filterInputRef, () => g.focusRow(g.selectedIndex));
   const { anchor: reviewAnchor, secondary: reviewSecondary } = usePrReviewPanels({
     selectedPr: g.selectedPr,
     maximized: g.maximized,
@@ -113,8 +128,7 @@ export function MyReviewsGrid({
 
     if (e.key === '/') {
       e.preventDefault();
-      g.filterInputRef.current?.focus();
-      g.filterInputRef.current?.select();
+      filterBar.onOpen();
       return;
     }
     if (e.key === 'd' || e.key === 'D') {
@@ -252,14 +266,6 @@ export function MyReviewsGrid({
           {g.copyToast}
         </div>
       )}
-      <ReviewFilterBar
-        textFilter={g.textFilter}
-        onTextFilterChange={(v) => { g.setTextFilter(v); g.setSelectedIndex(0); }}
-        filterInputRef={g.filterInputRef}
-        showDrafts={g.showDrafts}
-        onShowDraftsChange={(checked) => { g.setShowDrafts(checked); g.setSelectedIndex(0); }}
-        filterSuggestionPool={g.filterSuggestionPool}
-      />
       <DockableWorkspace
         storageKey={`${REVIEW_PREVIEW_WIDTH_STORAGE_KEY}:dockview:v2`}
         panels={[
@@ -267,6 +273,19 @@ export function MyReviewsGrid({
             id: 'grid',
             title: 'Reviews',
             minWidth: 480,
+            headerActions: (
+              <ReviewFilterBar
+                textFilter={g.textFilter}
+                onTextFilterChange={(v) => { g.setTextFilter(v); g.setSelectedIndex(0); }}
+                filterInputRef={g.filterInputRef}
+                showDrafts={g.showDrafts}
+                onShowDraftsChange={(checked) => { g.setShowDrafts(checked); g.setSelectedIndex(0); }}
+                filterSuggestionPool={g.filterSuggestionPool}
+                open={filterBar.open}
+                onOpen={filterBar.onOpen}
+                onClose={filterBar.onClose}
+              />
+            ),
             content: (
         <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card">
           {g.showSnoozed ? (
@@ -393,8 +412,22 @@ export function MyReviewsGrid({
             minWidth: MIN_REVIEW_PREVIEW_WIDTH,
             maxWidth: MAX_REVIEW_PREVIEW_WIDTH,
           },
-          ...reviewSecondary,
+          ...reviewSecondary.map((panel) =>
+            panel.id === LINKED_WORK_ITEMS_PANEL_ID
+              ? {
+                  ...panel,
+                  headerActions: (
+                    <LinkedWorkItemsToggle
+                      pr={g.selectedPr}
+                      collapsed={linkedCollapsed}
+                      onToggle={() => (linkedCollapsed ? openLinkedWorkItems() : setLinkedCollapsed(true))}
+                    />
+                  ),
+                }
+              : panel,
+          ),
         ] satisfies DockablePanelSpec[]}
+        collapsedIds={linkedCollapsed ? [LINKED_WORK_ITEMS_PANEL_ID] : undefined}
         maximizedId={g.maximized ? 'review' : undefined}
         activatePanel={activateRequest}
       />

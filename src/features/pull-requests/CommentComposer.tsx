@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { focusPrimaryPreview } from "@/lib/utils";
 import { type MentionCandidate } from "@/lib/azdoCommands";
 import {
   activeMentionAt,
@@ -28,6 +29,7 @@ export function CommentComposer({
   onCancel,
   onSubmitted,
   mentionSearch,
+  collapsible = false,
 }: {
   placeholder: string;
   submitLabel?: string;
@@ -38,8 +40,11 @@ export function CommentComposer({
   onCancel?: () => void;
   onSubmitted?: () => void;
   mentionSearch?: (query: string) => Promise<MentionCandidate[]>;
+  /** Folds to a one-line button while empty and unfocused; Esc folds it back. */
+  collapsible?: boolean;
 }) {
   const [text, setText] = useState(initialValue);
+  const [expanded, setExpanded] = useState(!collapsible);
   const [submitting, setSubmitting] = useState(false);
   const textareaRef = usePersistedTextareaHeight(
     PULL_REQUEST_COMMENT_HEIGHT_STORAGE_KEY,
@@ -63,6 +68,7 @@ export function CommentComposer({
       setText("");
       setMention(null);
       setSelectedMentions([]);
+      if (collapsible) setExpanded(false);
       onSubmitted?.();
     } catch {
       // Keep the draft; the caller surfaces the error.
@@ -123,12 +129,31 @@ export function CommentComposer({
 
   const showMentions = mention != null && candidates.length > 0;
 
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        className="flex h-7 w-full items-center rounded-md border border-border bg-card px-2 text-left text-xs text-muted-foreground hover:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
+      >
+        {placeholder}
+      </button>
+    );
+  }
+
   return (
-    <div className="rounded-md border border-border bg-card">
+    <div
+      className="rounded-md border border-border bg-card"
+      onBlur={(event) => {
+        if (collapsible && !text.trim() && !event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setExpanded(false);
+        }
+      }}
+    >
       <div className="relative">
           <textarea
             ref={textareaRef}
-            autoFocus={autoFocus}
+            autoFocus={autoFocus || (collapsible && expanded)}
             value={text}
             onChange={(event) => {
               setText(event.target.value);
@@ -189,6 +214,16 @@ export function CommentComposer({
               if (event.key === "Escape" && onCancel) {
                 event.stopPropagation();
                 onCancel();
+              } else if (event.key === "Escape" && collapsible && !text.trim()) {
+                event.stopPropagation();
+                setExpanded(false);
+                // Back to this PR's own preview, not the first one on the page
+                // (the linked work item preview can come earlier in the DOM).
+                const preview = event.currentTarget
+                  .closest("aside")
+                  ?.querySelector<HTMLElement>("[data-primary-preview='true']");
+                if (preview) preview.focus();
+                else focusPrimaryPreview();
               }
             }}
             rows={3}

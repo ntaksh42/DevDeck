@@ -8,6 +8,7 @@ import {
   splitSearchTerms,
 } from "@/lib/utils";
 import { FilterAutocomplete } from "@/components/FilterAutocomplete";
+import { DockFilterBar, useDockFilter } from "@/components/DockFilterBar";
 import { ColumnResizeHandle } from "@/components/ResizeHandle";
 import { ColumnVisibilityMenu } from "@/components/ColumnVisibilityMenu";
 import { useGridColumns } from "@/lib/useGridColumns";
@@ -236,6 +237,11 @@ export function MyPullRequestsGrid() {
     }
   };
 
+  const filterInputRef = useRef<HTMLInputElement | null>(null);
+  const filterBar = useDockFilter(filterInputRef, () =>
+    (rowRefs.current[selectedIndex] ?? rowRefs.current[0])?.focus(),
+  );
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card">
       {copyToast && (
@@ -247,31 +253,38 @@ export function MyPullRequestsGrid() {
           {copyToast}
         </div>
       )}
-      {/* Toolbar */}
-      <div
-        className="flex items-center gap-2 border-b border-border px-2 py-1.5"
-        onKeyDown={(e) => {
-          if (e.key === "Escape" && isEditableTarget(e.target)) {
-            e.preventDefault();
-            setTextFilter("");
-            setSelectedIndex(0);
-            const firstRow = rowRefs.current[0];
-            if (firstRow) firstRow.focus();
-            else (e.target as HTMLElement).blur();
+      {/* Title strip; the filter stays folded here until Ctrl+F or / opens it. */}
+      <div className="flex h-5 shrink-0 items-center justify-between border-b border-border bg-muted/40 pl-2">
+        <span className="text-xs font-semibold">Pull requests</span>
+        <DockFilterBar
+          label="Filter pull requests"
+          open={filterBar.open}
+          onOpen={filterBar.onOpen}
+          onClose={filterBar.onClose}
+          inputRef={filterInputRef}
+          hasValue={!!textFilter}
+          chips={
+            textFilter
+              ? [{ label: `“${textFilter}”`, onEdit: filterBar.onOpen, onClear: () => setTextFilter("") }]
+              : []
           }
-        }}
-      >
-        <FilterAutocomplete
-          value={textFilter}
-          onChange={(value) => {
-            setTextFilter(value);
-            setSelectedIndex(0);
-          }}
-          onClear={() => setTextFilter("")}
-          placeholder="Filter by repo, title, target…"
-          suggestionPool={suggestionPool}
-          ariaLabel="Filter pull requests"
-        />
+        >
+          <div className="w-56">
+            <FilterAutocomplete
+              compact
+              value={textFilter}
+              onChange={(value) => {
+                setTextFilter(value);
+                setSelectedIndex(0);
+              }}
+              onClear={() => setTextFilter("")}
+              placeholder="Filter by repo, title, target…"
+              suggestionPool={suggestionPool}
+              ariaLabel="Filter pull requests"
+              inputRef={filterInputRef}
+            />
+          </div>
+        </DockFilterBar>
       </div>
 
       {query.isLoading ? (

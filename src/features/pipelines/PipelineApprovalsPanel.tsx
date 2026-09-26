@@ -1,4 +1,5 @@
-import { Check, Loader2, X } from "lucide-react";
+import { useState } from "react";
+import { Check, ChevronDown, ChevronRight, Loader2, X } from "lucide-react";
 import { type PipelineApprovalSummary } from "@/lib/azdoCommands";
 
 export function PipelineApprovalsPanel({
@@ -12,17 +13,39 @@ export function PipelineApprovalsPanel({
   error: string | null;
   onAct: (approvalId: string, status: "approved" | "rejected") => void;
 }) {
+  // Folded to a one-line banner (count + first request) until expanded.
+  const [expanded, setExpanded] = useState(false);
+  const first = approvals[0]?.instructions?.trim() || "Approval required to continue";
   return (
     <div className="shrink-0 rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700/60 dark:bg-amber-950/30">
-      <div className="border-b border-amber-200 px-3 py-2 text-sm font-medium text-amber-800 dark:border-amber-800/60 dark:text-amber-200">
-        Pending approvals ({approvals.length})
-      </div>
+      <button
+        type="button"
+        onClick={() => setExpanded((value) => !value)}
+        aria-expanded={expanded}
+        className="flex w-full items-center gap-2 px-3 py-1 text-left text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ring"
+      >
+        {expanded ? (
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-amber-800 dark:text-amber-200" aria-hidden="true" />
+        ) : (
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-amber-800 dark:text-amber-200" aria-hidden="true" />
+        )}
+        <span className="shrink-0 font-medium text-amber-800 dark:text-amber-200">
+          Pending approvals ({approvals.length})
+        </span>
+        {!expanded && approvals.length > 0 ? (
+          <span className="min-w-0 truncate text-xs text-muted-foreground">
+            {first}
+            {approvals.length > 1 ? ` and ${approvals.length - 1} more` : ""}
+          </span>
+        ) : null}
+      </button>
       {error ? (
         <p role="alert" className="px-3 py-2 text-xs text-destructive">
           {error}
         </p>
       ) : null}
-      <ul className="divide-y divide-amber-200/70 dark:divide-amber-800/40">
+      {expanded ? (
+      <ul className="divide-y divide-amber-200/70 border-t border-amber-200 dark:divide-amber-800/40 dark:border-amber-800/60">
         {approvals.map((approval) => {
           const busy = pendingApprovalId === approval.id;
           return (
@@ -69,6 +92,7 @@ export function PipelineApprovalsPanel({
           );
         })}
       </ul>
+      ) : null}
     </div>
   );
 }
