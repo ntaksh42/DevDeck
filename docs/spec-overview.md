@@ -115,8 +115,9 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
   ただし PR のコメント活動による早期復帰は `pr_comment_seen` カーソルに依存し、同カーソルは
   コメント返信通知の処理時（`notify_pr_comment_replies` が有効。`desktop_notifications_enabled`
   には依存しない）のみ進むため、同トグルがオフの間はコメント活動では早期復帰せず期限で復帰する。
-- **エージェントへの申し送り (Agent notes)**: 作業項目グリッドの Result パネル (調査結果 HTML) に、
-  調査を行う外部 AI エージェント向けのコメントを残せる。保存先は `work_item_result_folder_path` 配下の
+- **エージェントへの申し送り (Agent notes)**: 作業項目グリッドの Result パネル (調査結果 HTML) と
+  PR (My Reviews / PR Search) の Result タブ (レビュー結果 HTML) に、調査・レビューを行う外部 AI
+  エージェント向けのコメントを残せる (UI は共通の `AgentResultPanel`)。保存先は `work_item_result_folder_path` 配下の
   `.to-agent-msg/wi-{id}/{yyyyMMdd-HHmmss}.md` (1 メモ 1 ファイル、front-matter に `created` /
   `result_file` / `quote` / `quote_prefix` / `quote_suffix`、本文は Markdown)。SQLite には保存しない。
   エージェントは open のメモを読んで WI にコメント追記し、ファイルを `_done/` へ移動する (任意で
@@ -124,7 +125,7 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
   コマンドは `list_agent_notes` / `create_agent_note` / `delete_agent_note` (`agent_notes.rs`)。
   入力は `target` (`work-item` / `pull-request`) と `itemId` で、`pull-request` は
   `review_result_folder_path` 配下の `.to-agent-msg/pr-{id}/` を使う (保存形式は共通、front-matter の
-  `target` に種別を書く)。現在 UI から使うのは `work-item` のみで、PR の Result タブは未対応。
+  `target` に種別を書く)。作業項目は `work-item`、PR の Result タブは `pull-request` を使う。
   結果 HTML 上のテキスト選択 (Comment ボタン) またはキーボードのブロック選択で引用付きコメントを作れ、
   引用は空白を無視したテキスト + 前後 24 文字の文脈で再アンカーする (HTML 再生成後に見つからない
   メモは「Not found in current result」と表示)。ハイライトは CSS Custom Highlight API、番号ピン
@@ -422,7 +423,8 @@ API呼び出しは発生しない。この判定はビュー実行結果 (`WorkI
 にのみ適用され、My Work Items など同期キャッシュ経由の一覧には反映されない
 (常に `false`)。Completed/Abandoned のみのPRは対象外。
 
-作業項目グリッドの `R` は Result パネルを前面化してコメントモードに入る。コメントモードでは
+作業項目グリッド・My Reviews・PR Search の `R` は Result パネル/タブを前面化してコメントモードに入る。
+Result 内 (テキスト入力以外) の `o` は結果 HTML を既定のブラウザで開く。コメントモードでは
 `↑ ↓` / `Home` / `End` でブロック (見出し・段落・リスト項目・表の行など) を移動、`Shift+↑ ↓` で範囲を
 拡張、`C` でコメント作成 (引用付き)、`Enter` はそのブロックにメモがあればメモ一覧へ移動し、無ければ
 コメント作成、`]` / `[` で次/前のメモ付きブロック、`PageUp` / `PageDown` でスクロール、`Escape` は

@@ -94,6 +94,8 @@ export function PullRequestResults({
   const [columnMenuRect, setColumnMenuRect] = useState<DOMRect | null>(null);
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const [maximized, setMaximized] = useState(false);
+  // Bumped by R: brings the Result tab forward and enters comment mode.
+  const [resultCommentRequest, setResultCommentRequest] = useState(0);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
   const restoreFocusRef = useRef(false);
   const columnUniqueValues = useMemo(
@@ -264,6 +266,7 @@ export function PullRequestResults({
     else if (e.key === "PageDown") { e.preventDefault(); moveSelection(10); }
     else if (e.key === "PageUp") { e.preventDefault(); moveSelection(-10); }
     else if (e.key === "Enter" || e.key === "ArrowRight") { e.preventDefault(); focusPrimaryPreview(); }
+    else if (e.key === "r" || e.key === "R") { e.preventDefault(); setResultCommentRequest((v) => v + 1); }
     else if (e.key === "o" || e.key === "O") {
       e.preventDefault();
       const pr = filteredResults[selectedIndex];
@@ -304,6 +307,7 @@ export function PullRequestResults({
     selectedPr,
     maximized,
     onToggleMaximize: () => setMaximized((value) => !value),
+    resultCommentRequest,
   });
 
   const gridPane = (
@@ -437,6 +441,7 @@ export function PullRequestResults({
           ...reviewSecondary,
         ] satisfies DockablePanelSpec[]}
         maximizedId={maximized ? 'review' : undefined}
+        activatePanel={resultCommentRequest > 0 ? { id: 'result', key: resultCommentRequest } : undefined}
       />
 
       {copyToast && (

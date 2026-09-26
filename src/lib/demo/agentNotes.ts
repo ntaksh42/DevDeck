@@ -1,8 +1,10 @@
 import type { AgentNote, AgentNoteItem, CreateAgentNoteInput } from "@/lib/azdoCommands";
 
 // In-memory agent notes for browser demo mode, keyed by `${target}:${itemId}`.
-// Seeded against the demo result HTML for work item 123 (see demoWorkItemResultPreview).
+// Seeded against the demo result HTML for work item 123 and PR 101 (see
+// demoWorkItemResultPreview / demoReviewResultPreview).
 const FOLDER = "C:\\reports\\azdo-work-items\\.to-agent-msg";
+const PR_FOLDER = "C:\\reports\\azdo-reviews\\.to-agent-msg";
 const demoNotes = new Map<string, AgentNote[]>([
   [
     "work-item:123",
@@ -33,6 +35,23 @@ const demoNotes = new Map<string, AgentNote[]>([
       },
     ],
   ],
+  [
+    "pull-request:101",
+    [
+      {
+        id: "20260926-101500.md",
+        status: "open",
+        createdAt: "2026-09-26T10:15:00+09:00",
+        body: "Also check the limiter under concurrent requests from one client.",
+        quote: "No blocking issues found",
+        quotePrefix: null,
+        quoteSuffix: null,
+        resultFile: "review-PR101.html",
+        resolved: null,
+        filePath: `${PR_FOLDER}\\pr-101\\20260926-101500.md`,
+      },
+    ],
+  ],
 ]);
 let demoNoteSeq = 0;
 
@@ -57,7 +76,9 @@ export function demoCreateAgentNote(input: CreateAgentNoteInput): AgentNote {
     quoteSuffix: quote ? input.quoteSuffix ?? null : null,
     resultFile: input.resultFile ?? null,
     resolved: null,
-    filePath: `${FOLDER}\\${input.target === "pull-request" ? "pr" : "wi"}-${input.itemId}\\${id}`,
+    filePath: input.target === "pull-request"
+      ? `${PR_FOLDER}\\pr-${input.itemId}\\${id}`
+      : `${FOLDER}\\wi-${input.itemId}\\${id}`,
   };
   demoNotes.set(keyOf(input), [...demoListAgentNotes(input), note]);
   return note;

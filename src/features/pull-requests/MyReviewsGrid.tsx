@@ -49,11 +49,19 @@ export function MyReviewsGrid({
     setActivateRequest((prev) => ({ id: LINKED_WORK_ITEMS_PANEL_ID, key: (prev?.key ?? 0) + 1 }));
     window.setTimeout(focusLinkedWorkItems, 50);
   }
+  // Bumped by R: brings the Result tab forward and enters comment mode.
+  const [resultCommentRequest, setResultCommentRequest] = useState(0);
+  function openResultCommentMode() {
+    if (!g.selectedPr) return;
+    setResultCommentRequest((v) => v + 1);
+    setActivateRequest((prev) => ({ id: 'result', key: (prev?.key ?? 0) + 1 }));
+  }
   const { anchor: reviewAnchor, secondary: reviewSecondary } = usePrReviewPanels({
     selectedPr: g.selectedPr,
     maximized: g.maximized,
     onToggleMaximize: () => g.setMaximized((v) => !v),
     onOpenLinkedWorkItems: openLinkedWorkItems,
+    resultCommentRequest,
   });
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -125,6 +133,11 @@ export function MyReviewsGrid({
     if (e.key === 't' || e.key === 'T') {
       e.preventDefault();
       openLinkedWorkItems();
+      return;
+    }
+    if (e.key === 'r' || e.key === 'R') {
+      e.preventDefault();
+      openResultCommentMode();
       return;
     }
     if (e.key === 'e' || e.key === 'E') {
