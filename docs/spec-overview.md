@@ -115,6 +115,22 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
   ただし PR のコメント活動による早期復帰は `pr_comment_seen` カーソルに依存し、同カーソルは
   コメント返信通知の処理時（`notify_pr_comment_replies` が有効。`desktop_notifications_enabled`
   には依存しない）のみ進むため、同トグルがオフの間はコメント活動では早期復帰せず期限で復帰する。
+- **エージェントへの申し送り (Agent notes)**: 作業項目グリッドの Result パネル (調査結果 HTML) に、
+  調査を行う外部 AI エージェント向けのコメントを残せる。保存先は `work_item_result_folder_path` 配下の
+  `.to-agent-msg/wi-{id}/{yyyyMMdd-HHmmss}.md` (1 メモ 1 ファイル、front-matter に `created` /
+  `result_file` / `quote` / `quote_prefix` / `quote_suffix`、本文は Markdown)。SQLite には保存しない。
+  エージェントは open のメモを読んで WI にコメント追記し、ファイルを `_done/` へ移動する (任意で
+  `resolved:` を追記)。DevDeck は `_done/` を Done として表示し、Done のメモは削除できない。
+  コマンドは `list_agent_notes` / `create_agent_note` / `delete_agent_note` (`agent_notes.rs`)。
+  入力は `target` (`work-item` / `pull-request`) と `itemId` で、`pull-request` は
+  `review_result_folder_path` 配下の `.to-agent-msg/pr-{id}/` を使う (保存形式は共通、front-matter の
+  `target` に種別を書く)。現在 UI から使うのは `work-item` のみで、PR の Result タブは未対応。
+  結果 HTML 上のテキスト選択 (Comment ボタン) またはキーボードのブロック選択で引用付きコメントを作れ、
+  引用は空白を無視したテキスト + 前後 24 文字の文脈で再アンカーする (HTML 再生成後に見つからない
+  メモは「Not found in current result」と表示)。ハイライトは CSS Custom Highlight API、番号ピン
+  (左余白) とスクロール位置マーカー (右端) は親ドキュメント側に描画し、結果 HTML は書き換えない。
+  iframe は従来どおり `sandbox="allow-same-origin"` (スクリプト無効) のため、スクロールと選択は親から
+  ポーリングで監視する。メモ一覧はエージェントによる外部変更を拾うため 15 秒ごとに再取得する。
 - **作業項目の新規作成**: My Work Items の「New item」ボタン、テンプレート適用
   (`WorkItemTemplatesPanel`)、またはプレビューの Duplicate (`D` キー / ヘッダーボタン) から
   作成ダイアログを開き、プロジェクト・種別 (`list_work_item_types`)・タイトル・説明・
@@ -405,6 +421,14 @@ API呼び出しは発生しない。この判定はビュー実行結果 (`WorkI
 `hasDraftPullRequest`)
 にのみ適用され、My Work Items など同期キャッシュ経由の一覧には反映されない
 (常に `false`)。Completed/Abandoned のみのPRは対象外。
+
+作業項目グリッドの `R` は Result パネルを前面化してコメントモードに入る。コメントモードでは
+`↑ ↓` / `Home` / `End` でブロック (見出し・段落・リスト項目・表の行など) を移動、`Shift+↑ ↓` で範囲を
+拡張、`C` でコメント作成 (引用付き)、`Enter` はそのブロックにメモがあればメモ一覧へ移動し、無ければ
+コメント作成、`]` / `[` で次/前のメモ付きブロック、`PageUp` / `PageDown` でスクロール、`Escape` は
+範囲拡張の解除 → グリッドへ戻る。コメント入力は `Ctrl+Enter` 送信 / `Escape` 取消で、いずれも
+呼び出し元 (コメントモード / グリッド) へフォーカスを戻す。メモ一覧は `↑ ↓` 移動 (結果内の該当箇所を
+強調)、`Enter` で該当箇所へスクロール、`Delete` で削除、`Escape` でグリッドへ。
 
 ビュー一覧では `↑ ↓ ← →` (グリッド状に移動) / `Home` / `End` で選択、`Shift+←→↑↓` で並べ替え、
 `Delete` で削除、`N` 追加 / `E` 編集 / `R` 全ビュー再実行。`Ctrl+B` は一覧の折りたたみトグルで、

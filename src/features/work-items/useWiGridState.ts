@@ -79,6 +79,8 @@ export function useWiGridState({
   const [lastCheckedIndex, setLastCheckedIndex] = useState<number | null>(null);
   const [columnMenuRect, setColumnMenuRect] = useState<DOMRect | null>(null);
   const [focusCommentRequest, setFocusCommentRequest] = useState(0);
+  // Bumped by R on the grid: activates the Result panel and enters comment mode.
+  const [resultCommentRequest, setResultCommentRequest] = useState(0);
   const [openAssigneeRequest, setOpenAssigneeRequest] = useState(0);
   const [openStateRequest, setOpenStateRequest] = useState(0);
   const [openPriorityRequest, setOpenPriorityRequest] = useState(0);
@@ -210,6 +212,7 @@ export function useWiGridState({
     lastCheckedIndex, setLastCheckedIndex,
     columnMenuRect, setColumnMenuRect,
     focusCommentRequest, setFocusCommentRequest,
+    resultCommentRequest, setResultCommentRequest,
     openAssigneeRequest, setOpenAssigneeRequest,
     openStateRequest, setOpenStateRequest,
     openPriorityRequest, setOpenPriorityRequest,

@@ -137,6 +137,9 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Post comment (+ apply pending changes)</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
           <div className={row}><span>Return to grid (from input / preview)</span><kbd className={kbd}>Esc / ←</kbd></div>
           <div className={row}><span>Snooze selected row (My Items / Views / Search)</span><kbd className={kbd}>Z</kbd></div>
+          <div className={row}><span>Comment on the investigation result (Result panel)</span><kbd className={kbd}>R</kbd></div>
+          <div className={row}><span>Result: move block / extend</span><kbd className={kbd}>↑ ↓ / Shift+↑ ↓</kbd></div>
+          <div className={row}><span>Result: comment / open note / next-prev note</span><kbd className={kbd}>C / Enter / ] [</kbd></div>
 
           <p className={section}>Work Item Views</p>
           <div className={row}><span>Move view card</span><kbd className={kbd}>← → ↑ ↓</kbd></div>

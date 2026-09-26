@@ -4,6 +4,7 @@ use serde::Deserialize;
 use tauri::State;
 use tokio::sync::{mpsc, RwLock};
 
+use crate::agent_notes::AgentNoteService;
 use crate::cancellation::CancellationRegistry;
 use crate::code_browse::CodeBrowseService;
 use crate::code_search::CodeSearchService;
@@ -33,6 +34,7 @@ pub(crate) struct AppState {
     pub(crate) code_search: CodeSearchService,
     pub(crate) code_browse: CodeBrowseService,
     pub(crate) settings: SettingsService,
+    pub(crate) agent_notes: AgentNoteService,
     pub(crate) snooze: SnoozeService,
     pub(crate) cancellation: CancellationRegistry,
     pub(crate) sync_trigger: mpsc::Sender<SyncTrigger>,

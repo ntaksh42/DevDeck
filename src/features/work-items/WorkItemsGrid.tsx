@@ -230,7 +230,10 @@ export function WorkItemsGrid({
   );
 
   const resultPane = g.selectedItem ? (
-    <WorkItemResultSection workItemId={g.selectedItem.id} />
+    <WorkItemResultSection
+      workItemId={g.selectedItem.id}
+      commentModeRequest={state.resultCommentRequest}
+    />
   ) : (
     <div className="flex h-full items-center justify-center p-4">
       <PreviewEmptyState message="Select a work item to see its investigation result." />
@@ -339,6 +342,11 @@ export function WorkItemsGrid({
               minWidth: 320,
             },
           ] satisfies DockablePanelSpec[]}
+          activatePanel={
+            state.resultCommentRequest > 0
+              ? { id: 'result', key: state.resultCommentRequest }
+              : undefined
+          }
         />
       ) : (
         gridPane

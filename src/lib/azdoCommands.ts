@@ -10,3 +10,4 @@ export * from "./commands/pipelines";
 export * from "./commands/search";
 export * from "./commands/snooze";
 export * from "./commands/notifications";
+export * from "./commands/agentNotes";

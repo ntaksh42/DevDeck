@@ -2,6 +2,8 @@
 // demoInvoke to keep the main file within the 500-line limit.
 // Returns `undefined` for unrecognised commands so the caller can fall through.
 import type {
+  AgentNoteItem,
+  CreateAgentNoteInput,
   CommitActivityInput,
   ListNotificationsInput,
   RecordNotificationInput,
@@ -38,6 +40,11 @@ import {
   demoRecordNotification,
   demoUnreadNotificationsCount,
 } from "@/lib/demo/notifications";
+import {
+  demoCreateAgentNote,
+  demoDeleteAgentNote,
+  demoListAgentNotes,
+} from "@/lib/demo/agentNotes";
 
 export function dispatchExt(command: string, args: unknown): unknown {
   switch (command) {
@@ -203,6 +210,21 @@ export function dispatchExt(command: string, args: unknown): unknown {
     case "record_notification": {
       const input = (args as { input?: RecordNotificationInput } | undefined)?.input;
       if (input) demoRecordNotification(input);
+      return null;
+    }
+    // ── Agent notes ───────────────────────────────────────────────────────
+    case "list_agent_notes": {
+      const input = (args as { input?: AgentNoteItem } | undefined)?.input;
+      return input ? demoListAgentNotes(input) : [];
+    }
+    case "create_agent_note": {
+      const input = (args as { input?: CreateAgentNoteInput } | undefined)?.input;
+      if (!input) throw new Error("missing input");
+      return demoCreateAgentNote(input);
+    }
+    case "delete_agent_note": {
+      const input = (args as { input?: AgentNoteItem & { noteId: string } } | undefined)?.input;
+      if (input) demoDeleteAgentNote(input, input.noteId);
       return null;
     }
     default:
