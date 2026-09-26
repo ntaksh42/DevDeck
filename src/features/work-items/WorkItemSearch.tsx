@@ -12,6 +12,7 @@ import { handleSearchInputEscape } from "@/lib/utils";
 import { ErrorState } from "@/components/StateDisplay";
 import { MultiSelectFilter } from "@/components/MultiSelectFilter";
 import { WorkItemsGrid } from "./WorkItemsGrid";
+import { WorkItemFilterBar } from "./WorkItemFilterBar";
 import { toMatchTarget } from "./workItemMatchTarget";
 import { workItemQueryKeys } from "./queryKeys";
 
@@ -148,28 +149,15 @@ export function WorkItemSearch({
           )}
           Search
         </button>
+        <span
+          className="text-muted-foreground"
+          title="Showing locally synced data — refreshed automatically every 5 minutes."
+          aria-label="Showing locally synced data — refreshed automatically every 5 minutes."
+          role="note"
+        >
+          <Info className="h-3.5 w-3.5" aria-hidden="true" />
+        </span>
       </form>
-
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
-        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Info className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
-          Showing locally synced data — refreshed automatically every 5 minutes.
-        </p>
-        {mutation.isSuccess ? (
-          <div className="flex h-7 min-w-[180px] items-center rounded-md border border-input bg-background px-2 focus-within:ring-2 focus-within:ring-ring">
-            <Search className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <input
-              value={resultFilter}
-              onChange={(event) => setResultFilter(event.target.value)}
-              onKeyDown={(event) => handleSearchInputEscape(event, () => setResultFilter(""))}
-              placeholder="Filter results… #1234, p:1, @user, s:active, t:bug"
-              aria-label="Filter results"
-              title="Smart filter: #1234 id, p:1–4 priority, @user assignee, s:active state, t:bug type. Unknown prefixes are searched as text."
-              className="min-w-0 flex-1 bg-transparent text-xs outline-none"
-            />
-          </div>
-        ) : null}
-      </div>
 
       {mutation.isError ? (
         <ErrorState message={commandErrorMessage(mutation.error)} />
@@ -179,6 +167,11 @@ export function WorkItemSearch({
         loading={mutation.isPending}
         results={filteredResults}
         searched={mutation.isSuccess}
+        filterBar={
+          mutation.isSuccess ? (
+            <WorkItemFilterBar value={resultFilter} onChange={setResultFilter} ariaLabel="Filter results" />
+          ) : undefined
+        }
         snoozeOrganizationId={organizationId}
       />
     </div>

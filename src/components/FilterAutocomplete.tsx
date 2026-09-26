@@ -55,6 +55,7 @@ export function FilterAutocomplete({
   inputRef,
   ariaLabel = "Filter",
   showAllOnFocus = false,
+  compact = false,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -64,6 +65,8 @@ export function FilterAutocomplete({
   inputRef?: RefObject<HTMLInputElement | null>;
   ariaLabel?: string;
   showAllOnFocus?: boolean;
+  /** Fits a 20px dock tab strip instead of a full-height toolbar. */
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(-1);
@@ -113,8 +116,12 @@ export function FilterAutocomplete({
 
   return (
     <div className="relative flex-1">
-      <div className="flex h-8 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
-        <Search className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <div
+        className={`flex items-center rounded-md border border-input bg-background focus-within:ring-2 focus-within:ring-ring ${
+          compact ? "h-[18px] px-1.5" : "h-8 px-3"
+        }`}
+      >
+        <Search className={`shrink-0 text-muted-foreground ${compact ? "mr-1 h-3 w-3" : "mr-2 h-3.5 w-3.5"}`} aria-hidden="true" />
         <input
           ref={inputRef}
           type="text"
@@ -134,7 +141,7 @@ export function FilterAutocomplete({
           onFocus={() => setOpen(true)}
           onBlur={() => setOpen(false)}
           onKeyDown={onKeyDown}
-          className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          className={`w-full bg-transparent outline-none placeholder:text-muted-foreground ${compact ? "text-xs" : "text-sm"}`}
         />
         {value && (
           <button

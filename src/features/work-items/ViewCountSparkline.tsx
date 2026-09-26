@@ -33,7 +33,7 @@ export function ViewCountSparkline({ points, viewName }: ViewCountSparklineProps
       preserveAspectRatio="none"
       role="img"
       aria-label={`${viewName} count trend over the last ${points.length} sessions: ${trendLabel}`}
-      className={`mt-2 block ${TREND_CLASSES[geometry.trend]}`}
+      className={`block ${TREND_CLASSES[geometry.trend]}`}
     >
       <polygon points={geometry.area} fill="currentColor" opacity={0.12} />
       <polyline

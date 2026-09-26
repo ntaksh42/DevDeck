@@ -120,6 +120,13 @@ export function focusPrimaryPreview(): boolean {
 // Focuses the active view's main filter/search input (shared by Ctrl+F and the
 // per-grid "/" shortcut so they target the same field everywhere).
 export function focusFilterInput(): boolean {
+  // A view whose filter is folded away until needed exposes a reveal control
+  // instead of an always-present input; activating it opens and focuses it.
+  const reveal = document.querySelector<HTMLElement>("[data-filter-reveal='true']");
+  if (reveal) {
+    reveal.click();
+    return true;
+  }
   const input = document.querySelector<HTMLInputElement>(
     [
       "[data-filter-input='true']",

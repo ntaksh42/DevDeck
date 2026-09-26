@@ -34,7 +34,7 @@ test.describe("browser preview", () => {
     await main.getByRole("tab", { name: "Result" }).click();
     await expect(main.getByText("review-PR101.html", { exact: true })).toBeVisible();
     await expect(page.getByRole("separator", { name: "Resize navigation" })).toBeVisible();
-    await expect(main.getByRole("separator", { name: "Resize review preview" })).toBeVisible();
+    await expect(main.getByRole("separator", { name: "Resize Conversation" })).toBeVisible();
 
     await main.getByRole("button", { name: "Sort by PR#" }).click();
     await expect(reviewGrid.getByRole("row").first()).toContainText("#98");
@@ -54,6 +54,8 @@ test.describe("browser preview", () => {
     await expect(main.getByText("Upgrade EKS cluster to 1.29")).toHaveCount(0);
     await main.getByRole("button", { name: /Rejected by you/ }).click();
 
+    // The filter is folded into the Reviews tab strip until opened.
+    await main.getByRole("button", { name: "Filter reviews" }).click();
     await main.getByPlaceholder("Filter by repo, title, author…").fill("auth");
     await expect(reviewGrid.getByText("Migrate token signing to RS256")).toBeVisible();
     await expect(reviewGrid.getByText("Add rate limiting middleware to all endpoints")).toHaveCount(0);
@@ -70,7 +72,7 @@ test.describe("browser preview", () => {
     await expect(main.getByRole("button", { name: "Edit title" })).toContainText(
       "Validate onboarding with PAT credentials",
     );
-    await expect(main.getByRole("separator", { name: "Resize work item preview" })).toBeVisible();
+    await expect(main.getByRole("separator", { name: "Resize Preview" })).toBeVisible();
     await expect(
       main.frameLocator('iframe[title="Description"]').getByText("Fetch detail fields from Azure DevOps"),
     ).toBeVisible();

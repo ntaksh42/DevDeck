@@ -185,6 +185,14 @@
   --dv-inactivegroup-visiblepanel-tab-color: hsl(var(--foreground));
   --dv-activegroup-hiddenpanel-tab-color: hsl(var(--muted-foreground));
   --dv-inactivegroup-hiddenpanel-tab-color: hsl(var(--muted-foreground));
+  --dv-separator-border: transparent;
+}
+
+/* Pane boundaries: every group draws its own border, so adjacent panes read
+   as separate cards (a border, not a dockview gap, so sizes stay exact). */
+.dv-dockview .dv-groupview {
+  border: 1px solid hsl(var(--border));
+  border-radius: 4px;
 }
 
 .dv-tab.dv-active-tab {

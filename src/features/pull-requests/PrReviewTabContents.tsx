@@ -10,7 +10,7 @@ import {
   type PullRequestReview,
   type ReviewPullRequestSummary,
 } from "@/lib/azdoCommands";
-import { focusPrimaryPreview, formatRelativeDate } from "@/lib/utils";
+import { focusPrimaryPreview } from "@/lib/utils";
 import { extractWorkItemMentions, navigateToWorkItem } from "@/lib/crossLinks";
 import { fetchWorkItemImageCached } from "@/lib/workItemImageCache";
 import { MarkdownView } from "@/lib/markdown";
@@ -130,9 +130,6 @@ export function ReviewTab({
   const myVote = review.reviewers.find((reviewer) => reviewer.isMe)?.vote ?? pr.myVote;
   const userThreads = review.threads.filter((thread) =>
     thread.comments.some((comment) => !comment.isSystem),
-  );
-  const systemThreads = review.threads.filter((thread) =>
-    thread.comments.every((comment) => comment.isSystem),
   );
 
   return (
@@ -400,30 +397,12 @@ export function ReviewTab({
           </div>
         </PrPreviewSection>
 
-        {/* System events (auto-generated threads) */}
-        {systemThreads.length > 0 ? (
-          <PrPreviewSection
-            title={`System Events (${systemThreads.length})`}
-            collapseId="systemEvents"
-            className="px-3"
-          >
-            <ul className="space-y-0.5 pb-2 pl-3 text-xs text-muted-foreground">
-              {systemThreads.map((thread) => (
-                <li key={thread.id}>
-                  {thread.comments[0]?.content ?? ""}
-                  {thread.comments[0]?.publishedDate
-                    ? ` · ${formatRelativeDate(thread.comments[0].publishedDate)}`
-                    : ""}
-                </li>
-              ))}
-            </ul>
-          </PrPreviewSection>
-        ) : null}
       </div>
 
       {/* New comment */}
       <div className="shrink-0 border-t border-border p-2">
         <CommentComposer
+          collapsible
           placeholder="Add a comment… (Ctrl+Enter to post)"
           busy={commentMutation.isPending}
           mentionSearch={mentionSearch}

@@ -1,12 +1,12 @@
 import { useState, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Plus, Search } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { listMyWorkItems, commandErrorMessage } from '@/lib/azdoCommands';
 import { useActiveOrganizationId } from '@/lib/useActiveConnection';
 import { matchesWorkItemQuery, parseSearchQuery } from '@/lib/searchQuery';
-import { handleSearchInputEscape } from '@/lib/utils';
 import { ErrorState } from '@/components/StateDisplay';
 import { WorkItemsGrid } from './WorkItemsGrid';
+import { WorkItemFilterBar } from './WorkItemFilterBar';
 import { WorkItemTemplatesPanel } from './WorkItemTemplatesPanel';
 import { CreateWorkItemDialog, type CreateWorkItemDraft } from './CreateWorkItemDialog';
 import { toMatchTarget } from './workItemMatchTarget';
@@ -42,19 +42,6 @@ export function MyWorkItemsPanel() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex shrink-0 flex-wrap items-center gap-2">
-        <div className="flex h-8 min-w-[180px] flex-1 items-center rounded-md border border-input bg-background px-2 focus-within:ring-2 focus-within:ring-ring">
-          <Search className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <input
-            value={filter}
-            onChange={(event) => setFilter(event.target.value)}
-            onKeyDown={(event) => handleSearchInputEscape(event, () => setFilter(""))}
-            placeholder="Filter… try #1234, p:1, @user, s:active, t:bug"
-            aria-label="Filter"
-            title="Smart search: #1234 jumps to an id, p:1–4 priority, @user assignee, s:active state, t:bug type. Unknown prefixes are searched as text."
-            className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-          />
-        </div>
-
         <button
           type="button"
           onClick={() => setCreateDraft({})}
@@ -97,6 +84,7 @@ export function MyWorkItemsPanel() {
         autoFocus
         triageScope={`myWorkItems:${selectedOrganizationId}`}
         snoozeOrganizationId={selectedOrganizationId}
+        filterBar={<WorkItemFilterBar value={filter} onChange={setFilter} />}
       />
 
       {createDraft ? (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   ArrowDownToLine,
@@ -24,6 +24,7 @@ import "dockview-react/dist/styles/dockview.css";
 import { ResizeHandle } from "@/components/ResizeHandle";
 import { readStoredJson, writeStoredJson } from "@/lib/storage";
 import { useIsDarkMode } from "@/lib/useIsDarkMode";
+import { createHeaderSlotStore, useCollapsedGroups, type HeaderSlotStore } from "./dockableWorkspaceSlots";
 
 export interface DockablePanelSpec {
   id: string;
@@ -48,6 +49,8 @@ export interface DockablePanelSpec {
   maxWidth?: number;
   minHeight?: number;
   maxHeight?: number;
+  /** Rendered in the group's tab strip (left of the move menu) while this panel is active. */
+  headerActions?: ReactNode;
 }
 
 interface PanelContentParams {
@@ -231,34 +234,42 @@ interface ResizeSpec {
   title: string;
 }
 
+type ResizePlacement = { axis: "x" | "y"; direction: -1; edge: "leading" };
+
 /**
- * Finds the group boundary that is shared with a sibling, including whether
- * the group is before or after that sibling. dockview marks the containing
- * split `dv-horizontal` or `dv-vertical`; the group's position in its
- * `.dv-view-container` determines whether the shared edge is leading or
- * trailing. Re-docking rebuilds the group, so this is stable for an overlay's
- * lifetime.
+ * The shared boundaries this group should carry a resize handle for: the
+ * leading (left/top) edge of the nearest split on each axis where the group --
+ * or the branch it sits in -- is not the first view. dockview marks each split
+ * `dv-horizontal` or `dv-vertical`.
+ *
+ * Walking up past the group's own split matters for nested layouts: a group
+ * stacked in a column (e.g. Conversation above Work Items) is the first view
+ * of that vertical split, but its column is the second view of the outer
+ * horizontal split, and that column boundary is the only place the preview
+ * width can be dragged. Resizing the group's width through `setSize` resizes
+ * that enclosing column.
+ *
+ * One handle per boundary: the later (right/bottom) side owns it, so adjacent
+ * overlays never compete for a drag. Re-docking rebuilds the group, so this is
+ * stable for an overlay's lifetime.
  */
-function groupResizePlacement(group: IDockviewHeaderActionsProps["group"]): {
-  axis: "x" | "y";
-  direction: 1 | -1;
-  edge: "leading" | "trailing";
-} | null {
-  const view = group.element.closest<HTMLElement>(".dv-view");
-  const viewContainer = view?.parentElement;
-  const split = viewContainer?.parentElement;
-  if (!view || !viewContainer?.classList.contains("dv-view-container") || !split) return null;
-
-  const views = Array.from(viewContainer.children).filter((child): child is HTMLElement =>
-    child.classList.contains("dv-view"),
-  );
-  const index = views.indexOf(view);
-  if (index < 0 || views.length < 2) return null;
-
-  const axis = split.classList.contains("dv-vertical") ? "y" : "x";
-  if (index > 0) return { axis, direction: -1, edge: "leading" };
-  if (index < views.length - 1) return { axis, direction: 1, edge: "trailing" };
-  return null;
+function groupResizePlacements(group: IDockviewHeaderActionsProps["group"]): ResizePlacement[] {
+  const placements: ResizePlacement[] = [];
+  const seen = new Set<"x" | "y">();
+  let view = group.element.closest<HTMLElement>(".dv-view");
+  while (view && seen.size < 2) {
+    const viewContainer = view.parentElement;
+    const split = viewContainer?.parentElement;
+    if (!viewContainer?.classList.contains("dv-view-container") || !split) break;
+    const axis = split.classList.contains("dv-vertical") ? "y" : "x";
+    if (!seen.has(axis)) {
+      seen.add(axis);
+      const views = Array.from(viewContainer.children).filter((child) => child.classList.contains("dv-view"));
+      if (views.indexOf(view) > 0) placements.push({ axis, direction: -1, edge: "leading" });
+    }
+    view = split.parentElement?.closest<HTMLElement>(".dv-view") ?? null;
+  }
+  return placements;
 }
 
 /**
@@ -281,15 +292,19 @@ function groupResizePlacement(group: IDockviewHeaderActionsProps["group"]): {
  */
 function GroupResizeOverlay({
   group,
+  placement,
+  labelSuffix,
   resizeSpec,
   dimensions,
 }: {
   group: IDockviewHeaderActionsProps["group"];
+  placement: ResizePlacement;
+  /** Tells a group's second (outer-split) handle apart from its first. */
+  labelSuffix: string;
   resizeSpec: ResizeSpec;
   dimensions: { width: number; height: number };
 }) {
-  const [placement] = useState(() => groupResizePlacement(group));
-  const vertical = placement?.axis === "y";
+  const vertical = placement.axis === "y";
   const [initialSize] = useState(() => (vertical ? group.api.height : group.api.width));
   const [crossLength, setCrossLength] = useState(() =>
     vertical ? group.element.clientWidth : group.element.clientHeight,
@@ -303,11 +318,6 @@ function GroupResizeOverlay({
     return () => observer.disconnect();
   }, [group, vertical]);
 
-  // One handle per boundary: the later (right/bottom) group owns it. This
-  // prevents adjacent group overlays from competing for a drag and continues
-  // to work when a stored layout is restored without its original specs.
-  if (!placement || placement.edge !== "leading") return null;
-
   const min = vertical
     ? resizeSpec.minHeight ?? VERTICAL_SPLIT_MIN_HEIGHT
     : resizeSpec.minWidth ?? FALLBACK_SPLIT_MIN_WIDTH;
@@ -320,7 +330,7 @@ function GroupResizeOverlay({
 
   return createPortal(
     <ResizeHandle
-      ariaLabel={`Resize ${resizeSpec.title}`}
+      ariaLabel={`Resize ${resizeSpec.title}${labelSuffix}`}
       axis={vertical ? "y" : "x"}
       direction={placement.direction}
       min={min}
@@ -345,13 +355,7 @@ function GroupResizeOverlay({
       onReset={() =>
         group.api.setSize(vertical ? { height: defaultSize } : { width: defaultSize })
       }
-      className={`absolute z-20 ${
-        placement.edge === "leading"
-          ? "left-0 top-0"
-          : vertical
-            ? "bottom-0 left-0"
-            : "right-0 top-0"
-      }`}
+      className="absolute left-0 top-0 z-20"
       style={vertical ? { width: crossLength } : { height: crossLength }}
     />,
     group.element,
@@ -367,9 +371,12 @@ function GroupResizeOverlay({
 function createHeaderActions(
   resizeSpecs: Map<string, ResizeSpec>,
   panelsRef: { current: DockablePanelSpec[] },
+  headerSlots: HeaderSlotStore,
 ) {
   return function HeaderActions({ api, group, containerApi, activePanel }: IDockviewHeaderActionsProps) {
+    const slot = useSyncExternalStore(headerSlots.subscribe, () => headerSlots.get(activePanel?.id));
     const resizablePanel = group.panels.find((panel) => resizeSpecs.has(panel.id));
+    const [placements] = useState(() => groupResizePlacements(group));
     const [dimensions, setDimensions] = useState(() => ({ width: api.width, height: api.height }));
 
     useEffect(() => {
@@ -384,7 +391,10 @@ function createHeaderActions(
     };
 
     return (
-      <div className="flex h-full items-center gap-0.5 pr-0.5">
+      // Above the group's top-edge resize overlay (z-20), which spans the tab
+      // strip: the strip's own buttons stay clickable, the rest stays draggable.
+      <div className="relative z-30 flex h-full items-center gap-0.5 pr-0.5">
+        {slot}
         {activePanel ? (
           <PanelMoveMenu
             panel={activePanel}
@@ -392,13 +402,16 @@ function createHeaderActions(
             panelsRef={panelsRef}
           />
         ) : null}
-        {resizeSpec ? (
+        {placements.map((placement, index) => (
           <GroupResizeOverlay
+            key={placement.axis}
             group={group}
+            placement={placement}
+            labelSuffix={index === 0 ? "" : placement.axis === "x" ? " width" : " height"}
             resizeSpec={resizeSpec}
             dimensions={dimensions}
           />
-        ) : null}
+        ))}
       </div>
     );
   };
@@ -490,6 +503,7 @@ export function DockableWorkspace({
   panels,
   maximizedId,
   activatePanel,
+  collapsedIds,
 }: {
   storageKey: string;
   panels: DockablePanelSpec[];
@@ -503,6 +517,8 @@ export function DockableWorkspace({
    * effect on a second identical activation).
    */
   activatePanel?: { id: string; key: number };
+  /** Panels whose group is shrunk to just its tab strip. */
+  collapsedIds?: string[];
 }) {
   const apiRef = useRef<DockviewApi | null>(null);
   const dockviewElementRef = useRef<HTMLDivElement | null>(null);
@@ -511,6 +527,10 @@ export function DockableWorkspace({
   const layoutStorageKey = `${storageKey}${LAYOUT_SCHEMA_SUFFIX}`;
   const panelsRef = useRef(panels);
   panelsRef.current = panels;
+  const headerSlots = useRef(createHeaderSlotStore()).current;
+  // Set once dockview has built or restored the layout, so effects that need
+  // the api (collapsing a group) re-run then instead of missing it at mount.
+  const [dockReady, setDockReady] = useState(false);
 
   // Frozen at first render: dockview reads `rightHeaderActionsComponent` only
   // once, at mount, the same as `onReady` below.
@@ -540,6 +560,7 @@ export function DockableWorkspace({
           ]),
       ),
       panelsRef,
+      headerSlots,
     ),
   ).current;
 
@@ -555,6 +576,7 @@ export function DockableWorkspace({
     (event: DockviewReadyEvent) => {
       const api = event.api;
       apiRef.current = api;
+      setDockReady(true);
       dockviewElementRef.current
         ?.querySelector<HTMLElement>(".dv-dockview")
         ?.style.setProperty("--dv-tabs-and-actions-container-height", "20px");
@@ -680,6 +702,16 @@ export function DockableWorkspace({
   useEffect(() => {
     syncPanelContent();
   });
+
+  // Layout effect so header content (e.g. a filter that opened on Ctrl+F) is
+  // in the DOM -- and can take focus -- before the next keystroke is handled.
+  useLayoutEffect(() => {
+    headerSlots.set(new Map(panels.map((panel) => [panel.id, panel.headerActions])));
+  });
+
+  useCollapsedGroups(apiRef, panelsRef, dockReady ? collapsedIds : undefined, (api) =>
+    applyGroupConstraints(api, panelsRef.current),
+  );
 
   useEffect(() => () => {
     if (persistTimeoutRef.current !== null) clearTimeout(persistTimeoutRef.current);

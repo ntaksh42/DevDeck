@@ -18,6 +18,7 @@ import { clamp, handleSearchInputEscape, isEditableTarget } from '@/lib/utils';
 import { matchesWorkItemQuery, parseSearchQuery } from '@/lib/searchQuery';
 import { ErrorState } from '@/components/StateDisplay';
 import { WorkItemsGrid } from './WorkItemsGrid';
+import { WorkItemFilterBar } from './WorkItemFilterBar';
 import { WorkItemBoard } from './WorkItemBoard';
 import { toMatchTarget } from './workItemMatchTarget';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from './queryKeys';
@@ -410,6 +411,7 @@ export function WorkItemViewsPanel({
             />
           ) : null}
 
+          {layout === "board" ? (
           <div className="flex h-8 shrink-0 items-center rounded-md border border-input bg-background px-2 focus-within:ring-2 focus-within:ring-ring">
             <Search className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
             <input
@@ -422,6 +424,7 @@ export function WorkItemViewsPanel({
               className="min-w-0 flex-1 bg-transparent text-sm outline-none"
             />
           </div>
+          ) : null}
 
           {layout === "board" ? (
             <WorkItemBoard
@@ -454,6 +457,7 @@ export function WorkItemViewsPanel({
                 })
               }
               previewVisible={selectedView.previewVisible !== false}
+              filterBar={<WorkItemFilterBar value={filter} onChange={setFilter} />}
               storageKeyScope={selectedView.id}
               extraColumns={selectedViewExtraColumns}
               fieldColumnsSource={{

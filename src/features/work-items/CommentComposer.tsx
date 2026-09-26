@@ -55,6 +55,10 @@ export function CommentComposer({
 }) {
   const queryClient = useQueryClient();
   const [commentText, setCommentText] = useState("");
+  // Folded to one line while empty and unfocused; the textarea stays mounted
+  // so `m` / Ctrl+M and the focus-comment event still find and focus it.
+  const [focused, setFocused] = useState(false);
+  const active = focused || commentText.trim() !== "";
   const mentionsToRecordRef = useRef<
     Array<{ id: string; displayName: string; uniqueName: string; organizationId: string }>
   >([]);
@@ -184,8 +188,15 @@ export function CommentComposer({
   }
 
   return (
-    <div className="bg-muted/70 p-2">
-      <form className="space-y-1" onSubmit={submitComment}>
+    <div className={`bg-muted/70 ${active ? "p-2" : "px-2 py-1"}`}>
+      <form
+        className="space-y-1"
+        onSubmit={submitComment}
+        onFocus={() => setFocused(true)}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocused(false);
+        }}
+      >
         <div ref={mentionPicker.containerRef} className="relative">
           <textarea
             ref={textareaRef}
@@ -201,9 +212,9 @@ export function CommentComposer({
             onKeyDown={handleCommentKeyDown}
             aria-label="Comment"
             aria-keyshortcuts="M Control+M Control+Enter Meta+Enter"
-            placeholder="Add a comment..."
-            rows={2}
-            className="min-h-[36px] w-full resize-y rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none transition-[border-color,box-shadow,min-height] focus:min-h-[64px] focus:border-primary focus:ring-4 focus:ring-primary/20"
+            placeholder="Add a comment... (m)"
+            rows={active ? 2 : 1}
+            className={`${active ? "min-h-[36px] resize-y" : "!h-7 !min-h-0 resize-none"} w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none transition-[border-color,box-shadow,min-height] focus:min-h-[64px] focus:border-primary focus:ring-4 focus:ring-primary/20`}
           />
           <MentionPickerDropdown
             options={mentionPicker.dropdown.options}
@@ -218,7 +229,7 @@ export function CommentComposer({
             {commandErrorMessage(commentMutation.error)}
           </p>
         ) : null}
-        <div className="flex items-center justify-end gap-1.5">
+        <div className={`items-center justify-end gap-1.5 ${active ? "flex" : "hidden"}`}>
           {commentMutation.isSuccess ? (
             <span className="text-xs text-muted-foreground">Comment posted</span>
           ) : null}

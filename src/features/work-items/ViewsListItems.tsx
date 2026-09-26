@@ -81,7 +81,7 @@ export function ViewCard({
       aria-keyshortcuts={OPTION_KEY_SHORTCUTS}
       onClick={onSelect}
       onDoubleClick={onEdit}
-      className={`min-h-[88px] rounded-md border p-3 text-left outline-none transition-colors focus:ring-2 focus:ring-inset focus:ring-ring ${selectionClasses(
+      className={`rounded-md border px-2.5 py-1.5 text-left outline-none transition-colors focus:ring-2 focus:ring-inset focus:ring-ring ${selectionClasses(
         selected,
         stats.alerting,
       )}`}
@@ -97,9 +97,9 @@ export function ViewCard({
           ) : null}
         </span>
       </div>
-      <div className="mt-3 flex items-baseline gap-1.5">
+      <div className="mt-1 flex items-end gap-1.5">
         <span
-          className={`text-3xl font-semibold leading-none ${stats.alerting ? "text-destructive" : ""}`}
+          className={`text-2xl font-semibold leading-none tabular-nums ${stats.alerting ? "text-destructive" : ""}`}
         >
           {query?.isError ? "!" : stats.displayCount}
         </span>
@@ -111,16 +111,20 @@ export function ViewCard({
             {stats.delta > 0 ? `+${stats.delta}` : stats.delta}
           </span>
         ) : null}
+        {query?.isError ? null : (
+          <span className="min-w-0 flex-1">
+            <ViewCountSparkline points={stats.history} viewName={view.name} />
+          </span>
+        )}
       </div>
-      {query?.isError ? null : <ViewCountSparkline points={stats.history} viewName={view.name} />}
-      <p className="mt-1 truncate text-xs text-muted-foreground">
+      {/* One meta line: limit, sort and the per-view options. */}
+      <p className="mt-1 truncate text-[11px] text-muted-foreground">
         {query?.isError
           ? commandErrorMessage(query.error)
           : view.limit !== undefined
-            ? `${view.limit} max results`
-            : "no result limit"}
-      </p>
-      <p className="mt-1 truncate text-[11px] text-muted-foreground">
+            ? `${view.limit} max`
+            : "no limit"}
+        {" · "}
         {(view.sortKey ?? "changedDate")} {(view.sortDirection ?? "desc").toUpperCase()}
         {view.previewVisible === false ? " · preview off" : ""}
         {view.refreshIntervalSec ? ` · auto ${view.refreshIntervalSec}s` : ""}

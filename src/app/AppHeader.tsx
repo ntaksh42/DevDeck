@@ -55,7 +55,7 @@ export function AppHeader({
   onSync,
 }: AppHeaderProps) {
   return (
-    <header className="flex h-12 items-center justify-between border-b border-border bg-card px-4 lg:px-5">
+    <header className="flex h-9 items-center justify-between border-b border-border bg-card px-4 lg:px-5">
       <div className="flex min-w-0 items-center gap-2">
         <button
           type="button"
@@ -71,10 +71,10 @@ export function AppHeader({
             <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
           )}
         </button>
-        <div className="min-w-0">
-          <h1 className="text-lg font-semibold">{VIEW_TITLES[activeView]}</h1>
-          <p className="text-sm text-muted-foreground">{VIEW_DESCRIPTIONS[activeView]}</p>
-        </div>
+        {/* One line: the description is a tooltip so the header gives its height back to the view. */}
+        <h1 className="truncate text-base font-semibold" title={VIEW_DESCRIPTIONS[activeView]}>
+          {VIEW_TITLES[activeView]}
+        </h1>
       </div>
       {organizationsLength > 0 && (
         <div className="flex items-center gap-2">
