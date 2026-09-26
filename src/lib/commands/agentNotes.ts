@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { invokeCommand } from "./runtime";
 
-// Notes for the external AI agent that investigates work items (and, later,
-// reviews pull requests). The backend stores each note as a Markdown file under
+// Notes for the external AI agent that investigates work items and reviews
+// pull requests. The backend stores each note as a Markdown file under
 // the matching result folder (`.to-agent-msg/wi-{id}/` or `pr-{id}/`); the agent
 // moves handled notes into `_done/`.
 

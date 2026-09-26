@@ -50,12 +50,15 @@ export function usePrReviewPanels({
   maximized = false,
   onToggleMaximize,
   onOpenLinkedWorkItems,
+  resultCommentRequest = 0,
 }: {
   selectedPr: ReviewPullRequestSummary | null;
   maximized?: boolean;
   onToggleMaximize?: () => void;
   /** When set, adds the linked Work Items tab and its header button. */
   onOpenLinkedWorkItems?: () => void;
+  /** Bumped by R on the grid: the Result tab enters agent-note comment mode. */
+  resultCommentRequest?: number;
 }): { anchor: DockablePanelSpec; secondary: DockablePanelSpec[] } {
   const { canZoomIn, canZoomOut, resetZoom, zoom, zoomIn, zoomOut } = usePreviewZoom();
 
@@ -231,7 +234,9 @@ export function usePrReviewPanels({
     {
       id: "result",
       title: "Result",
-      content: withChrome(!selectedPr ? noPrSelected : <ResultTab selectedPr={selectedPr} />),
+      content: withChrome(!selectedPr ? noPrSelected : (
+        <ResultTab selectedPr={selectedPr} commentModeRequest={resultCommentRequest} />
+      )),
       position: { relativeTo: "review", direction: "within" },
     },
     ...(onOpenLinkedWorkItems

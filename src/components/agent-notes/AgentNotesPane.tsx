@@ -5,12 +5,13 @@ import type { AgentNote } from "@/lib/azdoCommands";
 import { focusPrimaryGrid } from "@/lib/utils";
 import type { NoteAnchor } from "./types";
 
-// Lists the agent notes for one work item and hosts the composer. Open notes
+// Lists the agent notes for one work item or PR and hosts the composer. Open notes
 // are numbered to match the gutter pins in the result; notes whose quote no
 // longer appears in the regenerated result are flagged instead of dropped.
 
 type Props = {
-  workItemId: number;
+  /** Notes subfolder name, e.g. `wi-123` or `pr-45`. */
+  folderName: string;
   open: NoteAnchor[];
   done: AgentNote[];
   hasResult: boolean;
@@ -35,7 +36,7 @@ function formatTime(value: string): string {
 }
 
 export function AgentNotesPane({
-  workItemId, open, done, hasResult, activeId, pendingQuote, sending, error,
+  folderName, open, done, hasResult, activeId, pendingQuote, sending, error,
   composerRef, listRef, onReveal, onDelete, onClearQuote, onSend, onCancel,
 }: Props) {
   const [draft, setDraft] = useState("");
@@ -103,7 +104,7 @@ export function AgentNotesPane({
           <span className="rounded-full bg-yellow-200 px-1.5 text-[10px] text-yellow-900">{open.length} open</span>
         ) : null}
         <span className="ml-auto truncate text-muted-foreground" title="Notes are saved as Markdown files for the investigating agent">
-          .to-agent-msg/wi-{workItemId}/
+          .to-agent-msg/{folderName}/
         </span>
       </div>
       <div

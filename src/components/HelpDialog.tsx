@@ -101,6 +101,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Copy URLs of all selected rows</span><kbd className={kbd}>Ctrl+C</kbd></div>
           <div className={row}><span>Copy as Markdown link</span><kbd className={kbd}>L</kbd></div>
           <div className={row}><span>Snooze selected row</span><kbd className={kbd}>Z</kbd></div>
+          <div className={row}><span>Comment on the review result (Result tab, also PR Search)</span><kbd className={kbd}>R</kbd></div>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ PgUp PgDn Home End</kbd></div>
           <div className={row}><span>Select multiple (check file-overlap conflict risk)</span><kbd className={kbd}>Shift+↑ ↓ · Shift+click · Ctrl+click</kbd></div>
 

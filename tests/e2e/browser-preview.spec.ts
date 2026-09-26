@@ -220,3 +220,28 @@ test("snoozes a Work Item View row with Z and lists it under Snoozed", async ({ 
   await main.getByRole("button", { name: "Back to inbox" }).click();
   await expect(grid.getByRole("row")).toHaveCount(rowCount);
 });
+
+test("leaves an agent note on a PR review result with R", async ({ page }) => {
+  await page.goto("/");
+  const main = page.getByRole("main");
+  const reviewGrid = main.getByRole("grid", { name: "My review pull requests" });
+  await reviewGrid.getByText("Add rate limiting middleware to all endpoints").click();
+  await page.keyboard.press("r");
+  const frame = page.locator("[data-agent-result-frame='true']");
+  await expect(main.getByText(".to-agent-msg/pr-101/")).toBeVisible();
+  await expect(main.getByText("1 open")).toBeVisible();
+  await expect(frame).toBeFocused();
+
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("c");
+  const composer = main.getByRole("textbox", { name: "Note to the agent" });
+  await expect(composer).toBeFocused();
+  await composer.fill("Please re-check this paragraph.");
+  await page.keyboard.press("Control+Enter");
+  await expect(main.getByText("2 open")).toBeVisible();
+  await expect(frame).toBeFocused();
+
+  // The help shortcut still reaches the app while the result has focus.
+  await page.keyboard.press("?");
+  await expect(page.getByRole("button", { name: "Close keyboard shortcuts" })).toBeVisible();
+});
