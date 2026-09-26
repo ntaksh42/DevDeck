@@ -43,6 +43,7 @@ function makeDeps(overrides: Partial<WiKeyHandlerDeps> = {}): WiKeyHandlerDeps {
     setColumnMenuRect: vi.fn(),
     setCopyToast: vi.fn(),
     setFocusCommentRequest: vi.fn(),
+    setResultCommentRequest: vi.fn(),
     setTriageVersion: vi.fn(),
     setSnoozeAnchorRect: vi.fn(),
     setOpenAssigneeRequest: vi.fn(),
@@ -166,5 +167,13 @@ describe("createWiKeyHandler — snooze", () => {
 
     expect(snoozeTargetRef.current).toEqual(checkedItems);
     expect(setSnoozeAnchorRect).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("createWiKeyHandler — result comment mode", () => {
+  it("requests the Result panel comment mode on 'r'", () => {
+    const setResultCommentRequest = vi.fn();
+    fireKey("r", makeDeps({ setResultCommentRequest }));
+    expect(setResultCommentRequest).toHaveBeenCalledTimes(1);
   });
 });

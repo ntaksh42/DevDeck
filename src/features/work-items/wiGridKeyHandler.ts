@@ -30,6 +30,7 @@ export interface WiKeyHandlerDeps {
   setColumnMenuRect: React.Dispatch<React.SetStateAction<DOMRect | null>>;
   setCopyToast: (msg: string | null) => void;
   setFocusCommentRequest: React.Dispatch<React.SetStateAction<number>>;
+  setResultCommentRequest: React.Dispatch<React.SetStateAction<number>>;
   setTriageVersion: React.Dispatch<React.SetStateAction<number>>;
   setSnoozeAnchorRect: (rect: DOMRect | null) => void;
   setOpenAssigneeRequest: React.Dispatch<React.SetStateAction<number>>;
@@ -48,7 +49,7 @@ export function createWiKeyHandler(deps: WiKeyHandlerDeps): (e: React.KeyboardEv
       selectedIndex, displayed, checkedIds, checkedItems, openFilterCol, triageScope,
       snoozeEnabled, snoozeTargetRef, rowRefs, moveSelection, setOpenFilterCol,
       setFilterAnchorRect, setBulkAssignOpen, setBulkStateOpen, setBulkPriorityOpen,
-      setColumnMenuRect, setCopyToast, setFocusCommentRequest, setTriageVersion,
+      setColumnMenuRect, setCopyToast, setFocusCommentRequest, setResultCommentRequest, setTriageVersion,
       setSnoozeAnchorRect, setOpenAssigneeRequest, setOpenStateRequest,
       setOpenPriorityRequest, setOpenFieldRequest, handleCheckboxChange, clearCheckedIds,
       selectRangeTo,
@@ -222,6 +223,9 @@ export function createWiKeyHandler(deps: WiKeyHandlerDeps): (e: React.KeyboardEv
     } else if (e.key === "f" || e.key === "F") {
       e.preventDefault();
       setOpenFieldRequest((value) => value + 1);
+    } else if (e.key === "r" || e.key === "R") {
+      e.preventDefault();
+      setResultCommentRequest((value) => value + 1);
     }
   };
 }

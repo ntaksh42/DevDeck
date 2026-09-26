@@ -1,3 +1,4 @@
+pub mod agent_notes;
 pub mod code;
 pub mod commits;
 pub mod notifications;

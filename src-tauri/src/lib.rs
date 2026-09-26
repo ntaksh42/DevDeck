@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+mod agent_notes;
 mod app_state;
 mod auth;
 mod cancellation;
@@ -25,6 +26,7 @@ mod snooze;
 mod sync;
 mod work_items;
 
+use agent_notes::AgentNoteService;
 use app_state::AppState;
 use cancellation::CancellationRegistry;
 use code_browse::CodeBrowseService;
@@ -133,6 +135,7 @@ pub fn run() {
                 code_search: CodeSearchService::new(db.clone(), SecretStore),
                 code_browse: CodeBrowseService::new(db.clone(), SecretStore),
                 settings: SettingsService::new(db.clone()),
+                agent_notes: AgentNoteService::new(db.clone()),
                 snooze: SnoozeService::new(db.clone()),
                 cancellation: CancellationRegistry::new(),
                 sync_trigger: sync_tx,
@@ -149,6 +152,9 @@ pub fn run() {
             commands::settings::update_app_settings,
             commands::settings::get_review_result_preview,
             commands::settings::get_work_item_result_preview,
+            commands::agent_notes::list_agent_notes,
+            commands::agent_notes::create_agent_note,
+            commands::agent_notes::delete_agent_note,
             commands::settings::list_sync_states,
             commands::settings::export_diagnostics,
             commands::snooze::snooze_item,
