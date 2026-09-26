@@ -1,32 +1,9 @@
-import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Trash2 } from 'lucide-react';
-import {
-  deleteOrganization,
-  getActiveOrganization,
-  setActiveOrganization,
-  commandErrorMessage,
-  type Organization,
-} from '@/lib/azdoCommands';
-import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { SoftwareUpdateSettings } from "./SoftwareUpdateSettings";
-import { RowColorRulesSettings } from "./RowColorRulesSettings";
-import { SetupPanel } from './SetupPanel';
-import { QuickPipelinesSettings } from './QuickPipelinesSettings';
-import { SyncHealthSettings } from './SyncHealthSettings';
-import { ThemeSettings } from './ThemeSettings';
-import { DataCacheSettings } from './DataCacheSettings';
-import { ValidationModeSettings } from './ValidationModeSettings';
-import { ExperimentalSettings } from './ExperimentalSettings';
-import { ExperimentalUsageStats } from './ExperimentalUsageStats';
-import { ExperimentalDiagnostics } from './ExperimentalDiagnostics';
-import { DesktopNotificationSettings } from './DesktopNotificationSettings';
-import { NotificationRulesSettings } from './NotificationRulesSettings';
-import { ReviewResultFolderSettings } from './ReviewResultFolderSettings';
-import { WorkItemResultFolderSettings } from './WorkItemResultFolderSettings';
-import { ReviewStaleThresholdSettings, WorkItemStaleThresholdSettings } from './StaleThresholdSettings';
-import { ShowWindowHotkeySettings } from './ShowWindowHotkeySettings';
-import { KeyboardShortcutSettings } from './KeyboardShortcutSettings';
+import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { Search, X } from 'lucide-react';
+import type { Organization } from '@/lib/azdoCommands';
+import { resolveKeybindings } from '@/lib/keybindings';
+import { useExperimentalFlags } from './useExperimentalFlags';
+import { filterSettingsGroups, SETTINGS_GROUPS } from './settingsSections';
 
 export { SetupPanel } from './SetupPanel';
 export { ReviewResultFolderSettings } from './ReviewResultFolderSettings';
@@ -35,147 +12,199 @@ export { ReviewStaleThresholdSettings, WorkItemStaleThresholdSettings } from './
 export { NotificationRulesSettings } from './NotificationRulesSettings';
 export { ShowWindowHotkeySettings } from './ShowWindowHotkeySettings';
 
+const FOCUSABLE =
+  "input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex='0']";
+
 export function OrganizationSettings({
   organizations,
 }: {
   organizations: Organization[];
 }) {
-  const queryClient = useQueryClient();
-  const [pendingDelete, setPendingDelete] = useState<Organization | null>(null);
-  const activeQuery = useQuery({
-    queryKey: ["activeOrganization"],
-    queryFn: getActiveOrganization,
-  });
-  const activeId = activeQuery.data?.id ?? null;
+  const flags = useExperimentalFlags();
+  const [query, setQuery] = useState("");
+  const [activeGroupId, setActiveGroupId] = useState(SETTINGS_GROUPS[0].id);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const navRef = useRef<HTMLUListElement>(null);
 
-  // Switching the active connection swaps the whole API-layer provider, so every
-  // screen's data is stale: invalidate everything and refresh capabilities.
-  const setActiveMutation = useMutation({
-    mutationFn: setActiveOrganization,
-    onSuccess: () => {
-      void queryClient.invalidateQueries();
-    },
-  });
-  const deleteMutation = useMutation({
-    mutationFn: deleteOrganization,
-    onSuccess: () => {
-      void queryClient.invalidateQueries();
-    },
-  });
+  const visibleGroups = useMemo(
+    () => filterSettingsGroups(SETTINGS_GROUPS, "", (entry) => !entry.flag || flags[entry.flag]),
+    [flags],
+  );
+  const filteredGroups = useMemo(
+    () => filterSettingsGroups(visibleGroups, query),
+    [visibleGroups, query],
+  );
+  const matchingGroupIds = new Set(filteredGroups.map((group) => group.id));
+  const filterCombo = resolveKeybindings().focusFilter;
+
+  // Highlight the section currently at the top of the scroll area so the nav
+  // doubles as a "you are here" marker while scrolling the long page.
+  const groupKey = filteredGroups.map((group) => group.id).join(",");
+  useEffect(() => {
+    const container = contentRef.current;
+    if (!container || typeof IntersectionObserver === "undefined") return;
+    const visible = new Set<string>();
+    const order = groupKey.split(",");
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const id = (entry.target as HTMLElement).dataset.settingsGroup ?? "";
+          if (entry.isIntersecting) visible.add(id);
+          else visible.delete(id);
+        }
+        const first = order.find((id) => visible.has(id));
+        if (first) setActiveGroupId(first);
+      },
+      { rootMargin: "0px 0px -60% 0px" },
+    );
+    container
+      .querySelectorAll<HTMLElement>("[data-settings-group]")
+      .forEach((section) => observer.observe(section));
+    return () => observer.disconnect();
+  }, [groupKey]);
+
+  function jumpToGroup(groupId: string) {
+    const section = contentRef.current?.querySelector<HTMLElement>(
+      `[data-settings-group='${groupId}']`,
+    );
+    if (!section) return;
+    setActiveGroupId(groupId);
+    section.scrollIntoView?.({ block: "start" });
+    section.focus({ preventScroll: true });
+  }
+
+  function onNavKeyDown(event: KeyboardEvent<HTMLUListElement>) {
+    const keys = ["ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft", "Home", "End"];
+    if (!keys.includes(event.key)) return;
+    const buttons = Array.from(
+      navRef.current?.querySelectorAll<HTMLButtonElement>("button:not([disabled])") ?? [],
+    );
+    if (buttons.length === 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    let next = current;
+    if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = buttons.length - 1;
+    else if (event.key === "ArrowDown" || event.key === "ArrowRight")
+      next = current < 0 ? 0 : (current + 1) % buttons.length;
+    else next = current <= 0 ? buttons.length - 1 : current - 1;
+    buttons[next].focus();
+  }
+
+  function onFilterKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Escape") {
+      // First Escape clears the filter; a second one leaves the field.
+      event.preventDefault();
+      if (query) setQuery("");
+      else event.currentTarget.blur();
+      return;
+    }
+    if (event.key === "Enter") {
+      // Enter jumps into the first matching panel's first control.
+      event.preventDefault();
+      const entry = contentRef.current?.querySelector<HTMLElement>("[data-settings-entry]");
+      if (!entry) return;
+      entry.scrollIntoView?.({ block: "start" });
+      (entry.querySelector<HTMLElement>(FOCUSABLE) ?? entry).focus({ preventScroll: true });
+    }
+  }
 
   return (
-    <div className="space-y-3">
-      <SetupPanel compact />
-      <ThemeSettings />
-      <KeyboardShortcutSettings />
-      <ShowWindowHotkeySettings />
-      <DesktopNotificationSettings />
-      <NotificationRulesSettings />
-      <ReviewResultFolderSettings />
-      <WorkItemResultFolderSettings />
-      <QuickPipelinesSettings organizations={organizations} />
-      <ReviewStaleThresholdSettings />
-      <WorkItemStaleThresholdSettings />
-      <RowColorRulesSettings />
-      <SyncHealthSettings organizations={organizations} />
-      <DataCacheSettings />
-      <SoftwareUpdateSettings />
-      <ValidationModeSettings />
-      <ExperimentalSettings />
-      <ExperimentalUsageStats />
-      <ExperimentalDiagnostics />
-      <div className="overflow-hidden rounded-md border border-border bg-card">
-        <div className="border-b border-border px-3 py-2">
-          <h2 className="text-base font-semibold">Connections</h2>
-          <p className="text-sm text-muted-foreground">
-            The active connection determines which platform every screen shows.
-          </p>
-        </div>
-        {deleteMutation.isError && (
-          <p className="px-5 py-2 text-sm text-destructive">
-            {commandErrorMessage(deleteMutation.error)}
-          </p>
-        )}
-        {setActiveMutation.isError && (
-          <p className="px-5 py-2 text-sm text-destructive">
-            {commandErrorMessage(setActiveMutation.error)}
-          </p>
-        )}
-        <div
-          role="radiogroup"
-          aria-label="Active connection"
-          className="divide-y divide-border"
-        >
-          {organizations.map((organization) => (
-            <div
-              key={organization.id}
-              className="grid items-center gap-4 px-3 py-2 md:grid-cols-[auto_1fr_auto_auto_auto]"
+    <div className="grid gap-3 lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start">
+      <nav
+        aria-label="Settings sections"
+        className="grid gap-2 lg:sticky lg:top-0 lg:z-10"
+      >
+        <div className="flex h-9 items-center gap-2 rounded-md border border-input bg-background px-2 focus-within:ring-2 focus-within:ring-ring">
+          <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={onFilterKeyDown}
+            placeholder={`Filter settings (${filterCombo})`}
+            aria-label="Filter settings"
+            data-filter-input="true"
+            spellCheck={false}
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none [&::-webkit-search-cancel-button]:hidden"
+          />
+          {query ? (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Clear settings filter"
+              className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground"
             >
-              <input
-                type="radio"
-                name="active-connection"
-                checked={organization.id === activeId}
-                onChange={() => setActiveMutation.mutate(organization.id)}
-                disabled={setActiveMutation.isPending}
-                aria-label={`Use ${organization.displayName ?? organization.name}`}
-                className="h-4 w-4"
-              />
-              <div>
-                <p className="font-medium">
-                  {organization.displayName ?? organization.name}
-                  <span className="ml-2 rounded bg-secondary px-1.5 py-0.5 text-xs text-muted-foreground">
-                    {organization.providerKind === "github" ? "GitHub" : "Azure DevOps"}
-                  </span>
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {organization.baseUrl}
-                </p>
-              </div>
-              <div className="text-left text-sm md:text-right">
-                <p className="text-muted-foreground">Auth</p>
-                <p className="font-medium">
-                  {formatAuthProvider(organization.authProvider)}
-                </p>
-              </div>
-              <div className="text-left text-sm md:text-right">
-                <p className="text-muted-foreground">Authenticated user</p>
-                <p className="font-medium">
-                  {organization.authenticatedUserDisplayName ?? "Unknown"}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPendingDelete(organization)}
-                disabled={deleteMutation.isPending}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
-                aria-label={`Remove ${organization.name}`}
-                title={`Remove ${organization.name}`}
-              >
-                <Trash2 className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-          ))}
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          ) : null}
         </div>
+        <ul
+          ref={navRef}
+          onKeyDown={onNavKeyDown}
+          className="flex flex-wrap gap-1 lg:flex-col"
+        >
+          {visibleGroups.map((group) => {
+            const matches = matchingGroupIds.has(group.id);
+            const active = matches && group.id === activeGroupId;
+            return (
+              <li key={group.id}>
+                <button
+                  type="button"
+                  onClick={() => jumpToGroup(group.id)}
+                  disabled={!matches}
+                  aria-current={active ? "true" : undefined}
+                  className={`w-full rounded-md px-2.5 py-1.5 text-left text-sm disabled:cursor-default disabled:opacity-40 ${
+                    active
+                      ? "bg-secondary font-medium text-foreground"
+                      : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  }`}
+                >
+                  {group.label}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+
+      <div ref={contentRef} className="min-w-0 space-y-5">
+        {filteredGroups.length === 0 ? (
+          <div className="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
+            <p>No settings match “{query}”.</p>
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              className="mt-2 text-sm font-medium text-primary hover:underline"
+            >
+              Clear filter
+            </button>
+          </div>
+        ) : (
+          filteredGroups.map((group) => (
+            <section
+              key={group.id}
+              aria-label={group.label}
+              data-settings-group={group.id}
+              tabIndex={-1}
+              className="scroll-mt-1 space-y-3 outline-none"
+            >
+              <p
+                aria-hidden="true"
+                className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+              >
+                {group.label}
+              </p>
+              {group.entries.map((entry) => (
+                <div key={entry.id} data-settings-entry={entry.id} className="scroll-mt-1">
+                  {entry.render(organizations)}
+                </div>
+              ))}
+            </section>
+          ))
+        )}
       </div>
-      {pendingDelete ? (
-        <ConfirmDialog
-          title="Remove organization"
-          message={`Remove "${pendingDelete.name}"? This deletes its stored credential and cannot be undone.`}
-          confirmLabel="Remove"
-          destructive
-          onCancel={() => setPendingDelete(null)}
-          onConfirm={() => {
-            deleteMutation.mutate({ id: pendingDelete.id });
-            setPendingDelete(null);
-          }}
-        />
-      ) : null}
     </div>
   );
-}
-
-function formatAuthProvider(value: string): string {
-  if (value === "azure_cli") return "Azure CLI";
-  if (value === "github_pat") return "GitHub PAT";
-  return value.toUpperCase();
 }
