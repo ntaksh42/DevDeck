@@ -293,7 +293,8 @@ export function PrReviewHeader({
   const reviewers = review?.reviewers ?? [];
 
   // Read top-down: what the PR is (title), what needs attention (status
-  // badges), then where it came from (id / branch / author) and who reviews.
+  // badges) followed by where it came from (id / branch / author) on the same
+  // line, then who reviews.
   return (
     <div className="flex shrink-0 flex-col gap-1.5 border-b border-border px-2 py-1.5">
       <div className="flex items-start gap-2">
@@ -314,22 +315,22 @@ export function PrReviewHeader({
         aria-label="Pull request metadata"
         className="flex min-w-0 flex-col gap-1"
       >
-        <div className="flex min-w-0 flex-wrap items-center gap-1">
+        <div className="flex min-w-0 items-center gap-1">
           <StateBadge isDraft={isDraft} />
           {statusBadges}
+          <p className="ml-0.5 min-w-0 truncate text-xs text-muted-foreground">
+            <span className="font-mono font-semibold text-foreground">
+              #{selectedPr.pullRequestId}
+            </span>
+            {" · "}
+            <span className="font-mono" title={branchTitle}>
+              {branchLabel}
+            </span>
+            {" · "}
+            {createdBy ?? "Unknown"}
+            {creationDate ? ` · opened ${formatRelativeDate(creationDate)}` : ""}
+          </p>
         </div>
-        <p className="min-w-0 truncate text-xs text-muted-foreground">
-          <span className="font-mono font-semibold text-foreground">
-            #{selectedPr.pullRequestId}
-          </span>
-          {" · "}
-          <span className="font-mono" title={branchTitle}>
-            {branchLabel}
-          </span>
-          {" · "}
-          {createdBy ?? "Unknown"}
-          {creationDate ? ` · opened ${formatRelativeDate(creationDate)}` : ""}
-        </p>
         {reviewers.length > 0 ? (
           <div className="flex min-w-0 flex-wrap items-center gap-1">
             <span className="mr-0.5 text-xs text-muted-foreground">Reviewers</span>
