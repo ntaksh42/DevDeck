@@ -227,8 +227,8 @@ export const PrFileDiffSection = memo(function PrFileDiffSection({
             <CommentComposer
               placeholder={
                 side === "left"
-                  ? "Comment on the old line… (Ctrl+Enter to post)"
-                  : "Comment on this line… (Ctrl+Enter to post)"
+                  ? "Comment on the old line…"
+                  : "Comment on this line…"
               }
               autoFocus
               busy={commentBusy}

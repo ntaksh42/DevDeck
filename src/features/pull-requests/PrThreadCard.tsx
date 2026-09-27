@@ -340,7 +340,7 @@ export function PrThreadCard({
                 {editingId === comment.id && onEditComment ? (
                   <div className="mt-1 pl-[26px]">
                     <CommentComposer
-                      placeholder="Edit comment… (Ctrl+Enter to save)"
+                      placeholder="Edit comment…"
                       submitLabel="Save"
                       initialValue={comment.content ?? ""}
                       autoFocus
@@ -373,7 +373,7 @@ export function PrThreadCard({
           <div className="mt-1.5">
             {replying ? (
               <CommentComposer
-                placeholder="Reply… (Ctrl+Enter to post)"
+                placeholder="Reply…"
                 submitLabel="Reply"
                 autoFocus
                 busy={busy}
@@ -393,7 +393,7 @@ export function PrThreadCard({
                 <button
                   type="button"
                   onClick={() => setReplying(true)}
-                  className="min-w-0 flex-1 rounded-md border border-border bg-card px-2 py-1 text-left text-xs text-muted-foreground hover:bg-secondary focus:outline-none focus:ring-1 focus:ring-ring"
+                  className="flex h-7 min-w-0 flex-1 items-center rounded border border-input bg-background px-2 text-left text-xs text-muted-foreground hover:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                   Write a reply…
                 </button>

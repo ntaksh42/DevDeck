@@ -403,7 +403,7 @@ export function ReviewTab({
       <div className="shrink-0 border-t border-border p-2">
         <CommentComposer
           collapsible
-          placeholder="Add a comment… (Ctrl+Enter to post)"
+          placeholder="Add a comment…"
           busy={commentMutation.isPending}
           mentionSearch={mentionSearch}
           onSubmit={(content) =>

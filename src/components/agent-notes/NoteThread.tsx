@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { AgentNote } from "@/lib/azdoCommands";
+import { CommentField } from "@/components/CommentField";
 
 // The reply thread under one agent note: collapsed to a count by default,
 // expanded it lists the agent/user replies and a reply box. Replying to a done
@@ -97,28 +98,20 @@ export function NoteThread({
               </div>
             );
           })}
-          <textarea
-            ref={inputRef}
+          <CommentField
+            textareaRef={inputRef}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={handleKeyDown}
             rows={2}
             aria-label={`Reply to note ${note.id}`}
             placeholder={note.status === "done" ? "Reply (reopens the note)…" : "Reply…"}
-            className="w-full resize-y rounded border border-border bg-background px-1.5 py-1 outline-none focus:ring-2 focus:ring-ring"
+            hint="Ctrl+Enter to send · Esc to go back"
+            submitLabel="Reply"
+            submitDisabled={!draft.trim()}
+            pending={sending}
+            onSubmit={() => void send()}
           />
-          <div className="flex items-center gap-1.5">
-            <span className="mr-auto text-[11px] text-muted-foreground">Ctrl+Enter send · Esc back</span>
-            <button
-              type="button"
-              tabIndex={-1}
-              onClick={() => void send()}
-              disabled={!draft.trim() || sending}
-              className="rounded bg-primary px-2 py-0.5 font-medium text-primary-foreground disabled:opacity-50"
-            >
-              {sending ? "Sending…" : "Reply"}
-            </button>
-          </div>
         </div>
       ) : null}
     </div>

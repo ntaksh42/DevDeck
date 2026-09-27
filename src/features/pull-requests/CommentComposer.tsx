@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useState } from "react";
+import { CommentField } from "@/components/CommentField";
 import { focusPrimaryPreview } from "@/lib/utils";
 import { type MentionCandidate } from "@/lib/azdoCommands";
 import {
@@ -129,12 +129,76 @@ export function CommentComposer({
 
   const showMentions = mention != null && candidates.length > 0;
 
+  function handleKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
+    if (
+      event.key === "Backspace" &&
+      event.currentTarget.selectionStart === event.currentTarget.selectionEnd
+    ) {
+      const textarea = event.currentTarget;
+      const cursor = textarea.selectionStart;
+      const start = mentionTokenDeletionStart(
+        text,
+        cursor,
+        selectedMentions.map((selected) => selected.displayName),
+      );
+      if (start !== null) {
+        event.preventDefault();
+        const next = text.slice(0, start) + text.slice(cursor);
+        setText(next);
+        refreshMention(next, start);
+        window.setTimeout(() => textarea.setSelectionRange(start, start), 0);
+        return;
+      }
+    }
+    if (showMentions) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setActiveIndex((index) => (index + 1) % candidates.length);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setActiveIndex((index) => (index - 1 + candidates.length) % candidates.length);
+        return;
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault();
+        insertMention(candidates[activeIndex]);
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMention(null);
+        return;
+      }
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      void submit();
+      return;
+    }
+    if (event.key === "Escape" && onCancel) {
+      event.stopPropagation();
+      onCancel();
+    } else if (event.key === "Escape" && collapsible && !text.trim()) {
+      event.stopPropagation();
+      setExpanded(false);
+      // Back to this PR's own preview, not the first one on the page
+      // (the linked work item preview can come earlier in the DOM).
+      const preview = event.currentTarget
+        .closest("aside")
+        ?.querySelector<HTMLElement>("[data-primary-preview='true']");
+      if (preview) preview.focus();
+      else focusPrimaryPreview();
+    }
+  }
+
   if (!expanded) {
     return (
       <button
         type="button"
         onClick={() => setExpanded(true)}
-        className="flex h-7 w-full items-center rounded-md border border-border bg-card px-2 text-left text-xs text-muted-foreground hover:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
+        className="flex h-7 w-full items-center rounded border border-input bg-background px-2 text-left text-xs text-muted-foreground hover:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
       >
         {placeholder}
       </button>
@@ -143,95 +207,31 @@ export function CommentComposer({
 
   return (
     <div
-      className="rounded-md border border-border bg-card"
       onBlur={(event) => {
         if (collapsible && !text.trim() && !event.currentTarget.contains(event.relatedTarget as Node | null)) {
           setExpanded(false);
         }
       }}
     >
-      <div className="relative">
-          <textarea
-            ref={textareaRef}
-            autoFocus={autoFocus || (collapsible && expanded)}
-            value={text}
-            onChange={(event) => {
-              setText(event.target.value);
-              refreshMention(event.target.value, event.target.selectionStart ?? event.target.value.length);
-            }}
-            onKeyUp={(event) => {
-              const target = event.currentTarget;
-              refreshMention(target.value, target.selectionStart ?? target.value.length);
-            }}
-            onKeyDown={(event) => {
-              if (
-                event.key === "Backspace" &&
-                event.currentTarget.selectionStart === event.currentTarget.selectionEnd
-              ) {
-                const textarea = event.currentTarget;
-                const cursor = textarea.selectionStart;
-                const start = mentionTokenDeletionStart(
-                  text,
-                  cursor,
-                  selectedMentions.map((selected) => selected.displayName),
-                );
-                if (start !== null) {
-                  event.preventDefault();
-                  const next = text.slice(0, start) + text.slice(cursor);
-                  setText(next);
-                  refreshMention(next, start);
-                  window.setTimeout(() => textarea.setSelectionRange(start, start), 0);
-                  return;
-                }
-              }
-              if (showMentions) {
-                if (event.key === "ArrowDown") {
-                  event.preventDefault();
-                  setActiveIndex((index) => (index + 1) % candidates.length);
-                  return;
-                }
-                if (event.key === "ArrowUp") {
-                  event.preventDefault();
-                  setActiveIndex((index) => (index - 1 + candidates.length) % candidates.length);
-                  return;
-                }
-                if (event.key === "Enter" || event.key === "Tab") {
-                  event.preventDefault();
-                  insertMention(candidates[activeIndex]);
-                  return;
-                }
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  setMention(null);
-                  return;
-                }
-              }
-              if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-                event.preventDefault();
-                void submit();
-                return;
-              }
-              if (event.key === "Escape" && onCancel) {
-                event.stopPropagation();
-                onCancel();
-              } else if (event.key === "Escape" && collapsible && !text.trim()) {
-                event.stopPropagation();
-                setExpanded(false);
-                // Back to this PR's own preview, not the first one on the page
-                // (the linked work item preview can come earlier in the DOM).
-                const preview = event.currentTarget
-                  .closest("aside")
-                  ?.querySelector<HTMLElement>("[data-primary-preview='true']");
-                if (preview) preview.focus();
-                else focusPrimaryPreview();
-              }
-            }}
-            rows={3}
-            placeholder={placeholder}
-            aria-label={placeholder}
-            className="w-full resize-y bg-transparent px-2 py-1.5 text-xs outline-none placeholder:text-muted-foreground"
-          />
-          {showMentions ? (
+      <CommentField
+        textareaRef={textareaRef}
+        autoFocus={autoFocus || (collapsible && expanded)}
+        value={text}
+        onChange={(event) => {
+          setText(event.target.value);
+          refreshMention(event.target.value, event.target.selectionStart ?? event.target.value.length);
+        }}
+        onKeyUp={(event) => {
+          const target = event.currentTarget;
+          refreshMention(target.value, target.selectionStart ?? target.value.length);
+        }}
+        onKeyDown={handleKeyDown}
+        rows={3}
+        placeholder={placeholder}
+        aria-label={placeholder}
+        hint={`Ctrl+Enter to ${submitLabel === "Save" ? "save" : "post"} · Esc to cancel`}
+        overlay={
+          showMentions ? (
             <ul className="absolute left-2 top-full z-20 max-h-40 w-64 overflow-auto rounded-md border border-border bg-popover shadow-lg">
               {candidates.map((candidate, index) => (
                 <li key={candidate.id}>
@@ -253,31 +253,14 @@ export function CommentComposer({
                 </li>
               ))}
             </ul>
-          ) : null}
-      </div>
-
-      <div className="flex items-center justify-end gap-1 border-t border-border px-1.5 py-1">
-        {submitting || busy ? (
-          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" aria-hidden="true" />
-        ) : null}
-        {onCancel ? (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded border border-border bg-card px-1.5 py-px text-[11px] hover:bg-secondary"
-          >
-            Cancel
-          </button>
-        ) : null}
-        <button
-          type="button"
-          disabled={!text.trim() || submitting || busy}
-          onClick={submit}
-          className="rounded border border-border bg-card px-2 py-px text-[11px] hover:bg-secondary disabled:opacity-50"
-        >
-          {submitLabel}
-        </button>
-      </div>
+          ) : null
+        }
+        submitLabel={submitLabel}
+        submitDisabled={!text.trim()}
+        pending={submitting || busy}
+        onSubmit={() => void submit()}
+        onCancel={onCancel}
+      />
     </div>
   );
 }
