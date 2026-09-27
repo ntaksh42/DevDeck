@@ -4,6 +4,7 @@ import { readStoredJson, writeStoredJson } from "@/lib/storage";
 import { ShortcutHint } from "@/components/ShortcutHint";
 import { splitWorkItemTags } from "./workItemChanges";
 import { stopPreviewNavigationKeyDown } from "./workItemPreviewHelpers";
+import { SectionGrip, usePreviewSectionHeaderMoveProps } from "./PreviewSectionMover";
 
 const WI_PREVIEW_COLLAPSED_SECTIONS_STORAGE_KEY =
   "azdodeck:view:wiPreviewCollapsedSections:v1";
@@ -91,6 +92,8 @@ export function PreviewSection({
   const [collapsed, setCollapsed] = useState(() =>
     collapseId ? loadCollapsedPreviewSections().has(collapseId) : false,
   );
+  // Present when the section sits in a movable preview slot (drag / Alt+Arrow).
+  const move = usePreviewSectionHeaderMoveProps();
 
   function toggleCollapsed() {
     if (!collapseId) return;
@@ -114,7 +117,8 @@ export function PreviewSection({
             type="button"
             aria-expanded={!collapsed}
             onClick={toggleCollapsed}
-            className={`flex w-full items-center gap-1 rounded border-l-4 bg-slate-200 px-1.5 py-1 text-left hover:bg-slate-300 focus:outline-none focus:ring-1 focus:ring-ring dark:bg-slate-700 dark:hover:bg-slate-600 ${accentColor}`}
+            {...move}
+            className={`group flex w-full items-center gap-1 rounded border-l-4 bg-slate-200 px-1.5 py-1 text-left hover:bg-slate-300 focus:outline-none focus:ring-1 focus:ring-ring dark:bg-slate-700 dark:hover:bg-slate-600 ${accentColor}`}
           >
             <ChevronRight
               className={`h-3 w-3 shrink-0 text-slate-600 transition-transform dark:text-slate-300 ${
@@ -125,6 +129,7 @@ export function PreviewSection({
             <h3 className="text-[11px] font-extrabold uppercase tracking-wider leading-4 text-slate-800 dark:text-slate-100">
               {title}
             </h3>
+            <SectionGrip show={move !== null} />
           </button>
         ) : (
           <h3

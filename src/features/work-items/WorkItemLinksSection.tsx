@@ -54,7 +54,7 @@ export function WorkItemLinksSection({ preview }: { preview: WorkItemPreview }) 
   }
 
   return (
-    <PreviewSection className="mt-2" collapseId="links" title={`Links (${preview.relations.length})`}>
+    <PreviewSection collapseId="links" title={`Links (${preview.relations.length})`}>
       <div className="space-y-1">
         {preview.relations.map((relation) => (
           <div key={`${relation.relationType}:${relation.id}`} className="flex items-center gap-1">

@@ -386,6 +386,14 @@ PR 検索 / Commits は共通フック `src/lib/useRangeSelection.ts` を使う�
 作業項目プレビューは Comments と新規コメント欄を右側の列 (幅 42%、独立スクロール) に移して詳細と並べるか、
 従来どおり詳細の下に続けるかをヘッダーの切替ボタンで選べる (`azdodeck:wiPreview:commentsLayout` に保存)。
 未選択の間はパネル幅 880px 以上で横並び、それ未満で縦並び (`WorkItemCommentsSection`)。
+作業項目プレビューの折り畳みセクション (Description / Acceptance Criteria / Comments / Links /
+Pull Requests / Attachments / History) は VSCode のビューのように配置を変えられる。見出しを
+ドラッグして並べ替え、横並び時は詳細列と右列の間でも移動できる (挿入位置は青い線で表示、空の列には
+末尾に追加)。キーボードでは見出しにフォーカスして `Alt+↑` / `Alt+↓` で同じ列内を並べ替え、横並び時は
+`Alt+←` / `Alt+→` で詳細列 / 右列へ移す (移動後もフォーカスは見出しに残る)。配置は
+`azdodeck:wiPreview:sectionLayout:v1` に全体順序 + 右列に置くセクションとして保存し、縦並び時は
+全体順序どおり 1 列に並べる。新規コメント欄は Comments のある列の下端に付く
+(`PreviewSectionMover` / `previewSectionLayout`)。
 作業項目グリッドのキー処理は、プレビュー内のボタン/リンク上の `Enter` / `Space` を横取りしない (ボタンとして押せる)。
 PR の Conversation タブ下部の新規コメント欄は、空の間は1行のボタンに畳んでおき、クリック /
 Enter で展開してフォーカスする。空のまま `Escape` またはフォーカスが外れると畳み、`Escape`
