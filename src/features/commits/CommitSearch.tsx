@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ChevronDown, Info, Loader2, Search, SlidersHorizontal } from "lucide-react";
+import { Info } from "lucide-react";
 import {
   searchCommits,
   listCommitRepositories,
@@ -11,6 +11,14 @@ import {
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { handleSearchInputEscape } from "@/lib/utils";
 import { MultiSelectFilter } from "@/components/MultiSelectFilter";
+import {
+  FilterField,
+  FiltersToggle,
+  SearchInput,
+  SearchSubmitButton,
+  filterInputClass,
+  searchBarRowClass,
+} from "@/components/SearchBar";
 import { ErrorState } from "@/components/StateDisplay";
 import { CommitActivityHeatmap } from "./CommitActivityHeatmap";
 import { extractCommitQuery } from "./commitQuery";
@@ -114,6 +122,11 @@ export function CommitSearch({
     }
     return out;
   }, [allCommits]);
+  const repositoryStatus = repositoriesQuery.isLoading
+    ? "Loading repositories"
+    : repositoriesQuery.isError
+      ? null
+      : `${repositoryOptions.length} repositories available`;
   const advancedFilterCount =
     (author.trim() ? 1 : 0) +
     (branch.trim() ? 1 : 0) +
@@ -266,12 +279,18 @@ export function CommitSearch({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="shrink-0 rounded-md border border-border bg-card">
-        <form className="grid gap-2 px-3 py-2" onSubmit={onSubmit}>
-          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-[minmax(200px,1fr)_minmax(220px,1fr)_auto]">
-            <div className="grid gap-0.5">
-              <span className="text-[11px] font-medium text-muted-foreground">Project</span>
-              <MultiSelectFilter
+      <form className="grid shrink-0 gap-2" onSubmit={onSubmit}>
+        <div className={searchBarRowClass}>
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            onKeyDown={handleSearchInputEscape}
+            placeholder="message, author, SHA — or path:src/auth"
+            ariaLabel="Filter"
+            autoFocus
+          />
+          <div className="w-44">
+            <MultiSelectFilter
                 className="h-8"
                 options={projectOptions.map((project) => ({
                   value: project.projectId,
@@ -284,11 +303,9 @@ export function CommitSearch({
                 searchable
                 disabled={repositoriesQuery.isLoading || repositoryOptions.length === 0}
               />
-            </div>
-
-            <div className="grid gap-0.5">
-              <span className="text-[11px] font-medium text-muted-foreground">Repository</span>
-              <MultiSelectFilter
+          </div>
+          <div className="w-56" title={repositoryStatus ?? undefined}>
+            <MultiSelectFilter
                 className="h-8"
                 options={filteredRepositoryOptions.map((repository) => ({
                   value: repository.repositoryId,
@@ -304,138 +321,83 @@ export function CommitSearch({
                 searchable
                 disabled={repositoriesQuery.isLoading || filteredRepositoryOptions.length === 0}
               />
-            </div>
-
-            <div className="flex items-end">
-              <p className="pb-1.5 text-xs text-muted-foreground">
-                {repositoriesQuery.isLoading
-                  ? "Loading repositories"
-                  : repositoriesQuery.isError
-                    ? (
-                      <>
-                        Repositories unavailable{" "}
-                        <button
-                          type="button"
-                          onClick={() => void repositoriesQuery.refetch()}
-                          className="rounded-sm underline hover:no-underline focus:outline-none focus:ring-2 focus:ring-ring"
-                        >
-                          Retry
-                        </button>
-                      </>
-                    )
-                    : `${repositoryOptions.length} repositories available`}
-              </p>
-            </div>
           </div>
-
-          <div className="flex items-end gap-2">
-            <label className="grid min-w-0 flex-1 gap-0.5">
-              <span className="text-[11px] font-medium text-muted-foreground">Search</span>
-              <div className="flex h-8 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
-                <Search className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  onKeyDown={handleSearchInputEscape}
-                  placeholder="message, author, SHA — or path:src/auth"
-                  aria-label="Filter"
-                  autoFocus
-                  className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-                />
-              </div>
-            </label>
-
-            <button
-              type="button"
-              onClick={() => setFiltersOpen((value) => !value)}
-              aria-expanded={filtersOpen}
-              aria-controls="commit-advanced-filters"
-              className="inline-flex h-8 shrink-0 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+          {repositoriesQuery.isError ? (
+            <span className="text-xs text-muted-foreground">
+              Repositories unavailable{" "}
+              <button
+                type="button"
+                onClick={() => void repositoriesQuery.refetch()}
+                className="rounded-sm underline hover:no-underline focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                Retry
+              </button>
+            </span>
+          ) : null}
+          <FiltersToggle
+            open={filtersOpen}
+            onToggle={() => setFiltersOpen((value) => !value)}
+            count={advancedFilterCount}
+            controls="commit-advanced-filters"
+          />
+          <SearchSubmitButton pending={mutation.isPending} disabled={!selectedOrganizationId} />
+          <div className="ml-auto flex items-center gap-2">
+            <CommitViewToggle value={viewMode} onChange={setViewMode} />
+            <span
+              role="note"
+              className="text-muted-foreground"
+              title="Showing locally synced data — refreshed automatically every 5 minutes."
+              aria-label="Showing locally synced data — refreshed automatically every 5 minutes."
             >
-              <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-              Filters
-              {advancedFilterCount > 0 ? (
-                <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-primary px-1.5 text-xs font-semibold text-primary-foreground">
-                  {advancedFilterCount}
-                </span>
-              ) : null}
-              <ChevronDown
-                className={`h-4 w-4 transition-transform ${filtersOpen ? "rotate-180" : ""}`}
-                aria-hidden="true"
-              />
-            </button>
-
-            <button
-              type="submit"
-              disabled={mutation.isPending || !selectedOrganizationId}
-              className="inline-flex h-8 shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {mutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <Search className="h-4 w-4" aria-hidden="true" />
-              )}
-              Search
-            </button>
+              <Info className="h-3.5 w-3.5" aria-hidden="true" />
+            </span>
           </div>
+        </div>
 
-          {filtersOpen ? (
-          <div
-            id="commit-advanced-filters"
-            className="grid gap-2 border-t border-border pt-2 md:grid-cols-2 xl:grid-cols-[minmax(160px,1fr)_minmax(120px,180px)_150px_150px_auto]"
-          >
-            <label className="grid gap-0.5">
-              <span className="text-[11px] font-medium text-muted-foreground">Author</span>
+        {filtersOpen ? (
+          <div id="commit-advanced-filters" className="flex flex-wrap items-end gap-2">
+            <FilterField label="Author" className="w-56">
               <input
                 value={author}
                 onChange={(event) => setAuthor(event.target.value)}
                 onKeyDown={handleSearchInputEscape}
                 placeholder="email or name"
                 list={authorSuggestions.length > 0 ? "commit-author-suggestions" : undefined}
-                className="h-8 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className={filterInputClass}
               />
               {authorSuggestions.length > 0 ? (
                 <datalist id="commit-author-suggestions">
                   {authorSuggestions.map((s) => <option key={s} value={s} />)}
                 </datalist>
               ) : null}
-            </label>
-
-            <label className="grid gap-0.5">
-              <span className="text-[11px] font-medium text-muted-foreground">Branch</span>
+            </FilterField>
+            <FilterField label="Branch" className="w-40">
               <input
                 value={branch}
                 onChange={(event) => setBranch(event.target.value)}
                 onKeyDown={handleSearchInputEscape}
                 placeholder="main"
-                className="h-8 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className={filterInputClass}
               />
-            </label>
-
-            <label className="grid gap-0.5">
-              <span className="text-[11px] font-medium text-muted-foreground">From</span>
+            </FilterField>
+            <FilterField label="From">
               <input
                 type="date"
                 value={fromDate}
                 onChange={(event) => setFromDate(event.target.value)}
-                className="h-8 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className={filterInputClass}
               />
-            </label>
-
-            <label className="grid gap-0.5">
-              <span className="text-[11px] font-medium text-muted-foreground">To</span>
+            </FilterField>
+            <FilterField label="To">
               <input
                 type="date"
                 value={toDate}
                 onChange={(event) => setToDate(event.target.value)}
-                className="h-8 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className={filterInputClass}
               />
-            </label>
-
-            <div className="grid gap-0.5">
-              <span className="text-[11px] font-medium text-muted-foreground">Preset</span>
-              <div className="flex items-center gap-1">
-                {([7, 30, 90] as const).map((days) => (
+            </FilterField>
+            <div className="flex h-8 items-center gap-1">
+              {([7, 30, 90] as const).map((days) => (
                   <button
                     key={days}
                     type="button"
@@ -453,36 +415,21 @@ export function CommitSearch({
                     {days}d
                   </button>
                 ))}
-              </div>
             </div>
-
-            <p className="text-xs text-muted-foreground md:col-span-2 xl:col-span-5">
+            <p className="basis-full text-xs text-muted-foreground">
               Tip: add{" "}
               <code className="rounded bg-muted px-1 py-0.5 font-mono">path:src/auth</code> to filter
               by changed path. Path filtering runs on the server, so select a repository first.
             </p>
           </div>
-          ) : null}
+        ) : null}
 
-          {validationError ? (
-            <p role="alert" className="text-sm text-destructive">
-              {validationError}
-            </p>
-          ) : null}
-        </form>
-      </div>
-
-      <div className="flex items-center justify-between gap-3">
-        <CommitViewToggle value={viewMode} onChange={setViewMode} />
-        <span
-          role="note"
-          className="text-muted-foreground"
-          title="Showing locally synced data — refreshed automatically every 5 minutes."
-          aria-label="Showing locally synced data — refreshed automatically every 5 minutes."
-        >
-          <Info className="h-3.5 w-3.5" aria-hidden="true" />
-        </span>
-      </div>
+        {validationError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {validationError}
+          </p>
+        ) : null}
+      </form>
 
       {mutation.isError ? (
         <ErrorState message={commandErrorMessage(mutation.error)} />

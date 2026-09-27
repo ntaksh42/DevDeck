@@ -123,7 +123,7 @@ describe("App — Layout", () => {
     fireEvent.keyDown(navResize, { key: "Escape" });
     expect(navResize.getAttribute("aria-valuenow")).toBe("232");
 
-    expect(await screen.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Pull Requests My Reviews" })).toBeTruthy();
     const previewResize = screen.getByRole("separator", { name: "Resize Conversation" });
     expect(previewResize.getAttribute("aria-valuenow")).toBe("420");
     fireEvent.keyDown(previewResize, { key: "ArrowLeft" });
@@ -197,7 +197,7 @@ describe("App — Layout", () => {
     renderApp();
     const main = within(await screen.findByRole("main"));
 
-    expect(await main.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "Pull Requests My Reviews" })).toBeTruthy();
     fireEvent.click(within(screen.getByRole("navigation", { name: "Primary navigation" })).getAllByRole("button", { name: "Search" })[0]);
 
     expect(

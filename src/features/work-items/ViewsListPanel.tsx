@@ -5,8 +5,6 @@ import {
   ChevronDown,
   ChevronRight,
   Columns3,
-  Copy,
-  Download,
   Eye,
   EyeOff,
   LayoutGrid,
@@ -16,8 +14,6 @@ import {
   Play,
   Plus,
   Rows3,
-  Trash2,
-  Upload,
 } from 'lucide-react';
 import { type WorkItemQueryView, type WorkItemViewLayout } from './workItemViewsStorage';
 import type { WorkItemViewsCardMode } from './workItemViewsDisplayStorage';
@@ -27,6 +23,7 @@ import {
   viewCardStats,
   type ViewCountQueryResult,
 } from './ViewsListItems';
+import { WorkItemViewsOverflowMenu } from './WorkItemViewsOverflowMenu';
 
 export type ViewsListPanelProps = {
   views: WorkItemQueryView[];
@@ -262,42 +259,14 @@ export function ViewsListPanel({
             )}
             <span className="sr-only">Preview</span>
           </button>
-          <button
-            type="button"
-            disabled={!selectedView}
-            onClick={onShare}
-            aria-label="Copy selected view share JSON"
-            title="Copy selected view share JSON"
-            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-            <span className="sr-only">Share</span>
-          </button>
-          <button
-            type="button"
-            disabled={views.length === 0}
-            onClick={onExport}
-            title="Export all views as JSON"
-            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Download className="h-3.5 w-3.5" aria-hidden="true" />
-            <span className="sr-only">Export</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => importInputRef.current?.click()}
-            title="Import views from JSON"
-            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary"
-          >
-            <Upload className="h-3.5 w-3.5" aria-hidden="true" />
-            <span className="sr-only">Import</span>
-          </button>
-          <input
-            ref={importInputRef}
-            type="file"
-            accept="application/json,.json"
-            className="hidden"
-            onChange={(event) => void onImport(event)}
+          <WorkItemViewsOverflowMenu
+            hasSelectedView={!!selectedView}
+            hasViews={views.length > 0}
+            importInputRef={importInputRef}
+            onShare={onShare}
+            onExport={onExport}
+            onImport={onImport}
+            onDelete={onDelete}
           />
           <button
             type="button"
@@ -308,16 +277,6 @@ export function ViewsListPanel({
             className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
           >
             Edit
-          </button>
-          <button
-            type="button"
-            disabled={!selectedView}
-            onClick={onDelete}
-            aria-keyshortcuts="Delete"
-            title="Delete selected view (Del)"
-            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
           <button
             type="button"

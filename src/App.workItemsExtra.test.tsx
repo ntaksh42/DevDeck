@@ -352,7 +352,8 @@ describe("App — Work Items (extra)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Pin" }));
     expect(screen.getByRole("button", { name: "Active Bugs" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy selected view share JSON" }));
+    fireEvent.click(screen.getByRole("button", { name: "More view actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy share JSON" }));
     await waitFor(() => {
       expect(writeClipboardTextMock).toHaveBeenCalledWith(
         expect.stringContaining('"name": "Active Bugs"'),

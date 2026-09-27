@@ -176,7 +176,7 @@ describe("App — Reviews", () => {
     renderApp();
     const main = within(await screen.findByRole("main"));
 
-    expect(await main.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "Pull Requests My Reviews" })).toBeTruthy();
     // The vote-filter tabs are gone; rows group into collapsible sections.
     expect(main.queryByRole("tab", { name: "All" })).toBeNull();
 

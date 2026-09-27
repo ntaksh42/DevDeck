@@ -129,7 +129,7 @@ export function WorkItemsGrid({
         />
       ) : (
       <div ref={state.setGridScrollNode} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
-        <div style={{ minWidth: state.gridMinWidth }}>
+        <div ref={state.gridRef} style={{ minWidth: state.gridMinWidth }}>
           <WiGridHeader
             displayed={g.displayed}
             checkedIds={state.checkedIds}
@@ -377,6 +377,7 @@ export function WorkItemsGrid({
           requiredColumns={WI_GRID_REQUIRED_COLUMNS}
           onToggle={state.toggleColumnVisibility}
           onReset={state.resetColumnVisibility}
+          onAutoFitWidths={state.resetColumnWidths}
           onClose={() => state.setColumnMenuRect(null)}
         >
           {fieldColumnsSource && onExtraColumnsChange ? (

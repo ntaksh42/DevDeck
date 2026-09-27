@@ -84,7 +84,7 @@ export function AnalyzeGroupList({
   }
 
   return (
-    <div className="flex min-h-0 flex-col border-r border-border">
+    <div className="flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-card">
       <div className="flex items-center justify-between border-b border-border px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         <span>Groups</span>
         <span className="tabular-nums">{groups.length}</span>

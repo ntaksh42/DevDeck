@@ -193,8 +193,7 @@ export function PipelinesView() {
       <div className="shrink-0 rounded-md border border-border bg-card">
         {/* One compact row: the selectors carry the view, so they stay, but without a card's worth of height. */}
         <div className="flex flex-wrap items-center gap-2 px-2 py-1.5">
-          <label className="flex w-72 items-center gap-1.5">
-            <span className="shrink-0 text-xs text-muted-foreground">Project</span>
+          <div className="w-64">
             <FilterableSelect
               ariaLabel="Project"
               value={projectId}
@@ -206,10 +205,9 @@ export function PipelinesView() {
                 setDefinitionId(null);
               }}
             />
-          </label>
+          </div>
 
-          <label className="flex w-72 items-center gap-1.5">
-            <span className="shrink-0 text-xs text-muted-foreground">Pipeline</span>
+          <div className="w-64">
             <FilterableSelect
               ariaLabel="Pipeline"
               value={definitionId == null ? "" : String(definitionId)}
@@ -218,7 +216,7 @@ export function PipelinesView() {
               placeholder="All pipelines"
               onChange={(next) => setDefinitionId(next ? Number(next) : null)}
             />
-          </label>
+          </div>
 
           <div className="flex items-center gap-2">
             <button
@@ -235,7 +233,7 @@ export function PipelinesView() {
               aria-pressed={selectedIsSubscribed}
               className={`flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 ${
                 selectedIsSubscribed
-                  ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                  ? "border-emerald-500 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
                   : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground"
               }`}
             >

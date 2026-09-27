@@ -1,10 +1,20 @@
 import { type ReactNode } from "react";
 import { Loader2, AlertTriangle, WifiOff } from "lucide-react";
 
-export function PreviewEmptyState({ message }: { message: string }) {
+/** Short hints shown under empty states, pointing at the keyboard path. */
+export const SEARCH_EMPTY_HINT = "Press / to focus the search box, Enter to run it.";
+export const SELECT_EMPTY_HINT = "Move with ↑ ↓ in the list · Enter or → opens the preview.";
+
+/**
+ * The one empty state used by grids and previews: a line of text (plus an
+ * optional keyboard hint) placed a third of the way down, so empty panes look
+ * the same whether the pane is short or tall.
+ */
+export function PreviewEmptyState({ message, hint }: { message: ReactNode; hint?: ReactNode }) {
   return (
-    <div className="flex flex-1 items-center justify-center px-4 text-center text-sm text-muted-foreground">
-      {message}
+    <div className="flex flex-1 flex-col items-center gap-1 px-4 pb-4 pt-[12vh] text-center text-sm text-muted-foreground">
+      <span>{message}</span>
+      {hint ? <span className="text-xs text-muted-foreground/80">{hint}</span> : null}
     </div>
   );
 }

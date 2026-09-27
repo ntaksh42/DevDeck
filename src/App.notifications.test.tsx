@@ -60,7 +60,7 @@ describe("App — Notifications", () => {
   it("shows the unread badge in the sidebar and opens the view from the nav", async () => {
     renderApp();
     const main = within(await screen.findByRole("main"));
-    expect(await main.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "Pull Requests My Reviews" })).toBeTruthy();
 
     const nav = within(screen.getByRole("navigation", { name: "Primary navigation" }));
     const notificationsButton = await nav.findByRole("button", { name: "Notifications, 3" });
@@ -75,7 +75,7 @@ describe("App — Notifications", () => {
   it("navigates to Notifications with the g n key chain", async () => {
     renderApp();
     const main = within(await screen.findByRole("main"));
-    expect(await main.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "Pull Requests My Reviews" })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: "g" });
     fireEvent.keyDown(window, { key: "n" });

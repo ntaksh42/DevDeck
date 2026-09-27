@@ -133,6 +133,8 @@ export function useMyReviewsGrid({
   const {
     template: COLS,
     minWidth: gridMinWidth,
+    resetWidths: resetColumnWidths,
+    gridRef,
     resizeProps: columnResizeProps,
   } = useGridColumns({
     keys: PR_GRID_KEYS,
@@ -421,7 +423,7 @@ export function useMyReviewsGrid({
     // queries
     query, queryClient, staleThresholdDays, snoozeMutation,
     // grid layout
-    COLS, gridMinWidth, columnResizeProps, scrollerRef,
+    COLS, gridMinWidth, columnResizeProps, resetColumnWidths, gridRef, scrollerRef,
     virtualTopPadding, virtualBottomPadding, virtualRows,
     maximized, setMaximized,
     columnMenuRect, setColumnMenuRect,

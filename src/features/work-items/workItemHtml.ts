@@ -127,11 +127,41 @@ function sanitizeRichHtml(html: string): string {
 export function buildRichHtmlDocument(
   html: string,
   density: "compact" | "comfortable" = "compact",
+  theme: "light" | "dark" = "light",
 ): string {
   const fontSize = density === "comfortable" ? 14 : 12;
   const lineHeight = density === "comfortable" ? 1.55 : 1.35;
   const paragraphMargin = density === "comfortable" ? 10 : 6;
   const safeHtml = sanitizeRichHtml(html);
+  // Hard-coded hex equivalents of the app's `.dark` HSL variables in
+  // src/index.css (--foreground, --muted-foreground, --border, --link),
+  // since this document is sandboxed and cannot see the app's CSS variables.
+  const colors =
+    theme === "dark"
+      ? {
+          background: "transparent",
+          text: "#f8fafc",
+          link: "#88c2fc",
+          border: "#303e55",
+          thBackground: "#1e293b",
+          preBackground: "#1e293b",
+          blockquoteText: "#a8b5c7",
+          errorText: "#fca5a5",
+          errorBackground: "#450a0a",
+          errorBorder: "#7f1d1d",
+        }
+      : {
+          background: "#fff",
+          text: "#0f172a",
+          link: "#2563eb",
+          border: "#dbe3ef",
+          thBackground: "#f8fafc",
+          preBackground: "#f8fafc",
+          blockquoteText: "#475569",
+          errorText: "#991b1b",
+          errorBackground: "#fef2f2",
+          errorBorder: "#fecaca",
+        };
   return `<!doctype html>
 <html>
 <head>
@@ -139,38 +169,40 @@ export function buildRichHtmlDocument(
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    html, body { margin: 0; padding: 0; background: #fff; }
+    :root { color-scheme: ${theme}; }
+    html, body { margin: 0; padding: 0; background: ${colors.background}; }
     body {
       box-sizing: border-box;
-      color: #0f172a;
+      color: ${colors.text};
       font: ${fontSize}px/${lineHeight} -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       overflow-wrap: anywhere;
+      padding: 4px 8px;
     }
     * { box-sizing: border-box; }
     p { margin: 0 0 ${paragraphMargin}px; }
     p:last-child, ul:last-child, ol:last-child, table:last-child, pre:last-child { margin-bottom: 0; }
     ul, ol { margin: 0 0 ${paragraphMargin}px 20px; padding: 0; }
     li { margin: 3px 0; }
-    a { color: #2563eb; text-decoration: none; }
+    a { color: ${colors.link}; text-decoration: none; }
     a:hover { text-decoration: underline; }
-    .azdo-mention { color: #2563eb; font-weight: 500; }
-    img, video { max-width: 100%; height: auto; border: 1px solid #dbe3ef; border-radius: 4px; }
+    .azdo-mention { color: ${colors.link}; font-weight: 500; }
+    img, video { max-width: 100%; height: auto; border: 1px solid ${colors.border}; border-radius: 4px; }
     img { cursor: zoom-in; }
     .azdo-image-error {
       display: inline-block;
       margin: 2px 0;
       padding: 6px 8px;
-      color: #991b1b;
-      background: #fef2f2;
-      border: 1px solid #fecaca;
+      color: ${colors.errorText};
+      background: ${colors.errorBackground};
+      border: 1px solid ${colors.errorBorder};
       border-radius: 4px;
     }
     table { width: 100%; margin: 0 0 ${paragraphMargin}px; border-collapse: collapse; font-size: ${fontSize}px; }
-    th, td { border: 1px solid #dbe3ef; padding: 5px 7px; text-align: left; vertical-align: top; }
-    th { background: #f8fafc; font-weight: 600; }
+    th, td { border: 1px solid ${colors.border}; padding: 5px 7px; text-align: left; vertical-align: top; }
+    th { background: ${colors.thBackground}; font-weight: 600; }
     pre, code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; }
-    pre { margin: 0 0 6px; padding: 6px; overflow: auto; border: 1px solid #dbe3ef; border-radius: 4px; background: #f8fafc; }
-    blockquote { margin: 0 0 6px; padding-left: 8px; border-left: 2px solid #cbd5e1; color: #475569; }
+    pre { margin: 0 0 6px; padding: 6px; overflow: auto; border: 1px solid ${colors.border}; border-radius: 4px; background: ${colors.preBackground}; }
+    blockquote { margin: 0 0 6px; padding-left: 8px; border-left: 2px solid ${colors.border}; color: ${colors.blockquoteText}; }
   </style>
 </head>
 <body>${safeHtml}</body>

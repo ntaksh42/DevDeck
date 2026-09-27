@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo, useRef } from 'react';
-import { LoadingState } from '@/components/StateDisplay';
+import { LoadingState, PreviewEmptyState, SEARCH_EMPTY_HINT } from '@/components/StateDisplay';
 import type { WorkItemSummary } from '@/lib/azdoCommands';
 import { matchRowColorClass, type RowColorRule } from '@/lib/rowColorRules';
 import { workItemUnreadKey } from './workItemUnreadTracking';
@@ -68,9 +68,10 @@ export function WiGridBody({
   }
   if (!searched) {
     return (
-      <div className="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
-        {emptyMessage ?? "Run a search to load work items."}
-      </div>
+      <PreviewEmptyState
+        message={emptyMessage ?? "Run a search to load work items."}
+        hint={emptyMessage ? undefined : SEARCH_EMPTY_HINT}
+      />
     );
   }
   if (sorted.length === 0) {

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { buildRichHtmlDocument, hydrateAuthenticatedImages } from "./workItemHtml";
+import { useIsDarkMode } from "@/lib/useIsDarkMode";
 
 export function RichHtmlFrame({
   baseUrl,
@@ -31,7 +32,11 @@ export function RichHtmlFrame({
   const [visible, setVisible] = useState(!lazy);
   const placeholderRef = useRef<HTMLDivElement>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
-  const srcDoc = useMemo(() => buildRichHtmlDocument(html, density), [density, html]);
+  const isDark = useIsDarkMode();
+  const srcDoc = useMemo(
+    () => buildRichHtmlDocument(html, density, isDark ? "dark" : "light"),
+    [density, html, isDark],
+  );
 
   useEffect(() => {
     return () => {
@@ -66,7 +71,7 @@ export function RichHtmlFrame({
       <div
         ref={placeholderRef}
         aria-hidden="true"
-        className={`block w-full bg-white ${framed ? "rounded border border-border" : ""}`}
+        className={`block w-full bg-card ${framed ? "rounded border border-border" : ""}`}
         style={{ height: minHeight }}
       />
     );
@@ -78,7 +83,7 @@ export function RichHtmlFrame({
       srcDoc={srcDoc}
       sandbox="allow-same-origin"
       scrolling="no"
-      className={`block w-full bg-white ${framed ? "rounded border border-border" : ""}`}
+      className={`block w-full bg-card ${framed ? "rounded border border-border" : ""}`}
       style={{ height }}
       onLoad={(event) => {
         const frame = event.currentTarget;

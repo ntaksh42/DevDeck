@@ -8,6 +8,7 @@ import { workItemQueryKeys } from "./queryKeys";
 import { REMOVABLE_LINK_TYPES, WORK_ITEM_LINK_TYPES } from "./workItemPreviewHelpers";
 import { WorkItemStatePill, WorkItemTypeBadge } from "./WorkItemBadges";
 import { PreviewSection } from "./PreviewSection";
+import { NativeSelect } from "@/components/SearchBar";
 
 export function WorkItemLinksSection({ preview }: { preview: WorkItemPreview }) {
   const linkQueryClient = useQueryClient();
@@ -110,18 +111,18 @@ export function WorkItemLinksSection({ preview }: { preview: WorkItemPreview }) 
         <label className="sr-only" htmlFor="add-link-type">
           Link type
         </label>
-        <select
+        <NativeSelect
+          compact
           id="add-link-type"
           value={newLinkType}
           onChange={(event) => setNewLinkType(event.target.value as WorkItemLinkType)}
-          className="h-7 rounded border border-input bg-background px-1 text-[11px] outline-none focus:ring-2 focus:ring-ring"
         >
           {WORK_ITEM_LINK_TYPES.map((type) => (
             <option key={type} value={type}>
               {type}
             </option>
           ))}
-        </select>
+        </NativeSelect>
         <input
           value={newLinkTargetId}
           onChange={(event) => setNewLinkTargetId(event.target.value)}

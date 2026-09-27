@@ -3,10 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { commandErrorMessage, listMyCreatedPullRequests } from "@/lib/azdoCommands";
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import {
+  focusPrimaryPreview,
   isEditableTarget,
   matchesAllSearchTerms,
   splitSearchTerms,
 } from "@/lib/utils";
+import { DockableWorkspace, type DockablePanelSpec } from "@/components/DockableWorkspace";
 import { FilterAutocomplete } from "@/components/FilterAutocomplete";
 import { DockFilterBar, useDockFilter } from "@/components/DockFilterBar";
 import { ColumnResizeHandle } from "@/components/ResizeHandle";
@@ -15,7 +17,14 @@ import { useGridColumns } from "@/lib/useGridColumns";
 import { useColumnVisibility } from "@/lib/useColumnVisibility";
 import { useRangeSelection } from "@/lib/useRangeSelection";
 import { copyRowUrls } from "@/lib/copyUrls";
+import { openExternalUrl } from "@/lib/openExternal";
 import { CreatedPrRow, SortHeaderButton } from "./MyPullRequestsRow";
+import { usePrReviewPanels } from "./usePrReviewPanels";
+import {
+  DEFAULT_REVIEW_PREVIEW_WIDTH,
+  MAX_REVIEW_PREVIEW_WIDTH,
+  MIN_REVIEW_PREVIEW_WIDTH,
+} from "./myReviewsTypes";
 import {
   comparePrs,
   defaultSortDirection,
@@ -30,7 +39,28 @@ import {
   type SortKey,
   type SortState,
 } from "./myPullRequestsTypes";
-import type { MyCreatedPullRequestSummary } from "@/lib/azdoCommands";
+import type {
+  MyCreatedPullRequestSummary,
+  ReviewPullRequestSummary,
+} from "@/lib/azdoCommands";
+
+const PREVIEW_LAYOUT_STORAGE_KEY = "azdodeck:layout:myPullRequestsPreview:dockview:v1";
+
+/** The review panels take the review-inbox shape; an authored PR is always active. */
+function toReviewSummary(pr: MyCreatedPullRequestSummary): ReviewPullRequestSummary {
+  return {
+    ...pr,
+    createdBy: null,
+    status: "active",
+    myVote: 0,
+    myVoteLabel: "No Vote",
+    myIsRequired: false,
+    mergeStatus: null,
+    ciStatus: null,
+    ciContext: null,
+    ciCheckCount: 0,
+  };
+}
 
 // One grid row. Memoized so that moving the selection or filtering the list
 // only re-renders the rows whose own props actually changed. `onSelect` and
@@ -92,7 +122,8 @@ const MemoCreatedPrRow = memo(function MemoCreatedPrRow({
 // DevOps (not from the local sync cache), so data refreshes on view re-entry
 // rather than via the sync:updated wiring the cached review grid uses. The grid
 // layout, resizable/toggleable columns, sort headers, row styling, keyboard,
-// and status bar mirror MyReviewsGrid.
+// and status bar mirror MyReviewsGrid, including the PR review panels docked
+// to the right of the grid.
 export function MyPullRequestsGrid() {
   const organizationId = useActiveOrganizationId();
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -105,12 +136,14 @@ export function MyPullRequestsGrid() {
   });
   const [columnMenuRect, setColumnMenuRect] = useState<DOMRect | null>(null);
   const [copyToast, setCopyToast] = useState<string | null>(null);
+  const [maximized, setMaximized] = useState(false);
   const rowRefs = useRef<Array<HTMLDivElement | null>>([]);
 
   const {
     template,
     minWidth: gridMinWidth,
     resetWidths,
+    gridRef,
     resizeProps: columnResizeProps,
   } = useGridColumns({
     keys: GRID_KEYS,
@@ -193,6 +226,9 @@ export function MyPullRequestsGrid() {
       if ((event.key === "c" || event.key === "C") && !event.altKey) {
         event.preventDefault();
         void copyRowUrls(selection.selectedRows, setCopyToast);
+      } else if (event.key === "Enter" && pr?.webUrl) {
+        event.preventDefault();
+        openExternalUrl(pr.webUrl);
       }
       return;
     }
@@ -221,11 +257,25 @@ export function MyPullRequestsGrid() {
         event.preventDefault();
         moveSelection(rows.length - 1);
         break;
+      case "Enter":
+      case "ArrowRight":
+        event.preventDefault();
+        focusPrimaryPreview();
+        break;
+      case "\\":
+        event.preventDefault();
+        setMaximized((value) => !value);
+        break;
       case "Escape":
         if (selection.selectedKeys.size > 0) {
           event.preventDefault();
           selection.clear();
         }
+        break;
+      case "o":
+      case "O":
+        event.preventDefault();
+        if (pr?.webUrl) openExternalUrl(pr.webUrl);
         break;
       case "c":
       case "C":
@@ -237,25 +287,23 @@ export function MyPullRequestsGrid() {
     }
   };
 
+  const selectedPr = useMemo(
+    () => (rows[selectedIndex] ? toReviewSummary(rows[selectedIndex]) : null),
+    [rows, selectedIndex],
+  );
+  const { anchor: reviewAnchor, secondary: reviewSecondary } = usePrReviewPanels({
+    selectedPr,
+    maximized,
+    onToggleMaximize: () => setMaximized((value) => !value),
+  });
+
   const filterInputRef = useRef<HTMLInputElement | null>(null);
   const filterBar = useDockFilter(filterInputRef, () =>
     (rowRefs.current[selectedIndex] ?? rowRefs.current[0])?.focus(),
   );
 
-  return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card">
-      {copyToast && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed bottom-4 right-4 z-50 rounded-md bg-foreground px-3 py-2 text-sm text-background shadow-lg"
-        >
-          {copyToast}
-        </div>
-      )}
-      {/* Title strip; the filter stays folded here until Ctrl+F or / opens it. */}
-      <div className="flex h-5 shrink-0 items-center justify-between border-b border-border bg-muted/40 pl-2">
-        <span className="text-xs font-semibold">Pull requests</span>
+  // The filter stays folded in the panel's tab strip until Ctrl+F or / opens it.
+  const filterActions = (
         <DockFilterBar
           label="Filter pull requests"
           open={filterBar.open}
@@ -285,15 +333,17 @@ export function MyPullRequestsGrid() {
             />
           </div>
         </DockFilterBar>
-      </div>
+  );
 
+  const gridPane = (
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card">
       {query.isLoading ? (
         <p className="px-2 py-3 text-sm text-muted-foreground">Loading…</p>
       ) : query.isError ? (
         <p className="px-2 py-3 text-sm text-destructive">{commandErrorMessage(query.error)}</p>
       ) : (
         <div className="min-h-0 flex-1 overflow-auto" onKeyDown={onKeyDown}>
-          <div style={{ minWidth: gridMinWidth }}>
+          <div ref={gridRef} style={{ minWidth: gridMinWidth }}>
             {/* Column headers */}
             <div
               role="row"
@@ -358,6 +408,41 @@ export function MyPullRequestsGrid() {
           Columns
         </button>
       </div>
+    </div>
+  );
+
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {copyToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-4 right-4 z-50 rounded-md bg-foreground px-3 py-2 text-sm text-background shadow-lg"
+        >
+          {copyToast}
+        </div>
+      )}
+      <DockableWorkspace
+        storageKey={PREVIEW_LAYOUT_STORAGE_KEY}
+        panels={[
+          {
+            id: "grid",
+            title: "Pull requests",
+            minWidth: 480,
+            headerActions: filterActions,
+            content: gridPane,
+          },
+          {
+            ...reviewAnchor,
+            position: { relativeTo: "grid", direction: "right" },
+            initialWidth: DEFAULT_REVIEW_PREVIEW_WIDTH,
+            minWidth: MIN_REVIEW_PREVIEW_WIDTH,
+            maxWidth: MAX_REVIEW_PREVIEW_WIDTH,
+          },
+          ...reviewSecondary,
+        ] satisfies DockablePanelSpec[]}
+        maximizedId={maximized ? "review" : undefined}
+      />
 
       {columnMenuRect ? (
         <ColumnVisibilityMenu
@@ -370,6 +455,7 @@ export function MyPullRequestsGrid() {
             resetColumns();
             resetWidths();
           }}
+          onAutoFitWidths={resetWidths}
           onClose={() => setColumnMenuRect(null)}
         />
       ) : null}

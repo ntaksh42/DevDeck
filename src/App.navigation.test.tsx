@@ -76,18 +76,18 @@ describe("App — Navigation", () => {
     renderApp();
     const main = within(await screen.findByRole("main"));
 
-    expect(await main.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "Pull Requests My Reviews" })).toBeTruthy();
 
     const nav = within(screen.getByRole("navigation", { name: "Primary navigation" }));
 
     fireEvent.click(nav.getByRole("button", { name: "Views" }));
-    expect(await main.findByRole("heading", { name: "Work Item Views" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "Work Items Views Assigned to me" })).toBeTruthy();
 
     fireEvent.click(nav.getAllByRole("button", { name: "Search" })[1]);
-    expect(await main.findByRole("heading", { name: "Work Items" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "Work Items Search" })).toBeTruthy();
 
     fireEvent.click(nav.getByRole("button", { name: "Commits" }));
-    expect(await main.findByRole("heading", { name: "Commits" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "Code Commits" })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: ",", ctrlKey: true });
     expect(await main.findByRole("heading", { name: "Connections" })).toBeTruthy();
@@ -109,23 +109,23 @@ describe("App — Navigation", () => {
 
     renderApp();
     const main = within(await screen.findByRole("main"));
-    expect(await main.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "Pull Requests My Reviews" })).toBeTruthy();
 
     const nav = within(screen.getByRole("navigation", { name: "Primary navigation" }));
     fireEvent.click(nav.getByRole("button", { name: "Views" }));
-    expect(await main.findByRole("heading", { name: "Work Item Views" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "Work Items Views Assigned to me" })).toBeTruthy();
     fireEvent.click(nav.getByRole("button", { name: "Commits" }));
-    expect(await main.findByRole("heading", { name: "Commits" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "Code Commits" })).toBeTruthy();
 
     // Back: Commits -> Work Item Views -> My Reviews.
     fireEvent.keyDown(window, { key: "ArrowLeft", altKey: true });
-    expect(await main.findByRole("heading", { name: "Work Item Views" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "Work Items Views Assigned to me" })).toBeTruthy();
     fireEvent.keyDown(window, { key: "ArrowLeft", altKey: true });
-    expect(await main.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "Pull Requests My Reviews" })).toBeTruthy();
 
     // Forward again restores the next view.
     fireEvent.keyDown(window, { key: "ArrowRight", altKey: true });
-    expect(await main.findByRole("heading", { name: "Work Item Views" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "Work Items Views Assigned to me" })).toBeTruthy();
   });
 
   it("navigates between views with the G key chain", async () => {
@@ -165,19 +165,19 @@ describe("App — Navigation", () => {
 
     renderApp();
     const main = within(await screen.findByRole("main"));
-    expect(await main.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "Pull Requests My Reviews" })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: "g" });
     fireEvent.keyDown(window, { key: "w" });
-    expect(await main.findByRole("heading", { name: "My Work Items" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "Work Items My Items" })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: "g" });
     fireEvent.keyDown(window, { key: "c" });
-    expect(await main.findByRole("heading", { name: "Commits" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "Code Commits" })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: "g" });
     fireEvent.keyDown(window, { key: "r" });
-    expect(await main.findByRole("heading", { name: "My Reviews" })).toBeTruthy();
+    expect(await main.findByRole("heading", { name: "Pull Requests My Reviews" })).toBeTruthy();
   });
 
   it("suppresses unbound WebView shortcuts (Ctrl+P / Ctrl+G) outside inputs", async () => {

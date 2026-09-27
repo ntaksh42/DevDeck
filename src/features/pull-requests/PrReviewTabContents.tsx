@@ -21,6 +21,7 @@ import { PrPreviewSection } from "./PrPreviewSection";
 import { PrOverflowMenu } from "./PrOverflowMenu";
 import { VOTE_BADGE_CLASSES, voteTone } from "./voteVisual";
 import { usePrReviewActions } from "./usePrReviewActions";
+import { NativeSelect } from "@/components/SearchBar";
 
 function usePrMentionSearch(organizationId: string) {
   return useCallback(
@@ -165,18 +166,18 @@ export function ReviewTab({
         ) : null}
 
         <div className="ml-auto flex items-center gap-1.5">
-          <select
+          <NativeSelect
+            compact
             aria-label="Merge strategy"
             value={mergeStrategy}
             disabled={readOnly || updateMutation.isPending}
             onChange={(event) => setMergeStrategy(event.target.value)}
-            className="h-6 rounded border border-input bg-background px-1 outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
           >
             <option value="squash">Squash</option>
             <option value="noFastForward">Merge</option>
             <option value="rebase">Rebase</option>
             <option value="rebaseMerge">Rebase + merge</option>
-          </select>
+          </NativeSelect>
           <button
             type="button"
             disabled={readOnly || updateMutation.isPending}

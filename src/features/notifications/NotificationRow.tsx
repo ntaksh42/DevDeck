@@ -71,7 +71,11 @@ export const NotificationRow = forwardRef<
         >
           <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
-      ) : null}
+      ) : (
+        <span className="shrink-0 rounded p-1" aria-hidden="true">
+          <span className="block h-3.5 w-3.5" />
+        </span>
+      )}
     </div>
   );
 });
