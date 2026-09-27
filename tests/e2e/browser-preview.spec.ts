@@ -271,3 +271,59 @@ test("keeps focus on a done agent note after a reply reopens it", async ({ page 
   await expect(main.getByText("2 open")).toBeVisible();
   await expect(main.locator('[data-agent-note-id="20260925-174000.md"]')).toBeFocused();
 });
+
+test("opens the collapsed Work Items dock to half the column after a reload", async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 800 });
+  await page.goto("/");
+  const main = page.getByRole("main");
+  const selectPr = () =>
+    main
+      .getByRole("grid", { name: "My review pull requests" })
+      .getByText("Add rate limiting middleware to all endpoints")
+      .click();
+  const groupHeight = (title: string) =>
+    page.evaluate(
+      (name) =>
+        [...document.querySelectorAll(".dv-groupview")]
+          .find((group) => group.querySelector(".dv-tab")?.textContent === name)
+          ?.getBoundingClientRect().height ?? 0,
+      title,
+    );
+  await selectPr();
+
+  // Moving the dock while collapsed keeps it collapsed.
+  await main.getByRole("button", { name: "Move Work Items panel" }).click();
+  await page
+    .getByRole("menu", { name: "Move Work Items" })
+    .getByRole("menuitem", { name: "Split below Conversation" })
+    .click();
+  await expect.poll(() => groupHeight("Work Items")).toBeLessThan(30);
+  // The layout is saved on a debounce; reload once the move is persisted.
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        type Node = { type: string; data: Node[] | { views: string[] } };
+        const views = (node: Node): string[] =>
+          node.type === "leaf" ? (node.data as { views: string[] }).views : (node.data as Node[]).flatMap(views);
+        // True once the saved layout has Work Items in the same split as Conversation.
+        const sharesSplit = (node: Node): boolean =>
+          node.type === "branch" &&
+          ((node.data as Node[]).some((child) => child.type === "leaf" && views(child).includes("linkedWorkItems"))
+            ? (node.data as Node[]).some((child) => views(child).includes("review"))
+            : (node.data as Node[]).some(sharesSplit));
+        return Object.keys(localStorage).some((key) => {
+          if (!key.endsWith(":schema:v3")) return false;
+          const root = JSON.parse(localStorage.getItem(key) ?? "{}")?.grid?.root;
+          return !!root && sharesSplit(root);
+        });
+      }),
+    )
+    .toBe(true);
+
+  await page.reload();
+  await selectPr();
+  await main.getByRole("button", { name: "Show linked work items" }).click();
+  await expect
+    .poll(async () => Math.abs((await groupHeight("Work Items")) - (await groupHeight("Conversation"))))
+    .toBeLessThan(40);
+});
