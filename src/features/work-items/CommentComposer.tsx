@@ -1,12 +1,11 @@
 import {
-  type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
   useRef,
   useState,
 } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Send } from "lucide-react";
+import { CommentField } from "@/components/CommentField";
 import {
   addWorkItemComment,
   commandErrorMessage,
@@ -182,40 +181,33 @@ export function CommentComposer({
     }
   }
 
-  function submitComment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    postComment();
-  }
-
   return (
-    <div className={`bg-muted/70 ${active ? "p-2" : "px-2 py-1"}`}>
-      <form
-        className="space-y-1"
-        onSubmit={submitComment}
-        onFocus={() => setFocused(true)}
-        onBlur={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocused(false);
+    <div
+      className={`bg-muted/70 ${active ? "p-2" : "px-2 py-1"}`}
+      onFocus={() => setFocused(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocused(false);
+      }}
+    >
+      <CommentField
+        textareaRef={textareaRef}
+        containerRef={mentionPicker.containerRef}
+        data-work-item-comment-input="true"
+        value={commentText}
+        onChange={(event) => {
+          setCommentText(event.target.value);
+          mentionPicker.handleTextChange(event.target.value, event.target.selectionStart);
         }}
-      >
-        <div ref={mentionPicker.containerRef} className="relative">
-          <textarea
-            ref={textareaRef}
-            data-work-item-comment-input="true"
-            value={commentText}
-            onChange={(event) => {
-              setCommentText(event.target.value);
-              mentionPicker.handleTextChange(event.target.value, event.target.selectionStart);
-            }}
-            onClick={(event) => {
-              mentionPicker.handleSelectionChange(event.currentTarget.selectionStart);
-            }}
-            onKeyDown={handleCommentKeyDown}
-            aria-label="Comment"
-            aria-keyshortcuts="M Control+M Control+Enter Meta+Enter"
-            placeholder="Add a comment... (m)"
-            rows={active ? 2 : 1}
-            className={`${active ? "min-h-[36px] resize-y" : "!h-7 !min-h-0 resize-none"} w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none transition-[border-color,box-shadow,min-height] focus:min-h-[64px] focus:border-primary focus:ring-4 focus:ring-primary/20`}
-          />
+        onClick={(event) => {
+          mentionPicker.handleSelectionChange(event.currentTarget.selectionStart);
+        }}
+        onKeyDown={handleCommentKeyDown}
+        aria-label="Comment"
+        aria-keyshortcuts="M Control+M Control+Enter Meta+Enter"
+        placeholder="Add a comment... (m)"
+        rows={active ? 2 : 1}
+        className={active ? "min-h-[36px] focus:min-h-[64px]" : "!h-7 !min-h-0 !resize-none"}
+        overlay={
           <MentionPickerDropdown
             options={mentionPicker.dropdown.options}
             activeIndex={mentionPicker.dropdown.activeIndex}
@@ -223,31 +215,22 @@ export function CommentComposer({
             errorMessage={mentionPicker.dropdown.errorMessage}
             onSelect={mentionPicker.applyMention}
           />
-        </div>
-        {commentMutation.isError ? (
-          <p className="text-xs text-destructive">
-            {commandErrorMessage(commentMutation.error)}
-          </p>
-        ) : null}
-        <div className={`items-center justify-end gap-1.5 ${active ? "flex" : "hidden"}`}>
-          {commentMutation.isSuccess ? (
-            <span className="text-xs text-muted-foreground">Comment posted</span>
-          ) : null}
-          <button
-            type="submit"
-            aria-label="Post comment"
-            title="Post comment (Ctrl+Enter)"
-            disabled={!commentText.trim() || commentMutation.isPending}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {commentMutation.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-            ) : (
-              <Send className="h-3.5 w-3.5" aria-hidden="true" />
-            )}
-          </button>
-        </div>
-      </form>
+        }
+        error={commentMutation.isError ? commandErrorMessage(commentMutation.error) : null}
+        showActions={active}
+        status={
+          commentMutation.isSuccess ? (
+            <span className="text-[11px] text-muted-foreground">Comment posted</span>
+          ) : null
+        }
+        submitLabel="Comment"
+        submitAriaLabel="Post comment"
+        submitDisabled={!commentText.trim()}
+        pending={commentMutation.isPending}
+        onSubmit={() => {
+          postComment();
+        }}
+      />
     </div>
   );
 }
