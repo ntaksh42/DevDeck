@@ -43,6 +43,9 @@ pub struct AppSettings {
     pub review_result_folder_path: Option<String>,
     pub work_item_result_folder_path: Option<String>,
     pub show_window_hotkey: Option<String>,
+    /// Shell command that starts an agent on an item's notes (`{target}`,
+    /// `{id}`, `{notes}` placeholders). Run from the result folder.
+    pub agent_command: Option<String>,
     pub read_only_validation_mode_enabled: bool,
     pub desktop_notifications_enabled: bool,
     pub notification_content_preview_enabled: bool,
@@ -76,6 +79,7 @@ impl Default for AppSettings {
             review_result_folder_path: None,
             work_item_result_folder_path: None,
             show_window_hotkey: None,
+            agent_command: None,
             read_only_validation_mode_enabled: false,
             desktop_notifications_enabled: false,
             notification_content_preview_enabled: true,
@@ -153,6 +157,7 @@ pub(crate) fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
         review_result_folder_path: get_setting(conn, "review_result_folder_path")?,
         work_item_result_folder_path: get_setting(conn, "work_item_result_folder_path")?,
         show_window_hotkey: get_setting(conn, "show_window_hotkey")?,
+        agent_command: get_setting(conn, "agent_command")?,
         read_only_validation_mode_enabled: get_bool_setting(
             conn,
             "read_only_validation_mode_enabled",
@@ -246,6 +251,7 @@ pub(crate) fn update_app_settings(conn: &Connection, settings: AppSettings) -> R
         "show_window_hotkey",
         settings.show_window_hotkey.as_deref(),
     )?;
+    set_setting(conn, "agent_command", settings.agent_command.as_deref())?;
     set_bool_setting(
         conn,
         "read_only_validation_mode_enabled",

@@ -13,6 +13,7 @@ export function settingsInput(
     reviewResultFolderPath: settings?.reviewResultFolderPath ?? null,
     workItemResultFolderPath: settings?.workItemResultFolderPath ?? null,
     showWindowHotkey: settings?.showWindowHotkey ?? null,
+    agentCommand: settings?.agentCommand ?? null,
     readOnlyValidationModeEnabled:
       settings?.readOnlyValidationModeEnabled ?? false,
     desktopNotificationsEnabled: settings?.desktopNotificationsEnabled ?? false,

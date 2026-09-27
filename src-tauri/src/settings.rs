@@ -21,6 +21,8 @@ pub struct UpdateAppSettingsInput {
     pub review_result_folder_path: Option<String>,
     pub work_item_result_folder_path: Option<String>,
     pub show_window_hotkey: Option<String>,
+    #[serde(default)]
+    pub agent_command: Option<String>,
     pub read_only_validation_mode_enabled: Option<bool>,
     pub desktop_notifications_enabled: Option<bool>,
     pub notification_content_preview_enabled: Option<bool>,
@@ -103,18 +105,7 @@ impl SettingsService {
 
     pub fn update_normalized(&self, settings: AppSettings) -> Result<AppSettings> {
         let saved = self.db.update_app_settings(settings)?;
-        // Best effort: a folder that cannot take the guide must not block
-        // saving the rest of the settings.
-        for (folder, target) in [
-            (&saved.work_item_result_folder_path, NoteTarget::WorkItem),
-            (&saved.review_result_folder_path, NoteTarget::PullRequest),
-        ] {
-            if let Some(folder) = folder {
-                if let Err(err) = ensure_guide(Path::new(folder), target) {
-                    tracing::warn!(%folder, error = %err, "could not place agent notes guide");
-                }
-            }
-        }
+        place_agent_guides(&saved);
         Ok(saved)
     }
 
@@ -176,11 +167,28 @@ impl SettingsService {
     }
 }
 
+/// Places or refreshes the agent notes guide in both result folders. Best
+/// effort: a folder that cannot take the guide must not block saving the rest
+/// of the settings or starting the app.
+pub(crate) fn place_agent_guides(settings: &AppSettings) {
+    for (folder, target) in [
+        (&settings.work_item_result_folder_path, NoteTarget::WorkItem),
+        (&settings.review_result_folder_path, NoteTarget::PullRequest),
+    ] {
+        if let Some(folder) = folder {
+            if let Err(err) = ensure_guide(Path::new(folder), target) {
+                tracing::warn!(%folder, error = %err, "could not place agent notes guide");
+            }
+        }
+    }
+}
+
 pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
     AppSettings {
         review_result_folder_path: normalize_path(input.review_result_folder_path),
         work_item_result_folder_path: normalize_path(input.work_item_result_folder_path),
         show_window_hotkey: normalize_path(input.show_window_hotkey),
+        agent_command: normalize_path(input.agent_command),
         read_only_validation_mode_enabled: input.read_only_validation_mode_enabled.unwrap_or(false),
         desktop_notifications_enabled: input.desktop_notifications_enabled.unwrap_or(false),
         notification_content_preview_enabled: input

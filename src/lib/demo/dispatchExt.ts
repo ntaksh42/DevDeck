@@ -8,6 +8,8 @@ import type {
   ListNotificationsInput,
   RecordNotificationInput,
   ReplyAgentNoteInput,
+  AgentNoteTarget,
+  UpdateAgentNoteInput,
   SearchCommitsInput,
 } from "@/lib/azdoCommands";
 import {
@@ -46,6 +48,11 @@ import {
   demoDeleteAgentNote,
   demoListAgentNotes,
   demoReplyAgentNote,
+  demoRestoreAgentNote,
+  demoSetAgentNoteStatus,
+  demoSubmitAgentNoteDrafts,
+  demoSummarizeAgentNotes,
+  demoUpdateAgentNote,
 } from "@/lib/demo/agentNotes";
 
 export function dispatchExt(command: string, args: unknown): unknown {
@@ -234,6 +241,31 @@ export function dispatchExt(command: string, args: unknown): unknown {
       if (!input) throw new Error("missing input");
       return demoReplyAgentNote(input);
     }
+    case "update_agent_note": {
+      const input = (args as { input?: UpdateAgentNoteInput } | undefined)?.input;
+      if (!input) throw new Error("missing input");
+      return demoUpdateAgentNote(input);
+    }
+    case "set_agent_note_status": {
+      const input = (args as { input?: AgentNoteItem & { noteId: string; status: "open" | "done" } } | undefined)?.input;
+      if (!input) throw new Error("missing input");
+      return demoSetAgentNoteStatus(input);
+    }
+    case "restore_agent_note": {
+      const input = (args as { input?: AgentNoteItem & { noteId: string } } | undefined)?.input;
+      if (input) demoRestoreAgentNote(input);
+      return null;
+    }
+    case "submit_agent_note_drafts": {
+      const input = (args as { input?: AgentNoteItem } | undefined)?.input;
+      return input ? demoSubmitAgentNoteDrafts(input) : 0;
+    }
+    case "summarize_agent_notes": {
+      const input = (args as { input?: { target: AgentNoteTarget } } | undefined)?.input;
+      return input ? demoSummarizeAgentNotes(input.target) : [];
+    }
+    case "run_agent":
+      throw new Error("Running an agent is only available in the desktop app");
     default:
       return undefined;
   }

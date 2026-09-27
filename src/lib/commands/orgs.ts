@@ -37,6 +37,7 @@ const appSettingsSchema = z.object({
   reviewResultFolderPath: z.string().nullable(),
   workItemResultFolderPath: z.string().nullable().default(null),
   showWindowHotkey: z.string().nullable().default(null),
+  agentCommand: z.string().nullable().default(null),
   readOnlyValidationModeEnabled: z.boolean().default(false),
   desktopNotificationsEnabled: z.boolean().default(false),
   notificationContentPreviewEnabled: z.boolean().default(true),
@@ -180,6 +181,7 @@ export type UpdateAppSettingsInput = {
   reviewResultFolderPath?: string | null;
   workItemResultFolderPath?: string | null;
   showWindowHotkey?: string | null;
+  agentCommand?: string | null;
   readOnlyValidationModeEnabled?: boolean;
   desktopNotificationsEnabled?: boolean;
   notificationContentPreviewEnabled?: boolean;

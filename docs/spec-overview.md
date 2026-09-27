@@ -118,31 +118,50 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
 - **エージェントへの申し送り (Agent notes)**: 作業項目グリッドの Result パネル (調査結果 HTML) と
   PR (My Reviews / PR Search) の Result タブ (レビュー結果 HTML) に、調査・レビューを行う外部 AI
   エージェント向けのコメントを残せる (UI は共通の `AgentResultPanel`)。保存先は `work_item_result_folder_path` 配下の
-  `.to-agent-msg/wi-{id}/{yyyyMMdd-HHmmss}.md` (1 メモ 1 ファイル、front-matter に `created` /
-  `result_file` / `quote` / `quote_prefix` / `quote_suffix`、本文は Markdown)。SQLite には保存しない。
-  エージェントは open のメモを読んで WI にコメント追記し、ファイルを `_done/` へ移動する (任意で
-  `resolved:` を追記)。DevDeck は `_done/` を Done として表示し、Done のメモは削除できない。
-  コマンドは `list_agent_notes` / `create_agent_note` / `delete_agent_note` / `reply_agent_note` (`agent_notes.rs`)。
-  返信はメモ本文の後ろに `<!-- reply {author} {ISO 時刻} -->` の行で区切って追記し、最初の区切りより前が
-  元の本文になる (`agent_notes_replies.rs` が分割)。一覧では各メモの下に「N replies」として畳んで表示し
-  (最後の返信がエージェントならその名前のバッジ)、展開すると返信と返信欄を出す。author は人なら `user`
-  (「You」と表示)、エージェントは自分の名前を英小文字 1 語で書き (`claude` / `codex` 等、旧形式の `agent` も可)、
-  先頭を大文字にした `@Claude` のように表示して人の返信と区別する。ユーザーが Done のメモに返信
-  すると `_done/` から open に戻し、エージェントに再度拾わせる (front-matter の同じキーが複数あれば後の行を
-  採用するので、再度 Done になったメモは新しい `resolved:` を表示する)。区切り行と同じ形の行を含む本文・返信は拒否する。
-  入力は `target` (`work-item` / `pull-request`) と `itemId` で、`pull-request` は
-  `review_result_folder_path` 配下の `.to-agent-msg/pr-{id}/` を使う (保存形式は共通、front-matter の
-  `target` に種別を書く)。作業項目は `work-item`、PR の Result タブは `pull-request` を使う。
-  結果 HTML 上のテキスト選択 (Comment ボタン) またはキーボードのブロック選択で引用付きコメントを作れ、
-  引用は空白を無視したテキスト + 前後 24 文字の文脈で再アンカーする (HTML 再生成後に見つからない
-  メモは「Not found in current result」と表示)。ハイライトは CSS Custom Highlight API、番号ピン
-  (左余白) とスクロール位置マーカー (右端) は親ドキュメント側に描画し、結果 HTML は書き換えない。
-  iframe は従来どおり `sandbox="allow-same-origin"` (スクリプト無効) のため、スクロールと選択は親から
-  ポーリングで監視する。メモ一覧はエージェントによる外部変更を拾うため 15 秒ごとに再取得する。
-  結果ファイル名・パスの行は置かず、ブラウザで開く操作はメモ一覧ヘッダーのアイコン (ツールチップにファイル名) と `o` キーで行う。
-  設定保存時、2 つの結果フォルダが存在し `AGENTS.md` が無ければ、エージェント向けの読み方
-  (`agent_notes_guide.md` を WI / PR 向けに置換したもの) を `AGENTS.md` として配置する。既存の
-  `AGENTS.md` は上書きしない。配置失敗は警告ログのみで設定保存は成功させる。
+  `.to-agent-msg/wi-{id}/{yyyyMMdd-HHmmss}.md` (1 メモ 1 ファイル、本文は Markdown)。front-matter は `target` / `id` /
+  `created` / `kind` (`fix` 既定・`question`・`redo`) / `result_file` / `result_hash` (作成時の結果 HTML の指紋) /
+  `quote` / `quote_prefix` / `quote_suffix` / `quote_offset` (空白除去後の本文での位置)。SQLite には保存しない。
+  書き込みは一時ファイル → rename で行い、エージェントに書きかけを読ませない。
+  - **フォルダ**: 直下の `.md` が未対応 (open)。`_done/` は対応済み、`_draft/` はユーザーの未送信下書き、
+    `_trash/` は削除済み (1 日後に一覧取得時に消去)。エージェントは直下だけを読む。
+  - **状態**: Open / Needs you / Done (+ 下書き)。Needs you は open かつ最後の返信がエージェントのメモ
+    (質問・対応不能の報告)。エージェントは対応したら `resolved:` を追記して `_done/` へ移し、直した要素に
+    `data-agent-note="{ファイル名}"` 属性を付ける。
+  - **返信**: メモ本文の後ろに `<!-- reply {author} {ISO 時刻} -->` の行で区切って追記し、最初の区切りより前が元の本文
+    (`agent_notes/replies.rs` が分割)。author は人なら `user` (「You」と表示)、エージェントは英小文字 1 語
+    (`claude` / `codex` 等、旧形式の `agent` も可) で `@Claude` のように表示。ユーザーが Done のメモに返信すると open に戻す。
+    front-matter の同じキーが複数あれば後の行を採用する。区切り行と同じ形の行を含む本文・返信は拒否する。
+  - **コマンド** (`agent_notes/`): `list_agent_notes` / `create_agent_note` (`draft` で `_draft/` へ) /
+    `delete_agent_note` (`_trash/` へ移動) / `restore_agent_note` / `reply_agent_note` / `update_agent_note`
+    (本文編集はエージェントの返信前のみ、`anchor` で引用の付け替え) / `set_agent_note_status` (ユーザーによる Resolve /
+    Reopen、Resolve は `resolved: Resolved in DevDeck`) / `submit_agent_note_drafts` / `summarize_agent_notes`
+    (項目ごとの open / needsYou / drafts / done 件数と最終更新) / `run_agent` (設定 `agent_command` をシェルで起動)。
+    入力は `target` (`work-item` / `pull-request`) と `itemId` で、`pull-request` は `review_result_folder_path` 配下の
+    `.to-agent-msg/pr-{id}/` を使う。
+  - **一覧 UI**: カード型で、Needs you → Open (結果内の位置順) → 下書き の順、Done は「Done (n)」見出しの下に畳む。
+    カードは状態チップ・種別・引用・Markdown 本文 (`#123` / `!45` はアプリ内リンク)・Needs you なら最新のエージェント返信を
+    表示し、1 行に畳める (個別に ← →、ヘッダーのボタンで一括、一括状態は localStorage に保存)。未読のエージェント返信は
+    青点 (既読は localStorage)。結果が再生成されていれば「Result regenerated since this note」。引用が現在の結果に無いメモは
+    「Re-attach」で選択範囲に付け替えられる。Done のメモは `data-agent-note` の付いた箇所があれば「Show change」で強調表示。
+    削除は数秒間 Undo できる。見出しのパス表示は無く、保存先はツールチップで示す。
+  - **入力欄**: 普段は 1 行で、フォーカス (一覧で `C`) で 3 行に広がる。種別を選び、`Ctrl+Enter` で送信、`Alt+Enter` で
+    下書きに追加、下書きがあれば「Send all」(`Ctrl+Shift+Enter`) でまとめて送る。
+  - **キーボード (一覧)**: `↑↓` 移動、`→ ←` カード / スレッドの開閉、`Enter` 結果の該当箇所へ (Done は変更箇所)、`R` 返信、
+    `X` Resolve / Reopen、`E` 編集、`L` 付け替え、`Del` 削除、`Esc` グリッドへ。パネル内では `o` 結果をブラウザで開く、
+    `a` エージェント起動 (`agent_command` 設定時)、`Ctrl+Z` 削除の取り消し。
+  - **結果との連携**: 結果 HTML 上のテキスト選択 (Comment ボタン) またはキーボードのブロック選択で引用付きコメントを作れ、
+    引用は空白を無視したテキスト + 前後 24 文字の文脈 + 位置で再アンカーする。ハイライトは CSS Custom Highlight API、
+    番号ピン (左余白、状態の色: Needs you 赤・Open 黄・下書き点線) とスクロール位置マーカー (右端) は親ドキュメント側に描画し、
+    結果 HTML は書き換えない。iframe は `sandbox="allow-same-origin"` (スクリプト無効) のため、スクロールと選択は親から
+    ポーリングで監視する。結果とメモ一覧の境界はドラッグまたはフォーカスして矢印キーで調整でき、サイズは localStorage に保存。
+  - **グリッドと通知**: My Reviews / My Work Items の行のタイトル横に open メモ数のバッジ (Needs you があれば赤、
+    未読のエージェント返信があれば太字)。App 直下の `useAgentNoteWatcher` が `summarize_agent_notes` を 5 秒ごとに取得し、
+    変化した項目のメモ一覧を即時再取得、エージェントの返信・完了をデスクトップ通知する (`desktop_notifications_enabled` に従い、
+    初回取得は基準のみ)。メモ一覧自体の定期再取得は 60 秒 (保険)。
+  - **ガイド**: 起動時と設定保存時、結果フォルダの `AGENTS.md` に DevDeck 管理区間
+    (`<!-- devdeck:agent-notes:start ... -->` 〜 `end`、`agent_notes/guide.md` を WI / PR 向けに置換) を置く / 更新する。
+    ファイルが無ければ作成、区間があれば区間だけ差し替え、旧版 (区間なし) の DevDeck 製ガイドは全体を置き換え、
+    それ以外の既存 `AGENTS.md` は変更しない。配置失敗は警告ログのみ。
 - **作業項目の新規作成**: My Work Items の「New item」ボタン、テンプレート適用
   (`WorkItemTemplatesPanel`)、またはプレビューの Duplicate (`D` キー / ヘッダーボタン) から
   作成ダイアログを開き、プロジェクト・種別 (`list_work_item_types`)・タイトル・説明・
@@ -312,6 +331,7 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
 | `review_result_folder_path` | レビュー結果 HTML を格納するフォルダ。My Reviews のプレビューが PR 番号を含むファイルを照合。 |
 | `work_item_result_folder_path` | 作業項目の調査結果 HTML を格納するフォルダ。Work Item Views のプレビューが作業項目 ID の数字列を含むファイルを照合。 |
 | `show_window_hotkey` | ウィンドウを前面化するグローバルホットキー。 |
+| `agent_command` | Agent notes の「Run agent」(`a`) で結果フォルダから起動するシェルコマンド。`{target}` / `{id}` / `{notes}` を置換。未設定なら非表示。 |
 | `read_only_validation_mode_enabled` | 読み取り専用モード (誤操作によるミューテーションを抑止)。既定 false。 |
 | `desktop_notifications_enabled` | デスクトップ通知の総合トグル。既定 false。 |
 | `notification_content_preview_enabled` | 通知に本文プレビューを含めるか。既定 true。 |

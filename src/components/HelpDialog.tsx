@@ -142,7 +142,10 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Comment on the investigation result (Result panel)</span><kbd className={kbd}>R</kbd></div>
           <div className={row}><span>Result: move block / extend</span><kbd className={kbd}>↑ ↓ / Shift+↑ ↓</kbd></div>
           <div className={row}><span>Result: comment / open note / next-prev note</span><kbd className={kbd}>C / Enter / ] [</kbd></div>
-          <div className={row}><span>Agent notes: expand / collapse thread, reply</span><kbd className={kbd}>→ ← / R</kbd></div>
+          <div className={row}><span>Agent notes: expand / collapse note and thread, reply</span><kbd className={kbd}>→ ← / R</kbd></div>
+          <div className={row}><span>Agent notes: resolve-reopen / edit / re-attach / delete</span><kbd className={kbd}>X / E / L / Del</kbd></div>
+          <div className={row}><span>Agent notes: new note / undo delete / run agent</span><kbd className={kbd}>C / Ctrl+Z / A</kbd></div>
+          <div className={row}><span>Note box: send / add to drafts / send all drafts</span><kbd className={kbd}>Ctrl+Enter / Alt+Enter / Ctrl+Shift+Enter</kbd></div>
 
           <p className={section}>Work Item Views</p>
           <div className={row}><span>Move view card</span><kbd className={kbd}>← → ↑ ↓</kbd></div>

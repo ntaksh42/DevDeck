@@ -6,6 +6,10 @@
 //! notes, acts on them, and moves each file into the `_done/` subfolder. The
 //! files are the source of truth -- nothing is stored in SQLite -- so the agent
 //! needs no access to DevDeck.
+//!
+//! Besides the open folder and `_done/`, DevDeck keeps unsent drafts in
+//! `_draft/` and deleted notes in `_trash/` (so a delete can be undone). The
+//! agent only reads the `.md` files directly in the item folder.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -16,14 +20,30 @@ use serde::{Deserialize, Serialize};
 use crate::db::AppDatabase;
 use crate::error::{AppError, Result};
 
-#[path = "agent_notes_replies.rs"]
+mod format;
+mod guide;
+mod launch;
+mod ops;
 mod replies;
+mod summary;
+
+pub(crate) use guide::ensure_guide;
+pub use ops::{
+    RestoreAgentNoteInput, SetAgentNoteStatusInput, SubmitAgentNoteDraftsInput,
+    UpdateAgentNoteInput,
+};
 pub use replies::{NoteReply, ReplyAgentNoteInput};
+pub use summary::{AgentNoteSummary, SummarizeAgentNotesInput};
+
+use format::{parse_note, write_atomic};
 
 const NOTES_DIR: &str = ".to-agent-msg";
 const DONE_DIR: &str = "_done";
+const DRAFT_DIR: &str = "_draft";
+const TRASH_DIR: &str = "_trash";
 const MAX_BODY_CHARS: usize = 20_000;
 const MAX_QUOTE_CHARS: usize = 2_000;
+const KINDS: [&str; 3] = ["fix", "question", "redo"];
 
 /// What a note is about. Selects the result folder and the `wi-` / `pr-`
 /// subfolder, and is written to the note's `target` front-matter field.
@@ -57,7 +77,7 @@ pub struct ListAgentNotesInput {
     pub item_id: i64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateAgentNoteInput {
     pub target: NoteTarget,
@@ -66,7 +86,20 @@ pub struct CreateAgentNoteInput {
     pub quote: Option<String>,
     pub quote_prefix: Option<String>,
     pub quote_suffix: Option<String>,
+    /// Offset of the quote in the result's whitespace-free text; tells apart
+    /// repeated occurrences of the same text.
+    #[serde(default)]
+    pub quote_offset: Option<i64>,
     pub result_file: Option<String>,
+    /// Fingerprint of the result HTML the note was written against.
+    #[serde(default)]
+    pub result_hash: Option<String>,
+    /// `fix`, `question` or `redo`.
+    #[serde(default)]
+    pub kind: Option<String>,
+    /// Saved to `_draft/` until the drafts are submitted together.
+    #[serde(default)]
+    pub draft: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -77,19 +110,31 @@ pub struct DeleteAgentNoteInput {
     pub note_id: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunAgentInput {
+    pub target: NoteTarget,
+    pub item_id: i64,
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentNote {
     /// File name; unique within the item's folder.
     pub id: String,
-    /// `open` (in the item folder) or `done` (moved into `_done/`).
+    /// `open`, `done` (in `_done/`) or `draft` (in `_draft/`).
     pub status: String,
     pub created_at: String,
+    /// File modification time; changes whenever the agent or user touches it.
+    pub modified_at: Option<String>,
     pub body: String,
     pub quote: Option<String>,
     pub quote_prefix: Option<String>,
     pub quote_suffix: Option<String>,
+    pub quote_offset: Option<i64>,
     pub result_file: Option<String>,
+    pub result_hash: Option<String>,
+    pub kind: Option<String>,
     /// What the agent reported when it handled the note.
     pub resolved: Option<String>,
     /// Agent and user replies appended after the body, oldest first.
@@ -117,11 +162,7 @@ impl AgentNoteService {
 
     pub fn create(&self, input: CreateAgentNoteInput) -> Result<AgentNote> {
         validate_id(input.item_id)?;
-        let folder = self.result_folder(input.target)?.ok_or_else(|| {
-            AppError::InvalidInput(
-                "Set a result folder in Settings to leave agent notes".to_string(),
-            )
-        })?;
+        let folder = self.require_folder(input.target)?;
         create_note(&folder, input, Local::now())
     }
 
@@ -130,17 +171,60 @@ impl AgentNoteService {
         let Some(folder) = self.result_folder(input.target)? else {
             return Ok(());
         };
-        delete_note(&folder, input.target, input.item_id, &input.note_id)
+        ops::trash_note(&folder, input.target, input.item_id, &input.note_id)
+    }
+
+    pub fn restore(&self, input: RestoreAgentNoteInput) -> Result<()> {
+        validate_id(input.item_id)?;
+        let folder = self.require_folder(input.target)?;
+        ops::restore_note(&folder, input)
     }
 
     pub fn reply(&self, input: ReplyAgentNoteInput) -> Result<AgentNote> {
         validate_id(input.item_id)?;
-        let folder = self.result_folder(input.target)?.ok_or_else(|| {
-            AppError::InvalidInput(
-                "Set a result folder in Settings to reply to agent notes".to_string(),
-            )
-        })?;
+        let folder = self.require_folder(input.target)?;
         replies::reply_note(&folder, input, Local::now())
+    }
+
+    pub fn update(&self, input: UpdateAgentNoteInput) -> Result<AgentNote> {
+        validate_id(input.item_id)?;
+        let folder = self.require_folder(input.target)?;
+        ops::update_note(&folder, input)
+    }
+
+    pub fn set_status(&self, input: SetAgentNoteStatusInput) -> Result<AgentNote> {
+        validate_id(input.item_id)?;
+        let folder = self.require_folder(input.target)?;
+        ops::set_status(&folder, input)
+    }
+
+    pub fn submit_drafts(&self, input: SubmitAgentNoteDraftsInput) -> Result<usize> {
+        validate_id(input.item_id)?;
+        let folder = self.require_folder(input.target)?;
+        ops::submit_drafts(&folder, input.target, input.item_id)
+    }
+
+    pub fn summarize(&self, input: SummarizeAgentNotesInput) -> Result<Vec<AgentNoteSummary>> {
+        match self.result_folder(input.target)? {
+            Some(folder) => summary::summarize(&folder, input.target),
+            None => Ok(Vec::new()),
+        }
+    }
+
+    /// Starts the agent command from Settings for one item's notes.
+    pub fn run_agent(&self, input: RunAgentInput) -> Result<()> {
+        validate_id(input.item_id)?;
+        let folder = self.require_folder(input.target)?;
+        let command = self.db.get_app_settings()?.agent_command;
+        launch::run_agent(&folder, command.as_deref(), input.target, input.item_id)
+    }
+
+    fn require_folder(&self, target: NoteTarget) -> Result<PathBuf> {
+        self.result_folder(target)?.ok_or_else(|| {
+            AppError::InvalidInput(
+                "Set a result folder in Settings to leave agent notes".to_string(),
+            )
+        })
     }
 
     /// Work item notes live beside the investigation results, pull request
@@ -165,29 +249,6 @@ impl AgentNoteService {
     }
 }
 
-const GUIDE_FILE: &str = "AGENTS.md";
-
-/// Places the agent-facing instructions for notes in a result folder, so an
-/// agent working there can find them without knowing DevDeck. An existing
-/// `AGENTS.md` is left alone: the user may have edited or written their own.
-pub(crate) fn ensure_guide(folder: &Path, target: NoteTarget) -> Result<()> {
-    let path = folder.join(GUIDE_FILE);
-    if !folder.is_dir() || path.exists() {
-        return Ok(());
-    }
-    let (kind, report, keep) = match target {
-        NoteTarget::WorkItem => ("調査", "WI にコメントとして追記する", "WI のフィールド"),
-        NoteTarget::PullRequest => ("レビュー", "PR にコメントとして投稿する", "投票"),
-    };
-    let guide = include_str!("agent_notes_guide.md")
-        .replace("{kind}", kind)
-        .replace("{prefix}", target.dir_prefix())
-        .replace("{report}", report)
-        .replace("{keep}", keep);
-    fs::write(path, guide)?;
-    Ok(())
-}
-
 fn validate_id(item_id: i64) -> Result<()> {
     if item_id <= 0 {
         return Err(AppError::InvalidInput(
@@ -209,8 +270,10 @@ pub(crate) fn list_notes(
     item_id: i64,
 ) -> Result<Vec<AgentNote>> {
     let dir = notes_dir(folder, target, item_id);
+    ops::purge_old_trash(&dir.join(TRASH_DIR));
     let mut notes = read_notes_in(&dir, "open")?;
     notes.extend(read_notes_in(&dir.join(DONE_DIR), "done")?);
+    notes.extend(read_notes_in(&dir.join(DRAFT_DIR), "draft")?);
     notes.sort_by(|a, b| a.created_at.cmp(&b.created_at).then(a.id.cmp(&b.id)));
     Ok(notes)
 }
@@ -222,10 +285,7 @@ fn read_notes_in(dir: &Path, status: &str) -> Result<Vec<AgentNote>> {
     let mut notes = Vec::new();
     for entry in fs::read_dir(dir)? {
         let path = entry?.path();
-        let is_md = path
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("md"));
-        if !path.is_file() || !is_md {
+        if !is_note_file(&path) {
             continue;
         }
         // The agent moves handled notes into `_done/` while DevDeck polls, so a
@@ -245,79 +305,11 @@ fn read_notes_in(dir: &Path, status: &str) -> Result<Vec<AgentNote>> {
     Ok(notes)
 }
 
-pub(crate) fn parse_note(
-    path: &Path,
-    status: &str,
-    text: &str,
-    modified: Option<String>,
-) -> AgentNote {
-    let (fields, body) = split_front_matter(text);
-    let (body, replies) = replies::split_replies(body);
-    // Last occurrence wins: a note reopened by a reply keeps its old
-    // `resolved` line, and the agent appends a new one when it is done again.
-    let get = |key: &str| {
-        fields
-            .iter()
-            .rev()
-            .find(|(name, _)| name == key)
-            .map(|(_, value)| value.clone())
-            .filter(|value| !value.is_empty())
-    };
-    AgentNote {
-        id: path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or_default()
-            .to_string(),
-        status: status.to_string(),
-        created_at: get("created").or(modified).unwrap_or_default(),
-        body,
-        quote: get("quote"),
-        quote_prefix: get("quote_prefix"),
-        quote_suffix: get("quote_suffix"),
-        result_file: get("result_file"),
-        resolved: get("resolved"),
-        replies,
-        file_path: path.display().to_string(),
-    }
-}
-
-/// Splits `---`-delimited `key: value` lines from the body. Values written by
-/// DevDeck are JSON strings; values an agent writes by hand may be bare text,
-/// so both are accepted. A file without front-matter is all body.
-fn split_front_matter(text: &str) -> (Vec<(String, String)>, &str) {
-    let text = text.trim_start_matches('\u{feff}');
-    let Some(rest) = text
-        .strip_prefix("---\r\n")
-        .or_else(|| text.strip_prefix("---\n"))
-    else {
-        return (Vec::new(), text);
-    };
-    let mut fields = Vec::new();
-    let mut offset = 0;
-    for line in rest.split_inclusive('\n') {
-        offset += line.len();
-        let trimmed = line.trim_end();
-        if trimmed == "---" {
-            return (fields, &rest[offset..]);
-        }
-        if let Some((key, value)) = trimmed.split_once(':') {
-            fields.push((key.trim().to_string(), parse_value(value.trim())));
-        }
-    }
-    (Vec::new(), text)
-}
-
-fn parse_value(raw: &str) -> String {
-    if raw.starts_with('"') {
-        if let Ok(value) = serde_json::from_str::<String>(raw) {
-            return value;
-        }
-    }
-    if raw == "null" || raw == "~" {
-        return String::new();
-    }
-    raw.to_string()
+fn is_note_file(path: &Path) -> bool {
+    path.is_file()
+        && path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("md"))
 }
 
 pub(crate) fn create_note(
@@ -325,40 +317,33 @@ pub(crate) fn create_note(
     input: CreateAgentNoteInput,
     now: DateTime<Local>,
 ) -> Result<AgentNote> {
-    let body = input.body.trim();
-    if body.is_empty() {
-        return Err(AppError::InvalidInput("note body is empty".to_string()));
-    }
-    if body.chars().count() > MAX_BODY_CHARS {
-        return Err(AppError::InvalidInput("note body is too long".to_string()));
-    }
-    replies::reject_markers(body)?;
+    let body = clean_body(&input.body)?;
     let clean = |value: Option<String>, max: usize| {
         value
             .map(|value| value.trim().chars().take(max).collect::<String>())
             .filter(|value| !value.is_empty())
     };
     let quote = clean(input.quote, MAX_QUOTE_CHARS);
-    let (quote_prefix, quote_suffix) = if quote.is_some() {
-        (clean(input.quote_prefix, 64), clean(input.quote_suffix, 64))
+    let (quote_prefix, quote_suffix, quote_offset) = if quote.is_some() {
+        (
+            clean(input.quote_prefix, 64),
+            clean(input.quote_suffix, 64),
+            input.quote_offset.filter(|offset| *offset >= 0),
+        )
     } else {
-        (None, None)
+        (None, None, None)
     };
     let result_file = clean(input.result_file, 260);
+    let result_hash = clean(input.result_hash, 64);
+    let kind = validate_kind(input.kind)?;
 
-    let dir = notes_dir(folder, input.target, input.item_id);
+    let mut dir = notes_dir(folder, input.target, input.item_id);
+    if input.draft {
+        dir = dir.join(DRAFT_DIR);
+    }
     fs::create_dir_all(&dir)?;
     let stamp = now.format("%Y%m%d-%H%M%S").to_string();
-    let path = (0..1000)
-        .map(|n| {
-            if n == 0 {
-                dir.join(format!("{stamp}.md"))
-            } else {
-                dir.join(format!("{stamp}-{n}.md"))
-            }
-        })
-        .find(|path| !path.exists())
-        .ok_or_else(|| AppError::InvalidInput("too many notes in one second".to_string()))?;
+    let path = ops::unique_path(&dir, &stamp)?;
 
     let created_at = now.to_rfc3339_opts(chrono::SecondsFormat::Secs, false);
     let json = |value: &str| serde_json::to_string(value).unwrap_or_default();
@@ -367,8 +352,12 @@ pub(crate) fn create_note(
         input.target.as_str(),
         input.item_id
     );
+    if let Some(kind) = &kind {
+        text.push_str(&format!("kind: {kind}\n"));
+    }
     for (key, value) in [
         ("result_file", &result_file),
+        ("result_hash", &result_hash),
         ("quote", &quote),
         ("quote_prefix", &quote_prefix),
         ("quote_suffix", &quote_suffix),
@@ -377,41 +366,34 @@ pub(crate) fn create_note(
             text.push_str(&format!("{key}: {}\n", json(value)));
         }
     }
+    if let Some(offset) = quote_offset {
+        text.push_str(&format!("quote_offset: {offset}\n"));
+    }
     text.push_str(&format!("---\n{body}\n"));
-    fs::write(&path, text)?;
+    write_atomic(&path, &text)?;
 
-    Ok(AgentNote {
-        id: path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or_default()
-            .to_string(),
-        status: "open".to_string(),
-        created_at,
-        body: body.to_string(),
-        quote,
-        quote_prefix,
-        quote_suffix,
-        result_file,
-        resolved: None,
-        replies: Vec::new(),
-        file_path: path.display().to_string(),
-    })
+    let status = if input.draft { "draft" } else { "open" };
+    Ok(parse_note(&path, status, &text, Some(created_at)))
 }
 
-/// Deletes an open note. Done notes are the agent's record and stay put.
-pub(crate) fn delete_note(
-    folder: &Path,
-    target: NoteTarget,
-    item_id: i64,
-    note_id: &str,
-) -> Result<()> {
-    validate_note_id(note_id)?;
-    let path = notes_dir(folder, target, item_id).join(note_id);
-    if path.is_file() {
-        fs::remove_file(path)?;
+fn clean_body(body: &str) -> Result<&str> {
+    let body = body.trim();
+    if body.is_empty() {
+        return Err(AppError::InvalidInput("note body is empty".to_string()));
     }
-    Ok(())
+    if body.chars().count() > MAX_BODY_CHARS {
+        return Err(AppError::InvalidInput("note body is too long".to_string()));
+    }
+    replies::reject_markers(body)?;
+    Ok(body)
+}
+
+fn validate_kind(kind: Option<String>) -> Result<Option<String>> {
+    match kind.as_deref().map(str::trim) {
+        None | Some("") => Ok(None),
+        Some(kind) if KINDS.contains(&kind) => Ok(Some(kind.to_string())),
+        Some(kind) => Err(AppError::InvalidInput(format!("unknown note kind: {kind}"))),
+    }
 }
 
 /// Note ids are bare file names; reject anything that could leave the folder.
@@ -430,5 +412,6 @@ fn validate_note_id(note_id: &str) -> Result<()> {
 }
 
 #[cfg(test)]
-#[path = "agent_notes_tests.rs"]
 mod tests;
+#[cfg(test)]
+mod tests_ops;

@@ -62,6 +62,7 @@ export const DEFAULT_DEMO_SETTINGS: AppSettings = {
   reviewResultFolderPath: "C:\\reports\\azdo-reviews",
   workItemResultFolderPath: "C:\\reports\\azdo-work-items",
   showWindowHotkey: null,
+  agentCommand: null,
   readOnlyValidationModeEnabled: false,
   desktopNotificationsEnabled: false,
   notificationContentPreviewEnabled: true,
@@ -118,6 +119,10 @@ export function applyDemoSettingsUpdate(
       input && "showWindowHotkey" in input
         ? input.showWindowHotkey?.trim() || null
         : current.showWindowHotkey,
+    agentCommand:
+      input && "agentCommand" in input
+        ? input.agentCommand?.trim() || null
+        : current.agentCommand,
     readOnlyValidationModeEnabled:
       input && "readOnlyValidationModeEnabled" in input
         ? Boolean(input.readOnlyValidationModeEnabled)

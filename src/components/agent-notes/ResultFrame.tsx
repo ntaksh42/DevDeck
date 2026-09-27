@@ -4,7 +4,8 @@ import { MessageSquarePlus } from "lucide-react";
 import { useLatestRef } from "@/lib/useLatestRef";
 import { focusPrimaryGrid } from "@/lib/utils";
 import { anchorFromRange, blockSpanRange, collapseWhitespace } from "./resultAnchoring";
-import type { CommentRequest, FrameState, NoteAnchor } from "./types";
+import { PIN_CLASS } from "./NoteCard";
+import type { CommentRequest, FrameState, NoteAnchor, NoteTone } from "./types";
 
 // Renders the investigation result in a script-less sandboxed iframe and layers
 // the agent-note UI on top from the parent document: highlights via the CSS
@@ -22,7 +23,13 @@ type HighlightWindow = Window & {
   Highlight?: new (...ranges: Range[]) => { priority: number };
   CSS: { highlights?: Map<string, unknown> };
 };
-type Marker = { id: string; num: number; pinTop: number | null; markTop: number };
+type Marker = { id: string; num: number; tone: NoteTone; pinTop: number | null; markTop: number };
+
+const MARK_CLASS: Record<NoteTone, string> = {
+  needs: "bg-red-500",
+  open: "bg-yellow-500 hover:bg-yellow-600",
+  draft: "bg-gray-400",
+};
 
 type Props = {
   html: string;
@@ -72,7 +79,7 @@ export function ResultFrame({
     const docHeight = Math.max(1, win.document.documentElement.scrollHeight);
     let lastPin = -Infinity;
     const next: Marker[] = [];
-    for (const { note, num, range } of anchorsRef.current) {
+    for (const { note, num, range, tone } of anchorsRef.current) {
       if (!range || num == null) continue;
       const rect = range.getClientRects()[0] ?? range.getBoundingClientRect();
       let pinTop: number | null = null;
@@ -81,7 +88,7 @@ export function ResultFrame({
         lastPin = pinTop;
       }
       const markTop = offset + 4 + Math.min(trackHeight - 4, ((rect.top + win.scrollY) / docHeight) * trackHeight);
-      next.push({ id: note.id, num, pinTop, markTop });
+      next.push({ id: note.id, num, tone, pinTop, markTop });
     }
     lastScrollRef.current = win.scrollY;
     setMarkers((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
@@ -252,13 +259,13 @@ export function ResultFrame({
               key={m.id}
               type="button"
               tabIndex={-1}
-              title={`Note ${m.num}`}
+              title={`Note ${m.num}${m.tone === "needs" ? " — needs you" : m.tone === "draft" ? " — draft" : ""}`}
               onMouseDown={(e) => e.preventDefault()}
               onMouseEnter={() => onRevealNote(m.id)}
               onClick={() => onOpenNote(m.id)}
               style={{ top: m.pinTop }}
               className={`pointer-events-auto absolute left-1 h-4 w-4 rounded-full text-[10px] font-bold leading-4 shadow ${
-                m.id === activeId ? "bg-orange-500 text-white" : "bg-yellow-400 text-gray-900 hover:bg-yellow-500"
+                m.id === activeId ? "bg-orange-500 text-white" : PIN_CLASS[m.tone]
               }`}
             >
               {m.num}
@@ -277,7 +284,7 @@ export function ResultFrame({
             onClick={() => onRevealNote(m.id)}
             style={{ top: m.markTop }}
             className={`pointer-events-auto absolute left-0 h-1 w-1.5 rounded-sm ${
-              m.id === activeId ? "bg-orange-500" : "bg-yellow-500 hover:bg-yellow-600"
+              m.id === activeId ? "bg-orange-500" : MARK_CLASS[m.tone]
             }`}
           />
         ))}

@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import type { WorkItemSummary } from "@/lib/azdoCommands";
 import { WorkItemGridRow } from "./WorkItemGridRow";
@@ -25,7 +26,9 @@ function item(overrides: Partial<WorkItemSummary> = {}): WorkItemSummary {
 }
 
 function renderRow(overrides: Partial<WorkItemSummary>) {
+  // The row shows an agent-notes badge backed by a query.
   return render(
+    <QueryClientProvider client={new QueryClient()}>
     <WorkItemGridRow
       item={item(overrides)}
       selected={false}
@@ -38,7 +41,8 @@ function renderRow(overrides: Partial<WorkItemSummary>) {
       rowColorClass={null}
       onSelect={vi.fn()}
       onCheckedChange={vi.fn()}
-    />,
+    />
+    </QueryClientProvider>,
   );
 }
 

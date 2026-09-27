@@ -16,6 +16,7 @@ import { DesktopNotificationSettings } from './DesktopNotificationSettings';
 import { NotificationRulesSettings } from './NotificationRulesSettings';
 import { ReviewResultFolderSettings } from './ReviewResultFolderSettings';
 import { WorkItemResultFolderSettings } from './WorkItemResultFolderSettings';
+import { AgentCommandSettings } from './AgentCommandSettings';
 import { ReviewStaleThresholdSettings, WorkItemStaleThresholdSettings } from './StaleThresholdSettings';
 import { ShowWindowHotkeySettings } from './ShowWindowHotkeySettings';
 import { KeyboardShortcutSettings } from './KeyboardShortcutSettings';
@@ -114,6 +115,12 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         title: "Work item result previews",
         keywords: "folder path html",
         render: () => <WorkItemResultFolderSettings />,
+      },
+      {
+        id: "agent-command",
+        title: "Agent command",
+        keywords: "agent notes run claude codex shell ai",
+        render: () => <AgentCommandSettings />,
       },
       {
         id: "quick-pipelines",

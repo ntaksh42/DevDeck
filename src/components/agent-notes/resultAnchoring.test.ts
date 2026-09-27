@@ -33,6 +33,13 @@ describe("resultAnchoring", () => {
     expect(found.startContainer.parentElement?.textContent).toBe("gamma retry delta");
   });
 
+  it("uses the recorded offset when the context is the same everywhere", () => {
+    const doc = parse("<table><tr><td>OK</td></tr><tr><td>OK</td></tr><tr><td>OK</td></tr></table>");
+    const index = buildTextIndex(doc);
+    const found = locateQuote(doc, index, { quote: "OK", offset: 4 })!;
+    expect(found.startContainer).toBe(doc.querySelectorAll("td")[2].firstChild);
+  });
+
   it("still finds the quote after the HTML is reflowed", () => {
     const doc = parse("<ul>\n  <li>\n    Set a 1.5 s\n    deadline\n  </li>\n</ul>");
     const found = locateQuote(doc, buildTextIndex(doc), { quote: "Set a 1.5 s deadline" });
