@@ -102,6 +102,7 @@ describe("App — Settings", () => {
           reviewResultFolderPath: "D:\\azdo-review-results",
           workItemResultFolderPath: null,
           showWindowHotkey: null,
+          agentCommand: null,
           readOnlyValidationModeEnabled: false,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
@@ -137,6 +138,7 @@ describe("App — Settings", () => {
         return Promise.resolve({
           reviewResultFolderPath: "C:\\reports",
           showWindowHotkey: null,
+          agentCommand: null,
         });
       }
       if (command === "update_app_settings") {
@@ -171,6 +173,7 @@ describe("App — Settings", () => {
           reviewResultFolderPath: "C:\\reports",
           workItemResultFolderPath: null,
           showWindowHotkey: "Ctrl+Alt+D",
+          agentCommand: null,
           readOnlyValidationModeEnabled: false,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
@@ -206,6 +209,7 @@ describe("App — Settings", () => {
         return Promise.resolve({
           reviewResultFolderPath: null,
           showWindowHotkey: null,
+          agentCommand: null,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
           notifyWorkItemAssignments: true,
@@ -238,6 +242,7 @@ describe("App — Settings", () => {
           reviewResultFolderPath: null,
           workItemResultFolderPath: null,
           showWindowHotkey: null,
+          agentCommand: null,
           readOnlyValidationModeEnabled: false,
           desktopNotificationsEnabled: true,
           notificationContentPreviewEnabled: false,
@@ -273,6 +278,7 @@ describe("App — Settings", () => {
         return Promise.resolve({
           reviewResultFolderPath: null,
           showWindowHotkey: null,
+          agentCommand: null,
           readOnlyValidationModeEnabled: false,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
@@ -296,7 +302,7 @@ describe("App — Settings", () => {
     expect(await screen.findByRole("heading", { name: "Validation mode" })).toBeTruthy();
 
     fireEvent.click(screen.getByLabelText("Read-only validation mode"));
-    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[4]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[5]);
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("update_app_settings", {
@@ -304,6 +310,7 @@ describe("App — Settings", () => {
           reviewResultFolderPath: null,
           workItemResultFolderPath: null,
           showWindowHotkey: null,
+          agentCommand: null,
           readOnlyValidationModeEnabled: true,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
@@ -339,6 +346,7 @@ describe("App — Settings", () => {
         return Promise.resolve({
           reviewResultFolderPath: null,
           showWindowHotkey: null,
+          agentCommand: null,
           ...settings,
         });
       }
@@ -366,7 +374,7 @@ describe("App — Settings", () => {
     fireEvent.click(screen.getByLabelText("Enable experimental features"));
     fireEvent.click(screen.getByLabelText("Local usage stats"));
     fireEvent.click(screen.getByLabelText("Automatic update check"));
-    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[5]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[6]);
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("update_app_settings", {
@@ -409,7 +417,7 @@ describe("App — Settings", () => {
     });
 
     fireEvent.click(screen.getByLabelText("Enable experimental features"));
-    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[5]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[6]);
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("update_app_settings", {
@@ -433,7 +441,7 @@ describe("App — Settings", () => {
     await openSettings();
 
     fireEvent.click(screen.getByLabelText("Read-only validation mode"));
-    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[4]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[5]);
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("update_app_settings", {

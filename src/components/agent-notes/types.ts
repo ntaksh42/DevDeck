@@ -8,9 +8,13 @@ export type FrameState = {
   blocks: HTMLElement[];
 };
 
-/** An open note with its location in the current result, if it still resolves. */
+/** How a note shows up in the list and as a pin: waiting for the user, open, or an unsent draft. */
+export type NoteTone = "needs" | "open" | "draft";
+
+/** An open or draft note with its location in the current result, if it still resolves. */
 export type NoteAnchor = {
   note: AgentNote;
+  tone: NoteTone;
   /** Display number shared by the list and the gutter pin; null when unanchored. */
   num: number | null;
   range: Range | null;

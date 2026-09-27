@@ -233,8 +233,7 @@ test("leaves an agent note on a PR review result with R", async ({ page }) => {
   await reviewGrid.getByText("Add rate limiting middleware to all endpoints").click();
   await page.keyboard.press("r");
   const frame = page.locator("[data-agent-result-frame='true']");
-  await expect(main.getByText(".to-agent-msg/pr-101/")).toBeVisible();
-  await expect(main.getByText("1 open")).toBeVisible();
+  await expect(main.getByText("1 needs you")).toBeVisible();
   await expect(frame).toBeFocused();
 
   await page.keyboard.press("ArrowDown");
@@ -243,7 +242,7 @@ test("leaves an agent note on a PR review result with R", async ({ page }) => {
   await expect(composer).toBeFocused();
   await composer.fill("Please re-check this paragraph.");
   await page.keyboard.press("Control+Enter");
-  await expect(main.getByText("2 open")).toBeVisible();
+  await expect(main.getByText("1 open")).toBeVisible();
   await expect(frame).toBeFocused();
 
   // The help shortcut still reaches the app while the result has focus.
@@ -257,11 +256,14 @@ test("keeps focus on a done agent note after a reply reopens it", async ({ page 
   const main = page.getByRole("main");
   await main.getByText("Validate onboarding with PAT credentials").first().click();
   await page.keyboard.press("r");
-  await expect(main.getByText(".to-agent-msg/wi-123/")).toBeVisible();
   await expect(page.locator("[data-agent-result-frame='true']")).toBeFocused();
 
+  // Done notes are folded under their header; Enter opens it.
+  await main.getByRole("button", { name: "Done (1)" }).focus();
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("ArrowDown");
   const doneNote = main.locator('[data-agent-note-id="20260925-174000.md"]');
-  await doneNote.focus();
+  await expect(doneNote).toBeFocused();
   await page.keyboard.press("r");
   const reply = main.getByRole("textbox", { name: "Reply to note 20260925-174000.md" });
   await expect(reply).toBeFocused();
@@ -270,6 +272,46 @@ test("keeps focus on a done agent note after a reply reopens it", async ({ page 
 
   await expect(main.getByText("2 open")).toBeVisible();
   await expect(main.locator('[data-agent-note-id="20260925-174000.md"]')).toBeFocused();
+});
+
+test("manages agent notes from the keyboard", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /^My Items/ }).click();
+  const main = page.getByRole("main");
+  await main.getByText("Validate onboarding with PAT credentials").first().click();
+  await page.keyboard.press("r");
+  await expect(page.locator("[data-agent-result-frame='true']")).toBeFocused();
+  const note = main.locator('[data-agent-note-id="20260926-091500.md"]');
+
+  // Collapse to one line and back.
+  await note.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(note.getByRole("button", { name: "Expand note" })).toBeVisible();
+  await page.keyboard.press("ArrowRight");
+  await expect(note.getByRole("button", { name: "Collapse note" })).toBeVisible();
+
+  // Drafts wait until they are sent together.
+  await page.keyboard.press("c");
+  const composer = main.getByRole("textbox", { name: "Note to the agent" });
+  await expect(composer).toBeFocused();
+  await composer.fill("First draft");
+  await page.keyboard.press("Alt+Enter");
+  await expect(main.getByText("1 draft not sent yet")).toBeVisible();
+  await main.getByRole("button", { name: "Send all" }).click();
+  await expect(main.getByText("2 open")).toBeVisible();
+
+  // Delete, then undo.
+  await note.focus();
+  await page.keyboard.press("Delete");
+  await expect(main.getByText("Note deleted.")).toBeVisible();
+  await expect(note).toHaveCount(0);
+  await page.keyboard.press("Control+z");
+  await expect(note).toBeVisible();
+
+  // Resolve moves it under Done.
+  await note.focus();
+  await page.keyboard.press("x");
+  await expect(main.getByRole("button", { name: "Done (2)" })).toBeVisible();
 });
 
 test("opens the collapsed Work Items dock to half the column after a reload", async ({ page }) => {

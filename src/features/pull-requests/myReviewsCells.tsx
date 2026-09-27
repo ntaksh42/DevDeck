@@ -6,6 +6,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import type { ReviewPullRequestSummary } from '@/lib/azdoCommands';
+import { AgentNotesBadge } from '@/components/agent-notes/AgentNotesBadge';
 import { formatDate, formatRelativeDate } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
 import { STALE_TEXT_CLASS } from '@/lib/gridRowState';
@@ -145,6 +146,7 @@ export function renderPrCell(
               Conflicts
             </span>
           ) : null}
+          <AgentNotesBadge target="pull-request" itemId={pr.pullRequestId} />
         </div>
       );
     case 'createdBy':

@@ -46,6 +46,7 @@ import {
   type ViewHistory,
 } from "@/features/navigation/viewHistory";
 import { usePipelineWatchNotifications } from "@/features/pipelines/usePipelineWatchNotifications";
+import { useAgentNoteWatcher } from "@/components/agent-notes/useAgentNoteSummaries";
 import {
   NAVIGATE_WORK_ITEM_EVENT,
   NAVIGATE_PULL_REQUEST_EVENT,
@@ -140,6 +141,7 @@ function AppShell() {
   // Watch every subscribed pipeline app-wide so start/finish notifications fire
   // regardless of the active view.
   usePipelineWatchNotifications(appSettingsQuery.data ?? null);
+  useAgentNoteWatcher(appSettingsQuery.data ?? null);
 
   // Sidebar count badges follow the active connection, matching the grids.
   const badgeOrganizationId = useActiveOrganizationId();

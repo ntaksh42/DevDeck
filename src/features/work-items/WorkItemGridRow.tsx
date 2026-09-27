@@ -15,6 +15,7 @@ import {
   type WiSortKey,
 } from './workItemsGridHelpers';
 import { gridRowStateClass } from '@/lib/gridRowState';
+import { AgentNotesBadge } from '@/components/agent-notes/AgentNotesBadge';
 
 // Reactively reads the row color rules and refreshes when they change in
 // Settings or another tab (mirrors useKeybindings in App.tsx).
@@ -143,6 +144,7 @@ export const WorkItemGridRow = forwardRef<
           ) : (
             workItemCellValue(item, column)
           )}
+          {isTitle ? <AgentNotesBadge target="work-item" itemId={item.id} /> : null}
         </div>
       );
     })}

@@ -97,6 +97,16 @@ export async function sendPipelineRunNotification(input: {
   });
 }
 
+// An agent replied to or finished a note on a work item / PR result. Clicking
+// it opens the item in DevDeck.
+export async function showAgentNoteNotification(input: {
+  title: string;
+  body: string;
+  onClick: () => void;
+}): Promise<DesktopNotificationResult> {
+  return sendDesktopNotification(input.title, { body: input.body, onClick: input.onClick });
+}
+
 // Fired by the app-wide watch notifier when a watched pipeline's latest run
 // starts running or finishes. `webUrl` opens that run when the toast is clicked.
 export async function showPipelineWatchNotification(

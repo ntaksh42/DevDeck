@@ -18,6 +18,8 @@ export type QuoteAnchor = {
   quote: string;
   prefix: string;
   suffix: string;
+  /** Start of the quote in `TextIndex.text`; tells repeated text apart. */
+  offset: number;
 };
 
 const WHITESPACE = /\s/;
@@ -70,14 +72,24 @@ export function anchorFromRange(index: TextIndex, range: Range): QuoteAnchor | n
     quote,
     prefix: index.text.slice(Math.max(0, start - CONTEXT_CHARS), start),
     suffix: index.text.slice(start + length, start + length + CONTEXT_CHARS),
+    offset: start,
   };
 }
 
-/** Finds the quote in the current document, preferring the occurrence whose context matches. */
+/**
+ * Finds the quote in the current document. With several occurrences, the one
+ * whose surrounding context matches wins, then the one nearest the recorded
+ * offset (the result may have shifted a little since the note was written).
+ */
 export function locateQuote(
   doc: Document,
   index: TextIndex,
-  anchor: { quote: string | null; prefix?: string | null; suffix?: string | null },
+  anchor: {
+    quote: string | null;
+    prefix?: string | null;
+    suffix?: string | null;
+    offset?: number | null;
+  },
 ): Range | null {
   if (!anchor.quote) return null;
   const needle = stripWhitespace(anchor.quote);
@@ -85,12 +97,18 @@ export function locateQuote(
   const prefix = stripWhitespace(anchor.prefix ?? "");
   const suffix = stripWhitespace(anchor.suffix ?? "");
   let start = -1;
-  if (prefix) {
-    const at = index.text.indexOf(prefix + needle);
-    if (at >= 0) start = at + prefix.length;
+  let best = -Infinity;
+  for (let at = index.text.indexOf(needle); at >= 0; at = index.text.indexOf(needle, at + 1)) {
+    const context =
+      (prefix && index.text.slice(Math.max(0, at - prefix.length), at) === prefix ? 2 : 0) +
+      (suffix && index.text.startsWith(suffix, at + needle.length) ? 2 : 0);
+    const distance = anchor.offset == null ? 0 : Math.abs(at - anchor.offset) / (index.text.length + 1);
+    const score = context - distance;
+    if (score > best) {
+      best = score;
+      start = at;
+    }
   }
-  if (start < 0 && suffix) start = index.text.indexOf(needle + suffix);
-  if (start < 0) start = index.text.indexOf(needle);
   if (start < 0) return null;
   const [startNode, startOffset] = index.map[start];
   const [endNode, endOffset] = index.map[start + needle.length - 1];
@@ -98,6 +116,16 @@ export function locateQuote(
   range.setStart(startNode, startOffset);
   range.setEnd(endNode, endOffset + 1);
   return range;
+}
+
+/** Short fingerprint of the result HTML, to tell whether it changed since a note. */
+export function hashResult(html: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < html.length; i++) {
+    hash ^= html.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
 export function blockSpanRange(doc: Document, blocks: HTMLElement[], a: number, b: number): Range {

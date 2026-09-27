@@ -3,6 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { AgentNote } from "@/lib/azdoCommands";
 import { CommentField } from "@/components/CommentField";
+import { NoteMarkdown } from "./NoteMarkdown";
 
 // The reply thread under one agent note: collapsed to a count by default,
 // expanded it lists the agent/user replies and a reply box. Replying to a done
@@ -99,7 +100,7 @@ export function NoteThread({
                   </span>
                   {reply.createdAt ? <span>{formatTime(reply.createdAt)}</span> : null}
                 </div>
-                <p className="whitespace-pre-wrap break-words">{reply.body}</p>
+                <NoteMarkdown text={reply.body} />
               </div>
             );
           })}

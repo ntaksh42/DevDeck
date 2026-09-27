@@ -1,4 +1,5 @@
 use super::*;
+
 use chrono::TimeZone;
 
 fn at(h: u32, m: u32, s: u32) -> DateTime<Local> {
@@ -13,7 +14,11 @@ fn input(body: &str, quote: Option<&str>) -> CreateAgentNoteInput {
         quote: quote.map(str::to_string),
         quote_prefix: quote.map(|_| "前の文脈".to_string()),
         quote_suffix: quote.map(|_| "後ろの\"文脈\"".to_string()),
+        quote_offset: None,
         result_file: Some("1234-result.html".to_string()),
+        result_hash: None,
+        kind: None,
+        draft: false,
     }
 }
 
@@ -34,7 +39,9 @@ fn create_then_list_round_trips_all_fields() {
     let notes = list_notes(temp.path(), NoteTarget::WorkItem, 1234).unwrap();
     assert_eq!(notes.len(), 1);
     let note = &notes[0];
-    assert_eq!(note, &created);
+    assert_eq!(note.id, created.id);
+    assert_eq!(note.body, created.body);
+    assert_eq!(note.created_at, created.created_at);
     assert_eq!(note.status, "open");
     assert_eq!(note.body, "設定値も確認して。\n2 行目");
     assert_eq!(note.quote.as_deref(), Some("リトライは最大 3 回"));
@@ -118,12 +125,12 @@ fn missing_folder_lists_nothing() {
 fn delete_removes_open_note_only() {
     let temp = tempfile::tempdir().unwrap();
     let note = create_note(temp.path(), input("x", None), at(9, 0, 0)).unwrap();
-    delete_note(temp.path(), NoteTarget::WorkItem, 1234, &note.id).unwrap();
+    ops::trash_note(temp.path(), NoteTarget::WorkItem, 1234, &note.id).unwrap();
     assert!(list_notes(temp.path(), NoteTarget::WorkItem, 1234)
         .unwrap()
         .is_empty());
     // Unknown ids are a no-op.
-    delete_note(temp.path(), NoteTarget::WorkItem, 1234, "missing.md").unwrap();
+    ops::trash_note(temp.path(), NoteTarget::WorkItem, 1234, "missing.md").unwrap();
 }
 
 #[test]
@@ -131,7 +138,7 @@ fn delete_rejects_path_traversal() {
     let temp = tempfile::tempdir().unwrap();
     for bad in ["../x.md", "..\\x.md", "_done/x.md", "C:x.md", "x.txt", ""] {
         assert!(
-            delete_note(temp.path(), NoteTarget::WorkItem, 1234, bad).is_err(),
+            ops::trash_note(temp.path(), NoteTarget::WorkItem, 1234, bad).is_err(),
             "{bad}"
         );
     }
@@ -159,20 +166,56 @@ fn pull_request_notes_use_pr_folder_and_target() {
 }
 
 #[test]
-fn ensure_guide_writes_once_and_keeps_existing_file() {
+fn ensure_guide_owns_only_its_marked_block() {
     let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("AGENTS.md");
     ensure_guide(temp.path(), NoteTarget::PullRequest).unwrap();
-    let guide = fs::read_to_string(temp.path().join("AGENTS.md")).unwrap();
+    let guide = fs::read_to_string(&path).unwrap();
     assert!(guide.contains(".to-agent-msg/pr-{番号}/"));
     assert!(guide.contains("PR にコメントとして投稿する"));
     assert!(!guide.contains("{kind}"));
 
-    fs::write(temp.path().join("AGENTS.md"), "user edited").unwrap();
+    // A user file without the block is left alone.
+    fs::write(&path, "user edited").unwrap();
     ensure_guide(temp.path(), NoteTarget::PullRequest).unwrap();
-    assert_eq!(
-        fs::read_to_string(temp.path().join("AGENTS.md")).unwrap(),
-        "user edited"
-    );
+    assert_eq!(fs::read_to_string(&path).unwrap(), "user edited");
+
+    // Text around the block survives a refresh; the block is rewritten.
+    let stale = guide.replace("data-agent-note", "OLD");
+    fs::write(
+        &path,
+        format!(
+            "# mine
+
+{stale}
+after
+"
+        ),
+    )
+    .unwrap();
+    ensure_guide(temp.path(), NoteTarget::PullRequest).unwrap();
+    let text = fs::read_to_string(&path).unwrap();
+    assert!(text.starts_with(
+        "# mine
+
+"
+    ));
+    assert!(text.ends_with(
+        "after
+"
+    ));
+    assert!(text.contains("data-agent-note") && !text.contains("OLD"));
+
+    // The old unmarked guide DevDeck wrote is replaced whole.
+    fs::write(
+        &path,
+        "# 申し送りの読み方
+
+古い版",
+    )
+    .unwrap();
+    ensure_guide(temp.path(), NoteTarget::PullRequest).unwrap();
+    assert_eq!(fs::read_to_string(&path).unwrap(), guide);
 }
 
 #[test]

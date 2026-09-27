@@ -5,13 +5,13 @@
 //! the note's original body.
 
 use std::fs;
-use std::io::Write;
 use std::path::Path;
 
 use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
 
-use super::{notes_dir, parse_note, AgentNote, NoteTarget, DONE_DIR, MAX_BODY_CHARS};
+use super::format::{parse_note, write_atomic};
+use super::{notes_dir, AgentNote, NoteTarget, DONE_DIR, MAX_BODY_CHARS};
 use crate::error::{AppError, Result};
 
 #[derive(Debug, Deserialize)]
@@ -45,6 +45,10 @@ fn parse_marker(line: &str) -> Option<(String, String)> {
     let author = words.next().unwrap_or("agent").to_string();
     let created_at = words.next().unwrap_or_default().to_string();
     Some((author, created_at))
+}
+
+pub(crate) fn is_marker(line: &str) -> bool {
+    parse_marker(line).is_some()
 }
 
 /// A marker line in user text would split it into a fake reply when read back.
@@ -111,10 +115,11 @@ pub(crate) fn reply_note(
     }
 
     let created = now.to_rfc3339_opts(chrono::SecondsFormat::Secs, false);
-    let mut file = fs::OpenOptions::new().append(true).open(&open_path)?;
-    write!(file, "\n<!-- reply user {created} -->\n{body}\n")?;
-    drop(file);
-
     let text = fs::read_to_string(&open_path)?;
-    Ok(parse_note(&open_path, "open", &text, None))
+    let text = format!(
+        "{}\n\n<!-- reply user {created} -->\n{body}\n",
+        text.trim_end_matches(['\r', '\n'])
+    );
+    write_atomic(&open_path, &text)?;
+    Ok(parse_note(&open_path, "open", &text, Some(created)))
 }

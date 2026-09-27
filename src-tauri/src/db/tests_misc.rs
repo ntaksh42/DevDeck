@@ -161,6 +161,7 @@ fn app_settings_can_be_saved_and_cleared() {
             review_result_folder_path: Some("C:/reports".to_string()),
             work_item_result_folder_path: Some("C:/reports/work-items".to_string()),
             show_window_hotkey: Some("Ctrl+Alt+D".to_string()),
+            agent_command: None,
             read_only_validation_mode_enabled: true,
             desktop_notifications_enabled: true,
             notification_content_preview_enabled: false,
