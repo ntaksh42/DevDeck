@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode, RefObject } from "react";
 import { Trash2 } from "lucide-react";
 import type { AgentNote } from "@/lib/azdoCommands";
@@ -82,6 +82,18 @@ export function AgentNotesPane({
     listRef.current?.querySelector<HTMLElement>(`[data-agent-note-id="${CSS.escape(id)}"]`)?.focus();
   }
 
+  // A note moving between Open and Done (a reply reopens it, or the agent
+  // finishes it while we poll) remounts its row, which drops focus to <body>.
+  // Put it back on the same note so keyboard navigation is not stranded.
+  const listHasFocusRef = useRef(false);
+  useEffect(() => {
+    const active = document.activeElement;
+    if (listHasFocusRef.current && focusedId && (!active || active === document.body)) {
+      focusItem(focusedId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on list changes
+  }, [open, done]);
+
   function handleListKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     const id = (event.target as HTMLElement).dataset.agentNoteId;
     if (!id || event.ctrlKey || event.metaKey || event.altKey) return;
@@ -152,7 +164,16 @@ export function AgentNotesPane({
         ref={listRef}
         className="min-h-0 flex-1 overflow-auto"
         onKeyDown={handleListKeyDown}
-        onFocus={(e) => setFocusedId((e.target as HTMLElement).dataset.agentNoteId ?? null)}
+        onFocus={(e) => {
+          listHasFocusRef.current = true;
+          setFocusedId((e.target as HTMLElement).dataset.agentNoteId ?? null);
+        }}
+        onBlur={(e) => {
+          // A row unmounting also blurs; only a real move elsewhere clears it.
+          if (e.target.isConnected && !listRef.current?.contains(e.relatedTarget as Node | null)) {
+            listHasFocusRef.current = false;
+          }
+        }}
       >
         {open.length === 0 && done.length === 0 ? (
           <p className="px-2 py-2 text-muted-foreground">

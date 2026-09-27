@@ -47,6 +47,16 @@ fn parse_marker(line: &str) -> Option<(String, String)> {
     Some((author, created_at))
 }
 
+/// A marker line in user text would split it into a fake reply when read back.
+pub(crate) fn reject_markers(body: &str) -> Result<()> {
+    if body.lines().any(|line| parse_marker(line).is_some()) {
+        return Err(AppError::InvalidInput(
+            "text must not contain a `<!-- reply ... -->` line".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 /// Splits the note body from the replies that follow it.
 pub(crate) fn split_replies(text: &str) -> (String, Vec<NoteReply>) {
     let mut body = String::new();
@@ -85,11 +95,7 @@ pub(crate) fn reply_note(
     if body.chars().count() > MAX_BODY_CHARS {
         return Err(AppError::InvalidInput("reply is too long".to_string()));
     }
-    if body.lines().any(|line| parse_marker(line).is_some()) {
-        return Err(AppError::InvalidInput(
-            "reply must not contain a reply marker".to_string(),
-        ));
-    }
+    reject_markers(body)?;
 
     let dir = notes_dir(folder, input.target, input.item_id);
     let open_path = dir.join(&input.note_id);

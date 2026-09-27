@@ -32,7 +32,10 @@ test.describe("browser preview", () => {
 
     // The local review-result preview lives on the Result tab.
     await main.getByRole("tab", { name: "Result" }).click();
-    await expect(main.getByText("review-PR101.html", { exact: true })).toBeVisible();
+    await expect(main.getByRole("button", { name: "Open the result in your browser" })).toHaveAttribute(
+      "title",
+      /review-PR101\.html/,
+    );
     await expect(page.getByRole("separator", { name: "Resize navigation" })).toBeVisible();
     await expect(main.getByRole("separator", { name: "Resize Conversation" })).toBeVisible();
 
@@ -246,4 +249,25 @@ test("leaves an agent note on a PR review result with R", async ({ page }) => {
   // The help shortcut still reaches the app while the result has focus.
   await page.keyboard.press("?");
   await expect(page.getByRole("button", { name: "Close keyboard shortcuts" })).toBeVisible();
+});
+
+test("keeps focus on a done agent note after a reply reopens it", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /^My Items/ }).click();
+  const main = page.getByRole("main");
+  await main.getByText("Validate onboarding with PAT credentials").first().click();
+  await page.keyboard.press("r");
+  await expect(main.getByText(".to-agent-msg/wi-123/")).toBeVisible();
+  await expect(page.locator("[data-agent-result-frame='true']")).toBeFocused();
+
+  const doneNote = main.locator('[data-agent-note-id="20260925-174000.md"]');
+  await doneNote.focus();
+  await page.keyboard.press("r");
+  const reply = main.getByRole("textbox", { name: "Reply to note 20260925-174000.md" });
+  await expect(reply).toBeFocused();
+  await reply.fill("Please also check release.");
+  await page.keyboard.press("Control+Enter");
+
+  await expect(main.getByText("2 open")).toBeVisible();
+  await expect(main.locator('[data-agent-note-id="20260925-174000.md"]')).toBeFocused();
 });

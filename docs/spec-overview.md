@@ -128,7 +128,8 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
   (最後の返信がエージェントならその名前のバッジ)、展開すると返信と返信欄を出す。author は人なら `user`
   (「You」と表示)、エージェントは自分の名前を英小文字 1 語で書き (`claude` / `codex` 等、旧形式の `agent` も可)、
   先頭を大文字にした `@Claude` のように表示して人の返信と区別する。ユーザーが Done のメモに返信
-  すると `_done/` から open に戻し、エージェントに再度拾わせる。
+  すると `_done/` から open に戻し、エージェントに再度拾わせる (front-matter の同じキーが複数あれば後の行を
+  採用するので、再度 Done になったメモは新しい `resolved:` を表示する)。区切り行と同じ形の行を含む本文・返信は拒否する。
   入力は `target` (`work-item` / `pull-request`) と `itemId` で、`pull-request` は
   `review_result_folder_path` 配下の `.to-agent-msg/pr-{id}/` を使う (保存形式は共通、front-matter の
   `target` に種別を書く)。作業項目は `work-item`、PR の Result タブは `pull-request` を使う。
