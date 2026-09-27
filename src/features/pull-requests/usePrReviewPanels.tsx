@@ -140,7 +140,7 @@ export function usePrReviewPanels({
   // split into its own pane, visible alongside another tab rather than
   // switched with it). Only the active tab actually renders at a time by
   // default, so this costs nothing until the user splits them apart.
-  function withChrome(body: ReactNode) {
+  function withChrome(body: ReactNode, compactHeader = false) {
     return (
       <aside
         onKeyDown={handlePreviewKeyDown}
@@ -173,6 +173,7 @@ export function usePrReviewPanels({
           onZoomIn={zoomIn}
           onZoomOut={zoomOut}
           onResetZoom={resetZoom}
+          compact={compactHeader}
         />
         {reviewerError ? (
           <div className="shrink-0 border-b border-border bg-red-50 px-3 py-1 text-xs text-destructive dark:bg-red-950/40">
@@ -236,7 +237,7 @@ export function usePrReviewPanels({
       title: "Result",
       content: withChrome(!selectedPr ? noPrSelected : (
         <ResultTab selectedPr={selectedPr} commentModeRequest={resultCommentRequest} />
-      )),
+      ), true),
       position: { relativeTo: "review", direction: "within" },
     },
     ...(onOpenLinkedWorkItems

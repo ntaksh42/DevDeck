@@ -157,3 +157,90 @@ fn pull_request_notes_use_pr_folder_and_target() {
         .unwrap()
         .is_empty());
 }
+
+#[test]
+fn ensure_guide_writes_once_and_keeps_existing_file() {
+    let temp = tempfile::tempdir().unwrap();
+    ensure_guide(temp.path(), NoteTarget::PullRequest).unwrap();
+    let guide = fs::read_to_string(temp.path().join("AGENTS.md")).unwrap();
+    assert!(guide.contains(".to-agent-msg/pr-{番号}/"));
+    assert!(guide.contains("PR にコメントとして投稿する"));
+    assert!(!guide.contains("{kind}"));
+
+    fs::write(temp.path().join("AGENTS.md"), "user edited").unwrap();
+    ensure_guide(temp.path(), NoteTarget::PullRequest).unwrap();
+    assert_eq!(
+        fs::read_to_string(temp.path().join("AGENTS.md")).unwrap(),
+        "user edited"
+    );
+}
+
+#[test]
+fn ensure_guide_skips_missing_folder() {
+    let temp = tempfile::tempdir().unwrap();
+    let missing = temp.path().join("missing");
+    ensure_guide(&missing, NoteTarget::WorkItem).unwrap();
+    assert!(!missing.exists());
+}
+
+#[test]
+fn replies_are_split_from_the_body() {
+    let temp = tempfile::tempdir().unwrap();
+    let dir = temp.path().join(".to-agent-msg").join("wi-1234");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(
+        dir.join("a.md"),
+        "---\ncreated: 2026-09-26T10:00:00+09:00\n---\n指示\n\n<!-- reply agent 2026-09-26T11:00:00+09:00 -->\n対応しました。\n2 行目\n<!--reply user-->\nまだ\n",
+    )
+    .unwrap();
+    let notes = list_notes(temp.path(), NoteTarget::WorkItem, 1234).unwrap();
+    assert_eq!(notes[0].body, "指示");
+    let replies: Vec<_> = notes[0]
+        .replies
+        .iter()
+        .map(|r| (r.author.as_str(), r.created_at.as_str(), r.body.as_str()))
+        .collect();
+    assert_eq!(
+        replies,
+        vec![
+            (
+                "agent",
+                "2026-09-26T11:00:00+09:00",
+                "対応しました。\n2 行目"
+            ),
+            ("user", "", "まだ"),
+        ]
+    );
+}
+
+#[test]
+fn reply_appends_and_reopens_a_done_note() {
+    let temp = tempfile::tempdir().unwrap();
+    let dir = temp.path().join(".to-agent-msg").join("wi-1234");
+    fs::create_dir_all(dir.join("_done")).unwrap();
+    fs::write(
+        dir.join("_done").join("a.md"),
+        "---\nresolved: done\n---\n指示\n<!-- reply agent -->\n対応済み",
+    )
+    .unwrap();
+    let reply = |body: &str| ReplyAgentNoteInput {
+        target: NoteTarget::WorkItem,
+        item_id: 1234,
+        note_id: "a.md".to_string(),
+        body: body.to_string(),
+    };
+
+    let note = replies::reply_note(temp.path(), reply("  直っていない  "), at(12, 0, 0)).unwrap();
+    assert_eq!(note.status, "open");
+    assert!(dir.join("a.md").is_file());
+    assert!(!dir.join("_done").join("a.md").exists());
+    assert_eq!(note.replies.len(), 2);
+    assert_eq!(note.replies[1].author, "user");
+    assert_eq!(note.replies[1].body, "直っていない");
+
+    assert!(replies::reply_note(temp.path(), reply("<!-- reply agent -->"), at(12, 1, 0)).is_err());
+    assert!(replies::reply_note(temp.path(), reply("   "), at(12, 1, 0)).is_err());
+    let mut bad = reply("x");
+    bad.note_id = "../a.md".to_string();
+    assert!(replies::reply_note(temp.path(), bad, at(12, 1, 0)).is_err());
+}

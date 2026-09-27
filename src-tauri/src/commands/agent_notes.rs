@@ -1,7 +1,7 @@
 use tauri::State;
 
 use crate::agent_notes::{
-    AgentNote, CreateAgentNoteInput, DeleteAgentNoteInput, ListAgentNotesInput,
+    AgentNote, CreateAgentNoteInput, DeleteAgentNoteInput, ListAgentNotesInput, ReplyAgentNoteInput,
 };
 use crate::app_state::{run_blocking, AppState};
 use crate::error::Result;
@@ -34,4 +34,14 @@ pub async fn delete_agent_note(
 ) -> Result<()> {
     let service = state.agent_notes.clone();
     run_blocking(move || service.delete(input)).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state, input))]
+pub async fn reply_agent_note(
+    input: ReplyAgentNoteInput,
+    state: State<'_, AppState>,
+) -> Result<AgentNote> {
+    let service = state.agent_notes.clone();
+    run_blocking(move || service.reply(input)).await
 }

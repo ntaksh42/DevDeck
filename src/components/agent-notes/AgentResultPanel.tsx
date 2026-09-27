@@ -7,6 +7,7 @@ import {
   createAgentNote,
   deleteAgentNote,
   listAgentNotes,
+  replyAgentNote,
   type AgentNoteItem,
 } from "@/lib/azdoCommands";
 import { openLocalPath } from "@/lib/openExternal";
@@ -141,6 +142,11 @@ export function AgentResultPanel({
     mutationFn: (noteId: string) => deleteAgentNote({ target, itemId, noteId }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: notesKey }),
   });
+  const replyMutation = useMutation({
+    mutationFn: ({ noteId, body }: { noteId: string; body: string }) =>
+      replyAgentNote({ target, itemId, noteId, body }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: notesKey }),
+  });
 
   function handleFrameLoad() {
     const doc = frameRef.current?.contentDocument;
@@ -250,28 +256,6 @@ export function AgentResultPanel({
         ? { "data-primary-preview": "true", "aria-keyshortcuts": "Control+P", tabIndex: -1 }
         : {})}
     >
-      {preview ? (
-        <div className="flex shrink-0 items-center gap-2">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-medium" title={preview.fileName}>
-              {preview.fileName}
-            </p>
-            <p className="truncate text-xs text-muted-foreground" title={preview.filePath}>
-              {preview.filePath}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={openInBrowser}
-            title="Open the result in your browser (o)"
-            className="inline-flex shrink-0 items-center gap-1 rounded border border-border bg-card px-2 py-1 text-xs font-medium hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-            Open in browser
-            <span className="text-muted-foreground">o</span>
-          </button>
-        </div>
-      ) : null}
       {openError ? <p className="shrink-0 text-[11px] leading-4 text-destructive">{openError}</p> : null}
       <div ref={bodyRef} className={`flex min-h-0 flex-1 gap-2 ${wide ? "flex-row" : "flex-col"}`}>
         {preview ? (
@@ -307,6 +291,7 @@ export function AgentResultPanel({
             activeId={activeId}
             pendingQuote={pending?.quote ?? null}
             sending={createMutation.isPending}
+            replying={replyMutation.isPending}
             error={
               createMutation.error
                 ? commandErrorMessage(createMutation.error)
@@ -314,7 +299,9 @@ export function AgentResultPanel({
                   ? commandErrorMessage(notesQuery.error)
                   : deleteMutation.error
                     ? commandErrorMessage(deleteMutation.error)
-                    : null
+                    : replyMutation.error
+                      ? commandErrorMessage(replyMutation.error)
+                      : null
             }
             composerRef={composerRef}
             listRef={listRef}
@@ -322,6 +309,22 @@ export function AgentResultPanel({
             onDelete={(id) => deleteMutation.mutate(id)}
             onClearQuote={() => setPending(null)}
             onSend={send}
+            headerAction={
+              preview ? (
+                <button
+                  type="button"
+                  onClick={openInBrowser}
+                  title={`Open ${preview.fileName} in your browser (o)`}
+                  aria-label="Open the result in your browser"
+                  className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              ) : null
+            }
+            onReply={(noteId, body) =>
+              replyMutation.mutateAsync({ noteId, body }).then(() => true, () => false)
+            }
             onCancel={() => {
               setPending(null);
               returnFocus();

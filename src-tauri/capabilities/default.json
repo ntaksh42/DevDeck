@@ -9,7 +9,10 @@
     "fs:allow-write-text-file",
     "notification:default",
     "opener:default",
-    "opener:allow-open-path",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [{ "path": "**/*.html" }, { "path": "**/*.htm" }]
+    },
     "updater:default",
     "process:default"
   ]

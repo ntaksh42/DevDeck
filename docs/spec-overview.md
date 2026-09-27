@@ -71,7 +71,7 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
 
 | ビュー | 用途 |
 |---|---|
-| **My Reviews** | 自分がレビュアーの PR。投票状態・マージコンフリクト/CI バッジ・stale 強調・ローカルの done/archive トリアージ・ローカルのレビュー結果プレビュー。自分のレビュー後に author の push で投票がリセットされた PR を「Returned」バッジで強調（投票スナップショットの差分でローカル検出、開く/再投票で解除）。ソート可能な「Review age」列 (作成からの経過日数、stale 閾値超過で強調)。テキストフィルタは読み込み済みデータの値 (リポジトリ/作者) をキーボード操作可能なオートコンプリートで候補表示 (`FilterAutocomplete`)。フィルタは Reviews ペインのドックのタブ帯に置き、既定では小さな「Ctrl+F」ボタンに畳んでおく。`Ctrl+F` / `/` / ボタンで開いて入力欄にフォーカスし (Show Drafts もここ)、`Escape` で畳んでグリッドの選択行へフォーカスを戻す。畳んでも値は保持し、有効なテキストと Show Drafts はタブ帯にチップ (✕ でクリア) として残す。空のままフォーカスが外れた場合も畳む。プレビューヘッダー (`PrReviewHeader`) は上から「PR タイトル (常時表示、最大2行) → 状態と問題点のバッジ (Active/Draft・CI・Conflicts・コメント) → `#ID · source → target · 作成者 · 経過` → Reviewers (承認数 + レビュアー)」の順に並べる。コメントバッジは未解決があれば「N unresolved」で強調し、すべて解決済みなら「N resolved」を控えめに表示する (人間コメントを含むスレッドのみ集計しシステムスレッドは除外、0件は非表示)。システムスレッド (投票・push などの自動イベント) は Conversation に表示しない。。グリッドの下に「Work Items」ドックペイン (`LinkedWorkItemsPanel`) がある。既定ではタブ帯だけに畳まれており (状態は `azdodeck:myReviews:linkedWorkItemsCollapsed` に保存)、タブ帯のトグル (リンク件数 + Show/Hide) で開閉する。`t` キーまたはプレビューヘッダの clipboard ボタンで展開してフォーカスする。このペインはPR にリンクされた作業項目を `list_pull_request_work_items` (Azure DevOps の PR work items API、GitHub は空) の結果と説明文/コミットの `AB#NNN` 言及を統合して取得し、既存の `WorkItemPreviewPanel` でプレビューする。複数ある場合はタブ上部のラジオリストから `↑↓`/`←→` で選択 (`Esc` でグリッドへフォーカス復帰)。取得結果は TanStack Query キャッシュ (60 秒) を利用 |
+| **My Reviews** | 自分がレビュアーの PR。投票状態・マージコンフリクト/CI バッジ・stale 強調・ローカルの done/archive トリアージ・ローカルのレビュー結果プレビュー。自分のレビュー後に author の push で投票がリセットされた PR を「Returned」バッジで強調（投票スナップショットの差分でローカル検出、開く/再投票で解除）。ソート可能な「Review age」列 (作成からの経過日数、stale 閾値超過で強調)。テキストフィルタは読み込み済みデータの値 (リポジトリ/作者) をキーボード操作可能なオートコンプリートで候補表示 (`FilterAutocomplete`)。フィルタは Reviews ペインのドックのタブ帯に置き、既定では小さな「Ctrl+F」ボタンに畳んでおく。`Ctrl+F` / `/` / ボタンで開いて入力欄にフォーカスし (Show Drafts もここ)、`Escape` で畳んでグリッドの選択行へフォーカスを戻す。畳んでも値は保持し、有効なテキストと Show Drafts はタブ帯にチップ (✕ でクリア) として残す。空のままフォーカスが外れた場合も畳む。プレビューヘッダー (`PrReviewHeader`) は上から「PR タイトル (常時表示、最大2行) → 状態と問題点のバッジ (Active/Draft・CI・Conflicts・コメント) → `#ID · source → target · 作成者 · 経過` → Reviewers (承認数 + レビュアー)」の順に並べる。Result タブでは結果を広く見せるため、`#ID タイトル` と操作ボタンだけの 1 行に縮める。コメントバッジは未解決があれば「N unresolved」で強調し、すべて解決済みなら「N resolved」を控えめに表示する (人間コメントを含むスレッドのみ集計しシステムスレッドは除外、0件は非表示)。システムスレッド (投票・push などの自動イベント) は Conversation に表示しない。。グリッドの下に「Work Items」ドックペイン (`LinkedWorkItemsPanel`) がある。既定ではタブ帯だけに畳まれており (状態は `azdodeck:myReviews:linkedWorkItemsCollapsed` に保存)、タブ帯のトグル (リンク件数 + Show/Hide) で開閉する。`t` キーまたはプレビューヘッダの clipboard ボタンで展開してフォーカスする。このペインはPR にリンクされた作業項目を `list_pull_request_work_items` (Azure DevOps の PR work items API、GitHub は空) の結果と説明文/コミットの `AB#NNN` 言及を統合して取得し、既存の `WorkItemPreviewPanel` でプレビューする。複数ある場合はタブ上部のラジオリストから `↑↓`/`←→` で選択 (`Esc` でグリッドへフォーカス復帰)。取得結果は TanStack Query キャッシュ (60 秒) を利用 |
 | **My Reviews** | 自分がレビュアーの PR。投票状態・マージコンフリクト/CI バッジ・stale 強調・ローカルの done/archive トリアージ・ローカルのレビュー結果プレビュー。自分のレビュー後に author の push で投票がリセットされた PR を「Returned」バッジで強調（投票スナップショットの差分でローカル検出、開く/再投票で解除）。ソート可能な「Review age」列 (作成からの経過日数、stale 閾値超過で強調)。差分レビューではファイルを「閲覧済み (viewed)」にマーク可能 (`azdodeck:prViewed`、ローカル、iteration 変更でリセット)。`v` で選択ファイルをトグル、ヘッダの Mark all / Clear all で一括。PR の Files タブは Azure DevOps 準拠のツリー表示: サブフォルダを1つだけ持ちファイルを直接持たないフォルダは `src/features/pull-requests` のように連結して1行表示し (折りたたみキーは連結後のフルパス)、変更種別は文字バッジではなく色付き記号 (add/undelete=緑`+`、delete=赤`−`、rename=紫`→`、edit=無印) で示す。折りたたんだフォルダ行には配下ファイルの未解決コメント数を合計したバッジを表示 (展開中は非表示)。ファイル一覧上部にパス部分一致 (大文字小文字無視) のフィルタ入力があり、Escape でクリアしてファイル一覧へフォーカスを戻す (ヒットしたファイルの祖先フォルダは表示を維持)。ファイル一覧と diff ペインの境界はドラッグ (矢印キー/Home/End でも可、ダブルクリック・Escape で既定 300px に戻す) で幅を変更でき、幅は `azdodeck:layout:prFileListWidth` に保存される (150–800px、表示上はタブ幅の 60% まで)。右ペインは選択中の1ファイルだけでなく、フィルタ適用後の全ファイルの diff をツリー順に連続スクロール表示する (各ファイルは IntersectionObserver で近づいたら遅延ロード)。「Whole file」表示のときのみ選択中の1ファイルだけを表示する。ツリー選択・`j`/`k` はスクロール同期し、逆に右ペインをスクロールすると最上部に近いファイルが選択状態に反映される。`n`/`p` は未解決コメントへ、`]`/`[` は次/前の変更ブロック (hunk) の先頭行へジャンプする (ファイル境界をまたいで移動)。コメントスレッドカード (`PrThreadCard`、Review タブと Files タブで共用) は Azure DevOps 準拠の見た目: コメントごとに著者名から生成したイニシャル円アバター、カード右上に Active/Resolved のステータスドロップダウン (バックエンドが対応する2状態のみ)、カード左上に折りたたみトグル (折りたたみ時は先頭コメントの著者+1行サマリのみ表示)、カード下部に常時表示の「Write a reply…」欄+Resolve/Reactivate ボタン (クリックで返信コンポーザーに展開、Escape で畳んでプレビューへフォーカスを返す)。Files タブの split 表示では、スレッド/下書きはアンカーする側 (right=新ファイル列/left=旧ファイル列) の列の下にだけ表示し、反対側の同じ高さは斜めハッチのプレースホルダーで埋めて左右の行位置を揃える (unified 表示は従来どおり全幅)。 |
 | **My Pull Requests** | 自分が作成した active PR を一覧 (`list_my_created_pull_requests`、`searchCriteria.creatorId` でサーバ側フィルタ、全プロジェクトを並列取得しライブ取得・非キャッシュ)。グリッドは My Reviews と同じ CSS グリッド構成・行スタイル・ステータスバーで、列 (PR# / Repository / Title〔Draft バッジ込み〕/ Created / Target / Approvals〔vote==10 の人数/レビュアー総数〕) はヘッダクリックでソート可能、ドラッグで列幅リサイズ (localStorage 永続化)、Columns メニューで表示列を切替 (PR#/Title は必須)。テキストフィルタは読み込み済みデータの値 (リポジトリ/タイトル/ターゲット) をオートコンプリート候補表示するクライアント側絞り込み (`FilterAutocomplete`)。フィルタはグリッド上端のタイトル帯に「Ctrl+F」ボタンとして畳んでおき、My Reviews と同じ操作 (`DockFilterBar`: `Ctrl+F`/`/`/ボタンで開く、`Escape` で畳んで行へフォーカスを戻す、値はチップで残す) で使う。キーボード操作 (`↑↓`/`J K`/`Home`/`End`、`Enter` でブラウザ、`C` で URL コピー)。複数組織は組織セレクタで切替。ライブ取得のため Sync (キャッシュ同期) の対象外で、データはビュー再訪時に再取得される。 |
 | **Pull Request Search** | プロジェクト/リポジトリ/ステータス (active/completed/abandoned、いずれも複数選択可。空=既定 active)/ターゲットブランチ/期間 (作成日 or 完了日基準)/ドラフト除外で PR を検索。並び替え (作成日・完了日・タイトル)。active はキャッシュ、それ以外はライブ取得 (ターゲットブランチ・期間はサーバ側フィルタ)。ターゲットブランチ欄は選択中のリポジトリの実ブランチ (`list_repo_branches`) を複数選択候補として表示 (`MultiSelectFilter`、候補検索とキーボード操作に対応)。複数選択時は選択ブランチごとの結果を統合する。結果は先頭 100 件で打ち切り、超過時はインジケータ表示。ソート可能グリッド、列リサイズ、`C` で URL コピー。 検索フォームはラベルを小さくした2行に詰め、キャッシュ/ライブ取得の説明は Hide drafts 横の情報アイコンのツールチップにする。結果の件数・アクティブな列フィルタ数・Columns ボタンは Results ペインのタブ帯に置く (ペイン内に見出し行は持たない)。 |
@@ -122,7 +122,11 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
   `result_file` / `quote` / `quote_prefix` / `quote_suffix`、本文は Markdown)。SQLite には保存しない。
   エージェントは open のメモを読んで WI にコメント追記し、ファイルを `_done/` へ移動する (任意で
   `resolved:` を追記)。DevDeck は `_done/` を Done として表示し、Done のメモは削除できない。
-  コマンドは `list_agent_notes` / `create_agent_note` / `delete_agent_note` (`agent_notes.rs`)。
+  コマンドは `list_agent_notes` / `create_agent_note` / `delete_agent_note` / `reply_agent_note` (`agent_notes.rs`)。
+  返信はメモ本文の後ろに `<!-- reply {agent|user} {ISO 時刻} -->` の行で区切って追記し、最初の区切りより前が
+  元の本文になる (`agent_notes_replies.rs` が分割)。一覧では各メモの下に「N replies」として畳んで表示し
+  (最後の返信がエージェントなら Agent バッジ)、展開すると返信と返信欄を出す。ユーザーが Done のメモに返信
+  すると `_done/` から open に戻し、エージェントに再度拾わせる。
   入力は `target` (`work-item` / `pull-request`) と `itemId` で、`pull-request` は
   `review_result_folder_path` 配下の `.to-agent-msg/pr-{id}/` を使う (保存形式は共通、front-matter の
   `target` に種別を書く)。作業項目は `work-item`、PR の Result タブは `pull-request` を使う。
@@ -132,6 +136,10 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
   (左余白) とスクロール位置マーカー (右端) は親ドキュメント側に描画し、結果 HTML は書き換えない。
   iframe は従来どおり `sandbox="allow-same-origin"` (スクリプト無効) のため、スクロールと選択は親から
   ポーリングで監視する。メモ一覧はエージェントによる外部変更を拾うため 15 秒ごとに再取得する。
+  結果ファイル名・パスの行は置かず、ブラウザで開く操作はメモ一覧ヘッダーのアイコン (ツールチップにファイル名) と `o` キーで行う。
+  設定保存時、2 つの結果フォルダが存在し `AGENTS.md` が無ければ、エージェント向けの読み方
+  (`agent_notes_guide.md` を WI / PR 向けに置換したもの) を `AGENTS.md` として配置する。既存の
+  `AGENTS.md` は上書きしない。配置失敗は警告ログのみで設定保存は成功させる。
 - **作業項目の新規作成**: My Work Items の「New item」ボタン、テンプレート適用
   (`WorkItemTemplatesPanel`)、またはプレビューの Duplicate (`D` キー / ヘッダーボタン) から
   作成ダイアログを開き、プロジェクト・種別 (`list_work_item_types`)・タイトル・説明・
@@ -372,6 +380,10 @@ PR 検索 / Commits は共通フック `src/lib/useRangeSelection.ts` を使う�
 作業項目と PR のコメント入力欄 (新規・返信・編集・インライン) は縦方向にリサイズできる。
 作業項目プレビューの新規コメント欄も、空でフォーカスが無い間は1行 (投稿ボタン非表示) に
 畳み、フォーカス (`m` / `Ctrl+M` を含む) または入力中は元の高さに戻す。
+作業項目プレビューは Comments と新規コメント欄を右側の列 (幅 42%、独立スクロール) に移して詳細と並べるか、
+従来どおり詳細の下に続けるかをヘッダーの切替ボタンで選べる (`azdodeck:wiPreview:commentsLayout` に保存)。
+未選択の間はパネル幅 880px 以上で横並び、それ未満で縦並び (`WorkItemCommentsSection`)。
+作業項目グリッドのキー処理は、プレビュー内のボタン/リンク上の `Enter` / `Space` を横取りしない (ボタンとして押せる)。
 PR の Conversation タブ下部の新規コメント欄は、空の間は1行のボタンに畳んでおき、クリック /
 Enter で展開してフォーカスする。空のまま `Escape` またはフォーカスが外れると畳み、`Escape`
 のときはその PR のプレビューへフォーカスを返す。
@@ -442,7 +454,8 @@ Result 内 (テキスト入力以外) の `o` は結果 HTML を既定のブラ�
 コメント作成、`]` / `[` で次/前のメモ付きブロック、`PageUp` / `PageDown` でスクロール、`Escape` は
 範囲拡張の解除 → グリッドへ戻る。コメント入力は `Ctrl+Enter` 送信 / `Escape` 取消で、いずれも
 呼び出し元 (コメントモード / グリッド) へフォーカスを戻す。メモ一覧は `↑ ↓` 移動 (結果内の該当箇所を
-強調)、`Enter` で該当箇所へスクロール、`Delete` で削除、`Escape` でグリッドへ。
+強調)、`Enter` で該当箇所へスクロール、`→` / `←` で返信スレッドの展開/折りたたみ、`R` で展開して返信欄へ
+(返信欄は `Ctrl+Enter` 送信 / `Escape` でメモ行へ戻る)、`Delete` で削除、`Escape` でグリッドへ。
 
 ビュー一覧では `↑ ↓ ← →` (グリッド状に移動) / `Home` / `End` で選択、`Shift+←→↑↓` で並べ替え、
 `Delete` で削除、`N` 追加 / `E` 編集 / `R` 全ビュー再実行。`Ctrl+B` は一覧の折りたたみトグルで、
@@ -533,6 +546,8 @@ format!(
   に集約する: 選択は primary の薄い背景 + 左端 3px の primary バー、stale は背景を塗らず左端の
   オレンジバー + 経過日数の文字色 (`STALE_TEXT_CLASS`) で示し、選択の表示を常に優先する。
   列見出しは既定幅・最小幅で省略されない幅を確保する (保存済みの列幅も最小幅に丸められる)。
+  列の境界には常に細い区切り線を描き (掴める幅は 10px、ホバー/ドラッグで強調)、ドラッグは画面上の実際の列幅から
+  始める (余白を埋める列でもドラッグ開始直後から追従する)。
   dockview のパネルタブは、非表示タブを muted 色、表示中タブを太字 + primary の下線で示す。
 - サーバ状態は TanStack Query 経由。ミューテーションで画面表示が変わる場合は該当クエリキーを更新/無効化する。
 - 長いリストは既存のローカル windowing で仮想化する。

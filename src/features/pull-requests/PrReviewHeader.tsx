@@ -183,6 +183,7 @@ export function PrReviewHeader({
   onZoomIn,
   onZoomOut,
   onResetZoom,
+  compact = false,
 }: {
   selectedPr: ReviewPullRequestSummary | null;
   review: PullRequestReview | null;
@@ -198,6 +199,8 @@ export function PrReviewHeader({
   onZoomIn: () => void;
   onZoomOut: () => void;
   onResetZoom: () => void;
+  /** One line (id + title + controls) instead of the full metadata block. */
+  compact?: boolean;
 }) {
   const zoomControl = (
     <PreviewZoomControls
@@ -250,8 +253,27 @@ export function PrReviewHeader({
     );
   }
 
-  const isDraft = review?.isDraft ?? selectedPr.isDraft;
   const title = review?.title ?? selectedPr.title;
+
+  // Result-style tabs need the room for their own content; the full metadata
+  // is one tab away in Conversation.
+  if (compact) {
+    return (
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-2 py-1">
+        <h2 className="min-w-0 flex-1 truncate text-xs text-foreground" title={title}>
+          <span className="font-mono font-semibold">#{selectedPr.pullRequestId}</span>{" "}
+          {title}
+        </h2>
+        <div className="flex shrink-0 items-center gap-1">
+          {zoomControl}
+          {linkedWorkItemsButton}
+          {maximizeButton}
+        </div>
+      </div>
+    );
+  }
+
+  const isDraft = review?.isDraft ?? selectedPr.isDraft;
   const createdBy = review?.createdBy ?? selectedPr.createdBy;
   const creationDate = review?.creationDate ?? selectedPr.creationDate;
   const sourceRef = review?.sourceRefName ?? null;
