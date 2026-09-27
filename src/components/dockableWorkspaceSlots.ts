@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactNode } from "react";
-import type { DockviewApi } from "dockview-react";
+import type { DockviewApi, DockviewGroupPanel } from "dockview-react";
 
 /** Height of a collapsed group: just its tab strip (`--dv-tabs-and-actions-container-height`). */
 export const COLLAPSED_GROUP_HEIGHT = 20;
@@ -43,6 +43,27 @@ export function useCollapsedGroups(
   const expandedHeights = useRef(new Map<string, number>());
   const collapsedKey = (collapsedIds ?? []).join(",");
 
+  const fold = (group: DockviewGroupPanel) => {
+    group.api.setConstraints({ minimumHeight: 0, maximumHeight: COLLAPSED_GROUP_HEIGHT });
+    group.api.setSize({ height: COLLAPSED_GROUP_HEIGHT });
+  };
+
+  // Moving a collapsed panel (the Move panel menu) re-adds it at full size
+  // and resets its group's constraints; fold it again whenever that happens.
+  useEffect(() => {
+    const api = apiRef.current;
+    if (!api || !collapsedKey) return;
+    const collapsed = collapsedKey.split(",");
+    const subscription = api.onDidLayoutChange(() => {
+      for (const id of collapsed) {
+        const group = api.getPanel(id)?.api.group;
+        if (group && group.api.height > COLLAPSED_GROUP_HEIGHT + 1) fold(group);
+      }
+    });
+    return () => subscription.dispose();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collapsedKey]);
+
   useEffect(() => {
     const api = apiRef.current;
     if (!api) return;
@@ -52,16 +73,19 @@ export function useCollapsedGroups(
       if (!group) continue;
       if (collapsed.has(spec.id)) {
         if (!expandedHeights.current.has(spec.id)) expandedHeights.current.set(spec.id, group.api.height);
-        group.api.setConstraints({ minimumHeight: 0, maximumHeight: COLLAPSED_GROUP_HEIGHT });
-        group.api.setSize({ height: COLLAPSED_GROUP_HEIGHT });
+        fold(group);
       } else if (expandedHeights.current.has(spec.id)) {
         const previous = expandedHeights.current.get(spec.id) ?? 0;
         expandedHeights.current.delete(spec.id);
         reapplyConstraints(api);
-        // A layout restored while collapsed only remembers the strip height.
-        const height = previous > COLLAPSED_GROUP_HEIGHT + 1
+        // A height at or below the minimum was not chosen by the user: a
+        // layout restored while collapsed only remembers the strip, which
+        // dockview clamps up to the minimum before it is recorded. Open to
+        // half of the column then, like a fresh split.
+        const column = group.element.closest<HTMLElement>(".dv-split-view-container")?.clientHeight ?? 0;
+        const height = previous > (spec.minHeight ?? COLLAPSED_GROUP_HEIGHT + 1)
           ? previous
-          : (spec.initialHeight ?? spec.minHeight ?? 200);
+          : Math.max(spec.minHeight ?? 0, Math.round(column / 2)) || (spec.initialHeight ?? 200);
         group.api.setSize({ height });
       }
     }
