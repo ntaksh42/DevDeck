@@ -26,7 +26,7 @@ const demoNotes = new Map<string, AgentNote[]>([
         resolved: "Commented on #123: re-ran the analysis on main.",
         replies: [
           {
-            author: "agent",
+            author: "claude",
             createdAt: "2026-09-25T18:05:00+09:00",
             body: "Re-ran the analysis on main @ 8c1d2e4 and commented on #123.",
           },
@@ -63,7 +63,7 @@ const demoNotes = new Map<string, AgentNote[]>([
         resolved: null,
         replies: [
           {
-            author: "agent",
+            author: "codex",
             createdAt: "2026-09-26T10:40:00+09:00",
             body: "How many concurrent requests should I assume? The service limit is 50 rps per client.",
           },
@@ -73,7 +73,7 @@ const demoNotes = new Map<string, AgentNote[]>([
             body: "Use 50 rps with bursts of 200.",
           },
           {
-            author: "agent",
+            author: "codex",
             createdAt: "2026-09-26T11:10:00+09:00",
             body: "Load-tested 50 rps with 200-request bursts: the limiter holds, p99 +3 ms. Added to the result.",
           },
