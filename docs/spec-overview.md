@@ -123,9 +123,11 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
   エージェントは open のメモを読んで WI にコメント追記し、ファイルを `_done/` へ移動する (任意で
   `resolved:` を追記)。DevDeck は `_done/` を Done として表示し、Done のメモは削除できない。
   コマンドは `list_agent_notes` / `create_agent_note` / `delete_agent_note` / `reply_agent_note` (`agent_notes.rs`)。
-  返信はメモ本文の後ろに `<!-- reply {agent|user} {ISO 時刻} -->` の行で区切って追記し、最初の区切りより前が
+  返信はメモ本文の後ろに `<!-- reply {author} {ISO 時刻} -->` の行で区切って追記し、最初の区切りより前が
   元の本文になる (`agent_notes_replies.rs` が分割)。一覧では各メモの下に「N replies」として畳んで表示し
-  (最後の返信がエージェントなら Agent バッジ)、展開すると返信と返信欄を出す。ユーザーが Done のメモに返信
+  (最後の返信がエージェントならその名前のバッジ)、展開すると返信と返信欄を出す。author は人なら `user`
+  (「You」と表示)、エージェントは自分の名前を英小文字 1 語で書き (`claude` / `codex` 等、旧形式の `agent` も可)、
+  先頭を大文字にした `@Claude` のように表示して人の返信と区別する。ユーザーが Done のメモに返信
   すると `_done/` から open に戻し、エージェントに再度拾わせる。
   入力は `target` (`work-item` / `pull-request`) と `itemId` で、`pull-request` は
   `review_result_folder_path` 配下の `.to-agent-msg/pr-{id}/` を使う (保存形式は共通、front-matter の

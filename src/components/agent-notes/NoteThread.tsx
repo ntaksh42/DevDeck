@@ -8,6 +8,13 @@ import { CommentField } from "@/components/CommentField";
 // expanded it lists the agent/user replies and a reply box. Replying to a done
 // note reopens it (the backend moves it back out of `_done/`).
 
+/** Replies by the user are "You"; any other author is an agent, shown by the
+ *  name it wrote in the marker (`claude` -> `@Claude`, legacy `agent` -> `@Agent`). */
+export function replyAuthorLabel(author: string): { label: string; isAgent: boolean } {
+  if (author === "user") return { label: "You", isAgent: false };
+  return { label: `@${author.charAt(0).toUpperCase()}${author.slice(1)}`, isAgent: true };
+}
+
 type Props = {
   note: AgentNote;
   expanded: boolean;
@@ -27,7 +34,7 @@ export function NoteThread({
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const count = note.replies.length;
-  const lastByAgent = count > 0 && note.replies[count - 1].author === "agent";
+  const last = count > 0 ? replyAuthorLabel(note.replies[count - 1].author) : null;
 
   useEffect(() => {
     if (focusRequest && expanded) inputRef.current?.focus();
@@ -69,25 +76,28 @@ export function NoteThread({
       >
         <Chevron className="h-3 w-3" aria-hidden="true" />
         {count ? `${count} ${count === 1 ? "reply" : "replies"}` : "Reply"}
-        {lastByAgent && !expanded ? (
+        {last?.isAgent && !expanded ? (
           <span className="ml-1 rounded bg-sky-100 px-1 text-[10px] text-sky-800 dark:bg-sky-950 dark:text-sky-300">
-            Agent
+            {last.label}
           </span>
         ) : null}
       </button>
       {expanded ? (
         <div className="ml-1.5 mt-1 flex flex-col gap-1 border-l-2 border-border pl-2" onClick={(e) => e.stopPropagation()}>
-          {note.replies.map((reply, index) => (
-            <div key={index}>
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <span className={`font-medium ${reply.author === "agent" ? "text-sky-700 dark:text-sky-400" : "text-foreground"}`}>
-                  {reply.author === "agent" ? "Agent" : reply.author === "user" ? "You" : reply.author}
-                </span>
-                {reply.createdAt ? <span>{formatTime(reply.createdAt)}</span> : null}
+          {note.replies.map((reply, index) => {
+            const { label, isAgent } = replyAuthorLabel(reply.author);
+            return (
+              <div key={index}>
+                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <span className={`font-medium ${isAgent ? "text-sky-700 dark:text-sky-400" : "text-foreground"}`}>
+                    {label}
+                  </span>
+                  {reply.createdAt ? <span>{formatTime(reply.createdAt)}</span> : null}
+                </div>
+                <p className="whitespace-pre-wrap break-words">{reply.body}</p>
               </div>
-              <p className="whitespace-pre-wrap break-words">{reply.body}</p>
-            </div>
-          ))}
+            );
+          })}
           <CommentField
             textareaRef={inputRef}
             value={draft}
