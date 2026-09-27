@@ -3,6 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, ReactNode, RefObject } from "
 import { Trash2 } from "lucide-react";
 import type { AgentNote } from "@/lib/azdoCommands";
 import { focusPrimaryGrid } from "@/lib/utils";
+import { CommentField, commentSecondaryButtonClass } from "@/components/CommentField";
 import { NoteThread } from "./NoteThread";
 import type { NoteAnchor } from "./types";
 
@@ -236,33 +237,28 @@ export function AgentNotesPane({
         {pendingQuote ? (
           <blockquote className="line-clamp-3 border-l-2 border-orange-500 pl-1.5 text-muted-foreground">{pendingQuote}</blockquote>
         ) : null}
-        <textarea
-          ref={composerRef}
+        <CommentField
+          textareaRef={composerRef}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={handleComposerKeyDown}
           rows={3}
           aria-label="Note to the agent"
           placeholder={pendingQuote ? "Comment on the quoted text…" : "Note to the agent…"}
-          className="w-full resize-y rounded border border-border bg-background px-1.5 py-1 outline-none focus:ring-2 focus:ring-ring"
+          error={error}
+          hint="Ctrl+Enter to send · Esc to cancel"
+          extraActions={
+            pendingQuote ? (
+              <button type="button" onClick={onClearQuote} className={commentSecondaryButtonClass}>
+                Remove quote
+              </button>
+            ) : null
+          }
+          submitLabel="Send"
+          submitDisabled={!draft.trim()}
+          pending={sending}
+          onSubmit={() => void send()}
         />
-        {error ? <p className="text-destructive">{error}</p> : null}
-        <div className="flex items-center gap-1.5">
-          <span className="mr-auto text-[11px] text-muted-foreground">Ctrl+Enter send · Esc cancel</span>
-          {pendingQuote ? (
-            <button type="button" onClick={onClearQuote} className="rounded border border-border px-2 py-0.5 hover:bg-secondary">
-              Remove quote
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => void send()}
-            disabled={!draft.trim() || sending}
-            className="rounded bg-primary px-2 py-0.5 font-medium text-primary-foreground disabled:opacity-50"
-          >
-            {sending ? "Sending…" : "Send"}
-          </button>
-        </div>
       </div>
     </div>
   );

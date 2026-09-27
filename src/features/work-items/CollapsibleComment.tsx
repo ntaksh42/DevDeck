@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { Check, Loader2, Pencil, SmilePlus, Trash2, X } from "lucide-react";
+import { Check, Loader2, Pencil, SmilePlus, Trash2 } from "lucide-react";
 import { formatRelativeDate } from "@/lib/utils";
 import type { MentionCandidate, Organization } from "@/lib/azdoCommands";
 import {
@@ -14,6 +14,7 @@ import {
   type WorkItemMentionScope,
 } from "./useWorkItemMentionPicker";
 import { MentionPickerDropdown } from "./MentionPickerDropdown";
+import { CommentField } from "@/components/CommentField";
 
 // Azure DevOps comment reaction types, in display order, with their emoji.
 const COMMENT_REACTIONS: { type: string; emoji: string; label: string }[] = [
@@ -236,42 +237,40 @@ export function CollapsibleComment({
       </div>
       <div className="px-1.5 py-1">
         {editMode ? (
-          <div className="grid gap-1">
-            <div ref={mentionPicker.containerRef} className="relative">
-              <textarea
-                ref={editTextareaRef}
-                aria-label={`Edit comment ${id}`}
-                value={draft}
-                autoFocus
-                disabled={editPending}
-                onChange={(event) => {
-                  setDraft(event.target.value);
-                  mentionPicker.handleTextChange(
-                    event.target.value,
-                    event.target.selectionStart,
-                  );
-                }}
-                onClick={(event) => {
-                  mentionPicker.handleSelectionChange(event.currentTarget.selectionStart);
-                }}
-                onKeyDown={(event) => {
-                  // Ctrl+Enter always saves, matching the composer, even with the
-                  // picker open; then the picker consumes its own keys; a second
-                  // Escape (picker already closed) cancels the edit.
-                  if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-                    event.preventDefault();
-                    saveEdit();
-                    return;
-                  }
-                  if (mentionPicker.handleKeyDown(event)) return;
-                  if (event.key === "Escape") {
-                    event.preventDefault();
-                    cancelEdit();
-                  }
-                }}
-                rows={Math.min(10, Math.max(3, draft.split("\n").length + 1))}
-                className="w-full resize-y rounded border border-input bg-background px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-              />
+          <CommentField
+            textareaRef={editTextareaRef}
+            containerRef={mentionPicker.containerRef}
+            aria-label={`Edit comment ${id}`}
+            value={draft}
+            autoFocus
+            disabled={editPending}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              mentionPicker.handleTextChange(
+                event.target.value,
+                event.target.selectionStart,
+              );
+            }}
+            onClick={(event) => {
+              mentionPicker.handleSelectionChange(event.currentTarget.selectionStart);
+            }}
+            onKeyDown={(event) => {
+              // Ctrl+Enter always saves, matching the composer, even with the
+              // picker open; then the picker consumes its own keys; a second
+              // Escape (picker already closed) cancels the edit.
+              if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+                event.preventDefault();
+                saveEdit();
+                return;
+              }
+              if (mentionPicker.handleKeyDown(event)) return;
+              if (event.key === "Escape") {
+                event.preventDefault();
+                cancelEdit();
+              }
+            }}
+            rows={Math.min(10, Math.max(3, draft.split("\n").length + 1))}
+            overlay={
               <MentionPickerDropdown
                 options={mentionPicker.dropdown.options}
                 activeIndex={mentionPicker.dropdown.activeIndex}
@@ -279,33 +278,15 @@ export function CollapsibleComment({
                 errorMessage={mentionPicker.dropdown.errorMessage}
                 onSelect={mentionPicker.applyMention}
               />
-            </div>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={saveEdit}
-                disabled={editPending || !draft.trim()}
-                className="inline-flex items-center gap-1 rounded border border-border bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {editPending ? (
-                  <Loader2 aria-hidden="true" className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Check aria-hidden="true" className="h-3 w-3" />
-                )}
-                Save
-              </button>
-              <button
-                type="button"
-                onClick={cancelEdit}
-                disabled={editPending}
-                className="inline-flex items-center gap-1 rounded border border-border bg-card px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
-              >
-                <X aria-hidden="true" className="h-3 w-3" />
-                Cancel
-              </button>
-              <span className="text-[11px] text-muted-foreground">Ctrl+Enter to save · Esc to cancel</span>
-            </div>
-          </div>
+            }
+            hint="Ctrl+Enter to save · Esc to cancel"
+            submitLabel="Save"
+            submitDisabled={!draft.trim()}
+            pending={editPending}
+            onSubmit={saveEdit}
+            onCancel={cancelEdit}
+            cancelDisabled={editPending}
+          />
         ) : (
           <>
             <div className={expanded || !collapsible ? "" : "max-h-32 overflow-hidden"}>
