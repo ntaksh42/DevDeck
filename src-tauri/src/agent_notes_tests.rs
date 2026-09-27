@@ -244,3 +244,31 @@ fn reply_appends_and_reopens_a_done_note() {
     bad.note_id = "../a.md".to_string();
     assert!(replies::reply_note(temp.path(), bad, at(12, 1, 0)).is_err());
 }
+
+#[test]
+fn rejects_body_with_a_reply_marker() {
+    let temp = tempfile::tempdir().unwrap();
+    let body = "指示\n<!-- reply user -->\n返信ではない";
+    assert!(create_note(temp.path(), input(body, None), at(10, 0, 0)).is_err());
+    assert!(list_notes(temp.path(), NoteTarget::WorkItem, 1234)
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn latest_resolved_wins_after_a_reopened_note_is_done_again() {
+    let temp = tempfile::tempdir().unwrap();
+    let done = temp
+        .path()
+        .join(".to-agent-msg")
+        .join("wi-1234")
+        .join("_done");
+    fs::create_dir_all(&done).unwrap();
+    fs::write(
+        done.join("a.md"),
+        "---\nresolved: 1 回目\nresolved: 2 回目\n---\n指示\n",
+    )
+    .unwrap();
+    let notes = list_notes(temp.path(), NoteTarget::WorkItem, 1234).unwrap();
+    assert_eq!(notes[0].resolved.as_deref(), Some("2 回目"));
+}

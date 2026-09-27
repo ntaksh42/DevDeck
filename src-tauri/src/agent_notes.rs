@@ -253,9 +253,12 @@ pub(crate) fn parse_note(
 ) -> AgentNote {
     let (fields, body) = split_front_matter(text);
     let (body, replies) = replies::split_replies(body);
+    // Last occurrence wins: a note reopened by a reply keeps its old
+    // `resolved` line, and the agent appends a new one when it is done again.
     let get = |key: &str| {
         fields
             .iter()
+            .rev()
             .find(|(name, _)| name == key)
             .map(|(_, value)| value.clone())
             .filter(|value| !value.is_empty())
@@ -329,6 +332,7 @@ pub(crate) fn create_note(
     if body.chars().count() > MAX_BODY_CHARS {
         return Err(AppError::InvalidInput("note body is too long".to_string()));
     }
+    replies::reject_markers(body)?;
     let clean = |value: Option<String>, max: usize| {
         value
             .map(|value| value.trim().chars().take(max).collect::<String>())

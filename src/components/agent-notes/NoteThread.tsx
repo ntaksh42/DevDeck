@@ -36,8 +36,13 @@ export function NoteThread({
   const count = note.replies.length;
   const last = count > 0 ? replyAuthorLabel(note.replies[count - 1].author) : null;
 
+  // Only a new request focuses the box: a thread remounted with the last one
+  // (its note moved between Open and Done) must not steal focus.
+  const handledFocusRef = useRef(focusRequest);
   useEffect(() => {
-    if (focusRequest && expanded) inputRef.current?.focus();
+    if (!expanded || focusRequest === handledFocusRef.current) return;
+    handledFocusRef.current = focusRequest;
+    inputRef.current?.focus();
   }, [focusRequest, expanded]);
 
   async function send() {
