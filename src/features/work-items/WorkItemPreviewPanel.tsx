@@ -237,7 +237,10 @@ export function WorkItemPreviewPanel({
   return (
     <aside
       ref={panelRef}
-      className="flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-border bg-card shadow-sm transition-[border-color,box-shadow] focus-within:border-primary focus-within:ring-4 focus-within:ring-inset focus-within:ring-primary/25"
+      // The focus ring lives on an ::after overlay so it is painted above the
+      // opaque children (e.g. the side-by-side comments column) instead of
+      // being hidden underneath them like an inset box-shadow would be.
+      className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-border bg-card shadow-sm transition-[border-color] after:pointer-events-none after:absolute after:inset-0 after:z-10 after:rounded-[inherit] after:content-[''] focus-within:border-primary focus-within:after:ring-4 focus-within:after:ring-inset focus-within:after:ring-primary/25"
       onKeyDown={handlePreviewPanelKeyDown}
     >
       {!selectedItem ? (
