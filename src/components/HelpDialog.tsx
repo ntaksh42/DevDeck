@@ -137,6 +137,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Focus comment</span><kbd className={kbd}>{combo("focusComment")} / M</kbd></div>
           <div className={row}><span>Post comment (+ apply pending changes)</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
           <div className={row}><span>Return to grid (from input / preview)</span><kbd className={kbd}>Esc / ←</kbd></div>
+          <div className={row}><span>Reorder / move preview section (header focused; or drag)</span><kbd className={kbd}>Alt+↑ ↓ / Alt+← →</kbd></div>
           <div className={row}><span>Snooze selected row (My Items / Views / Search)</span><kbd className={kbd}>Z</kbd></div>
           <div className={row}><span>Comment on the investigation result (Result panel)</span><kbd className={kbd}>R</kbd></div>
           <div className={row}><span>Result: move block / extend</span><kbd className={kbd}>↑ ↓ / Shift+↑ ↓</kbd></div>

@@ -12,12 +12,14 @@ import type {
 } from "@/lib/azdoCommands";
 import { richFieldHtml } from "./workItemHtml";
 import { focusPrimaryGrid, formatRelativeDate, isEditableTarget } from "@/lib/utils";
-import { openExternalUrl } from "@/lib/openExternal";
 import { readStoredJson, writeStoredJson } from "@/lib/storage";
 import { Columns2, Rows2 } from "lucide-react";
 import type { CustomPreviewField, PreviewFieldKey } from "./previewFieldsStorage";
 import { TitleEditor } from "./PreviewEditors";
 import { WorkItemStatePill, WorkItemTypeBadge } from "./WorkItemBadges";
+import { WorkItemAttachmentsSection, WorkItemPullRequestsSection } from "./WorkItemPreviewLinkedSections";
+import { usePreviewSectionMover } from "./PreviewSectionMover";
+import { type PreviewSectionId, sectionColumn } from "./previewSectionLayout";
 import { PreviewControl, PreviewField, PreviewSection, PreviewTagsField } from "./PreviewSection";
 import { RichHtmlFrame } from "./RichHtmlFrame";
 import { WorkItemCommentsSection } from "./WorkItemCommentsSection";
@@ -171,7 +173,6 @@ export function WorkItemPreviewDetails({
 
   const comments = (
     <WorkItemCommentsSection
-      className={sideBySide ? "" : "mt-2"}
       preview={preview}
       deleteCommentError={deleteCommentError}
       editCommentError={editCommentError}
@@ -195,14 +196,61 @@ export function WorkItemPreviewDetails({
   const descriptionHtml = richFieldHtml(preview.descriptionHtml);
   const acceptanceCriteriaHtml = richFieldHtml(preview.acceptanceCriteriaHtml);
   const selectedFieldDefinitions = selectedPreviewFieldDefinitions(selectedFieldKeys);
+  const hasComments = preview.comments.length > 0 || preview.commentsUnavailable;
+  const visibleSections = new Set<PreviewSectionId>(["links", "history"]);
+  if (descriptionHtml) visibleSections.add("description");
+  if (acceptanceCriteriaHtml) visibleSections.add("acceptanceCriteria");
+  if (hasComments) visibleSections.add("comments");
+  if (preview.pullRequests.length > 0) visibleSections.add("pullRequests");
+  if (preview.attachments.length > 0) visibleSections.add("attachments");
+  const sections = usePreviewSectionMover({
+    scopeRef: outerRef,
+    sideBySide,
+    visible: visibleSections,
+  });
+  const mainColumn = sideBySide ? "main" : null;
+  const commentsInSide = sideBySide && sectionColumn(sections.layout, "comments") === "side";
+
+  function renderSection(id: PreviewSectionId): ReactNode {
+    switch (id) {
+      case "description":
+      case "acceptanceCriteria": {
+        const title = id === "description" ? "Description" : "Acceptance Criteria";
+        return (
+          <PreviewSection accentColor="border-l-primary" collapseId={id} title={title}>
+            <RichHtmlFrame
+              baseUrl={preview.webUrl}
+              html={(id === "description" ? descriptionHtml : acceptanceCriteriaHtml) ?? ""}
+              onImageOpen={setLightboxSrc}
+              resolveImageSource={resolveImageSource}
+              title={title}
+            />
+          </PreviewSection>
+        );
+      }
+      case "comments":
+        return comments;
+      case "links":
+        return <WorkItemLinksSection preview={preview} />;
+      case "pullRequests":
+        return <WorkItemPullRequestsSection preview={preview} />;
+      case "attachments":
+        return <WorkItemAttachmentsSection preview={preview} />;
+      case "history":
+        return <WorkItemHistorySection preview={preview} />;
+    }
+  }
 
   const details = (
     <div
       ref={rootRef}
       aria-keyshortcuts="Control+P"
       aria-label="Work item preview"
-      className="min-h-0 flex-1 overflow-auto bg-card px-2.5 pb-2 pt-1.5 text-xs outline-none focus:bg-primary/[0.02]"
+      className={`min-h-0 flex-1 overflow-auto bg-card px-2.5 pb-2 pt-1.5 text-xs outline-none focus:bg-primary/[0.02] ${
+        sections.dragging ? "[&_iframe]:pointer-events-none" : ""
+      }`}
       data-primary-preview="true"
+      {...sections.columnDropProps(mainColumn)}
       style={sideBySide ? undefined : { zoom }}
       onKeyDown={(event) => {
         // ← steps back to the grid (mirrors the grid's → into the preview).
@@ -337,114 +385,8 @@ export function WorkItemPreviewDetails({
         </div>
       </div>
 
-      {(descriptionHtml || acceptanceCriteriaHtml) && (
-        <div className="mt-2 grid gap-2">
-          {descriptionHtml ? (
-            <PreviewSection
-              accentColor="border-l-primary"
-              collapseId="description"
-              title="Description"
-            >
-              <RichHtmlFrame
-                baseUrl={preview.webUrl}
-                html={descriptionHtml}
-                onImageOpen={setLightboxSrc}
-                resolveImageSource={resolveImageSource}
-                title="Description"
-              />
-            </PreviewSection>
-          ) : null}
-          {acceptanceCriteriaHtml ? (
-            <PreviewSection
-              accentColor="border-l-primary"
-              collapseId="acceptanceCriteria"
-              title="Acceptance Criteria"
-            >
-              <RichHtmlFrame
-                baseUrl={preview.webUrl}
-                html={acceptanceCriteriaHtml}
-                onImageOpen={setLightboxSrc}
-                resolveImageSource={resolveImageSource}
-                title="Acceptance Criteria"
-              />
-            </PreviewSection>
-          ) : null}
-        </div>
-      )}
-
-      {sideBySide ? null : comments}
-
-      <WorkItemLinksSection preview={preview} />
-
-      {preview.pullRequests.length > 0 ? (
-        <PreviewSection
-          accentColor="border-l-violet-400 dark:border-l-violet-500"
-          className="mt-2"
-          collapseId="pullRequests"
-          title={`Pull Requests (${preview.pullRequests.length})`}
-        >
-          <div className="space-y-1">
-            {preview.pullRequests.map((pr) => {
-              const inReviews = !!pr.repositoryId;
-              return (
-                <button
-                  key={pr.pullRequestId}
-                  type="button"
-                  onClick={() => {
-                    if (pr.webUrl) openExternalUrl(pr.webUrl);
-                  }}
-                  disabled={!pr.webUrl}
-                  className="flex w-full min-w-0 items-center gap-1.5 rounded border border-border bg-card px-1.5 py-1 text-left text-xs hover:bg-secondary disabled:cursor-default disabled:opacity-60"
-                  title={pr.webUrl ?? "Pull request not in My Reviews"}
-                >
-                  <span className="w-16 shrink-0 truncate text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                    {inReviews ? "Review" : "PR"}
-                  </span>
-                  <span className="shrink-0 font-mono text-[11px] font-extrabold text-primary">
-                    !{pr.pullRequestId}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">
-                    {pr.title ?? "(not in My Reviews)"}
-                  </span>
-                  {pr.myVoteLabel ? (
-                    <span className="shrink-0 rounded border border-border bg-muted px-1 py-px text-[11px] text-muted-foreground">
-                      {pr.myVoteLabel}
-                    </span>
-                  ) : null}
-                  {pr.status ? <WorkItemStatePill state={pr.status} /> : null}
-                </button>
-              );
-            })}
-          </div>
-        </PreviewSection>
-      ) : null}
-
-      {preview.attachments.length > 0 ? (
-        <PreviewSection
-          accentColor="border-l-amber-400 dark:border-l-amber-500"
-          className="mt-2"
-          collapseId="attachments"
-          title={`Attachments (${preview.attachments.length})`}
-        >
-          <div className="space-y-1">
-            {preview.attachments.map((attachment) => (
-              <button
-                key={attachment.url}
-                type="button"
-                onClick={() => openExternalUrl(attachment.url)}
-                title={`Download ${attachment.name}`}
-                aria-label={`Download attachment ${attachment.name}`}
-                className="flex w-full min-w-0 items-center gap-1.5 rounded border border-border bg-card px-1.5 py-1 text-left text-xs hover:bg-secondary"
-              >
-                <span className="min-w-0 flex-1 truncate">{attachment.name}</span>
-                <span className="shrink-0 text-[11px] text-primary">Download</span>
-              </button>
-            ))}
-          </div>
-        </PreviewSection>
-      ) : null}
-
-      <WorkItemHistorySection preview={preview} />
+      {sections.renderColumn(mainColumn, renderSection)}
+      {sections.appendIndicator(mainColumn)}
       {lightboxSrc ? (
         <button
           type="button"
@@ -470,16 +412,28 @@ export function WorkItemPreviewDetails({
     <div ref={outerRef} className="flex min-h-0 flex-1 flex-col">
       {sideBySide ? (
         <div className="flex min-h-0 flex-1" style={{ zoom }}>
-          {details}
+          <div className="flex min-w-0 flex-1 flex-col">
+            {details}
+            {commentsInSide ? null : composer}
+          </div>
           <div className="flex w-[42%] min-w-48 max-w-xl shrink-0 flex-col border-l border-border bg-card text-xs">
-            <div className="min-h-0 flex-1 overflow-auto px-2 pb-2 pt-1.5">
-              {preview.comments.length > 0 || preview.commentsUnavailable ? (
-                comments
-              ) : (
+            <div
+              className={`min-h-0 flex-1 overflow-auto px-2 pb-2 pt-1.5 ${
+                sections.dragging ? "[&_iframe]:pointer-events-none" : ""
+              }`}
+              {...sections.columnDropProps("side")}
+            >
+              {sections.renderColumn("side", renderSection)}
+              {sections.appendIndicator("side")}
+              {commentsInSide && !hasComments ? (
                 <p className="px-1 py-2 text-muted-foreground">No comments yet.</p>
-              )}
+              ) : sections.visibleIn("side").length === 0 ? (
+                <p className="rounded border border-dashed border-border px-2 py-3 text-center text-[11px] text-muted-foreground">
+                  Drag a section header here (or focus it and press Alt+→).
+                </p>
+              ) : null}
             </div>
-            {composer}
+            {commentsInSide ? composer : null}
           </div>
         </div>
       ) : (
