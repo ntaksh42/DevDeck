@@ -198,17 +198,18 @@ describe("App — Reviews", () => {
     fireEvent.click(main.getByText("Waiting on author"));
 
     fireEvent.pointerDown(main.getByRole("tab", { name: "Result" }), { button: 0 });
-    expect(await main.findByText("review-PR102.html")).toBeTruthy();
+    const openButton = await main.findByRole("button", { name: /Open the result in your browser/ });
+    expect(openButton.getAttribute("title")).toContain("review-PR102.html");
 
     // The Result tab opens the local HTML in the browser via a button…
-    fireEvent.click(main.getByRole("button", { name: /Open in browser/ }));
+    fireEvent.click(openButton);
     await waitFor(() => {
       expect(openPathMock).toHaveBeenCalledWith("C:\\reports\\review-PR102.html");
     });
 
     // …and via the `o` shortcut while the tab is focused.
     openPathMock.mockClear();
-    fireEvent.keyDown(main.getByText("review-PR102.html"), { key: "o" });
+    fireEvent.keyDown(openButton, { key: "o" });
     await waitFor(() => {
       expect(openPathMock).toHaveBeenCalledWith("C:\\reports\\review-PR102.html");
     });

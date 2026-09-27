@@ -6,7 +6,6 @@ import {
 } from 'react';
 import {
   commandErrorMessage,
-  type MentionCandidate,
   type WorkItemPreview,
   type WorkItemSummary,
 } from '@/lib/azdoCommands';
@@ -40,6 +39,7 @@ import { StagedStatusChip } from './StagedStatusChip';
 import { useWorkItemStagedChanges } from './useWorkItemStagedChanges';
 import { useWorkItemPickerState } from './useWorkItemPickerState';
 import { usePreviewZoom } from '@/lib/usePreviewZoom';
+import { useMentionDisplayNames } from './useMentionDisplayNames';
 import { PreviewZoomControls } from '@/components/PreviewZoomControls';
 
 // Re-exported so existing importers (and the unit tests) keep a single entry
@@ -90,9 +90,6 @@ export function WorkItemPreviewPanel({
     () => loadPreviewFieldKeys(),
   );
   const { canZoomIn, canZoomOut, resetZoom, zoom, zoomIn, zoomOut } = usePreviewZoom();
-  const [mentionDisplayNamesById, setMentionDisplayNamesById] = useState<
-    Record<string, string>
-  >({});
   const panelRef = useRef<HTMLElement | null>(null);
 
   const customFieldsSignature = useMemo(
@@ -185,18 +182,8 @@ export function WorkItemPreviewPanel({
     openFieldRequest,
   });
 
-  const commentMentionDisplayNames = useMemo(() => {
-    const names = new Map<string, string>();
-    for (const [id, displayName] of Object.entries(mentionDisplayNamesById)) {
-      names.set(id, displayName);
-      names.set(id.toLowerCase(), displayName);
-    }
-    for (const candidate of recentMentionOptions) {
-      names.set(candidate.id, candidate.displayName);
-      names.set(candidate.id.toLowerCase(), candidate.displayName);
-    }
-    return names;
-  }, [mentionDisplayNamesById, recentMentionOptions]);
+  const { mentionDisplayNames: commentMentionDisplayNames, rememberMention: handleMentionApplied } =
+    useMentionDisplayNames(recentMentionOptions);
 
   const resolvePreviewImage = useMemo(
     () => async (url: string) => {
@@ -208,13 +195,6 @@ export function WorkItemPreviewPanel({
     },
     [selectedItem],
   );
-
-  function handleMentionApplied(candidate: MentionCandidate) {
-    setMentionDisplayNamesById((current) => ({
-      ...current,
-      [candidate.id]: candidate.displayName,
-    }));
-  }
 
   function duplicateSelected() {
     if (!onDuplicate || !preview) return;
@@ -271,6 +251,19 @@ export function WorkItemPreviewPanel({
           ) : preview ? (
             <>
               <WorkItemPreviewDetails
+                composer={
+                  <CommentComposer
+                    focusCommentRequest={focusCommentRequest}
+                    hasStagedChanges={stagedEntries.length > 0}
+                    mentionPriorityNames={mentionPriorityNames}
+                    onApplyStaged={() => { void applyStaged(); }}
+                    onEscapeToPanel={focusPanelBody}
+                    onMentionApplied={handleMentionApplied}
+                    recentMentionOptions={recentMentionOptions}
+                    selectedItem={selectedItem}
+                    selfOrg={selfOrg}
+                  />
+                }
                 customPreviewFields={customPreviewFields}
                 zoom={zoom}
                 statusChip={
@@ -483,17 +476,6 @@ export function WorkItemPreviewPanel({
                     pending={applying || updateFieldsPending}
                   />
                 }
-              />
-              <CommentComposer
-                focusCommentRequest={focusCommentRequest}
-                hasStagedChanges={stagedEntries.length > 0}
-                mentionPriorityNames={mentionPriorityNames}
-                onApplyStaged={() => { void applyStaged(); }}
-                onEscapeToPanel={focusPanelBody}
-                onMentionApplied={handleMentionApplied}
-                recentMentionOptions={recentMentionOptions}
-                selectedItem={selectedItem}
-                selfOrg={selfOrg}
               />
             </>
           ) : previewLoading ? (

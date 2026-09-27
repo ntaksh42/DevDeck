@@ -7,6 +7,7 @@ import type {
   CommitActivityInput,
   ListNotificationsInput,
   RecordNotificationInput,
+  ReplyAgentNoteInput,
   SearchCommitsInput,
 } from "@/lib/azdoCommands";
 import {
@@ -44,6 +45,7 @@ import {
   demoCreateAgentNote,
   demoDeleteAgentNote,
   demoListAgentNotes,
+  demoReplyAgentNote,
 } from "@/lib/demo/agentNotes";
 
 export function dispatchExt(command: string, args: unknown): unknown {
@@ -226,6 +228,11 @@ export function dispatchExt(command: string, args: unknown): unknown {
       const input = (args as { input?: AgentNoteItem & { noteId: string } } | undefined)?.input;
       if (input) demoDeleteAgentNote(input, input.noteId);
       return null;
+    }
+    case "reply_agent_note": {
+      const input = (args as { input?: ReplyAgentNoteInput } | undefined)?.input;
+      if (!input) throw new Error("missing input");
+      return demoReplyAgentNote(input);
     }
     default:
       return undefined;

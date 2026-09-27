@@ -114,7 +114,9 @@ export function ColumnResizeHandle({
   return (
     <div
       title="Drag to resize · double-click to reset this column to its default width"
-      className="absolute right-0 top-0 bottom-0 z-10 w-1.5 cursor-col-resize hover:bg-primary/20 active:bg-primary/40"
+      // A wider grab strip than the faint divider it draws, so the edge is easy
+      // to find; the divider darkens on hover/drag.
+      className="group absolute -right-1 top-0 bottom-0 z-10 flex w-2.5 cursor-col-resize justify-center"
       onDoubleClick={() => {
         if (defaultWidth === undefined) return;
         setWidths((prev) => {
@@ -126,7 +128,14 @@ export function ColumnResizeHandle({
       onPointerDown={(e) => {
         e.preventDefault();
         const startX = e.clientX;
-        const startWidth = widths[columnIndex];
+        // Start from the width actually on screen, not the stored one: the
+        // flexible column (minmax(width, 1fr)) is usually drawn wider than its
+        // stored minimum, and starting from that minimum left a dead zone where
+        // dragging did nothing until the pointer passed it.
+        const rendered = e.currentTarget.parentElement?.offsetWidth;
+        const startWidth = clamp(rendered || widths[columnIndex], min, max);
+        const previousCursor = document.body.style.cursor;
+        document.body.style.cursor = "col-resize";
         function onMove(ev: PointerEvent) {
           setWidths((prev) => {
             const next = [...prev];
@@ -135,13 +144,16 @@ export function ColumnResizeHandle({
           });
         }
         function onUp() {
+          document.body.style.cursor = previousCursor;
           window.removeEventListener("pointermove", onMove);
           window.removeEventListener("pointerup", onUp);
         }
         window.addEventListener("pointermove", onMove);
         window.addEventListener("pointerup", onUp);
       }}
-    />
+    >
+      <div className="my-1 w-px bg-border group-hover:w-0.5 group-hover:bg-primary/60 group-active:w-0.5 group-active:bg-primary" />
+    </div>
   );
 }
 

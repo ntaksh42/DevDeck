@@ -1,8 +1,9 @@
 import { useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode, RefObject } from "react";
 import { Trash2 } from "lucide-react";
 import type { AgentNote } from "@/lib/azdoCommands";
 import { focusPrimaryGrid } from "@/lib/utils";
+import { NoteThread } from "./NoteThread";
 import type { NoteAnchor } from "./types";
 
 // Lists the agent notes for one work item or PR and hosts the composer. Open notes
@@ -18,6 +19,7 @@ type Props = {
   activeId: string | null;
   pendingQuote: string | null;
   sending: boolean;
+  replying: boolean;
   error: string | null;
   composerRef: RefObject<HTMLTextAreaElement | null>;
   listRef: RefObject<HTMLDivElement | null>;
@@ -25,7 +27,10 @@ type Props = {
   onDelete: (id: string) => void;
   onClearQuote: () => void;
   onSend: (body: string) => Promise<boolean>;
+  onReply: (id: string, body: string) => Promise<boolean>;
   onCancel: () => void;
+  /** Extra control at the right of the header (e.g. open the result file). */
+  headerAction?: ReactNode;
 };
 
 function formatTime(value: string): string {
@@ -36,11 +41,38 @@ function formatTime(value: string): string {
 }
 
 export function AgentNotesPane({
-  folderName, open, done, hasResult, activeId, pendingQuote, sending, error,
-  composerRef, listRef, onReveal, onDelete, onClearQuote, onSend, onCancel,
+  folderName, open, done, hasResult, activeId, pendingQuote, sending, replying, error,
+  composerRef, listRef, onReveal, onDelete, onClearQuote, onSend, onReply, onCancel, headerAction,
 }: Props) {
   const [draft, setDraft] = useState("");
   const [focusedId, setFocusedId] = useState<string | null>(null);
+  // Reply threads start collapsed; `replyRequest` focuses one thread's reply box.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const [replyRequest, setReplyRequest] = useState({ id: "", n: 0 });
+
+  function setThreadOpen(id: string, value: boolean) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (value) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  function thread(note: AgentNote) {
+    return (
+      <NoteThread
+        note={note}
+        expanded={expanded.has(note.id)}
+        focusRequest={replyRequest.id === note.id ? replyRequest.n : 0}
+        sending={replying}
+        formatTime={formatTime}
+        onToggle={() => setThreadOpen(note.id, !expanded.has(note.id))}
+        onReply={(body) => onReply(note.id, body)}
+        onLeave={() => focusItem(note.id)}
+      />
+    );
+  }
   const ids = [...open.map((a) => a.note.id), ...done.map((n) => n.id)];
   const tabStopId = focusedId && ids.includes(focusedId) ? focusedId : ids[0];
 
@@ -64,6 +96,13 @@ export function AgentNotesPane({
     } else if (event.key === "Enter") {
       handled();
       onReveal(id);
+    } else if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+      handled();
+      setThreadOpen(id, event.key === "ArrowRight");
+    } else if (event.key === "r" || event.key === "R") {
+      handled();
+      setThreadOpen(id, true);
+      setReplyRequest((prev) => ({ id, n: prev.n + 1 }));
     } else if (event.key === "Delete" && open.some((a) => a.note.id === id)) {
       handled();
       focusItem(ids[index + 1] ?? ids[index - 1]);
@@ -106,6 +145,7 @@ export function AgentNotesPane({
         <span className="ml-auto truncate text-muted-foreground" title="Notes are saved as Markdown files for the investigating agent">
           .to-agent-msg/{folderName}/
         </span>
+        {headerAction}
       </div>
       <div
         ref={listRef}
@@ -162,6 +202,7 @@ export function AgentNotesPane({
                 }`}>{note.quote}</blockquote>
               ) : null}
               <p className="whitespace-pre-wrap break-words">{note.body}</p>
+              {thread(note)}
             </div>
           );
         })}
@@ -187,6 +228,7 @@ export function AgentNotesPane({
             {note.resolved ? (
               <p className="mt-1 whitespace-pre-wrap text-emerald-700 dark:text-emerald-400">{note.resolved}</p>
             ) : null}
+            {thread(note)}
           </div>
         ))}
       </div>

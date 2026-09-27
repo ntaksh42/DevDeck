@@ -10,15 +10,17 @@ import type {
   Organization,
   WorkItemPreview,
 } from "@/lib/azdoCommands";
-import { commentRichHtml, richFieldHtml } from "./workItemHtml";
+import { richFieldHtml } from "./workItemHtml";
 import { focusPrimaryGrid, formatRelativeDate, isEditableTarget } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
+import { readStoredJson, writeStoredJson } from "@/lib/storage";
+import { Columns2, Rows2 } from "lucide-react";
 import type { CustomPreviewField, PreviewFieldKey } from "./previewFieldsStorage";
 import { TitleEditor } from "./PreviewEditors";
 import { WorkItemStatePill, WorkItemTypeBadge } from "./WorkItemBadges";
 import { PreviewControl, PreviewField, PreviewSection, PreviewTagsField } from "./PreviewSection";
 import { RichHtmlFrame } from "./RichHtmlFrame";
-import { CollapsibleComment } from "./CollapsibleComment";
+import { WorkItemCommentsSection } from "./WorkItemCommentsSection";
 import { WorkItemHistorySection } from "./WorkItemHistorySection";
 import { FieldConfigMenu } from "./FieldConfigMenu";
 import { WorkItemLinksSection } from "./WorkItemLinksSection";
@@ -27,10 +29,14 @@ import {
   previewFieldValue,
   selectedPreviewFieldDefinitions,
   stopPreviewNavigationKeyDown,
-  VISIBLE_COMMENT_LIMIT,
 } from "./workItemPreviewHelpers";
 
 export { workItemStateDotClass, workItemTypeColor } from "./WorkItemBadges";
+
+/** Panel width (CSS px, before zoom) at which comments go beside the details by default. */
+const SIDE_BY_SIDE_MIN_WIDTH = 880;
+const COMMENTS_LAYOUT_KEY = "azdodeck:wiPreview:commentsLayout";
+type CommentsLayout = "auto" | "side" | "below";
 
 export function WorkItemPreviewDetails({
   customPreviewFields,
@@ -70,6 +76,7 @@ export function WorkItemPreviewDetails({
   titlePending,
   zoom,
   zoomControl,
+  composer,
 }: {
   customPreviewFields: CustomPreviewField[];
   preview: WorkItemPreview;
@@ -108,10 +115,40 @@ export function WorkItemPreviewDetails({
   titlePending: boolean;
   zoom: number;
   zoomControl?: ReactNode;
+  /** The new-comment box; follows the comments into the side column. */
+  composer?: ReactNode;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
-  const [showAllComments, setShowAllComments] = useState(false);
+  const outerRef = useRef<HTMLDivElement>(null);
+  // Comments (and the composer) either sit in a column beside the details or
+  // follow them below. Until the user picks one with the header toggle, wide
+  // panels go beside and narrow ones below.
+  const [wideEnough, setWideEnough] = useState(false);
+  const [commentsLayout, setCommentsLayout] = useState<CommentsLayout>(() =>
+    readStoredJson<CommentsLayout>(
+      COMMENTS_LAYOUT_KEY,
+      (raw) => (raw === "side" || raw === "below" ? raw : undefined),
+      "auto",
+    ),
+  );
+  const sideBySide = commentsLayout === "side" || (commentsLayout === "auto" && wideEnough);
+
+  function toggleCommentsLayout() {
+    const next = sideBySide ? "below" : "side";
+    setCommentsLayout(next);
+    writeStoredJson(COMMENTS_LAYOUT_KEY, next);
+  }
+
+  useEffect(() => {
+    const el = outerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => {
+      setWideEnough(entry.contentRect.width >= SIDE_BY_SIDE_MIN_WIDTH);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // The lightbox opens from a click inside a sandboxed comment/description
   // iframe, so focus lives in that frame; close on Escape and hand focus back to
@@ -132,26 +169,41 @@ export function WorkItemPreviewDetails({
     return () => document.removeEventListener("keydown", handleKeyDown, true);
   }, [lightboxSrc]);
 
-  useEffect(() => {
-    setShowAllComments(false);
-  }, [preview.id]);
-
-  const visibleComments = showAllComments
-    ? preview.comments
-    : preview.comments.slice(0, VISIBLE_COMMENT_LIMIT);
-  const hiddenCommentCount = preview.comments.length - visibleComments.length;
+  const comments = (
+    <WorkItemCommentsSection
+      className={sideBySide ? "" : "mt-2"}
+      preview={preview}
+      deleteCommentError={deleteCommentError}
+      editCommentError={editCommentError}
+      deletingCommentId={deletingCommentId}
+      editingCommentId={editingCommentId}
+      editPending={editPending}
+      deletePending={deletePending}
+      mentionDisplayNames={mentionDisplayNames}
+      recentMentionOptions={recentMentionOptions}
+      mentionPriorityNames={mentionPriorityNames}
+      selfOrg={selfOrg}
+      onMentionApplied={onMentionApplied}
+      onDeleteComment={onDeleteComment}
+      onEditComment={onEditComment}
+      onToggleCommentReaction={onToggleCommentReaction}
+      reactionPendingCommentId={reactionPendingCommentId}
+      resolveImageSource={resolveImageSource}
+      onImageOpen={setLightboxSrc}
+    />
+  );
   const descriptionHtml = richFieldHtml(preview.descriptionHtml);
   const acceptanceCriteriaHtml = richFieldHtml(preview.acceptanceCriteriaHtml);
   const selectedFieldDefinitions = selectedPreviewFieldDefinitions(selectedFieldKeys);
 
-  return (
+  const details = (
     <div
       ref={rootRef}
       aria-keyshortcuts="Control+P"
       aria-label="Work item preview"
       className="min-h-0 flex-1 overflow-auto bg-card px-2.5 pb-2 pt-1.5 text-xs outline-none focus:bg-primary/[0.02]"
       data-primary-preview="true"
-      style={{ zoom }}
+      style={sideBySide ? undefined : { zoom }}
       onKeyDown={(event) => {
         // ← steps back to the grid (mirrors the grid's → into the preview).
         if (
@@ -171,7 +223,7 @@ export function WorkItemPreviewDetails({
       tabIndex={-1}
     >
       <div className="border-b-2 border-border pb-1.5">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
           <div className="flex min-w-0 items-center gap-1.5">
             <span className="shrink-0 font-mono text-[11px] font-bold leading-5 text-slate-600 dark:text-slate-300">
               #{preview.id}
@@ -201,6 +253,20 @@ export function WorkItemPreviewDetails({
             {actionsControl}
             {presetsControl}
             {zoomControl}
+            <button
+              type="button"
+              onClick={toggleCommentsLayout}
+              aria-pressed={sideBySide}
+              aria-label={sideBySide ? "Show comments below the details" : "Show comments beside the details"}
+              title={sideBySide ? "Show comments below the details" : "Show comments beside the details"}
+              className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              {sideBySide ? (
+                <Rows2 className="h-3.5 w-3.5" aria-hidden="true" />
+              ) : (
+                <Columns2 className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+            </button>
             <FieldConfigMenu
               organizationId={preview.organizationId}
               projectId={preview.projectId}
@@ -306,86 +372,7 @@ export function WorkItemPreviewDetails({
         </div>
       )}
 
-      {preview.comments.length > 0 ? (
-        <PreviewSection
-          accentColor="border-l-slate-400 dark:border-l-slate-500"
-          className="mt-2"
-          collapseId="comments"
-          title={`Comments (${preview.comments.length})`}
-        >
-          {deleteCommentError ? (
-            <p className="mb-1 text-[11px] leading-4 text-destructive">
-              {deleteCommentError}
-            </p>
-          ) : null}
-          {editCommentError ? (
-            <p className="mb-1 text-[11px] leading-4 text-destructive">
-              {editCommentError}
-            </p>
-          ) : null}
-          <div className="space-y-1">
-            {visibleComments.map((comment) => {
-              const deleting = deletingCommentId === comment.id;
-              const editing = editingCommentId === comment.id;
-              return (
-                <CollapsibleComment
-                  baseUrl={preview.webUrl}
-                  commentHtml={commentRichHtml(
-                    comment.renderedText,
-                    comment.text,
-                    mentionDisplayNames,
-                  )}
-                  commentText={comment.text}
-                  createdBy={comment.createdBy}
-                  createdDate={comment.createdDate}
-                  deleting={deleting}
-                  deletePending={deletePending}
-                  editing={editing}
-                  editPending={editPending}
-                  id={comment.id}
-                  key={comment.id}
-                  mentionScope={{
-                    organizationId: preview.organizationId,
-                    projectId: preview.projectId,
-                    id: preview.id,
-                  }}
-                  recentMentionOptions={recentMentionOptions}
-                  mentionPriorityNames={mentionPriorityNames}
-                  selfOrg={selfOrg}
-                  onMentionApplied={onMentionApplied}
-                  onDelete={onDeleteComment}
-                  onEdit={onEditComment}
-                  onImageOpen={setLightboxSrc}
-                  reactions={comment.reactions ?? []}
-                  onToggleReaction={onToggleCommentReaction}
-                  reactionPending={reactionPendingCommentId === comment.id}
-                  resolveImageSource={resolveImageSource}
-                />
-              );
-            })}
-            {hiddenCommentCount > 0 ? (
-              <button
-                type="button"
-                onClick={() => setShowAllComments(true)}
-                className="w-full rounded border border-dashed border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
-              >
-                Show {hiddenCommentCount} older comment{hiddenCommentCount === 1 ? "" : "s"}
-              </button>
-            ) : null}
-          </div>
-        </PreviewSection>
-      ) : preview.commentsUnavailable ? (
-        <PreviewSection
-          accentColor="border-l-slate-400 dark:border-l-slate-500"
-          className="mt-2"
-          collapseId="comments"
-          title="Comments"
-        >
-          <p className="text-[11px] leading-4 text-destructive">
-            Comments could not be loaded. Try refreshing.
-          </p>
-        </PreviewSection>
-      ) : null}
+      {sideBySide ? null : comments}
 
       <WorkItemLinksSection preview={preview} />
 
@@ -476,6 +463,31 @@ export function WorkItemPreviewDetails({
           />
         </button>
       ) : null}
+    </div>
+  );
+
+  return (
+    <div ref={outerRef} className="flex min-h-0 flex-1 flex-col">
+      {sideBySide ? (
+        <div className="flex min-h-0 flex-1" style={{ zoom }}>
+          {details}
+          <div className="flex w-[42%] min-w-48 max-w-xl shrink-0 flex-col border-l border-border bg-card text-xs">
+            <div className="min-h-0 flex-1 overflow-auto px-2 pb-2 pt-1.5">
+              {preview.comments.length > 0 || preview.commentsUnavailable ? (
+                comments
+              ) : (
+                <p className="px-1 py-2 text-muted-foreground">No comments yet.</p>
+              )}
+            </div>
+            {composer}
+          </div>
+        </div>
+      ) : (
+        <>
+          {details}
+          {composer}
+        </>
+      )}
     </div>
   );
 }

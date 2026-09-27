@@ -54,6 +54,17 @@ export function createWiKeyHandler(deps: WiKeyHandlerDeps): (e: React.KeyboardEv
       setOpenPriorityRequest, setOpenFieldRequest, handleCheckboxChange, clearCheckedIds,
       selectRangeTo,
     } = deps;
+    // Keys typed in the preview bubble up here too. Leave Enter/Space on a
+    // button or link to the browser so it activates the control (e.g. the
+    // preview header's zoom or layout toggle) instead of refocusing the preview.
+    if (
+      (e.key === "Enter" || e.key === " ") &&
+      !e.ctrlKey && !e.metaKey && !e.altKey &&
+      e.target instanceof Element &&
+      e.target.closest("button, a[href], [role='button']")
+    ) {
+      return;
+    }
     if (isEditableTarget(e.target)) {
       if (e.key === "Escape") {
         e.preventDefault();

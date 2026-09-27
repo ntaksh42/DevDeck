@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use chrono::Utc;
 
+use crate::agent_notes::{ensure_guide, NoteTarget};
+
 use crate::db::{
     AppDatabase, AppSettings, NotificationRule, DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
     DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS, REVIEW_STALE_THRESHOLD_DAY_OPTIONS,
@@ -100,7 +102,20 @@ impl SettingsService {
     }
 
     pub fn update_normalized(&self, settings: AppSettings) -> Result<AppSettings> {
-        self.db.update_app_settings(settings)
+        let saved = self.db.update_app_settings(settings)?;
+        // Best effort: a folder that cannot take the guide must not block
+        // saving the rest of the settings.
+        for (folder, target) in [
+            (&saved.work_item_result_folder_path, NoteTarget::WorkItem),
+            (&saved.review_result_folder_path, NoteTarget::PullRequest),
+        ] {
+            if let Some(folder) = folder {
+                if let Err(err) = ensure_guide(Path::new(folder), target) {
+                    tracing::warn!(%folder, error = %err, "could not place agent notes guide");
+                }
+            }
+        }
+        Ok(saved)
     }
 
     /// Writes a diagnostic report next to the review results, since that folder

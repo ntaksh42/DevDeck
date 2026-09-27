@@ -16,6 +16,10 @@ use serde::{Deserialize, Serialize};
 use crate::db::AppDatabase;
 use crate::error::{AppError, Result};
 
+#[path = "agent_notes_replies.rs"]
+mod replies;
+pub use replies::{NoteReply, ReplyAgentNoteInput};
+
 const NOTES_DIR: &str = ".to-agent-msg";
 const DONE_DIR: &str = "_done";
 const MAX_BODY_CHARS: usize = 20_000;
@@ -88,6 +92,8 @@ pub struct AgentNote {
     pub result_file: Option<String>,
     /// What the agent reported when it handled the note.
     pub resolved: Option<String>,
+    /// Agent and user replies appended after the body, oldest first.
+    pub replies: Vec<NoteReply>,
     pub file_path: String,
 }
 
@@ -127,6 +133,16 @@ impl AgentNoteService {
         delete_note(&folder, input.target, input.item_id, &input.note_id)
     }
 
+    pub fn reply(&self, input: ReplyAgentNoteInput) -> Result<AgentNote> {
+        validate_id(input.item_id)?;
+        let folder = self.result_folder(input.target)?.ok_or_else(|| {
+            AppError::InvalidInput(
+                "Set a result folder in Settings to reply to agent notes".to_string(),
+            )
+        })?;
+        replies::reply_note(&folder, input, Local::now())
+    }
+
     /// Work item notes live beside the investigation results, pull request
     /// notes beside the review results.
     fn result_folder(&self, target: NoteTarget) -> Result<Option<PathBuf>> {
@@ -147,6 +163,29 @@ impl AgentNoteService {
         }
         Ok(Some(folder))
     }
+}
+
+const GUIDE_FILE: &str = "AGENTS.md";
+
+/// Places the agent-facing instructions for notes in a result folder, so an
+/// agent working there can find them without knowing DevDeck. An existing
+/// `AGENTS.md` is left alone: the user may have edited or written their own.
+pub(crate) fn ensure_guide(folder: &Path, target: NoteTarget) -> Result<()> {
+    let path = folder.join(GUIDE_FILE);
+    if !folder.is_dir() || path.exists() {
+        return Ok(());
+    }
+    let (kind, report, keep) = match target {
+        NoteTarget::WorkItem => ("調査", "WI にコメントとして追記する", "WI のフィールド"),
+        NoteTarget::PullRequest => ("レビュー", "PR にコメントとして投稿する", "投票"),
+    };
+    let guide = include_str!("agent_notes_guide.md")
+        .replace("{kind}", kind)
+        .replace("{prefix}", target.dir_prefix())
+        .replace("{report}", report)
+        .replace("{keep}", keep);
+    fs::write(path, guide)?;
+    Ok(())
 }
 
 fn validate_id(item_id: i64) -> Result<()> {
@@ -206,8 +245,14 @@ fn read_notes_in(dir: &Path, status: &str) -> Result<Vec<AgentNote>> {
     Ok(notes)
 }
 
-fn parse_note(path: &Path, status: &str, text: &str, modified: Option<String>) -> AgentNote {
+pub(crate) fn parse_note(
+    path: &Path,
+    status: &str,
+    text: &str,
+    modified: Option<String>,
+) -> AgentNote {
     let (fields, body) = split_front_matter(text);
+    let (body, replies) = replies::split_replies(body);
     let get = |key: &str| {
         fields
             .iter()
@@ -223,12 +268,13 @@ fn parse_note(path: &Path, status: &str, text: &str, modified: Option<String>) -
             .to_string(),
         status: status.to_string(),
         created_at: get("created").or(modified).unwrap_or_default(),
-        body: body.trim().to_string(),
+        body,
         quote: get("quote"),
         quote_prefix: get("quote_prefix"),
         quote_suffix: get("quote_suffix"),
         result_file: get("result_file"),
         resolved: get("resolved"),
+        replies,
         file_path: path.display().to_string(),
     }
 }
@@ -344,6 +390,7 @@ pub(crate) fn create_note(
         quote_suffix,
         result_file,
         resolved: None,
+        replies: Vec::new(),
         file_path: path.display().to_string(),
     })
 }
@@ -355,6 +402,16 @@ pub(crate) fn delete_note(
     item_id: i64,
     note_id: &str,
 ) -> Result<()> {
+    validate_note_id(note_id)?;
+    let path = notes_dir(folder, target, item_id).join(note_id);
+    if path.is_file() {
+        fs::remove_file(path)?;
+    }
+    Ok(())
+}
+
+/// Note ids are bare file names; reject anything that could leave the folder.
+fn validate_note_id(note_id: &str) -> Result<()> {
     let is_plain_name = !note_id.is_empty()
         && !note_id.contains(['/', '\\', ':'])
         && note_id != "."
@@ -364,10 +421,6 @@ pub(crate) fn delete_note(
         return Err(AppError::InvalidInput(format!(
             "invalid note id: {note_id}"
         )));
-    }
-    let path = notes_dir(folder, target, item_id).join(note_id);
-    if path.is_file() {
-        fs::remove_file(path)?;
     }
     Ok(())
 }

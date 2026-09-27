@@ -8,6 +8,12 @@ import { invokeCommand } from "./runtime";
 
 export type AgentNoteTarget = "work-item" | "pull-request";
 
+const noteReplySchema = z.object({
+  author: z.string(),
+  createdAt: z.string(),
+  body: z.string(),
+});
+
 const agentNoteSchema = z.object({
   id: z.string(),
   status: z.enum(["open", "done"]),
@@ -18,6 +24,7 @@ const agentNoteSchema = z.object({
   quoteSuffix: z.string().nullable(),
   resultFile: z.string().nullable(),
   resolved: z.string().nullable(),
+  replies: z.array(noteReplySchema),
   filePath: z.string(),
 });
 
@@ -47,4 +54,12 @@ export async function deleteAgentNote(
   input: AgentNoteItem & { noteId: string },
 ): Promise<void> {
   await invokeCommand("delete_agent_note", { input });
+}
+
+export type ReplyAgentNoteInput = AgentNoteItem & { noteId: string; body: string };
+
+/** Appends the user's reply to a note's thread; a done note is reopened. */
+export async function replyAgentNote(input: ReplyAgentNoteInput): Promise<AgentNote> {
+  const result = await invokeCommand("reply_agent_note", { input });
+  return agentNoteSchema.parse(result);
 }

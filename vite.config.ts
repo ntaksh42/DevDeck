@@ -41,10 +41,17 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
-      // 3. tell Vite to ignore watching `src-tauri`, and `.claude` so sibling
-      //    agent worktrees building under `.claude/worktrees/**` don't trigger
-      //    endless HMR full-page reloads in this dev server.
-      ignored: ["**/src-tauri/**", "**/.claude/**", "**/.worktrees/**"],
+      // 3. tell Vite to ignore watching `src-tauri`, and the worktree folders
+      //    under this checkout so sibling agent worktrees don't trigger endless
+      //    HMR full-page reloads in this dev server. Anchored to this
+      //    checkout's root: a `**/.worktrees/**` glob also matched the dev
+      //    server's own files when it runs from inside a worktree, so edits
+      //    there were never picked up.
+      ignored: [
+        "**/src-tauri/**",
+        `${path.resolve(__dirname, ".claude").replace(/\\/g, "/")}/**`,
+        `${path.resolve(__dirname, ".worktrees").replace(/\\/g, "/")}/**`,
+      ],
     },
   },
   test: {

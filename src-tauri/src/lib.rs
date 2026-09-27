@@ -155,6 +155,7 @@ pub fn run() {
             commands::agent_notes::list_agent_notes,
             commands::agent_notes::create_agent_note,
             commands::agent_notes::delete_agent_note,
+            commands::agent_notes::reply_agent_note,
             commands::settings::list_sync_states,
             commands::settings::export_diagnostics,
             commands::snooze::snooze_item,
