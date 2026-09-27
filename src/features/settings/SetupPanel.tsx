@@ -104,7 +104,7 @@ export function SetupPanel({ compact = false }: { compact?: boolean }) {
         </div>
       </div>
 
-      <form className="grid gap-3 p-3" onSubmit={onSubmit}>
+      <form className="grid max-w-xl gap-3 p-3" onSubmit={onSubmit}>
         <div
           role="radiogroup"
           aria-label="Platform"

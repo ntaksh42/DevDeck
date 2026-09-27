@@ -101,30 +101,25 @@ export function ColumnResizeHandle({
   setWidths,
   min,
   max,
-  defaultWidth,
+  onAutoFit,
 }: {
   columnIndex: number;
   widths: number[];
   setWidths: Dispatch<SetStateAction<number[]>>;
   min: number;
   max: number;
-  /** Width restored on double-click. Reset is disabled when omitted. */
+  /** Kept for callers spreading ColumnResizeProps; unused by the handle. */
   defaultWidth?: number;
+  /** Fits the column to its content on double-click. */
+  onAutoFit?: () => void;
 }) {
   return (
     <div
-      title="Drag to resize · double-click to reset this column to its default width"
+      title="Drag to resize · double-click to fit this column to its content"
       // A wider grab strip than the faint divider it draws, so the edge is easy
       // to find; the divider darkens on hover/drag.
       className="group absolute -right-1 top-0 bottom-0 z-10 flex w-2.5 cursor-col-resize justify-center"
-      onDoubleClick={() => {
-        if (defaultWidth === undefined) return;
-        setWidths((prev) => {
-          const next = [...prev];
-          next[columnIndex] = clamp(defaultWidth, min, max);
-          return next;
-        });
-      }}
+      onDoubleClick={onAutoFit}
       onPointerDown={(e) => {
         e.preventDefault();
         const startX = e.clientX;

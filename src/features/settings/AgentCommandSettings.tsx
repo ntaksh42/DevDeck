@@ -48,7 +48,7 @@ export function AgentCommandSettings() {
         </div>
       </div>
 
-      <form className="grid gap-3 p-3" onSubmit={onSubmit}>
+      <form className="grid max-w-xl gap-3 p-3" onSubmit={onSubmit}>
         <label className="grid gap-2">
           <span className="text-sm font-medium">Command</span>
           <input

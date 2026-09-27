@@ -133,7 +133,7 @@ export function AnalyzeView() {
     : undefined;
 
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-[14rem_1fr] overflow-hidden">
+    <div className="grid min-h-0 flex-1 grid-cols-[14rem_1fr] gap-3 overflow-hidden">
       <AnalyzeGroupList
         groups={groups}
         selectedId={selectedId}

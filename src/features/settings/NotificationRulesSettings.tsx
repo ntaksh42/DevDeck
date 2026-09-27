@@ -177,7 +177,7 @@ export function NotificationRulesSettings() {
                 </div>
               </fieldset>
 
-              <label className="grid gap-1">
+              <label className="grid max-w-xl gap-1">
                 <span className="text-xs font-medium text-muted-foreground">
                   Projects (comma separated; any if blank)
                 </span>
@@ -191,7 +191,7 @@ export function NotificationRulesSettings() {
                 />
               </label>
 
-              <label className="grid gap-1">
+              <label className="grid max-w-xl gap-1">
                 <span className="text-xs font-medium text-muted-foreground">
                   Repositories (comma separated; pull requests only)
                 </span>

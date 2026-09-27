@@ -14,6 +14,7 @@ import { PreviewZoomControls } from "@/components/PreviewZoomControls";
 import { CommitFilesPanel } from "./CommitFilesPanel";
 import { PR_STATUS_LABELS } from "./commitSearchConstants";
 import { commitPrQueryKey, prStatusBadgeClass } from "./commitSearchUtils";
+import { PreviewEmptyState, SELECT_EMPTY_HINT } from "@/components/StateDisplay";
 
 // Lists the PRs that contain the selected commit. This is the query that
 // actually fetches; the grid indicator reads the same cache passively. Renders
@@ -229,9 +230,7 @@ export function CommitPreviewPanel({
             />
           </>
         ) : (
-          <div className="flex h-full items-center justify-center px-3 text-sm text-muted-foreground">
-            Select a commit.
-          </div>
+          <PreviewEmptyState message="Select a commit." hint={SELECT_EMPTY_HINT} />
         )}
       </div>
     </aside>

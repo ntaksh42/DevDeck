@@ -11,7 +11,7 @@ import {
 } from "@/lib/azdoCommands";
 import { focusPrimaryGrid, isEditableTarget } from "@/lib/utils";
 import { usePreviewZoom } from "@/lib/usePreviewZoom";
-import { LoadingState, PreviewEmptyState } from "@/components/StateDisplay";
+import { LoadingState, PreviewEmptyState, SELECT_EMPTY_HINT } from "@/components/StateDisplay";
 import type { DockablePanelSpec } from "@/components/DockableWorkspace";
 import { PrReviewHeader } from "./PrReviewHeader";
 import { ReviewTab } from "./PrReviewTabContents";
@@ -133,7 +133,7 @@ export function usePrReviewPanels({
     }
   }
 
-  const noPrSelected = <PreviewEmptyState message="Select a pull request." />;
+  const noPrSelected = <PreviewEmptyState message="Select a pull request." hint={SELECT_EMPTY_HINT} />;
 
   // Each tab gets its own copy of the header/error banner/fetching row, since
   // a dockview panel's content is now self-contained (the tab may end up

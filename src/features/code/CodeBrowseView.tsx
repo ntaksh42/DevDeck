@@ -345,7 +345,7 @@ export function CodeBrowseView() {
     : [];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="grid gap-2 sm:grid-cols-[minmax(220px,1fr)_minmax(180px,280px)]">
         <div className="flex items-center gap-1">
           <div className="min-w-0 flex-1">
@@ -384,8 +384,8 @@ export function CodeBrowseView() {
       </div>
 
       {!repo ? (
-        <div className="flex flex-1 items-center justify-center rounded-md border border-border bg-card text-sm text-muted-foreground">
-          Select a repository to browse its files.
+        <div className="flex flex-1 rounded-md border border-border bg-card">
+          <PreviewEmptyState message="Select a repository to browse its files." />
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 overflow-hidden rounded-md border border-border bg-card">

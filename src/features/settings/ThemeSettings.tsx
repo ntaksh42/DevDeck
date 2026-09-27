@@ -63,7 +63,7 @@ export function ThemeSettings() {
                 onClick={() => selectTheme(value)}
                 className={`inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-sm font-medium ${
                   selected
-                    ? "bg-card text-foreground shadow-sm"
+                    ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >

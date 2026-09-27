@@ -10,7 +10,7 @@ import {
   type WorkItemSummary,
 } from '@/lib/azdoCommands';
 import { fetchWorkItemImageCached } from '@/lib/workItemImageCache';
-import { PreviewEmptyState } from '@/components/StateDisplay';
+import { PreviewEmptyState, SELECT_EMPTY_HINT } from '@/components/StateDisplay';
 import {
   loadPreviewFieldKeys,
   storePreviewFieldKeys,
@@ -244,7 +244,7 @@ export function WorkItemPreviewPanel({
       onKeyDown={handlePreviewPanelKeyDown}
     >
       {!selectedItem ? (
-        <PreviewEmptyState message="Select a work item." />
+        <PreviewEmptyState message="Select a work item." hint={SELECT_EMPTY_HINT} />
       ) : (
         <>
           {previewError ? (

@@ -28,7 +28,7 @@ export function NavButton({
       data-nav-item="true"
       data-nav-active={active ? "true" : undefined}
       data-nav-label={label}
-      className={`group flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2.5 text-left text-sm font-medium outline-none focus:ring-2 focus:ring-ring ${
+      className={`group flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2.5 text-left text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring ${
         active ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-secondary"
       } disabled:cursor-not-allowed disabled:opacity-50`}
     >
@@ -67,7 +67,7 @@ export function NavSection({
         data-section-id={id}
         data-nav-label={label}
         onClick={() => onExpandedChange?.(!expanded)}
-        className="group flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2.5 text-left text-sm font-semibold text-foreground outline-none hover:bg-secondary focus:ring-2 focus:ring-ring disabled:cursor-not-allowed"
+        className="group flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2.5 text-left text-sm font-semibold text-foreground outline-none hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
       >
         <span className="shrink-0">{icon}</span>
         <span className="min-w-0 truncate">{label}</span>
@@ -128,7 +128,7 @@ export function NavSubItem({
       data-nav-item="true"
       data-nav-active={active ? "true" : undefined}
       data-nav-label={label}
-      className={`group flex h-7 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm outline-none focus:ring-2 focus:ring-ring ${
+      className={`group flex h-7 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring ${
         active ? "bg-secondary font-medium text-foreground" : "text-muted-foreground hover:bg-secondary"
       } disabled:cursor-not-allowed disabled:opacity-50`}
     >
@@ -177,7 +177,7 @@ export function NavSubGroup({
           data-nav-label={label}
           data-nav-subgroup={expandable ? "true" : undefined}
           data-subgroup-id={id}
-          className={`group flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-sm outline-none focus:ring-2 focus:ring-ring ${
+          className={`group flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring ${
             active ? "bg-secondary font-medium text-foreground" : "text-muted-foreground hover:bg-secondary"
           } disabled:cursor-not-allowed disabled:opacity-50`}
         >
@@ -191,7 +191,7 @@ export function NavSubGroup({
             onClick={onToggle}
             aria-label={`${expanded ? "Collapse" : "Expand"} ${label}`}
             aria-expanded={expanded}
-            className="flex h-7 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-secondary focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-7 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
           >
             {expanded ? (
               <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />

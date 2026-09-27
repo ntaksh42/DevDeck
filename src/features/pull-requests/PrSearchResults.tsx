@@ -17,7 +17,7 @@ import { openExternalUrl } from '@/lib/openExternal';
 import { recordRecentPullRequest } from '@/lib/recentItems';
 import { ColumnResizeHandle } from '@/components/ResizeHandle';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
-import { LoadingState } from '@/components/StateDisplay';
+import { LoadingState, PreviewEmptyState, SEARCH_EMPTY_HINT } from '@/components/StateDisplay';
 import { ActiveFilters } from '@/components/ActiveFilters';
 import { ColumnFilterDropdown } from '@/components/ColumnFilterDropdown';
 import {
@@ -81,6 +81,8 @@ export function PullRequestResults({
   const {
     template: columnTemplate,
     minWidth: gridMinWidth,
+    resetWidths: resetColumnWidths,
+    gridRef,
     resizeProps: columnResizeProps,
   } = useGridColumns({
     keys: PR_SEARCH_KEYS,
@@ -329,9 +331,7 @@ export function PullRequestResults({
   const gridPane = (
       <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card">
       {!searched && !loading ? (
-        <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-          Run a search to load pull requests.
-        </div>
+        <PreviewEmptyState message="Run a search to load pull requests." hint={SEARCH_EMPTY_HINT} />
       ) : results.length === 0 && !loading ? (
         <div className="px-3 py-6 text-center text-sm text-muted-foreground">
           No pull requests matched.
@@ -346,7 +346,7 @@ export function PullRequestResults({
           onKeyDown={handleKeyDown}
         >
           <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
-          <div style={{ minWidth: gridMinWidth }}>
+          <div ref={gridRef} style={{ minWidth: gridMinWidth }}>
           <div
             role="row"
             className="grid border-b border-border bg-muted/40 px-2 py-1 text-xs font-medium text-muted-foreground"
@@ -477,6 +477,7 @@ export function PullRequestResults({
           requiredColumns={PR_SEARCH_REQUIRED_COLUMNS}
           onToggle={toggleColumn}
           onReset={resetColumns}
+          onAutoFitWidths={resetColumnWidths}
           onClose={() => setColumnMenuRect(null)}
         />
       ) : null}

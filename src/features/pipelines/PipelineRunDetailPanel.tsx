@@ -21,6 +21,7 @@ import {
   runToneClasses,
   shortBranch,
 } from "./pipelineStatus";
+import { PreviewEmptyState, SELECT_EMPTY_HINT } from "@/components/StateDisplay";
 
 const LOG_REFRESH_INTERVAL_MS = 15_000;
 
@@ -251,9 +252,7 @@ export function PipelineRunDetailPanel({
         tabIndex={-1}
       >
         {buildId == null ? (
-          <div className="flex h-full items-center justify-center px-3 text-sm text-muted-foreground">
-            Select a run.
-          </div>
+          <PreviewEmptyState message="Select a run." hint={SELECT_EMPTY_HINT} />
         ) : runQuery.isLoading ? (
           <div className="flex h-full items-center justify-center gap-2 px-3 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Loading run…

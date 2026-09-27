@@ -128,3 +128,16 @@ describe("buildRichHtmlDocument sanitization", () => {
     expect(body).toContain('referrerpolicy="no-referrer"');
   });
 });
+
+describe("buildRichHtmlDocument theming", () => {
+  it("defaults to a light, opaque background", () => {
+    const doc = buildRichHtmlDocument("<p>Hi</p>");
+    expect(doc).toContain("background: #fff;");
+  });
+
+  it("renders a transparent background and light text in dark theme", () => {
+    const doc = buildRichHtmlDocument("<p>Hi</p>", "compact", "dark");
+    expect(doc).toContain("background: transparent;");
+    expect(doc).toContain("color: #f8fafc;");
+  });
+});

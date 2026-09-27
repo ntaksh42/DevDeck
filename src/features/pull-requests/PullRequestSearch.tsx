@@ -5,7 +5,7 @@ import {
   useState,
 } from 'react';
 import { useMutation, useQueries, useQuery } from '@tanstack/react-query';
-import { Info, Loader2, Search } from 'lucide-react';
+import { Info } from 'lucide-react';
 import {
   searchPullRequests,
   listCommitRepositories,
@@ -18,6 +18,15 @@ import { useActiveOrganizationId } from '@/lib/useActiveConnection';
 import { handleSearchInputEscape } from '@/lib/utils';
 import { ErrorState } from '@/components/StateDisplay';
 import { MultiSelectFilter } from '@/components/MultiSelectFilter';
+import {
+  FilterField,
+  FiltersToggle,
+  NativeSelect,
+  SearchInput,
+  SearchSubmitButton,
+  filterInputClass,
+  searchBarRowClass,
+} from '@/components/SearchBar';
 import { PullRequestResults } from './PrSearchResults';
 import {
   PR_SEARCH_STATUS_OPTIONS,
@@ -39,6 +48,9 @@ import {
 // results array changes.
 const NO_RESULTS: PullRequestSummary[] = [];
 
+const PR_SEARCH_NOTE =
+  "Active pull requests are served from the local cache. Completed and abandoned pull requests are fetched live from Azure DevOps, so those statuses may take a moment. Target branch and the date window narrow the live query server-side. Select a repository to get target-branch suggestions.";
+
 export function PullRequestSearch({
   externalSearch,
   onExternalSearchHandled,
@@ -58,6 +70,7 @@ export function PullRequestSearch({
   const [dateBasis, setDateBasis] = useState<PrSearchDateBasis>(loadPrSearchDateBasis);
   const [sortBy, setSortBy] = useState<PrSearchSortBy>(loadPrSearchSortBy);
   const [excludeDrafts, setExcludeDrafts] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const repositoriesQuery = useQuery({
     queryKey: ["prRepositories", organizationId],
@@ -127,6 +140,11 @@ export function PullRequestSearch({
     (query.trim() ? 1 : 0) +
     (projectIds.length > 0 ? 1 : 0) +
     (repositoryIds.length > 0 ? 1 : 0) +
+    (targetBranches.length > 0 ? 1 : 0) +
+    (fromDate ? 1 : 0) +
+    (toDate ? 1 : 0) +
+    (excludeDrafts ? 1 : 0);
+  const advancedFilterCount =
     (targetBranches.length > 0 ? 1 : 0) +
     (fromDate ? 1 : 0) +
     (toDate ? 1 : 0) +
@@ -214,86 +232,72 @@ export function PullRequestSearch({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="shrink-0 rounded-md border border-border bg-card">
-        <form className="grid gap-2 px-3 py-2" onSubmit={onSubmit}>
-          <div className="grid gap-2 lg:grid-cols-[1fr_140px_160px_200px_auto]">
-            <label className="grid gap-0.5">
-              <span className="text-[11px] font-medium text-muted-foreground">Search</span>
-              <div className="flex h-8 items-center rounded-md border border-input bg-background px-3 focus-within:ring-2 focus-within:ring-ring">
-                <Search className="mr-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={handleSearchInputEscape}
-                  placeholder="title, author, branch…"
-                  autoFocus
-                  className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-                />
-              </div>
-            </label>
-
-            <div className="grid gap-0.5">
-              <span className="text-[11px] font-medium text-muted-foreground" id="pr-search-status-label">Status</span>
-              <MultiSelectFilter
-                className="h-8"
-                options={PR_SEARCH_STATUS_OPTIONS}
-                selected={statuses}
-                onChange={(next) => setStatuses(next as PrSearchStatus[])}
-                placeholder="Active"
-                ariaLabel="Filter by status"
-                capitalize
-              />
-            </div>
-
-            <div className="grid gap-0.5">
-              <span className="text-[11px] font-medium text-muted-foreground">Project</span>
-              <MultiSelectFilter
-                className="h-8"
-                options={projects.map((p) => ({ value: p.id, label: p.name }))}
-                selected={projectIds}
-                onChange={onProjectsChange}
-                placeholder="All projects"
-                ariaLabel="Filter by project"
-                searchable
-                disabled={repositoriesQuery.isLoading}
-              />
-            </div>
-
-            <div className="grid gap-0.5">
-              <span className="text-[11px] font-medium text-muted-foreground">Repository</span>
-              <MultiSelectFilter
-                className="h-8"
-                options={filteredRepositories.map((r) => ({
-                  value: r.repositoryId,
-                  label: r.repositoryName,
-                }))}
-                selected={repositoryIds}
-                onChange={setRepositoryIds}
-                placeholder="All repositories"
-                ariaLabel="Filter by repository"
-                searchable
-                disabled={repositoriesQuery.isLoading}
-              />
-            </div>
-
-            <div className="flex items-end">
-              <button
-                type="submit"
-                disabled={mutation.isPending || !organizationId}
-                className="inline-flex h-8 w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
-              >
-                {mutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <Search className="h-4 w-4" aria-hidden="true" />
-                )}
-                Search
-              </button>
-            </div>
+      <form className="grid shrink-0 gap-2" onSubmit={onSubmit}>
+        <div className={searchBarRowClass}>
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            onKeyDown={handleSearchInputEscape}
+            placeholder="title, author, branch…"
+            autoFocus
+          />
+          <div className="w-36">
+            <MultiSelectFilter
+              className="h-8"
+              options={PR_SEARCH_STATUS_OPTIONS}
+              selected={statuses}
+              onChange={(next) => setStatuses(next as PrSearchStatus[])}
+              placeholder="Active"
+              ariaLabel="Filter by status"
+              capitalize
+            />
           </div>
+          <div className="w-44">
+            <MultiSelectFilter
+              className="h-8"
+              options={projects.map((p) => ({ value: p.id, label: p.name }))}
+              selected={projectIds}
+              onChange={onProjectsChange}
+              placeholder="All projects"
+              ariaLabel="Filter by project"
+              searchable
+              disabled={repositoriesQuery.isLoading}
+            />
+          </div>
+          <div className="w-52">
+            <MultiSelectFilter
+              className="h-8"
+              options={filteredRepositories.map((r) => ({
+                value: r.repositoryId,
+                label: r.repositoryName,
+              }))}
+              selected={repositoryIds}
+              onChange={setRepositoryIds}
+              placeholder="All repositories"
+              ariaLabel="Filter by repository"
+              searchable
+              disabled={repositoriesQuery.isLoading}
+            />
+          </div>
+          <FiltersToggle
+            open={filtersOpen}
+            onToggle={() => setFiltersOpen((open) => !open)}
+            count={advancedFilterCount}
+            controls="pr-search-advanced-filters"
+          />
+          <SearchSubmitButton pending={mutation.isPending} disabled={!organizationId} />
+          <span
+            className="text-muted-foreground"
+            title={PR_SEARCH_NOTE}
+            aria-describedby="pr-search-status-note"
+          >
+            <Info className="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
+        </div>
 
-          <div className="grid gap-2 lg:grid-cols-[1fr_150px_150px_150px_170px_auto]">
-            <div className="grid gap-0.5">
+        {filtersOpen ? (
+          <div id="pr-search-advanced-filters" className="flex flex-wrap items-end gap-2">
+            <div className="grid w-64 gap-0.5">
               <span className="text-[11px] font-medium text-muted-foreground">Target branches</span>
               <MultiSelectFilter
                 className="h-8"
@@ -306,88 +310,66 @@ export function PullRequestSearch({
                 disabled={branchQueries.length === 0 || branchSuggestions.length === 0}
               />
             </div>
-
-            <label className="grid gap-0.5">
-              <span className="text-[11px] font-medium text-muted-foreground">From</span>
+            <FilterField label="From">
               <input
                 type="date"
                 value={fromDate}
                 max={toDate || undefined}
                 onChange={(e) => setFromDate(e.target.value)}
-                className="h-8 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className={filterInputClass}
               />
-            </label>
-
-            <label className="grid gap-0.5">
-              <span className="text-[11px] font-medium text-muted-foreground">To</span>
+            </FilterField>
+            <FilterField label="To">
               <input
                 type="date"
                 value={toDate}
                 min={fromDate || undefined}
                 onChange={(e) => setToDate(e.target.value)}
-                className="h-8 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                className={filterInputClass}
               />
-            </label>
-
-            <label className="grid gap-0.5">
-              <span className="text-[11px] font-medium text-muted-foreground">Date basis</span>
-              <select
+            </FilterField>
+            <FilterField label="Date basis">
+              <NativeSelect
+                className="w-36"
                 value={dateBasis}
                 onChange={(e) => setDateBasis(e.target.value as PrSearchDateBasis)}
                 title={statuses.length === 0 || statuses.includes("active")
                   ? "Active PRs have no close date, so the window uses the created date for them."
                   : "Whether the date window filters by created or closed date."}
-                className="h-8 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               >
                 {PR_SEARCH_DATE_BASIS_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
-              </select>
-            </label>
-
-            <label className="grid gap-0.5">
-              <span className="text-[11px] font-medium text-muted-foreground">Sort by</span>
-              <select
+              </NativeSelect>
+            </FilterField>
+            <FilterField label="Sort by">
+              <NativeSelect
+                className="w-40"
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as PrSearchSortBy)}
-                className="h-8 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               >
                 {PR_SEARCH_SORT_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
-              </select>
+              </NativeSelect>
+            </FilterField>
+            <label className="flex h-8 items-center gap-2">
+              <input
+                type="checkbox"
+                checked={excludeDrafts}
+                onChange={(e) => setExcludeDrafts(e.target.checked)}
+                className="h-4 w-4"
+              />
+              <span className="text-xs font-medium">Hide drafts</span>
             </label>
-
-            <div className="flex items-center gap-2">
-              <label className="flex items-end gap-2 pb-2 lg:pb-0 lg:items-center">
-                <input
-                  type="checkbox"
-                  checked={excludeDrafts}
-                  onChange={(e) => setExcludeDrafts(e.target.checked)}
-                  className="h-4 w-4"
-                />
-                <span className="text-xs font-medium">Hide drafts</span>
-              </label>
-              <span
-                className="self-center text-muted-foreground"
-                title="Active pull requests are served from the local cache. Completed and abandoned pull requests are fetched live from Azure DevOps, so those statuses may take a moment. Target branch and the date window narrow the live query server-side. Select a repository to get target-branch suggestions."
-                aria-hidden="true"
-              >
-                <Info className="h-3.5 w-3.5" />
-              </span>
-            </div>
           </div>
+        ) : null}
 
-          {/* Kept for assistive tech; sighted users get it from the info icon's tooltip. */}
-          <p id="pr-search-status-note" className="sr-only">
-            Active pull requests are served from the local cache. Completed and
-            abandoned pull requests are fetched live from Azure DevOps, so those
-            statuses may take a moment. Target branch and the date window narrow
-            the live query server-side. Select a repository to get target-branch
-            suggestions.
-          </p>
-        </form>
-      </div>
+        {/* Kept for assistive tech; sighted users get it from the info icon's tooltip. */}
+        <p id="pr-search-status-note" className="sr-only">
+          {PR_SEARCH_NOTE}
+        </p>
+      </form>
 
       {mutation.isError && <ErrorState message={commandErrorMessage(mutation.error)} />}
 

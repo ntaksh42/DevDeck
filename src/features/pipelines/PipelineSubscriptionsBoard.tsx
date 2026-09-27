@@ -16,6 +16,7 @@ import {
   subscriptionKey,
   type PipelineSubscription,
 } from "./pipelineSubscriptionsStorage";
+import { NativeSelect } from "@/components/SearchBar";
 
 const ACTIVE_REFRESH_INTERVAL_MS = 15_000;
 const IDLE_REFRESH_INTERVAL_MS = 60_000;
@@ -285,18 +286,18 @@ export function PipelineSubscriptionsBoard({
             aria-label="Filter runs by branch"
             className="h-7 w-32 rounded-md border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
           />
-          <select
+          <NativeSelect
+            compact
             value={resultFilter}
             onChange={(event) => setResultFilter(event.target.value)}
             aria-label="Filter runs by result"
-            className="h-7 rounded-md border border-input bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring"
           >
             <option value="">All results</option>
             <option value="succeeded">Succeeded</option>
             <option value="failed">Failed</option>
             <option value="canceled">Canceled</option>
             <option value="partiallySucceeded">Partially succeeded</option>
-          </select>
+          </NativeSelect>
           <label className="flex items-center gap-1 text-xs text-muted-foreground">
             <input
               type="checkbox"

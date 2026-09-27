@@ -52,10 +52,10 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="help-title"
-        className="relative w-full max-w-md rounded-lg border border-border bg-popover p-6 shadow-xl"
+        className="relative flex max-h-[85vh] w-full max-w-4xl flex-col rounded-lg border border-border bg-popover p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex shrink-0 items-center justify-between">
           <h2 id="help-title" className="flex items-center gap-2 text-base font-semibold">
             <Keyboard className="h-4 w-4" aria-hidden="true" />
             Keyboard Shortcuts
@@ -70,7 +70,9 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        <div className="text-sm">
+        <div className="min-h-0 flex-1 overflow-y-auto pr-1 text-sm" tabIndex={0}>
+        <div className="md:columns-2 md:gap-8">
+        <div className="break-inside-avoid">
           <p className={section}>Navigation</p>
           <div className={row}><span>Settings</span><kbd className={kbd}>{combo("openSettings")}</kbd></div>
           <div className={row}><span>Focus left navigation</span><kbd className={kbd}>{combo("focusNavigation")}</kbd></div>
@@ -89,6 +91,8 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Grid → preview / back to grid</span><kbd className={kbd}>Enter / → · Esc / ←</kbd></div>
           <div className={row}><span>Focus views panel</span><kbd className={kbd}>{combo("focusViewsPanel")}</kbd></div>
 
+        </div>
+        <div className="break-inside-avoid">
           <p className={section}>My Reviews</p>
           <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>
           <div className={row}><span>Open / focus preview</span><kbd className={kbd}>Enter / →</kbd></div>
@@ -105,6 +109,8 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ PgUp PgDn Home End</kbd></div>
           <div className={row}><span>Select multiple (check file-overlap conflict risk)</span><kbd className={kbd}>Shift+↑ ↓ · Shift+click · Ctrl+click</kbd></div>
 
+        </div>
+        <div className="break-inside-avoid">
           <p className={section}>PR Search / WI Search / Commits</p>
           <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>
           <div className={row}><span>Open / focus preview</span><kbd className={kbd}>Enter / →</kbd></div>
@@ -117,6 +123,8 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Select multiple</span><kbd className={kbd}>Shift+↑ ↓ · Shift+click · Ctrl+click</kbd></div>
           <div className={row}><span>Mark done / restore (My Reviews, My Items)</span><kbd className={kbd}>E</kbd></div>
 
+        </div>
+        <div className="break-inside-avoid">
           <p className={section}>Work Items</p>
           <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>
           <div className={row}><span>Open detail preview</span><kbd className={kbd}>Enter / →</kbd></div>
@@ -147,28 +155,38 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Agent notes: new note / undo delete / run agent</span><kbd className={kbd}>C / Ctrl+Z / A</kbd></div>
           <div className={row}><span>Note box: send / add to drafts / send all drafts</span><kbd className={kbd}>Ctrl+Enter / Alt+Enter / Ctrl+Shift+Enter</kbd></div>
 
+        </div>
+        <div className="break-inside-avoid">
           <p className={section}>Work Item Views</p>
           <div className={row}><span>Move view card</span><kbd className={kbd}>← → ↑ ↓</kbd></div>
           <div className={row}><span>Add / edit view</span><kbd className={kbd}>N / E</kbd></div>
           <div className={row}><span>Run views / delete</span><kbd className={kbd}>R / Del</kbd></div>
           <div className={row}><span>Save (in dialog)</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
 
+        </div>
+        <div className="break-inside-avoid">
           <p className={section}>Pipelines</p>
           <div className={row}><span>Move run row</span><kbd className={kbd}>J/K ↑ ↓ Home End</kbd></div>
           <div className={row}><span>Open run preview</span><kbd className={kbd}>Enter</kbd></div>
           <div className={row}><span>Open run in browser</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
 
+        </div>
+        <div className="break-inside-avoid">
           <p className={section}>Notifications</p>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ Home End PgUp PgDn</kbd></div>
           <div className={row}><span>Open / jump to item (marks read)</span><kbd className={kbd}>Enter</kbd></div>
           <div className={row}><span>Open in Azure DevOps (marks read)</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
           <div className={row}><span>Mark selected read</span><kbd className={kbd}>R</kbd></div>
 
+        </div>
+        <div className="break-inside-avoid">
           <p className={section}>General</p>
           <div className={row}><span>Go to view</span><kbd className={kbd}>{combo("gotoLeader")} then {gotoKeys}</kbd></div>
           <div className={row}><span>Apply pending work item changes</span><kbd className={kbd}>{combo("applyStaged")}</kbd></div>
           <div className={row}><span>Show this help</span><kbd className={kbd}>F1 / {combo("help")}</kbd></div>
           <div className={row}><span>Close dialog</span><kbd className={kbd}>Esc</kbd></div>
+        </div>
+        </div>
         </div>
       </div>
     </div>

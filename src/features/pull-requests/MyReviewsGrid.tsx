@@ -296,7 +296,7 @@ export function MyReviewsGrid({
             />
           ) : (
             <div ref={g.scrollerRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
-              <div style={{ minWidth: g.gridMinWidth }}>
+              <div ref={g.gridRef} style={{ minWidth: g.gridMinWidth }}>
                 <div
                   role="row"
                   className="grid items-center gap-2 border-b border-border bg-muted px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
@@ -451,6 +451,7 @@ export function MyReviewsGrid({
           requiredColumns={PR_GRID_REQUIRED_COLUMNS}
           onToggle={g.toggleColumn}
           onReset={g.resetColumns}
+          onAutoFitWidths={g.resetColumnWidths}
           onClose={() => g.setColumnMenuRect(null)}
         />
       ) : null}

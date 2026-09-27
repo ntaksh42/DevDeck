@@ -21,7 +21,7 @@ import { ColumnResizeHandle } from "@/components/ResizeHandle";
 import { DockableWorkspace, type DockablePanelSpec } from "@/components/DockableWorkspace";
 import { ColumnVisibilityMenu } from "@/components/ColumnVisibilityMenu";
 import { ActiveFilters } from "@/components/ActiveFilters";
-import { LoadingState } from "@/components/StateDisplay";
+import { LoadingState, PreviewEmptyState, SEARCH_EMPTY_HINT } from "@/components/StateDisplay";
 import {
   type CommitColumnKey,
   type CommitSortKey,
@@ -84,6 +84,8 @@ export function CommitResults({
   const {
     template: commitColTemplate,
     minWidth: gridMinWidth,
+    resetWidths: resetColumnWidths,
+    gridRef,
     resizeProps: columnResizeProps,
   } = useGridColumns({
     keys: COMMIT_COLUMN_KEYS,
@@ -314,9 +316,7 @@ export function CommitResults({
   const gridPane = (
       <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card">
       {!searched && !loading ? (
-        <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-          Run a search to load commits.
-        </div>
+        <PreviewEmptyState message="Run a search to load commits." hint={SEARCH_EMPTY_HINT} />
       ) : results.length === 0 && !loading ? (
         <div className="px-3 py-6 text-center text-sm text-muted-foreground">
           No commits matched.
@@ -331,7 +331,7 @@ export function CommitResults({
           onKeyDown={handleKeyDown}
         >
           <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
-          <div style={{ minWidth: gridMinWidth }}>
+          <div ref={gridRef} style={{ minWidth: gridMinWidth }}>
             <div
               role="row"
               className="grid items-center gap-2 border-b border-border bg-muted px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
@@ -470,6 +470,7 @@ export function CommitResults({
           requiredColumns={COMMIT_REQUIRED_COLUMNS}
           onToggle={toggleColumnVisibility}
           onReset={resetColumnVisibility}
+          onAutoFitWidths={resetColumnWidths}
           onClose={() => setColumnMenuRect(null)}
         />
       ) : null}

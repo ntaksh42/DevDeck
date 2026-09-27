@@ -435,6 +435,9 @@ function AppShell() {
           organizationsLength={organizations.length}
           keybindings={keybindings}
           syncing={syncMutation.isPending}
+          activeWorkItemViewName={
+            workItemNavViews.find((view) => view.id === activeWorkItemViewId)?.name
+          }
           onToggleSidebar={() => setSidebarCollapsed((c) => !c)}
           onSync={() => syncMutation.mutate({ scope: "all" })}
         />

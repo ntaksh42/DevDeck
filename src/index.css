@@ -27,6 +27,7 @@
        buttons; as small text it is only 3.27:1 on white, this is 5.38:1. */
     --link: 210 80% 42%;
     --radius: 0.5rem;
+    color-scheme: light;
   }
 
   .dark {
@@ -50,6 +51,7 @@
     --input: 217 28% 26%;
     --ring: 210 90% 70%;
     --link: 210 95% 76%;
+    color-scheme: dark;
   }
 }
 
