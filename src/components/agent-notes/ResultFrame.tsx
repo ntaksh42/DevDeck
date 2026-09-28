@@ -68,6 +68,10 @@ export function ResultFrame({
 
   const blocks = frame?.blocks ?? [];
   const safeIdx = Math.min(blockIdx, Math.max(0, blocks.length - 1));
+  // Clamped like safeIdx: when the result document is swapped, effects still
+  // see the previous document's anchor for one render (the reset below lands
+  // on the next one), and it may point past the new, shorter block list.
+  const safeAnchor = blockAnchor == null ? null : Math.min(blockAnchor, Math.max(0, blocks.length - 1));
 
   useEffect(() => {
     setBlockIdx(0);
@@ -111,7 +115,7 @@ export function ResultFrame({
     const ranges = anchors.flatMap((a) => (a.range ? [a.range] : []));
     registry.set("agent-note", new win.Highlight(...ranges));
     if (blockMode && blocks.length) {
-      const anchor = blockAnchor ?? safeIdx;
+      const anchor = safeAnchor ?? safeIdx;
       registry.set("agent-block", new win.Highlight(blockSpanRange(frame.doc, blocks, anchor, safeIdx)));
     } else registry.delete("agent-block");
     const active = pendingRange ?? anchors.find((a) => a.note.id === activeId)?.range ?? null;
@@ -121,7 +125,7 @@ export function ResultFrame({
       registry.set("agent-active", highlight);
     } else registry.delete("agent-active");
     updateMarkers();
-  }, [frame, anchors, activeId, pendingRange, blockMode, blockAnchor, safeIdx, blocks, frameRef, updateMarkers]);
+  }, [frame, anchors, activeId, pendingRange, blockMode, safeAnchor, safeIdx, blocks, frameRef, updateMarkers]);
 
   // The sandbox disables scripts inside the result, so scroll and selection
   // are observed from here by polling rather than with in-frame listeners.
@@ -168,14 +172,14 @@ export function ResultFrame({
 
   function moveBlock(next: number, extend: boolean) {
     const clamped = Math.max(0, Math.min(blocks.length - 1, next));
-    setBlockAnchor(extend ? (blockAnchor ?? safeIdx) : null);
+    setBlockAnchor(extend ? (safeAnchor ?? safeIdx) : null);
     setBlockIdx(clamped);
     blocks[clamped]?.scrollIntoView({ block: "nearest" });
   }
 
   function commentOnBlocks() {
     if (!frame || !blocks.length) return;
-    const range = blockSpanRange(frame.doc, blocks, blockAnchor ?? safeIdx, safeIdx);
+    const range = blockSpanRange(frame.doc, blocks, safeAnchor ?? safeIdx, safeIdx);
     const anchor = anchorFromRange(frame.index, range);
     if (anchor) onComment({ ...anchor, range, origin: "block" });
   }
