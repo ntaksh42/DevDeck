@@ -31,6 +31,14 @@ const MARK_CLASS: Record<NoteTone, string> = {
   draft: "bg-gray-400",
 };
 
+// Moving to another row swaps `srcDoc`, so the iframe starts loading a new
+// document before the parent clears the old `frame`. Until the new load fires,
+// the window's document is not the one `frame` indexed (and may not even have
+// a `documentElement` yet), so treat that window as not ready.
+function isCurrentDoc(frame: FrameState | null, win: Window): frame is FrameState {
+  return !!frame && win.document === frame.doc;
+}
+
 type Props = {
   html: string;
   title: string;
@@ -69,14 +77,15 @@ export function ResultFrame({
 
   const updateMarkers = useCallback(() => {
     const iframe = frameRef.current, wrap = wrapRef.current, win = iframe?.contentWindow;
-    if (!iframe || !wrap || !win || !frame) {
+    const root = win?.document.documentElement;
+    if (!iframe || !wrap || !win || !root || !isCurrentDoc(frame, win)) {
       setMarkers((prev) => (prev.length ? [] : prev));
       return;
     }
     const fr = iframe.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
     const offset = fr.top - wr.top;
     const trackHeight = Math.max(0, fr.height - 8);
-    const docHeight = Math.max(1, win.document.documentElement.scrollHeight);
+    const docHeight = Math.max(1, root.scrollHeight);
     let lastPin = -Infinity;
     const next: Marker[] = [];
     for (const { note, num, range, tone } of anchorsRef.current) {
@@ -98,7 +107,7 @@ export function ResultFrame({
   useEffect(() => {
     const win = frameRef.current?.contentWindow as HighlightWindow | null | undefined;
     const registry = win?.CSS?.highlights;
-    if (!frame || !win?.Highlight || !registry) return;
+    if (!win || !isCurrentDoc(frame, win) || !win.Highlight || !registry) return;
     const ranges = anchors.flatMap((a) => (a.range ? [a.range] : []));
     registry.set("agent-note", new win.Highlight(...ranges));
     if (blockMode && blocks.length) {
@@ -120,7 +129,7 @@ export function ResultFrame({
     if (!frame) return;
     const timer = window.setInterval(() => {
       const iframe = frameRef.current, win = iframe?.contentWindow, wrap = wrapRef.current;
-      if (!iframe || !win || !wrap) return;
+      if (!iframe || !win || !wrap || !isCurrentDoc(frame, win)) return;
       if (win.scrollY !== lastScrollRef.current) updateMarkers();
       const sel = win.document.getSelection();
       if (!sel || sel.isCollapsed || !collapseWhitespace(sel.toString())) {
