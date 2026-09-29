@@ -432,11 +432,11 @@ pub struct WorkItemAttachment {
 #[serde(rename_all = "camelCase")]
 pub struct WorkItemPullRequestLink {
     pub pull_request_id: i64,
-    /// Present when the PR is locally synced (My Reviews); otherwise the PR is
-    /// shown with only its id and a web link.
+    /// Repository GUID, from the local PR caches or the artifact link.
     pub repository_id: Option<String>,
     pub title: Option<String>,
     pub status: Option<String>,
+    /// Present only when the PR is in My Reviews (the vote is mine).
     pub my_vote_label: Option<String>,
     pub web_url: Option<String>,
 }

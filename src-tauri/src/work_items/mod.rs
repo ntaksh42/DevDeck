@@ -408,46 +408,30 @@ impl WorkItemService {
     }
 
     /// Extracts pull request `ArtifactLink` relations and enriches them with
-    /// locally synced My Reviews data (title, vote, draft status) when present.
+    /// locally synced PR data (My Reviews, then the Active PR cache). Cache
+    /// lookups are a progressive enhancement, so failures are ignored.
     fn resolve_pull_request_links(
         &self,
         organization: &Organization,
         raw_relations: &[WorkItemRelation],
     ) -> Vec<WorkItemPullRequestLink> {
-        let pr_ids = pull_request_ids_from_relations(raw_relations);
-        if pr_ids.is_empty() {
+        if pull_request_ids_from_relations(raw_relations).is_empty() {
             return Vec::new();
         }
-
-        // Reviews are a progressive enhancement; missing local data still yields
-        // a clickable PR id, so ignore lookup failures.
         let reviews = self
             .db
             .list_review_pull_requests(&organization.id)
             .unwrap_or_default();
-
-        pr_ids
-            .into_iter()
-            .map(|pull_request_id| {
-                let review = reviews
-                    .iter()
-                    .find(|pr| pr.pull_request_id == pull_request_id);
-                WorkItemPullRequestLink {
-                    pull_request_id,
-                    repository_id: review.map(|pr| pr.repository_id.clone()),
-                    title: review.map(|pr| pr.title.clone()),
-                    status: review.map(|pr| {
-                        if pr.is_draft {
-                            "Draft".to_string()
-                        } else {
-                            "Active".to_string()
-                        }
-                    }),
-                    my_vote_label: review.map(|pr| pr.my_vote_label.clone()),
-                    web_url: review.and_then(|pr| pr.web_url.clone()),
-                }
-            })
-            .collect()
+        let active_prs = self
+            .db
+            .search_pull_requests(&organization.id, None, None, Some("active"))
+            .unwrap_or_default();
+        pull_request_links_from_relations(
+            &organization.base_url,
+            raw_relations,
+            &reviews,
+            &active_prs,
+        )
     }
 
     async fn resolve_preview_relations(
