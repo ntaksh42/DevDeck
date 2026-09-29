@@ -348,16 +348,17 @@ function splitMarkdownTableRow(value: string): string[] {
 }
 
 function formatInlineMarkdown(value: string): string {
-  // Code spans are split out first so bold/link syntax inside them stays literal.
-  return (escapeHtml(value) ?? "")
-    .split(/(`[^`]+`)/)
-    .map((part) => {
-      if (/^`[^`]+`$/.test(part)) return `<code>${part.slice(1, -1)}</code>`;
-      return part
-        .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-        .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>');
-    })
-    .join("");
+  // Code spans are swapped for placeholders first so bold/link syntax inside
+  // them stays literal, while code inside bold/link text still renders.
+  const codeSpans: string[] = [];
+  const withPlaceholders = (escapeHtml(value) ?? "").replace(/`([^`]+)`/g, (_match, code: string) => {
+    codeSpans.push(`<code>${code}</code>`);
+    return `\u0000${codeSpans.length - 1}\u0000`;
+  });
+  return withPlaceholders
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>')
+    .replace(/\u0000(\d+)\u0000/g, (_match, index: string) => codeSpans[Number(index)]);
 }
 
 export function commentAuthorInitials(name: string | null | undefined): string {

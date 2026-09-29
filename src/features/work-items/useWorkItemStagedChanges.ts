@@ -17,6 +17,7 @@ import {
   type WorkItemPreview,
   type WorkItemSummary,
 } from '@/lib/azdoCommands';
+import { pushToast } from '@/lib/toast';
 import { invalidateWorkItemQueryViews, workItemQueryKeys } from './queryKeys';
 import {
   loadFieldPresets,
@@ -62,6 +63,9 @@ export function useWorkItemStagedChanges({
   const stagedRef = useRef<StagedChanges>(staged);
   const previewRef = useRef<WorkItemPreview | null>(preview ?? null);
   const selectedIdRef = useRef<number | undefined>(selectedItem?.id);
+  // Bumped on every selection change so an in-flight apply can tell it is stale
+  // even after an A -> B -> A round trip.
+  const selectionEpochRef = useRef(0);
   stagedRef.current = staged;
   previewRef.current = preview ?? null;
   selectedIdRef.current = selectedItem?.id;
@@ -318,6 +322,7 @@ export function useWorkItemStagedChanges({
     const inverse = currentPreview ? buildInverseChanges(currentPreview, currentStaged) : {};
     const appliedCount = currentStagedEntries.length;
     const workItemId = selectedItem.id;
+    const epoch = selectionEpochRef.current;
     setApplying(true);
     setApplyError(null);
     try {
@@ -334,7 +339,7 @@ export function useWorkItemStagedChanges({
       }
       // The user moved to another item while the request ran: the staged edits,
       // undo banner and errors now belong to that item, so leave them alone.
-      if (selectedIdRef.current !== workItemId) return;
+      if (selectionEpochRef.current !== epoch) return;
       setStagedChanges({});
       setUndoState({ changes: inverse, workItemId, count: appliedCount });
       if (undoTimerRef.current !== null) window.clearTimeout(undoTimerRef.current);
@@ -343,10 +348,17 @@ export function useWorkItemStagedChanges({
         undoTimerRef.current = null;
       }, UNDO_WINDOW_MS);
     } catch (error) {
-      if (selectedIdRef.current === workItemId) setApplyError(commandErrorMessage(error));
+      if (selectionEpochRef.current === epoch) {
+        setApplyError(commandErrorMessage(error));
+      } else {
+        // The panel no longer shows this item, so surface the failure as a toast.
+        pushToast(`#${workItemId} の更新に失敗しました: ${commandErrorMessage(error)}`);
+      }
     } finally {
-      setApplying(false);
-      restorePanelFocus(previousFocus);
+      if (selectionEpochRef.current === epoch) {
+        setApplying(false);
+        restorePanelFocus(previousFocus);
+      }
     }
   }
 
@@ -375,6 +387,8 @@ export function useWorkItemStagedChanges({
   }
 
   useEffect(() => {
+    selectionEpochRef.current += 1;
+    setApplying(false);
     setStagedChanges({});
     setApplyError(null);
     setUndoState(null);

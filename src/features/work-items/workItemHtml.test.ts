@@ -43,6 +43,15 @@ describe("richFieldHtml", () => {
     );
   });
 
+  it("renders inline code inside bold and link text", () => {
+    expect(richFieldHtml("**run `pnpm test` first**")).toBe(
+      "<p><strong>run <code>pnpm test</code> first</strong></p>",
+    );
+    expect(richFieldHtml("[`foo.ts`](https://x.test/a)")).toBe(
+      '<p><a href="https://x.test/a"><code>foo.ts</code></a></p>',
+    );
+  });
+
   it("returns null for empty input", () => {
     expect(richFieldHtml("   ")).toBeNull();
     expect(richFieldHtml(null)).toBeNull();

@@ -217,6 +217,13 @@ impl AzureCliTokenSource for AzCommandTokenSource {
             })?;
 
         if !output.status.success() {
+            // `cmd /C` reports a missing `az` as exit code 9009 with a localised
+            // message, so map it back to the install guidance.
+            if cfg!(windows) && output.status.code() == Some(9009) {
+                return Err(AdoError::Auth(
+                    "failed to run Azure CLI; install Azure CLI and run 'az login'".to_string(),
+                ));
+            }
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
             return Err(AdoError::Auth(format!(
                 "Azure CLI token request failed: {}",
