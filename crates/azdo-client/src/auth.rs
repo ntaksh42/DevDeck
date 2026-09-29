@@ -175,13 +175,32 @@ trait AzureCliTokenSource: Send + Sync {
     fn access_token(&self) -> Result<AzureCliToken>;
 }
 
+/// Builds the `az` invocation. On Windows the Azure CLI installs `az.cmd`, which
+/// `Command::new("az")` cannot resolve (it only looks for `az.exe`), so it runs
+/// through `cmd /C`. `CREATE_NO_WINDOW` stops a console window from flashing
+/// each time a token is fetched from the GUI app.
+fn az_command() -> Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let mut command = Command::new("cmd");
+        command.args(["/C", "az"]).creation_flags(CREATE_NO_WINDOW);
+        command
+    }
+    #[cfg(not(windows))]
+    {
+        Command::new("az")
+    }
+}
+
 struct AzCommandTokenSource {
     resource: String,
 }
 
 impl AzureCliTokenSource for AzCommandTokenSource {
     fn access_token(&self) -> Result<AzureCliToken> {
-        let output = Command::new("az")
+        let output = az_command()
             .args([
                 "account",
                 "get-access-token",
@@ -251,6 +270,15 @@ fn token_expires_in(value: &serde_json::Value) -> Option<Duration> {
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[cfg(windows)]
+    #[test]
+    fn az_command_runs_through_cmd_on_windows() {
+        // `az` is `az.cmd` on Windows, which `Command::new("az")` cannot find.
+        let command = az_command();
+        assert_eq!(command.get_program(), "cmd");
+        assert_eq!(command.get_args().collect::<Vec<_>>(), vec!["/C", "az"]);
+    }
 
     struct StaticTokenSource {
         token: String,

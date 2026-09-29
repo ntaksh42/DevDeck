@@ -11,6 +11,8 @@ mod requests;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_read_post;
 
 #[derive(Debug, Clone, Copy)]
 pub struct RetryPolicy {

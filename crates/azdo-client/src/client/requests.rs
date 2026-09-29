@@ -203,7 +203,20 @@ impl AdoClient {
         body: &B,
     ) -> Result<T> {
         let url = join_api_path(&self.base_url, path)?;
-        self.post_json_to_url(url, query, body).await
+        self.post_json_to_url(url, query, body, false).await
+    }
+
+    /// POST for read-only endpoints that use POST only to carry a request body
+    /// (WIQL, batch fetches, queries). They are safe to retry on 5xx and
+    /// timeouts like a GET.
+    pub(crate) async fn post_json_read<B: Serialize + ?Sized, T: DeserializeOwned>(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        body: &B,
+    ) -> Result<T> {
+        let url = join_api_path(&self.base_url, path)?;
+        self.post_json_to_url(url, query, body, true).await
     }
 
     /// POST with an explicit Content-Type. Work item creation requires
@@ -235,7 +248,8 @@ impl AdoClient {
     }
 
     /// POSTs to the Almsearch service host (Code/Work Item Search), which lives
-    /// on a different subdomain than the core REST API.
+    /// on a different subdomain than the core REST API. Search is read-only, so
+    /// it is retried like a GET.
     pub(crate) async fn post_json_almsearch<B: Serialize + ?Sized, T: DeserializeOwned>(
         &self,
         path: &str,
@@ -243,7 +257,7 @@ impl AdoClient {
         body: &B,
     ) -> Result<T> {
         let url = join_api_path(&almsearch_base_url(&self.base_url)?, path)?;
-        self.post_json_to_url(url, query, body).await
+        self.post_json_to_url(url, query, body, true).await
     }
 
     async fn post_json_to_url<B: Serialize + ?Sized, T: DeserializeOwned>(
@@ -251,11 +265,12 @@ impl AdoClient {
         url: Url,
         query: &[(&str, &str)],
         body: &B,
+        idempotent: bool,
     ) -> Result<T> {
         self.send_with_retry(
             "POST",
             url.as_str(),
-            false,
+            idempotent,
             || self.http.post(url.clone()).query(query).json(body),
             |resp| async move { decode_json(resp).await },
         )

@@ -37,6 +37,12 @@ describe("richFieldHtml", () => {
     expect(html).toContain("<li>two</li>");
   });
 
+  it("keeps bold and link syntax literal inside inline code", () => {
+    expect(richFieldHtml("use `**x**` and **y**")).toBe(
+      "<p>use <code>**x**</code> and <strong>y</strong></p>",
+    );
+  });
+
   it("returns null for empty input", () => {
     expect(richFieldHtml("   ")).toBeNull();
     expect(richFieldHtml(null)).toBeNull();

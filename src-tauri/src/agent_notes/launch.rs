@@ -18,22 +18,34 @@ pub(crate) fn run_agent(
     item_id: i64,
 ) -> Result<()> {
     let command = expand(command, folder, target, item_id)?;
-    let mut shell = if cfg!(windows) {
-        let mut cmd = Command::new("cmd");
-        cmd.args(["/C", &command]);
-        cmd
-    } else {
-        let mut cmd = Command::new("sh");
-        cmd.args(["-c", &command]);
-        cmd
-    };
-    shell
+    shell_command(&command)
         .current_dir(folder)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()?;
     Ok(())
+}
+
+/// The system shell running `command`. On Windows the string is handed to
+/// `cmd` verbatim: `Command::arg` would re-escape its `"` as `\"`, which
+/// cmd.exe does not understand, so a quoted argument such as
+/// `claude -p "handle {id}"` would be split apart. `/S` plus the outer quotes
+/// makes cmd strip exactly that pair and keep the rest as written.
+fn shell_command(command: &str) -> Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let mut cmd = Command::new("cmd");
+        cmd.args(["/S", "/C"]).raw_arg(format!("\"{command}\""));
+        cmd
+    }
+    #[cfg(not(windows))]
+    {
+        let mut cmd = Command::new("sh");
+        cmd.args(["-c", command]);
+        cmd
+    }
 }
 
 fn expand(
@@ -58,6 +70,18 @@ fn expand(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn shell_command_keeps_quoted_arguments_intact() {
+        let output = shell_command("echo \"handle 7 in C:\\dir\"")
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim(),
+            "\"handle 7 in C:\\dir\""
+        );
+    }
 
     #[test]
     fn expands_placeholders_and_requires_a_command() {

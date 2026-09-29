@@ -180,6 +180,8 @@ fn resolve_and_reopen_move_the_file() {
 
     let open = ops::set_status(temp.path(), set("open")).unwrap();
     assert_eq!(open.status, "open");
+    // Reopening drops the stale "Resolved in DevDeck" line.
+    assert_eq!(open.resolved, None);
     assert!(path.is_file());
     assert!(ops::set_status(temp.path(), set("later")).is_err());
 }

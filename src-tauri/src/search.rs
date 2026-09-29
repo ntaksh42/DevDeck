@@ -59,6 +59,60 @@ pub struct SearchAllResult {
     pub totals: SearchAllTotals,
 }
 
+type OrganizationHits = (
+    Vec<WorkItemSummary>,
+    Vec<PullRequestSummary>,
+    Vec<CommitSummary>,
+);
+
+async fn search_organization(
+    work_items: &WorkItemService,
+    pull_requests: &PullRequestService,
+    commits: &CommitService,
+    org_id: &str,
+    query: &str,
+) -> Result<OrganizationHits> {
+    let work_item_hits = work_items.search(SearchWorkItemsInput {
+        organization_id: Some(org_id.to_string()),
+        query: Some(query.to_string()),
+        states: None,
+        work_item_types: None,
+        project_ids: None,
+    })?;
+    let pull_request_hits = pull_requests
+        .search(SearchPullRequestsInput {
+            organization_id: Some(org_id.to_string()),
+            query: Some(query.to_string()),
+            statuses: None,
+            project_ids: None,
+            repository_ids: None,
+            target_branches: None,
+            from_date: None,
+            to_date: None,
+            date_basis: None,
+            exclude_drafts: None,
+            sort_by: None,
+        })
+        .await?
+        .pull_requests;
+    let commit_hits = commits
+        .search(SearchCommitsInput {
+            organization_id: Some(org_id.to_string()),
+            query: Some(query.to_string()),
+            author: None,
+            branch: None,
+            item_path: None,
+            from_date: None,
+            to_date: None,
+            project_ids: None,
+            repository_ids: None,
+            offset: None,
+        })
+        .await?
+        .commits;
+    Ok((work_item_hits, pull_request_hits, commit_hits))
+}
+
 pub async fn search_all(
     db: &AppDatabase,
     work_items: &WorkItemService,
@@ -99,49 +153,26 @@ pub async fn search_all(
     let mut work_item_results = Vec::new();
     let mut pull_request_results = Vec::new();
     let mut commit_results = Vec::new();
+    let mut succeeded = 0;
+    let mut last_error = None;
     for org_id in &org_ids {
-        work_item_results.extend(work_items.search(SearchWorkItemsInput {
-            organization_id: Some(org_id.clone()),
-            query: Some(query.clone()),
-            states: None,
-            work_item_types: None,
-            project_ids: None,
-        })?);
-        pull_request_results.extend(
-            pull_requests
-                .search(SearchPullRequestsInput {
-                    organization_id: Some(org_id.clone()),
-                    query: Some(query.clone()),
-                    statuses: None,
-                    project_ids: None,
-                    repository_ids: None,
-                    target_branches: None,
-                    from_date: None,
-                    to_date: None,
-                    date_basis: None,
-                    exclude_drafts: None,
-                    sort_by: None,
-                })
-                .await?
-                .pull_requests,
-        );
-        commit_results.extend(
-            commits
-                .search(SearchCommitsInput {
-                    organization_id: Some(org_id.clone()),
-                    query: Some(query.clone()),
-                    author: None,
-                    branch: None,
-                    item_path: None,
-                    from_date: None,
-                    to_date: None,
-                    project_ids: None,
-                    repository_ids: None,
-                    offset: None,
-                })
-                .await?
-                .commits,
-        );
+        match search_organization(work_items, pull_requests, commits, org_id, &query).await {
+            Ok((work_item_hits, pull_request_hits, commit_hits)) => {
+                work_item_results.extend(work_item_hits);
+                pull_request_results.extend(pull_request_hits);
+                commit_results.extend(commit_hits);
+                succeeded += 1;
+            }
+            // One failing connection (e.g. a GitHub outage) must not blank the
+            // palette for the others; only fail when nothing could be searched.
+            Err(error) => {
+                tracing::warn!(organization = %org_id, error = ?error, "search: organization search failed");
+                last_error = Some(error);
+            }
+        }
+    }
+    if let (0, Some(error)) = (succeeded, last_error) {
+        return Err(error);
     }
     if org_ids.len() > 1 {
         // Results from different providers spell the same instant differently:
@@ -346,6 +377,26 @@ mod tests {
         // PR #421 matches the numeric query by ID prefix.
         assert_eq!(result.pull_requests.len(), 1);
         assert_eq!(result.pull_requests[0].pull_request_id, 421);
+    }
+
+    #[tokio::test]
+    async fn search_all_reports_the_error_when_no_organization_can_be_searched() {
+        let (_db_file, db, work_items, pull_requests, commits) = make_services();
+
+        let result = search_all(
+            &db,
+            &work_items,
+            &pull_requests,
+            &commits,
+            SearchAllInput {
+                organization_id: Some("missing".to_string()),
+                query: "retry".to_string(),
+                limit_per_kind: None,
+            },
+        )
+        .await;
+
+        assert!(result.is_err());
     }
 
     #[tokio::test]

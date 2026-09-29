@@ -152,9 +152,13 @@ pub(crate) fn set_status(folder: &Path, input: SetAgentNoteStatusInput) -> Resul
         return Ok(parse_note(&path, status, &text, None));
     }
     let mut text = fs::read_to_string(&path)?;
-    if to_status == "done" {
-        text = set_field(&text, "resolved", Some("Resolved in DevDeck"));
-    }
+    text = if to_status == "done" {
+        set_field(&text, "resolved", Some("Resolved in DevDeck"))
+    } else {
+        // Reopened by the user: a leftover `resolved` line would still show it
+        // as handled.
+        set_field(&text, "resolved", None)
+    };
     fs::create_dir_all(&to_dir)?;
     let to_path = to_dir.join(&input.note_id);
     write_atomic(&to_path, &text)?;

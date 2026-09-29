@@ -348,11 +348,16 @@ function splitMarkdownTableRow(value: string): string[] {
 }
 
 function formatInlineMarkdown(value: string): string {
-  let html = escapeHtml(value) ?? "";
-  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
-  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>');
-  return html;
+  // Code spans are split out first so bold/link syntax inside them stays literal.
+  return (escapeHtml(value) ?? "")
+    .split(/(`[^`]+`)/)
+    .map((part) => {
+      if (/^`[^`]+`$/.test(part)) return `<code>${part.slice(1, -1)}</code>`;
+      return part
+        .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+        .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>');
+    })
+    .join("");
 }
 
 export function commentAuthorInitials(name: string | null | undefined): string {

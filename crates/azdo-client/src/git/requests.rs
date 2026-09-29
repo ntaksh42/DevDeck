@@ -391,7 +391,7 @@ impl AdoClient {
             }],
         };
         let response: PullRequestQueryResponse = self
-            .post_json(&path, &[("api-version", "7.1-preview")], &body)
+            .post_json_read(&path, &[("api-version", "7.1-preview")], &body)
             .await?;
         let prs = response
             .results

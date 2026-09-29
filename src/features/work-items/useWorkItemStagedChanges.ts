@@ -61,8 +61,10 @@ export function useWorkItemStagedChanges({
   const undoTimerRef = useRef<number | null>(null);
   const stagedRef = useRef<StagedChanges>(staged);
   const previewRef = useRef<WorkItemPreview | null>(preview ?? null);
+  const selectedIdRef = useRef<number | undefined>(selectedItem?.id);
   stagedRef.current = staged;
   previewRef.current = preview ?? null;
+  selectedIdRef.current = selectedItem?.id;
 
   function setStagedChanges(action: SetStateAction<StagedChanges>) {
     setStaged((current) => {
@@ -330,6 +332,9 @@ export function useWorkItemStagedChanges({
           // History is best-effort; the assignment itself already succeeded.
         });
       }
+      // The user moved to another item while the request ran: the staged edits,
+      // undo banner and errors now belong to that item, so leave them alone.
+      if (selectedIdRef.current !== workItemId) return;
       setStagedChanges({});
       setUndoState({ changes: inverse, workItemId, count: appliedCount });
       if (undoTimerRef.current !== null) window.clearTimeout(undoTimerRef.current);
@@ -338,7 +343,7 @@ export function useWorkItemStagedChanges({
         undoTimerRef.current = null;
       }, UNDO_WINDOW_MS);
     } catch (error) {
-      setApplyError(commandErrorMessage(error));
+      if (selectedIdRef.current === workItemId) setApplyError(commandErrorMessage(error));
     } finally {
       setApplying(false);
       restorePanelFocus(previousFocus);
@@ -359,8 +364,10 @@ export function useWorkItemStagedChanges({
     try {
       await applyChangeSet(undo.changes);
     } catch (error) {
-      setApplyError(commandErrorMessage(error));
-      if (selectedItem.id === undo.workItemId) setUndoState(undo);
+      if (selectedIdRef.current === undo.workItemId) {
+        setApplyError(commandErrorMessage(error));
+        setUndoState(undo);
+      }
     } finally {
       setApplying(false);
       restorePanelFocus(previousFocus);
