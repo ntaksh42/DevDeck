@@ -15,7 +15,8 @@ export function WorkItemPullRequestsSection({ preview }: { preview: WorkItemPrev
     >
       <div className="space-y-1">
         {preview.pullRequests.map((pr) => {
-          const inReviews = !!pr.repositoryId;
+          // myVoteLabel is only set for PRs I review (My Reviews).
+          const inReviews = !!pr.myVoteLabel;
           return (
             <button
               key={pr.pullRequestId}
@@ -25,7 +26,7 @@ export function WorkItemPullRequestsSection({ preview }: { preview: WorkItemPrev
               }}
               disabled={!pr.webUrl}
               className="flex w-full min-w-0 items-center gap-1.5 rounded border border-border bg-card px-1.5 py-1 text-left text-xs hover:bg-secondary disabled:cursor-default disabled:opacity-60"
-              title={pr.webUrl ?? "Pull request not in My Reviews"}
+              title={pr.webUrl ?? "Pull request link unavailable"}
             >
               <span className="w-16 shrink-0 truncate text-[11px] font-bold text-slate-500 dark:text-slate-400">
                 {inReviews ? "Review" : "PR"}
@@ -33,7 +34,7 @@ export function WorkItemPullRequestsSection({ preview }: { preview: WorkItemPrev
               <span className="shrink-0 font-mono text-[11px] font-extrabold text-primary">
                 !{pr.pullRequestId}
               </span>
-              <span className="min-w-0 flex-1 truncate">{pr.title ?? "(not in My Reviews)"}</span>
+              <span className="min-w-0 flex-1 truncate">{pr.title ?? "(not synced — opens in browser)"}</span>
               {pr.myVoteLabel ? (
                 <span className="shrink-0 rounded border border-border bg-muted px-1 py-px text-[11px] text-muted-foreground">
                   {pr.myVoteLabel}

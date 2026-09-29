@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 
+use crate::db::{CachedPr, CachedReviewPr};
+
 use super::super::*;
 
 /// Extracts attached files (`AttachedFile` relations) for the preview, newest
@@ -59,6 +61,83 @@ pub(crate) fn pull_request_ids_from_relations(raw_relations: &[WorkItemRelation]
     pr_ids.sort_unstable();
     pr_ids.dedup();
     pr_ids
+}
+
+/// Parses `(project_id, repository_id, pull_request_id)` from a Git PR
+/// `ArtifactLink` URL (`vstfs:///Git/PullRequestId/{proj}%2F{repo}%2F{id}`).
+pub(crate) fn pull_request_artifact_parts(url: &str) -> Option<(String, String, i64)> {
+    const MARKER: &str = "/git/pullrequestid/";
+    let start = url.to_ascii_lowercase().find(MARKER)? + MARKER.len();
+    let decoded = url[start..].replace("%2F", "/").replace("%2f", "/");
+    let mut parts = decoded.split('/');
+    let project = parts.next().filter(|part| !part.is_empty())?;
+    let repository = parts.next().filter(|part| !part.is_empty())?;
+    let id = parts.next()?.parse::<i64>().ok()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    Some((project.to_string(), repository.to_string(), id))
+}
+
+/// Builds the preview's Pull Requests section. Details come from My Reviews
+/// first (it carries the vote), then the org-wide Active PR cache. A PR in
+/// neither cache still gets a browser link: Azure DevOps web routes accept the
+/// project and repository GUIDs from the artifact link in place of names.
+pub(crate) fn pull_request_links_from_relations(
+    base_url: &str,
+    raw_relations: &[WorkItemRelation],
+    reviews: &[CachedReviewPr],
+    active_prs: &[CachedPr],
+) -> Vec<WorkItemPullRequestLink> {
+    let base_url = base_url.trim_end_matches('/');
+    pull_request_ids_from_relations(raw_relations)
+        .into_iter()
+        .map(|pull_request_id| {
+            let draft_label =
+                |is_draft: bool| if is_draft { "Draft" } else { "Active" }.to_string();
+            if let Some(pr) = reviews
+                .iter()
+                .find(|pr| pr.pull_request_id == pull_request_id)
+            {
+                return WorkItemPullRequestLink {
+                    pull_request_id,
+                    repository_id: Some(pr.repository_id.clone()),
+                    title: Some(pr.title.clone()),
+                    status: Some(draft_label(pr.is_draft)),
+                    my_vote_label: Some(pr.my_vote_label.clone()),
+                    web_url: pr.web_url.clone(),
+                };
+            }
+            let fallback = raw_relations
+                .iter()
+                .filter_map(|relation| pull_request_artifact_parts(&relation.url))
+                .find(|(_, _, id)| *id == pull_request_id);
+            let fallback_url = fallback.as_ref().map(|(project, repository, _)| {
+                format!("{base_url}/{project}/_git/{repository}/pullrequest/{pull_request_id}")
+            });
+            if let Some(pr) = active_prs
+                .iter()
+                .find(|pr| pr.pull_request_id == pull_request_id)
+            {
+                return WorkItemPullRequestLink {
+                    pull_request_id,
+                    repository_id: Some(pr.repository_id.clone()),
+                    title: Some(pr.title.clone()),
+                    status: Some(draft_label(pr.is_draft)),
+                    my_vote_label: None,
+                    web_url: pr.web_url.clone().or(fallback_url),
+                };
+            }
+            WorkItemPullRequestLink {
+                pull_request_id,
+                repository_id: fallback.map(|(_, repository, _)| repository),
+                title: None,
+                status: None,
+                my_vote_label: None,
+                web_url: fallback_url,
+            }
+        })
+        .collect()
 }
 
 /// True when any PR linked to the work item is currently active in the

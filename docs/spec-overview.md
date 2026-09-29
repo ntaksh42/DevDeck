@@ -478,6 +478,13 @@ API呼び出しは発生しない。この判定はビュー実行結果 (`WorkI
 にのみ適用され、My Work Items など同期キャッシュ経由の一覧には反映されない
 (常に `false`)。Completed/Abandoned のみのPRは対象外。
 
+作業項目プレビューの Pull Requests セクションは、`ArtifactLink` (Pull Request) の各PRを
+My Reviews キャッシュ (タイトル・自分の投票・Draft) → Active PRキャッシュ (タイトル・Draft)
+の順に突き合わせて表示し、クリックで常にブラウザで開く。どちらのキャッシュにも無いPR
+(他人のPRで Active 以外など) も、リンクURL `vstfs:///Git/PullRequestId/{projectGuid}%2F{repoGuid}%2F{id}`
+から `{base_url}/{projectGuid}/_git/{repoGuid}/pullrequest/{id}` を組み立てて開けるようにする
+(追加のAPI呼び出しはしない)。
+
 作業項目グリッド・My Reviews・PR Search の `R` は Result パネル/タブを前面化してコメントモードに入る。
 Result 内 (テキスト入力以外) の `o` は結果 HTML を既定のブラウザで開く。コメントモードでは
 `↑ ↓` / `Home` / `End` でブロック (見出し・段落・リスト項目・表の行など) を移動、`Shift+↑ ↓` で範囲を

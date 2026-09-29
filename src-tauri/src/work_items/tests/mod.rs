@@ -10,6 +10,7 @@ mod authenticated_user;
 mod candidates;
 mod conversions;
 mod mutations;
+mod pull_request_links;
 mod sync;
 
 pub(super) async fn test_client(server: &MockServer) -> AdoClient {

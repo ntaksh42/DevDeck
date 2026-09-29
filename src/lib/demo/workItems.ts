@@ -524,11 +524,11 @@ export function demoWorkItemPreview(input?: GetWorkItemPreviewInput): WorkItemPr
       },
       {
         pullRequestId: 9001,
-        repositoryId: null,
+        repositoryId: "demo-repo-guid",
         title: null,
         status: null,
         myVoteLabel: null,
-        webUrl: null,
+        webUrl: "https://dev.azure.com/contoso/demo-project-guid/_git/demo-repo-guid/pullrequest/9001",
       },
     ],
     attachments: [
