@@ -122,6 +122,20 @@ describe("MarkdownView", () => {
     expect(resolveImageSource).toHaveBeenCalledWith(attachmentUrl);
   });
 
+  it("re-hydrates an image when the resolver changes while the first fetch is pending", async () => {
+    const attachmentUrl =
+      "https://dev.azure.com/contoso/proj/_apis/wit/attachments/abc?fileName=a.png";
+    const first = vi.fn().mockReturnValue(new Promise<string>(() => {}));
+    const second = vi.fn().mockResolvedValue("data:image/png;base64,BBBB");
+    const text = `![alt](${attachmentUrl})`;
+    const { container, rerender } = render(<MarkdownView text={text} resolveImageSource={first} />);
+    rerender(<MarkdownView text={text} resolveImageSource={second} />);
+    await waitFor(() =>
+      expect(container.querySelector("img")?.getAttribute("src")).toBe("data:image/png;base64,BBBB"),
+    );
+    expect(second).toHaveBeenCalledWith(attachmentUrl);
+  });
+
   it("does not hydrate non-attachment image URLs", async () => {
     const resolveImageSource = vi.fn().mockResolvedValue("data:image/png;base64,AAAA");
     render(

@@ -182,6 +182,10 @@ export function MarkdownView({
     const root = containerRef.current;
     if (!root || !resolveImageSource) return;
     let cancelled = false;
+    // Images whose fetch is still in flight. If the effect re-runs before they
+    // settle, their result is discarded, so the hydrated marker must be cleared
+    // or the re-run would skip them and leave the unauthenticated src (401).
+    const pending = new Set<HTMLImageElement>();
     for (const image of Array.from(root.querySelectorAll("img"))) {
       const rawSrc = image.getAttribute("src");
       if (!rawSrc || /^(data|blob):/i.test(rawSrc) || image.dataset.azdoImageHydrated) {
@@ -197,7 +201,9 @@ export function MarkdownView({
         fallback.className = "text-xs italic text-muted-foreground";
         image.replaceWith(fallback);
       };
+      pending.add(image);
       void resolveImageSource(attachmentUrl)
+        .finally(() => pending.delete(image))
         .then((dataUrl) => {
           if (cancelled || !image.isConnected) return;
           // Without a data URL the original authenticated src stays in place and
@@ -213,6 +219,7 @@ export function MarkdownView({
     }
     return () => {
       cancelled = true;
+      for (const image of pending) delete image.dataset.azdoImageHydrated;
     };
   }, [html, resolveImageSource, baseUrl]);
 
