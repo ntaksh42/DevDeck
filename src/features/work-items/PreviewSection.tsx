@@ -118,22 +118,22 @@ export function PreviewSection({
             aria-expanded={!collapsed}
             onClick={toggleCollapsed}
             {...move}
-            className={`group flex w-full items-center gap-1 rounded border-l-4 bg-slate-200 px-1.5 py-1 text-left hover:bg-slate-300 focus:outline-none focus:ring-1 focus:ring-ring dark:bg-slate-700 dark:hover:bg-slate-600 ${accentColor}`}
+            className={`group flex w-full items-center gap-1 rounded border-l-4 bg-blue-50 px-1.5 py-1 text-left hover:bg-blue-100 focus:outline-none focus:ring-1 focus:ring-ring dark:bg-blue-950/40 dark:hover:bg-blue-950/70 ${accentColor}`}
           >
             <ChevronRight
-              className={`h-3 w-3 shrink-0 text-slate-600 transition-transform dark:text-slate-300 ${
+              className={`h-3 w-3 shrink-0 text-blue-700 transition-transform dark:text-blue-300 ${
                 collapsed ? "" : "rotate-90"
               }`}
               aria-hidden="true"
             />
-            <h3 className="text-[11px] font-extrabold uppercase tracking-wider leading-4 text-slate-800 dark:text-slate-100">
+            <h3 className="text-[11px] font-extrabold uppercase tracking-wider leading-4 text-blue-900 dark:text-blue-100">
               {title}
             </h3>
             <SectionGrip show={move !== null} />
           </button>
         ) : (
           <h3
-            className={`rounded border-l-4 bg-slate-200 px-1.5 py-1 text-[11px] font-extrabold uppercase tracking-wider leading-4 text-slate-800 dark:bg-slate-700 dark:text-slate-100 ${accentColor}`}
+            className={`rounded border-l-4 bg-blue-50 px-1.5 py-1 text-[11px] font-extrabold uppercase tracking-wider leading-4 text-blue-900 dark:bg-blue-950/40 dark:text-blue-100 ${accentColor}`}
           >
             {title}
           </h3>

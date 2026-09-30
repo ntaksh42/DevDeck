@@ -292,24 +292,17 @@ export function PrReviewHeader({
   ].filter(Boolean);
   const reviewers = review?.reviewers ?? [];
 
-  // Read top-down: what the PR is (title), what needs attention (status
-  // badges) followed by where it came from (id / branch / author) on the same
-  // line, then who reviews.
+  // Read top-down: what the PR is (title, full width), what needs attention
+  // (status badges, with the view controls at the row's right end), where it
+  // came from (branch, then id / author), then who reviews.
   return (
     <div className="flex shrink-0 flex-col gap-1.5 border-b border-border px-2 py-1.5">
-      <div className="flex items-start gap-2">
-        <h2
-          className="line-clamp-2 min-w-0 flex-1 text-sm font-semibold leading-snug text-foreground"
-          title={title}
-        >
-          {title}
-        </h2>
-        <div className="flex shrink-0 items-center gap-1">
-          {zoomControl}
-          {linkedWorkItemsButton}
-          {maximizeButton}
-        </div>
-      </div>
+      <h2
+        className="line-clamp-2 min-w-0 text-sm font-semibold leading-snug text-foreground"
+        title={title}
+      >
+        {title}
+      </h2>
       <div
         role="group"
         aria-label="Pull request metadata"
@@ -318,19 +311,23 @@ export function PrReviewHeader({
         <div className="flex min-w-0 items-center gap-1">
           <StateBadge isDraft={isDraft} />
           {statusBadges}
-          <p className="ml-0.5 min-w-0 truncate text-xs text-muted-foreground">
-            <span className="font-mono font-semibold text-foreground">
-              #{selectedPr.pullRequestId}
-            </span>
-            {" · "}
-            <span className="font-mono" title={branchTitle}>
-              {branchLabel}
-            </span>
-            {" · "}
-            {createdBy ?? "Unknown"}
-            {creationDate ? ` · opened ${formatRelativeDate(creationDate)}` : ""}
-          </p>
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            {zoomControl}
+            {linkedWorkItemsButton}
+            {maximizeButton}
+          </div>
         </div>
+        <p className="min-w-0 truncate font-mono text-xs text-foreground" title={branchTitle}>
+          {branchLabel}
+        </p>
+        <p className="min-w-0 truncate text-xs text-muted-foreground">
+          <span className="font-mono font-semibold text-foreground">
+            #{selectedPr.pullRequestId}
+          </span>
+          {" · "}
+          {createdBy ?? "Unknown"}
+          {creationDate ? ` · opened ${formatRelativeDate(creationDate)}` : ""}
+        </p>
         {reviewers.length > 0 ? (
           <div className="flex min-w-0 flex-wrap items-center gap-1">
             <span className="mr-0.5 text-xs text-muted-foreground">Reviewers</span>
