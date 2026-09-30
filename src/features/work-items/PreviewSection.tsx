@@ -109,7 +109,7 @@ export function PreviewSection({
 
   return (
     <section className={`min-w-0 ${className}`}>
-      {/* Muted band so each section reads as a distinct group and the
+      {/* Light blue band so each section reads as a distinct group and the
           Description ↔ Comments boundary is obvious; collapse stays. */}
       <div className="sticky top-0 z-10 mb-1 bg-card/95 pt-1 backdrop-blur-sm">
         {collapseId ? (
@@ -118,7 +118,7 @@ export function PreviewSection({
             aria-expanded={!collapsed}
             onClick={toggleCollapsed}
             {...move}
-            className={`group flex w-full items-center gap-1 rounded border-l-4 bg-blue-50 px-1.5 py-1 text-left hover:bg-blue-100 focus:outline-none focus:ring-1 focus:ring-ring dark:bg-blue-950/40 dark:hover:bg-blue-950/70 ${accentColor}`}
+            className={`group flex w-full items-center gap-1 rounded border-l-4 bg-blue-50 px-1.5 py-1 text-left hover:bg-blue-100 focus:outline-none focus:ring-1 focus:ring-ring dark:bg-blue-950 dark:hover:bg-blue-900 ${accentColor}`}
           >
             <ChevronRight
               className={`h-3 w-3 shrink-0 text-blue-700 transition-transform dark:text-blue-300 ${
@@ -133,7 +133,7 @@ export function PreviewSection({
           </button>
         ) : (
           <h3
-            className={`rounded border-l-4 bg-blue-50 px-1.5 py-1 text-[11px] font-extrabold uppercase tracking-wider leading-4 text-blue-900 dark:bg-blue-950/40 dark:text-blue-100 ${accentColor}`}
+            className={`rounded border-l-4 bg-blue-50 px-1.5 py-1 text-[11px] font-extrabold uppercase tracking-wider leading-4 text-blue-900 dark:bg-blue-950 dark:text-blue-100 ${accentColor}`}
           >
             {title}
           </h3>

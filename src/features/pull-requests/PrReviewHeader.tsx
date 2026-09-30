@@ -308,7 +308,7 @@ export function PrReviewHeader({
         aria-label="Pull request metadata"
         className="flex min-w-0 flex-col gap-1"
       >
-        <div className="flex min-w-0 items-center gap-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-1">
           <StateBadge isDraft={isDraft} />
           {statusBadges}
           <div className="ml-auto flex shrink-0 items-center gap-1">

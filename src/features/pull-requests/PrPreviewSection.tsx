@@ -73,14 +73,14 @@ export function PrPreviewSection({
   return (
     <section className={`min-w-0 ${className}`}>
       <div className="sticky top-0 z-10 mb-1 bg-card/95 pt-1 backdrop-blur-sm">
-        <div className="flex items-center gap-1 rounded border-l-4 border-l-primary bg-blue-50 dark:bg-blue-950/40">
+        <div className="flex items-center gap-1 rounded border-l-4 border-l-primary bg-blue-50 dark:bg-blue-950">
           {collapseId ? (
             <button
               type="button"
               aria-expanded={!collapsed}
               onClick={toggleCollapsed}
               onKeyDown={handleHeaderKeyDown}
-              className="flex min-w-0 flex-1 items-center gap-1 rounded px-1.5 py-1 text-left hover:bg-blue-100 focus:outline-none focus:ring-1 focus:ring-ring dark:hover:bg-blue-950/70"
+              className="flex min-w-0 flex-1 items-center gap-1 rounded px-1.5 py-1 text-left hover:bg-blue-100 focus:outline-none focus:ring-1 focus:ring-ring dark:hover:bg-blue-900"
             >
               <ChevronRight
                 className={`h-3 w-3 shrink-0 text-blue-700 transition-transform dark:text-blue-300 ${
