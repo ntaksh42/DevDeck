@@ -29,6 +29,13 @@ fn resolve_cli_resource(override_value: Option<&str>) -> String {
 #[async_trait::async_trait]
 pub trait AdoCredentialProvider: Send + Sync {
     async fn auth_header_value(&self) -> Result<String>;
+
+    /// Drops any cached credential after the server rejected it with 401.
+    /// Returns `true` when a fresh credential may now be obtained, so the
+    /// request is worth re-sending.
+    fn invalidate(&self) -> bool {
+        false
+    }
 }
 
 pub struct PatProvider {
@@ -59,7 +66,13 @@ pub struct AzureCliProvider {
     /// their own `az` process. Holders re-check the cache after acquiring it.
     fetch_lock: tokio::sync::Mutex<()>,
     token_ttl: Duration,
+    /// Upper bound for one `az` invocation. A hung CLI would otherwise hold
+    /// `fetch_lock` forever and stall every request until the app restarts.
+    fetch_timeout: Duration,
 }
+
+/// Generous enough for a cold `az` start, short enough to unblock the app.
+const AZ_FETCH_TIMEOUT: Duration = Duration::from_secs(30);
 
 impl AzureCliProvider {
     pub fn new() -> Self {
@@ -69,6 +82,7 @@ impl AzureCliProvider {
             cache: Mutex::new(None),
             fetch_lock: tokio::sync::Mutex::new(()),
             token_ttl: Duration::from_secs(300),
+            fetch_timeout: AZ_FETCH_TIMEOUT,
         }
     }
 
@@ -79,6 +93,7 @@ impl AzureCliProvider {
             cache: Mutex::new(None),
             fetch_lock: tokio::sync::Mutex::new(()),
             token_ttl,
+            fetch_timeout: AZ_FETCH_TIMEOUT,
         }
     }
 }
@@ -107,9 +122,18 @@ impl AdoCredentialProvider for AzureCliProvider {
 
         // `az` shells out synchronously; run it off the async worker thread.
         let token_source = Arc::clone(&self.token_source);
-        let fetched = tokio::task::spawn_blocking(move || token_source.access_token())
-            .await
-            .map_err(|error| AdoError::Auth(format!("Azure CLI token task failed: {error}")))??;
+        let fetched = tokio::time::timeout(
+            self.fetch_timeout,
+            tokio::task::spawn_blocking(move || token_source.access_token()),
+        )
+        .await
+        .map_err(|_| {
+            AdoError::Auth(format!(
+                "Azure CLI token request timed out after {}s; check 'az login' and retry",
+                self.fetch_timeout.as_secs()
+            ))
+        })?
+        .map_err(|error| AdoError::Auth(format!("Azure CLI token task failed: {error}")))??;
         if fetched.token.trim().is_empty() {
             return Err(AdoError::Auth(
                 "Azure CLI returned an empty access token".to_string(),
@@ -134,6 +158,13 @@ impl AdoCredentialProvider for AzureCliProvider {
         });
 
         Ok(header)
+    }
+
+    fn invalidate(&self) -> bool {
+        if let Ok(mut cache) = self.cache.lock() {
+            *cache = None;
+        }
+        true
     }
 }
 
@@ -272,6 +303,9 @@ fn token_expires_in(value: &serde_json::Value) -> Option<Duration> {
         .to_std()
         .ok()
 }
+
+#[cfg(test)]
+mod tests_fetch;
 
 #[cfg(test)]
 mod tests {

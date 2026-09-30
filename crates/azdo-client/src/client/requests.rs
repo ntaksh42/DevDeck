@@ -139,7 +139,12 @@ impl AdoClient {
         S: Fn(reqwest::Response) -> Fut,
         Fut: std::future::Future<Output = Result<T>>,
     {
-        for attempt in 1..=self.retry_policy.attempts() {
+        // A 401 with a refreshable credential earns one free re-send that does
+        // not consume a retry attempt, so it works even with `no_retries()`.
+        let mut refreshed_after_401 = false;
+        let mut attempt = 0;
+        while attempt < self.retry_policy.attempts() {
+            attempt += 1;
             let auth = self.auth.auth_header_value().await?;
             let response = build_request().header("Authorization", &auth).send().await;
 
@@ -150,6 +155,13 @@ impl AdoClient {
                         return on_success(resp).await;
                     }
                     if status == StatusCode::UNAUTHORIZED {
+                        // The cached token may have been revoked or outlived its
+                        // real expiry (e.g. after sleep); drop it and re-send once.
+                        if !refreshed_after_401 && self.auth.invalidate() {
+                            refreshed_after_401 = true;
+                            attempt -= 1;
+                            continue;
+                        }
                         return Err(AdoError::Unauthorized);
                     }
 

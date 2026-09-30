@@ -234,7 +234,7 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
   で、既存接続は無変更で動作する。詳細は `docs/design/05-provider-abstraction-and-github-mode.md`。
 - **認証プロバイダ**: `auth_provider` は `pat` / `azure_cli` (アンダースコア形) / `github_pat`。
   - **PAT (Azure DevOps)**: `Authorization: Basic base64(":{pat}")`。必要スコープは Code(Read)/Work Items(Read)/Project and Team(Read)。
-  - **Azure CLI**: `az account get-access-token` を実行し Bearer トークンを取得。メモリにキャッシュし、CLI 報告の `expires_on`/`expiresOn` から算出した有効期限の 60 秒前まで再利用する (取得できない古い CLI では 5 分の固定 TTL にフォールバック)。
+  - **Azure CLI**: `az account get-access-token` を実行し Bearer トークンを取得。メモリにキャッシュし、CLI 報告の `expires_on`/`expiresOn` から算出した有効期限の 60 秒前まで再利用する (取得できない古い CLI では 5 分の固定 TTL にフォールバック)。`az` の 1 回の実行は 30 秒でタイムアウトし (固まった `az` が全リクエストを止めないよう取得ロックを解放)、REST が 401 を返したらキャッシュを破棄して 1 回だけ再送する。
   - **GitHub PAT**: `Authorization: Bearer {pat}` (classic / fine-grained)。接続追加時に `GET /user` で
     検証し、認証ユーザーの login から接続 id (`github:{login}`) を導出する。
 - **シークレット保管**: Windows 資格情報マネージャ (`keyring`) のみ。
