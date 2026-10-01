@@ -73,4 +73,12 @@ describe("useRangeSelection", () => {
     expect(result.current.selectedKeys.size).toBe(0);
     expect(result.current.selectedRows.map((row) => row.id)).toEqual(["a"]);
   });
+
+  it("uses the focused row as anchor after the original anchor disappears", () => {
+    const { result, rerender } = render(rows, 0);
+    act(() => result.current.extendTo(2));
+    rerender({ rows: rows.slice(1), selectedIndex: 0 });
+    act(() => result.current.extendTo(2));
+    expect([...result.current.selectedKeys]).toEqual(["b", "c", "d"]);
+  });
 });

@@ -43,9 +43,10 @@ export function useRangeSelection<T>({
   // Drop keys whose rows disappeared (filter change, sync) so the status bar
   // and copy action never report rows the user cannot see.
   useEffect(() => {
+    const present = new Set(rows.map(keyOf));
+    setAnchorKey((prev) => (prev !== null && !present.has(prev) ? null : prev));
     setSelectedKeys((prev) => {
       if (prev.size === 0) return prev;
-      const present = new Set(rows.map(keyOf));
       const next = new Set([...prev].filter((key) => present.has(key)));
       return next.size === prev.size ? prev : next;
     });
