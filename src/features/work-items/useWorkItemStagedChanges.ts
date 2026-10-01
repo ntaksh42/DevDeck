@@ -62,13 +62,11 @@ export function useWorkItemStagedChanges({
   const undoTimerRef = useRef<number | null>(null);
   const stagedRef = useRef<StagedChanges>(staged);
   const previewRef = useRef<WorkItemPreview | null>(preview ?? null);
-  const selectedIdRef = useRef<number | undefined>(selectedItem?.id);
   // Bumped on every selection change so an in-flight apply can tell it is stale
   // even after an A -> B -> A round trip.
   const selectionEpochRef = useRef(0);
   stagedRef.current = staged;
   previewRef.current = preview ?? null;
-  selectedIdRef.current = selectedItem?.id;
 
   function setStagedChanges(action: SetStateAction<StagedChanges>) {
     setStaged((current) => {
@@ -365,6 +363,7 @@ export function useWorkItemStagedChanges({
   async function undoLastApply() {
     const undo = undoState;
     if (!undo || !selectedItem || applying || selectedItem.id !== undo.workItemId) return;
+    const epoch = selectionEpochRef.current;
     const previousFocus = document.activeElement;
     if (undoTimerRef.current !== null) {
       window.clearTimeout(undoTimerRef.current);
@@ -376,13 +375,17 @@ export function useWorkItemStagedChanges({
     try {
       await applyChangeSet(undo.changes);
     } catch (error) {
-      if (selectedIdRef.current === undo.workItemId) {
+      if (selectionEpochRef.current === epoch) {
         setApplyError(commandErrorMessage(error));
         setUndoState(undo);
+      } else {
+        pushToast(`#${undo.workItemId} の取り消しに失敗しました: ${commandErrorMessage(error)}`);
       }
     } finally {
-      setApplying(false);
-      restorePanelFocus(previousFocus);
+      if (selectionEpochRef.current === epoch) {
+        setApplying(false);
+        restorePanelFocus(previousFocus);
+      }
     }
   }
 
