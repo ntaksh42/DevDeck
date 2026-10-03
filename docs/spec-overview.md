@@ -101,6 +101,15 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
 | **Notifications** | 通知履歴 (`notifications` テーブル) 専用ビュー。サイドバー最上位に固定表示 (ドラッグ並べ替え対象外)、未読件数バッジ付き。フィルタ: Unread only トグル、種別の複数選択 (`MultiSelectFilter`)、組織が2件以上のときのみ表示される単一選択の組織セレクト。一覧は `list_notifications` (`limit=100`、`beforeId` カーソルで「Load more」) を `useInfiniteQuery` で取得し、共有 `useGridVirtualizer` で仮想化。行は未読ドット・タイトル・相対時刻・種別ラベル+詳細+本文冒頭、webUrl があれば行内に外部ブラウザで開くボタン。キーボード: `↑↓`/`J K`/`Home`/`End`/`PageUp`/`PageDown` で行移動、`Enter` でジャンプ (種別ごとに PR Search / Work Item Search / Pipelines / Settings のいずれかへ遷移、または `webUrl` を外部ブラウザで開く。対象を特定できない場合は何もしない) と同時に既読化、`Ctrl+Enter` は `webUrl` を外部ブラウザで開いて既読化、`R` で選択行を既読化 (バックエンドに未読へ戻す手段が無いため、未読の行を既読にするだけの片方向操作)。ヘッダーの「Mark all read」で全既読。既読操作は `mark_notifications_read` / `mark_all_notifications_read` を呼び関連クエリを invalidate。`notifications:inbox-updated` イベント (App 直下で購読) を受けて一覧・未読バッジの両方を invalidate するため、ビューを開いていなくてもバッジは最新化される。パイプライン監視の開始/終了通知 (`usePipelineWatchNotifications`) とパイプライン手動実行のキュー投入 (App の `runQuickPipeline`) は、デスクトップ通知トーストと同じタイミングで `record_notification` を呼び、同じ履歴に記録する (kind: `pipelineWatchStarted` / `pipelineWatchFinished` / `pipelineRunQueued`)。`G` チェーンは `N`。 |
 | **Analyze** | 登録したクエリとブランチを**グループ**単位でまとめ、Day / Week の粒度で推移を見るビュー。1 グループにクエリ複数 + ブランチ複数を登録でき、どちらか片方だけでもよい (両方 0 件のときのみ保存を拒否)。左のグループ一覧 + 右の詳細。クエリは WIQL に `ASOF` を付けて各時点の件数を取得し (`count_work_item_query_history`、バックエンドで並列度 4・1 回あたり最大 90 点)、1 本ごとに小さな折れ線 + 現在値 + 前期比を並べる。`ASOF` は `ORDER BY` の前に挿入し、文字列リテラル内の同名語は誤検出しない。ブランチは既存の `search_commits` で期間内のコミットを取り、日別の縦棒 (最新バケットを強調色) で件数を示す。行を開くとクエリは数値テーブル (期間 / 件数 / 前期比 / 備考)、ブランチは日・週バケットのコミット一覧 (既定は最新 3 バケット展開、見出しに件数の横棒、`truncated` 時は「Showing N of M commits」) に展開し、`Esc` で一覧へ戻る。Azure DevOps が答えられなかった時点は 0 ではなく欠測 (`count: null`) として扱い、テーブルに理由を出しつつ折れ線は前後をつないで線を途切れさせない。粒度と期間 (Day: 7/30/90 日、Week: 4/12/26 週) はグループ単位の設定で、週は既存のヒートマップと同じ月曜起点・UTC。グループは localStorage (`azdodeck:analyze:groups`) に保存する (グループ 20 件、1 グループあたりメンバー 12 件が上限)。`ASOF` を含む WIQL は登録時に拒否し、保存済み Work Item View からの取り込みでも候補から除外する。ブランチ欄は選択中リポジトリの実ブランチ (`list_repo_branches`) をキーボード操作対応の候補選択欄 (`FilterableSelect`) で提示し、既定ブランチを初期選択にする (取得失敗時は自由入力へフォールバック、リポジトリ変更で選択をリセット)。キーボード: 一覧で `↑↓`/`J K`/`Home`/`End` 移動、`Enter` で詳細へ、`N` 追加 / `E` 編集 / `Delete` 削除、詳細で `D`/`W` 粒度切替。`G` チェーンは `A`。 |
 
+My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnings }`、
+PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warnings }` を返す。
+ライブ取得のプロジェクト単位の失敗 (403/404/一時的なサーバーエラーを含む) はスキップし、
+成功した結果を表示する。`warnings` は取得できなかったプロジェクト名の重複なしの配列で、
+両画面に件数と名前を表示する。成功した取得が 0 件で失敗がある場合だけエラーにする。
+空の成功レスポンスは成功と数える。複数ステータス・ターゲットブランチの検索では全取得を
+通じて成功を判定し、active キャッシュの取得成功も含める。GitHub 接続とブラウザデモでは
+`warnings` は空配列。
+
 ### 横断機能
 
 - **コマンドパレット (`Ctrl+K`)**: コマンド実行 + 作業項目/アクティブ PR/コミットの横断検索。

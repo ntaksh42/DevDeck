@@ -48,7 +48,7 @@ use crate::pr_review::{
     SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
 };
 use crate::prs::{
-    ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestSummary,
+    ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestsResult,
     PullRequestSearchResult, ReviewPullRequestSummary, SearchPullRequestsInput,
 };
 use crate::work_items::{
@@ -104,7 +104,7 @@ pub(crate) trait Provider: Send + Sync {
     async fn list_my_created_pull_requests(
         &self,
         input: ListMyCreatedPullRequestsInput,
-    ) -> Result<Vec<MyCreatedPullRequestSummary>>;
+    ) -> Result<MyCreatedPullRequestsResult>;
     async fn list_my_review_pull_requests(
         &self,
         input: ListMyReviewPullRequestsInput,

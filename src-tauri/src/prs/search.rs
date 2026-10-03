@@ -148,8 +148,7 @@ pub(crate) async fn project_id_name_pairs(client: &AdoClient) -> Result<Vec<(Str
 }
 
 /// Lists PRs of `status` across one project with optional server-side target
-/// branch and date-window filters, dropping a deleted project (404) rather than
-/// failing the whole search.
+/// branch and date-window filters. Project errors are collected by the caller.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn fetch_status_prs_for_project(
     client: &AdoClient,
@@ -162,7 +161,7 @@ pub(crate) async fn fetch_status_prs_for_project(
     max_time: Option<&str>,
     time_range_type: &str,
 ) -> Result<Vec<PullRequestSummary>> {
-    let prs = match client
+    let prs = client
         .search_project_pull_requests(
             project_id,
             status,
@@ -172,20 +171,7 @@ pub(crate) async fn fetch_status_prs_for_project(
             Some(time_range_type),
             PROJECT_PR_SYNC_TOP,
         )
-        .await
-    {
-        Ok(prs) => prs,
-        Err(e) if is_ado_not_found(&e) => {
-            tracing::warn!(
-                org = %org.name,
-                project = %project_name,
-                error = %e,
-                "pull request search returned 404, skipping project"
-            );
-            return Ok(Vec::new());
-        }
-        Err(e) => return Err(e.into()),
-    };
+        .await?;
     Ok(prs
         .into_iter()
         .filter_map(|pr| live_pr_to_summary(org, project_id, project_name, pr))

@@ -162,7 +162,7 @@ export function MyPullRequestsGrid() {
     enabled: organizationId !== "",
   });
 
-  const allPrs = useMemo(() => query.data ?? [], [query.data]);
+  const allPrs = useMemo(() => query.data?.pullRequests ?? [], [query.data]);
 
   // Autocomplete pool: the repo/target/title values already loaded, mirroring
   // the My Reviews value-suggestion filter.
@@ -356,6 +356,11 @@ export function MyPullRequestsGrid() {
 
   const gridPane = (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card">
+      {query.data && query.data.warnings.length > 0 && (
+        <p role="status" className="shrink-0 px-2 py-1 text-xs text-amber-600 dark:text-amber-400">
+          Could not fetch {query.data.warnings.length} project(s): {query.data.warnings.join(", ")}.
+        </p>
+      )}
       {query.isLoading ? (
         <p className="px-2 py-3 text-sm text-muted-foreground">Loading…</p>
       ) : query.isError ? (
