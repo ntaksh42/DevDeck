@@ -21,7 +21,7 @@ import { buildTextIndex, hashResult, listBlocks, locateQuote } from "./resultAnc
 import { useAgentNoteActions } from "./useAgentNoteActions";
 import type { CommentRequest, FrameState, NoteAnchor } from "./types";
 
-type ResultPreview = { fileName: string; filePath: string; html: string };
+type ResultPreview = { fileName: string; filePath: string; html: string; warning: string | null; tooLarge: boolean };
 
 const headerButton =
   "shrink-0 rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring";
@@ -73,7 +73,7 @@ export function AgentResultPanel({
   const [notesSize, setNotesSize] = useNotesSize(wide);
   const [openError, setOpenError] = useState<string | null>(null);
   const returnToRef = useRef<"block" | "grid">("grid");
-  const resultHash = useMemo(() => (preview ? hashResult(preview.html) : null), [preview]);
+  const resultHash = useMemo(() => (preview && !preview.tooLarge ? hashResult(preview.html) : null), [preview]);
 
   useEffect(() => {
     setFrame(null);
@@ -100,7 +100,7 @@ export function AgentResultPanel({
         () => bodyRef.current?.querySelector<HTMLElement>("[data-agent-result-frame='true']")?.focus(),
         60,
       );
-    } else if ((!hasFolder && !loading) || (showsBody && !preview)) {
+    } else if ((!hasFolder && !loading) || (showsBody && (!preview || preview.tooLarge))) {
       handledCommentRequestRef.current = commentModeRequest;
     }
   }, [commentModeRequest, frame, hasFolder, loading, showsBody, preview]);
@@ -326,8 +326,16 @@ export function AgentResultPanel({
         : {})}
     >
       {openError ? <p className="shrink-0 text-[11px] leading-4 text-destructive">{openError}</p> : null}
+      {preview?.warning ? <p role="status" className="text-[11px] text-amber-600">{preview.warning}</p> : null}
       <div ref={bodyRef} className={`flex min-h-0 flex-1 gap-1 ${wide ? "flex-row" : "flex-col"}`}>
-        {preview ? (
+        {preview?.tooLarge ? (
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 rounded border border-border p-4">
+            <p className="text-[11px]">ファイルが大きすぎます（上限 5 MiB）。</p>
+            <button type="button" onClick={openInBrowser} className={headerButton}>
+              外部ブラウザで開く (o)
+            </button>
+          </div>
+        ) : preview ? (
           <ResultFrame
             html={preview.html}
             title={frameTitle}
@@ -357,7 +365,7 @@ export function AgentResultPanel({
             folderName={`${target === "pull-request" ? "pr" : "wi"}-${itemId}`}
             anchors={anchors}
             done={done}
-            hasResult={!!preview}
+            hasResult={!!preview && !preview.tooLarge}
             resultHash={resultHash}
             activeId={activeId}
             pendingQuote={pending?.quote ?? null}

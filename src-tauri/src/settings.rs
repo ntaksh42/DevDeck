@@ -1,6 +1,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+mod result_html;
+
 use serde::{Deserialize, Serialize};
 
 use chrono::Utc;
@@ -77,7 +79,8 @@ pub struct ReviewResultPreview {
     pub pull_request_id: i64,
     pub file_name: String,
     pub file_path: String,
-    pub html: String,
+    #[serde(flatten)]
+    pub content: result_html::ResultHtml,
 }
 
 #[derive(Debug, Serialize)]
@@ -86,7 +89,8 @@ pub struct WorkItemResultPreview {
     pub work_item_id: i64,
     pub file_name: String,
     pub file_path: String,
-    pub html: String,
+    #[serde(flatten)]
+    pub content: result_html::ResultHtml,
 }
 
 #[derive(Clone)]
@@ -268,7 +272,7 @@ impl SettingsService {
         let Some(file_path) = find_review_result_file(&folder, input.pull_request_id)? else {
             return Ok(None);
         };
-        let html = fs::read_to_string(&file_path)?;
+        let content = result_html::read_result_html(&file_path)?;
         Ok(Some(ReviewResultPreview {
             pull_request_id: input.pull_request_id,
             file_name: file_path
@@ -277,7 +281,7 @@ impl SettingsService {
                 .unwrap_or_default()
                 .to_string(),
             file_path: file_path.display().to_string(),
-            html,
+            content,
         }))
     }
 
@@ -307,7 +311,7 @@ impl SettingsService {
         let Some(file_path) = find_work_item_result_file(&folder, input.work_item_id)? else {
             return Ok(None);
         };
-        let html = fs::read_to_string(&file_path)?;
+        let content = result_html::read_result_html(&file_path)?;
         Ok(Some(WorkItemResultPreview {
             work_item_id: input.work_item_id,
             file_name: file_path
@@ -316,7 +320,7 @@ impl SettingsService {
                 .unwrap_or_default()
                 .to_string(),
             file_path: file_path.display().to_string(),
-            html,
+            content,
         }))
     }
 }
