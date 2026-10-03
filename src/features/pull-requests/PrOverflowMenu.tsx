@@ -181,6 +181,18 @@ function OverflowMenuPopup({
         >
           Publish
         </button>
+      ) : !isAbandoned ? (
+        <button
+          type="button"
+          role="menuitem"
+          data-menu-item="true"
+          disabled={readOnly || pending}
+          title={readOnly ? "Read-only validation mode is enabled" : undefined}
+          onClick={() => runAndClose("draft", "Convert this pull request to a draft?")}
+          className={itemClass}
+        >
+          Convert to draft
+        </button>
       ) : null}
       {autoComplete ? (
         <button

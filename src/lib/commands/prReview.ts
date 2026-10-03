@@ -97,6 +97,7 @@ export type PullRequestAction =
   | "abandon"
   | "reactivate"
   | "publish"
+  | "draft"
   | "complete"
   | "enableAutoComplete"
   | "cancelAutoComplete";

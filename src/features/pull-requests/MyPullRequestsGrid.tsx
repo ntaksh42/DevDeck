@@ -5,6 +5,7 @@ import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import {
   focusPrimaryPreview,
   isEditableTarget,
+  markdownLink,
   matchesAllSearchTerms,
   splitSearchTerms,
 } from "@/lib/utils";
@@ -281,6 +282,24 @@ export function MyPullRequestsGrid() {
       case "C":
         event.preventDefault();
         if (pr?.webUrl) void navigator.clipboard?.writeText(pr.webUrl);
+        break;
+      case "l":
+      case "L":
+        event.preventDefault();
+        if (pr?.webUrl) {
+          void navigator.clipboard
+            ?.writeText(markdownLink(`!${pr.pullRequestId} ${pr.title}`, pr.webUrl))
+            .then(
+              () => {
+                setCopyToast("Markdown link copied");
+                window.setTimeout(() => setCopyToast(null), 1500);
+              },
+              () => {
+                setCopyToast("Copy failed");
+                window.setTimeout(() => setCopyToast(null), 1500);
+              },
+            );
+        }
         break;
       default:
         break;

@@ -6,9 +6,11 @@ import {
   Maximize2,
   MessageSquare,
   Minimize2,
+  Share2,
   X,
   XCircle,
 } from "lucide-react";
+import { openMailtoUrl } from "@/lib/openExternal";
 import { formatRelativeDate } from "@/lib/utils";
 import type {
   PrReviewer,
@@ -16,6 +18,7 @@ import type {
   ReviewPullRequestSummary,
 } from "@/lib/azdoCommands";
 import { PreviewZoomControls } from "@/components/PreviewZoomControls";
+import { buildPullRequestEmailLink } from "./prEmailLink";
 import { VOTE_DOT_CLASSES, voteTone } from "./voteVisual";
 
 const BADGE_BASE =
@@ -255,6 +258,26 @@ export function PrReviewHeader({
 
   const title = review?.title ?? selectedPr.title;
 
+  const emailLinkButton = (
+    <button
+      type="button"
+      onClick={() =>
+        void openMailtoUrl(
+          buildPullRequestEmailLink({
+            pullRequestId: selectedPr.pullRequestId,
+            title,
+            webUrl: selectedPr.webUrl,
+          }),
+        )
+      }
+      aria-label="Email a link"
+      title="Email a link"
+      className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+    >
+      <Share2 className="h-3.5 w-3.5" aria-hidden="true" />
+    </button>
+  );
+
   // Result-style tabs need the room for their own content; the full metadata
   // is one tab away in Conversation.
   if (compact) {
@@ -266,6 +289,7 @@ export function PrReviewHeader({
         </h2>
         <div className="flex shrink-0 items-center gap-1">
           {zoomControl}
+          {emailLinkButton}
           {linkedWorkItemsButton}
           {maximizeButton}
         </div>
@@ -313,6 +337,7 @@ export function PrReviewHeader({
           {statusBadges}
           <div className="ml-auto flex shrink-0 items-center gap-1">
             {zoomControl}
+            {emailLinkButton}
             {linkedWorkItemsButton}
             {maximizeButton}
           </div>

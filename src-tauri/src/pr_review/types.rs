@@ -62,7 +62,7 @@ pub struct SubmitPullRequestVoteInput {
 pub struct UpdatePullRequestInput {
     #[serde(flatten)]
     pub pr: PrLocator,
-    /// "abandon" | "reactivate" | "publish" | "complete"
+    /// "abandon" | "reactivate" | "publish" | "draft" | "complete"
     pub action: String,
     /// Required for "complete": noFastForward | squash | rebase | rebaseMerge
     pub merge_strategy: Option<String>,

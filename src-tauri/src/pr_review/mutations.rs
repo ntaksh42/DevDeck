@@ -118,6 +118,7 @@ impl PrReviewService {
             "abandon" => serde_json::json!({ "status": "abandoned" }),
             "reactivate" => serde_json::json!({ "status": "active" }),
             "publish" => serde_json::json!({ "isDraft": false }),
+            "draft" => serde_json::json!({ "isDraft": true }),
             "complete" => {
                 let merge_strategy = input
                     .merge_strategy

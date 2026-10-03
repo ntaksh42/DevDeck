@@ -104,6 +104,29 @@ describe("PrReviewPanel status actions", () => {
       fireEvent.click(screen.getByRole("button", { name: "More actions" }));
       expect(await screen.findByRole("menuitem", { name: "Reactivate" })).toBeTruthy();
       expect(screen.queryByRole("menuitem", { name: "Abandon" })).toBeNull();
+      expect(screen.queryByRole("menuitem", { name: "Convert to draft" })).toBeNull();
+    },
+    15000,
+  );
+
+  it(
+    "offers Convert to draft for an active non-draft PR",
+    async () => {
+      renderPanel();
+      await screen.findByRole("button", { name: "Complete" }, { timeout: 8000 });
+      fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+      expect(await screen.findByRole("menuitem", { name: "Convert to draft" })).toBeTruthy();
+      expect(screen.queryByRole("menuitem", { name: "Publish" })).toBeNull();
+    },
+    15000,
+  );
+
+  it(
+    "shows an Email a link button in the PR header",
+    async () => {
+      renderPanel();
+      await screen.findByRole("button", { name: "Complete" }, { timeout: 8000 });
+      expect(screen.getByRole("button", { name: "Email a link" })).toBeTruthy();
     },
     15000,
   );

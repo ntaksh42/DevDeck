@@ -209,9 +209,10 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
   次状態へ自動遷移する `transitionWorkItems` を指定できる (`update_pull_request` の complete アクション)。
 - **PR レビュアー管理**: レビューパネルから既存レビュアーの必須/任意切替・削除が可能
   (`set_pull_request_reviewer_required` / `remove_pull_request_reviewer`)。
-- **PR 編集**: ライフサイクル操作 (abandon / reactivate / publish / complete、`update_pull_request`) に加え、
+- **PR 編集**: ライフサイクル操作 (abandon / reactivate / publish / draft / complete、`update_pull_request`) に加え、
   レビューパネルからタイトル・説明をインライン編集できる (`update_pull_request_details`)。
-- **PR 操作**: レビューパネルから publish / complete / abandon に加え、自動完了 (auto-complete) の
+- **PR 操作**: レビューパネルから publish / Convert to draft (`draft` アクション、Azure DevOps のみ。
+  GitHub は未対応でエラー) / complete / abandon に加え、自動完了 (auto-complete) の
   有効化・解除が可能 (`update_pull_request` の `enableAutoComplete` / `cancelAutoComplete` アクション、
   マージ戦略を指定。`get_pull_request_review` が `autoComplete` 状態を返す)。
   プレビューに添付ファイル (`AttachedFile` リレーション) を一覧表示しブラウザでダウンロード可能。
@@ -424,6 +425,9 @@ Enter で展開してフォーカスする。空のまま `Escape` またはフ�
 作業項目プレビューのヘッダーには「Email a link」ボタンがあり、タイトルと URL を
 本文に入れた `mailto:` リンクで既定のメールクライアントを開く (Azure DevOps Web の
 Share 相当、Duplicate ボタンの隣、Tab キーで到達可能)。
+PR レビューパネルのヘッダー (ズーム/最大化ボタンの並び) にも同様の「Email a link」ボタンがあり、
+件名 `!{id} {title}`、本文にタイトルと URL を入れた `mailto:` を開く。
+My Pull Requests グリッドも他グリッド同様、`L` で選択行の Markdown リンクをコピーできる。
 作業項目 / PR / Commits の各プレビューパネルには共通のズームコントロール
 (縮小 / 現在の倍率 / 拡大の3ボタン、`src/components/PreviewZoomControls.tsx`) があり、
 70%〜160% の範囲で 10% 刻みにプレビュー内のテキストとレイアウトを拡大縮小する
