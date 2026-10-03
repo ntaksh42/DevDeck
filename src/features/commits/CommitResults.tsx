@@ -15,6 +15,8 @@ import {
 } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
 import { useGridColumns } from "@/lib/useGridColumns";
+import { useKeyedGridSelection } from "@/lib/useKeyedGridSelection";
+import { useGridFocusRestoration } from "@/lib/useGridFocusRestoration";
 import { useRangeSelection } from "@/lib/useRangeSelection";
 import { copyRowUrls } from "@/lib/copyUrls";
 import { ColumnResizeHandle } from "@/components/ResizeHandle";
@@ -77,7 +79,6 @@ export function CommitResults({
   searched: boolean;
 }) {
   const [sort, setCommitSort] = useState<CommitSortState>(() => loadCommitSort());
-  const [selectedIndex, setSelectedIndex] = useState(0);
   const [visibleColumns, setVisibleColumns] = useState<CommitColumnKey[]>(
     loadCommitVisibleColumns,
   );
@@ -100,6 +101,7 @@ export function CommitResults({
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const [maximized, setMaximized] = useState(false);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const restoreFocusRef = useRef(false);
   const [scrollerEl, setScrollerEl] = useState<HTMLDivElement | null>(null);
   const [gridViewport, setGridViewport] = useState({ height: 0, scrollTop: 0 });
@@ -155,16 +157,15 @@ export function CommitResults({
     });
   }, [results, sort]);
 
-  useEffect(() => {
-    setSelectedIndex((i) => Math.min(i, Math.max(sorted.length - 1, 0)));
-  }, [sorted.length]);
+  const { selectedIndex, setSelectedIndex, selectedRow: selectedCommit } =
+    useKeyedGridSelection(sorted, (commit) =>
+      `${commit.organizationId}:${commit.repositoryId}:${commit.commitId}`);
 
   function applySort(key: CommitSortKey) {
     setCommitSort((current) => {
       if (current.key !== key) return { key, direction: defaultCommitSortDir(key) };
       return { key, direction: current.direction === "asc" ? "desc" : "asc" };
     });
-    setSelectedIndex(0);
   }
 
   function scrollRowIntoView(index: number) {
@@ -177,6 +178,18 @@ export function CommitResults({
       scrollerEl.scrollTop = rowBottom - scrollerEl.clientHeight;
     }
   }
+
+  const gridFocus = useGridFocusRestoration({
+    containerRef,
+    restoreSignature: `${sorted.map((commit) => `${commit.organizationId}:${commit.repositoryId}:${commit.commitId}`).join("|")}#${selectedIndex}`,
+    restoreFocus: () => {
+      scrollRowIntoView(selectedIndex);
+      const row = rowRefs.current[selectedIndex];
+      if (!row?.isConnected) return false;
+      row.focus({ preventScroll: true });
+      return true;
+    },
+  });
 
   const selection = useRangeSelection({
     rows: sorted,
@@ -295,8 +308,6 @@ export function CommitResults({
   const virtualBottomPadding =
     Math.max(0, sorted.length - lastVirtualRow) * COMMIT_GRID_ROW_HEIGHT;
 
-  const selectedCommit = sorted[selectedIndex] ?? null;
-
   // Count, filter state and Columns sit in the dock tab strip, not a row of their own.
   const resultsHeader = (
     <span className="flex items-center gap-2 pr-1 text-[11px] text-muted-foreground">
@@ -324,6 +335,9 @@ export function CommitResults({
       ) : (
         <div
           role="grid"
+          ref={containerRef}
+          onFocusCapture={gridFocus.onFocusCapture}
+          onBlurCapture={gridFocus.onBlurCapture}
           aria-label="Commit search results"
           data-primary-grid="true"
           tabIndex={-1}

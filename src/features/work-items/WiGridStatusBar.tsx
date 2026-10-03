@@ -14,7 +14,6 @@ export function WiGridStatusBar({
   triageScope,
   showDone,
   setShowDone,
-  setSelectedIndex,
   archivedKeys,
   snoozeEnabled,
   showSnoozed,
@@ -37,7 +36,6 @@ export function WiGridStatusBar({
   triageScope?: string;
   showDone: boolean;
   setShowDone: React.Dispatch<React.SetStateAction<boolean>>;
-  setSelectedIndex: (i: number) => void;
   archivedKeys: Set<string>;
   snoozeEnabled: boolean;
   showSnoozed: boolean;
@@ -78,7 +76,6 @@ export function WiGridStatusBar({
             title="Toggle done view (E marks the selected row done)"
             onClick={() => {
               setShowDone((value) => !value);
-              setSelectedIndex(0);
             }}
             className={`rounded border px-2 py-0.5 text-xs ${
               showDone
@@ -96,7 +93,6 @@ export function WiGridStatusBar({
             title="Toggle snoozed view (Z snoozes the selected row)"
             onClick={() => {
               setShowSnoozed((value) => !value);
-              setSelectedIndex(0);
             }}
             className={`rounded border px-2 py-0.5 text-xs ${
               showSnoozed
@@ -115,7 +111,6 @@ export function WiGridStatusBar({
             title={`Show only stale items (no change in ${staleThresholdDays}+ days)`}
             onClick={() => {
               setStaleOnly((value) => !value);
-              setSelectedIndex(0);
             }}
             className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs ${
               staleOnly

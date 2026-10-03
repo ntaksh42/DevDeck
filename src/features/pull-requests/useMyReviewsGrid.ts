@@ -378,7 +378,6 @@ export function useMyReviewsGrid({
   function toggleFilter(col: FilterableColumn, value: string) {
     const allValues = columnUniqueValues[col] ?? [];
     setColumnFilters((prev) => toggleColumnFilterValue(prev, col, value, allValues));
-    selection.setSelectedIndex(0);
   }
 
   function clearColumnFilter(col: FilterableColumn) {
@@ -386,12 +385,10 @@ export function useMyReviewsGrid({
       const { [col]: _, ...rest } = prev;
       return rest;
     });
-    selection.setSelectedIndex(0);
   }
 
   function uncheckAllColumnFilter(col: FilterableColumn) {
     setColumnFilters((prev) => ({ ...prev, [col]: new Set<string>() }));
-    selection.setSelectedIndex(0);
   }
 
   function clearAllFilters() {
@@ -399,7 +396,6 @@ export function useMyReviewsGrid({
     setColumnFilters({});
     setOpenFilterCol(null);
     setFilterAnchorRect(null);
-    selection.setSelectedIndex(0);
   }
 
   function applySort(column: SortKey) {
@@ -409,7 +405,6 @@ export function useMyReviewsGrid({
       }
       return { key: column, direction: current.direction === 'asc' ? 'desc' : 'asc' };
     });
-    selection.setSelectedIndex(0);
   }
 
   // ── Presentation values ────────────────────────────────────────────────────

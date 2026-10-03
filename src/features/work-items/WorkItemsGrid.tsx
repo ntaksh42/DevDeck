@@ -154,7 +154,7 @@ export function WorkItemsGrid({
             clearAllFilters={g.clearAllFilters}
             firstVirtualRow={g.firstVirtualRow}
             virtualRows={g.virtualRows}
-            selectedIndex={state.selectedIndex}
+            selectedIndex={g.selectedIndex}
             checkedIds={state.checkedIds}
             unreadKeys={g.unreadKeys}
             wiColTemplate={state.wiColTemplate}
@@ -165,7 +165,7 @@ export function WorkItemsGrid({
             rowRefs={state.rowRefs}
             virtualTopPadding={g.virtualTopPadding}
             virtualBottomPadding={g.virtualBottomPadding}
-            setSelectedIndex={state.setSelectedIndex}
+            setSelectedIndex={g.setSelectedIndex}
             handleCheckboxChange={g.handleCheckboxChange}
             onShiftRangeSelect={g.selectRangeTo}
             onCtrlToggleSelect={g.toggleSelectionAt}
@@ -185,7 +185,6 @@ export function WorkItemsGrid({
         triageScope={triageScope}
         showDone={state.showDone}
         setShowDone={state.setShowDone}
-        setSelectedIndex={state.setSelectedIndex}
         archivedKeys={g.archivedKeys}
         snoozeEnabled={state.snoozeEnabled}
         showSnoozed={state.showSnoozed}

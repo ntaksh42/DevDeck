@@ -9,6 +9,7 @@ import {
 } from '@/lib/azdoCommands';
 import { recordRecentWorkItem } from '@/lib/recentItems';
 import { isTauriRuntime } from '@/lib/runtime';
+import { useKeyedGridSelection } from '@/lib/useKeyedGridSelection';
 import { useGridFocusRestoration } from '@/lib/useGridFocusRestoration';
 import { markWorkItemRead, reconcileUnread, seedDemoUnread, workItemUnreadKey } from './workItemUnreadTracking';
 import { activeArchivedKeys } from '@/lib/triage';
@@ -48,7 +49,6 @@ export function useWiGridLogic(
     onClearExternalFilters, autoFocus,
   } = props;
   const {
-    selectedIndex, setSelectedIndex,
     sort,
     checkedIds, setCheckedIds,
     lastCheckedIndex, setLastCheckedIndex,
@@ -146,13 +146,13 @@ export function useWiGridLogic(
     });
   }, [sorted, columnFilters, state.staleOnly, staleThresholdDays]);
 
-  const selectedItem = displayed[selectedIndex] ?? null;
+  const { selectedIndex, setSelectedIndex, selectedRow: selectedItem } =
+    useKeyedGridSelection(displayed, workItemSummaryKey);
   const customPreviewFieldRefs = useMemo(
     () => customPreviewFields.map((field) => field.referenceName),
     [customPreviewFields],
   );
   const customPreviewFieldSignature = customPreviewFieldRefs.join("|");
-  const selectedItemKey = selectedItem ? workItemSummaryKey(selectedItem) : null;
   const resultKeysSignature = useMemo(
     () => results.map((item) => workItemSummaryKey(item)).join("|"),
     [results],
@@ -266,18 +266,6 @@ export function useWiGridLogic(
   useEffect(() => {
     if (autoFocus) containerRef.current?.focus();
   }, [autoFocus, containerRef]);
-
-  useEffect(() => {
-    setSelectedIndex((current) => {
-      if (selectedItemKey) {
-        const preservedIndex = displayed.findIndex(
-          (item) => workItemSummaryKey(item) === selectedItemKey,
-        );
-        if (preservedIndex >= 0) return preservedIndex;
-      }
-      return Math.min(current, Math.max(displayed.length - 1, 0));
-    });
-  }, [displayed, displayed.length, selectedItemKey, setSelectedIndex]);
 
   useEffect(() => {
     // Depends on `scrollerAttached` (not just `gridScrollRef`, which never
@@ -424,7 +412,6 @@ export function useWiGridLogic(
     setOpenFilterCol(null);
     setFilterAnchorRect(null);
     onClearExternalFilters?.();
-    setSelectedIndex(0);
   }
 
   const handleKeyDown = createWiKeyHandler({
@@ -480,6 +467,7 @@ export function useWiGridLogic(
   const virtualBottomPadding = Math.max(0, displayed.length - lastVirtualRow) * WI_GRID_ROW_HEIGHT;
 
   return {
+    selectedIndex, setSelectedIndex,
     archivedKeys, sorted, displayed, columnUniqueValues,
     staleThresholdDays, rowColorRules, staleCount,
     selectedItem, previewQuery, checkedItems, bulk, unreadKeys,

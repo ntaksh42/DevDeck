@@ -92,7 +92,6 @@ export function MyReviewsGrid({
       if (e.key === 'Escape') {
         e.preventDefault();
         g.setTextFilter('');
-        g.setSelectedIndex(0);
         (e.target as HTMLElement).blur();
       } else if (e.key === 'ArrowDown' && g.visibleSortedIndexes.length > 0) {
         e.preventDefault();
@@ -134,7 +133,6 @@ export function MyReviewsGrid({
     if (e.key === 'd' || e.key === 'D') {
       e.preventDefault();
       g.setShowDrafts((v) => !v);
-      g.setSelectedIndex(0);
       return;
     }
     if (e.key === '\\') { e.preventDefault(); g.setMaximized((v) => !v); return; }
@@ -276,10 +274,10 @@ export function MyReviewsGrid({
             headerActions: (
               <ReviewFilterBar
                 textFilter={g.textFilter}
-                onTextFilterChange={(v) => { g.setTextFilter(v); g.setSelectedIndex(0); }}
+                onTextFilterChange={(v) => { g.setTextFilter(v); }}
                 filterInputRef={g.filterInputRef}
                 showDrafts={g.showDrafts}
-                onShowDraftsChange={(checked) => { g.setShowDrafts(checked); g.setSelectedIndex(0); }}
+                onShowDraftsChange={(checked) => { g.setShowDrafts(checked); }}
                 filterSuggestionPool={g.filterSuggestionPool}
                 open={filterBar.open}
                 onOpen={filterBar.onOpen}
@@ -393,7 +391,7 @@ export function MyReviewsGrid({
             activeFilterCount={g.activeFilterCount}
             sortedPrsCount={g.sortedPrs.length}
             onToggleOverlapPopup={() => g.setOverlapPopupOpen((v) => !v)}
-            onToggleShowDone={() => { g.setShowDone((v) => !v); g.setSelectedIndex(0); }}
+            onToggleShowDone={() => { g.setShowDone((v) => !v); }}
             onToggleShowSnoozed={() => g.setShowSnoozed((v) => !v)}
             onClearAllFilters={g.clearAllFilters}
             onOpenColumnMenu={(rect) => g.setColumnMenuRect(rect)}

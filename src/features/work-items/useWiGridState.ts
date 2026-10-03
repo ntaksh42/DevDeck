@@ -51,7 +51,6 @@ export function useWiGridState({
   const columnFiltersStorageKey = storageKeyScope
     ? `${WI_COLUMN_FILTERS_STORAGE_KEY}:${storageKeyScope}`
     : WI_COLUMN_FILTERS_STORAGE_KEY;
-  const [selectedIndex, setSelectedIndex] = useState(0);
   const [sort, setWiSort] = useState<WiSortState>(
     initialSort ?? loadWorkItemSort(sortStorageKey, defaultWorkItemSort()),
   );
@@ -185,7 +184,6 @@ export function useWiGridState({
       onSortChange?.(next);
       return next;
     });
-    setSelectedIndex(0);
   }
 
   function toggleColumnVisibility(column: WiSortKey) {
@@ -203,7 +201,6 @@ export function useWiGridState({
   }
 
   return {
-    selectedIndex, setSelectedIndex,
     sort, setWiSort, applyWiSort,
     visibleColumns, setVisibleColumns,
     toggleColumnVisibility, resetColumnVisibility,

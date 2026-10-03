@@ -3,6 +3,7 @@ import { useQueries } from '@tanstack/react-query';
 import { listPullRequestChanges, prLocator, type ReviewPullRequestSummary } from '@/lib/azdoCommands';
 import { recordRecentPullRequest } from '@/lib/recentItems';
 import { useGridFocusRestoration } from '@/lib/useGridFocusRestoration';
+import { useKeyedGridSelection } from '@/lib/useKeyedGridSelection';
 import { useLatestRef } from '@/lib/useLatestRef';
 import { detectFileOverlaps } from '@/lib/prOverlap';
 import { acknowledgeReturn } from './reviewReturnTracking';
@@ -39,7 +40,8 @@ export function useMyReviewsSelectionState({
   onSelectRequestHandled,
   onClearForSelectRequest,
 }: SelectionStateInput) {
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const { selectedIndex, setSelectedIndex, selectedRow: selectedPr } =
+    useKeyedGridSelection(sortedPrs, reviewTriageKey, visibleSortedIndexes);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
   const [overlapPopupOpen, setOverlapPopupOpen] = useState(false);
@@ -138,20 +140,6 @@ export function useMyReviewsSelectionState({
   }, []);
 
   // ── Effects ────────────────────────────────────────────────────────────────
-  // Keep selection on a visible row when data shrinks or a section collapses.
-  useEffect(() => {
-    if (visibleSortedIndexes.length === 0) {
-      setSelectedIndex(0);
-      return;
-    }
-    if (!visibleSortedIndexes.includes(selectedIndex)) {
-      const next =
-        visibleSortedIndexes.find((index) => index >= selectedIndex) ??
-        visibleSortedIndexes[visibleSortedIndexes.length - 1];
-      setSelectedIndex(next);
-    }
-  }, [visibleSortedIndexes, selectedIndex]);
-
   // Cross-link: switch org/filters/sections to reveal the target PR, then
   // remember it as pending so the resolution effect below can select it.
   useEffect(() => {
@@ -180,8 +168,6 @@ export function useMyReviewsSelectionState({
     }, 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sortedPrs]);
-
-  const selectedPr = sortedPrs[selectedIndex] ?? null;
 
   // Record recent PR; acknowledge "returned" highlight on open.
   useEffect(() => {
