@@ -307,7 +307,7 @@ function AppShell() {
   }
 
   function openCommandPalette(): void {
-    paletteReturnRef.current = document.activeElement as HTMLElement | null;
+    paletteReturnRef.current ??= document.activeElement as HTMLElement | null;
     setCommandPaletteOpen(true);
   }
 
@@ -319,7 +319,7 @@ function AppShell() {
   }
 
   function openHelp(): void {
-    helpReturnRef.current = document.activeElement as HTMLElement | null;
+    helpReturnRef.current ??= document.activeElement as HTMLElement | null;
     setHelpOpen(true);
   }
 

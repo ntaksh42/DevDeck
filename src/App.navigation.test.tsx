@@ -93,6 +93,43 @@ describe("App — Navigation", () => {
     expect(await main.findByRole("heading", { name: "Connections" })).toBeTruthy();
   });
 
+  it("returns focus to the original element after Ctrl+K is pressed twice", async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") {
+        return Promise.resolve([organization]);
+      }
+      if (command === "get_active_organization") {
+        return Promise.resolve(organization);
+      }
+      if (command === "list_my_review_pull_requests") {
+        return Promise.resolve([]);
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+    await screen.findByRole("main");
+    // Stands in for an element outside the grid, e.g. a preview comment box.
+    const origin = document.createElement("button");
+    document.body.appendChild(origin);
+    origin.focus();
+    expect(document.activeElement).toBe(origin);
+
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    const paletteInput = await screen.findByPlaceholderText("Type a command or search…");
+    expect(document.activeElement).toBe(paletteInput);
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    fireEvent.keyDown(paletteInput, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(screen.queryByPlaceholderText("Type a command or search…")).toBeNull();
+    });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(origin);
+    });
+    origin.remove();
+  });
+
   it("navigates view history with Alt+Left and Alt+Right", async () => {
     invokeMock.mockImplementation((command: string) => {
       if (command === "list_organizations") {
