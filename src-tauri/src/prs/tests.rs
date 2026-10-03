@@ -315,6 +315,58 @@ fn within_window_is_inclusive_and_open_ended() {
 }
 
 #[test]
+fn end_of_day_bound_covers_the_whole_final_second() {
+    // Azure DevOps timestamps carry sub-second precision, so a PR created at
+    // 23:59:59.913 on the `to` date is still inside that day. A whole-second
+    // 23:59:59 bound sits before it and dropped the row -- both from the
+    // in-memory active-cache filter and from the live query, which sends this
+    // same value as `maxTime`.
+    let to = parse_date_bound(Some("2026-05-31"), true).unwrap().unwrap();
+    assert!(within_window(
+        "2026-05-31T23:59:59.913333300+00:00",
+        None,
+        Some(&to),
+    ));
+    // The very last representable instant of the day is still inside.
+    assert!(within_window(
+        "2026-05-31T23:59:59.999999900+00:00",
+        None,
+        Some(&to),
+    ));
+    // The next day is not, so the bound did not spill over.
+    assert!(!within_window("2026-06-01T00:00:00+00:00", None, Some(&to)));
+}
+
+#[test]
+fn within_window_compares_instants_not_raw_strings() {
+    // `Z` (0x5A) sorts after `+` (0x2B) as text, so a `Z`-spelled value on the
+    // exact bound compared as later than the identical instant written
+    // `+00:00`. Parsing both sides makes the two spellings equivalent.
+    assert!(within_window(
+        "2026-05-31T23:59:59Z",
+        Some("2026-05-01T00:00:00+00:00"),
+        Some("2026-05-31T23:59:59+00:00"),
+    ));
+    // Genuinely outside the window is still rejected in both directions.
+    assert!(!within_window(
+        "2026-06-01T00:00:00.500000000+00:00",
+        None,
+        Some("2026-05-31T23:59:59+00:00"),
+    ));
+    assert!(!within_window(
+        "2026-04-30T23:59:59.999000000+00:00",
+        Some("2026-05-01T00:00:00+00:00"),
+        None,
+    ));
+    // A value we cannot parse is kept rather than silently hidden.
+    assert!(within_window(
+        "not-a-timestamp",
+        Some("2026-05-01T00:00:00+00:00"),
+        Some("2026-05-31T23:59:59+00:00"),
+    ));
+}
+
+#[test]
 fn parse_date_basis_and_sort_by_default_and_match() {
     assert!(matches!(parse_date_basis(None), DateBasis::Created));
     assert!(matches!(
