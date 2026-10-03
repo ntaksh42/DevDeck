@@ -26,6 +26,10 @@ fn resolve_cli_resource(override_value: Option<&str>) -> String {
     }
 }
 
+#[allow(
+    clippy::double_must_use,
+    reason = "async_trait adds must_use to its boxed future"
+)]
 #[async_trait::async_trait]
 pub trait AdoCredentialProvider: Send + Sync {
     async fn auth_header_value(&self) -> Result<String>;

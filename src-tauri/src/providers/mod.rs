@@ -92,6 +92,10 @@ pub struct ProviderInfo {
 }
 
 /// Domain operations the command layer invokes, independent of platform.
+#[allow(
+    clippy::double_must_use,
+    reason = "async_trait adds must_use to its boxed future"
+)]
 #[async_trait]
 pub(crate) trait Provider: Send + Sync {
     fn capabilities(&self) -> ProviderCapabilities;
