@@ -77,7 +77,7 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
 | **Pull Request Search** | プロジェクト/リポジトリ/ステータス (active/completed/abandoned、いずれも複数選択可。空=既定 active)/ターゲットブランチ/期間 (作成日 or 完了日基準)/ドラフト除外で PR を検索。並び替え (作成日・完了日・タイトル)。active はキャッシュ、それ以外はライブ取得 (ターゲットブランチ・期間はサーバ側フィルタ)。ターゲットブランチ欄は選択中のリポジトリの実ブランチ (`list_repo_branches`) を複数選択候補として表示 (`MultiSelectFilter`、候補検索とキーボード操作に対応)。複数選択時は選択ブランチごとの結果を統合する。結果は先頭 100 件で打ち切り、超過時はインジケータ表示。ソート可能グリッド、列リサイズ、`C` で URL コピー。 検索フォームはラベルを小さくした2行に詰め、キャッシュ/ライブ取得の説明は Hide drafts 横の情報アイコンのツールチップにする。結果の件数・アクティブな列フィルタ数・Columns ボタンは Results ペインのタブ帯に置く (ペイン内に見出し行は持たない)。 |
 | **My Work Items** | 自分に割当中の未完了の作業項目 (同期 WIQL で `System.StateCategory` が Completed / Removed の項目は除外。サイドバーのバッジも同じ集合の件数)。スマートフィルタは Work items ペインのタブ帯に「Ctrl+F」ボタンとして畳んでおく (`WorkItemFilterBar`、操作は My Reviews と同じ。Work Item Views の list レイアウトと Work Items Search の結果フィルタも同じ)。状態・種別・割当先・タグ (`System.Tags`、各タグをチップ表示)・更新日時。最後に開いてから変更された項目に未読マーカー (ChangedDate の差分でローカル検出、開くと消える)。 |
 | **Work Item Views** | 保存済み WIQL クエリ。件数表示、ナビへのピン留め、並べ替え、ビュー別ソート/列。グリッドの Columns メニューの「Field columns」から、Azure DevOps フィールドを検索 (名前/参照名/型の部分一致、`Enter` で先頭候補を追加) して追加列にでき、チェックを外すと削除する。追加列はビューの Extra columns (ビュー編集ダイアログと同じ設定、最大20列) として保存される。テキストフィルタ (`Ctrl+F`/`/` でフォーカス、`parseSearchQuery`/`matchesWorkItemQuery` によるスマート検索、list/board 両レイアウトに適用)。取得件数の上限はなく (ビュー編集の Limit を空欄にすると無制限、既定)、明示的に件数を指定した場合のみ打ち切る。ビュー一覧はヘッダーのトグルまたは `Ctrl+B` (グリッドからも有効) で折りたたみでき、折りたたみ時も選択中ビュー名・件数・アラート中の件数をヘッダー1行に残す。表示密度はカード / コンパクト行の2種をヘッダーで切り替える。折りたたみ状態 (`azdodeck:workItemViewsCollapsed`) と密度 (`azdodeck:workItemViewsCardMode`) は localStorage に保存する。カードには件数推移のスパークラインを描画する (`azdodeck:workItems:viewCountHistory`、ビューごと最大20点、同値の連続は記録しない。2点未満は非表示。増加=赤/減少=緑/横ばい=灰)。ビュー JSON の Export はデスクトップ版では保存ダイアログで出力先とファイル名を選択し、ブラウザ版では既定のダウンロード先へ保存する。 ビュー一覧のヘッダーは1行 (Views · 件数) で、Pin / Preview / Share / Export / Import はアイコンのみのボタン (名前はツールチップとスクリーンリーダー用テキスト)。カードは名前 → 件数+差分+スパークライン → 制限・ソート等のメタ情報1行の3段。 |
-| **Work Item Search** | キーワード + プロジェクト/状態/種別での作業項目検索。全文検索 (FTS)。グリッドは Tags 列 (`System.Tags` をチップ表示、Columns メニューで表示切替・ソート可) を含む。 |
+| **Work Item Search** | キーワード + プロジェクト/状態/種別での作業項目検索。全文検索 (FTS)。グリッドは Tags 列 (`System.Tags` をチップ表示、Columns メニューで表示切替・ソート可) を含む。 ステータスバーの「Fields」から任意フィールドを追加列にでき、選択は画面単位で保存する。値は検索結果の先頭500件まで取得する。 |
 | **Commits** | キーワード/プロジェクト/リポジトリ/作者/ブランチ/期間でコミット検索。7d/30d/90d プリセット。関連 PR の遅延ルックアップ。 |
 | **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。実行の成果物 (artifacts) を一覧表示しブラウザでダウンロード (`list_pipeline_artifacts`)。 |
 | **Commits** | キーワード/プロジェクト/リポジトリ/作者/ブランチ/期間でコミット検索。7d/30d/90d プリセット。関連 PR の遅延ルックアップ。検索ボックスの `path:src/auth` 構文で変更パス絞り込み（`searchCriteria.itemPath` を使うサーバ側適用のためリポジトリ選択が必須）。 |
@@ -87,7 +87,7 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
 | **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。ブランチ + 任意のランタイムパラメータを指定して新規実行をキュー投入 (`queue_pipeline_run`)。 |
 | **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。自分に割り当てられた保留中の承認 (manual approval) をアプリ内で承認/却下 (`list_pipeline_approvals` / `update_pipeline_approval`)。承認待ちは件数と先頭の依頼だけを1行の帯に畳んで表示し、帯のボタン (Enter/Space) で一覧を開閉する。Project / Pipeline の選択と Watch / Queue run は1行のツールバーにまとめる。 |
 | **Commits** | キーワード/プロジェクト/リポジトリ/作者/ブランチ/期間でコミット検索。7d/30d/90d プリセット。関連 PR の遅延ルックアップ。結果が表示上限(100件)を超えた場合は `truncated`/`total` を返し「Showing N of M commits」と母数を明示。 |
-| **Work Item Search** | キーワード + プロジェクト/状態/種別 (いずれも複数選択可) での作業項目検索。全文検索 (FTS)。 |
+| **Work Item Search** | キーワード + プロジェクト/状態/種別 (いずれも複数選択可) での作業項目検索。全文検索 (FTS)。 ステータスバーの「Fields」から任意フィールドを追加列にでき、選択は画面単位で保存する。値は検索結果の先頭500件まで取得する。 |
 | **Commits** | キーワード/プロジェクト/リポジトリ (複数選択可)/作者/ブランチ/期間でコミット検索。7d/30d/90d プリセット。関連 PR の遅延ルックアップ。結果が表示上限(100件)を超えた場合は `truncated`/`total` を返し「Showing N of M commits」と母数を明示。 |
 | **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。 |
 | **Settings** | パネルを 6 カテゴリ (Accounts / Appearance & keyboard / Notifications / Views & workflow / Data & sync / Advanced) に分けて表示。左側 (狭い幅では上部) に sticky なセクションナビとフィルタ入力を置く。フィルタは全語 AND・大文字小文字無視でカテゴリ名・パネル名・キーワードに一致するパネルだけを残し、該当なしのカテゴリはナビで無効化、全件不一致なら空状態 + Clear filter。フィルタは `focusFilter` (既定 `Ctrl+F`) でフォーカス、`Enter` で最初の一致パネルの先頭コントロールへ移動、`Escape` は 1 回目でクリア・2 回目でフォーカス解除。ナビは `↑↓`/`←→`/`Home`/`End` でボタン間移動、Enter/クリックでセクションへスクロールしてフォーカス、スクロール位置に応じて現在セクションを `aria-current` で強調。Connections 一覧は Add connection の直前 (先頭) に表示。実験フラグで非表示のパネル (Usage stats / Diagnostics) はフィルタ・ナビの対象外。内容: 組織設定 (PAT / Azure CLI)、通知設定、フォルダパス、グローバルホットキー、キーバインド上書き、行の条件付き色ルール (Work Item グリッドの行を条件で着色、先勝ち、localStorage 永続化)。Software update パネル (opt-in: 手動で更新確認→適用、失敗時は安全にスキップ。`tauri-plugin-updater`、ブラウザでは無効)。Experimental パネル (マスタースイッチ + 個別フラグ。マスターが false の間は個別フラグの保存値を保持したまま無効化する)。Usage stats パネル (`experimental_usage_stats` が有効なときのみ表示。localStorage `azdodeck:experimental:usageStats` に投票数・解決スレッド数・状態変更数を集計、リセット可能、外部送信なし)。 |
@@ -205,6 +205,19 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
     絞り込み。日本語可) から選択できる。↑/↓ で移動し Enter で確定 (IME 変換中の Enter は
     無視)、Escape はフィルタが空でなければクリアのみ行う。選択すると WIQL を
     常に上書きし、Name は未入力の場合のみクエリ名で補完する (保存は別途「Save」操作が必要)。
+
+- **作業項目グリッドの追加列**: Azure DevOps の任意フィールドを標準列 (#/Type/State/Title/
+  Project/Assigned To/Tags/Changed) の後ろに列として追加できる (`src/features/work-items/extraColumns.ts`)。
+  1 列は `{referenceName, fieldType}` で表され、`fieldType` は `list_work_item_fields` が返す
+  フィールド型。セルは型に応じて描画し (dateTime=相対表示 + 絶対時刻ツールチップ、boolean=Yes/No、
+  html=タグ除去したプレーンテキスト、数値=右寄せ)、ソートも型に応じて比較する (数値は数値順、
+  日付は時系列、それ以外は文字列順)。空欄の行は昇順・降順いずれでも末尾に置く
+  (`compareExtraColumnValuesDirected`)。列幅はフィールド参照名ごとに localStorage
+  (`azdodeck:layout:wiExtraColumnWidths:v1`) へ保存するため、同じフィールドは画面をまたいで
+  同じ幅になる。列の選択元は画面によって異なり、Work Item Views はビュー編集または Columns メニューの Field columns で選び、ビュー定義
+  (`extraColumns`) に保存する。保存ビューを持たない画面 (Work Item Search) はステータスバーの「Fields」
+  ピッカーと画面単位の localStorage キー。旧形式 (参照名の文字列配列) で保存されたビューは
+  読み込み時に型なし列へ移行され、文字列として描画・比較される。
 - **作業項目の一括操作**: 複数項目の状態変更・割当・優先度設定をまとめて適用。
 - **作業項目編集**: state / assignee / priority / フィールドをステージし 1 リクエストで適用。
   タイトルはプレビューヘッダーからインライン編集し即時適用 (System.Title を `update_fields` で更新)。
@@ -287,6 +300,12 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   `pull_requests` / `work_items` 自体の列を変更しても `shared_cache` 側のマッピングさえ
   追従させれば waypoint 側は壊れない。Work Item は書き込みのみで読み取りゲートは持たない
   (差分/フル同期の込み入った既存ロジックに読み取りスキップを組み込むリスクが高いと判断)。
+
+- キャッシュは標準列のみを保持する。グリッドの追加列 (任意フィールド) はキャッシュ由来の画面
+  では値を持たないため、同期スコープを広げる代わりに `fetch_work_item_extra_fields` で表示中の
+  行 (先頭 500 件まで) の分だけオンデマンド取得し、`extraFields` にマージする。バックエンドは
+  ID をプロジェクト単位にまとめて `workitemsbatch` を呼ぶ (フィールドは最大 20、標準列と重複する
+  参照名は除去)。作業項目の編集後は `workItemExtraFields` クエリキーも invalidate する。
 
 ### 同期ループ (`sync.rs`)
 

@@ -1,5 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { commandErrorMessage } from '@/lib/azdoCommands';
+import { useQuery } from '@tanstack/react-query';
+import { commandErrorMessage, listWorkItemFields } from '@/lib/azdoCommands';
+import { useActiveOrganizationId } from '@/lib/useActiveConnection';
 import { CreateWorkItemDialog, type CreateWorkItemDraft } from './CreateWorkItemDialog';
 import { SnoozeMenu } from '@/components/SnoozeMenu';
 import { SnoozedItemsPanel } from '@/components/SnoozedItemsPanel';
@@ -20,6 +22,8 @@ import {
   wiSortLabels,
   type WiSortState,
 } from './workItemsGridHelpers';
+import type { ExtraColumn } from './extraColumns';
+import { ExtraColumnPicker } from './ExtraColumnPicker';
 import { BulkActionBar, BulkFailurePanel } from './BulkActionBar';
 import { WiGridHeader } from './WiGridHeader';
 import { WiGridBody } from './WiGridBody';
@@ -37,7 +41,7 @@ export { summarizeBy } from './BulkActionBar';
 // render would flow down into the memoized MemoWiRow and defeat its memo,
 // since callers that omit this prop would otherwise pass a new reference
 // every render.
-const EMPTY_EXTRA_COLUMNS: string[] = [];
+const EMPTY_EXTRA_COLUMNS: ExtraColumn[] = [];
 
 export function WorkItemsGrid({
   results,
@@ -51,6 +55,7 @@ export function WorkItemsGrid({
   extraColumns = EMPTY_EXTRA_COLUMNS,
   fieldColumnsSource,
   onExtraColumnsChange,
+  extraColumnsProjectId,
   initialSort,
   onClearExternalFilters,
   onSortChange,
@@ -68,11 +73,12 @@ export function WorkItemsGrid({
   dataUpdatedAt?: number;
   isFetching?: boolean;
   activeExternalFilterCount?: number;
-  extraColumns?: string[];
+  extraColumns?: ExtraColumn[];
   /** Org/project whose fields the Columns menu offers as extra columns. */
   fieldColumnsSource?: { organizationId: string; projectId: string };
   /** When set, the Columns menu can add/remove extra field columns. */
-  onExtraColumnsChange?: (columns: string[]) => void;
+  onExtraColumnsChange?: (columns: ExtraColumn[]) => void;
+  extraColumnsProjectId?: string;
   initialSort?: WiSortState;
   onClearExternalFilters?: () => void;
   onSortChange?: (sort: WiSortState) => void;
@@ -92,7 +98,10 @@ export function WorkItemsGrid({
   });
 
   const g = useWiGridLogic(
-    { results, loading, triageScope, activeExternalFilterCount, onClearExternalFilters, autoFocus },
+    {
+      results, loading, triageScope, activeExternalFilterCount,
+      onClearExternalFilters, autoFocus, extraColumns,
+    },
     state,
   );
 
@@ -100,6 +109,17 @@ export function WorkItemsGrid({
   // the header button) and the create dialog finishes the job.
   const [duplicateDraft, setDuplicateDraft] = useState<CreateWorkItemDraft | null>(null);
 
+  const [extraColumnMenuRect, setExtraColumnMenuRect] = useState<DOMRect | null>(null);
+  const organizationId = useActiveOrganizationId();
+  // Fields are only listed while the picker is open, so grids that never open
+  // it (or have no picker at all) do not pay for the request.
+  const fieldsQuery = useQuery({
+    queryKey: workItemQueryKeys.fields(organizationId, extraColumnsProjectId),
+    queryFn: () =>
+      listWorkItemFields({ organizationId, projectId: extraColumnsProjectId ?? "" }),
+    enabled: !!extraColumnMenuRect && !!organizationId,
+    staleTime: 5 * 60_000,
+  });
   const snoozeFallbackItems = useMemo(
     () =>
       new Map(
@@ -144,6 +164,7 @@ export function WorkItemsGrid({
             onFilterOpen={g.openFilter}
             columnResizeProps={state.columnResizeProps}
             extraColumns={extraColumns}
+            extraColumnResizeProps={state.extraColumnResizeProps}
           />
           <WiGridBody
             showBlockingLoading={g.showBlockingLoading}
@@ -197,6 +218,8 @@ export function WorkItemsGrid({
         staleCount={g.staleCount}
         staleThresholdDays={g.staleThresholdDays}
         setColumnMenuRect={state.setColumnMenuRect}
+        setExtraColumnMenuRect={!fieldColumnsSource && onExtraColumnsChange ? setExtraColumnMenuRect : undefined}
+        extraColumnCount={extraColumns.length}
       />
     </div>
   );
@@ -372,6 +395,17 @@ export function WorkItemsGrid({
           onUncheckAll={() => g.uncheckAllColumnFilter(state.openFilterCol!)}
           onClose={() => { state.setOpenFilterCol(null); state.setFilterAnchorRect(null); }}
           restoreFocusRef={state.filterButtonRef}
+        />
+      ) : null}
+      {extraColumnMenuRect && onExtraColumnsChange ? (
+        <ExtraColumnPicker
+          anchorRect={extraColumnMenuRect}
+          columns={extraColumns}
+          fields={fieldsQuery.data ?? []}
+          fieldsLoading={fieldsQuery.isFetching}
+          fieldsError={fieldsQuery.isError ? commandErrorMessage(fieldsQuery.error) : null}
+          onChange={onExtraColumnsChange}
+          onClose={() => setExtraColumnMenuRect(null)}
         />
       ) : null}
       {state.columnMenuRect ? (

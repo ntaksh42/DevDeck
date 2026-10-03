@@ -33,7 +33,7 @@ function renderSection(extraColumns: string[], onChange = vi.fn()) {
       <WiFieldColumnsSection
         organizationId="contoso"
         projectId="demo"
-        extraColumns={extraColumns}
+        extraColumns={extraColumns.map((referenceName) => ({ referenceName }))}
         onExtraColumnsChange={onChange}
       />
     </QueryClientProvider>,
@@ -51,7 +51,7 @@ describe("WiFieldColumnsSection", () => {
     expect(screen.queryByRole("button", { name: /Severity/ })).toBeNull();
 
     fireEvent.keyDown(search, { key: "Enter" });
-    expect(onChange).toHaveBeenCalledWith(["Microsoft.VSTS.Common.Priority"]);
+    expect(onChange).toHaveBeenCalledWith([{ referenceName: "Microsoft.VSTS.Common.Priority", fieldType: "integer" }]);
   });
 
   it("hides fields already shown and removes a column when unchecked", async () => {

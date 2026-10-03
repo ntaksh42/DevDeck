@@ -26,6 +26,8 @@ export function WiGridStatusBar({
   staleCount,
   staleThresholdDays,
   setColumnMenuRect,
+  setExtraColumnMenuRect,
+  extraColumnCount = 0,
 }: {
   loading: boolean;
   searched: boolean;
@@ -49,6 +51,9 @@ export function WiGridStatusBar({
   staleCount: number;
   staleThresholdDays: number;
   setColumnMenuRect: React.Dispatch<React.SetStateAction<DOMRect | null>>;
+  /** Omitted on view-backed grids, where the view editor owns the field choice. */
+  setExtraColumnMenuRect?: React.Dispatch<React.SetStateAction<DOMRect | null>>;
+  extraColumnCount?: number;
 }) {
   return (
     <div className="flex items-center justify-between gap-2 border-t border-border px-2 py-1 text-xs text-muted-foreground">
@@ -134,6 +139,18 @@ export function WiGridStatusBar({
         >
           Columns
         </button>
+        {setExtraColumnMenuRect ? (
+          <button
+            type="button"
+            onClick={(event) =>
+              setExtraColumnMenuRect(event.currentTarget.getBoundingClientRect())
+            }
+            title="Show additional Azure DevOps fields as grid columns"
+            className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary"
+          >
+            Fields{extraColumnCount > 0 ? ` (${extraColumnCount})` : ""}
+          </button>
+        ) : null}
       </span>
     </div>
   );

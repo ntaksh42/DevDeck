@@ -76,4 +76,18 @@ describe("ReviewFilterBar", () => {
     });
     expect(onClose).toHaveBeenCalledWith(false);
   });
+
+  it("does not run deferred focus after unmount and document teardown", () => {
+    vi.useFakeTimers();
+    try {
+      const { unmount } = render(<Harness open textFilter="api" />);
+      fireEvent.keyDown(screen.getByRole("combobox", { name: "Filter" }), { key: "Escape" });
+      unmount();
+      vi.stubGlobal("document", undefined);
+      expect(() => vi.runAllTimers()).not.toThrow();
+    } finally {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
 });

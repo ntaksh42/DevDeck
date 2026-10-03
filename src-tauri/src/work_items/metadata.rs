@@ -63,6 +63,49 @@ impl WorkItemService {
         Ok(fields)
     }
 
+    /// Fetches arbitrary field values for work items already on screen.
+    ///
+    /// Search and My Work Items render from the SQLite cache, which only holds
+    /// the standard columns. Rather than widening the sync scope, extra columns
+    /// are filled in on demand for the rows the user is actually looking at.
+    pub async fn fetch_extra_fields(
+        &self,
+        input: FetchWorkItemExtraFieldsInput,
+    ) -> Result<Vec<WorkItemExtraFields>> {
+        let extra_fields = sanitize_extra_query_fields(Some(&input.extra_fields));
+        if extra_fields.is_empty() || input.items.is_empty() {
+            return Ok(Vec::new());
+        }
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+
+        // The batch endpoint is per project, so group the ids before calling it.
+        let mut ids_by_project: HashMap<String, Vec<i64>> = HashMap::new();
+        for target in &input.items {
+            let ids = ids_by_project.entry(target.project_id.clone()).or_default();
+            if !ids.contains(&target.id) {
+                ids.push(target.id);
+            }
+        }
+
+        // `System.Id` keeps the response rows identifiable when every requested
+        // field happens to be empty on an item.
+        let mut fields = vec!["System.Id".to_string()];
+        fields.extend(extra_fields.iter().cloned());
+
+        let mut results = Vec::new();
+        for (project_id, ids) in ids_by_project {
+            let work_items = client
+                .get_work_items_batch(&project_id, ids, fields.clone())
+                .await?;
+            results.extend(work_items.into_iter().map(|work_item| WorkItemExtraFields {
+                id: work_item.id,
+                extra_fields: extra_work_item_fields(&work_item, &extra_fields),
+            }));
+        }
+        Ok(results)
+    }
+
     pub async fn get_saved_query(&self, input: GetSavedQueryInput) -> Result<SavedQueryResult> {
         let query_id = input.query_id.trim().to_string();
         if query_id.is_empty() {
