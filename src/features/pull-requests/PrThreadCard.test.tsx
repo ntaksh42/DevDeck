@@ -67,8 +67,8 @@ describe("PrThreadCard focus restoration", () => {
 
   it("returns focus to the preview pane when the reply composer is cancelled", () => {
     const preview = renderInPreview();
-    // The always-visible "Write a reply…" row expands into the composer.
-    fireEvent.click(screen.getByRole("button", { name: "Write a reply…" }));
+    // The Reply link expands into the composer.
+    fireEvent.click(screen.getByRole("button", { name: "Reply" }));
     // The composer autofocuses its textarea while open.
     expect(document.activeElement).toBe(screen.getByRole("textbox"));
 
@@ -89,7 +89,7 @@ describe("PrThreadCard focus restoration", () => {
 describe("PrThreadCard resolve toggle", () => {
   afterEach(cleanup);
 
-  it("shows the Resolve button next to the reply row for a thread without a status (#434)", () => {
+  it("shows the Resolve action next to Reply for a thread without a status (#434)", () => {
     const onToggleStatus = vi.fn();
     render(
       <PrThreadCard
@@ -113,6 +113,9 @@ describe("PrThreadCard resolve toggle", () => {
         onToggleStatus={() => {}}
       />,
     );
+    // Resolved threads start folded to one line; expanding shows the actions.
+    expect(screen.queryByRole("button", { name: "Reactivate" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Expand thread" }));
     expect(screen.getByRole("button", { name: "Reactivate" })).toBeTruthy();
   });
 });
@@ -201,10 +204,10 @@ describe("PrThreadCard collapse toggle", () => {
     expect(screen.getByText("Alice")).toBeTruthy();
     expect(screen.getByText("Looks good")).toBeTruthy();
     // The reply row and per-comment Edit action are hidden while collapsed.
-    expect(screen.queryByRole("button", { name: "Write a reply…" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reply" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Expand thread" }));
-    expect(screen.getByRole("button", { name: "Write a reply…" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Reply" })).toBeTruthy();
   });
 });
 

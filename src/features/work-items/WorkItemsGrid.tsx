@@ -6,6 +6,7 @@ import { SnoozedItemsPanel } from '@/components/SnoozedItemsPanel';
 import { DockableWorkspace, type DockablePanelSpec } from '@/components/DockableWorkspace';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { PreviewEmptyState } from '@/components/StateDisplay';
+import { PreviewToolbarSlotProvider, usePreviewToolbarSlot } from '@/components/PreviewToolbarSlot';
 import { WorkItemPreviewPanel } from './WorkItemPreviewPanel';
 import { WorkItemResultSection } from './WorkItemResultSection';
 import { storeCustomPreviewFields } from './previewFieldsStorage';
@@ -200,36 +201,39 @@ export function WorkItemsGrid({
     </div>
   );
 
+  const previewToolbar = usePreviewToolbarSlot();
   const previewPane = (
-    <WorkItemPreviewPanel
-      customPreviewFields={state.customPreviewFields}
-      focusCommentRequest={state.focusCommentRequest}
-      onCustomPreviewFieldsChange={(fields) => {
-        storeCustomPreviewFields(fields);
-        state.setCustomPreviewFields(fields);
-      }}
-      openAssigneeRequest={state.openAssigneeRequest}
-      openFieldRequest={state.openFieldRequest}
-      openPriorityRequest={state.openPriorityRequest}
-      openStateRequest={state.openStateRequest}
-      preview={g.previewQuery.data ?? null}
-      previewError={g.previewQuery.isError ? commandErrorMessage(g.previewQuery.error) : null}
-      previewLoading={g.previewQuery.isFetching}
-      selectedItem={g.selectedItem}
-      onPreviewUpdated={g.handlePreviewUpdated}
-      onDuplicate={(draft) =>
-        setDuplicateDraft({
-          projectId: draft.projectId,
-          workItemType: draft.workItemType ?? undefined,
-          title: draft.title,
-          priority: draft.priority ?? undefined,
-          areaPath: draft.areaPath ?? undefined,
-          iterationPath: draft.iterationPath ?? undefined,
-          tags: draft.tags.join("; "),
-          assignedTo: draft.assignedTo ?? undefined,
-        })
-      }
-    />
+    <PreviewToolbarSlotProvider value={previewToolbar.element}>
+      <WorkItemPreviewPanel
+        customPreviewFields={state.customPreviewFields}
+        focusCommentRequest={state.focusCommentRequest}
+        onCustomPreviewFieldsChange={(fields) => {
+          storeCustomPreviewFields(fields);
+          state.setCustomPreviewFields(fields);
+        }}
+        openAssigneeRequest={state.openAssigneeRequest}
+        openFieldRequest={state.openFieldRequest}
+        openPriorityRequest={state.openPriorityRequest}
+        openStateRequest={state.openStateRequest}
+        preview={g.previewQuery.data ?? null}
+        previewError={g.previewQuery.isError ? commandErrorMessage(g.previewQuery.error) : null}
+        previewLoading={g.previewQuery.isFetching}
+        selectedItem={g.selectedItem}
+        onPreviewUpdated={g.handlePreviewUpdated}
+        onDuplicate={(draft) =>
+          setDuplicateDraft({
+            projectId: draft.projectId,
+            workItemType: draft.workItemType ?? undefined,
+            title: draft.title,
+            priority: draft.priority ?? undefined,
+            areaPath: draft.areaPath ?? undefined,
+            iterationPath: draft.iterationPath ?? undefined,
+            tags: draft.tags.join("; "),
+            assignedTo: draft.assignedTo ?? undefined,
+          })
+        }
+      />
+    </PreviewToolbarSlotProvider>
   );
 
   const resultPane = g.selectedItem ? (
@@ -328,6 +332,7 @@ export function WorkItemsGrid({
               id: 'preview',
               title: 'Preview',
               content: previewPane,
+              headerActions: previewToolbar.slot,
               position: { relativeTo: 'grid', direction: 'right' },
               initialWidth: DEFAULT_WORK_ITEM_PREVIEW_WIDTH,
               minWidth: 300,

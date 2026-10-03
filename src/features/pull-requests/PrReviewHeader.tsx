@@ -1,24 +1,17 @@
 import {
   AlertTriangle,
   CheckCircle2,
-  ClipboardList,
   Loader,
-  Maximize2,
   MessageSquare,
-  Minimize2,
-  Share2,
   X,
   XCircle,
 } from "lucide-react";
-import { openMailtoUrl } from "@/lib/openExternal";
 import { formatRelativeDate } from "@/lib/utils";
 import type {
   PrReviewer,
   PullRequestReview,
   ReviewPullRequestSummary,
 } from "@/lib/azdoCommands";
-import { PreviewZoomControls } from "@/components/PreviewZoomControls";
-import { buildPullRequestEmailLink } from "./prEmailLink";
 import { VOTE_DOT_CLASSES, voteTone } from "./voteVisual";
 
 const BADGE_BASE =
@@ -174,109 +167,28 @@ function commentsBadge(review: PullRequestReview | null) {
 export function PrReviewHeader({
   selectedPr,
   review,
-  maximized,
-  onToggleMaximize,
-  onOpenLinkedWorkItems,
   reviewerActionsBusy = false,
   onToggleReviewerRequired,
   onRemoveReviewer,
-  zoom,
-  canZoomIn,
-  canZoomOut,
-  onZoomIn,
-  onZoomOut,
-  onResetZoom,
   compact = false,
 }: {
   selectedPr: ReviewPullRequestSummary | null;
   review: PullRequestReview | null;
-  maximized: boolean;
-  onToggleMaximize?: () => void;
-  onOpenLinkedWorkItems?: () => void;
   reviewerActionsBusy?: boolean;
   onToggleReviewerRequired?: (reviewer: PrReviewer) => void;
   onRemoveReviewer?: (reviewer: PrReviewer) => void;
-  zoom: number;
-  canZoomIn: boolean;
-  canZoomOut: boolean;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
-  onResetZoom: () => void;
-  /** One line (id + title + controls) instead of the full metadata block. */
+  /** One line (id + title) instead of the full metadata block. */
   compact?: boolean;
 }) {
-  const zoomControl = (
-    <PreviewZoomControls
-      canZoomIn={canZoomIn}
-      canZoomOut={canZoomOut}
-      zoom={zoom}
-      onZoomIn={onZoomIn}
-      onZoomOut={onZoomOut}
-      onReset={onResetZoom}
-    />
-  );
-  const maximizeButton = onToggleMaximize ? (
-    <button
-      type="button"
-      onClick={onToggleMaximize}
-      aria-label={maximized ? "Restore split view" : "Maximize review panel"}
-      aria-pressed={maximized}
-      title={`${maximized ? "Restore split view" : "Maximize review panel"} (\\)`}
-      className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-    >
-      {maximized ? (
-        <Minimize2 className="h-3.5 w-3.5" aria-hidden="true" />
-      ) : (
-        <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
-      )}
-    </button>
-  ) : null;
-
-  const linkedWorkItemsButton = onOpenLinkedWorkItems ? (
-    <button
-      type="button"
-      onClick={onOpenLinkedWorkItems}
-      aria-label="Preview linked work items"
-      title="Preview linked work items (T)"
-      className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-    >
-      <ClipboardList className="h-3.5 w-3.5" aria-hidden="true" />
-    </button>
-  ) : null;
-
   if (!selectedPr) {
     return (
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-1.5">
         <span className="text-sm text-muted-foreground">No PR selected</span>
-        <div className="ml-auto flex items-center gap-1">
-          {zoomControl}
-          {maximizeButton}
-        </div>
       </div>
     );
   }
 
   const title = review?.title ?? selectedPr.title;
-
-  const emailLinkButton = (
-    <button
-      type="button"
-      onClick={() =>
-        void openMailtoUrl(
-          buildPullRequestEmailLink({
-            pullRequestId: selectedPr.pullRequestId,
-            title,
-            webUrl: selectedPr.webUrl,
-          }),
-        )
-      }
-      aria-label="Email a link"
-      title="Email a link"
-      className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-    >
-      <Share2 className="h-3.5 w-3.5" aria-hidden="true" />
-    </button>
-  );
 
   // Result-style tabs need the room for their own content; the full metadata
   // is one tab away in Conversation.
@@ -287,12 +199,6 @@ export function PrReviewHeader({
           <span className="font-mono font-semibold">#{selectedPr.pullRequestId}</span>{" "}
           {title}
         </h2>
-        <div className="flex shrink-0 items-center gap-1">
-          {zoomControl}
-          {emailLinkButton}
-          {linkedWorkItemsButton}
-          {maximizeButton}
-        </div>
       </div>
     );
   }
@@ -317,7 +223,7 @@ export function PrReviewHeader({
   const reviewers = review?.reviewers ?? [];
 
   // Read top-down: what the PR is (title, full width), what needs attention
-  // (status badges, with the view controls at the row's right end), where it
+  // (status badges), where it
   // came from (branch, then id / author), then who reviews.
   return (
     <div className="flex shrink-0 flex-col gap-1.5 border-b border-border px-2 py-1.5">
@@ -335,12 +241,6 @@ export function PrReviewHeader({
         <div className="flex min-w-0 flex-wrap items-center gap-1">
           <StateBadge isDraft={isDraft} />
           {statusBadges}
-          <div className="ml-auto flex shrink-0 items-center gap-1">
-            {zoomControl}
-            {emailLinkButton}
-            {linkedWorkItemsButton}
-            {maximizeButton}
-          </div>
         </div>
         <p className="min-w-0 truncate font-mono text-xs text-foreground" title={branchTitle}>
           {branchLabel}
