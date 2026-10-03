@@ -93,6 +93,8 @@ describe("App — Reviews", () => {
                 fileName: "review-PR102.html",
                 filePath: "C:\\reports\\review-PR102.html",
                 html: "<html><body>Waiting author preview</body></html>",
+                warning: null,
+                tooLarge: false,
               }
             : null,
         );

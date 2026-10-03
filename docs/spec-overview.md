@@ -159,6 +159,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   - **キーボード (一覧)**: `↑↓` 移動、`→ ←` カード / スレッドの開閉、`Enter` 結果の該当箇所へ (Done は変更箇所)、`R` 返信、
     `X` Resolve / Reopen、`E` 編集、`L` 付け替え、`Del` 削除、`Esc` グリッドへ。パネル内では `o` 結果をブラウザで開く、
     `a` エージェント起動 (`agent_command` 設定時)、`Ctrl+Z` 削除の取り消し。
+  - **結果 HTML の読み込み**: PR / Work Item 共通で最大 5 MiB。超過時は本文を IPC / iframe に渡さず、外部ブラウザで開くボタンと既存の `o` キーを提供する。BOM を優先し、先頭 8 KiB の meta charset / http-equiv Content-Type 宣言を使ってデコードする。宣言がなければ UTF-8。未知の文字コードや不正なバイト列は置換して注記を表示する。
   - **結果との連携**: 結果 HTML 上のテキスト選択 (Comment ボタン) またはキーボードのブロック選択で引用付きコメントを作れ、
     引用は空白を無視したテキスト + 前後 24 文字の文脈 + 位置で再アンカーする。ハイライトは CSS Custom Highlight API、
     番号ピン (左余白、状態の色: Needs you 赤・Open 黄・下書き点線) とスクロール位置マーカー (右端) は親ドキュメント側に描画し、

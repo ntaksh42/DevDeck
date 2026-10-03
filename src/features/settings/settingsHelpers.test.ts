@@ -20,7 +20,7 @@ function nonDefaultSettings(): AppSettings {
     reviewResultFolderPath: "C:/reviews",
     workItemResultFolderPath: "C:/work-items",
     showWindowHotkey: "Ctrl+Shift+D",
-    agentCommand: "codex",
+    agentCommand: "agent --target {target} --id {id}",
     readOnlyValidationModeEnabled: true,
     desktopNotificationsEnabled: true,
     notificationContentPreviewEnabled: false,

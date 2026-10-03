@@ -74,6 +74,8 @@ const reviewResultPreviewSchema = z.object({
   fileName: z.string(),
   filePath: z.string(),
   html: z.string(),
+  warning: z.string().nullable(),
+  tooLarge: z.boolean(),
 });
 
 export type ReviewResultPreview = z.infer<typeof reviewResultPreviewSchema>;
@@ -83,6 +85,8 @@ const workItemResultPreviewSchema = z.object({
   fileName: z.string(),
   filePath: z.string(),
   html: z.string(),
+  warning: z.string().nullable(),
+  tooLarge: z.boolean(),
 });
 
 export type WorkItemResultPreview = z.infer<typeof workItemResultPreviewSchema>;

@@ -270,6 +270,8 @@ export function demoReviewResultPreview(
   return {
     pullRequestId,
     fileName: `review-PR${pullRequestId}.html`,
+    warning: null,
+    tooLarge: false,
     filePath: `${folderPath}\\review-PR${pullRequestId}.html`,
     html: `<!doctype html>
 <html>
@@ -307,6 +309,8 @@ export function demoWorkItemResultPreview(
   return {
     workItemId,
     fileName: `${workItemId}-result.html`,
+    warning: null,
+    tooLarge: false,
     filePath: `${folderPath}\\${workItemId}-result.html`,
     html: `<!doctype html>
 <html>
