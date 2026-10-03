@@ -102,7 +102,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Maximize preview</span><kbd className={kbd}>\</kbd></div>
           <div className={row}><span>Show drafts</span><kbd className={kbd}>D</kbd></div>
           <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
-          <div className={row}><span>Copy URLs of all selected rows</span><kbd className={kbd}>Ctrl+C</kbd></div>
+          <div className={row}><span>Copy selected rows as a table (paste into email)</span><kbd className={kbd}>Ctrl+C</kbd></div>
           <div className={row}><span>Copy as Markdown link</span><kbd className={kbd}>L</kbd></div>
           <div className={row}><span>Snooze selected row</span><kbd className={kbd}>Z</kbd></div>
           <div className={row}><span>Comment on the review result (Result tab, also PR Search)</span><kbd className={kbd}>R</kbd></div>
@@ -117,7 +117,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>O / Ctrl+Enter</kbd></div>
           <div className={row}><span>Maximize preview</span><kbd className={kbd}>\</kbd></div>
           <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
-          <div className={row}><span>Copy URLs of all selected rows</span><kbd className={kbd}>Ctrl+C</kbd></div>
+          <div className={row}><span>Copy selected rows as a table (Commits: URLs)</span><kbd className={kbd}>Ctrl+C</kbd></div>
           <div className={row}><span>Copy as Markdown link</span><kbd className={kbd}>L</kbd></div>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ PgUp PgDn Home End</kbd></div>
           <div className={row}><span>Select multiple</span><kbd className={kbd}>Shift+↑ ↓ · Shift+click · Ctrl+click</kbd></div>
@@ -130,7 +130,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Open detail preview</span><kbd className={kbd}>Enter / →</kbd></div>
           <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>Ctrl+Enter / O</kbd></div>
           <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
-          <div className={row}><span>Copy URLs of all selected rows</span><kbd className={kbd}>Ctrl+C</kbd></div>
+          <div className={row}><span>Copy selected rows as a table (paste into email)</span><kbd className={kbd}>Ctrl+C</kbd></div>
           <div className={row}><span>Copy as Markdown link</span><kbd className={kbd}>L</kbd></div>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ PgUp PgDn Home End</kbd></div>
           <div className={row}><span>Select row</span><kbd className={kbd}>Space · Shift+click · Ctrl+click</kbd></div>

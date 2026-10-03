@@ -29,6 +29,8 @@ function makeDeps(overrides: Partial<WiKeyHandlerDeps> = {}): WiKeyHandlerDeps {
     displayed: [makeItem()],
     checkedIds: new Set(),
     checkedItems: [],
+    visibleColumns: ["id", "title", "state"],
+    extraColumns: [],
     openFilterCol: null,
     triageScope: undefined,
     snoozeEnabled: false,
@@ -116,7 +118,7 @@ describe("createWiKeyHandler — Ctrl+C copies the selection", () => {
     } as unknown as React.KeyboardEvent);
   }
 
-  it("copies every checked work item's URL, one per line", async () => {
+  it("copies every checked work item as a table", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -124,17 +126,18 @@ describe("createWiKeyHandler — Ctrl+C copies the selection", () => {
     });
     const setCopyToast = vi.fn();
     const checkedItems = [
-      makeItem({ id: 456, webUrl: "https://dev.azure.com/a/_workitems/edit/456" }),
-      makeItem({ id: 789, webUrl: "https://dev.azure.com/a/_workitems/edit/789" }),
+      makeItem({ id: 456, title: "Fix login", state: "Active" }),
+      makeItem({ id: 789, title: "Add logout", state: "New" }),
     ];
 
     fireCtrlC(makeDeps({ checkedItems, setCopyToast }));
 
+    // jsdom has no ClipboardItem, so the TSV fallback is what gets written.
     expect(writeText).toHaveBeenCalledWith(
-      "https://dev.azure.com/a/_workitems/edit/456\nhttps://dev.azure.com/a/_workitems/edit/789",
+      "#\tTitle\tState\n#456\tFix login\tActive\n#789\tAdd logout\tNew",
     );
     await Promise.resolve();
-    expect(setCopyToast).toHaveBeenCalledWith("2 URLs copied");
+    expect(setCopyToast).toHaveBeenCalledWith("2 rows copied");
   });
 
   it("falls back to the focused row when nothing is checked", () => {
@@ -146,9 +149,7 @@ describe("createWiKeyHandler — Ctrl+C copies the selection", () => {
 
     fireCtrlC(makeDeps({ checkedItems: [] }));
 
-    expect(writeText).toHaveBeenCalledWith(
-      "https://dev.azure.com/contoso/Platform/_workitems/edit/456",
-    );
+    expect(writeText).toHaveBeenCalledWith("#\tTitle\tState\n#456\tFix login\tActive");
   });
 });
 

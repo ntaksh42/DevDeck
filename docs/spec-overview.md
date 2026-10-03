@@ -418,9 +418,18 @@ find-next) は、入力欄以外では抑止し、ネイティブ動作が素通
 My Reviews / Work Items / Commits のフォーカス行は項目キーで保持し、同期・ソート・フィルタ変更で行位置が変わっても同じ項目の選択とプレビューを維持する。選択項目が非表示・削除された場合のみ、直前の行位置に近い表示行へ移動する。表示行が無い場合は選択を解除する。
 
 複数行の選択は全グリッド共通で `Shift+↑ ↓` / `Shift+クリック` による範囲選択と
-`Ctrl+クリック` による個別追加/解除に対応し、`Ctrl+C` で選択行の URL を改行区切りで
-まとめてコピーする (選択が無い場合はフォーカス行 1 件)。コピー結果はトーストで通知する
-(`URL copied` / `N URLs copied` / `Copy failed`)。`Escape` で複数選択を解除。
+`Ctrl+クリック` による個別追加/解除に対応する。`Ctrl+C` は Work Items / PR Search /
+My Reviews / My Pull Requests で選択行をメール貼り付け向けの表としてコピーする
+(選択が無い場合はフォーカス行 1 件)。表は現在グリッドに表示中の列を画面の順序で並べ、
+ID とタイトルのセルは Web URL へのハイパーリンクにする。日付は相対表記ではなく絶対日時、
+CI・役割・投票などのバッジはラベル文字列にする。Work Items ではビューの追加フィールド列も含める。
+クリップボードには `text/html` (`<table>` + インラインスタイル、Outlook / Gmail / Teams 向け) と
+`text/plain` (ヘッダー付き TSV、Excel / テキストエディタ向け) を同時に書き込み、
+`ClipboardItem` が使えない環境では TSV のみ書き込む (`src/lib/clipboardTable.ts`)。
+Commits は従来どおり URL を改行区切りでコピーする。`C` (1 件の URL) と `L`
+(Markdown リンク) は変わらない。コピー結果はトーストで通知する
+(`Row copied` / `N rows copied` / `Copy failed`、Commits は `URL copied` / `N URLs copied`)。
+`Escape` で複数選択を解除。
 My Reviews は既存の `selectedKeys` (ファイル重複検知と共有)、作業項目グリッドは既存の
 チェックボックス選択 (一括操作と共有。選択ロジックは
 `src/features/work-items/wiRowSelection.ts`) を選択状態として使い、My Pull Requests /

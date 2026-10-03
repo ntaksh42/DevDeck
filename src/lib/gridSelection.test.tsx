@@ -92,7 +92,7 @@ describe("Work Items focused selection", () => {
   function setup() {
     return renderHook(({ rows }: { rows: WorkItemSummary[] }) => {
       const state = useWiGridState({ extraColumns: [], initialSort: { key: "id", direction: "asc" } });
-      const logic = useWiGridLogic({ results: rows, loading: false, autoFocus: false }, state);
+      const logic = useWiGridLogic({ results: rows, loading: false, extraColumns: [], autoFocus: false }, state);
       return { ...state, ...logic };
     }, { initialProps: { rows: items }, wrapper });
   }

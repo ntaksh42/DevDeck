@@ -92,7 +92,7 @@ export function WorkItemsGrid({
   });
 
   const g = useWiGridLogic(
-    { results, loading, triageScope, activeExternalFilterCount, onClearExternalFilters, autoFocus },
+    { results, loading, triageScope, extraColumns, activeExternalFilterCount, onClearExternalFilters, autoFocus },
     state,
   );
 

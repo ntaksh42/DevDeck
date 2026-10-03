@@ -7,15 +7,23 @@ import {
   markdownLink,
 } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/openExternal';
-import { copyRowUrls } from '@/lib/copyUrls';
+import { copyRowsAsTable } from '@/lib/clipboardTable';
 import { toggleTriageArchived } from '@/lib/triage';
-import { workItemSummaryKey, workItemTriageSnapshot, type FilterableColumn } from './workItemsGridHelpers';
+import {
+  workItemSummaryKey,
+  workItemTriageSnapshot,
+  type FilterableColumn,
+  type WiSortKey,
+} from './workItemsGridHelpers';
+import { workItemCopyColumns } from './workItemCopyColumns';
 
 export interface WiKeyHandlerDeps {
   selectedIndex: number;
   displayed: WorkItemSummary[];
   checkedIds: Set<string>;
   checkedItems: WorkItemSummary[];
+  visibleColumns: WiSortKey[];
+  extraColumns: string[];
   openFilterCol: FilterableColumn | null;
   triageScope: string | undefined;
   snoozeEnabled: boolean;
@@ -46,7 +54,8 @@ export function createWiKeyHandler(deps: WiKeyHandlerDeps): (e: React.KeyboardEv
   return (e) => {
     if (e.defaultPrevented) return;
     const {
-      selectedIndex, displayed, checkedIds, checkedItems, openFilterCol, triageScope,
+      selectedIndex, displayed, checkedIds, checkedItems, visibleColumns, extraColumns,
+      openFilterCol, triageScope,
       snoozeEnabled, snoozeTargetRef, rowRefs, moveSelection, setOpenFilterCol,
       setFilterAnchorRect, setBulkAssignOpen, setBulkStateOpen, setBulkPriorityOpen,
       setColumnMenuRect, setCopyToast, setFocusCommentRequest, setResultCommentRequest, setTriageVersion,
@@ -100,7 +109,8 @@ export function createWiKeyHandler(deps: WiKeyHandlerDeps): (e: React.KeyboardEv
         if (item?.webUrl) openExternalUrl(item.webUrl);
       } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "c" || e.key === "C")) {
         // Copies every checked row, falling back to the focused row when the
-        // user has not checked anything. `c` alone stays the single-row copy.
+        // user has not checked anything, as a table for pasting into email.
+        // `c` alone stays the single-row URL copy.
         e.preventDefault();
         const targets =
           checkedItems.length > 0
@@ -108,7 +118,7 @@ export function createWiKeyHandler(deps: WiKeyHandlerDeps): (e: React.KeyboardEv
             : displayed[selectedIndex]
               ? [displayed[selectedIndex]]
               : [];
-        void copyRowUrls(targets, setCopyToast);
+        void copyRowsAsTable(targets, workItemCopyColumns(visibleColumns, extraColumns), setCopyToast);
       }
       return;
     }

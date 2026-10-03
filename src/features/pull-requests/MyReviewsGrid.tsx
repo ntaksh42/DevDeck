@@ -13,7 +13,8 @@ import { ColumnFilterDropdown } from '@/components/ColumnFilterDropdown';
 import { SortHeaderButton } from '@/components/SortHeaderButton';
 import { LoadingState, ErrorState } from '@/components/StateDisplay';
 import { openExternalUrl } from '@/lib/openExternal';
-import { copyRowUrls } from '@/lib/copyUrls';
+import { copyRowsAsTable } from '@/lib/clipboardTable';
+import { reviewCopyColumns } from './prCopyColumns';
 import { toggleTriageArchived } from '@/lib/triage';
 import { usePrReviewPanels } from './usePrReviewPanels';
 import { focusLinkedWorkItems, LINKED_WORK_ITEMS_PANEL_ID, LinkedWorkItemsToggle } from './LinkedWorkItemsPanel';
@@ -118,9 +119,10 @@ export function MyReviewsGrid({
         const pr = g.sortedPrs[g.selectedIndex];
         if (pr?.webUrl) openExternalUrl(pr.webUrl);
       } else if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'c' || e.key === 'C')) {
-        // Copies the whole shift-selection; `c` alone stays the single-row copy.
+        // Copies the whole shift-selection as a table; `c` alone stays the
+        // single-row URL copy.
         e.preventDefault();
-        void copyRowUrls(g.selectedPrs, g.setCopyToast, 1500);
+        void copyRowsAsTable(g.selectedPrs, reviewCopyColumns(g.visibleColumns), g.setCopyToast, 1500);
       }
       return;
     }

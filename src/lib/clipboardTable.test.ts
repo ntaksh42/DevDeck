@@ -1,0 +1,103 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { copyRowsAsTable, rowsToTableHtml, rowsToTsv, type CopyColumn } from "./clipboardTable";
+
+type Row = { id: number; title: string; url: string | null };
+
+const columns: CopyColumn<Row>[] = [
+  { label: "#", text: (r) => `#${r.id}`, href: (r) => r.url },
+  { label: "Title", text: (r) => r.title },
+];
+const rows: Row[] = [
+  { id: 1, title: "A <b> & \"c\"", url: "https://example.com/1" },
+  { id: 2, title: "multi\nline\ttab", url: null },
+];
+
+describe("rowsToTableHtml", () => {
+  it("renders a header row and escaped, inline-styled cells", () => {
+    const html = rowsToTableHtml(rows, columns);
+    expect(html).toContain("<th");
+    expect(html).toContain("A &lt;b&gt; &amp; &quot;c&quot;");
+    expect(html).toContain('style="border:1px solid');
+  });
+
+  it("links only cells that have an http(s) href", () => {
+    const html = rowsToTableHtml(
+      [...rows, { id: 3, title: "x", url: "javascript:alert(1)" }],
+      columns,
+    );
+    expect(html).toContain('<a href="https://example.com/1">#1</a>');
+    expect(html.match(/<a /g)).toHaveLength(1);
+  });
+
+  it("keeps empty cells one line tall", () => {
+    const html = rowsToTableHtml([{ id: 1, title: "", url: null }], columns);
+    expect(html).toContain("&nbsp;");
+  });
+});
+
+describe("rowsToTsv", () => {
+  it("emits a header and flattens tabs/newlines inside cells", () => {
+    expect(rowsToTsv(rows, columns)).toBe('#\tTitle\n#1\tA <b> & "c"\n#2\tmulti line tab');
+  });
+});
+
+describe("copyRowsAsTable", () => {
+  const writeText = vi.fn(() => Promise.resolve());
+  const write = vi.fn(() => Promise.resolve());
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    writeText.mockClear();
+    write.mockClear();
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText, write },
+      configurable: true,
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it("writes HTML and plain text together when ClipboardItem exists", async () => {
+    const items: Record<string, Blob>[] = [];
+    vi.stubGlobal(
+      "ClipboardItem",
+      class {
+        constructor(data: Record<string, Blob>) {
+          items.push(data);
+        }
+      },
+    );
+    const setToast = vi.fn();
+    await copyRowsAsTable(rows, columns, setToast);
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(Object.keys(items[0]).sort()).toEqual(["text/html", "text/plain"]);
+    expect(writeText).not.toHaveBeenCalled();
+    expect(setToast).toHaveBeenCalledWith("2 rows copied");
+  });
+
+  it("falls back to TSV text without ClipboardItem", async () => {
+    const setToast = vi.fn();
+    await copyRowsAsTable([rows[0]], columns, setToast);
+    expect(writeText).toHaveBeenCalledWith('#\tTitle\n#1\tA <b> & "c"');
+    expect(setToast).toHaveBeenCalledWith("Row copied");
+  });
+
+  it("does not touch the clipboard when there are no rows", async () => {
+    const setToast = vi.fn();
+    await copyRowsAsTable([], columns, setToast);
+    expect(writeText).not.toHaveBeenCalled();
+    expect(setToast).toHaveBeenCalledWith("No rows to copy");
+  });
+
+  it("reports a failed clipboard write and clears the toast", async () => {
+    writeText.mockRejectedValueOnce(new Error("denied"));
+    const setToast = vi.fn();
+    await copyRowsAsTable(rows, columns, setToast);
+    expect(setToast).toHaveBeenCalledWith("Copy failed");
+    vi.runAllTimers();
+    expect(setToast).toHaveBeenLastCalledWith(null);
+  });
+});

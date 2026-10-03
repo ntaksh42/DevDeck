@@ -17,10 +17,11 @@ import { ColumnVisibilityMenu } from "@/components/ColumnVisibilityMenu";
 import { useGridColumns } from "@/lib/useGridColumns";
 import { useColumnVisibility } from "@/lib/useColumnVisibility";
 import { useRangeSelection } from "@/lib/useRangeSelection";
-import { copyRowUrls } from "@/lib/copyUrls";
+import { copyRowsAsTable } from "@/lib/clipboardTable";
 import { openExternalUrl } from "@/lib/openExternal";
 import { CreatedPrRow, SortHeaderButton } from "./MyPullRequestsRow";
 import { usePrReviewPanels } from "./usePrReviewPanels";
+import { createdCopyColumns } from "./prCopyColumns";
 import {
   DEFAULT_REVIEW_PREVIEW_WIDTH,
   MAX_REVIEW_PREVIEW_WIDTH,
@@ -226,7 +227,7 @@ export function MyPullRequestsGrid() {
     if (event.ctrlKey || event.metaKey) {
       if ((event.key === "c" || event.key === "C") && !event.altKey) {
         event.preventDefault();
-        void copyRowUrls(selection.selectedRows, setCopyToast);
+        void copyRowsAsTable(selection.selectedRows, createdCopyColumns(visibleColumns), setCopyToast);
       } else if (event.key === "Enter" && pr?.webUrl) {
         event.preventDefault();
         openExternalUrl(pr.webUrl);
