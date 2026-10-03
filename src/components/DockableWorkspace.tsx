@@ -25,6 +25,7 @@ import { ResizeHandle } from "@/components/ResizeHandle";
 import { readStoredJson, writeStoredJson } from "@/lib/storage";
 import { useIsDarkMode } from "@/lib/useIsDarkMode";
 import { createHeaderSlotStore, useCollapsedGroups, type HeaderSlotStore } from "./dockableWorkspaceSlots";
+import { minRowWidth } from "./dockableWorkspaceLayout";
 
 export interface DockablePanelSpec {
   id: string;
@@ -737,7 +738,10 @@ export function DockableWorkspace({
   }, [activatePanel?.id, activatePanel?.key]);
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1">
+    // Below the panels' combined floor dockview overflows its container and the
+    // right pane is clipped with no way to reach it; scroll instead.
+    <div className="flex min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-hidden">
+      <div className="flex min-w-0 flex-1" style={{ minWidth: minRowWidth(panels) }}>
       <DockviewReact
         key={layoutStorageKey}
         ref={dockviewElementRef}
@@ -760,6 +764,7 @@ export function DockableWorkspace({
         onReady={onReady}
         theme={dark ? themeDark : themeLight}
       />
+      </div>
     </div>
   );
 }
