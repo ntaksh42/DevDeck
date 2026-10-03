@@ -401,6 +401,7 @@ fn extra_work_item_fields_reads_scalars_and_identities() {
             id: 1,
             fields,
             links: None,
+            relations: None,
         },
         &[
             "Custom.ReleaseTrain".to_string(),

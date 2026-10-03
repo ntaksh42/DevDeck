@@ -81,6 +81,9 @@ pub struct RecordMentionInteractionInput {
     pub unique_name: String,
 }
 
+/// Same payload as a mention interaction; only the history table differs.
+pub type RecordAssigneeInteractionInput = RecordMentionInteractionInput;
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchWorkItemAssigneesInput {
