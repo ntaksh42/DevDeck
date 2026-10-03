@@ -461,6 +461,10 @@ My Pull Requests グリッドも他グリッド同様、`L` で選択行の Mark
 ボタンをクリックすると 100% にリセットする。ボタンのほか各プレビューパネル上で
 `Ctrl+=`/`Ctrl+-`/`Ctrl+0` (Cmd 系も可) でも拡大・縮小・リセットでき、テキスト入力欄に
 フォーカスがあっても効く。
+Commits プレビューと Pipelines の実行詳細は、PR / 作業項目プレビューと同じ薄い青の帯
+(`src/components/PreviewBand.tsx`) でセクションを区切る (Commits: Details / 関連 PR /
+変更ファイル〔右端に +/- 行数〕、Pipelines: Timeline / Artifacts / Log)。作業項目プレビューの
+優先度は 1=赤・2=橙・3=黄・4=灰の色ドットを値の前に表示する (`workItemPriorityDotClass`)。
 行を1件選択中は、ステータスバーに主要な行ショートカットのコンパクトな凡例を表示する
 (My Reviews / 作業項目グリッド)。Pipelines の監視パイプライン実行行でも
 `↑ ↓ / J K / Home / End` で移動、`Enter` で実行プレビュー、`Ctrl+Enter` で

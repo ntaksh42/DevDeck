@@ -22,6 +22,7 @@ import {
   shortBranch,
 } from "./pipelineStatus";
 import { PreviewEmptyState, SELECT_EMPTY_HINT } from "@/components/StateDisplay";
+import { PreviewBand } from "@/components/PreviewBand";
 
 const LOG_REFRESH_INTERVAL_MS = 15_000;
 
@@ -345,6 +346,7 @@ export function PipelineRunDetailPanel({
               ) : null}
             </div>
 
+            <PreviewBand>Timeline</PreviewBand>
             <div className="border-b border-border">
               {tree.length === 0 ? (
                 detail?.timelineUnavailable ? (
@@ -368,11 +370,9 @@ export function PipelineRunDetailPanel({
             </div>
 
             {artifacts.length > 0 ? (
-              <div className="border-b border-border px-3 py-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Artifacts ({artifacts.length})
-                </p>
-                <ul className="mt-1 flex flex-col gap-1">
+              <div className="border-b border-border pb-2">
+                <PreviewBand>Artifacts ({artifacts.length})</PreviewBand>
+                <ul className="flex flex-col gap-1 px-3">
                   {artifacts.map((artifact) => (
                     <li key={artifact.name} className="flex items-center gap-2">
                       <span className="truncate text-xs text-foreground" title={artifact.name}>
@@ -398,7 +398,9 @@ export function PipelineRunDetailPanel({
             ) : null}
 
             {selectedLogId != null ? (
-              <div className="px-3 py-2">
+              <div className="pb-2">
+                <PreviewBand>Log</PreviewBand>
+                <div className="px-3">
                 {logQuery.isLoading ? (
                   <p className="text-xs text-muted-foreground">Loading log…</p>
                 ) : logQuery.isError ? (
@@ -464,6 +466,7 @@ export function PipelineRunDetailPanel({
                     );
                   })()
                 )}
+                </div>
               </div>
             ) : (
               <p className="px-3 py-2 text-xs text-muted-foreground">

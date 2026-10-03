@@ -11,6 +11,7 @@ import { isEditableTarget, focusPrimaryGrid, formatDate } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
 import { usePreviewZoom } from "@/lib/usePreviewZoom";
 import { PreviewZoomControls } from "@/components/PreviewZoomControls";
+import { PreviewBand } from "@/components/PreviewBand";
 import { CommitFilesPanel } from "./CommitFilesPanel";
 import { PR_STATUS_LABELS } from "./commitSearchConstants";
 import { commitPrQueryKey, prStatusBadgeClass } from "./commitSearchUtils";
@@ -56,9 +57,9 @@ function CommitRelatedPrsPanel({
 
   return (
     <div className="border-t border-border">
-      <div className="border-b border-border bg-muted px-3 py-1 text-[11px] font-medium text-muted-foreground">
+      <PreviewBand>
         {prs.length} related pull request{prs.length === 1 ? "" : "s"}
-      </div>
+      </PreviewBand>
       <ul>
         {prs.map((pr) => (
           <li key={pr.pullRequestId}>
@@ -197,7 +198,8 @@ export function CommitPreviewPanel({
       >
         {commit ? (
           <>
-            <div className="px-3 py-2">
+            <PreviewBand>Details</PreviewBand>
+            <div className="px-3 pb-2 pt-1">
               <p className="whitespace-pre-wrap break-words text-sm text-foreground">
                 {commit.comment || "(no comment)"}
               </p>
