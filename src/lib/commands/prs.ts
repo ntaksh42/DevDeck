@@ -25,6 +25,7 @@ const pullRequestSearchResultSchema = z.object({
   pullRequests: pullRequestSummariesSchema,
   total: z.number(),
   truncated: z.boolean(),
+  warnings: z.array(z.string()),
 });
 
 export type PullRequestSummary = z.infer<typeof pullRequestSummarySchema>;
@@ -81,6 +82,13 @@ export const myCreatedPullRequestSummarySchema = z.object({
 
 export const myCreatedPullRequestSummariesSchema = z.array(myCreatedPullRequestSummarySchema);
 
+const myCreatedPullRequestsResultSchema = z.object({
+  pullRequests: myCreatedPullRequestSummariesSchema,
+  warnings: z.array(z.string()),
+});
+
+export type MyCreatedPullRequestsResult = z.infer<typeof myCreatedPullRequestsResultSchema>;
+
 export type MyCreatedPullRequestSummary = z.infer<typeof myCreatedPullRequestSummarySchema>;
 
 export type ReviewPullRequestSummary = z.infer<typeof reviewPullRequestSummarySchema>;
@@ -130,7 +138,7 @@ export async function listMyReviewPullRequests(
 
 export async function listMyCreatedPullRequests(
   input: ListMyCreatedPullRequestsInput,
-): Promise<MyCreatedPullRequestSummary[]> {
+): Promise<MyCreatedPullRequestsResult> {
   const result = await invokeCommand("list_my_created_pull_requests", { input });
-  return myCreatedPullRequestSummariesSchema.parse(result);
+  return myCreatedPullRequestsResultSchema.parse(result);
 }

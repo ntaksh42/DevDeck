@@ -74,35 +74,36 @@ impl PullRequestService {
     pub async fn list_my_created_pull_requests(
         &self,
         input: ListMyCreatedPullRequestsInput,
-    ) -> Result<Vec<MyCreatedPullRequestSummary>> {
+    ) -> Result<MyCreatedPullRequestsResult> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
 
         // Without an authenticated user id we cannot identify "my" PRs.
         let Some(user_id) = organization.authenticated_user_id.clone() else {
-            return Ok(Vec::new());
+            return Ok(MyCreatedPullRequestsResult::default());
         };
 
         let client = client_for_organization(&organization, &self.secrets)?;
         let projects = project_id_name_pairs(&client).await?;
 
-        let mut tasks: JoinSet<Result<Vec<MyCreatedPullRequestSummary>>> = JoinSet::new();
-        for (project_id, _project_name) in projects {
+        let mut tasks: JoinSet<(String, Result<Vec<MyCreatedPullRequestSummary>>)> = JoinSet::new();
+        for (project_id, project_name) in projects {
             let client = client.clone();
             let org = organization.clone();
             let user_id = user_id.clone();
             tasks.spawn(async move {
-                fetch_created_prs_for_project(&client, &org, &project_id, &user_id).await
+                let result =
+                    fetch_created_prs_for_project(&client, &org, &project_id, &user_id).await;
+                (project_name, result)
             });
         }
 
-        let mut results = Vec::new();
-        while let Some(joined) = tasks.join_next().await {
-            let fetched = joined
-                .map_err(|e| AppError::AzureDevOps(format!("created PR task failed: {e}")))?;
-            results.extend(fetched?);
-        }
+        let fetched = collect_project_prs(tasks).await?;
+        let (mut results, warnings) = fetched.finish()?;
         results.sort_by(|a, b| b.creation_date.cmp(&a.creation_date));
-        Ok(results)
+        Ok(MyCreatedPullRequestsResult {
+            pull_requests: results,
+            warnings,
+        })
     }
 
     // Active PRs are served from the local cache (kept fresh by background
@@ -156,12 +157,14 @@ impl PullRequestService {
             })
             .collect();
 
+        let mut fetched_results = ProjectPrResults::default();
         let mut results: Vec<PullRequestSummary> = Vec::new();
 
         if want_cached_active {
             let cached =
                 self.db
                     .search_pull_requests(&organization.id, None, None, Some("active"))?;
+            fetched_results.success_count += 1;
             results.extend(cached.into_iter().map(cached_pr_to_summary).filter(|pr| {
                 // Active rows have no close date, so the window always applies
                 // to creation date here regardless of basis.
@@ -199,9 +202,12 @@ impl PullRequestService {
                         date_basis,
                     )
                     .await?;
-                results.extend(fetched);
+                fetched_results.merge(fetched);
             }
         }
+
+        let (live_results, warnings) = fetched_results.finish()?;
+        results.extend(live_results);
 
         // Project/repository scoping is applied in memory so the cache path and
         // every live status share one consistent membership filter.
@@ -223,6 +229,7 @@ impl PullRequestService {
             pull_requests: results,
             total,
             truncated,
+            warnings,
         })
     }
 
@@ -243,7 +250,7 @@ impl PullRequestService {
         from_rfc: Option<&str>,
         to_rfc: Option<&str>,
         date_basis: DateBasis,
-    ) -> Result<Vec<PullRequestSummary>> {
+    ) -> Result<ProjectPrResults<PullRequestSummary>> {
         let client = client_for_organization(organization, &self.secrets)?;
 
         // Scope the live query to the relevant projects to limit API calls:
@@ -288,7 +295,7 @@ impl PullRequestService {
         let to = to_rfc.map(str::to_string);
         let time_range_type = date_basis.query_value();
 
-        let mut tasks: JoinSet<Result<Vec<PullRequestSummary>>> = JoinSet::new();
+        let mut tasks: JoinSet<(String, Result<Vec<PullRequestSummary>>)> = JoinSet::new();
         for (project_id, project_name) in projects {
             let client = client.clone();
             let org = organization.clone();
@@ -296,7 +303,7 @@ impl PullRequestService {
             let from = from.clone();
             let to = to.clone();
             tasks.spawn(async move {
-                fetch_status_prs_for_project(
+                let result = fetch_status_prs_for_project(
                     &client,
                     &org,
                     &project_id,
@@ -307,18 +314,12 @@ impl PullRequestService {
                     to.as_deref(),
                     time_range_type,
                 )
-                .await
+                .await;
+                (project_name, result)
             });
         }
 
-        let mut results = Vec::new();
-        while let Some(joined) = tasks.join_next().await {
-            let fetched =
-                joined.map_err(|e| AppError::AzureDevOps(format!("PR search task failed: {e}")))?;
-            results.extend(fetched?);
-        }
-
-        Ok(results)
+        collect_project_prs(tasks).await
     }
 
     fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {

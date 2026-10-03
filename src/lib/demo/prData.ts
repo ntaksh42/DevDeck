@@ -206,6 +206,7 @@ export function demoPullRequests(input?: SearchPullRequestsInput): PullRequestSe
     pullRequests: sorted.slice(0, limit),
     total: sorted.length,
     truncated: sorted.length > limit,
+    warnings: [],
   };
 }
 

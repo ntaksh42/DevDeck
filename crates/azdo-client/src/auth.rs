@@ -26,6 +26,8 @@ fn resolve_cli_resource(override_value: Option<&str>) -> String {
     }
 }
 
+// async_trait adds #[must_use] to methods already returning a must-use Future.
+#[allow(clippy::double_must_use)]
 #[async_trait::async_trait]
 pub trait AdoCredentialProvider: Send + Sync {
     async fn auth_header_value(&self) -> Result<String>;
