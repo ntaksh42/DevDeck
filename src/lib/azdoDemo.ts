@@ -216,7 +216,7 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       );
     }
     case "list_my_created_pull_requests":
-      return demoMyCreatedPullRequests();
+      return { pullRequests: demoMyCreatedPullRequests(), warnings: [] };
     case "get_pull_request_review": {
       const input = (args as { input?: GetPullRequestReviewInput } | undefined)?.input;
       return demoPrReviewDetail(input?.pullRequestId ?? 0);

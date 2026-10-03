@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { MyCreatedPullRequestSummary } from "@/lib/azdoCommands";
 import { MyPullRequestsGrid } from "./MyPullRequestsGrid";
@@ -32,10 +32,30 @@ const pr: MyCreatedPullRequestSummary = {
 };
 
 describe("MyPullRequestsGrid copy shortcuts", () => {
+  it("shows a project warning while keeping successful PRs usable", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+    client.setQueryData(["activeOrganization"], { id: "contoso" });
+    client.setQueryData(["myCreatedPullRequests", "contoso"], {
+      pullRequests: [pr],
+      warnings: ["Restricted"],
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <MyPullRequestsGrid />
+      </QueryClientProvider>,
+    );
+
+    const grid = await screen.findByRole("grid", { name: "My pull requests" });
+    expect(screen.getByText("Could not fetch 1 project(s): Restricted.")).toBeTruthy();
+    expect(within(grid).getByText(pr.title)).toBeTruthy();
+    fireEvent.keyDown(grid, { key: "l" });
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining("!77")));
+  });
+
   it("copies the selected PR as a Markdown link with L", async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     client.setQueryData(["activeOrganization"], { id: "contoso" });
-    client.setQueryData(["myCreatedPullRequests", "contoso"], [pr]);
+    client.setQueryData(["myCreatedPullRequests", "contoso"], { pullRequests: [pr], warnings: [] });
     render(
       <QueryClientProvider client={client}>
         <MyPullRequestsGrid />

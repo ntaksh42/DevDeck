@@ -32,6 +32,19 @@ export function workItemStateDotClass(state: string): string {
   return "bg-slate-400";
 }
 
+export function workItemPriorityDotClass(priority: string): string {
+  switch (priority.trim()) {
+    case "1":
+      return "bg-red-500";
+    case "2":
+      return "bg-orange-500";
+    case "3":
+      return "bg-yellow-500";
+    default:
+      return "bg-slate-400";
+  }
+}
+
 export function WorkItemTypeBadge({ type }: { type: string }) {
   return (
     <span className="inline-flex min-w-0 items-center gap-1 rounded border border-border bg-card px-1.5 text-[11px] font-semibold leading-[18px] text-foreground">

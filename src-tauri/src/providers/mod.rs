@@ -48,7 +48,7 @@ use crate::pr_review::{
     SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
 };
 use crate::prs::{
-    ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestSummary,
+    ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestsResult,
     PullRequestSearchResult, ReviewPullRequestSummary, SearchPullRequestsInput,
 };
 use crate::work_items::{
@@ -92,10 +92,8 @@ pub struct ProviderInfo {
 }
 
 /// Domain operations the command layer invokes, independent of platform.
-#[allow(
-    clippy::double_must_use,
-    reason = "async_trait adds must_use to its boxed future"
-)]
+// async_trait adds #[must_use] to methods already returning a must-use Future.
+#[allow(clippy::double_must_use)]
 #[async_trait]
 pub(crate) trait Provider: Send + Sync {
     fn capabilities(&self) -> ProviderCapabilities;
@@ -108,7 +106,7 @@ pub(crate) trait Provider: Send + Sync {
     async fn list_my_created_pull_requests(
         &self,
         input: ListMyCreatedPullRequestsInput,
-    ) -> Result<Vec<MyCreatedPullRequestSummary>>;
+    ) -> Result<MyCreatedPullRequestsResult>;
     async fn list_my_review_pull_requests(
         &self,
         input: ListMyReviewPullRequestsInput,

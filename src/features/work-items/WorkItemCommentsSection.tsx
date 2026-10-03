@@ -78,7 +78,7 @@ export function WorkItemCommentsSection({
           {editCommentError}
         </p>
       ) : null}
-      <div className="space-y-1">
+      <div className="divide-y divide-border">
         {visibleComments.map((comment) => {
           const deleting = deletingCommentId === comment.id;
           const editing = editingCommentId === comment.id;

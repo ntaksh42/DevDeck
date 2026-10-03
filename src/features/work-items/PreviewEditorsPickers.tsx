@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { ClassificationNodeOption } from "@/lib/azdoCommands";
 import { useCloseOnOutsidePointer } from "./PreviewEditorsBase";
+import { workItemPriorityDotClass } from "./WorkItemBadges";
 
 export function CustomFieldPicker({
   current,
@@ -396,10 +397,16 @@ export function PriorityPicker({
         aria-keyshortcuts={shortcut}
         disabled={pending}
         onClick={() => onOpenChange(!open)}
-        className="max-w-full truncate rounded px-1 text-left text-[11px] font-semibold leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+        className="inline-flex max-w-full items-center gap-1 rounded px-1 text-left text-[11px] font-semibold leading-4 text-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
         title={current ?? "—"}
       >
-        {pending ? "Updating..." : (current ?? "—")}
+        {!pending && current ? (
+          <span
+            aria-hidden="true"
+            className={`h-2 w-2 shrink-0 rounded-full ${workItemPriorityDotClass(current)}`}
+          />
+        ) : null}
+        <span className="truncate">{pending ? "Updating..." : (current ?? "—")}</span>
       </button>
       {error && (
         <p className="mt-0.5 text-[11px] text-destructive">{error}</p>
@@ -432,7 +439,9 @@ export function PriorityPicker({
                 }`}
               >
                 <span
-                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${value === current ? "bg-primary" : "bg-transparent"}`}
+                  className={`h-2 w-2 shrink-0 rounded-full ${workItemPriorityDotClass(value)} ${
+                    value === current ? "ring-2 ring-foreground/40" : ""
+                  }`}
                 />
                 {priority}
               </button>

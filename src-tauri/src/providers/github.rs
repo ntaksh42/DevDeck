@@ -38,7 +38,7 @@ use crate::pr_review::{
     SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
 };
 use crate::prs::{
-    ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestSummary,
+    ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestsResult,
     PullRequestSearchResult, ReviewPullRequestSummary, SearchPullRequestsInput,
 };
 use crate::search::{SearchAllInput, SearchAllResult, SearchAllTotals};
@@ -124,14 +124,19 @@ impl Provider for GithubProvider {
             pull_requests: results,
             total,
             truncated: false,
+            warnings: Vec::new(),
         })
     }
 
     async fn list_my_created_pull_requests(
         &self,
         _input: ListMyCreatedPullRequestsInput,
-    ) -> Result<Vec<MyCreatedPullRequestSummary>> {
-        github::prs::list_my_created_pull_requests(&self.org, &self.secrets).await
+    ) -> Result<MyCreatedPullRequestsResult> {
+        Ok(MyCreatedPullRequestsResult {
+            pull_requests: github::prs::list_my_created_pull_requests(&self.org, &self.secrets)
+                .await?,
+            warnings: Vec::new(),
+        })
     }
 
     async fn list_my_review_pull_requests(

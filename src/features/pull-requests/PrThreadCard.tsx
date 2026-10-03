@@ -243,19 +243,103 @@ export function PrThreadCard({
 }) {
   const [replying, setReplying] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [collapsed, setCollapsed] = useState(false);
+  // Resolved threads start folded to one line so open discussions stand out.
+  const [collapsed, setCollapsed] = useState(thread.isResolved);
   const resolved = thread.isResolved;
   const visibleComments = thread.comments.filter((comment) => !comment.isSystem);
   const firstComment = visibleComments[0];
+  const filePath = showFilePath && thread.filePath ? thread.filePath : null;
+  // Without a file path the first comment's author line doubles as the
+  // thread's header row, instead of a row holding only the controls.
+  const firstAuthorInHeader = !filePath && !collapsed;
+
+  function commentHeader(comment: PrThread["comments"][number], inThreadHeader = false) {
+    return (
+      <>
+        <CommentAvatar name={comment.author} />
+        <span className="truncate font-medium text-foreground">{comment.author ?? "Unknown"}</span>
+        {comment.publishedDate ? (
+          <span
+            className="shrink-0 text-[11px] text-muted-foreground"
+            title={formatDate(comment.publishedDate)}
+          >
+            {formatRelativeDate(comment.publishedDate)}
+          </span>
+        ) : null}
+        {comment.isMine && editingId !== comment.id && (onEditComment || onDeleteComment) ? (
+          <span
+            className={`${inThreadHeader ? "" : "ml-auto "}flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover/comment:opacity-100`}
+          >
+            {onEditComment ? (
+              <button
+                type="button"
+                onClick={() => setEditingId(comment.id)}
+                className="rounded px-1 py-px text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+              >
+                Edit
+              </button>
+            ) : null}
+            {onDeleteComment ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  if (window.confirm("Delete this comment?")) {
+                    void onDeleteComment(comment.id);
+                  }
+                }}
+                className="rounded px-1 py-px text-[11px] text-muted-foreground hover:bg-secondary hover:text-destructive disabled:opacity-50"
+              >
+                Delete
+              </button>
+            ) : null}
+          </span>
+        ) : null}
+      </>
+    );
+  }
 
   return (
     <div
       className={`rounded-md border px-2 py-1.5 ${
-        resolved ? "border-border bg-muted/60" : "border-border bg-card"
+        resolved
+          ? "border-border bg-muted/60"
+          : "border-border border-l-[3px] border-l-amber-400 bg-card dark:border-l-amber-500"
       }`}
     >
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-1.5">
+      <div className="group/comment flex min-w-0 items-center gap-1.5 text-xs">
+        {filePath ? (
+          <span
+            className="min-w-0 shrink truncate font-mono text-[11px] text-muted-foreground"
+            title={`${filePath}${thread.rightLine ? `:${thread.rightLine}` : ""}`}
+          >
+            {/* Folded to one line, the file name leaves room for the comment. */}
+            {collapsed ? filePath.split("/").pop() : filePath}
+            {thread.rightLine ? `:${thread.rightLine}` : ""}
+          </span>
+        ) : null}
+        {collapsed ? (
+          <>
+            <CommentAvatar name={firstComment?.author} />
+            <span className="shrink-0 font-medium text-foreground">
+              {firstComment?.author ?? "Unknown"}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-muted-foreground">
+              {firstComment?.content ?? ""}
+            </span>
+            {visibleComments.length > 1 ? (
+              <span
+                className="shrink-0 text-[11px] text-muted-foreground"
+                title={`${visibleComments.length} comments`}
+              >
+                {visibleComments.length}
+              </span>
+            ) : null}
+          </>
+        ) : firstAuthorInHeader && firstComment ? (
+          commentHeader(firstComment, true)
+        ) : null}
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           <button
             type="button"
             onClick={() => setCollapsed((value) => !value)}
@@ -269,74 +353,19 @@ export function PrThreadCard({
               <ChevronDown className="h-3 w-3" aria-hidden="true" />
             )}
           </button>
-          {showFilePath && thread.filePath ? (
-            <span
-              className="truncate font-mono text-[11px] text-muted-foreground"
-              title={`${thread.filePath}${thread.rightLine ? `:${thread.rightLine}` : ""}`}
-            >
-              {thread.filePath}
-              {thread.rightLine ? `:${thread.rightLine}` : ""}
-            </span>
-          ) : null}
+          {/* Threads without a status are still user discussions; default them to
+              active so the dropdown stays available (issue #434). */}
+          <ThreadStatusDropdown resolved={resolved} busy={busy} onSetResolved={onToggleStatus} />
         </div>
-        {/* Threads without a status are still user discussions; default them to
-            active so the dropdown stays available (issue #434). */}
-        <ThreadStatusDropdown resolved={resolved} busy={busy} onSetResolved={onToggleStatus} />
       </div>
-      {collapsed ? (
-        <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs">
-          <CommentAvatar name={firstComment?.author} />
-          <span className="shrink-0 font-medium text-foreground">
-            {firstComment?.author ?? "Unknown"}
-          </span>
-          <span className="min-w-0 flex-1 truncate text-muted-foreground">
-            {firstComment?.content ?? ""}
-          </span>
-        </div>
-      ) : (
+      {collapsed ? null : (
         <>
-          <div className="mt-1 space-y-1.5">
-            {visibleComments.map((comment) => (
+          <div className={`space-y-1.5 ${firstAuthorInHeader ? "" : "mt-1"}`}>
+            {visibleComments.map((comment, index) => (
               <div key={comment.id} className="group/comment text-xs">
-                <div className="flex items-center gap-1.5">
-                  <CommentAvatar name={comment.author} />
-                  <span className="font-medium text-foreground">{comment.author ?? "Unknown"}</span>
-                  {comment.publishedDate ? (
-                    <span
-                      className="text-[11px] text-muted-foreground"
-                      title={formatDate(comment.publishedDate)}
-                    >
-                      {formatRelativeDate(comment.publishedDate)}
-                    </span>
-                  ) : null}
-                  {comment.isMine && editingId !== comment.id && (onEditComment || onDeleteComment) ? (
-                    <span className="ml-auto flex items-center gap-1 opacity-0 transition-opacity group-hover/comment:opacity-100">
-                      {onEditComment ? (
-                        <button
-                          type="button"
-                          onClick={() => setEditingId(comment.id)}
-                          className="rounded px-1 py-px text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground"
-                        >
-                          Edit
-                        </button>
-                      ) : null}
-                      {onDeleteComment ? (
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => {
-                            if (window.confirm("Delete this comment?")) {
-                              void onDeleteComment(comment.id);
-                            }
-                          }}
-                          className="rounded px-1 py-px text-[11px] text-muted-foreground hover:bg-secondary hover:text-destructive disabled:opacity-50"
-                        >
-                          Delete
-                        </button>
-                      ) : null}
-                    </span>
-                  ) : null}
-                </div>
+                {firstAuthorInHeader && index === 0 ? null : (
+                  <div className="flex min-w-0 items-center gap-1.5">{commentHeader(comment)}</div>
+                )}
                 {editingId === comment.id && onEditComment ? (
                   <div className="mt-1 pl-[26px]">
                     <CommentComposer
@@ -370,7 +399,7 @@ export function PrThreadCard({
               </div>
             ))}
           </div>
-          <div className="mt-1.5">
+          <div className="mt-1">
             {replying ? (
               <CommentComposer
                 placeholder="Reply…"
@@ -389,19 +418,19 @@ export function PrThreadCard({
                 }}
               />
             ) : (
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-3 pl-[26px]">
                 <button
                   type="button"
                   onClick={() => setReplying(true)}
-                  className="flex h-7 min-w-0 flex-1 items-center rounded border border-input bg-background px-2 text-left text-xs text-muted-foreground hover:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="rounded text-xs font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring"
                 >
-                  Write a reply…
+                  Reply
                 </button>
                 <button
                   type="button"
                   disabled={busy}
                   onClick={onToggleStatus}
-                  className="shrink-0 rounded border border-border bg-card px-2 py-1 text-xs text-muted-foreground hover:bg-secondary disabled:opacity-50"
+                  className="rounded text-xs text-muted-foreground hover:text-foreground hover:underline focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
                 >
                   {resolved ? "Reactivate" : "Resolve"}
                 </button>

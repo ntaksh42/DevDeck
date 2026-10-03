@@ -10,6 +10,7 @@ import {
 import { summarizeDiff, type DiffSummary } from "@/lib/diffView";
 import { isEditableTarget } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
+import { PreviewBand } from "@/components/PreviewBand";
 import { CommitDiffView } from "./CommitDiffView";
 
 type ChangeBadge = { label: string; cls: string };
@@ -249,15 +250,16 @@ export function CommitFilesPanel({
 
   return (
     <div ref={panelRef} className="border-t border-border" onKeyDown={handleKeyDown}>
-      <div className="flex items-center gap-2 border-b border-border bg-muted px-3 py-1 text-[11px] font-medium text-muted-foreground">
-        <span>
-          {files.length} changed file{files.length === 1 ? "" : "s"}
-        </span>
-        <span className="ml-auto shrink-0 font-mono tabular-nums" title="Lines added / removed across this commit">
-          <span className="text-green-700 dark:text-green-400">+{totals.additions}</span>{" "}
-          <span className="text-red-700 dark:text-red-400">-{totals.deletions}</span>
-        </span>
-      </div>
+      <PreviewBand
+        action={
+          <span className="font-mono tabular-nums" title="Lines added / removed across this commit">
+            <span className="text-green-700 dark:text-green-400">+{totals.additions}</span>{" "}
+            <span className="text-red-700 dark:text-red-400">-{totals.deletions}</span>
+          </span>
+        }
+      >
+        {files.length} changed file{files.length === 1 ? "" : "s"}
+      </PreviewBand>
       {parents.length > 1 ? (
         <div className="flex items-center gap-1.5 border-b border-border bg-yellow-50 px-3 py-1 text-[11px] text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-300">
           <GitMerge className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />

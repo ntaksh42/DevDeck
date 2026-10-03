@@ -22,6 +22,7 @@ import { usePreviewSectionMover } from "./PreviewSectionMover";
 import { type PreviewSectionId, sectionColumn } from "./previewSectionLayout";
 import { PreviewControl, PreviewField, PreviewSection, PreviewTagsField } from "./PreviewSection";
 import { RichHtmlFrame } from "./RichHtmlFrame";
+import { PreviewToolbarPortal } from "@/components/PreviewToolbarSlot";
 import { WorkItemCommentsSection } from "./WorkItemCommentsSection";
 import { WorkItemHistorySection } from "./WorkItemHistorySection";
 import { FieldConfigMenu } from "./FieldConfigMenu";
@@ -218,8 +219,10 @@ export function WorkItemPreviewDetails({
         const title = id === "description" ? "Description" : "Acceptance Criteria";
         return (
           <PreviewSection accentColor="border-l-primary" collapseId={id} title={title}>
+            {/* Unframed: the section band already marks where the field starts. */}
             <RichHtmlFrame
               baseUrl={preview.webUrl}
+              framed={false}
               html={(id === "description" ? descriptionHtml : acceptanceCriteriaHtml) ?? ""}
               onImageOpen={setLightboxSrc}
               resolveImageSource={resolveImageSource}
@@ -271,6 +274,7 @@ export function WorkItemPreviewDetails({
       tabIndex={-1}
     >
       <div className="border-b-2 border-border pb-1.5">
+        <TitleEditor current={preview.title} onSubmit={onTitleChange} pending={titlePending} />
         <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
           <div className="flex min-w-0 items-center gap-1.5">
             <span className="shrink-0 font-mono text-[11px] font-bold leading-5 text-slate-600 dark:text-slate-300">
@@ -297,35 +301,38 @@ export function WorkItemPreviewDetails({
             ) : null}
             {statusChip}
           </div>
-          <div className="flex shrink-0 items-center gap-1">
-            {actionsControl}
-            {presetsControl}
-            {zoomControl}
-            <button
-              type="button"
-              onClick={toggleCommentsLayout}
-              aria-pressed={sideBySide}
-              aria-label={sideBySide ? "Show comments below the details" : "Show comments beside the details"}
-              title={sideBySide ? "Show comments below the details" : "Show comments beside the details"}
-              className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              {sideBySide ? (
-                <Rows2 className="h-3.5 w-3.5" aria-hidden="true" />
-              ) : (
-                <Columns2 className="h-3.5 w-3.5" aria-hidden="true" />
-              )}
-            </button>
-            <FieldConfigMenu
-              organizationId={preview.organizationId}
-              projectId={preview.projectId}
-              selectedFieldKeys={selectedFieldKeys}
-              onSelectedFieldKeysChange={onSelectedFieldKeysChange}
-              customPreviewFields={customPreviewFields}
-              onCustomPreviewFieldsChange={onCustomPreviewFieldsChange}
-            />
-          </div>
+          {/* In the dock tab strip when the host provides a slot (Work Items
+              grid); inline at the end of this row otherwise (board, PR pane). */}
+          <PreviewToolbarPortal>
+            <div className="flex shrink-0 items-center gap-1">
+              {actionsControl}
+              {presetsControl}
+              {zoomControl}
+              <button
+                type="button"
+                onClick={toggleCommentsLayout}
+                aria-pressed={sideBySide}
+                aria-label={sideBySide ? "Show comments below the details" : "Show comments beside the details"}
+                title={sideBySide ? "Show comments below the details" : "Show comments beside the details"}
+                className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                {sideBySide ? (
+                  <Rows2 className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  <Columns2 className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
+              </button>
+              <FieldConfigMenu
+                organizationId={preview.organizationId}
+                projectId={preview.projectId}
+                selectedFieldKeys={selectedFieldKeys}
+                onSelectedFieldKeysChange={onSelectedFieldKeysChange}
+                customPreviewFields={customPreviewFields}
+                onCustomPreviewFieldsChange={onCustomPreviewFieldsChange}
+              />
+            </div>
+          </PreviewToolbarPortal>
         </div>
-        <TitleEditor current={preview.title} onSubmit={onTitleChange} pending={titlePending} />
         {/* Chips instead of a fixed-column grid: a short value (e.g. Priority
             "2") only takes the width its own text needs rather than a forced
             minmax(120px,...) column, so more fields pack per row and the
