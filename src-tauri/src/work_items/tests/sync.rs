@@ -100,6 +100,17 @@ fn wiql_with_changed_date_filter_inserts_condition_before_order_by() {
     );
 }
 
+#[test]
+fn my_work_items_wiql_excludes_completed_and_removed_states() {
+    assert_eq!(
+        SYNC_MY_WI_WIQL,
+        "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project \
+         AND [System.AssignedTo] = @Me \
+         AND [System.StateCategory] NOT IN ('Completed', 'Removed') \
+         ORDER BY [System.ChangedDate] DESC"
+    );
+}
+
 #[tokio::test]
 async fn sync_work_items_delta_preserves_items_missing_from_window() {
     let server = MockServer::start().await;
