@@ -14,6 +14,7 @@ import { usePreviewZoom } from "@/lib/usePreviewZoom";
 import { LoadingState, PreviewEmptyState, SELECT_EMPTY_HINT } from "@/components/StateDisplay";
 import type { DockablePanelSpec } from "@/components/DockableWorkspace";
 import { PrReviewHeader } from "./PrReviewHeader";
+import { PrReviewToolbar } from "./PrReviewToolbar";
 import { ReviewTab } from "./PrReviewTabContents";
 import { CommitsTab } from "./PrCommitsTab";
 import { ResultTab } from "./PrSecondaryTabs";
@@ -149,9 +150,6 @@ export function usePrReviewPanels({
         <PrReviewHeader
           selectedPr={selectedPr}
           review={reviewQuery.data ?? null}
-          maximized={maximized}
-          onToggleMaximize={onToggleMaximize}
-          onOpenLinkedWorkItems={onOpenLinkedWorkItems}
           reviewerActionsBusy={reviewerActionsBusy}
           onToggleReviewerRequired={(reviewer) => {
             if (!selectedPr || !reviewer.id) return;
@@ -167,12 +165,6 @@ export function usePrReviewPanels({
               removeReviewerMutation.mutate({ ...prLocator(selectedPr), reviewerId: reviewer.id });
             }
           }}
-          zoom={zoom}
-          canZoomIn={canZoomIn}
-          canZoomOut={canZoomOut}
-          onZoomIn={zoomIn}
-          onZoomOut={zoomOut}
-          onResetZoom={resetZoom}
           compact={compactHeader}
         />
         {reviewerError ? (
@@ -192,9 +184,27 @@ export function usePrReviewPanels({
     );
   }
 
+  // Shared by every review tab: shown in the tab strip for whichever is active.
+  const toolbar = (
+    <PrReviewToolbar
+      selectedPr={selectedPr}
+      title={reviewQuery.data?.title ?? null}
+      maximized={maximized}
+      onToggleMaximize={onToggleMaximize}
+      onOpenLinkedWorkItems={onOpenLinkedWorkItems}
+      zoom={zoom}
+      canZoomIn={canZoomIn}
+      canZoomOut={canZoomOut}
+      onZoomIn={zoomIn}
+      onZoomOut={zoomOut}
+      onResetZoom={resetZoom}
+    />
+  );
+
   const anchor: DockablePanelSpec = {
     id: "review",
     title: "Conversation",
+    headerActions: toolbar,
     content: withChrome(
       !selectedPr ? (
         noPrSelected
@@ -215,12 +225,14 @@ export function usePrReviewPanels({
     {
       id: "commits",
       title: "Commits",
+      headerActions: toolbar,
       content: withChrome(!selectedPr ? noPrSelected : <CommitsTab pr={selectedPr} />),
       position: { relativeTo: "review", direction: "within" },
     },
     {
       id: "files",
       title: "Files changed",
+      headerActions: toolbar,
       content: withChrome(
         !selectedPr ? (
           noPrSelected
@@ -235,6 +247,7 @@ export function usePrReviewPanels({
     {
       id: "result",
       title: "Result",
+      headerActions: toolbar,
       content: withChrome(!selectedPr ? noPrSelected : (
         <ResultTab selectedPr={selectedPr} commentModeRequest={resultCommentRequest} />
       ), true),

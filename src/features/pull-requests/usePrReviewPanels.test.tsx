@@ -122,7 +122,7 @@ describe("PrReviewPanel status actions", () => {
   );
 
   it(
-    "shows an Email a link button in the PR header",
+    "shows an Email a link button in the review tab strip",
     async () => {
       renderPanel();
       await screen.findByRole("button", { name: "Complete" }, { timeout: 8000 });
@@ -171,7 +171,8 @@ describe("PrReviewPanel Result tab", () => {
       renderPanel();
       await screen.findByRole("button", { name: "Complete" }, { timeout: 8000 });
 
-      const panel = screen.getByRole("button", { name: "Reset preview zoom" }).closest("aside")!;
+      // The zoom buttons sit in the dock tab strip; the key handler is on the pane.
+      const panel = screen.getByRole("group", { name: "Pull request metadata" }).closest("aside")!;
       expect(screen.getByRole("button", { name: "Reset preview zoom" }).textContent).toBe("100%");
 
       fireEvent.keyDown(panel, { key: "=", ctrlKey: true });

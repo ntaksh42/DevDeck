@@ -1,3 +1,4 @@
+mod live_results;
 mod notifications;
 mod search;
 mod service;
@@ -9,6 +10,10 @@ mod util;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+mod live_results_tests;
+
+pub(crate) use live_results::*;
 pub(crate) use notifications::*;
 pub(crate) use search::*;
 pub use service::*;

@@ -306,22 +306,9 @@ pub(crate) async fn fetch_created_prs_for_project(
     project_id: &str,
     user_id: &str,
 ) -> Result<Vec<MyCreatedPullRequestSummary>> {
-    let prs = match client
+    let prs = client
         .list_pull_requests_by_creator(project_id, user_id, 200)
-        .await
-    {
-        Ok(prs) => prs,
-        Err(e) if is_ado_not_found(&e) => {
-            tracing::warn!(
-                org = %org.name,
-                project = %project_id,
-                error = %e,
-                "created pull request list returned 404, skipping project"
-            );
-            return Ok(Vec::new());
-        }
-        Err(e) => return Err(e.into()),
-    };
+        .await?;
 
     let mut summaries = Vec::new();
     for pr in prs {

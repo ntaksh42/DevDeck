@@ -3,7 +3,7 @@ use tauri::State;
 use crate::app_state::AppState;
 use crate::error::Result;
 use crate::prs::{
-    ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestSummary,
+    ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestsResult,
     PullRequestSearchResult, ReviewPullRequestSummary, SearchPullRequestsInput,
 };
 
@@ -34,7 +34,7 @@ pub async fn list_my_review_pull_requests(
 pub async fn list_my_created_pull_requests(
     input: ListMyCreatedPullRequestsInput,
     state: State<'_, AppState>,
-) -> Result<Vec<MyCreatedPullRequestSummary>> {
+) -> Result<MyCreatedPullRequestsResult> {
     state
         .provider()
         .await?

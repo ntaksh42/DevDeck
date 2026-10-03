@@ -107,6 +107,9 @@ export function CollapsibleComment({
   const collapsible =
     contentHeight == null ? commentHtml.length >= 700 : contentHeight > 150;
   const reactionByType = new Map(reactions.map((reaction) => [reaction.reactionType, reaction]));
+  const activeReactions = COMMENT_REACTIONS.filter(
+    (reaction) => (reactionByType.get(reaction.type)?.count ?? 0) > 0,
+  );
 
   // Once measured short, drop any pre-render collapse so the toggle disappears.
   useEffect(() => {
@@ -191,15 +194,16 @@ export function CollapsibleComment({
   }, [editing]);
 
   return (
-    <article className="group min-w-0 overflow-hidden rounded-md border border-border bg-card shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-      <div className="flex min-w-0 items-center gap-1.5 border-b border-border bg-muted px-1.5 py-0.5">
+    // No card frame: comments are separated by the list's divider lines so the
+    // text, not chrome, carries each entry.
+    <article className="group min-w-0 py-1">
+      <div className="flex min-w-0 items-center gap-1.5">
         <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[11px] font-semibold text-blue-700 dark:bg-blue-500/25 dark:text-blue-200">
           {commentAuthorInitials(createdBy)}
         </span>
-        <span className="min-w-0 truncate font-extrabold">
+        <span className="min-w-0 truncate font-bold">
           {createdBy ?? "Unknown"}
         </span>
-        <span className="hidden text-[11px] font-medium text-slate-500 dark:text-slate-400 sm:inline">commented</span>
         {createdDate ? (
           <span
             className="shrink-0 text-[11px] font-medium text-slate-500 dark:text-slate-400"
@@ -208,34 +212,88 @@ export function CollapsibleComment({
             {formatRelativeDate(createdDate)}
           </span>
         ) : null}
-        {!editMode ? (
+        <div className="ml-auto flex shrink-0 items-center gap-0.5">
+          {onToggleReaction && !editMode ? (
+            <div className="relative">
+              <button
+                ref={reactionTriggerRef}
+                type="button"
+                aria-label="Add reaction"
+                aria-expanded={pickerOpen}
+                title="Add reaction"
+                onClick={() => setPickerOpen((open) => !open)}
+                className={`inline-flex h-6 w-6 items-center justify-center rounded border border-transparent text-muted-foreground transition-opacity hover:border-border hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60 ${
+                  pickerOpen ? "opacity-100" : "opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
+                }`}
+              >
+                <SmilePlus className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+              {pickerOpen ? (
+                <div
+                  ref={reactionMenuRef}
+                  role="menu"
+                  aria-label="Reactions"
+                  onKeyDown={onReactionMenuKeyDown}
+                  className="absolute right-0 top-full z-30 mt-1 flex gap-0.5 rounded-md border border-border bg-popover p-1 shadow-lg"
+                >
+                  {COMMENT_REACTIONS.map((reaction) => {
+                    const mine = reactionByType.get(reaction.type)?.isMine ?? false;
+                    return (
+                      <button
+                        key={reaction.type}
+                        type="button"
+                        role="menuitemcheckbox"
+                        aria-checked={mine}
+                        title={`${reaction.label}${mine ? " (you reacted)" : ""}`}
+                        // Keep the picker open after toggling so the check badge
+                        // updates in place and the reaction is clearly applied.
+                        onClick={() => onToggleReaction(id, reaction.type, !mine)}
+                        className={`relative inline-flex h-7 w-7 items-center justify-center rounded text-base hover:bg-accent ${
+                          mine ? "bg-primary/15 ring-2 ring-primary" : ""
+                        }`}
+                      >
+                        <span aria-hidden="true">{reaction.emoji}</span>
+                        {mine ? (
+                          <span className="absolute -right-0.5 -top-0.5 inline-flex h-3 w-3 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                            <Check className="h-2 w-2" aria-hidden="true" />
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          {!editMode ? (
+            <button
+              type="button"
+              aria-label={`Edit comment ${id}`}
+              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-transparent text-muted-foreground opacity-0 transition-opacity hover:border-border hover:bg-accent hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 disabled:cursor-not-allowed"
+              disabled={deletePending || editPending}
+              title="Edit comment"
+              onClick={startEdit}
+            >
+              <Pencil aria-hidden="true" className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
           <button
             type="button"
-            aria-label={`Edit comment ${id}`}
-            className="ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-transparent text-muted-foreground opacity-0 transition-opacity hover:border-border hover:bg-accent hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 disabled:cursor-not-allowed"
+            aria-label={`Delete comment ${id}`}
+            className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-transparent text-muted-foreground transition-opacity hover:border-border hover:bg-accent hover:text-destructive disabled:cursor-not-allowed ${deleting ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"}`}
             disabled={deletePending || editPending}
-            title="Edit comment"
-            onClick={startEdit}
+            title="Delete comment"
+            onClick={() => onDelete(id)}
           >
-            <Pencil aria-hidden="true" className="h-3.5 w-3.5" />
+            {deleting ? (
+              <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
+            )}
           </button>
-        ) : null}
-        <button
-          type="button"
-          aria-label={`Delete comment ${id}`}
-          className={`${editMode ? "ml-auto" : ""} inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-transparent text-muted-foreground transition-opacity hover:border-border hover:bg-accent hover:text-destructive disabled:cursor-not-allowed ${deleting ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"}`}
-          disabled={deletePending || editPending}
-          title="Delete comment"
-          onClick={() => onDelete(id)}
-        >
-          {deleting ? (
-            <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
-          )}
-        </button>
+        </div>
       </div>
-      <div className="px-1.5 py-1">
+      <div className="pl-[18px]">
         {editMode ? (
           <CommentField
             textareaRef={editTextareaRef}
@@ -312,11 +370,9 @@ export function CollapsibleComment({
                 {expanded ? "Collapse" : "Expand"}
               </button>
             ) : null}
-            {onToggleReaction ? (
+            {onToggleReaction && activeReactions.length > 0 ? (
               <div className="mt-1 flex flex-wrap items-center gap-1">
-                {COMMENT_REACTIONS.filter(
-                  (reaction) => (reactionByType.get(reaction.type)?.count ?? 0) > 0,
-                ).map((reaction) => {
+                {activeReactions.map((reaction) => {
                   const state = reactionByType.get(reaction.type);
                   const mine = state?.isMine ?? false;
                   return (
@@ -338,54 +394,6 @@ export function CollapsibleComment({
                     </button>
                   );
                 })}
-                <div className="relative">
-                  <button
-                    ref={reactionTriggerRef}
-                    type="button"
-                    aria-label="Add reaction"
-                    aria-expanded={pickerOpen}
-                    title="Add reaction"
-                    onClick={() => setPickerOpen((open) => !open)}
-                    className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <SmilePlus className="h-3.5 w-3.5" aria-hidden="true" />
-                  </button>
-                  {pickerOpen ? (
-                    <div
-                      ref={reactionMenuRef}
-                      role="menu"
-                      aria-label="Reactions"
-                      onKeyDown={onReactionMenuKeyDown}
-                      className="absolute left-0 top-full z-30 mt-1 flex gap-0.5 rounded-md border border-border bg-popover p-1 shadow-lg"
-                    >
-                      {COMMENT_REACTIONS.map((reaction) => {
-                        const mine = reactionByType.get(reaction.type)?.isMine ?? false;
-                        return (
-                          <button
-                            key={reaction.type}
-                            type="button"
-                            role="menuitemcheckbox"
-                            aria-checked={mine}
-                            title={`${reaction.label}${mine ? " (you reacted)" : ""}`}
-                            // Keep the picker open after toggling so the check badge
-                            // updates in place and the reaction is clearly applied.
-                            onClick={() => onToggleReaction(id, reaction.type, !mine)}
-                            className={`relative inline-flex h-7 w-7 items-center justify-center rounded text-base hover:bg-accent ${
-                              mine ? "bg-primary/15 ring-2 ring-primary" : ""
-                            }`}
-                          >
-                            <span aria-hidden="true">{reaction.emoji}</span>
-                            {mine ? (
-                              <span className="absolute -right-0.5 -top-0.5 inline-flex h-3 w-3 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                                <Check className="h-2 w-2" aria-hidden="true" />
-                              </span>
-                            ) : null}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </div>
               </div>
             ) : null}
           </>

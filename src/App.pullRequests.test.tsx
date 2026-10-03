@@ -96,6 +96,7 @@ describe("App — Pull Requests", () => {
           ],
           total: 1,
           truncated: false,
+          warnings: ["Restricted"],
         });
       }
       return Promise.reject(new Error(`Unhandled command: ${command}`));
@@ -132,6 +133,7 @@ describe("App — Pull Requests", () => {
     const searchGrid = await screen.findByRole("grid", { name: "Pull request search results" });
     expect(await within(searchGrid).findByText("Add pull request search")).toBeTruthy();
     expect(screen.getByText("Platform / azdo-dashboard")).toBeTruthy();
+    expect(screen.getByText("Could not fetch 1 project(s): Restricted.")).toBeTruthy();
 
     // Status is now a multi-select filter: non-active statuses are selectable
     // and forwarded to the backend as an array.

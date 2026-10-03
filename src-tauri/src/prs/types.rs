@@ -58,6 +58,13 @@ pub struct MyCreatedPullRequestSummary {
     pub reviewer_count: i64,
 }
 
+#[derive(Debug, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct MyCreatedPullRequestsResult {
+    pub pull_requests: Vec<MyCreatedPullRequestSummary>,
+    pub warnings: Vec<String>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchPullRequestsInput {
@@ -108,4 +115,5 @@ pub struct PullRequestSearchResult {
     /// Total matches before the display cap, so the UI can show "100+".
     pub total: usize,
     pub truncated: bool,
+    pub warnings: Vec<String>,
 }

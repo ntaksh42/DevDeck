@@ -38,7 +38,7 @@ use crate::pr_review::{
     SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
 };
 use crate::prs::{
-    ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestSummary,
+    ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestsResult,
     PullRequestSearchResult, PullRequestService, ReviewPullRequestSummary, SearchPullRequestsInput,
 };
 use crate::search::{self, SearchAllInput, SearchAllResult};
@@ -117,7 +117,7 @@ impl Provider for AzdoProvider {
     async fn list_my_created_pull_requests(
         &self,
         input: ListMyCreatedPullRequestsInput,
-    ) -> Result<Vec<MyCreatedPullRequestSummary>> {
+    ) -> Result<MyCreatedPullRequestsResult> {
         self.pull_requests
             .list_my_created_pull_requests(input)
             .await
