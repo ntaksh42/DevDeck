@@ -112,6 +112,33 @@ export function highlightCode(content: string, fileName: string): HighlightedCod
   }
 }
 
+// Highlights a single source line by the file's extension. Unlike
+// `highlightCode` it never auto-detects (a lone line is too little to guess
+// from), so it returns null for unknown file types; diff views then show the
+// line as plain text. Lines are highlighted independently, so a token that
+// spans lines (e.g. a block comment) is only coloured on the line that opens it.
+const lineHtmlCache = new Map<string, string>();
+const MAX_LINE_CACHE = 5000;
+const MAX_LINE_CHARS = 2000;
+
+export function highlightLineHtml(text: string, fileName: string): string | null {
+  const language = languageForFile(fileName);
+  if (!language || text.length === 0 || text.length > MAX_LINE_CHARS) return null;
+  const key = `${language}:${text}`;
+  const cached = lineHtmlCache.get(key);
+  if (cached !== undefined) return cached;
+  try {
+    const html = DOMPurify.sanitize(hljs.highlight(text, { language, ignoreIllegals: true }).value, {
+      USE_PROFILES: { html: true },
+    });
+    if (lineHtmlCache.size >= MAX_LINE_CACHE) lineHtmlCache.clear();
+    lineHtmlCache.set(key, html);
+    return html;
+  } catch {
+    return null;
+  }
+}
+
 // Splits highlight.js HTML into one HTML string per source line. A span that
 // is still open at a line break (e.g. a multi-line comment) is closed there and
 // reopened on the next line, so every line is well-formed on its own.

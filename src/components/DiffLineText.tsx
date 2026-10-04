@@ -9,12 +9,21 @@ export function DiffLineText({
   segments,
   text,
   kind,
+  html,
 }: {
   segments?: InlineSegment[];
   text: string;
   kind: DiffLineKind;
+  /**
+   * Sanitized syntax-highlighted HTML for the line (see `highlightLineHtml`).
+   * Used only for lines without word-level `segments`, which take precedence so
+   * the changed words stay visible.
+   */
+  html?: string | null;
 }) {
-  if (!segments) return <>{text}</>;
+  if (!segments) {
+    return html ? <span dangerouslySetInnerHTML={{ __html: html }} /> : <>{text}</>;
+  }
   const highlight =
     kind === "add"
       ? "rounded-sm bg-green-200/80 dark:bg-green-700/50"

@@ -30,6 +30,7 @@ export const COMMIT_COLUMN_MAX_WIDTHS = [140, 160, 720, 380, 340, 72];
 export const COMMIT_COLUMN_WIDTHS_STORAGE_KEY = "azdodeck:layout:commitGridColumnWidths:v3";
 export const COMMIT_SEARCH_VIEW_STORAGE_KEY = "azdodeck:view:commitSearch:v1";
 export const COMMIT_VIEW_MODE_STORAGE_KEY = "azdodeck:view:commitViewMode:v1";
+export const COMMIT_DIFF_MODE_STORAGE_KEY = "azdodeck:view:commitDiffMode:v1";
 export const COMMIT_SORT_STORAGE_KEY = "azdodeck:view:commitGridSort:v1";
 export const COMMIT_VISIBLE_COLUMNS_STORAGE_KEY = "azdodeck:layout:commitVisibleColumns:v1";
 export const COMMIT_GRID_ROW_HEIGHT = 29;

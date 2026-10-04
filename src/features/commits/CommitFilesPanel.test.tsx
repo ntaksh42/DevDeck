@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CommitFilesPanel } from "./CommitFilesPanel";
 
@@ -31,7 +31,8 @@ describe("CommitFilesPanel", () => {
       const fileButton = await screen.findByText("app.ts", undefined, { timeout: 8000 });
       fireEvent.click(fileButton);
       // The demo diff adds `const z = 4;`.
-      expect(await screen.findByText(/const z = 4/, undefined, { timeout: 8000 })).toBeTruthy();
+      // Syntax highlighting splits a line into token spans, so match on the text content.
+      await waitFor(() => expect(document.body.textContent).toContain("const z = 4"), { timeout: 8000 });
       // It also modifies `const y = 2;` -> `const y = 3;`; the changed token is
       // rendered as a highlighted segment span, matching the PR diff view.
       const highlights = container.querySelectorAll(
@@ -93,7 +94,8 @@ describe("CommitFilesPanel", () => {
       expect(options).toHaveLength(2);
 
       fireEvent.click(screen.getByText("app.ts"));
-      expect(await screen.findByText(/const z = 4/, undefined, { timeout: 8000 })).toBeTruthy();
+      // Syntax highlighting splits a line into token spans, so match on the text content.
+      await waitFor(() => expect(document.body.textContent).toContain("const z = 4"), { timeout: 8000 });
 
       fireEvent.change(select, {
         target: { value: options[1].getAttribute("value") },
@@ -115,7 +117,8 @@ describe("CommitFilesPanel", () => {
       let appRow = screen.getByTitle("/src/app.ts");
 
       fireEvent.keyDown(appRow, { key: "j" });
-      expect(await screen.findByText(/const z = 4/, undefined, { timeout: 8000 })).toBeTruthy();
+      // Syntax highlighting splits a line into token spans, so match on the text content.
+      await waitFor(() => expect(document.body.textContent).toContain("const z = 4"), { timeout: 8000 });
       appRow = screen.getByTitle("/src/app.ts");
       expect(appRow.parentElement?.className).toMatch(/bg-secondary/);
       expect(appRow.getAttribute("tabindex")).toBe("0");
@@ -140,7 +143,9 @@ describe("CommitFilesPanel", () => {
       renderPanel();
       await screen.findByText("app.ts", undefined, { timeout: 8000 });
       fireEvent.click(screen.getByText("app.ts"));
-      await screen.findByText(/const z = 4/, undefined, { timeout: 8000 });
+      await waitFor(() => expect(document.body.textContent).toContain("const z = 4"), {
+        timeout: 8000,
+      });
       const appRow = screen.getByTitle("/src/app.ts");
       appRow.focus();
 
@@ -149,6 +154,43 @@ describe("CommitFilesPanel", () => {
       // Focus stays on the file row (not moved into the diff), so the panel's
       // Esc/ArrowLeft-to-grid path keeps working.
       expect(document.activeElement).toBe(appRow);
+    },
+    15000,
+  );
+});
+
+describe("CommitFilesPanel diff layout and syntax highlighting", () => {
+  afterEach(() => {
+    cleanup();
+    window.localStorage.clear();
+  });
+
+  async function openAppTsDiff() {
+    renderPanel();
+    fireEvent.click(await screen.findByText("app.ts", undefined, { timeout: 8000 }));
+    await waitFor(() => expect(document.body.textContent).toContain("const z = 4"), {
+      timeout: 8000,
+    });
+  }
+
+  it(
+    "colours tokens of a known file type",
+    async () => {
+      await openAppTsDiff();
+      expect(document.querySelector(".hljs-keyword")).not.toBeNull();
+    },
+    15000,
+  );
+
+  it(
+    "switches to side-by-side columns and remembers the choice",
+    async () => {
+      await openAppTsDiff();
+      expect(document.querySelectorAll(".grid-cols-2")).toHaveLength(0);
+
+      fireEvent.click(screen.getByRole("button", { name: "Side by side" }));
+      expect(document.querySelectorAll(".grid-cols-2").length).toBeGreaterThan(0);
+      expect(window.localStorage.getItem("azdodeck:view:commitDiffMode:v1")).toBe("split");
     },
     15000,
   );

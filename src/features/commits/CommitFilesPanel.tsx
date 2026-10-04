@@ -347,6 +347,7 @@ export function CommitFilesPanel({
                       targetContent={selectedDiff.data.targetContent}
                       baseUnavailableReason={selectedDiff.data.baseUnavailableReason}
                       targetUnavailableReason={selectedDiff.data.targetUnavailableReason}
+                      fileName={fileName(file.path)}
                     />
                   ) : null}
                 </div>
