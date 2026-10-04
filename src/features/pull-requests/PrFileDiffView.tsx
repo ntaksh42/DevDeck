@@ -2,6 +2,7 @@ import { type ReactNode, memo, useState, useMemo } from "react";
 import { ChevronDown, ChevronUp, ChevronsUpDown, Plus } from "lucide-react";
 import {
   buildDiffLines,
+  eolOnlyChange,
   buildSideBySideRows,
   collapseDiff,
   type CollapsedItem,
@@ -9,6 +10,7 @@ import {
   type SideBySideCell,
 } from "@/lib/diffView";
 import { DiffLineText } from "@/components/DiffLineText";
+import { EolOnlyNotice } from "@/components/EolOnlyNotice";
 import { openExternalUrl } from "@/lib/openExternal";
 import {
   DIFF_CONTEXT_LINES,
@@ -62,6 +64,11 @@ export function DiffContent({
       : baseBlocked
         ? `Previous version unavailable (${UNAVAILABLE_MESSAGES[baseUnavailableReason!] ?? baseUnavailableReason}); showing the new file.`
         : null;
+
+  const eolChange = useMemo(
+    () => (fatalReason ? null : eolOnlyChange(baseText, targetText)),
+    [baseText, targetText, fatalReason],
+  );
 
   const unified = useMemo(
     () => (fatalReason || viewMode !== "unified" ? [] : buildDiffLines(baseText, targetText)),
@@ -141,11 +148,16 @@ export function DiffContent({
     });
   }
 
-  const note = partialNote ? (
-    <p className="border-b border-border bg-yellow-50 px-2 py-1 text-[11px] text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-300">
-      {partialNote}
-    </p>
-  ) : null;
+  const note = (
+    <>
+      {partialNote ? (
+        <p className="border-b border-border bg-yellow-50 px-2 py-1 text-[11px] text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-300">
+          {partialNote}
+        </p>
+      ) : null}
+      {eolChange ? <EolOnlyNotice change={eolChange} /> : null}
+    </>
+  );
 
   if (viewMode === "split") {
     return (

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { ChevronsUpDown } from "lucide-react";
-import { buildDiffLines, collapseDiff, type DiffLine } from "@/lib/diffView";
+import { buildDiffLines, collapseDiff, eolOnlyChange, type DiffLine } from "@/lib/diffView";
+import { EolOnlyNotice } from "@/components/EolOnlyNotice";
 import { DiffLineText } from "@/components/DiffLineText";
 
 const MAX_RENDERED_DIFF_LINES = 2000;
@@ -50,6 +51,11 @@ export function CommitDiffView({
     const lines = buildDiffLines(baseText, targetText);
     return collapseDiff(lines, (line) => line.kind === "context");
   }, [baseText, targetText, fatalReason]);
+
+  const eolChange = useMemo(
+    () => (fatalReason ? null : eolOnlyChange(baseText, targetText)),
+    [baseText, targetText, fatalReason],
+  );
 
   if (fatalReason) {
     return (
@@ -123,6 +129,7 @@ export function CommitDiffView({
           {partialNote}
         </p>
       ) : null}
+      {eolChange ? <EolOnlyNotice change={eolChange} /> : null}
       {out}
       {rendered >= MAX_RENDERED_DIFF_LINES ? (
         <p className="px-2 py-1 text-[11px] italic text-muted-foreground">

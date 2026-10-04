@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildDiffLines, buildSideBySideRows, collapseDiff, summarizeDiff } from "./diffView";
+import {
+  buildDiffLines,
+  buildSideBySideRows,
+  collapseDiff,
+  eolOnlyChange,
+  summarizeDiff,
+} from "./diffView";
 
 describe("buildDiffLines", () => {
   it("marks added and removed lines with line numbers", () => {
@@ -179,5 +185,19 @@ describe("collapseDiff", () => {
         expect(item.rows.every(isContext)).toBe(true);
       }
     }
+  });
+});
+
+describe("eolOnlyChange", () => {
+  it("reports a newline-style-only change", () => {
+    expect(eolOnlyChange("a\nb\n", "a\r\nb\r\n")).toBe("LF → CRLF");
+    expect(eolOnlyChange("a\r\nb", "a\nb")).toBe("CRLF → LF");
+    expect(eolOnlyChange("a\nb\r\nc", "a\nb\nc")).toBe("mixed → LF");
+  });
+
+  it("returns null for identical or genuinely different content", () => {
+    expect(eolOnlyChange("a\nb\n", "a\nb\n")).toBeNull();
+    expect(eolOnlyChange("a\nb\n", "a\r\nc\r\n")).toBeNull();
+    expect(eolOnlyChange("a\n", "a")).toBeNull();
   });
 });

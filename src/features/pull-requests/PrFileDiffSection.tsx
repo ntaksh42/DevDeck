@@ -10,7 +10,7 @@ import {
   type PrThread,
   type ReviewPullRequestSummary,
 } from "@/lib/azdoCommands";
-import { summarizeDiff } from "@/lib/diffView";
+import { eolOnlyChange, summarizeDiff } from "@/lib/diffView";
 import { openExternalUrl } from "@/lib/openExternal";
 import { ErrorState } from "@/components/StateDisplay";
 import { CommentComposer } from "./CommentComposer";
@@ -166,6 +166,11 @@ export const PrFileDiffSection = memo(function PrFileDiffSection({
     [diffData, fatalReason, baseText, targetText],
   );
 
+  const eolChange = useMemo(
+    () => (diffData && !fatalReason ? eolOnlyChange(baseText, targetText) : null),
+    [diffData, fatalReason, baseText, targetText],
+  );
+
   // Threads for this file, indexed by the side + line they anchor to.
   const { threadsByRightLine, threadsByLeftLine } = useMemo(() => {
     const right = new Map<number, PrThread[]>();
@@ -286,6 +291,14 @@ export const PrFileDiffSection = memo(function PrFileDiffSection({
           <span className="shrink-0 font-mono text-[11px]">
             <span className="text-green-700 dark:text-green-400">+{summary.additions}</span>{" "}
             <span className="text-red-700 dark:text-red-400">−{summary.deletions}</span>
+            {eolChange ? (
+              <span
+                title={`Only line endings changed (${eolChange})`}
+                className="ml-1 rounded bg-blue-100 px-1 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
+              >
+                EOL
+              </span>
+            ) : null}
           </span>
         ) : null}
         <label className="flex shrink-0 cursor-pointer items-center gap-1 text-[11px] text-muted-foreground">

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { commandErrorMessage, type RepoFileVersion } from "@/lib/azdoCommands";
 import { ErrorState } from "@/components/StateDisplay";
-import { buildDiffLines, collapseDiff } from "@/lib/diffView";
+import { buildDiffLines, collapseDiff, eolOnlyChange } from "@/lib/diffView";
 import { DiffLineText } from "@/components/DiffLineText";
 import { FilterableSelect } from "@/features/pipelines/FilterableSelect";
 import { type RepoOption, useRepoFile } from "./codeBrowseShared";
@@ -53,11 +53,15 @@ export function CodeCompareView({
   // A file absent on the base ref (404) is treated as empty, i.e. fully added.
   const baseContent = baseQuery.data?.content ?? "";
   const targetContent = targetQuery.data?.content ?? "";
-  const { rows, hasChanges } = useMemo(() => {
-    if (!hasBase) return { rows: [], hasChanges: false };
+  const { rows, hasChanges, eolChange } = useMemo(() => {
+    if (!hasBase) return { rows: [], hasChanges: false, eolChange: null };
     const diff = buildDiffLines(baseContent, targetContent);
     const changed = diff.some((line) => line.kind !== "context");
-    return { rows: collapseDiff(diff, (line) => line.kind === "context"), hasChanges: changed };
+    return {
+      rows: collapseDiff(diff, (line) => line.kind === "context"),
+      hasChanges: changed,
+      eolChange: eolOnlyChange(baseContent, targetContent),
+    };
   }, [hasBase, baseContent, targetContent]);
 
   return (
@@ -106,7 +110,9 @@ export function CodeCompareView({
           </div>
         ) : !hasChanges ? (
           <div className="px-3 py-3 text-sm text-muted-foreground">
-            No differences between {baseLabel} and {branch}.
+            {eolChange
+              ? `Only line endings differ between ${baseLabel} and ${branch} (${eolChange}); the text content is identical.`
+              : `No differences between ${baseLabel} and ${branch}.`}
           </div>
         ) : (
           <div className="font-mono text-[12px] leading-5">

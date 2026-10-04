@@ -22,6 +22,29 @@ function normalizeNewlines(value: string): string {
   return value.replace(/\r\n?/g, "\n");
 }
 
+function eolStyle(value: string): string {
+  const crlf = (value.match(/\r\n/g) ?? []).length;
+  const lf = (value.match(/(?<!\r)\n/g) ?? []).length;
+  const cr = (value.match(/\r(?!\n)/g) ?? []).length;
+  const kinds = [crlf, lf, cr].filter((count) => count > 0).length;
+  if (kinds > 1) return "mixed";
+  if (crlf > 0) return "CRLF";
+  if (lf > 0) return "LF";
+  if (cr > 0) return "CR";
+  return "none";
+}
+
+/**
+ * When the two texts differ only in newline style (so the normalized diff is
+ * empty), returns a label such as "LF → CRLF"; otherwise null. Lets the UI say
+ * so instead of showing a file that changed as "no differences".
+ */
+export function eolOnlyChange(rawBase: string, rawTarget: string): string | null {
+  if (rawBase === rawTarget) return null;
+  if (normalizeNewlines(rawBase) !== normalizeNewlines(rawTarget)) return null;
+  return `${eolStyle(rawBase)} → ${eolStyle(rawTarget)}`;
+}
+
 function splitLines(value: string): string[] {
   if (value === "") return [];
   const lines = value.split("\n");
