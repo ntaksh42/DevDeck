@@ -8,6 +8,7 @@ import {
   type PullRequestSummary,
 } from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
+import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { loadRecentPaletteEntries } from "@/lib/recentItems";
 import type { CommandPaletteSearchItem } from "@/components/CommandPalette";
 import { parsePaletteSearch, commitFirstLine } from "./appHelpers";
@@ -76,9 +77,10 @@ export function usePaletteSearch(
     placeholderData: keepPreviousData,
   });
 
-  // Code search targets the first configured organization (the palette has no
-  // org selector); the dedicated Code view offers per-org search.
-  const paletteCodeOrgId = organizations[0]?.id;
+  // Code search targets the active connection (the palette has no org
+  // selector), falling back to the first one until the active id has loaded.
+  const activeOrganizationId = useActiveOrganizationId();
+  const paletteCodeOrgId = activeOrganizationId || organizations[0]?.id;
   const paletteCodeQuery = useQuery({
     queryKey: ["paletteCode", paletteCodeOrgId, paletteSearch.query],
     queryFn: ({ signal }) =>
@@ -86,7 +88,8 @@ export function usePaletteSearch(
     enabled: paletteCodeEnabled,
     staleTime: 30_000,
     placeholderData: keepPreviousData,
-    // Code Search is an optional extension; a failed query just yields no items.
+    // Code Search is an optional extension; a failure is reported as a single
+    // "unavailable" row instead of retrying.
     retry: false,
   });
 
@@ -141,6 +144,15 @@ export function usePaletteSearch(
     if (kind === "code") {
       const codeData = paletteCodeEnabled ? paletteCodeQuery.data : undefined;
       const codeItems: CommandPaletteSearchItem[] = [];
+      if (paletteCodeEnabled && paletteCodeQuery.isError) {
+        codeItems.push({
+          id: "code:unavailable",
+          group: "Code",
+          label: "Code Search is unavailable",
+          detail: "The extension may be disabled or the token lacks permission.",
+          run: () => {},
+        });
+      }
       for (const hit of codeData?.results ?? []) {
         codeItems.push({
           id: `code:${hit.projectName}:${hit.repositoryName}:${hit.branch ?? ""}:${hit.path}`,
@@ -294,6 +306,7 @@ export function usePaletteSearch(
     votePullRequest,
     paletteCodeEnabled,
     paletteCodeQuery.data,
+    paletteCodeQuery.isError,
   ]);
 
   // The palette surfaces recently opened Work Items and PRs. With an empty query
