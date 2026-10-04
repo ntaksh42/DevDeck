@@ -152,9 +152,51 @@ function pipelineWatchNotificationBody(input: {
   return detail ? `${detail}\n${input.projectName}` : input.projectName;
 }
 
+// Brings the DevDeck window to the foreground (restoring it if minimized or in
+// the tray) so a clicked summary notification lands in the app.
+async function bringAppToFront(): Promise<void> {
+  if (!isTauriRuntime()) {
+    window.focus();
+    return;
+  }
+  try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    const appWindow = getCurrentWindow();
+    await appWindow.show();
+    await appWindow.unminimize();
+    await appWindow.setFocus();
+  } catch {
+    // Best-effort: the click handler still navigates to the list.
+  }
+}
+
+// What clicking a summary notification does: open the matching list inside the
+// app when the caller can navigate, otherwise fall back to the first item's URL.
+function summaryClickHandler(
+  onOpenList: (() => void) | undefined,
+  jumpUrl: string | null,
+): (() => void) | undefined {
+  if (onOpenList) {
+    return () => {
+      void bringAppToFront();
+      onOpenList();
+    };
+  }
+  return jumpUrl
+    ? () => {
+        void openExternalUrl(jumpUrl);
+      }
+    : undefined;
+}
+
+function moreSuffix(total: number): string {
+  return total > 3 ? `, +${total - 3} more` : "";
+}
+
 export async function showWorkItemNotificationEvent(
   event: WorkItemNotificationEvent,
   settings: AppSettings,
+  onOpenList?: () => void,
 ): Promise<DesktopNotificationResult> {
   if (!settings.desktopNotificationsEnabled || event.items.length === 0) {
     return "skipped";
@@ -169,13 +211,9 @@ export async function showWorkItemNotificationEvent(
         ? `${event.organizationName}: ${items
             .slice(0, 3)
             .map((item) => `#${item.id} ${item.title}`)
-            .join(", ")}`
+            .join(", ")}${moreSuffix(event.items.length)}`
         : "Open DevDeck to review the latest work item updates.",
-      onClick: jumpUrl
-        ? () => {
-            void openExternalUrl(jumpUrl);
-          }
-        : undefined,
+      onClick: summaryClickHandler(onOpenList, jumpUrl),
     });
   }
 
@@ -200,6 +238,7 @@ export async function showWorkItemNotificationEvent(
 export async function showPullRequestNotificationEvent(
   event: PullRequestNotificationEvent,
   settings: AppSettings,
+  onOpenList?: () => void,
 ): Promise<DesktopNotificationResult> {
   if (!settings.desktopNotificationsEnabled || event.items.length === 0) {
     return "skipped";
@@ -214,13 +253,9 @@ export async function showPullRequestNotificationEvent(
         ? `${event.organizationName}: ${items
             .slice(0, 3)
             .map((item) => `!${item.pullRequestId} ${item.title}`)
-            .join(", ")}`
+            .join(", ")}${moreSuffix(event.items.length)}`
         : "Open DevDeck to review the latest pull request updates.",
-      onClick: jumpUrl
-        ? () => {
-            void openExternalUrl(jumpUrl);
-          }
-        : undefined,
+      onClick: summaryClickHandler(onOpenList, jumpUrl),
     });
   }
 

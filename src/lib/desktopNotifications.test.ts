@@ -6,12 +6,22 @@ const sendNotification = vi.fn();
 const onAction = vi.fn();
 const isTauriRuntime = vi.fn();
 const openExternalUrl = vi.fn();
+const showWindow = vi.fn();
+const unminimizeWindow = vi.fn();
+const focusWindow = vi.fn();
 
 vi.mock("@tauri-apps/plugin-notification", () => ({
   isPermissionGranted: () => isPermissionGranted(),
   requestPermission: () => requestPermission(),
   sendNotification: (options: unknown) => sendNotification(options),
   onAction: (cb: (notification: { id?: number }) => void) => onAction(cb),
+}));
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => ({
+    show: () => showWindow(),
+    unminimize: () => unminimizeWindow(),
+    setFocus: () => focusWindow(),
+  }),
 }));
 vi.mock("@/lib/runtime", () => ({ isTauriRuntime: () => isTauriRuntime() }));
 vi.mock("@/lib/openExternal", () => ({
@@ -110,6 +120,39 @@ describe("sendTauriDesktopNotification click wiring", () => {
     expect(openExternalUrl).toHaveBeenCalledWith(
       "https://dev.azure.com/org/_workitems/edit/1",
     );
+  });
+
+  it("raises the window and opens the matching list when a summary notification is clicked", async () => {
+    const items = Array.from({ length: 5 }, (_, index) => ({
+      kind: "assigned" as const,
+      id: index + 1,
+      title: `Item ${index + 1}`,
+      projectName: "Proj",
+      state: null,
+      previousState: null,
+      assignedTo: null,
+      webUrl: `https://dev.azure.com/org/_workitems/edit/${index + 1}`,
+    }));
+    const onOpenList = vi.fn();
+
+    await showWorkItemNotificationEvent(
+      { organizationId: "org", organizationName: "Org", items },
+      settings,
+      onOpenList,
+    );
+
+    const sent = sendNotification.mock.calls[0][0] as { id?: number; body: string };
+    // The body names the first three items and counts the rest.
+    expect(sent.body).toBe("Org: #1 Item 1, #2 Item 2, #3 Item 3, +2 more");
+    actionCb?.({ id: sent.id });
+
+    expect(onOpenList).toHaveBeenCalledTimes(1);
+    expect(openExternalUrl).not.toHaveBeenCalled();
+    await vi.waitFor(() => {
+      expect(showWindow).toHaveBeenCalled();
+      expect(unminimizeWindow).toHaveBeenCalled();
+      expect(focusWindow).toHaveBeenCalled();
+    });
   });
 
   it("ignores action events for unknown notification ids", async () => {

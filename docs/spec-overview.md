@@ -322,6 +322,9 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   `mark_all_notifications_read` / `record_notification` の各コマンドで参照・既読管理する。
 - デスクトップ通知: 設定が有効な場合のみ。組織の初回同期 (そのスコープで一度も同期が完了していない状態) では過去分を通知しない。同期済みであれば、レビュー待ち/担当が 0 件の状態からの最初の依頼・アサインも通知する (スナップショットの空/非空では判定しない)。
   スヌーズ対象は通知から除外。コメント返信は `pr_comment_seen` で追跡。
+  通知が 4 件以上のときは 1 件の要約通知にまとめ、本文は先頭 3 件 + 「+N more」とする。要約通知のクリックは
+  DevDeck ウィンドウを前面化し (`core:window:allow-show` / `allow-unminimize` / `allow-set-focus`)、PR は My Reviews、
+  作業項目は My Work Items へ遷移する (ブラウザプレビューなど遷移手段が無い場合のみ先頭項目の URL を開く)。
 - 通知ルール (`notification_rules`): 種別/プロジェクト/リポジトリ条件で通知を絞り込む。
   `mute` ルールは一致する通知を抑止し allow ルールより優先するため、特定の
   プロジェクト/リポジトリを個別にミュートできる（allow ルールが無ければミュート以外は通知）。

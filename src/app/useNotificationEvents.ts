@@ -10,7 +10,18 @@ import {
 import { subscribeTauriEvent } from "@/lib/tauriEvents";
 import type { AppSettings } from "@/lib/azdoCommands";
 
-export function useNotificationEvents(appSettings: AppSettings | null | undefined): void {
+export type NotificationListView = "myReviews" | "myWorkItems";
+
+// `onOpenView` lets a clicked summary notification ("5 pull request updates")
+// open the matching list in the app instead of a single item in the browser.
+export function useNotificationEvents(
+  appSettings: AppSettings | null | undefined,
+  onOpenView?: (view: NotificationListView) => void,
+): void {
+  const onOpenViewRef = useRef(onOpenView);
+  onOpenViewRef.current = onOpenView;
+  const openListFor = (view: NotificationListView) =>
+    onOpenViewRef.current ? () => onOpenViewRef.current?.(view) : undefined;
   const appSettingsRef = useRef<AppSettings | null>(null);
   // Notification events that arrived before settings finished loading. They are
   // replayed once settings are available so the first events are not dropped.
@@ -30,10 +41,10 @@ export function useNotificationEvents(appSettings: AppSettings | null | undefine
     pendingPullRequestEventsRef.current = [];
     pendingSyncFailedEventsRef.current = [];
     for (const event of workItemEvents) {
-      void showWorkItemNotificationEvent(event, settings);
+      void showWorkItemNotificationEvent(event, settings, openListFor("myWorkItems"));
     }
     for (const event of pullRequestEvents) {
-      void showPullRequestNotificationEvent(event, settings);
+      void showPullRequestNotificationEvent(event, settings, openListFor("myReviews"));
     }
     for (const event of syncFailedEvents) {
       void showSyncFailedNotificationEvent(event, settings);
@@ -49,7 +60,7 @@ export function useNotificationEvents(appSettings: AppSettings | null | undefine
           pendingWorkItemEventsRef.current.push(payload);
           return;
         }
-        void showWorkItemNotificationEvent(payload, settings);
+        void showWorkItemNotificationEvent(payload, settings, openListFor("myWorkItems"));
       },
     );
   }, []);
@@ -63,7 +74,7 @@ export function useNotificationEvents(appSettings: AppSettings | null | undefine
           pendingPullRequestEventsRef.current.push(payload);
           return;
         }
-        void showPullRequestNotificationEvent(payload, settings);
+        void showPullRequestNotificationEvent(payload, settings, openListFor("myReviews"));
       },
     );
   }, []);

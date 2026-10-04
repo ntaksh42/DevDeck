@@ -185,7 +185,7 @@ function AppShell() {
     activeView,
   );
 
-  useNotificationEvents(appSettingsQuery.data);
+  useNotificationEvents(appSettingsQuery.data, (target) => setView(target));
 
   const {
     setPaletteSearchText,

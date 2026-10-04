@@ -8,6 +8,9 @@
     "dialog:allow-save",
     "fs:allow-write-text-file",
     "notification:default",
+    "core:window:allow-show",
+    "core:window:allow-unminimize",
+    "core:window:allow-set-focus",
     "opener:default",
     {
       "identifier": "opener:allow-open-path",
