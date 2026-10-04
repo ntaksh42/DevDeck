@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 import {
   dismissToast,
   getSnapshot,
@@ -37,8 +37,9 @@ function ToastRow({ toast }: { toast: Toast }) {
 }
 
 /**
- * Renders retry toasts raised through `@/lib/toast`. Experimental: with the
- * flag off this renders nothing, so failures keep their existing handling.
+ * Renders toasts raised through `@/lib/toast`. The `retryToasts` flag only
+ * gates toasts that carry a Retry action; plain messages always show so a
+ * failure is never silent.
  */
 export function ToastHost() {
   const toasts = useSyncExternalStore(subscribe, getSnapshot);
@@ -53,24 +54,28 @@ export function ToastHost() {
 // toast. Querying from the shell on every mount would add an app-startup
 // request for a feature that is off by default.
 function ToastList({ toasts }: { toasts: Toast[] }) {
-  const enabled = useExperimentalFlag("retryToasts");
+  const retryEnabled = useExperimentalFlag("retryToasts");
+  const visible = useMemo(
+    () => (retryEnabled ? toasts : toasts.filter((toast) => !toast.onRetry)),
+    [retryEnabled, toasts],
+  );
 
   // Escape dismisses the newest toast so a keyboard user is never stuck with
   // one covering the corner of the grid.
   useEffect(() => {
-    if (!enabled) {
+    if (visible.length === 0) {
       return;
     }
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        dismissToast(toasts[toasts.length - 1].id);
+        dismissToast(visible[visible.length - 1].id);
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [enabled, toasts]);
+  }, [visible]);
 
-  if (!enabled) {
+  if (visible.length === 0) {
     return null;
   }
 
@@ -80,7 +85,7 @@ function ToastList({ toasts }: { toasts: Toast[] }) {
       aria-live="polite"
       className="fixed bottom-4 right-4 z-50 flex flex-col gap-2"
     >
-      {toasts.map((toast) => (
+      {visible.map((toast) => (
         <ToastRow key={toast.id} toast={toast} />
       ))}
     </div>
