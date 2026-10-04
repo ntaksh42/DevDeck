@@ -247,6 +247,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
 - **プロバイダ種別**: 各接続は `provider_kind` を持つ (`azdo` または `github`)。既定は `azdo`
   で、既存接続は無変更で動作する。詳細は `docs/design/05-provider-abstraction-and-github-mode.md`。
 - **認証プロバイダ**: `auth_provider` は `pat` / `azure_cli` (アンダースコア形) / `github_pat`。
+  - **組織名の入力 (Azure DevOps)**: 組織名のほか、貼り付けた組織 URL (`https://dev.azure.com/{org}/...` / `https://{org}.visualstudio.com/...`、`dev.azure.com/{org}` のようなスキーム省略形、末尾 `/`) から組織名を取り出して小文字に正規化する。それ以外のホストの URL は例付きのエラーにする。`base_url` はどの入力でも `https://dev.azure.com/{org}`。
   - **PAT (Azure DevOps)**: `Authorization: Basic base64(":{pat}")`。必要スコープは Code(Read)/Work Items(Read)/Project and Team(Read)。
   - **Azure CLI**: `az account get-access-token` を実行し Bearer トークンを取得。メモリにキャッシュし、CLI 報告の `expires_on`/`expiresOn` から算出した有効期限の 60 秒前まで再利用する (取得できない古い CLI では 5 分の固定 TTL にフォールバック)。`az` の 1 回の実行は 30 秒でタイムアウトし (固まった `az` が全リクエストを止めないよう取得ロックを解放)、REST が 401 を返したらキャッシュを破棄して 1 回だけ再送する。
   - **GitHub PAT**: `Authorization: Bearer {pat}` (classic / fine-grained)。接続追加時に `GET /user` で

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use azdo_client::{AdoClient, AzureCliProvider, PatProvider};
 use github_client::GitHubClient;
 use serde::Deserialize;
+use url::Url;
 
 use crate::db::{AppDatabase, Organization, OrganizationDraft};
 use crate::error::{AppError, Result};
@@ -198,8 +199,49 @@ fn authenticated_user_unique_name(user: &azdo_client::AuthenticatedUser) -> Opti
         .map(ToString::to_string)
 }
 
+const ORGANIZATION_HINT: &str =
+    "enter the organization name or its URL (e.g. contoso or https://dev.azure.com/contoso)";
+
+/// Extracts the organization from a pasted Azure DevOps URL
+/// (`https://dev.azure.com/{org}/...` or `https://{org}.visualstudio.com/...`).
+/// Returns `None` when the input is not URL-shaped, so a bare name falls through
+/// to the normal validation.
+fn organization_from_url(input: &str) -> Result<Option<String>> {
+    let lower = input.to_ascii_lowercase();
+    let looks_like_url = lower.contains("://")
+        || lower.starts_with("dev.azure.com/")
+        || lower.contains(".visualstudio.com");
+    if !looks_like_url {
+        return Ok(None);
+    }
+    let with_scheme = if lower.contains("://") {
+        input.to_string()
+    } else {
+        format!("https://{input}")
+    };
+    let invalid =
+        || AppError::InvalidInput(format!("not an Azure DevOps URL; {ORGANIZATION_HINT}"));
+    let url = Url::parse(&with_scheme).map_err(|_| invalid())?;
+    let host = url.host_str().unwrap_or_default().to_ascii_lowercase();
+    let organization = if host == "dev.azure.com" {
+        url.path_segments()
+            .and_then(|mut segments| segments.find(|segment| !segment.is_empty()))
+            .map(str::to_string)
+    } else {
+        host.strip_suffix(".visualstudio.com")
+            .filter(|name| !name.is_empty() && !name.contains('.'))
+            .map(str::to_string)
+    };
+    organization.map(Some).ok_or_else(invalid)
+}
+
 fn normalize_organization(value: &str) -> Result<String> {
-    let organization = value.trim().to_ascii_lowercase();
+    let trimmed = value.trim();
+    let organization = match organization_from_url(trimmed)? {
+        Some(from_url) => from_url,
+        None => trimmed.trim_end_matches('/').to_string(),
+    }
+    .to_ascii_lowercase();
     if organization.is_empty() {
         return Err(AppError::InvalidInput(
             "organization is required".to_string(),
@@ -219,9 +261,9 @@ fn normalize_organization(value: &str) -> Result<String> {
         .bytes()
         .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
     {
-        return Err(AppError::InvalidInput(
-            "organization can contain only letters, numbers, and '-'".to_string(),
-        ));
+        return Err(AppError::InvalidInput(format!(
+            "organization can contain only letters, numbers, and '-'; {ORGANIZATION_HINT}"
+        )));
     }
     Ok(organization)
 }
@@ -262,6 +304,38 @@ mod tests {
             normalize_organization(" Contoso-Dev42 ").unwrap(),
             "contoso-dev42"
         );
+    }
+
+    #[test]
+    fn normalize_extracts_the_organization_from_a_pasted_url() {
+        for input in [
+            "https://dev.azure.com/Contoso",
+            "https://dev.azure.com/contoso/",
+            "https://dev.azure.com/contoso/Project/_git/repo?path=%2Fa",
+            "https://contoso@dev.azure.com/contoso",
+            "dev.azure.com/contoso",
+            "https://contoso.visualstudio.com/Project/_workitems",
+            "contoso.visualstudio.com",
+            "  contoso/  ",
+        ] {
+            assert_eq!(normalize_organization(input).unwrap(), "contoso", "{input}");
+        }
+    }
+
+    #[test]
+    fn normalize_rejects_urls_without_an_organization() {
+        for input in [
+            "https://example.com/contoso",
+            "https://dev.azure.com/",
+            "https://a.b.visualstudio.com",
+            "https://",
+        ] {
+            let error = normalize_organization(input).unwrap_err().to_string();
+            assert!(
+                error.contains("https://dev.azure.com/contoso"),
+                "{input}: {error}"
+            );
+        }
     }
 
     #[test]

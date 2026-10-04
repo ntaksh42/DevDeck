@@ -146,6 +146,9 @@ export function SetupPanel({ compact = false }: { compact?: boolean }) {
               autoFocus={!compact}
               className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none ring-offset-background focus:ring-2 focus:ring-ring"
             />
+            <span className="text-xs text-muted-foreground">
+              Organization name, or paste its URL (e.g. https://dev.azure.com/contoso).
+            </span>
           </label>
         )}
 
