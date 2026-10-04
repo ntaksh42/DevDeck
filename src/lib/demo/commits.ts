@@ -45,6 +45,44 @@ export function demoRepoBranches() {
   ];
 }
 
+export function demoBranchOverview() {
+  return [
+    {
+      name: "main",
+      isDefault: true,
+      ahead: 0,
+      behind: 0,
+      lastCommitId: "abcdef1234567890abcdef1234567890abcdef12",
+      lastAuthor: "Ada Lovelace",
+      lastDate: "2026-06-12T09:30:00Z",
+      lastComment: "Add commit search dashboard with grid view and keyboard nav",
+      pullRequests: [],
+    },
+    {
+      name: "feature/dashboard",
+      isDefault: false,
+      ahead: 4,
+      behind: 2,
+      lastCommitId: "beef1234567890abcdef1234567890abcdef1234",
+      lastAuthor: "Grace Hopper",
+      lastDate: "2026-06-10T14:05:00Z",
+      lastComment: "feat(ui): add per-column resize handles to MyReviewsGrid",
+      pullRequests: [{ pullRequestId: 4242, title: "Add commit search dashboard", isDraft: false }],
+    },
+    {
+      name: "develop",
+      isDefault: false,
+      ahead: 0,
+      behind: 11,
+      lastCommitId: "1234567890abcdef1234567890abcdef12345678",
+      lastAuthor: "Linus Torvalds",
+      lastDate: "2026-04-02T08:00:00Z",
+      lastComment: "Tune request tracing middleware to reduce overhead",
+      pullRequests: [],
+    },
+  ];
+}
+
 export function demoRepoTags() {
   return ["v1.1.0", "v1.0.0"];
 }

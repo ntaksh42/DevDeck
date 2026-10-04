@@ -30,6 +30,7 @@ import {
   demoCommitRepositories,
   demoCommits,
   demoGetCodeSearchContext,
+  demoBranchOverview,
   demoRepoBranches,
   demoRepoTags,
   demoRevisionComparison,
@@ -208,6 +209,8 @@ export function dispatchExt(command: string, args: unknown): unknown {
     }
     case "list_repo_branches":
       return demoRepoBranches();
+    case "list_repo_branch_overview":
+      return demoBranchOverview();
     case "list_repo_tags":
       return demoRepoTags();
     case "compare_repo_revisions":

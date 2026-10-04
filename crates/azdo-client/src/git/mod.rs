@@ -1,8 +1,12 @@
+mod branch_stats;
 mod requests;
 mod types;
 
+pub use branch_stats::GitBranchStats;
 pub use types::*;
 
+#[cfg(test)]
+mod tests_branch_stats;
 #[cfg(test)]
 mod tests_commits;
 #[cfg(test)]

@@ -1,6 +1,8 @@
+mod branches;
 mod compare;
 mod util;
 
+pub use branches::BranchOverviewItem;
 pub use compare::{CompareRevisionsInput, RevisionComparison};
 
 use azdo_client::{CommitSearchCriteria, GitCommitRef};

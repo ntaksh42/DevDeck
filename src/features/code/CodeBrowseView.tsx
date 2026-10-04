@@ -27,7 +27,8 @@ import {
 import { handleTreeKeyDown, type TypeAheadState } from "./codeTreeKeyboard";
 import { TreeLevel } from "./CodeFileTree";
 import { CodeFilteredTree } from "./CodeFilteredTree";
-import { Breadcrumb } from "./CodeBrowseChrome";
+import { Breadcrumb, HeaderLinks } from "./CodeBrowseChrome";
+import { CodeBranchesView } from "./CodeBranchesView";
 import { CodeFolderView } from "./CodeFolderView";
 import { CodeFileView } from "./CodeFileView";
 import { CodeHistoryView } from "./CodeHistoryView";
@@ -333,6 +334,22 @@ export function CodeBrowseView({
           ),
           position: { relativeTo: "contents", direction: "within" },
         },
+        {
+          id: "branches",
+          title: "Branches",
+          content: (
+            <CodeBranchesView
+              organization={organization}
+              organizationId={organizationId}
+              repo={repo}
+              onBrowseBranch={(name) => {
+                setBranch(name);
+                focusContents();
+              }}
+            />
+          ),
+          position: { relativeTo: "contents", direction: "within" },
+        },
       ]
     : [];
 
@@ -455,26 +472,11 @@ export function CodeBrowseView({
                     target === "/" ? setSelected(ROOT) : openFolder(target)
                   }
                 />
-                <div className="flex shrink-0 items-center gap-3">
-                  {!selected.isFolder ? (
-                    <button
-                      type="button"
-                      onClick={() => openExternalUrl(blameUrl(organization, repo, selected.path, branch))}
-                      className="text-xs text-muted-foreground hover:text-foreground hover:underline"
-                      title="Open Blame in Azure DevOps (no public REST blame API)"
-                    >
-                      Blame
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => openExternalUrl(webUrl(organization, repo, selected.path, branch))}
-                    className="text-xs text-muted-foreground hover:text-foreground hover:underline"
-                    title="Open in Azure DevOps"
-                  >
-                    Open in Azure DevOps
-                  </button>
-                </div>
+                <HeaderLinks
+                  showBlame={!selected.isFolder}
+                  onBlame={() => openExternalUrl(blameUrl(organization, repo, selected.path, branch))}
+                  onOpenWeb={() => openExternalUrl(webUrl(organization, repo, selected.path, branch))}
+                />
               </div>
               <div className="min-h-0 flex-1">
                 <DockableWorkspace

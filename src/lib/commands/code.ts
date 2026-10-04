@@ -77,6 +77,35 @@ export async function listRepoBranches(input: {
   return z.array(repoBranchSchema).parse(result);
 }
 
+const branchOverviewItemSchema = z.object({
+  name: z.string(),
+  isDefault: z.boolean(),
+  /** Commits on the branch that the default branch lacks. */
+  ahead: z.number(),
+  /** Commits on the default branch that the branch lacks. */
+  behind: z.number(),
+  lastCommitId: z.string().nullable(),
+  lastAuthor: z.string().nullable(),
+  lastDate: z.string().nullable(),
+  lastComment: z.string().nullable(),
+  /** Active pull requests whose source is this branch. */
+  pullRequests: z.array(
+    z.object({ pullRequestId: z.number(), title: z.string(), isDraft: z.boolean() }),
+  ),
+});
+export type BranchOverviewItem = z.infer<typeof branchOverviewItemSchema>;
+
+// Lists a repository's branches with tip commit, ahead/behind against the
+// default branch, and active pull requests (default branch first, then newest).
+export async function listRepoBranchOverview(input: {
+  organizationId?: string;
+  project: string;
+  repository: string;
+}): Promise<BranchOverviewItem[]> {
+  const result = await invokeCommand("list_repo_branch_overview", { input });
+  return z.array(branchOverviewItemSchema).parse(result);
+}
+
 // Lists a repository's tag names.
 export async function listRepoTags(input: {
   organizationId?: string;

@@ -100,6 +100,38 @@ function repoBase(organization: Organization | undefined, repo: RepoOption): str
   )}`;
 }
 
+// Azure DevOps web URLs for a pull request, a branch comparison, and the
+// "new pull request" form with source/target preselected.
+export function pullRequestUrl(
+  organization: Organization | undefined,
+  repo: RepoOption,
+  pullRequestId: number,
+): string {
+  return `${repoBase(organization, repo)}/pullrequest/${pullRequestId}`;
+}
+
+export function branchCompareUrl(
+  organization: Organization | undefined,
+  repo: RepoOption,
+  base: string,
+  target: string,
+): string {
+  return `${repoBase(organization, repo)}/branchCompare?baseVersion=GB${encodeURIComponent(
+    base,
+  )}&targetVersion=GB${encodeURIComponent(target)}&_a=files`;
+}
+
+export function newPullRequestUrl(
+  organization: Organization | undefined,
+  repo: RepoOption,
+  source: string,
+  target: string,
+): string {
+  return `${repoBase(organization, repo)}/pullrequestcreate?sourceRef=${encodeURIComponent(
+    source,
+  )}&targetRef=${encodeURIComponent(target)}`;
+}
+
 // Builds the Azure DevOps web URL for a commit.
 export function commitUrl(
   organization: Organization | undefined,

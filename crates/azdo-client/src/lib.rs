@@ -14,8 +14,8 @@ pub use client::{AdoClient, RetryPolicy};
 pub use code_search::{CodeSearchRequest, CodeSearchResponse, CodeSearchResult};
 pub use error::{AdoError, Result};
 pub use git::{
-    CommitSearchCriteria, GitCommitDiffs, GitCommitRef, GitDiffChange, GitDiffItem, GitItem,
-    GitPullRequest, GitRef, GitRepository, GitUserDate, GitVersionType, IdentityRef,
+    CommitSearchCriteria, GitBranchStats, GitCommitDiffs, GitCommitRef, GitDiffChange, GitDiffItem,
+    GitItem, GitPullRequest, GitRef, GitRepository, GitUserDate, GitVersionType, IdentityRef,
     IdentityRefWithVote, PullRequestStatus, TeamProject,
 };
 pub use identity::{AuthenticatedUser, ConnectionData, Identity, IdentityPickerIdentity};

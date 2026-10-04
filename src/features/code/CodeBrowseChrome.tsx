@@ -50,3 +50,36 @@ export function Breadcrumb({
     </nav>
   );
 }
+
+const HEADER_LINK =
+  "text-xs text-muted-foreground hover:text-foreground hover:underline";
+
+// "Blame" (files only) and "Open in Azure DevOps" links at the right of the
+// breadcrumb row.
+export function HeaderLinks({
+  showBlame,
+  onBlame,
+  onOpenWeb,
+}: {
+  showBlame: boolean;
+  onBlame: () => void;
+  onOpenWeb: () => void;
+}) {
+  return (
+    <div className="flex shrink-0 items-center gap-3">
+      {showBlame ? (
+        <button
+          type="button"
+          onClick={onBlame}
+          className={HEADER_LINK}
+          title="Open Blame in Azure DevOps (no public REST blame API)"
+        >
+          Blame
+        </button>
+      ) : null}
+      <button type="button" onClick={onOpenWeb} className={HEADER_LINK} title="Open in Azure DevOps">
+        Open in Azure DevOps
+      </button>
+    </div>
+  );
+}
