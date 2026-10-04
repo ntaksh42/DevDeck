@@ -22,7 +22,44 @@ const COMMIT_DELTA_OVERLAP_HOURS: i64 = 1;
 /// Page size for the paginated commit sync. The REST API caps `$top`, so the
 /// sync walks pages with `$skip` until a short page signals the end.
 const COMMIT_SYNC_PAGE_SIZE: u32 = 100;
-type CommitSyncTaskResult = Result<Option<(String, Vec<CachedCommit>)>>;
+/// How many skipped repositories to name in the sync warning before summarizing.
+const SKIPPED_NAMES_IN_WARNING: usize = 5;
+
+/// Outcome of fetching one repository's commits: either its commits, or its name
+/// when the fetch failed and the repository was skipped this pass.
+enum RepoFetch {
+    Fetched(String, Vec<CachedCommit>),
+    Skipped(String),
+}
+type CommitSyncTaskResult = Result<RepoFetch>;
+
+struct CommitSyncOutcome {
+    was_full_sync: bool,
+    /// Repositories / projects that could not be synced and were left as-is.
+    skipped: Vec<String>,
+}
+
+fn skipped_warning(skipped: &[String]) -> Option<String> {
+    if skipped.is_empty() {
+        return None;
+    }
+    let shown = skipped
+        .iter()
+        .take(SKIPPED_NAMES_IN_WARNING)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(", ");
+    let more = skipped.len().saturating_sub(SKIPPED_NAMES_IN_WARNING);
+    let suffix = if more > 0 {
+        format!(" and {more} more")
+    } else {
+        String::new()
+    };
+    Some(format!(
+        "{} repositor(y/ies) skipped due to sync errors: {shown}{suffix}.",
+        skipped.len()
+    ))
+}
 
 pub(crate) fn commit_full_sync_scope(org_id: &str) -> String {
     format!("internal:commit_full_sync:{org_id}")
@@ -63,10 +100,18 @@ pub async fn sync_commits_for_org(
     let error_count = db.get_sync_state(&scope)?.map_or(0, |s| s.error_count);
 
     match do_sync_commits(db, client, org, projects, budget).await {
-        Ok(was_full_sync) => {
+        Ok(outcome) => {
             let now = Utc::now().to_rfc3339();
-            db.update_sync_state(&scope, &org.id, Some(&now), 0, None, None)?;
-            if was_full_sync {
+            let all_synced = outcome.skipped.is_empty();
+            // A delta pass that skipped repositories must not advance the cursor,
+            // or the next delta window would start after the gap and those
+            // repositories' commits would stay missing until the next full sync.
+            // A full pass has refreshed everything else, so its cursor advances,
+            // but the full-sync marker stays put so the next pass is full again.
+            let cursor = (all_synced || outcome.was_full_sync).then_some(now.as_str());
+            let warning = skipped_warning(&outcome.skipped);
+            db.update_sync_state(&scope, &org.id, cursor, 0, None, warning.as_deref())?;
+            if outcome.was_full_sync && all_synced {
                 db.update_sync_state(
                     &commit_full_sync_scope(&org.id),
                     &org.id,
@@ -96,16 +141,16 @@ pub async fn sync_commits_for_org(
 }
 
 /// Runs a commit sync pass. Returns whether it was a full sync (so the caller
-/// can advance the full-sync marker). A full sync replaces each repository's
-/// 90-day window; a delta sync only fetches and merges commits newer than the
-/// last sync.
+/// can advance the full-sync marker) and which repositories were skipped. A full
+/// sync replaces each repository's 90-day window; a delta sync only fetches and
+/// merges commits newer than the last sync.
 async fn do_sync_commits(
     db: &AppDatabase,
     client: &AdoClient,
     org: &Organization,
     projects: &[TeamProject],
     budget: &SyncBudget,
-) -> Result<bool> {
+) -> Result<CommitSyncOutcome> {
     let purge_before = (Utc::now() - chrono::Duration::days(COMMIT_SYNC_WINDOW_DAYS)).to_rfc3339();
     let delta_since = commit_delta_since(db, org);
     let is_full_sync = delta_since.is_none();
@@ -114,7 +159,7 @@ async fn do_sync_commits(
     // List every repository across all projects concurrently, then fan out the
     // per-repository commit fetches. Both phases are bounded by the shared
     // budget, so listing no longer serializes project-by-project.
-    let repositories = list_all_repositories(client, org, projects, budget).await;
+    let (repositories, mut skipped) = list_all_repositories(client, org, projects, budget).await;
 
     let mut tasks = JoinSet::new();
     for (project, repository) in repositories {
@@ -128,29 +173,42 @@ async fn do_sync_commits(
         ));
     }
     while !tasks.is_empty() {
-        if let Some((repository_id, cached)) = join_commit_task(&mut tasks).await? {
-            if is_full_sync {
-                db.replace_commits_for_repo(&org.id, &repository_id, &cached)?;
-            } else {
-                db.merge_commits(&cached)?;
+        match join_commit_task(&mut tasks).await? {
+            RepoFetch::Fetched(repository_id, cached) => {
+                if is_full_sync {
+                    db.replace_commits_for_repo(&org.id, &repository_id, &cached)?;
+                } else {
+                    db.merge_commits(&cached)?;
+                }
             }
+            RepoFetch::Skipped(name) => skipped.push(name),
         }
     }
+    skipped.sort();
     db.purge_old_commits(&org.id, &purge_before)?;
-    tracing::info!(org = %org.name, full = is_full_sync, "commit sync completed");
-    Ok(is_full_sync)
+    tracing::info!(
+        org = %org.name,
+        full = is_full_sync,
+        skipped = skipped.len(),
+        "commit sync completed"
+    );
+    Ok(CommitSyncOutcome {
+        was_full_sync: is_full_sync,
+        skipped,
+    })
 }
 
 /// Lists repositories for every project concurrently, pairing each with its
 /// project. A project whose repository listing fails is logged and skipped so
-/// the rest still sync.
+/// the rest still sync; its name (as `project/*`) is returned for the warning.
 async fn list_all_repositories(
     client: &AdoClient,
     org: &Organization,
     projects: &[TeamProject],
     budget: &SyncBudget,
-) -> Vec<(TeamProject, GitRepository)> {
-    let mut tasks: JoinSet<Vec<(TeamProject, GitRepository)>> = JoinSet::new();
+) -> (Vec<(TeamProject, GitRepository)>, Vec<String>) {
+    type Listed = std::result::Result<Vec<(TeamProject, GitRepository)>, String>;
+    let mut tasks: JoinSet<Listed> = JoinSet::new();
     for project in projects {
         let client = client.clone();
         let org = org.clone();
@@ -159,10 +217,10 @@ async fn list_all_repositories(
         tasks.spawn(async move {
             let _permit = budget.acquire_owned().await;
             match client.list_repositories(&project.id).await {
-                Ok(repos) => repos
+                Ok(repos) => Ok(repos
                     .into_iter()
                     .map(|repo| (project.clone(), repo))
-                    .collect(),
+                    .collect()),
                 Err(e) => {
                     tracing::warn!(
                         org = %org.name,
@@ -170,19 +228,21 @@ async fn list_all_repositories(
                         error = %e,
                         "failed to list repositories, skipping project"
                     );
-                    Vec::new()
+                    Err(format!("{}/*", project.name))
                 }
             }
         });
     }
     let mut repositories = Vec::new();
+    let mut skipped = Vec::new();
     while let Some(joined) = tasks.join_next().await {
         match joined {
-            Ok(pairs) => repositories.extend(pairs),
+            Ok(Ok(pairs)) => repositories.extend(pairs),
+            Ok(Err(project)) => skipped.push(project),
             Err(e) => tracing::warn!(error = %e, "repository listing task failed"),
         }
     }
-    repositories
+    (repositories, skipped)
 }
 
 async fn join_commit_task(tasks: &mut JoinSet<CommitSyncTaskResult>) -> CommitSyncTaskResult {
@@ -200,7 +260,7 @@ async fn fetch_commits_for_repo(
     repository: GitRepository,
     from_date: String,
     budget: SyncBudget,
-) -> Result<Option<(String, Vec<CachedCommit>)>> {
+) -> CommitSyncTaskResult {
     let _permit = budget.acquire_owned().await;
     let repository_id = repository.id.clone();
     let mut cached: Vec<CachedCommit> = Vec::new();
@@ -231,7 +291,10 @@ async fn fetch_commits_for_repo(
                     error = %e,
                     "failed to list commits, skipping repository"
                 );
-                return Ok(None);
+                return Ok(RepoFetch::Skipped(format!(
+                    "{}/{}",
+                    project.name, repository.name
+                )));
             }
         };
         let page_len = page.len() as u32;
@@ -251,5 +314,5 @@ async fn fetch_commits_for_repo(
         }
         skip += page_len;
     }
-    Ok(Some((repository_id, cached)))
+    Ok(RepoFetch::Fetched(repository_id, cached))
 }
