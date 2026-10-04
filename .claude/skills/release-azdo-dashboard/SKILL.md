@@ -97,8 +97,8 @@ gh release view vX.Y.Z --json name,tagName,isDraft,isPrerelease,publishedAt,url,
 The release is good when:
 
 - `draft: false` and `prerelease: false`.
-- Two assets are attached: `AzDoDeck_X.Y.Z_x64-setup.exe` (NSIS) and
-  `AzDoDeck_X.Y.Z_x64_en-US.msi` (MSI).
+- Two assets are attached: `DevDeck_X.Y.Z_x64-setup.exe` (NSIS) and
+  `DevDeck_X.Y.Z_x64_en-US.msi` (MSI).
 
 ## Troubleshooting
 
