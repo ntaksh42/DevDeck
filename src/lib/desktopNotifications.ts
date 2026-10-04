@@ -164,7 +164,7 @@ export async function showWorkItemNotificationEvent(
   const items = event.items.slice(0, 20);
   if (items.length > 3) {
     const jumpUrl = items.find((item) => item.webUrl)?.webUrl ?? null;
-    return sendDesktopNotification(`${items.length} work item updates`, {
+    return sendDesktopNotification(`${event.items.length} work item updates`, {
       body: contentPreviewEnabled
         ? `${event.organizationName}: ${items
             .slice(0, 3)
@@ -209,7 +209,7 @@ export async function showPullRequestNotificationEvent(
   const items = event.items.slice(0, 20);
   if (items.length > 3) {
     const jumpUrl = items.find((item) => item.webUrl)?.webUrl ?? null;
-    return sendDesktopNotification(`${items.length} pull request updates`, {
+    return sendDesktopNotification(`${event.items.length} pull request updates`, {
       body: contentPreviewEnabled
         ? `${event.organizationName}: ${items
             .slice(0, 3)

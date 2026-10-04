@@ -20,6 +20,7 @@ vi.mock("@/lib/openExternal", () => ({
 
 import {
   showPipelineWatchNotification,
+  showPullRequestNotificationEvent,
   showSyncFailedNotificationEvent,
   showWorkItemNotificationEvent,
 } from "./desktopNotifications";
@@ -134,6 +135,61 @@ describe("sendTauriDesktopNotification click wiring", () => {
 
     actionCb?.({ id: 999999 });
     expect(openExternalUrl).not.toHaveBeenCalled();
+  });
+});
+
+describe("summary notification count", () => {
+  beforeEach(() => {
+    sendNotification.mockReset();
+    isTauriRuntime.mockReturnValue(true);
+    isPermissionGranted.mockResolvedValue(true);
+  });
+
+  it("shows the total work item count even when more than 20 updates arrive", async () => {
+    const items = Array.from({ length: 35 }, (_, index) => ({
+      kind: "assigned" as const,
+      id: index + 1,
+      title: `Item ${index + 1}`,
+      projectName: "Proj",
+      state: null,
+      previousState: null,
+      assignedTo: null,
+      webUrl: null,
+    }));
+
+    await showWorkItemNotificationEvent(
+      { organizationId: "org", organizationName: "Org", items },
+      settings,
+    );
+
+    expect(sendNotification).toHaveBeenCalledTimes(1);
+    expect(sendNotification.mock.calls[0][0]).toMatchObject({
+      title: "35 work item updates",
+    });
+  });
+
+  it("shows the total pull request count even when more than 20 updates arrive", async () => {
+    const items = Array.from({ length: 35 }, (_, index) => ({
+      kind: "reviewRequested" as const,
+      pullRequestId: index + 1,
+      repositoryId: "repo",
+      title: `PR ${index + 1}`,
+      repositoryName: "Repo",
+      projectName: "Proj",
+      webUrl: null,
+      commentAuthor: null,
+      snippet: null,
+    }));
+
+    await showPullRequestNotificationEvent(
+      { organizationId: "org", organizationName: "Org", items },
+      settings,
+    );
+
+    expect(sendNotification).toHaveBeenCalledTimes(1);
+    expect(sendNotification.mock.calls[0][0]).toMatchObject({
+      title: "35 pull request updates",
+    });
   });
 });
 
