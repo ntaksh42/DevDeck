@@ -576,3 +576,33 @@ describe("CodeBrowseView markdown and binary files", () => {
     15000,
   );
 });
+
+describe("CodeBrowseView compare options", () => {
+  it(
+    "switches the compare view to side-by-side and back",
+    async () => {
+      renderView();
+      await selectDemoRepository();
+      await waitFor(() => expect(screen.getAllByText("package.json").length).toBeGreaterThan(0), {
+        timeout: 8000,
+      });
+      fireEvent.click(screen.getAllByText("package.json")[0]);
+      fireEvent.pointerDown(await screen.findByRole("tab", { name: "Compare" }, { timeout: 8000 }), {
+        button: 0,
+      });
+      const side = await screen.findByRole("button", { name: "Side by side" }, { timeout: 8000 });
+      expect(side.getAttribute("aria-pressed")).toBe("false");
+      fireEvent.click(side);
+      expect(screen.getByRole("button", { name: "Side by side" }).getAttribute("aria-pressed")).toBe(
+        "true",
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Unified" }));
+      expect(screen.getByRole("button", { name: "Unified" }).getAttribute("aria-pressed")).toBe(
+        "true",
+      );
+      expect(screen.getByLabelText("Ignore whitespace")).toBeTruthy();
+      expect(screen.getByLabelText("Wrap")).toBeTruthy();
+    },
+    15000,
+  );
+});

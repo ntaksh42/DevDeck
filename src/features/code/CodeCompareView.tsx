@@ -1,9 +1,8 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { commandErrorMessage, type RepoFileVersion } from "@/lib/azdoCommands";
 import { ErrorState } from "@/components/StateDisplay";
-import { buildDiffLines, collapseDiff, eolOnlyChange } from "@/lib/diffView";
-import { DiffLineText } from "@/components/DiffLineText";
+import { CompareDiffBody, type CompareDiffMode } from "./CompareDiffBody";
 import { FilterableSelect } from "@/features/pipelines/FilterableSelect";
 import { type RepoOption, useRepoFile } from "./codeBrowseShared";
 
@@ -49,21 +48,13 @@ export function CodeCompareView({
     baseVersion,
   );
   const targetQuery = useRepoFile(organizationId, repo, branch, path);
+  const [mode, setMode] = useState<CompareDiffMode>("unified");
+  const [ignoreWhitespace, setIgnoreWhitespace] = useState(false);
+  const [wrap, setWrap] = useState(false);
 
   // A file absent on the base ref (404) is treated as empty, i.e. fully added.
   const baseContent = baseQuery.data?.content ?? "";
   const targetContent = targetQuery.data?.content ?? "";
-  const { rows, hasChanges, eolChange } = useMemo(() => {
-    if (!hasBase) return { rows: [], hasChanges: false, eolChange: null };
-    const diff = buildDiffLines(baseContent, targetContent);
-    const changed = diff.some((line) => line.kind !== "context");
-    return {
-      rows: collapseDiff(diff, (line) => line.kind === "context"),
-      hasChanges: changed,
-      eolChange: eolOnlyChange(baseContent, targetContent),
-    };
-  }, [hasBase, baseContent, targetContent]);
-
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2 text-sm">
@@ -88,6 +79,33 @@ export function CodeCompareView({
           className="h-8 w-44 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
         />
         <span className="text-xs text-muted-foreground">→ {branch}</span>
+        <div className="ml-auto flex items-center gap-2 text-xs">
+          <div role="group" aria-label="Diff layout" className="flex overflow-hidden rounded border border-border">
+            {(["unified", "split"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={mode === value}
+                onClick={() => setMode(value)}
+                className={`px-2 py-0.5 ${mode === value ? "bg-secondary font-medium" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                {value === "unified" ? "Unified" : "Side by side"}
+              </button>
+            ))}
+          </div>
+          <label className="flex cursor-pointer items-center gap-1 text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={ignoreWhitespace}
+              onChange={(event) => setIgnoreWhitespace(event.target.checked)}
+            />
+            Ignore whitespace
+          </label>
+          <label className="flex cursor-pointer items-center gap-1 text-muted-foreground">
+            <input type="checkbox" checked={wrap} onChange={(event) => setWrap(event.target.checked)} />
+            Wrap
+          </label>
+        </div>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
         {!hasBase ? (
@@ -108,59 +126,18 @@ export function CodeCompareView({
           <div className="px-3 py-3 text-sm text-muted-foreground">
             File is too large to compare.
           </div>
-        ) : !hasChanges ? (
-          <div className="px-3 py-3 text-sm text-muted-foreground">
-            {eolChange
-              ? `Only line endings differ between ${baseLabel} and ${branch} (${eolChange}); the text content is identical.`
-              : `No differences between ${baseLabel} and ${branch}.`}
-          </div>
         ) : (
-          <div className="font-mono text-[12px] leading-5">
-            {rows.map((item, index) =>
-              item.type === "gap" ? (
-                <div
-                  key={`gap-${index}`}
-                  className="bg-muted/40 px-3 py-0.5 text-center text-[11px] text-muted-foreground"
-                >
-                  {item.rows.length} unchanged lines hidden
-                </div>
-              ) : (
-                <div
-                  key={`row-${index}`}
-                  className={`grid grid-cols-[3rem_3rem_1fr] ${rowBackground(item.row.kind)}`}
-                >
-                  <span className="select-none px-1 text-right text-muted-foreground">
-                    {item.row.baseLine ?? ""}
-                  </span>
-                  <span className="select-none px-1 text-right text-muted-foreground">
-                    {item.row.targetLine ?? ""}
-                  </span>
-                  <span className="whitespace-pre px-2">
-                    {marker(item.row.kind)}
-                    <DiffLineText
-                      segments={item.row.segments}
-                      text={item.row.text}
-                      kind={item.row.kind}
-                    />
-                  </span>
-                </div>
-              ),
-            )}
-          </div>
+          <CompareDiffBody
+            base={baseContent}
+            target={targetContent}
+            mode={mode}
+            ignoreWhitespace={ignoreWhitespace}
+            wrap={wrap}
+            baseLabel={baseLabel}
+            targetLabel={branch}
+          />
         )}
       </div>
     </div>
   );
-}
-
-function rowBackground(kind: "context" | "add" | "del"): string {
-  if (kind === "add") return "bg-green-100/60 dark:bg-green-900/30";
-  if (kind === "del") return "bg-red-100/60 dark:bg-red-900/30";
-  return "";
-}
-
-function marker(kind: "context" | "add" | "del"): string {
-  if (kind === "add") return "+ ";
-  if (kind === "del") return "- ";
-  return "  ";
 }

@@ -96,12 +96,21 @@ export type SideBySideRow = {
   right: SideBySideCell | null;
 };
 
+export type DiffOptions = {
+  /** Ignore leading/trailing whitespace differences (the `diff` package's mode). */
+  ignoreWhitespace?: boolean;
+};
+
 /**
  * Builds split-view rows: consecutive removed/added runs are paired index-wise
  * (GitHub-style), context lines occupy both sides. Paired rows additionally get
  * word-level `segments` when only part of the line changed.
  */
-export function buildSideBySideRows(rawBase: string, rawTarget: string): SideBySideRow[] {
+export function buildSideBySideRows(
+  rawBase: string,
+  rawTarget: string,
+  options: DiffOptions = {},
+): SideBySideRow[] {
   const base = normalizeNewlines(rawBase);
   const target = normalizeNewlines(rawTarget);
   const rows: SideBySideRow[] = [];
@@ -126,7 +135,7 @@ export function buildSideBySideRows(rawBase: string, rawTarget: string): SideByS
     pendingLeft = [];
   }
 
-  for (const part of diffLines(base, target)) {
+  for (const part of diffLines(base, target, { ignoreWhitespace: options.ignoreWhitespace })) {
     const texts = splitLines(part.value);
     if (part.removed) {
       // Hold removed lines until we know whether an added run follows.
@@ -161,8 +170,14 @@ export function summarizeDiff(rawBase: string, rawTarget: string): DiffSummary {
   return { additions, deletions };
 }
 
-export function buildDiffLines(rawBase: string, rawTarget: string): DiffLine[] {
-  const parts = diffLines(normalizeNewlines(rawBase), normalizeNewlines(rawTarget));
+export function buildDiffLines(
+  rawBase: string,
+  rawTarget: string,
+  options: DiffOptions = {},
+): DiffLine[] {
+  const parts = diffLines(normalizeNewlines(rawBase), normalizeNewlines(rawTarget), {
+    ignoreWhitespace: options.ignoreWhitespace,
+  });
   const result: DiffLine[] = [];
   let baseLine = 1;
   let targetLine = 1;

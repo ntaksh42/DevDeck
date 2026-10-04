@@ -201,3 +201,22 @@ describe("eolOnlyChange", () => {
     expect(eolOnlyChange("a\n", "a")).toBeNull();
   });
 });
+
+describe("ignoreWhitespace option", () => {
+  it("treats lines that differ only in leading/trailing whitespace as unchanged", () => {
+    const base = "a\n  b  \nc\n";
+    const target = "a\nb\nc\n";
+    expect(summarizeDiff(base, target)).toEqual({ additions: 1, deletions: 1 });
+    expect(buildDiffLines(base, target, { ignoreWhitespace: true }).every((l) => l.kind === "context")).toBe(true);
+    expect(
+      buildSideBySideRows(base, target, { ignoreWhitespace: true }).every(
+        (row) => row.left?.kind === "context" && row.right?.kind === "context",
+      ),
+    ).toBe(true);
+  });
+
+  it("still reports real changes", () => {
+    const lines = buildDiffLines("a\nb\n", "a\nc\n", { ignoreWhitespace: true });
+    expect(lines.some((l) => l.kind === "add")).toBe(true);
+  });
+});
