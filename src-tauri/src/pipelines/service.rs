@@ -296,18 +296,20 @@ impl PipelineService {
         input: ListPipelineApprovalsInput,
     ) -> Result<Vec<PipelineApprovalSummary>> {
         let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        // Without a user id the API would return every pending approval in the
+        // project, including ones assigned to other people.
+        let user_id = organization.authenticated_user_id.clone().ok_or_else(|| {
+            AppError::InvalidInput(
+                "organization has no authenticated user id; re-add the organization".to_string(),
+            )
+        })?;
         let client = client_for_organization(&organization, &self.secrets)?;
         let project = self
             .projects
             .project(&client, &organization.id, &input.project_id)
             .await?;
-        let user_ids: Vec<String> = organization
-            .authenticated_user_id
-            .as_deref()
-            .map(|id| vec![id.to_string()])
-            .unwrap_or_default();
         let approvals = client
-            .list_pipeline_approvals(&project.id, &user_ids, "pending")
+            .list_pipeline_approvals(&project.id, &[user_id], "pending")
             .await?;
         Ok(approvals.into_iter().map(approval_to_summary).collect())
     }
@@ -337,5 +339,46 @@ impl PipelineService {
             .update_pipeline_approval(&project.id, &input.approval_id, status, &comment)
             .await?;
         Ok(updated.into_iter().map(approval_to_summary).collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::OrganizationDraft;
+
+    #[tokio::test]
+    async fn list_approvals_requires_an_authenticated_user_id() {
+        let db_file = tempfile::NamedTempFile::new().unwrap();
+        let db = AppDatabase::new(db_file.path().to_path_buf());
+        db.initialize().unwrap();
+        let org = db
+            .upsert_organization(OrganizationDraft {
+                id: "contoso".to_string(),
+                name: "contoso".to_string(),
+                display_name: None,
+                base_url: "https://dev.azure.com/contoso".to_string(),
+                auth_provider: "pat".to_string(),
+                credential_key: "azdodeck:org:contoso:pat".to_string(),
+                authenticated_user_id: None,
+                authenticated_user_display_name: None,
+                authenticated_user_unique_name: None,
+                provider_kind: "azdo".to_string(),
+            })
+            .unwrap();
+        let service = PipelineService::new(db, SecretStore);
+
+        let error = service
+            .list_approvals(ListPipelineApprovalsInput {
+                organization_id: Some(org.id),
+                project_id: "project-1".to_string(),
+            })
+            .await
+            .unwrap_err();
+
+        assert!(
+            matches!(&error, AppError::InvalidInput(message) if message.contains("re-add")),
+            "unexpected error: {error:?}"
+        );
     }
 }
