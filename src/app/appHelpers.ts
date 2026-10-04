@@ -27,6 +27,7 @@ export function invalidateSyncedDataQueries(
   }
   if (all || scopeSet.has("commits")) {
     void queryClient.invalidateQueries({ queryKey: ["commitRepositories"], refetchType });
+    void queryClient.invalidateQueries({ queryKey: ["commitActivity"], refetchType });
   }
 }
 

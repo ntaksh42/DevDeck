@@ -31,7 +31,7 @@ const FULL_WI_SYNC_INTERVAL_HOURS: i64 = 24;
 // WIQL fails with VS402337 when a query would return more than 20,000 items.
 // Cap sync queries well below that; ORDER BY ChangedDate DESC keeps the most
 // recently changed items.
-const SYNC_WORK_ITEM_QUERY_TOP: usize = 2000;
+pub(super) const SYNC_WORK_ITEM_QUERY_TOP: usize = 2000;
 
 pub(super) struct SyncWorkItemsResult {
     warning: Option<String>,
@@ -262,6 +262,10 @@ pub(super) async fn do_sync_work_items(
     let mut all_cached: Vec<CachedWorkItem> = Vec::new();
     let mut my_cached: Vec<CachedWorkItem> = Vec::new();
     let mut synced_project_ids: Vec<String> = Vec::new();
+    // Projects whose query hit SYNC_WORK_ITEM_QUERY_TOP: the snapshot is
+    // truncated (oldest-changed items dropped), so it must not be used to delete
+    // that project's existing cached rows.
+    let mut capped_project_ids: Vec<String> = Vec::new();
     let mut skipped_projects: Vec<String> = Vec::new();
     let mut last_skip_error: Option<AppError> = None;
     let mut capped_query_count = 0usize;
@@ -289,13 +293,17 @@ pub(super) async fn do_sync_work_items(
             // its cached rows survive.
             Ok(None) => continue,
             Ok(Some((project_all, project_my))) => {
-                synced_project_ids.push(fetch.project_id);
                 // Batching a long ID list loses nothing; only reaching the query
                 // cap means the WIQL result may have been cut off.
-                capped_query_count += [project_all.queried_count, project_my.queried_count]
+                let capped_queries = [project_all.queried_count, project_my.queried_count]
                     .iter()
                     .filter(|&&count| count >= SYNC_WORK_ITEM_QUERY_TOP)
                     .count();
+                capped_query_count += capped_queries;
+                if capped_queries > 0 {
+                    capped_project_ids.push(fetch.project_id.clone());
+                }
+                synced_project_ids.push(fetch.project_id);
                 all_cached.extend(project_all.items);
                 my_cached.extend(project_my.items);
             }
@@ -322,7 +330,26 @@ pub(super) async fn do_sync_work_items(
 
     let synced_ids: Vec<&str> = synced_project_ids.iter().map(String::as_str).collect();
     if was_full_sync {
-        db.replace_work_items(&org.id, &synced_ids, &all_cached, &my_cached)?;
+        // A full sync replaces a project's rows, deleting any that are missing
+        // from the snapshot. For a capped project the snapshot is incomplete, so
+        // it is merged like a delta instead: fetched rows are upserted and the
+        // rest (still valid upstream) are kept.
+        let (capped_all, full_all): (Vec<_>, Vec<_>) = all_cached
+            .into_iter()
+            .partition(|item| capped_project_ids.contains(&item.project_id));
+        let (capped_my, full_my): (Vec<_>, Vec<_>) = my_cached
+            .into_iter()
+            .partition(|item| capped_project_ids.contains(&item.project_id));
+        let replace_ids: Vec<&str> = synced_ids
+            .iter()
+            .copied()
+            .filter(|id| !capped_project_ids.iter().any(|capped| capped == id))
+            .collect();
+        db.replace_work_items(&org.id, &replace_ids, &full_all, &full_my)?;
+        if !capped_project_ids.is_empty() {
+            let capped_ids: Vec<&str> = capped_project_ids.iter().map(String::as_str).collect();
+            db.apply_work_items_delta(&org.id, &capped_ids, &capped_all, &capped_my)?;
+        }
     } else {
         db.apply_work_items_delta(&org.id, &synced_ids, &all_cached, &my_cached)?;
     }
@@ -335,7 +362,7 @@ pub(super) async fn do_sync_work_items(
 
 /// The sync-health warning: projects that failed and were skipped, and query
 /// results that reached the `SYNC_WORK_ITEM_QUERY_TOP` cap (older items beyond it
-/// are not synced). `None` when the pass was clean.
+/// are not refreshed, though their cached rows are kept). `None` when clean.
 pub(super) fn sync_warning(
     skipped_projects: &[String],
     capped_query_count: usize,
@@ -350,7 +377,7 @@ pub(super) fn sync_warning(
     }
     if capped_query_count > 0 {
         warning_parts.push(format!(
-            "Work item sync reached the {SYNC_WORK_ITEM_QUERY_TOP}-item query limit in {capped_query_count} query result(s); older items are not synced."
+            "Work item sync reached the {SYNC_WORK_ITEM_QUERY_TOP}-item query limit in {capped_query_count} query result(s); items older than that window are not refreshed (their cached rows are kept)."
         ));
     }
     (!warning_parts.is_empty()).then(|| warning_parts.join(" "))

@@ -14,6 +14,9 @@ mod tests;
 mod live_results_tests;
 
 #[cfg(test)]
+mod tests_capped;
+
+#[cfg(test)]
 mod tests_force_refresh;
 
 pub(crate) use live_results::*;

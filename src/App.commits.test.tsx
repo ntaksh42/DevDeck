@@ -11,9 +11,25 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: (command: string, args?: unknown) => invokeMock(command, args),
 }));
 
+const tauriEventHandlers = new Map<string, Array<(event: { payload: unknown }) => void>>();
+
 vi.mock("@tauri-apps/api/event", () => ({
-  listen: () => Promise.resolve(() => {}),
+  listen: (eventName: string, handler: (event: { payload: unknown }) => void) => {
+    const handlers = tauriEventHandlers.get(eventName) ?? [];
+    handlers.push(handler);
+    tauriEventHandlers.set(eventName, handlers);
+    return Promise.resolve(() => {
+      tauriEventHandlers.set(
+        eventName,
+        (tauriEventHandlers.get(eventName) ?? []).filter((existing) => existing !== handler),
+      );
+    });
+  },
 }));
+
+function emitTauriEvent(eventName: string, payload: unknown) {
+  for (const handler of tauriEventHandlers.get(eventName) ?? []) handler({ payload });
+}
 
 vi.mock("@tauri-apps/plugin-opener", () => ({
   openUrl: (url: string | URL) => openUrlMock(url),
@@ -167,6 +183,60 @@ describe("App — Commits", () => {
         "https://dev.azure.com/contoso/project/_git/repo/commit/abcdef1234567890abcdef1234567890abcdef12",
       );
     });
+  });
+
+  it("re-runs the last commit search when a commit sync completes", async () => {
+    let titles = ["Before sync"];
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "list_organizations") return Promise.resolve([organization]);
+      if (command === "get_active_organization") return Promise.resolve(organization);
+      if (command === "list_my_review_pull_requests") return Promise.resolve([]);
+      if (command === "list_commit_repositories") return Promise.resolve([]);
+      if (command === "commit_activity") return Promise.resolve([]);
+      if (command === "search_commits") {
+        return Promise.resolve({
+          commits: titles.map((comment, index) => ({
+            organizationId: "contoso",
+            projectId: "project-1",
+            projectName: "Platform",
+            repositoryId: "repo-1",
+            repositoryName: "azdo-dashboard",
+            commitId: `${index}`.padStart(40, "a"),
+            shortCommitId: `aaaa000${index}`,
+            comment,
+            authorName: "Test User",
+            authorEmail: "test@example.com",
+            authorDate: "2026-05-24T00:00:00Z",
+            webUrl: "https://dev.azure.com/contoso/project/_git/repo/commit/x",
+          })),
+          total: titles.length,
+          truncated: false,
+        });
+      }
+      return Promise.reject(new Error(`Unhandled command: ${command}`));
+    });
+
+    renderApp();
+    const main = within(await screen.findByRole("main"));
+    await screen.findByText("No pull requests assigned to you.");
+    fireEvent.click(screen.getByRole("button", { name: "Commits" }));
+    fireEvent.change(
+      await main.findByPlaceholderText("message, author, SHA — or path:src/auth"),
+      { target: { value: "sync" } },
+    );
+    fireEvent.click(main.getByRole("button", { name: "Search" }));
+    const grid = within(await main.findByRole("grid", { name: "Commit search results" }));
+    expect(await grid.findByText("Before sync")).toBeTruthy();
+
+    titles = ["After sync"];
+    emitTauriEvent("sync:updated", { orgId: "other-org", scopes: ["commits"] });
+    emitTauriEvent("sync:updated", { orgId: "contoso", scopes: ["myReviews"] });
+    expect(invokeMock.mock.calls.filter(([command]) => command === "search_commits")).toHaveLength(1);
+
+    emitTauriEvent("sync:updated", { orgId: "contoso", scopes: ["commits"] });
+
+    expect(await grid.findByText("After sync")).toBeTruthy();
+    expect(grid.queryByText("Before sync")).toBeNull();
   });
 
   it("validates commit date range before searching", async () => {

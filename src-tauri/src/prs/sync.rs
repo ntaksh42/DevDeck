@@ -17,6 +17,9 @@ pub(crate) struct PrProjectFetch {
     pub(crate) project_id: String,
     pub(crate) label: String,
     pub(crate) result: Result<Vec<CachedPr>>,
+    /// The live query returned `PROJECT_PR_SYNC_TOP` PRs, so the snapshot may be
+    /// truncated and must not be used to delete the project's cached rows.
+    pub(crate) capped: bool,
 }
 
 pub async fn sync_prs_for_org(
@@ -64,6 +67,8 @@ pub async fn sync_prs_for_org(
 struct ActivePrsFetch {
     cached_prs: Vec<CachedPr>,
     synced_project_ids: Vec<String>,
+    /// Projects whose result hit the query cap; their rows are merged, not replaced.
+    capped: Vec<String>,
     skipped: Vec<String>,
     last_skip_error: Option<AppError>,
 }
@@ -119,6 +124,13 @@ pub(crate) async fn do_sync_prs(
             "{} project(s) skipped due to PR sync errors: {}.",
             active.skipped.len(),
             active.skipped.join(", ")
+        ));
+    }
+    if !active.capped.is_empty() {
+        warning_parts.push(format!(
+            "{} project(s) have {PROJECT_PR_SYNC_TOP} or more active PRs; cached PRs outside the fetched window were kept: {}.",
+            active.capped.len(),
+            active.capped.join(", ")
         ));
     }
 
@@ -185,7 +197,11 @@ async fn fetch_all_active_prs(
             joined.map_err(|e| AppError::AzureDevOps(format!("PR sync task failed: {e}")))?;
         match fetch.result {
             Ok(prs) => {
-                out.synced_project_ids.push(fetch.project_id);
+                if fetch.capped {
+                    out.capped.push(fetch.label);
+                } else {
+                    out.synced_project_ids.push(fetch.project_id);
+                }
                 out.cached_prs.extend(prs);
             }
             Err(e) => {

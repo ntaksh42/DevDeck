@@ -36,6 +36,7 @@ pub(crate) async fn fetch_active_prs_for_project(
                 project_id,
                 label,
                 result: Ok(cached),
+                capped: false,
             };
         }
     }
@@ -58,6 +59,7 @@ pub(crate) async fn fetch_active_prs_for_project(
                 project_id,
                 label,
                 result: Ok(Vec::new()),
+                capped: false,
             };
         }
         Err(e) => {
@@ -65,9 +67,12 @@ pub(crate) async fn fetch_active_prs_for_project(
                 project_id,
                 label,
                 result: Err(e.into()),
+                capped: false,
             }
         }
     };
+
+    let capped = prs.len() >= PROJECT_PR_SYNC_TOP as usize;
 
     // Reviewers are read from `prs` by reference before the by-value pass
     // below consumes each `pr` to build `CachedPr`; both passes read the same
@@ -141,6 +146,7 @@ pub(crate) async fn fetch_active_prs_for_project(
         project_id,
         label,
         result: Ok(cached),
+        capped,
     }
 }
 

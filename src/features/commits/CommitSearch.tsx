@@ -5,9 +5,11 @@ import {
   searchCommits,
   listCommitRepositories,
   commandErrorMessage,
+  syncUpdatedEventSchema,
   type SearchCommitsInput,
   type CommitSummary,
 } from "@/lib/azdoCommands";
+import { subscribeTauriEvent } from "@/lib/tauriEvents";
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { handleSearchInputEscape } from "@/lib/utils";
 import { MultiSelectFilter } from "@/components/MultiSelectFilter";
@@ -93,6 +95,23 @@ export function CommitSearch({
       setLoadingMore(false);
     },
   });
+
+  // Search results live in mutation state, so a background commit sync cannot
+  // refresh them through query keys. Re-run the last search (first page) when a
+  // commit sync for that organization completes, so shown results do not go stale.
+  const mutationRef = useRef(mutation);
+  mutationRef.current = mutation;
+  useEffect(() => {
+    return subscribeTauriEvent("sync:updated", (payload) => {
+      const parsed = syncUpdatedEventSchema.safeParse(payload);
+      if (!parsed.success || !parsed.data.scopes.includes("commits")) return;
+      const last = lastSearchInputRef.current;
+      if (!last || mutationRef.current.isPending) return;
+      if (last.organizationId && last.organizationId !== parsed.data.orgId) return;
+      isLoadMoreRef.current = false;
+      mutationRef.current.mutate({ ...last, offset: 0 });
+    });
+  }, []);
 
   const repositoriesQuery = useQuery({
     queryKey: ["commitRepositories", selectedOrganizationId],

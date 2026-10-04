@@ -98,7 +98,7 @@ export const DEFAULT_DEMO_SYNC_STATES: SyncState[] = [
     errorCount: 0,
     lastError: null,
     lastWarning:
-      "Work item sync reached the 2000-item query limit in 1 query result(s); older items are not synced.",
+      "Work item sync reached the 2000-item query limit in 1 query result(s); items older than that window are not refreshed (their cached rows are kept).",
   },
 ];
 
