@@ -18,6 +18,11 @@ export function SnoozeMenu({
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [customValue, setCustomValue] = useState("");
+  // A past deadline would be accepted but never hide the item, so only a future
+  // custom value can be confirmed.
+  const customIso = localInputToIso(customValue);
+  const customIsPast = customIso !== null && new Date(customIso).getTime() <= Date.now();
+  const confirmableIso = customIsPast ? null : customIso;
 
   // Focus the first preset on open so the whole flow (Z → arrows → Enter) is
   // keyboard-driven without touching the mouse. On unmount, return focus to the
@@ -112,7 +117,6 @@ export function SnoozeMenu({
 
   const top = Math.min(anchorRect.bottom + 2, window.innerHeight - 280);
   const left = Math.min(anchorRect.left, window.innerWidth - 240);
-  const customIso = localInputToIso(customValue);
 
   return (
     <div
@@ -149,21 +153,27 @@ export function SnoozeMenu({
           value={customValue}
           data-snooze-item="true"
           onChange={(e) => setCustomValue(e.target.value)}
+          aria-invalid={customIsPast}
           onKeyDown={(e) => {
             // Enter in the field confirms the custom value directly.
-            if (e.key === "Enter" && customIso) {
+            if (e.key === "Enter" && confirmableIso) {
               e.preventDefault();
-              onSnooze(customIso);
+              onSnooze(confirmableIso);
             }
           }}
           className="w-full rounded border border-input bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-ring"
         />
+        {customIsPast ? (
+          <p role="alert" className="mt-1 text-xs text-destructive">
+            Choose a date and time in the future.
+          </p>
+        ) : null}
         <button
           type="button"
           data-snooze-item="true"
-          disabled={!customIso}
+          disabled={!confirmableIso}
           onClick={() => {
-            if (customIso) onSnooze(customIso);
+            if (confirmableIso) onSnooze(confirmableIso);
           }}
           className="mt-1.5 w-full rounded border border-border bg-card px-2 py-1 text-xs hover:bg-secondary focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
         >

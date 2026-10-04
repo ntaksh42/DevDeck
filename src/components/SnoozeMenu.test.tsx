@@ -69,3 +69,33 @@ describe("SnoozeMenu keyboard containment", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("SnoozeMenu custom date", () => {
+  function localValue(offsetMs: number): string {
+    const date = new Date(Date.now() + offsetMs);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
+  it("refuses a past custom date and explains why", () => {
+    const { onSnooze } = renderWithGrid();
+    const input = screen.getByDisplayValue("") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: localValue(-24 * 3600_000) } });
+
+    const confirm = screen.getByRole("button", { name: "Snooze until selected" });
+    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByRole("alert").textContent).toContain("future");
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSnooze).not.toHaveBeenCalled();
+  });
+
+  it("accepts a future custom date", () => {
+    const { onSnooze } = renderWithGrid();
+    const input = screen.getByDisplayValue("") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: localValue(24 * 3600_000) } });
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Snooze until selected" }));
+    expect(onSnooze).toHaveBeenCalledTimes(1);
+  });
+});

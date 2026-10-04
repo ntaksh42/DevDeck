@@ -71,6 +71,7 @@ impl SnoozeService {
         if input.item_key.trim().is_empty() {
             return Err(AppError::InvalidInput("item_key is required".to_string()));
         }
+        validate_snooze_until(Utc::now(), &input.snooze_until)?;
         let baseline = self.current_baseline(&organization.id, item_type, &input.item_key)?;
         self.db.upsert_snoozed_item(
             &organization.id,
@@ -286,6 +287,20 @@ pub fn should_revive(now: &str, snooze_until: &str, new_activity: bool) -> bool 
     }
 }
 
+/// A snooze that is already over is reported as success but never hides the
+/// item, so reject it (and unparsable values) instead of silently storing it.
+fn validate_snooze_until(now: DateTime<Utc>, snooze_until: &str) -> Result<()> {
+    let until = DateTime::parse_from_rfc3339(snooze_until).map_err(|_| {
+        AppError::InvalidInput("snooze_until must be an RFC3339 timestamp".to_string())
+    })?;
+    if until <= now {
+        return Err(AppError::InvalidInput(
+            "snooze_until must be in the future".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 /// True while a snooze is still in effect at `now`. The read paths (My Reviews /
 /// My Work Items) use this to hide only items whose deadline is still in the
 /// future; an expired — or unparseable — deadline is treated as inactive so the
@@ -345,6 +360,19 @@ fn parse_pr_key(item_key: &str) -> Option<(String, i64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn validate_snooze_until_rejects_past_equal_and_unparsable_values() {
+        let now = DateTime::parse_from_rfc3339("2026-10-04T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        assert!(validate_snooze_until(now, "2026-10-04T12:00:01Z").is_ok());
+        assert!(validate_snooze_until(now, "2026-10-05T00:00:00+09:00").is_ok());
+        assert!(validate_snooze_until(now, "2026-10-04T20:00:00+09:00").is_err());
+        assert!(validate_snooze_until(now, "2026-10-04T12:00:00Z").is_err());
+        assert!(validate_snooze_until(now, "2026-10-03T12:00:00Z").is_err());
+        assert!(validate_snooze_until(now, "not a date").is_err());
+    }
 
     #[test]
     fn parse_pr_key_splits_repo_and_id() {
