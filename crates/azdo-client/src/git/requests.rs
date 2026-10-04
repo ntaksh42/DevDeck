@@ -49,15 +49,41 @@ struct PullRequestQueryResponse {
     results: Vec<HashMap<String, Vec<GitPullRequest>>>,
 }
 
-/// Refs - List page size; further pages are fetched via continuation token.
-const BRANCH_PAGE_SIZE: &str = "1000";
+/// Page size for list endpoints that return at most one page by default
+/// (Refs - List, Projects - List); further pages follow the continuation token.
+const LIST_PAGE_SIZE: &str = "1000";
 
 impl AdoClient {
+    /// Fetches every page of a list endpoint that signals more results with an
+    /// `x-ms-continuationtoken` header, sending `$top` and `continuationToken`.
+    async fn list_all_pages<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+        base_query: &[(&str, &str)],
+    ) -> Result<Vec<T>> {
+        let mut items = Vec::new();
+        let mut continuation: Option<String> = None;
+        loop {
+            let mut query = base_query.to_vec();
+            query.push(("$top", LIST_PAGE_SIZE));
+            if let Some(token) = continuation.as_deref() {
+                query.push(("continuationToken", token));
+            }
+            let (response, next): (ListResponse<T>, _) =
+                self.get_json_with_continuation(path, &query).await?;
+            items.extend(response.value);
+            match next {
+                Some(token) => continuation = Some(token),
+                None => return Ok(items),
+            }
+        }
+    }
+
+    /// Lists every project of the organization, following continuation tokens so
+    /// organizations with more projects than one page are not truncated.
     pub async fn list_projects(&self) -> Result<Vec<TeamProject>> {
-        let response: ListResponse<TeamProject> = self
-            .get_json("_apis/projects", &[("api-version", "7.1-preview")])
-            .await?;
-        Ok(response.value)
+        self.list_all_pages("_apis/projects", &[("api-version", "7.1-preview")])
+            .await
     }
 
     pub async fn list_repositories(&self, project_id: &str) -> Result<Vec<GitRepository>> {
@@ -76,25 +102,11 @@ impl AdoClient {
         repository_id: &str,
     ) -> Result<Vec<GitRef>> {
         let path = format!("{project_id}/_apis/git/repositories/{repository_id}/refs");
-        let mut branches = Vec::new();
-        let mut continuation: Option<String> = None;
-        loop {
-            let mut query = vec![
-                ("api-version", "7.1-preview"),
-                ("filter", "heads/"),
-                ("$top", BRANCH_PAGE_SIZE),
-            ];
-            if let Some(token) = continuation.as_deref() {
-                query.push(("continuationToken", token));
-            }
-            let (response, next): (ListResponse<GitRef>, _) =
-                self.get_json_with_continuation(&path, &query).await?;
-            branches.extend(response.value);
-            match next {
-                Some(token) => continuation = Some(token),
-                None => return Ok(branches),
-            }
-        }
+        self.list_all_pages(
+            &path,
+            &[("api-version", "7.1-preview"), ("filter", "heads/")],
+        )
+        .await
     }
 
     /// Lists the children of a folder at the tip of a branch. `scope_path` is

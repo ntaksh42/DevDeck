@@ -343,6 +343,9 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
 
 - HTTP は `AdoClient::get_json` / `post_json` 経由に統一 (リトライ・401・429・5xx 挙動を一貫させる)。
 - 既定: 3 回試行、ベース遅延 250ms の指数バックオフ。
+- 1 ページで打ち切られる一覧 (プロジェクト一覧 `_apis/projects`、ブランチ一覧 refs) は `$top=1000` を明示し、
+  `x-ms-continuationtoken` ヘッダーの継続トークンを辿って最後まで取得する (`list_all_pages`)。
+  これにより 100 件超のプロジェクトも同期対象から外れない。
 - 401: 即時 `Unauthorized`。429: `Retry-After` を尊重 (上限付き)。5xx/タイムアウト/ネットワーク: リトライ。
   副作用のある POST は 5xx/タイムアウトを再試行せず (429 と接続失敗のみ)、WIQL・バッチ取得・検索など読み取り専用の POST (`post_json_read` / Almsearch) は GET と同様に再試行する。
 - Azure CLI 認証は Windows では `cmd /C az` (`CREATE_NO_WINDOW`) 経由で起動する (`az` は `az.cmd` のため `Command::new("az")` では解決できない)。 `az` 未インストール時は `cmd` が終了コード 9009 を返すため、インストール案内メッセージに読み替える。

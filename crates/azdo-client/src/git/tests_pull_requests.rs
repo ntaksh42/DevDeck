@@ -16,6 +16,40 @@ async fn test_client(server: &MockServer) -> AdoClient {
 }
 
 #[tokio::test]
+async fn list_projects_follows_continuation_tokens() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/_apis/projects"))
+        .and(query_param("$top", "1000"))
+        .and(query_param_is_missing("continuationToken"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("x-ms-continuationtoken", "page-2")
+                .set_body_json(serde_json::json!({
+                    "count": 1,
+                    "value": [{ "id": "p1", "name": "First" }]
+                })),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/_apis/projects"))
+        .and(query_param("continuationToken", "page-2"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "count": 1,
+            "value": [{ "id": "p2", "name": "Second" }]
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let projects = test_client(&server).await.list_projects().await.unwrap();
+    let names: Vec<_> = projects.iter().map(|p| p.name.as_str()).collect();
+    assert_eq!(names, ["First", "Second"]);
+}
+
+#[tokio::test]
 async fn list_projects_maps_response() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
