@@ -19,6 +19,40 @@ function rulesTextToList(text: string): string[] {
   return text.split(",").map((value) => value.trim());
 }
 
+// Keeps the raw text while typing: re-rendering from the trimmed list would eat
+// the space in "My Project" as soon as it is typed. The text is only replaced
+// when the list changes to something the current text does not already mean
+// (for example after a server reload or removing another rule).
+function ListTextInput({
+  values,
+  onChange,
+  placeholder,
+}: {
+  values: string[];
+  onChange: (values: string[]) => void;
+  placeholder: string;
+}) {
+  const [text, setText] = useState(() => rulesListToText(values));
+  useEffect(() => {
+    setText((current) =>
+      JSON.stringify(rulesTextToList(current)) === JSON.stringify(values)
+        ? current
+        : rulesListToText(values),
+    );
+  }, [values]);
+  return (
+    <input
+      value={text}
+      onChange={(event) => {
+        setText(event.target.value);
+        onChange(rulesTextToList(event.target.value));
+      }}
+      placeholder={placeholder}
+      className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+    />
+  );
+}
+
 export function NotificationRulesSettings() {
   const queryClient = useQueryClient();
   const settingsQuery = useQuery({
@@ -60,12 +94,10 @@ export function NotificationRulesSettings() {
   function setListField(
     index: number,
     field: "projects" | "repositories",
-    text: string,
+    values: string[],
   ) {
     setDraft((rules) =>
-      rules.map((rule, i) =>
-        i === index ? { ...rule, [field]: rulesTextToList(text) } : rule,
-      ),
+      rules.map((rule, i) => (i === index ? { ...rule, [field]: values } : rule)),
     );
   }
 
@@ -181,13 +213,10 @@ export function NotificationRulesSettings() {
                 <span className="text-xs font-medium text-muted-foreground">
                   Projects (comma separated; any if blank)
                 </span>
-                <input
-                  value={rulesListToText(rule.projects)}
-                  onChange={(event) =>
-                    setListField(index, "projects", event.target.value)
-                  }
+                <ListTextInput
+                  values={rule.projects}
+                  onChange={(values) => setListField(index, "projects", values)}
                   placeholder="Platform, Mobile"
-                  className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
                 />
               </label>
 
@@ -195,13 +224,10 @@ export function NotificationRulesSettings() {
                 <span className="text-xs font-medium text-muted-foreground">
                   Repositories (comma separated; pull requests only)
                 </span>
-                <input
-                  value={rulesListToText(rule.repositories)}
-                  onChange={(event) =>
-                    setListField(index, "repositories", event.target.value)
-                  }
+                <ListTextInput
+                  values={rule.repositories}
+                  onChange={(values) => setListField(index, "repositories", values)}
                   placeholder="web-app, api"
-                  className="h-9 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
                 />
               </label>
             </div>
