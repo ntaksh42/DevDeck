@@ -2,6 +2,7 @@ import { type Dispatch, type SetStateAction, useEffect, useRef } from "react";
 import { matchesCombo, normalizeKey, type KeybindingMap } from "@/lib/keybindings";
 import {
   isEditableTarget,
+  isImeComposing,
   focusWorkItemCommentInput,
   focusFilterInput,
   focusPrimaryGrid,
@@ -163,6 +164,8 @@ export function useKeyboardShortcuts({
       }
 
       if (event.key === "Escape" && !event.altKey) {
+        // Escape that cancels an IME conversion must not move focus out of the field.
+        if (isImeComposing(event)) return;
         if (isEditableTarget(event.target) && focusPrimaryGrid()) {
           event.preventDefault();
           return;

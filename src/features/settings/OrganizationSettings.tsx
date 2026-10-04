@@ -4,6 +4,7 @@ import type { Organization } from '@/lib/azdoCommands';
 import { resolveKeybindings } from '@/lib/keybindings';
 import { useExperimentalFlags } from './useExperimentalFlags';
 import { filterSettingsGroups, SETTINGS_GROUPS } from './settingsSections';
+import { isImeComposing } from "@/lib/utils";
 
 export { SetupPanel } from './SetupPanel';
 export { ReviewResultFolderSettings } from './ReviewResultFolderSettings';
@@ -93,6 +94,7 @@ export function OrganizationSettings({
   }
 
   function onFilterKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (isImeComposing(event)) return;
     if (event.key === "Escape") {
       // First Escape clears the filter; a second one leaves the field.
       event.preventDefault();

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { ChevronDown, Loader2, X } from 'lucide-react';
 import type { BulkWorkItemResult, WorkItemAssigneeCandidate } from '@/lib/azdoCommands';
+import { isImeComposing } from "@/lib/utils";
 
 /**
  * Counts non-empty values and returns them ordered by frequency (ties broken
@@ -344,6 +345,7 @@ export function BulkActionBar({
             value={tagDraft}
             onChange={(event) => setTagDraft(event.target.value)}
             onKeyDown={(event) => {
+              if (isImeComposing(event)) return;
               if (event.key === "Enter") {
                 event.preventDefault();
                 applyTag("add");

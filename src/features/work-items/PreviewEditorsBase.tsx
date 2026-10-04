@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { commentAuthorInitials } from "./workItemHtml";
+import { isImeComposing } from "@/lib/utils";
 
 export function useCloseOnOutsidePointer<T extends HTMLElement>(
   open: boolean,
@@ -80,6 +81,7 @@ export function TitleEditor({
         onKeyDown={(event) => {
           // Keep title editing keys from reaching the grid navigation handler.
           event.stopPropagation();
+          if (isImeComposing(event)) return;
           if (event.key === "Enter") {
             event.preventDefault();
             save();
@@ -163,6 +165,7 @@ export function ReasonEditor({
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
+              if (isImeComposing(event)) return;
               if (event.key === "Escape") {
                 event.preventDefault();
                 onOpenChange(false);

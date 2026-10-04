@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { formatRelativeDate, handleSearchInputEscape, markdownLink } from "./utils";
+import {
+  formatRelativeDate,
+  handleSearchInputEscape,
+  isImeComposing,
+  markdownLink,
+} from "./utils";
 
 describe("markdownLink", () => {
   it("wraps the text and url in Markdown link syntax", () => {
@@ -91,5 +96,22 @@ describe("stored numbers with unavailable storage", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe("isImeComposing", () => {
+  it("is true while composing, whether the flag is on a native or React event", () => {
+    expect(isImeComposing({ key: "Enter", isComposing: true })).toBe(true);
+    expect(isImeComposing({ key: "Enter", nativeEvent: { isComposing: true } })).toBe(true);
+  });
+
+  it("treats Chromium's Process key as composing", () => {
+    expect(isImeComposing({ key: "Process" })).toBe(true);
+  });
+
+  it("is false for ordinary key presses", () => {
+    expect(isImeComposing({ key: "Enter" })).toBe(false);
+    expect(isImeComposing({ key: "Enter", isComposing: false })).toBe(false);
+    expect(isImeComposing({ key: "Escape", nativeEvent: { isComposing: false } })).toBe(false);
   });
 });

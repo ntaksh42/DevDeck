@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import { Search, X } from "lucide-react";
+import { isImeComposing } from "@/lib/utils";
 
 const MAX_SUGGESTIONS = 8;
 
@@ -86,6 +87,7 @@ export function FilterAutocomplete({
   }
 
   function onKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+    if (isImeComposing(event)) return;
     if (!open || suggestions.length === 0) {
       // Only the dropdown's own keys are intercepted; everything else (incl.
       // Escape when closed) keeps its existing behavior.

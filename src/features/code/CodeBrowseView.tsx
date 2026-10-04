@@ -32,6 +32,7 @@ import { CodeFileView } from "./CodeFileView";
 import { CodeHistoryView } from "./CodeHistoryView";
 import { CodeCompareView } from "./CodeCompareView";
 import { CodeSearchResults } from "./CodeSearchResults";
+import { isImeComposing } from "@/lib/utils";
 
 const INPUT_CLASS =
   "h-9 w-full rounded-md border border-input bg-background pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring";
@@ -194,6 +195,7 @@ export function CodeBrowseView() {
   }
 
   function onSearchKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+    if (isImeComposing(event)) return;
     if (event.key === "Enter" && filterText.trim()) {
       event.preventDefault();
       setSearchQuery(filterText.trim());

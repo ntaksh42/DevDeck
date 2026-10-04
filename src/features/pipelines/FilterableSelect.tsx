@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { ChevronDown } from "lucide-react";
+import { isImeComposing } from "@/lib/utils";
 
 export type SelectOption = { value: string; label: string };
 
@@ -105,6 +106,7 @@ export function FilterableSelect({
   closeListRef.current = closeList;
 
   function handleKeyDown(event: ReactKeyboardEvent) {
+    if (isImeComposing(event)) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
       if (!open) openList();

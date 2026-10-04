@@ -3,6 +3,21 @@ import { readStoredString } from "@/lib/storage";
 
 export type SortDirection = "asc" | "desc";
 
+/**
+ * True while an IME is composing (e.g. Japanese conversion). Enter / Escape /
+ * Tab pressed then belong to the IME (confirm or cancel the conversion), so
+ * handlers must ignore them instead of submitting, selecting or blurring.
+ * Accepts both React synthetic and native keyboard events; Chromium reports
+ * `key === "Process"` for keys swallowed by the IME.
+ */
+export function isImeComposing(event: {
+  key: string;
+  isComposing?: boolean;
+  nativeEvent?: { isComposing?: boolean };
+}): boolean {
+  return Boolean(event.nativeEvent?.isComposing ?? event.isComposing) || event.key === "Process";
+}
+
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }

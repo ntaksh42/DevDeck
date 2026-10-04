@@ -41,6 +41,27 @@ describe("CommentComposer mentions", () => {
     expect(mentionSearch).toHaveBeenCalledWith("田中");
   });
 
+  it("ignores Enter that confirms an IME conversion while the mention picker is open", async () => {
+    const mentionSearch = vi.fn().mockResolvedValue([candidate]);
+    render(
+      <CommentComposer
+        placeholder="Reply…"
+        onSubmit={async () => {}}
+        mentionSearch={mentionSearch}
+      />,
+    );
+    const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "@田中" } });
+    expect(await screen.findByText("田中太郎")).toBeTruthy();
+
+    fireEvent.keyDown(textarea, { key: "Enter", isComposing: true });
+    expect(textarea.value).toBe("@田中");
+    expect(screen.getByText("田中太郎")).toBeTruthy();
+
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    expect(textarea.value).toContain("@田中太郎");
+  });
+
   it("converts a selected mention to Azure DevOps @<guid> markdown on submit", async () => {
     const mentionSearch = vi.fn().mockResolvedValue([candidate]);
     const onSubmit = vi.fn().mockResolvedValue(undefined);

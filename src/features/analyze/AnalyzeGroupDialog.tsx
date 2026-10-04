@@ -18,6 +18,7 @@ import {
   type AnalyzeGranularity,
   type AnalyzeGroup,
 } from "./analyzeGroupsStorage";
+import { isImeComposing } from "@/lib/utils";
 
 /** Mirrors the backend guard so the error surfaces before a request is made. */
 function containsAsof(wiql: string): boolean {
@@ -438,6 +439,7 @@ export function AnalyzeGroupDialog({
                     placeholder="main"
                     onChange={(event) => setBranchDraft(event.target.value)}
                     onKeyDown={(event) => {
+                      if (isImeComposing(event)) return;
                       if (event.key === "Enter") {
                         event.preventDefault();
                         addBranch();

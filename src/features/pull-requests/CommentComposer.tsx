@@ -1,6 +1,6 @@
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useState } from "react";
 import { CommentField } from "@/components/CommentField";
-import { focusPrimaryPreview } from "@/lib/utils";
+import { focusPrimaryPreview, isImeComposing } from "@/lib/utils";
 import { type MentionCandidate } from "@/lib/azdoCommands";
 import {
   activeMentionAt,
@@ -130,6 +130,7 @@ export function CommentComposer({
   const showMentions = mention != null && candidates.length > 0;
 
   function handleKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
+    if (isImeComposing(event)) return;
     if (
       event.key === "Backspace" &&
       event.currentTarget.selectionStart === event.currentTarget.selectionEnd
