@@ -8,6 +8,7 @@ pub mod pipelines;
 pub mod policy;
 pub mod pr_review;
 pub mod pr_status;
+pub mod project_info;
 pub mod wiki;
 pub mod work_items;
 
@@ -35,6 +36,9 @@ pub use pr_review::{
     GitThreadContext, NewThreadContext,
 };
 pub use pr_status::{summarize_pr_ci, PrCiState, PrCiSummary, PrStatusCheck, PrStatusContext};
+pub use project_info::{
+    ProjectTeam, ServiceEndpoint, ServiceHookSubscription, TeamMember, TeamMemberIdentity,
+};
 pub use wiki::{WikiPage, WikiSearchRequest, WikiSearchResponse, WikiSearchResult};
 pub use work_items::{
     has_asof_clause, with_asof, ClassificationNode, ClassificationNodeAttributes, CommentReaction,

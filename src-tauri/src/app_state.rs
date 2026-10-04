@@ -14,6 +14,7 @@ use crate::error::{AppError, Result};
 use crate::orgs::OrganizationService;
 use crate::pipelines::PipelineService;
 use crate::pr_review::PrReviewService;
+use crate::project_info::ProjectInfoService;
 use crate::providers::{AzdoProvider, GithubProvider, Provider};
 use crate::prs::PullRequestService;
 use crate::secrets::SecretStore;
@@ -35,6 +36,7 @@ pub(crate) struct AppState {
     pub(crate) code_search: CodeSearchService,
     pub(crate) code_browse: CodeBrowseService,
     pub(crate) wiki: WikiService,
+    pub(crate) project_info: ProjectInfoService,
     pub(crate) settings: SettingsService,
     pub(crate) agent_notes: AgentNoteService,
     pub(crate) snooze: SnoozeService,
@@ -88,6 +90,7 @@ impl AppState {
                 self.code_search.clone(),
                 self.code_browse.clone(),
                 self.wiki.clone(),
+                self.project_info.clone(),
                 self.pipelines.clone(),
                 self.db.clone(),
             )),

@@ -15,6 +15,7 @@ mod github;
 mod orgs;
 mod pipelines;
 mod pr_review;
+mod project_info;
 mod projects;
 mod providers;
 mod prs;
@@ -38,6 +39,7 @@ use error::{AppError, Result};
 use orgs::OrganizationService;
 use pipelines::PipelineService;
 use pr_review::PrReviewService;
+use project_info::ProjectInfoService;
 use prs::PullRequestService;
 use secrets::SecretStore;
 use settings::SettingsService;
@@ -140,6 +142,7 @@ pub fn run() {
                 code_search: CodeSearchService::new(db.clone(), SecretStore),
                 code_browse: CodeBrowseService::new(db.clone(), SecretStore),
                 wiki: WikiService::new(db.clone(), SecretStore),
+                project_info: ProjectInfoService::new(db.clone(), SecretStore),
                 settings: SettingsService::new(db.clone()),
                 agent_notes: AgentNoteService::new(db.clone()),
                 snooze: SnoozeService::new(db.clone()),
@@ -245,6 +248,9 @@ pub fn run() {
             commands::code::get_code_search_context,
             commands::wiki::search_wiki,
             commands::wiki::get_wiki_page,
+            commands::project_info::list_project_teams,
+            commands::project_info::list_service_connections,
+            commands::project_info::list_service_hooks,
             commands::code::list_repo_branches,
             commands::code::list_repo_branch_overview,
             commands::code::create_repo_branch,

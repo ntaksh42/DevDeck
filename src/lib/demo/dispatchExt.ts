@@ -25,6 +25,7 @@ import {
   demoUpdatePipelineDefinition,
 } from "@/lib/demo/pipelines";
 import { demoBranchPolicies } from "@/lib/demo/branchPolicies";
+import { demoProjectTeams, demoServiceConnections, demoServiceHooks } from "@/lib/demo/projectInfo";
 import { demoRepoTagOverview } from "@/lib/demo/repoTags";
 import { demoGetWikiPage, demoSearchWiki } from "@/lib/demo/wiki";
 import {
@@ -225,6 +226,12 @@ export function dispatchExt(command: string, args: unknown): unknown {
       const input = (args as { input?: { query?: string } } | undefined)?.input;
       return demoSearchCode(input?.query?.trim() ?? "");
     }
+    case "list_project_teams":
+      return demoProjectTeams();
+    case "list_service_connections":
+      return demoServiceConnections();
+    case "list_service_hooks":
+      return demoServiceHooks();
     case "search_wiki": {
       const input = (args as { input?: { query?: string } } | undefined)?.input;
       return demoSearchWiki(input?.query?.trim() ?? "");

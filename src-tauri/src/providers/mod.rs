@@ -56,6 +56,7 @@ use crate::pr_review::{
     SetPullRequestThreadStatusInput, SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput,
     UpdatePullRequestInput,
 };
+use crate::project_info::{ProjectInfoInput, ProjectTeams, ServiceConnectionInfo, ServiceHookInfo};
 use crate::prs::{
     ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestsResult,
     PullRequestSearchResult, ReviewPullRequestSummary, SearchPullRequestsInput,
@@ -254,6 +255,12 @@ pub(crate) trait Provider: Send + Sync {
         &self,
         input: GetCodeContextInput,
     ) -> Result<CodeContextResult>;
+    async fn list_project_teams(&self, input: ProjectInfoInput) -> Result<ProjectTeams>;
+    async fn list_service_connections(
+        &self,
+        input: ProjectInfoInput,
+    ) -> Result<Vec<ServiceConnectionInfo>>;
+    async fn list_service_hooks(&self, input: ProjectInfoInput) -> Result<Vec<ServiceHookInfo>>;
     async fn search_wiki(&self, input: SearchWikiInput) -> Result<WikiSearchResults>;
     async fn get_wiki_page(&self, input: GetWikiPageInput) -> Result<WikiPageContent>;
     async fn list_repo_branches(&self, input: ListBranchesInput) -> Result<Vec<RepoBranch>>;

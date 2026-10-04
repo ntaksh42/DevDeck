@@ -4,6 +4,7 @@ import { SoftwareUpdateSettings } from "./SoftwareUpdateSettings";
 import { RowColorRulesSettings } from "./RowColorRulesSettings";
 import { SetupPanel } from './SetupPanel';
 import { ConnectionsSettings } from './ConnectionsSettings';
+import { ProjectInfoSettings } from './ProjectInfoSettings';
 import { QuickPipelinesSettings } from './QuickPipelinesSettings';
 import { SyncHealthSettings } from './SyncHealthSettings';
 import { ThemeSettings } from './ThemeSettings';
@@ -145,6 +146,18 @@ export const SETTINGS_GROUPS: SettingsGroup[] = [
         title: "Row color rules",
         keywords: "grid highlight conditional color work item",
         render: () => <RowColorRulesSettings />,
+      },
+    ],
+  },
+  {
+    id: "project",
+    label: "Project",
+    entries: [
+      {
+        id: "project-info",
+        title: "Project info",
+        keywords: "teams members service connections endpoints service hooks subscriptions read-only",
+        render: () => <ProjectInfoSettings />,
       },
     ],
   },

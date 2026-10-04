@@ -8,6 +8,7 @@ export * from "./commands/workItemFollows";
 export * from "./commands/commits";
 export * from "./commands/code";
 export * from "./commands/wiki";
+export * from "./commands/projectInfo";
 export * from "./commands/pipelines";
 export * from "./commands/search";
 export * from "./commands/snooze";

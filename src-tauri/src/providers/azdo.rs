@@ -46,6 +46,8 @@ use crate::pr_review::{
     SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
     SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
 };
+use crate::project_info::ProjectInfoService;
+use crate::project_info::{ProjectInfoInput, ProjectTeams, ServiceConnectionInfo, ServiceHookInfo};
 use crate::prs::{
     ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestsResult,
     PullRequestSearchResult, PullRequestService, ReviewPullRequestSummary, SearchPullRequestsInput,
@@ -74,6 +76,7 @@ pub(crate) struct AzdoProvider {
     code_search: CodeSearchService,
     code_browse: CodeBrowseService,
     wiki: WikiService,
+    project_info: ProjectInfoService,
     pipelines: PipelineService,
     db: AppDatabase,
 }
@@ -88,6 +91,7 @@ impl AzdoProvider {
         code_search: CodeSearchService,
         code_browse: CodeBrowseService,
         wiki: WikiService,
+        project_info: ProjectInfoService,
         pipelines: PipelineService,
         db: AppDatabase,
     ) -> Self {
@@ -99,6 +103,7 @@ impl AzdoProvider {
             code_search,
             code_browse,
             wiki,
+            project_info,
             pipelines,
             db,
         }
@@ -408,6 +413,21 @@ impl Provider for AzdoProvider {
         input: GetCodeContextInput,
     ) -> Result<CodeContextResult> {
         self.code_search.get_context(input).await
+    }
+
+    async fn list_project_teams(&self, input: ProjectInfoInput) -> Result<ProjectTeams> {
+        self.project_info.list_teams(input).await
+    }
+
+    async fn list_service_connections(
+        &self,
+        input: ProjectInfoInput,
+    ) -> Result<Vec<ServiceConnectionInfo>> {
+        self.project_info.list_service_connections(input).await
+    }
+
+    async fn list_service_hooks(&self, input: ProjectInfoInput) -> Result<Vec<ServiceHookInfo>> {
+        self.project_info.list_service_hooks(input).await
     }
 
     async fn search_wiki(&self, input: SearchWikiInput) -> Result<WikiSearchResults> {

@@ -46,6 +46,7 @@ use crate::pr_review::{
     SetPullRequestThreadStatusInput, SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput,
     UpdatePullRequestInput,
 };
+use crate::project_info::{ProjectInfoInput, ProjectTeams, ServiceConnectionInfo, ServiceHookInfo};
 use crate::prs::{
     ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestsResult,
     PullRequestSearchResult, ReviewPullRequestSummary, SearchPullRequestsInput,
@@ -433,6 +434,27 @@ impl Provider for GithubProvider {
     ) -> Result<CodeContextResult> {
         Err(AppError::NotSupported(
             "code search context preview is not available for GitHub".to_string(),
+        ))
+    }
+
+    async fn list_project_teams(&self, _input: ProjectInfoInput) -> Result<ProjectTeams> {
+        Err(AppError::NotSupported(
+            "project information is not available for GitHub".to_string(),
+        ))
+    }
+
+    async fn list_service_connections(
+        &self,
+        _input: ProjectInfoInput,
+    ) -> Result<Vec<ServiceConnectionInfo>> {
+        Err(AppError::NotSupported(
+            "project information is not available for GitHub".to_string(),
+        ))
+    }
+
+    async fn list_service_hooks(&self, _input: ProjectInfoInput) -> Result<Vec<ServiceHookInfo>> {
+        Err(AppError::NotSupported(
+            "project information is not available for GitHub".to_string(),
         ))
     }
 
