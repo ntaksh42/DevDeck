@@ -41,6 +41,7 @@ export interface AppContentProps {
   onOpenSettings: () => void;
   onOpenPullRequest: (query: string, organizationId?: string) => void;
   onOpenView: (view: "pipelines" | "settings" | "myReviews" | "myWorkItems") => void;
+  onOpenCommit: (query: string, organizationId?: string) => void;
 }
 
 export function AppContent({
@@ -62,6 +63,7 @@ export function AppContent({
   onOpenSettings,
   onOpenPullRequest,
   onOpenView,
+  onOpenCommit,
 }: AppContentProps) {
   return (
     <section
@@ -115,7 +117,7 @@ export function AppContent({
         ) : activeView === "pipelines" ? (
           <PipelinesView />
         ) : activeView === "codeSearch" ? (
-          <CodeBrowseView />
+          <CodeBrowseView onOpenCommit={onOpenCommit} />
         ) : activeView === "notifications" ? (
           <NotificationsView onOpenPullRequest={onOpenPullRequest} onOpenView={onOpenView} />
         ) : activeView === "crossOrgSummary" ? (

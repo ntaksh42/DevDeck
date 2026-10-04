@@ -1,6 +1,6 @@
 import { type KeyboardEvent as ReactKeyboardEvent, useRef } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { GitCompare, Loader2 } from "lucide-react";
 import {
   commandErrorMessage,
   listRepoHistory,
@@ -23,6 +23,7 @@ export function CodeHistoryView({
   branch,
   path,
   onViewAtCommit,
+  onOpenCommit,
 }: {
   organization: Organization | undefined;
   organizationId: string;
@@ -30,6 +31,9 @@ export function CodeHistoryView({
   branch: string;
   path: string;
   onViewAtCommit?: (commit: RepoCommitInfo) => void;
+  // Opens the Commits view searched for this commit, reusing its diff view
+  // instead of duplicating one here.
+  onOpenCommit?: (query: string, organizationId?: string) => void;
 }) {
   const query = useInfiniteQuery({
     queryKey: ["repoHistory", organizationId, repo.repositoryId, branch, path],
@@ -88,7 +92,7 @@ export function CodeHistoryView({
             <th className="px-3 py-1.5 font-medium">Message</th>
             <th className="px-3 py-1.5 font-medium">Author</th>
             <th className="px-3 py-1.5 font-medium">Date</th>
-            {onViewAtCommit ? <th className="px-3 py-1.5 font-medium" /> : null}
+            {onViewAtCommit || onOpenCommit ? <th className="px-3 py-1.5 font-medium" /> : null}
           </tr>
         </thead>
         <tbody>
@@ -112,16 +116,31 @@ export function CodeHistoryView({
               <td className="whitespace-nowrap px-3 py-1.5 text-muted-foreground">
                 {formatDate(commit.date)}
               </td>
-              {onViewAtCommit ? (
+              {onViewAtCommit || onOpenCommit ? (
                 <td className="whitespace-nowrap px-3 py-1.5">
-                  <button
-                    type="button"
-                    onClick={() => onViewAtCommit(commit)}
-                    className="text-xs text-link hover:underline"
-                    title="Show the file as of this commit"
-                  >
-                    View
-                  </button>
+                  <div className="flex items-center gap-3">
+                    {onViewAtCommit ? (
+                      <button
+                        type="button"
+                        onClick={() => onViewAtCommit(commit)}
+                        className="text-xs text-link hover:underline"
+                        title="Show the file as of this commit"
+                      >
+                        View
+                      </button>
+                    ) : null}
+                    {onOpenCommit ? (
+                      <button
+                        type="button"
+                        onClick={() => onOpenCommit(commit.commitId, organizationId)}
+                        className="inline-flex items-center gap-1 text-xs text-link hover:underline"
+                        title="View this commit's diff in Commits"
+                      >
+                        <GitCompare className="h-3.5 w-3.5" aria-hidden="true" />
+                        Diff
+                      </button>
+                    ) : null}
+                  </div>
                 </td>
               ) : null}
             </tr>

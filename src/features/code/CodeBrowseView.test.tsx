@@ -1,15 +1,16 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ComponentProps } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CodeBrowseView } from "./CodeBrowseView";
 
 let lastContainer: HTMLElement;
 
-function renderView() {
+function renderView(props: ComponentProps<typeof CodeBrowseView> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const result = render(
     <QueryClientProvider client={client}>
-      <CodeBrowseView />
+      <CodeBrowseView {...props} />
     </QueryClientProvider>,
   );
   lastContainer = result.container;
@@ -109,6 +110,50 @@ describe("CodeBrowseView", () => {
       expect(
         await screen.findByText("Add expression utilities", undefined, { timeout: 8000 }),
       ).toBeTruthy();
+    },
+    15000,
+  );
+
+  it(
+    "opens the commit in Commits from a History row's Diff button",
+    async () => {
+      const onOpenCommit = vi.fn();
+      renderView({ onOpenCommit });
+      await selectDemoRepository();
+      await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
+        timeout: 8000,
+      });
+      fireEvent.pointerDown(screen.getByRole("tab", { name: "History" }), { button: 0 });
+      await screen.findByText("Add expression utilities", undefined, { timeout: 8000 });
+
+      fireEvent.click(screen.getAllByRole("button", { name: /Diff/ })[0]);
+
+      expect(onOpenCommit).toHaveBeenCalledTimes(1);
+      expect(onOpenCommit.mock.calls[0][0]).toMatch(/^[0-9a-f]{7,40}$/);
+    },
+    15000,
+  );
+
+  it(
+    "toggles a file between highlighted and raw source",
+    async () => {
+      renderView();
+      await selectDemoRepository();
+      await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
+        timeout: 8000,
+      });
+      fireEvent.click(screen.getAllByText("README.md")[0]);
+      await waitFor(() => expect(lastContainer.querySelector("code.hljs")).not.toBeNull(), {
+        timeout: 8000,
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Raw" }));
+      expect(lastContainer.querySelector("code.hljs")).toBeNull();
+      expect(lastContainer.textContent).toContain("A Tauri + React dashboard for Azure DevOps.");
+
+      fireEvent.click(screen.getByRole("button", { name: "Highlighted" }));
+      expect(lastContainer.querySelector("code.hljs")).not.toBeNull();
+      expect(screen.getByRole("button", { name: /Download/ })).toBeTruthy();
     },
     15000,
   );

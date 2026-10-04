@@ -6,7 +6,17 @@ import {
   useRef,
   useState,
 } from "react";
-import { Check, ChevronDown, ChevronUp, Copy, Loader2, Search, WrapText, X } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Download,
+  Loader2,
+  Search,
+  WrapText,
+  X,
+} from "lucide-react";
 import { commandErrorMessage, type RepoFileVersion } from "@/lib/azdoCommands";
 import { ErrorState } from "@/components/StateDisplay";
 import { highlightCode, splitHighlightedLines } from "@/lib/highlight";
@@ -65,6 +75,8 @@ export function CodeFileView({
     [wrap, highlighted],
   );
   const [copied, setCopied] = useState(false);
+  // Raw shows the plain source (no syntax colors), reusing the plain-text line renderer.
+  const [raw, setRaw] = useState(false);
   const findInputRef = useRef<HTMLInputElement | null>(null);
   const currentMatchRef = useRef<HTMLElement | null>(null);
 
@@ -74,6 +86,7 @@ export function CodeFileView({
     setFind("");
     setCurrent(0);
     setCopied(false);
+    setRaw(false);
   }, [path]);
 
   // Ctrl/Cmd+F opens find-in-file from anywhere in the Files view while a
@@ -134,6 +147,18 @@ export function CodeFileView({
   function step(delta: number) {
     if (total === 0) return;
     setCurrent((value) => (value + delta + total) % total);
+  }
+
+  // Client-side download of the loaded text (no extra IPC); a truncated file
+  // downloads only what is shown.
+  function downloadFile() {
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = leafName(path);
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   async function copyContent() {
@@ -220,6 +245,7 @@ export function CodeFileView({
   }
 
   const searching = findOpen && find.length > 0;
+  const showPlainText = searching || raw;
   const wrapClass = wrap ? "whitespace-pre-wrap break-words" : "whitespace-pre";
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
@@ -250,6 +276,25 @@ export function CodeFileView({
             }`}
           >
             <WrapText className="h-3.5 w-3.5" aria-hidden="true" /> Wrap
+          </button>
+          <button
+            type="button"
+            onClick={() => setRaw((value) => !value)}
+            aria-pressed={raw}
+            title={raw ? "Show highlighted source" : "Show raw source"}
+            className={`flex items-center gap-1 rounded px-1 py-0.5 text-xs hover:text-foreground ${
+              raw ? "text-foreground" : "text-muted-foreground"
+            }`}
+          >
+            {raw ? "Highlighted" : "Raw"}
+          </button>
+          <button
+            type="button"
+            onClick={downloadFile}
+            title="Download file"
+            className="flex items-center gap-1 rounded px-1 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <Download className="h-3.5 w-3.5" aria-hidden="true" /> Download
           </button>
           <button
             type="button"
@@ -337,7 +382,7 @@ export function CodeFileView({
                 >
                   {index + 1}
                 </div>
-                {searching || !highlightedLines ? (
+                {showPlainText || !highlightedLines ? (
                   <div className={`min-w-0 flex-1 px-3 ${wrapClass}`}>
                     {renderLineWithMatches(line, lineMatches.get(index), current, currentMatchRef)}
                   </div>
@@ -361,7 +406,7 @@ export function CodeFileView({
               <div key={index}>{index + 1}</div>
             ))}
           </div>
-          {searching ? (
+          {showPlainText ? (
             <pre className="min-w-0 flex-1 overflow-x-auto px-3 py-1">
               <code className={wrapClass}>
                 {lines.map((line, index) => (

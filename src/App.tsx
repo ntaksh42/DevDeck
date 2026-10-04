@@ -404,6 +404,13 @@ function AppShell() {
     setView("pullRequestSearch");
   }
 
+  // Code > History rows pass a commit id upward; resolve it as a commit search
+  // so the existing Commits diff infrastructure shows that commit.
+  function openCommitSearch(query: string, organizationId?: string): void {
+    setCommitSearchRequest({ query, requestId: Date.now(), organizationId });
+    setView("commits");
+  }
+
   return (
     <div className="h-screen overflow-hidden bg-background text-foreground">
       <AppSidebar
@@ -460,6 +467,7 @@ function AppShell() {
           onOpenSettings={() => setView("settings")}
           onOpenPullRequest={openPullRequestSearch}
           onOpenView={setView}
+          onOpenCommit={openCommitSearch}
         />
       </main>
       <ToastHost />
