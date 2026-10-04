@@ -10,4 +10,5 @@ pub mod search;
 pub mod settings;
 pub mod snooze;
 pub mod sync;
+pub mod wiki;
 pub mod work_items;

@@ -17,7 +17,7 @@ export type View =
 
 export type NavSectionId = "pullRequests" | "workItems" | "code";
 
-export type PaletteSearchKind = "workItems" | "pullRequests" | "commits" | "code";
+export type PaletteSearchKind = "workItems" | "pullRequests" | "commits" | "code" | "wiki";
 
 export type ExternalSearchRequest = { query: string; requestId: number; organizationId?: string };
 

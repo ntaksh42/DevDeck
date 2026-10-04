@@ -30,6 +30,7 @@ import { applyTheme, loadThemePreference, THEME_CHANGED_EVENT, watchSystemTheme 
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { storedNumber, focusPrimaryGrid } from "@/lib/utils";
 import { HelpDialog } from "@/components/HelpDialog";
+import { WikiPreviewHost } from "@/features/wiki/WikiPreviewHost";
 import { CommandPalette } from "@/components/CommandPalette";
 import { ToastHost } from "@/components/ToastHost";
 import { useExperimentalFlag } from "@/features/settings/useExperimentalFlags";
@@ -471,6 +472,7 @@ function AppShell() {
         />
       </main>
       <ToastHost />
+      <WikiPreviewHost />
       {helpOpen && <HelpDialog onClose={() => closeHelp()} />}
       {commandPaletteOpen && (
         <CommandPalette

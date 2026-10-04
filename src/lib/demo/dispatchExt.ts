@@ -24,6 +24,7 @@ import {
   demoPipelineRunsFiltered,
   demoUpdatePipelineDefinition,
 } from "@/lib/demo/pipelines";
+import { demoGetWikiPage, demoSearchWiki } from "@/lib/demo/wiki";
 import {
   demoCommitActivity,
   demoCommitChanges,
@@ -221,6 +222,14 @@ export function dispatchExt(command: string, args: unknown): unknown {
     case "search_code": {
       const input = (args as { input?: { query?: string } } | undefined)?.input;
       return demoSearchCode(input?.query?.trim() ?? "");
+    }
+    case "search_wiki": {
+      const input = (args as { input?: { query?: string } } | undefined)?.input;
+      return demoSearchWiki(input?.query?.trim() ?? "");
+    }
+    case "get_wiki_page": {
+      const input = (args as { input?: { pagePath?: string } } | undefined)?.input;
+      return demoGetWikiPage(input?.pagePath ?? "/");
     }
     case "get_code_search_context": {
       const input = (args as { input?: { query?: string } } | undefined)?.input;

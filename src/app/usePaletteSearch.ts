@@ -3,10 +3,12 @@ import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-quer
 import {
   searchAll,
   searchCode,
+  searchWiki,
   submitPullRequestVote,
   type Organization,
   type PullRequestSummary,
 } from "@/lib/azdoCommands";
+import { openWikiPagePreview } from "@/features/wiki/wikiPreviewEvents";
 import { openExternalUrl } from "@/lib/openExternal";
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { loadRecentPaletteEntries } from "@/lib/recentItems";
@@ -54,17 +56,23 @@ export function usePaletteSearch(
   const paletteQueryLongEnough = /^\d+$/.test(paletteSearch.query)
     ? paletteSearch.query.length >= 1
     : paletteSearch.query.length >= 2;
-  // Code search is heavy and hits the API, so it only runs behind the explicit
-  // `code:`/`co:` prefix — never on a generic palette query.
+  // Code and wiki search hit the API, so they only run behind the explicit
+  // `code:`/`co:` and `wiki:` prefixes — never on a generic palette query.
   const paletteSearchEnabled =
     commandPaletteOpen &&
     organizations.length > 0 &&
     paletteSearch.kind !== "code" &&
+    paletteSearch.kind !== "wiki" &&
     paletteQueryLongEnough;
   const paletteCodeEnabled =
     commandPaletteOpen &&
     organizations.length > 0 &&
     paletteSearch.kind === "code" &&
+    paletteSearch.query.length >= 2;
+  const paletteWikiEnabled =
+    commandPaletteOpen &&
+    organizations.length > 0 &&
+    paletteSearch.kind === "wiki" &&
     paletteSearch.query.length >= 2;
 
   const searchAllQuery = useQuery({
@@ -90,6 +98,17 @@ export function usePaletteSearch(
     placeholderData: keepPreviousData,
     // Code Search is an optional extension; a failure is reported as a single
     // "unavailable" row instead of retrying.
+    retry: false,
+  });
+
+  const paletteWikiQuery = useQuery({
+    queryKey: ["paletteWiki", paletteCodeOrgId, paletteSearch.query],
+    queryFn: () => searchWiki({ organizationId: paletteCodeOrgId, query: paletteSearch.query }),
+    enabled: paletteWikiEnabled,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+    // Wiki search needs the optional Search extension; a failure is reported as
+    // a single "unavailable" row instead of retrying.
     retry: false,
   });
 
@@ -168,6 +187,35 @@ export function usePaletteSearch(
         });
       }
       return codeItems;
+    }
+
+    // Wiki is likewise its own opt-in search; a hit opens an in-app page preview
+    // (edits stay in the browser).
+    if (kind === "wiki") {
+      const wikiData = paletteWikiEnabled ? paletteWikiQuery.data : undefined;
+      const wikiItems: CommandPaletteSearchItem[] = [];
+      if (paletteWikiEnabled && paletteWikiQuery.isError) {
+        wikiItems.push({
+          id: "wiki:unavailable",
+          group: "Wiki",
+          label: "Wiki Search is unavailable",
+          detail: "The extension may be disabled or the token lacks permission.",
+          run: () => {},
+        });
+      }
+      for (const hit of wikiData?.results ?? []) {
+        wikiItems.push({
+          id: `wiki:${hit.projectId}:${hit.wikiId}:${hit.pagePath}`,
+          group: "Wiki",
+          label: hit.pagePath,
+          detail: `${hit.projectName} / ${hit.wikiName}`,
+          run: () => openWikiPagePreview({ organizationId: paletteCodeOrgId, hit }),
+          runAlt: () => {
+            void openExternalUrl(hit.webUrl);
+          },
+        });
+      }
+      return wikiItems;
     }
 
     const data = paletteSearchEnabled ? searchAllQuery.data : undefined;
@@ -307,6 +355,10 @@ export function usePaletteSearch(
     paletteCodeEnabled,
     paletteCodeQuery.data,
     paletteCodeQuery.isError,
+    paletteWikiEnabled,
+    paletteWikiQuery.data,
+    paletteWikiQuery.isError,
+    paletteCodeOrgId,
   ]);
 
   // The palette surfaces recently opened Work Items and PRs. With an empty query

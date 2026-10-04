@@ -24,6 +24,7 @@ mod settings;
 mod shared_cache;
 mod snooze;
 mod sync;
+mod wiki;
 mod work_items;
 
 use agent_notes::AgentNoteService;
@@ -44,6 +45,7 @@ use snooze::SnoozeService;
 use sync::SyncRunner;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+use wiki::WikiService;
 use work_items::WorkItemService;
 
 pub(crate) fn configure_show_window_hotkey(app: &AppHandle, hotkey: Option<&str>) -> Result<()> {
@@ -137,6 +139,7 @@ pub fn run() {
                 pipelines: PipelineService::new(db.clone(), SecretStore),
                 code_search: CodeSearchService::new(db.clone(), SecretStore),
                 code_browse: CodeBrowseService::new(db.clone(), SecretStore),
+                wiki: WikiService::new(db.clone(), SecretStore),
                 settings: SettingsService::new(db.clone()),
                 agent_notes: AgentNoteService::new(db.clone()),
                 snooze: SnoozeService::new(db.clone()),
@@ -240,6 +243,8 @@ pub fn run() {
             commands::commits::commit_activity,
             commands::code::search_code,
             commands::code::get_code_search_context,
+            commands::wiki::search_wiki,
+            commands::wiki::get_wiki_page,
             commands::code::list_repo_branches,
             commands::code::list_repo_branch_overview,
             commands::code::create_repo_branch,

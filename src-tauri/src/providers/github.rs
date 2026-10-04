@@ -51,6 +51,7 @@ use crate::prs::{
 };
 use crate::search::{SearchAllInput, SearchAllResult, SearchAllTotals};
 use crate::secrets::SecretStore;
+use crate::wiki::{GetWikiPageInput, SearchWikiInput, WikiPageContent, WikiSearchResults};
 use crate::work_items::{
     AddWorkItemCommentInput, AssignWorkItemsInput, BulkWorkItemResult, DeleteWorkItemCommentInput,
     GetWorkItemPreviewInput, ListMyWorkItemsInput, ListWorkItemProjectsInput,
@@ -431,6 +432,18 @@ impl Provider for GithubProvider {
     ) -> Result<CodeContextResult> {
         Err(AppError::NotSupported(
             "code search context preview is not available for GitHub".to_string(),
+        ))
+    }
+
+    async fn search_wiki(&self, _input: SearchWikiInput) -> Result<WikiSearchResults> {
+        Err(AppError::NotSupported(
+            "wiki search is not available for GitHub".to_string(),
+        ))
+    }
+
+    async fn get_wiki_page(&self, _input: GetWikiPageInput) -> Result<WikiPageContent> {
+        Err(AppError::NotSupported(
+            "wiki pages are not available for GitHub".to_string(),
         ))
     }
 

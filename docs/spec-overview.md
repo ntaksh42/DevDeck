@@ -119,6 +119,8 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
 - **コマンドパレット (`Ctrl+K`)**: コマンド実行 + 作業項目/アクティブ PR/コミット/コードの横断検索。
   接頭辞 `wi:` / `pr:` / `c:` で種別を限定。`code:`(または `co:`)はアクティブな接続 (取得前は先頭の接続) のコード検索を実行し、検索に失敗したときは「Code Search is unavailable」の 1 行を表示し、
   ファイルヒットを `Enter` でブラウザに開く(コード検索は重いため明示接頭辞時のみ実行)。
+  `wiki:` はアクティブな接続の Wiki ページ検索 (`search_wiki`、Search 拡張が必要) を実行し (失敗時は「Wiki Search is unavailable」の 1 行)、
+  ヒットを `Enter` でアプリ内プレビューダイアログ (`get_wiki_page`、本文を Markdown としてサニタイズ表示。Esc で閉じ、フォーカスは元に戻る) に開き、`Ctrl+Enter` でブラウザに開く。Wiki の編集はブラウザへジャンプする方針で、アプリ内編集はしない。GitHub 接続では未対応 (`NotSupported`)。
   横断検索は組織ごとに実行し、一部の組織が失敗しても成功した組織のヒットを返す(失敗はログのみで UI には通知しない)。
   通常の `Enter` でアプリ内、`Ctrl+Enter` でブラウザ。
 - **作業項目のフォロー** (issue #304): プレビューヘッダの星トグルで Follow/Unfollow

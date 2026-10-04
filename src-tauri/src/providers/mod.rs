@@ -59,6 +59,7 @@ use crate::prs::{
     ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestsResult,
     PullRequestSearchResult, ReviewPullRequestSummary, SearchPullRequestsInput,
 };
+use crate::wiki::{GetWikiPageInput, SearchWikiInput, WikiPageContent, WikiSearchResults};
 use crate::work_items::{
     AddWorkItemCommentInput, AssignWorkItemsInput, BulkWorkItemResult, DeleteWorkItemCommentInput,
     GetWorkItemPreviewInput, ListMyWorkItemsInput, ListWorkItemProjectsInput,
@@ -252,6 +253,8 @@ pub(crate) trait Provider: Send + Sync {
         &self,
         input: GetCodeContextInput,
     ) -> Result<CodeContextResult>;
+    async fn search_wiki(&self, input: SearchWikiInput) -> Result<WikiSearchResults>;
+    async fn get_wiki_page(&self, input: GetWikiPageInput) -> Result<WikiPageContent>;
     async fn list_repo_branches(&self, input: ListBranchesInput) -> Result<Vec<RepoBranch>>;
     async fn list_repo_branch_overview(
         &self,

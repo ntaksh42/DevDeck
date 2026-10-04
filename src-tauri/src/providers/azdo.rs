@@ -50,6 +50,9 @@ use crate::prs::{
     PullRequestSearchResult, PullRequestService, ReviewPullRequestSummary, SearchPullRequestsInput,
 };
 use crate::search::{self, SearchAllInput, SearchAllResult};
+use crate::wiki::{
+    GetWikiPageInput, SearchWikiInput, WikiPageContent, WikiSearchResults, WikiService,
+};
 use crate::work_items::{
     AddWorkItemCommentInput, AssignWorkItemsInput, BulkWorkItemResult, DeleteWorkItemCommentInput,
     GetWorkItemPreviewInput, ListMyWorkItemsInput, ListWorkItemProjectsInput,
@@ -69,6 +72,7 @@ pub(crate) struct AzdoProvider {
     commits: CommitService,
     code_search: CodeSearchService,
     code_browse: CodeBrowseService,
+    wiki: WikiService,
     pipelines: PipelineService,
     db: AppDatabase,
 }
@@ -82,6 +86,7 @@ impl AzdoProvider {
         commits: CommitService,
         code_search: CodeSearchService,
         code_browse: CodeBrowseService,
+        wiki: WikiService,
         pipelines: PipelineService,
         db: AppDatabase,
     ) -> Self {
@@ -92,6 +97,7 @@ impl AzdoProvider {
             commits,
             code_search,
             code_browse,
+            wiki,
             pipelines,
             db,
         }
@@ -401,6 +407,14 @@ impl Provider for AzdoProvider {
         input: GetCodeContextInput,
     ) -> Result<CodeContextResult> {
         self.code_search.get_context(input).await
+    }
+
+    async fn search_wiki(&self, input: SearchWikiInput) -> Result<WikiSearchResults> {
+        self.wiki.search(input).await
+    }
+
+    async fn get_wiki_page(&self, input: GetWikiPageInput) -> Result<WikiPageContent> {
+        self.wiki.get_page(input).await
     }
 
     async fn list_repo_branches(&self, input: ListBranchesInput) -> Result<Vec<RepoBranch>> {

@@ -36,18 +36,21 @@ export function invalidationScopesForSyncScope(scope: SyncScope = "all"): SyncSc
 }
 
 export function parsePaletteSearch(text: string): { kind: PaletteSearchKind | null; query: string } {
-  // `code`/`co` must precede `c` in the alternation so they win over commits.
-  const match = /^(wi|pr|code|co|c):\s*(.*)$/i.exec(text.trim());
+  // `code`/`co` must precede `c` (and `wiki` precede `wi`) in the alternation so
+  // the longer prefix wins.
+  const match = /^(wiki|wi|pr|code|co|c):\s*(.*)$/i.exec(text.trim());
   if (match) {
     const prefix = match[1].toLowerCase();
     const kind: PaletteSearchKind =
       prefix === "wi"
         ? "workItems"
-        : prefix === "pr"
-          ? "pullRequests"
-          : prefix === "code" || prefix === "co"
-            ? "code"
-            : "commits";
+        : prefix === "wiki"
+          ? "wiki"
+          : prefix === "pr"
+            ? "pullRequests"
+            : prefix === "code" || prefix === "co"
+              ? "code"
+              : "commits";
     return { kind, query: match[2].trim() };
   }
   return { kind: null, query: text.trim() };
