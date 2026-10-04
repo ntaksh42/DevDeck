@@ -34,7 +34,9 @@ function renderPanel() {
   );
 }
 
-beforeEach(() => getCommitContainingRefs.mockReset());
+beforeEach(() => {
+  getCommitContainingRefs.mockReset();
+});
 afterEach(cleanup);
 
 describe("CommitContainingRefsPanel", () => {

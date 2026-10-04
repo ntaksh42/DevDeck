@@ -1,5 +1,5 @@
-import { type KeyboardEvent as ReactKeyboardEvent, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { type KeyboardEvent as ReactKeyboardEvent, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { GitPullRequest, Loader2 } from "lucide-react";
 import {
   type BranchOverviewItem,
@@ -8,13 +8,14 @@ import {
   type Organization,
 } from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
+import { navigateToPullRequest } from "@/lib/crossLinks";
 import { formatRelativeDate } from "@/lib/utils";
 import { ErrorState } from "@/components/StateDisplay";
+import { CreatePullRequestDialog } from "./CreatePullRequestDialog";
 import {
   branchCompareUrl,
   formatDate,
   handleRowNavKey,
-  newPullRequestUrl,
   pullRequestUrl,
   type RepoOption,
 } from "./codeBrowseShared";
@@ -45,6 +46,8 @@ export function CodeBranchesView({
       }),
     staleTime: 60_000,
   });
+  const queryClient = useQueryClient();
+  const [creatingFrom, setCreatingFrom] = useState<BranchOverviewItem | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
@@ -91,10 +94,33 @@ export function CodeBranchesView({
               organization={organization}
               repo={repo}
               onBrowseBranch={onBrowseBranch}
+              onCreatePullRequest={setCreatingFrom}
             />
           ))}
         </tbody>
       </table>
+      {creatingFrom && defaultBranch ? (
+        <CreatePullRequestDialog
+          organizationId={organizationId}
+          repo={repo}
+          branches={branches.map((branch) => branch.name)}
+          initialSource={creatingFrom.name}
+          initialTarget={defaultBranch}
+          initialTitle={creatingFrom.lastComment ?? creatingFrom.name}
+          onClose={() => setCreatingFrom(null)}
+          onCreated={(pullRequest) => {
+            setCreatingFrom(null);
+            void queryClient.invalidateQueries({
+              queryKey: ["repoBranchOverview", organizationId, repo.repositoryId],
+            });
+            navigateToPullRequest({
+              organizationId,
+              repositoryId: repo.repositoryId,
+              pullRequestId: pullRequest.pullRequestId,
+            });
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -105,12 +131,14 @@ function BranchRow({
   organization,
   repo,
   onBrowseBranch,
+  onCreatePullRequest,
 }: {
   branch: BranchOverviewItem;
   defaultBranch: string | undefined;
   organization: Organization | undefined;
   repo: RepoOption;
   onBrowseBranch: (branch: string) => void;
+  onCreatePullRequest: (branch: BranchOverviewItem) => void;
 }) {
   const canCompare = !!defaultBranch && !branch.isDefault;
   const canOpenPr = canCompare && branch.ahead > 0 && branch.pullRequests.length === 0;
@@ -192,11 +220,9 @@ function BranchRow({
           {canOpenPr ? (
             <button
               type="button"
-              onClick={() =>
-                openExternalUrl(newPullRequestUrl(organization, repo, branch.name, defaultBranch))
-              }
+              onClick={() => onCreatePullRequest(branch)}
               className={LINK_BUTTON}
-              title={`Open a pull request into ${defaultBranch} in Azure DevOps`}
+              title={`Create a pull request into ${defaultBranch}`}
             >
               New PR
             </button>

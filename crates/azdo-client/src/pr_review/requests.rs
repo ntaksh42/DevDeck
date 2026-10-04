@@ -2,7 +2,7 @@ use serde_json::json;
 
 use crate::client::{AdoClient, BinaryResponse};
 use crate::error::Result;
-use crate::git::{GitCommitRef, GitVersionType, IdentityRefWithVote, ListResponse};
+use crate::git::{GitCommitRef, GitPullRequest, GitVersionType, IdentityRefWithVote, ListResponse};
 
 use super::types::{
     GitChangeEntry, GitItemContent, GitIteration, GitIterationChanges, GitPullRequestDetail,
@@ -20,6 +20,19 @@ impl AdoClient {
             "{project_id}/_apis/git/repositories/{repository_id}/pullrequests/{pull_request_id}"
         );
         self.get_json(&path, &[("api-version", "7.1-preview")])
+            .await
+    }
+
+    /// Creates a pull request from `body` (`sourceRefName`, `targetRefName`,
+    /// `title`, optional `description` / `isDraft`).
+    pub async fn create_pull_request(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        body: &serde_json::Value,
+    ) -> Result<GitPullRequest> {
+        let path = format!("{project_id}/_apis/git/repositories/{repository_id}/pullrequests");
+        self.post_json(&path, &[("api-version", "7.1-preview")], body)
             .await
     }
 

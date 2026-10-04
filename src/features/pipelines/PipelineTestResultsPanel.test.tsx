@@ -31,7 +31,9 @@ const failing: PipelineTestResults = {
   truncated: true,
 };
 
-beforeEach(() => listPipelineTestResults.mockReset());
+beforeEach(() => {
+  listPipelineTestResults.mockReset();
+});
 afterEach(cleanup);
 
 describe("PipelineTestResultsPanel", () => {

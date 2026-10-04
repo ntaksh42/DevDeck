@@ -188,6 +188,29 @@ pub struct PrLabel {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CreatePullRequestInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub repository_id: String,
+    /// Short (`feature/x`) or full (`refs/heads/feature/x`) branch name.
+    pub source_branch: String,
+    pub target_branch: String,
+    pub title: String,
+    pub description: Option<String>,
+    #[serde(default)]
+    pub is_draft: bool,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CreatedPullRequest {
+    pub pull_request_id: i64,
+    pub title: String,
+    pub web_url: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AddPullRequestLabelInput {
     #[serde(flatten)]
     pub pr: PrLocator,

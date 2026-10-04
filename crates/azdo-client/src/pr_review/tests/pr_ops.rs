@@ -491,3 +491,48 @@ async fn pull_request_detail_reads_labels() {
         .collect();
     assert_eq!(labels, [("bug", true), ("old", false)]);
 }
+
+#[tokio::test]
+async fn create_pull_request_posts_refs_title_and_draft() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(
+            "/project-1/_apis/git/repositories/repo-1/pullrequests",
+        ))
+        .and(query_param("api-version", "7.1-preview"))
+        .and(body_json(serde_json::json!({
+            "sourceRefName": "refs/heads/feature/x",
+            "targetRefName": "refs/heads/main",
+            "title": "Add x",
+            "description": "Details",
+            "isDraft": true
+        })))
+        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({
+            "pullRequestId": 77,
+            "title": "Add x",
+            "status": "active",
+            "creationDate": "2026-06-01T00:00:00Z",
+            "sourceRefName": "refs/heads/feature/x",
+            "targetRefName": "refs/heads/main"
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let pr = test_client(&server)
+        .await
+        .create_pull_request(
+            "project-1",
+            "repo-1",
+            &serde_json::json!({
+                "sourceRefName": "refs/heads/feature/x",
+                "targetRefName": "refs/heads/main",
+                "title": "Add x",
+                "description": "Details",
+                "isDraft": true
+            }),
+        )
+        .await
+        .unwrap();
+    assert_eq!(pr.pull_request_id, 77);
+}

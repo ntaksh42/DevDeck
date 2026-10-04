@@ -144,6 +144,14 @@ export function dispatchExt(command: string, args: unknown): unknown {
         demoPipelineRuns()[2];
       return { ...run, status: "cancelling" };
     }
+    case "create_pull_request": {
+      const input = (args as { input?: { title?: string } } | undefined)?.input;
+      return {
+        pullRequestId: 9001,
+        title: input?.title ?? "New pull request",
+        webUrl: "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/pullrequest/9001",
+      };
+    }
     case "add_pull_request_label": {
       const input = (args as { input?: { name?: string } } | undefined)?.input;
       return { id: `demo-label-${input?.name ?? "new"}`, name: input?.name ?? "" };

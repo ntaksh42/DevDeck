@@ -35,10 +35,11 @@ use crate::pipelines::{
     UpdatePipelineApprovalInput, UpdatePipelineDefinitionInput,
 };
 use crate::pr_review::{
-    AddPullRequestLabelInput, AddPullRequestReviewerInput, DeletePullRequestCommentInput,
-    EditPullRequestCommentInput, GetPullRequestFileDiffInput, PostPullRequestCommentInput,
-    PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator, PrReviewService, PrReviewer,
-    PrStatusResult, PrThread, PullRequestChanges, PullRequestReview, RemovePullRequestLabelInput,
+    AddPullRequestLabelInput, AddPullRequestReviewerInput, CreatePullRequestInput,
+    CreatedPullRequest, DeletePullRequestCommentInput, EditPullRequestCommentInput,
+    GetPullRequestFileDiffInput, PostPullRequestCommentInput, PrCommit, PrDetailsResult,
+    PrFileDiff, PrLabel, PrLocator, PrReviewService, PrReviewer, PrStatusResult, PrThread,
+    PullRequestChanges, PullRequestReview, RemovePullRequestLabelInput,
     RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
     SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
     SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
@@ -334,6 +335,13 @@ impl Provider for AzdoProvider {
         input: SetPullRequestReviewerRequiredInput,
     ) -> Result<()> {
         self.pr_review.set_reviewer_required(input).await
+    }
+
+    async fn create_pull_request(
+        &self,
+        input: CreatePullRequestInput,
+    ) -> Result<CreatedPullRequest> {
+        self.pr_review.create_pull_request(input).await
     }
 
     async fn add_pull_request_label(&self, input: AddPullRequestLabelInput) -> Result<PrLabel> {

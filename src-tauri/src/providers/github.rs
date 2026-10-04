@@ -36,13 +36,14 @@ use crate::pipelines::{
     UpdatePipelineDefinitionInput,
 };
 use crate::pr_review::{
-    AddPullRequestLabelInput, AddPullRequestReviewerInput, DeletePullRequestCommentInput,
-    EditPullRequestCommentInput, GetPullRequestFileDiffInput, PostPullRequestCommentInput,
-    PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator, PrReviewer, PrStatusResult,
-    PrThread, PullRequestChanges, PullRequestReview, RemovePullRequestLabelInput,
-    RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
-    SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
-    SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
+    AddPullRequestLabelInput, AddPullRequestReviewerInput, CreatePullRequestInput,
+    CreatedPullRequest, DeletePullRequestCommentInput, EditPullRequestCommentInput,
+    GetPullRequestFileDiffInput, PostPullRequestCommentInput, PrCommit, PrDetailsResult,
+    PrFileDiff, PrLabel, PrLocator, PrReviewer, PrStatusResult, PrThread, PullRequestChanges,
+    PullRequestReview, RemovePullRequestLabelInput, RemovePullRequestReviewerInput,
+    SearchPullRequestMentionsInput, SetPullRequestReviewerRequiredInput,
+    SetPullRequestThreadStatusInput, SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput,
+    UpdatePullRequestInput,
 };
 use crate::prs::{
     ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestsResult,
@@ -358,6 +359,15 @@ impl Provider for GithubProvider {
         input: SetPullRequestReviewerRequiredInput,
     ) -> Result<()> {
         github::pr_review::set_reviewer_required(&self.org, &self.secrets, input).await
+    }
+
+    async fn create_pull_request(
+        &self,
+        _input: CreatePullRequestInput,
+    ) -> Result<CreatedPullRequest> {
+        Err(AppError::NotSupported(
+            "creating pull requests is not available for GitHub yet".to_string(),
+        ))
     }
 
     async fn add_pull_request_label(&self, _input: AddPullRequestLabelInput) -> Result<PrLabel> {

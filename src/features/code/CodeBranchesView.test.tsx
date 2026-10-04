@@ -79,9 +79,9 @@ describe("CodeBranchesView", () => {
     expect(screen.getAllByText("Compare")).toHaveLength(2);
 
     fireEvent.click(screen.getByText("New PR"));
-    expect(openExternalUrl).toHaveBeenLastCalledWith(
-      "https://dev.azure.com/contoso/Platform/_git/web/pullrequestcreate?sourceRef=feature%2Fa&targetRef=main",
-    );
+    expect(screen.getByRole("dialog", { name: "Create pull request" })).toBeTruthy();
+    fireEvent.click(screen.getByText("Cancel"));
+    expect(screen.queryByRole("dialog")).toBeNull();
 
     fireEvent.click(screen.getByText("!9 Add B"));
     expect(openExternalUrl).toHaveBeenLastCalledWith(

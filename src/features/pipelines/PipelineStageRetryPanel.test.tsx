@@ -44,7 +44,9 @@ function renderPanel(nodes: TimelineNode[]) {
   );
 }
 
-beforeEach(() => retryPipelineStage.mockReset());
+beforeEach(() => {
+  retryPipelineStage.mockReset();
+});
 afterEach(cleanup);
 
 describe("PipelineStageRetryPanel", () => {
