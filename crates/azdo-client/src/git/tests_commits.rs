@@ -426,8 +426,11 @@ async fn list_tags_filters_tag_refs() {
         .and(path("/project-1/_apis/git/repositories/repo-1/refs"))
         .and(query_param("filter", "tags/"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "count": 1,
-            "value": [{ "name": "refs/tags/v1.0", "objectId": "abc" }]
+            "count": 2,
+            "value": [
+                { "name": "refs/tags/v1.0", "objectId": "abc" },
+                { "name": "refs/tags/v2.0", "objectId": "tagobj", "peeledObjectId": "commit2" }
+            ]
         })))
         .mount(&server)
         .await;
@@ -438,6 +441,9 @@ async fn list_tags_filters_tag_refs() {
         .await
         .unwrap();
     assert_eq!(tags[0].name, "refs/tags/v1.0");
+    // Only an annotated tag carries the commit its tag object points at.
+    assert_eq!(tags[0].peeled_object_id, None);
+    assert_eq!(tags[1].peeled_object_id.as_deref(), Some("commit2"));
 }
 
 #[tokio::test]

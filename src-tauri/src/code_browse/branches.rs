@@ -63,7 +63,7 @@ pub struct DeleteBranchInput {
 
 /// Checks `name` against Git's ref-name rules (the ones a user can plausibly
 /// break), so a bad name fails here with a clear message.
-fn validate_branch_name(name: &str) -> Result<&str> {
+pub(super) fn validate_branch_name(name: &str) -> Result<&str> {
     let name = name.trim();
     let invalid = name.is_empty()
         || name.starts_with('/')
@@ -91,7 +91,7 @@ fn validate_branch_name(name: &str) -> Result<&str> {
 }
 
 /// Turns a refused ref update into an error carrying the server's reason.
-fn require_ref_update(action: &str, result: GitRefUpdateResult) -> Result<()> {
+pub(super) fn require_ref_update(action: &str, result: GitRefUpdateResult) -> Result<()> {
     if result.success {
         return Ok(());
     }

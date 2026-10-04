@@ -33,6 +33,9 @@ pub struct GitRef {
     /// Fully-qualified ref name, e.g. `refs/heads/main`.
     pub name: String,
     pub object_id: Option<String>,
+    /// For an annotated tag, the commit the tag object points at (`object_id`
+    /// is then the tag object itself).
+    pub peeled_object_id: Option<String>,
 }
 
 /// One changed item in a revision comparison (`diffs/commits`).

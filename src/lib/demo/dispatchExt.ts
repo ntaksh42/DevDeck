@@ -24,6 +24,7 @@ import {
   demoPipelineRunsFiltered,
   demoUpdatePipelineDefinition,
 } from "@/lib/demo/pipelines";
+import { demoRepoTagOverview } from "@/lib/demo/repoTags";
 import { demoGetWikiPage, demoSearchWiki } from "@/lib/demo/wiki";
 import {
   demoCommitActivity,
@@ -239,6 +240,8 @@ export function dispatchExt(command: string, args: unknown): unknown {
       return demoRepoBranches();
     case "list_repo_branch_overview":
       return demoBranchOverview();
+    case "list_repo_tag_overview":
+      return demoRepoTagOverview();
     case "list_repo_tags":
       return demoRepoTags();
     case "compare_repo_revisions":

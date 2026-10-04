@@ -9,9 +9,9 @@ use async_trait::async_trait;
 use crate::app_state::run_blocking;
 use crate::code_browse::{
     BranchOverviewItem, CodeBrowseService, CompareRevisionsInput, CreateBranchInput,
-    DeleteBranchInput, GetFileInput, ListBranchesInput, ListHistoryInput, ListPathsInput,
-    ListTreeInput, RepoBranch, RepoCommitInfo, RepoFile, RepoPathList, RepoTreeItem,
-    RevisionComparison,
+    CreateTagInput, DeleteBranchInput, DeleteTagInput, GetFileInput, ListBranchesInput,
+    ListHistoryInput, ListPathsInput, ListTreeInput, RepoBranch, RepoCommitInfo, RepoFile,
+    RepoPathList, RepoTreeItem, RevisionComparison, TagOverviewItem,
 };
 use crate::code_search::{
     CodeContextResult, CodeSearchResults, CodeSearchService, GetCodeContextInput, SearchCodeInput,
@@ -438,6 +438,21 @@ impl Provider for AzdoProvider {
 
     async fn list_repo_tags(&self, input: ListBranchesInput) -> Result<Vec<String>> {
         self.code_browse.list_tags(input).await
+    }
+
+    async fn list_repo_tag_overview(
+        &self,
+        input: ListBranchesInput,
+    ) -> Result<Vec<TagOverviewItem>> {
+        self.code_browse.list_tag_overview(input).await
+    }
+
+    async fn create_repo_tag(&self, input: CreateTagInput) -> Result<()> {
+        self.code_browse.create_tag(input).await
+    }
+
+    async fn delete_repo_tag(&self, input: DeleteTagInput) -> Result<()> {
+        self.code_browse.delete_tag(input).await
     }
 
     async fn compare_repo_revisions(

@@ -15,6 +15,8 @@ import { ConfirmDialog, useConfirm } from "@/components/ConfirmDialog";
 import { ErrorState } from "@/components/StateDisplay";
 import { CreateBranchDialog } from "./CreateBranchDialog";
 import { CreatePullRequestDialog } from "./CreatePullRequestDialog";
+import { CreateTagDialog } from "./CreateTagDialog";
+import { CodeTagsSection, repoTagOverviewKey } from "./CodeTagsSection";
 import {
   branchCompareUrl,
   formatDate,
@@ -52,6 +54,7 @@ export function CodeBranchesView({
   const queryClient = useQueryClient();
   const [creatingFrom, setCreatingFrom] = useState<BranchOverviewItem | null>(null);
   const [branchingFrom, setBranchingFrom] = useState<BranchOverviewItem | null>(null);
+  const [taggingFrom, setTaggingFrom] = useState<BranchOverviewItem | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const { confirm, dialogProps } = useConfirm();
 
@@ -127,6 +130,7 @@ export function CodeBranchesView({
               onBrowseBranch={onBrowseBranch}
               onCreatePullRequest={setCreatingFrom}
               onCreateBranch={setBranchingFrom}
+              onCreateTag={setTaggingFrom}
               onDelete={(target) =>
                 confirm({
                   title: "Delete branch",
@@ -141,7 +145,23 @@ export function CodeBranchesView({
           ))}
         </tbody>
       </table>
+      <CodeTagsSection organizationId={organizationId} repo={repo} />
       {dialogProps ? <ConfirmDialog {...dialogProps} /> : null}
+      {taggingFrom?.lastCommitId ? (
+        <CreateTagDialog
+          organizationId={organizationId}
+          repo={repo}
+          sourceName={taggingFrom.name}
+          commitId={taggingFrom.lastCommitId}
+          onClose={() => setTaggingFrom(null)}
+          onCreated={() => {
+            setTaggingFrom(null);
+            void queryClient.invalidateQueries({
+              queryKey: repoTagOverviewKey(organizationId, repo.repositoryId),
+            });
+          }}
+        />
+      ) : null}
       {branchingFrom?.lastCommitId ? (
         <CreateBranchDialog
           organizationId={organizationId}
@@ -189,6 +209,7 @@ function BranchRow({
   onBrowseBranch,
   onCreatePullRequest,
   onCreateBranch,
+  onCreateTag,
   onDelete,
   busy,
 }: {
@@ -199,6 +220,7 @@ function BranchRow({
   onBrowseBranch: (branch: string) => void;
   onCreatePullRequest: (branch: BranchOverviewItem) => void;
   onCreateBranch: (branch: BranchOverviewItem) => void;
+  onCreateTag: (branch: BranchOverviewItem) => void;
   onDelete: (branch: BranchOverviewItem) => void;
   busy: boolean;
 }) {
@@ -287,6 +309,16 @@ function BranchRow({
               title={`Create a new branch from ${branch.name}`}
             >
               Branch
+            </button>
+          ) : null}
+          {branch.lastCommitId ? (
+            <button
+              type="button"
+              onClick={() => onCreateTag(branch)}
+              className={LINK_BUTTON}
+              title={`Create a tag at the tip of ${branch.name}`}
+            >
+              Tag
             </button>
           ) : null}
           {!branch.isDefault && branch.lastCommitId ? (

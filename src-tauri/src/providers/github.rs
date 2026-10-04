@@ -8,9 +8,10 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 
 use crate::code_browse::{
-    BranchOverviewItem, CompareRevisionsInput, CreateBranchInput, DeleteBranchInput, GetFileInput,
-    ListBranchesInput, ListHistoryInput, ListPathsInput, ListTreeInput, RepoBranch, RepoCommitInfo,
-    RepoFile, RepoPathList, RepoTreeItem, RevisionComparison,
+    BranchOverviewItem, CompareRevisionsInput, CreateBranchInput, CreateTagInput,
+    DeleteBranchInput, DeleteTagInput, GetFileInput, ListBranchesInput, ListHistoryInput,
+    ListPathsInput, ListTreeInput, RepoBranch, RepoCommitInfo, RepoFile, RepoPathList,
+    RepoTreeItem, RevisionComparison, TagOverviewItem,
 };
 use crate::code_search::{
     CodeContextResult, CodeSearchResults, GetCodeContextInput, SearchCodeInput,
@@ -475,6 +476,27 @@ impl Provider for GithubProvider {
     }
 
     async fn list_repo_tags(&self, _input: ListBranchesInput) -> Result<Vec<String>> {
+        Err(AppError::NotSupported(
+            "code browsing is not available for GitHub yet".to_string(),
+        ))
+    }
+
+    async fn list_repo_tag_overview(
+        &self,
+        _input: ListBranchesInput,
+    ) -> Result<Vec<TagOverviewItem>> {
+        Err(AppError::NotSupported(
+            "code browsing is not available for GitHub yet".to_string(),
+        ))
+    }
+
+    async fn create_repo_tag(&self, _input: CreateTagInput) -> Result<()> {
+        Err(AppError::NotSupported(
+            "code browsing is not available for GitHub yet".to_string(),
+        ))
+    }
+
+    async fn delete_repo_tag(&self, _input: DeleteTagInput) -> Result<()> {
         Err(AppError::NotSupported(
             "code browsing is not available for GitHub yet".to_string(),
         ))

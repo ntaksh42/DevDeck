@@ -6,9 +6,15 @@ import type { BranchOverviewItem, Organization } from "@/lib/azdoCommands";
 const listRepoBranchOverview = vi.fn();
 const deleteRepoBranch = vi.fn();
 const createRepoBranch = vi.fn();
+const listRepoTagOverview = vi.fn();
+const createRepoTag = vi.fn();
+const deleteRepoTag = vi.fn();
 vi.mock("@/lib/azdoCommands", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/azdoCommands")>()),
   listRepoBranchOverview: (...args: unknown[]) => listRepoBranchOverview(...args),
+  listRepoTagOverview: (...args: unknown[]) => listRepoTagOverview(...args),
+  createRepoTag: (...args: unknown[]) => createRepoTag(...args),
+  deleteRepoTag: (...args: unknown[]) => deleteRepoTag(...args),
   deleteRepoBranch: (...args: unknown[]) => deleteRepoBranch(...args),
   createRepoBranch: (...args: unknown[]) => createRepoBranch(...args),
 }));
@@ -60,6 +66,9 @@ beforeEach(() => {
   deleteRepoBranch.mockReset();
   createRepoBranch.mockReset();
   listRepoBranchOverview.mockReset();
+  listRepoTagOverview.mockReset().mockResolvedValue([]);
+  createRepoTag.mockReset();
+  deleteRepoTag.mockReset();
   openExternalUrl.mockReset();
 });
 afterEach(cleanup);
@@ -159,6 +168,59 @@ describe("CodeBranchesView", () => {
         repository: "r1",
         name: "feature/y",
         sourceCommitId: "m1",
+      }),
+    );
+  });
+
+  it("creates a tag at a row's tip commit and refreshes the tag list", async () => {
+    createRepoTag.mockResolvedValue(undefined);
+    listRepoBranchOverview.mockResolvedValue([
+      branch({ name: "main", isDefault: true, lastCommitId: "m1" }),
+    ]);
+    renderView();
+    await screen.findByText("main");
+    expect(await screen.findByText("Tags (0)")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Tag" }));
+    fireEvent.change(screen.getByLabelText("New tag name"), { target: { value: "v2.0.0" } });
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Create tag" })).getByText("Create"));
+
+    await vi.waitFor(() =>
+      expect(createRepoTag).toHaveBeenCalledWith({
+        organizationId: "contoso",
+        project: "p1",
+        repository: "r1",
+        name: "v2.0.0",
+        commitId: "m1",
+      }),
+    );
+    await vi.waitFor(() => expect(listRepoTagOverview).toHaveBeenCalledTimes(2));
+  });
+
+  it("lists tags with their commit and deletes one only after confirmation", async () => {
+    deleteRepoTag.mockResolvedValue(undefined);
+    listRepoBranchOverview.mockResolvedValue([
+      branch({ name: "main", isDefault: true, lastCommitId: "m1" }),
+    ]);
+    listRepoTagOverview.mockResolvedValue([
+      { name: "v1.0.0", commitId: "abcdef1234567890", objectId: "tagobj1" },
+    ]);
+    renderView();
+
+    expect(await screen.findByText("v1.0.0")).toBeTruthy();
+    expect(screen.getByText("abcdef12")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete tag" }));
+    expect(deleteRepoTag).not.toHaveBeenCalled();
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete" }));
+
+    await vi.waitFor(() =>
+      expect(deleteRepoTag).toHaveBeenCalledWith({
+        organizationId: "contoso",
+        project: "p1",
+        repository: "r1",
+        name: "v1.0.0",
+        objectId: "tagobj1",
       }),
     );
   });

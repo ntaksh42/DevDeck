@@ -1,9 +1,11 @@
 mod branches;
 mod compare;
+mod tags;
 mod util;
 
 pub use branches::{BranchOverviewItem, CreateBranchInput, DeleteBranchInput};
 pub use compare::{CompareRevisionsInput, RevisionComparison};
+pub use tags::{CreateTagInput, DeleteTagInput, TagOverviewItem};
 
 use azdo_client::{CommitSearchCriteria, GitCommitRef};
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;

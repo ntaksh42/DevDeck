@@ -128,6 +128,47 @@ export async function deleteRepoBranch(input: {
   await invokeCommand("delete_repo_branch", { input });
 }
 
+const tagOverviewItemSchema = z.object({
+  name: z.string(),
+  /** The tagged commit (the peeled commit for an annotated tag). */
+  commitId: z.string().nullable(),
+  /** What the tag ref points at; required to delete it. */
+  objectId: z.string().nullable(),
+});
+export type TagOverviewItem = z.infer<typeof tagOverviewItemSchema>;
+
+// Lists a repository's tags with the commit each one points at.
+export async function listRepoTagOverview(input: {
+  organizationId?: string;
+  project: string;
+  repository: string;
+}): Promise<TagOverviewItem[]> {
+  const result = await invokeCommand("list_repo_tag_overview", { input });
+  return z.array(tagOverviewItemSchema).parse(result);
+}
+
+// Creates a lightweight tag (a short name such as "v1.2.0") at commitId.
+export async function createRepoTag(input: {
+  organizationId?: string;
+  project: string;
+  repository: string;
+  name: string;
+  commitId: string;
+}): Promise<void> {
+  await invokeCommand("create_repo_tag", { input });
+}
+
+// Deletes a tag, refused by the server if it moved off objectId meanwhile.
+export async function deleteRepoTag(input: {
+  organizationId?: string;
+  project: string;
+  repository: string;
+  name: string;
+  objectId: string;
+}): Promise<void> {
+  await invokeCommand("delete_repo_tag", { input });
+}
+
 // Lists a repository's tag names.
 export async function listRepoTags(input: {
   organizationId?: string;
