@@ -22,6 +22,7 @@ import { PrOverflowMenu } from "./PrOverflowMenu";
 import { VOTE_BADGE_CLASSES, voteTone } from "./voteVisual";
 import { usePrReviewActions } from "./usePrReviewActions";
 import { NativeSelect } from "@/components/SearchBar";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 function usePrMentionSearch(organizationId: string) {
   return useCallback(
@@ -78,6 +79,7 @@ export function ReviewTab({
     startEditingDetails,
     saveDetails,
     runPrAction,
+    confirmDialogProps,
   } = usePrReviewActions(pr);
 
   const mentionSearch = usePrMentionSearch(pr.organizationId);
@@ -135,6 +137,7 @@ export function ReviewTab({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {confirmDialogProps ? <ConfirmDialog {...confirmDialogProps} /> : null}
       {/* Vote + primary merge action in one row; secondary actions (publish,
           auto-complete, branch / work-item toggles, abandon) live in the ⋯ menu
           so the row stays compact, matching the reference layout. */}

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PrThreadCard } from "./PrThreadCard";
 import type { PrThread } from "@/lib/azdoCommands";
@@ -224,5 +224,63 @@ describe("PrThreadCard avatars", () => {
       />,
     );
     expect(screen.getByText("AL")).toBeTruthy();
+  });
+});
+
+describe("PrThreadCard comment deletion", () => {
+  afterEach(cleanup);
+
+  function renderDeletable(onDeleteComment: (id: number) => Promise<void>) {
+    render(
+      <PrThreadCard
+        thread={makeThread({
+          comments: [
+            {
+              id: 10,
+              parentCommentId: null,
+              content: "Looks good",
+              author: "Me",
+              publishedDate: "2026-06-24T00:00:00Z",
+              isSystem: false,
+              isMine: true,
+            },
+          ],
+        })}
+        busy={false}
+        onReply={async () => {}}
+        onToggleStatus={() => {}}
+        onEditComment={async () => {}}
+        onDeleteComment={onDeleteComment}
+      />,
+    );
+  }
+
+  it("asks in an in-app dialog, focusing Cancel, and deletes only after confirming", () => {
+    const nativeConfirm = vi.spyOn(window, "confirm");
+    const onDelete = vi.fn(async () => {});
+    renderDeletable(onDelete);
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(nativeConfirm).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("alertdialog", { name: "Delete comment" });
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel" }));
+    expect(onDelete).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    expect(onDelete).toHaveBeenCalledWith(10);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    nativeConfirm.mockRestore();
+  });
+
+  it("does not delete when the dialog is cancelled", () => {
+    const onDelete = vi.fn(async () => {});
+    renderDeletable(onDelete);
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
   });
 });

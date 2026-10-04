@@ -13,6 +13,7 @@ import {
   type PullRequestAction,
   type ReviewPullRequestSummary,
 } from "@/lib/azdoCommands";
+import { useConfirm } from "@/components/ConfirmDialog";
 import { recordUsage } from "@/lib/usageStats";
 import { useExperimentalFlags } from "@/features/settings/useExperimentalFlags";
 
@@ -110,18 +111,25 @@ export function usePrReviewActions(pr: ReviewPullRequestSummary) {
     });
   }
 
+  const { confirm, dialogProps: confirmDialogProps } = useConfirm();
+
   function runPrAction(action: PullRequestAction, confirmMessage: string) {
-    if (!window.confirm(confirmMessage)) return;
-    updateMutation.mutate({
-      ...prLocator(pr),
-      action,
-      ...(action === "complete" || action === "enableAutoComplete"
-        ? {
-            mergeStrategy,
-            deleteSourceBranch,
-            ...(action === "complete" ? { transitionWorkItems } : {}),
-          }
-        : {}),
+    confirm({
+      title: "Confirm",
+      message: confirmMessage,
+      destructive: action === "abandon",
+      onConfirm: () =>
+        updateMutation.mutate({
+          ...prLocator(pr),
+          action,
+          ...(action === "complete" || action === "enableAutoComplete"
+            ? {
+                mergeStrategy,
+                deleteSourceBranch,
+                ...(action === "complete" ? { transitionWorkItems } : {}),
+              }
+            : {}),
+        }),
     });
   }
 
@@ -149,5 +157,6 @@ export function usePrReviewActions(pr: ReviewPullRequestSummary) {
     startEditingDetails,
     saveDetails,
     runPrAction,
+    confirmDialogProps,
   };
 }

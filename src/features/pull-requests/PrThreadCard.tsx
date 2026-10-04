@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { type MentionCandidate, type PrThread } from "@/lib/azdoCommands";
 import { focusPrimaryPreview, formatDate, formatRelativeDate } from "@/lib/utils";
+import { ConfirmDialog, useConfirm } from "@/components/ConfirmDialog";
 import { MarkdownView } from "@/lib/markdown";
 import { CommentComposer } from "./CommentComposer";
 
@@ -245,6 +246,7 @@ export function PrThreadCard({
   const [editingId, setEditingId] = useState<number | null>(null);
   // Resolved threads start folded to one line so open discussions stand out.
   const [collapsed, setCollapsed] = useState(thread.isResolved);
+  const { confirm, dialogProps } = useConfirm();
   const resolved = thread.isResolved;
   const visibleComments = thread.comments.filter((comment) => !comment.isSystem);
   const firstComment = visibleComments[0];
@@ -283,11 +285,15 @@ export function PrThreadCard({
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => {
-                  if (window.confirm("Delete this comment?")) {
-                    void onDeleteComment(comment.id);
-                  }
-                }}
+                onClick={() =>
+                  confirm({
+                    title: "Delete comment",
+                    message: "Delete this comment?",
+                    confirmLabel: "Delete",
+                    destructive: true,
+                    onConfirm: () => void onDeleteComment(comment.id),
+                  })
+                }
                 className="rounded px-1 py-px text-[11px] text-muted-foreground hover:bg-secondary hover:text-destructive disabled:opacity-50"
               >
                 Delete
@@ -439,6 +445,7 @@ export function PrThreadCard({
           </div>
         </>
       )}
+      {dialogProps ? <ConfirmDialog {...dialogProps} /> : null}
     </div>
   );
 }

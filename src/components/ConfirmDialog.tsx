@@ -1,4 +1,35 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+
+type ConfirmRequest = {
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  destructive?: boolean;
+  onConfirm: () => void;
+};
+
+/**
+ * Drives a ConfirmDialog from an event handler. Call `confirm(request)` to open
+ * it and render `<ConfirmDialog {...dialogProps} />` when `dialogProps` is
+ * non-null; confirming runs `request.onConfirm`, and either button closes it.
+ */
+export function useConfirm() {
+  const [request, setRequest] = useState<ConfirmRequest | null>(null);
+  const dialogProps = request
+    ? {
+        title: request.title,
+        message: request.message,
+        confirmLabel: request.confirmLabel,
+        destructive: request.destructive,
+        onConfirm: () => {
+          setRequest(null);
+          request.onConfirm();
+        },
+        onCancel: () => setRequest(null),
+      }
+    : null;
+  return { confirm: setRequest, dialogProps };
+}
 
 /**
  * In-app confirmation modal for destructive actions, replacing window.confirm so

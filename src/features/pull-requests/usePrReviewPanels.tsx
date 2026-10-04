@@ -19,6 +19,7 @@ import { ReviewTab } from "./PrReviewTabContents";
 import { CommitsTab } from "./PrCommitsTab";
 import { ResultTab } from "./PrSecondaryTabs";
 import { LINKED_WORK_ITEMS_PANEL_ID, LinkedWorkItemsPanel } from "./LinkedWorkItemsPanel";
+import { ConfirmDialog, useConfirm } from "@/components/ConfirmDialog";
 
 // The Files tab pulls in the `diff` library, so it is code-split to keep that
 // weight out of the startup bundle.
@@ -103,6 +104,7 @@ export function usePrReviewPanels({
     onError: (error) => setReviewerError(commandErrorMessage(error)),
   });
   const reviewerActionsBusy = reviewerRequiredMutation.isPending || removeReviewerMutation.isPending;
+  const { confirm: confirmRemoval, dialogProps: removalDialogProps } = useConfirm();
 
   // Esc / ← step back to the grid from anywhere in the preview that is not a
   // text field (composer Esc is handled locally and stops propagation first).
@@ -161,9 +163,15 @@ export function usePrReviewPanels({
           }}
           onRemoveReviewer={(reviewer) => {
             if (!selectedPr || !reviewer.id) return;
-            if (window.confirm(`Remove ${reviewer.displayName} as a reviewer?`)) {
-              removeReviewerMutation.mutate({ ...prLocator(selectedPr), reviewerId: reviewer.id });
-            }
+            const reviewerId = reviewer.id;
+            confirmRemoval({
+              title: "Remove reviewer",
+              message: `Remove ${reviewer.displayName} as a reviewer?`,
+              confirmLabel: "Remove",
+              destructive: true,
+              onConfirm: () =>
+                removeReviewerMutation.mutate({ ...prLocator(selectedPr), reviewerId }),
+            });
           }}
           compact={compactHeader}
         />
@@ -180,6 +188,7 @@ export function usePrReviewPanels({
         <div className="flex min-h-0 flex-1 flex-col overflow-auto" style={{ zoom }}>
           {body}
         </div>
+        {removalDialogProps ? <ConfirmDialog {...removalDialogProps} /> : null}
       </aside>
     );
   }
