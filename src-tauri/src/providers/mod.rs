@@ -14,6 +14,8 @@ mod github;
 pub(crate) use azdo::AzdoProvider;
 pub(crate) use github::GithubProvider;
 
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use serde::Serialize;
 
@@ -28,8 +30,9 @@ use crate::code_search::{
 use crate::commits::{
     CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitContainingRefs, CommitFileDiff,
     CommitPullRequest, CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput,
-    GetCommitContainingRefsInput, GetCommitFileDiffInput, GetCommitPullRequestsInput,
-    ListCommitRepositoriesInput, SearchCommitsInput,
+    GetCommitContainingRefsInput, GetCommitFileDiffInput, GetCommitPullRequestsBatchInput,
+    GetCommitPullRequestsInput, ListCommitRepositoriesInput, ListCommitWorkItemsInput,
+    SearchCommitsInput,
 };
 use crate::error::Result;
 use crate::pipelines::{
@@ -177,10 +180,15 @@ pub(crate) trait Provider: Send + Sync {
         &self,
         input: GetCommitPullRequestsInput,
     ) -> Result<Vec<CommitPullRequest>>;
+    async fn get_commit_pull_requests_batch(
+        &self,
+        input: GetCommitPullRequestsBatchInput,
+    ) -> Result<HashMap<String, Vec<CommitPullRequest>>>;
     async fn get_commit_containing_refs(
         &self,
         input: GetCommitContainingRefsInput,
     ) -> Result<CommitContainingRefs>;
+    async fn list_commit_work_items(&self, input: ListCommitWorkItemsInput) -> Result<Vec<i64>>;
 
     // --- Pull request review ---
     async fn get_pull_request_review(&self, input: PrLocator) -> Result<PullRequestReview>;

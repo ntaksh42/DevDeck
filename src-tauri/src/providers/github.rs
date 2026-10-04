@@ -3,6 +3,8 @@
 //! return `AppError::NotSupported`; `capabilities()` advertises what works so
 //! the UI hides the rest.
 
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 
 use crate::code_browse::{
@@ -16,8 +18,9 @@ use crate::code_search::{
 use crate::commits::{
     CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitContainingRefs, CommitFileDiff,
     CommitPullRequest, CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput,
-    GetCommitContainingRefsInput, GetCommitFileDiffInput, GetCommitPullRequestsInput,
-    ListCommitRepositoriesInput, SearchCommitsInput,
+    GetCommitContainingRefsInput, GetCommitFileDiffInput, GetCommitPullRequestsBatchInput,
+    GetCommitPullRequestsInput, ListCommitRepositoriesInput, ListCommitWorkItemsInput,
+    SearchCommitsInput,
 };
 use crate::db::Organization;
 use crate::error::{AppError, Result};
@@ -276,6 +279,15 @@ impl Provider for GithubProvider {
         github::commits::get_commit_pull_requests(&self.org, &self.secrets, input).await
     }
 
+    async fn get_commit_pull_requests_batch(
+        &self,
+        _input: GetCommitPullRequestsBatchInput,
+    ) -> Result<HashMap<String, Vec<CommitPullRequest>>> {
+        Err(AppError::NotSupported(
+            "batched related pull requests are not available for GitHub yet".to_string(),
+        ))
+    }
+
     async fn get_commit_containing_refs(
         &self,
         _input: GetCommitContainingRefsInput,
@@ -283,6 +295,11 @@ impl Provider for GithubProvider {
         Err(AppError::NotSupported(
             "containing branches/tags are not available for GitHub yet".to_string(),
         ))
+    }
+
+    async fn list_commit_work_items(&self, _input: ListCommitWorkItemsInput) -> Result<Vec<i64>> {
+        // GitHub has no work items; AB# mentions are still picked up client-side.
+        Ok(Vec::new())
     }
 
     async fn get_pull_request_review(&self, input: PrLocator) -> Result<PullRequestReview> {

@@ -14,6 +14,7 @@ import { usePreviewZoom } from "@/lib/usePreviewZoom";
 import { PreviewZoomControls } from "@/components/PreviewZoomControls";
 import { PreviewBand } from "@/components/PreviewBand";
 import { CommitContainingRefsPanel } from "./CommitContainingRefsPanel";
+import { CommitLinkedWorkItemsPanel } from "./CommitLinkedWorkItemsPanel";
 import { CommitFilesPanel } from "./CommitFilesPanel";
 import { PR_STATUS_LABELS } from "./commitSearchConstants";
 import { commitPrQueryKey, prStatusBadgeClass } from "./commitSearchUtils";
@@ -250,6 +251,7 @@ export function CommitPreviewPanel({
             </div>
             <CommitContainingRefsPanel commit={commit} />
             <CommitRelatedPrsPanel commit={commit} onOpenPullRequest={onOpenPullRequest} />
+            <CommitLinkedWorkItemsPanel commit={commit} />
             <CommitFilesPanel
               key={`${commit.organizationId}:${commit.repositoryId}:${commit.commitId}`}
               organizationId={commit.organizationId}

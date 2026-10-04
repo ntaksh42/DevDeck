@@ -173,6 +173,28 @@ export async function getCommitContainingRefs(input: {
   return commitContainingRefsSchema.parse(result);
 }
 
+// The pull requests containing each of several commits, keyed by commit id
+// (commits in no PR map to an empty list). One request per repository.
+export async function getCommitPullRequestsBatch(input: {
+  organizationId?: string;
+  repositoryId: string;
+  commitIds: string[];
+}): Promise<Record<string, CommitPullRequest[]>> {
+  const result = await invokeCommand("get_commit_pull_requests_batch", { input });
+  return z.record(z.string(), commitPullRequestsSchema).parse(result);
+}
+
+// The ids of the work items linked to a commit.
+export async function listCommitWorkItems(input: {
+  organizationId?: string;
+  projectId: string;
+  repositoryId: string;
+  commitId: string;
+}): Promise<number[]> {
+  const result = await invokeCommand("list_commit_work_items", { input });
+  return z.array(z.number()).parse(result);
+}
+
 export async function searchCommits(
   input: SearchCommitsInput,
 ): Promise<CommitSearchResult> {

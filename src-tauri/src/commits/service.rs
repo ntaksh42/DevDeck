@@ -1,4 +1,4 @@
-use azdo_client::CommitSearchCriteria;
+use azdo_client::{CommitSearchCriteria, GitPullRequest};
 use chrono::{DateTime, Local, Utc};
 
 use crate::auth::client_for_organization;
@@ -14,8 +14,9 @@ use super::helpers::{
 use super::{
     CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitChangedFile, CommitFileDiff,
     CommitPullRequest, CommitRepositoryOption, CommitSearchResult, CommitSummary,
-    GetCommitChangesInput, GetCommitFileDiffInput, GetCommitPullRequestsInput,
-    ListCommitRepositoriesInput, SearchCommitsInput,
+    GetCommitChangesInput, GetCommitFileDiffInput, GetCommitPullRequestsBatchInput,
+    GetCommitPullRequestsInput, ListCommitRepositoriesInput, ListCommitWorkItemsInput,
+    SearchCommitsInput,
 };
 
 /// How long a commit's related-PR lookup stays cached before being refreshed.
@@ -410,44 +411,7 @@ impl CommitService {
             .list_commit_pull_requests(&input.repository_id, &input.commit_id)
             .await?;
 
-        let me = organization.authenticated_user_id.as_deref();
-        let cached: Vec<CachedCommitPr> = prs
-            .into_iter()
-            .filter_map(|pr| {
-                let repo = pr.repository.as_ref()?;
-                let project_name = repo
-                    .project
-                    .as_ref()
-                    .map(|p| p.name.as_str())
-                    .unwrap_or(repo.name.as_str());
-                let web_url = format!(
-                    "{}/{}/_git/{}/pullrequest/{}",
-                    organization.base_url.trim_end_matches('/'),
-                    encode_path_segment(project_name),
-                    encode_path_segment(&repo.name),
-                    pr.pull_request_id
-                );
-                let my_vote = me
-                    .and_then(|me| {
-                        pr.reviewers
-                            .as_deref()
-                            .unwrap_or(&[])
-                            .iter()
-                            .find(|r| r.id.as_deref() == Some(me))
-                            .map(|r| r.vote)
-                    })
-                    .unwrap_or(0);
-                Some(CachedCommitPr {
-                    pull_request_id: pr.pull_request_id,
-                    pr_repository_id: repo.id.clone(),
-                    title: pr.title,
-                    status: pr.status,
-                    my_vote,
-                    my_vote_label: vote_label(my_vote).to_string(),
-                    web_url: Some(web_url),
-                })
-            })
-            .collect();
+        let cached = to_cached_commit_prs(&organization, prs);
 
         self.db.replace_commit_prs(
             &organization.id,
@@ -462,9 +426,128 @@ impl CommitService {
             .collect())
     }
 
+    /// The related PRs of many commits at once, so the grid can fill its PR
+    /// column for the visible window. Fresh cache hits are reused; the rest are
+    /// fetched in one Pull Request Query call and cached like single lookups.
+    pub async fn get_commit_pull_requests_batch(
+        &self,
+        input: GetCommitPullRequestsBatchInput,
+    ) -> Result<std::collections::HashMap<String, Vec<CommitPullRequest>>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let fresh_after =
+            (Utc::now() - chrono::Duration::minutes(COMMIT_PR_CACHE_TTL_MINUTES)).to_rfc3339();
+
+        let mut result = std::collections::HashMap::new();
+        let mut missing: Vec<&str> = Vec::new();
+        for commit_id in &input.commit_ids {
+            match self.db.get_cached_commit_prs(
+                &organization.id,
+                &input.repository_id,
+                commit_id,
+                &fresh_after,
+            )? {
+                Some(cached) => {
+                    result.insert(
+                        commit_id.clone(),
+                        cached
+                            .into_iter()
+                            .map(cached_commit_pr_to_summary)
+                            .collect(),
+                    );
+                }
+                None => missing.push(commit_id),
+            }
+        }
+        if missing.is_empty() {
+            return Ok(result);
+        }
+
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let mut by_commit = client
+            .list_pull_requests_for_commits(&input.repository_id, &missing)
+            .await?;
+        for commit_id in missing {
+            let cached = to_cached_commit_prs(
+                &organization,
+                by_commit.remove(commit_id).unwrap_or_default(),
+            );
+            self.db.replace_commit_prs(
+                &organization.id,
+                &input.repository_id,
+                commit_id,
+                &cached,
+            )?;
+            result.insert(
+                commit_id.to_string(),
+                cached
+                    .into_iter()
+                    .map(cached_commit_pr_to_summary)
+                    .collect(),
+            );
+        }
+        Ok(result)
+    }
+
+    /// The ids of the work items linked to a commit.
+    pub async fn list_commit_work_items(
+        &self,
+        input: ListCommitWorkItemsInput,
+    ) -> Result<Vec<i64>> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        Ok(client
+            .list_commit_work_item_ids(&input.project_id, &input.repository_id, &input.commit_id)
+            .await?)
+    }
+
     pub(super) fn resolve_organization(&self, id: Option<&str>) -> Result<Organization> {
         self.db.resolve_organization(id)
     }
+}
+
+/// Maps Azure DevOps pull requests to the cached related-PR rows (browser URL,
+/// the signed-in user's vote).
+fn to_cached_commit_prs(
+    organization: &Organization,
+    prs: Vec<GitPullRequest>,
+) -> Vec<CachedCommitPr> {
+    let me = organization.authenticated_user_id.as_deref();
+    prs.into_iter()
+        .filter_map(|pr| {
+            let repo = pr.repository.as_ref()?;
+            let project_name = repo
+                .project
+                .as_ref()
+                .map(|p| p.name.as_str())
+                .unwrap_or(repo.name.as_str());
+            let web_url = format!(
+                "{}/{}/_git/{}/pullrequest/{}",
+                organization.base_url.trim_end_matches('/'),
+                encode_path_segment(project_name),
+                encode_path_segment(&repo.name),
+                pr.pull_request_id
+            );
+            let my_vote = me
+                .and_then(|me| {
+                    pr.reviewers
+                        .as_deref()
+                        .unwrap_or(&[])
+                        .iter()
+                        .find(|r| r.id.as_deref() == Some(me))
+                        .map(|r| r.vote)
+                })
+                .unwrap_or(0);
+            Some(CachedCommitPr {
+                pull_request_id: pr.pull_request_id,
+                pr_repository_id: repo.id.clone(),
+                title: pr.title,
+                status: pr.status,
+                my_vote,
+                my_vote_label: vote_label(my_vote).to_string(),
+                web_url: Some(web_url),
+            })
+        })
+        .collect()
 }
 
 fn cached_commit_pr_to_summary(pr: CachedCommitPr) -> CommitPullRequest {

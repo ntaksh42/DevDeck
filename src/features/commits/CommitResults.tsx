@@ -53,6 +53,7 @@ import {
 import { CommitSortHeaderButton } from "./CommitGridRow";
 import { MemoCommitRow } from "./MemoCommitRow";
 import { CommitPreviewPanel } from "./CommitPreviewPanel";
+import { useCommitPrPrefetch } from "./useCommitPrPrefetch";
 
 export function CommitResults({
   activeExternalFilterCount = 0,
@@ -304,6 +305,7 @@ export function CommitResults({
     firstVirtualRow + visibleRowCount + COMMIT_GRID_OVERSCAN * 2,
   );
   const virtualRows = sorted.slice(firstVirtualRow, lastVirtualRow);
+  useCommitPrPrefetch(virtualRows);
   const virtualTopPadding = firstVirtualRow * COMMIT_GRID_ROW_HEIGHT;
   const virtualBottomPadding =
     Math.max(0, sorted.length - lastVirtualRow) * COMMIT_GRID_ROW_HEIGHT;

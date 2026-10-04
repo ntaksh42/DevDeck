@@ -182,6 +182,16 @@ export function dispatchExt(command: string, args: unknown): unknown {
       const input = (args as { input?: { commitId?: string } } | undefined)?.input;
       return demoCommitPullRequests(input?.commitId);
     }
+    case "get_commit_pull_requests_batch": {
+      const input = (args as { input?: { commitIds?: string[] } } | undefined)?.input;
+      return Object.fromEntries(
+        (input?.commitIds ?? []).map((id) => [id, demoCommitPullRequests(id)]),
+      );
+    }
+    case "list_commit_work_items": {
+      const input = (args as { input?: { commitId?: string } } | undefined)?.input;
+      return input?.commitId?.startsWith("abcdef") ? [1234] : [];
+    }
     case "get_commit_containing_refs":
       return { branches: ["main", "release/1.x"], tags: ["v1.1.0"], checked: 5, total: 5 };
     case "cancel_operation":

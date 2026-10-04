@@ -4,8 +4,9 @@ use crate::app_state::AppState;
 use crate::commits::{
     CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitContainingRefs, CommitFileDiff,
     CommitPullRequest, CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput,
-    GetCommitContainingRefsInput, GetCommitFileDiffInput, GetCommitPullRequestsInput,
-    ListCommitRepositoriesInput, SearchCommitsInput,
+    GetCommitContainingRefsInput, GetCommitFileDiffInput, GetCommitPullRequestsBatchInput,
+    GetCommitPullRequestsInput, ListCommitRepositoriesInput, ListCommitWorkItemsInput,
+    SearchCommitsInput,
 };
 use crate::error::Result;
 
@@ -81,5 +82,27 @@ pub async fn get_commit_containing_refs(
         .provider()
         .await?
         .get_commit_containing_refs(input)
+        .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn list_commit_work_items(
+    input: ListCommitWorkItemsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<i64>> {
+    state.provider().await?.list_commit_work_items(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn get_commit_pull_requests_batch(
+    input: GetCommitPullRequestsBatchInput,
+    state: State<'_, AppState>,
+) -> Result<std::collections::HashMap<String, Vec<CommitPullRequest>>> {
+    state
+        .provider()
+        .await?
+        .get_commit_pull_requests_batch(input)
         .await
 }

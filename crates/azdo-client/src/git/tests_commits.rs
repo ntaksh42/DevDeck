@@ -478,3 +478,92 @@ async fn compare_revisions_sends_both_versions_and_parses_changes() {
     assert_eq!(diffs.changes.len(), 3);
     assert_eq!(diffs.changes[1].original_path.as_deref(), Some("/old.ts"));
 }
+
+#[tokio::test]
+async fn list_commit_work_item_ids_reads_linked_items_from_commitsbatch() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(
+            "/project-1/_apis/git/repositories/repo-1/commitsbatch",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "count": 1,
+            "value": [{
+                "commitId": "abc",
+                "workItems": [
+                    { "id": "42", "url": "x" },
+                    { "id": "7", "url": "y" },
+                    { "id": "42", "url": "x" },
+                    { "id": "not-a-number" }
+                ]
+            }]
+        })))
+        .mount(&server)
+        .await;
+
+    let ids = test_client(&server)
+        .await
+        .list_commit_work_item_ids("project-1", "repo-1", "abc")
+        .await
+        .unwrap();
+    assert_eq!(ids, vec![7, 42]);
+}
+
+#[tokio::test]
+async fn list_commit_work_item_ids_is_empty_when_the_commit_has_no_links() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(
+            "/project-1/_apis/git/repositories/repo-1/commitsbatch",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "count": 1,
+            "value": [{ "commitId": "abc" }]
+        })))
+        .mount(&server)
+        .await;
+
+    let ids = test_client(&server)
+        .await
+        .list_commit_work_item_ids("project-1", "repo-1", "abc")
+        .await
+        .unwrap();
+    assert!(ids.is_empty());
+}
+
+#[tokio::test]
+async fn list_pull_requests_for_commits_queries_every_commit_in_one_request() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/_apis/git/repositories/repo-1/pullrequestquery"))
+        .and(wiremock::matchers::body_string_contains(
+            "\"items\":[\"c1\",\"c2\",\"c3\"]",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "results": [{
+                "c1": [{
+                    "pullRequestId": 1, "title": "One", "status": "active",
+                    "creationDate": "2026-06-09T00:00:00Z",
+                    "sourceRefName": "refs/heads/a", "targetRefName": "refs/heads/main"
+                }],
+                "c2": [],
+                "c3": [{
+                    "pullRequestId": 3, "title": "Three", "status": "completed",
+                    "creationDate": "2026-06-09T00:00:00Z",
+                    "sourceRefName": "refs/heads/b", "targetRefName": "refs/heads/main"
+                }]
+            }]
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let by_commit = test_client(&server)
+        .await
+        .list_pull_requests_for_commits("repo-1", &["c1", "c2", "c3"])
+        .await
+        .unwrap();
+    assert_eq!(by_commit["c1"][0].pull_request_id, 1);
+    assert!(by_commit["c2"].is_empty());
+    assert_eq!(by_commit["c3"][0].pull_request_id, 3);
+}

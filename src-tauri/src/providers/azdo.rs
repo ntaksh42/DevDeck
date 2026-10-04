@@ -2,6 +2,8 @@
 //! to the Azure DevOps REST API. Holds cheap service clones (path + secret
 //! handles) so swapping the active connection is inexpensive.
 
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 
 use crate::app_state::run_blocking;
@@ -17,7 +19,8 @@ use crate::commits::{
     CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitContainingRefs, CommitFileDiff,
     CommitPullRequest, CommitRepositoryOption, CommitSearchResult, CommitService,
     GetCommitChangesInput, GetCommitContainingRefsInput, GetCommitFileDiffInput,
-    GetCommitPullRequestsInput, ListCommitRepositoriesInput, SearchCommitsInput,
+    GetCommitPullRequestsBatchInput, GetCommitPullRequestsInput, ListCommitRepositoriesInput,
+    ListCommitWorkItemsInput, SearchCommitsInput,
 };
 use crate::db::AppDatabase;
 use crate::error::Result;
@@ -258,11 +261,22 @@ impl Provider for AzdoProvider {
         self.commits.get_commit_pull_requests(input).await
     }
 
+    async fn get_commit_pull_requests_batch(
+        &self,
+        input: GetCommitPullRequestsBatchInput,
+    ) -> Result<HashMap<String, Vec<CommitPullRequest>>> {
+        self.commits.get_commit_pull_requests_batch(input).await
+    }
+
     async fn get_commit_containing_refs(
         &self,
         input: GetCommitContainingRefsInput,
     ) -> Result<CommitContainingRefs> {
         self.commits.get_commit_containing_refs(input).await
+    }
+
+    async fn list_commit_work_items(&self, input: ListCommitWorkItemsInput) -> Result<Vec<i64>> {
+        self.commits.list_commit_work_items(input).await
     }
 
     async fn get_pull_request_review(&self, input: PrLocator) -> Result<PullRequestReview> {

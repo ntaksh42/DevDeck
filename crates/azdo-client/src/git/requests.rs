@@ -40,6 +40,29 @@ struct PullRequestQueryInput<'a> {
     query_type: &'a str,
 }
 
+/// Body of `commitsbatch` asking for one commit together with its linked work
+/// items.
+#[derive(Debug, Serialize)]
+struct CommitsBatchQuery<'a> {
+    ids: Vec<&'a str>,
+    #[serde(rename = "includeWorkItems")]
+    include_work_items: bool,
+    #[serde(rename = "$top")]
+    top: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct CommitWithWorkItems {
+    #[serde(rename = "workItems", default)]
+    work_items: Vec<WorkItemResourceRef>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkItemResourceRef {
+    /// Work item ids arrive as strings in resource refs.
+    id: Option<String>,
+}
+
 /// Response from the Pull Request Query API. Each entry in `results` maps the
 /// queried commit id to the pull requests that contain it.
 #[derive(Debug, Deserialize)]
@@ -448,22 +471,64 @@ impl AdoClient {
         repository_id: &str,
         commit_id: &str,
     ) -> Result<Vec<GitPullRequest>> {
+        let mut by_commit = self
+            .list_pull_requests_for_commits(repository_id, &[commit_id])
+            .await?;
+        Ok(by_commit.remove(commit_id).unwrap_or_default())
+    }
+
+    /// The pull requests containing each of `commit_ids`, in one Pull Request
+    /// Query call. Commits in no PR are absent from the map.
+    pub async fn list_pull_requests_for_commits(
+        &self,
+        repository_id: &str,
+        commit_ids: &[&str],
+    ) -> Result<HashMap<String, Vec<GitPullRequest>>> {
         let path = format!("_apis/git/repositories/{repository_id}/pullrequestquery");
         let body = PullRequestQuery {
             queries: vec![PullRequestQueryInput {
-                items: vec![commit_id],
+                items: commit_ids.to_vec(),
                 query_type: "commit",
             }],
         };
         let response: PullRequestQueryResponse = self
             .post_json_read(&path, &[("api-version", "7.1-preview")], &body)
             .await?;
-        let prs = response
-            .results
+        let mut merged: HashMap<String, Vec<GitPullRequest>> = HashMap::new();
+        for result in response.results {
+            for (commit_id, prs) in result {
+                merged.entry(commit_id).or_default().extend(prs);
+            }
+        }
+        Ok(merged)
+    }
+
+    /// The ids of the work items linked to a commit (Commits - Get Commits Batch
+    /// with `includeWorkItems`).
+    pub async fn list_commit_work_item_ids(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        commit_id: &str,
+    ) -> Result<Vec<i64>> {
+        let path = format!("{project_id}/_apis/git/repositories/{repository_id}/commitsbatch");
+        let body = CommitsBatchQuery {
+            ids: vec![commit_id],
+            include_work_items: true,
+            top: 1,
+        };
+        let response: ListResponse<CommitWithWorkItems> = self
+            .post_json_read(&path, &[("api-version", "7.1-preview")], &body)
+            .await?;
+        let mut ids: Vec<i64> = response
+            .value
             .into_iter()
-            .flat_map(|mut result| result.remove(commit_id).unwrap_or_default())
+            .flat_map(|commit| commit.work_items)
+            .filter_map(|reference| reference.id?.parse().ok())
             .collect();
-        Ok(prs)
+        ids.sort_unstable();
+        ids.dedup();
+        Ok(ids)
     }
 
     pub async fn get_commit(

@@ -74,6 +74,23 @@ pub struct CommitSummary {
     pub committer_date: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListCommitWorkItemsInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub repository_id: String,
+    pub commit_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetCommitPullRequestsBatchInput {
+    pub organization_id: Option<String>,
+    pub repository_id: String,
+    pub commit_ids: Vec<String>,
+}
+
 /// Result of a commit search. `total` is the match count before the display
 /// cap; `truncated` is true when more matches existed than were returned, so
 /// the UI can show "Showing N of total" instead of silently dropping rows.
