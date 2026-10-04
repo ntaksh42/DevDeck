@@ -26,6 +26,7 @@ import {
   type CommentScrollRequest,
   type ViewMode,
 } from "./PrFilesTabTypes";
+import { writeStoredJson } from "@/lib/storage";
 
 // How long (ms) to ignore scroll-driven selection updates after a
 // programmatic scroll (tree click, j/k, n/p, ]/[), so the resulting scroll
@@ -246,7 +247,7 @@ export function PrFilesTab({
         const key = fileViewedKey(path);
         if (next.has(key)) next.delete(key);
         else next.add(key);
-        window.localStorage.setItem(viewedStorageKey(pr), JSON.stringify([...next]));
+        writeStoredJson(viewedStorageKey(pr), [...next]);
         return next;
       });
     },
@@ -262,7 +263,7 @@ export function PrFilesTab({
         if (viewed) next.add(key);
         else next.delete(key);
       }
-      window.localStorage.setItem(viewedStorageKey(pr), JSON.stringify([...next]));
+      writeStoredJson(viewedStorageKey(pr), [...next]);
       return next;
     });
   }

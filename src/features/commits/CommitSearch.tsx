@@ -31,6 +31,7 @@ import {
   uniqueCommitProjects,
 } from "./commitSearchUtils";
 import { CommitViewToggle } from "./CommitViewToggle";
+import { writeStoredString } from "@/lib/storage";
 
 export function CommitSearch({
   externalSearch,
@@ -152,7 +153,7 @@ export function CommitSearch({
   }, [author, branch, fromDate, projectIds, repositoryIds, selectedOrganizationId, toDate]);
 
   useEffect(() => {
-    window.localStorage.setItem(COMMIT_VIEW_MODE_STORAGE_KEY, viewMode);
+    writeStoredString(COMMIT_VIEW_MODE_STORAGE_KEY, viewMode);
   }, [viewMode]);
 
   // Drop repository selections that no longer belong to the selected projects.

@@ -3,6 +3,7 @@
 // person watches is a personal working list rather than shared configuration.
 
 import { clamp } from "@/lib/utils";
+import { readStoredString, writeStoredJson } from "@/lib/storage";
 
 const ANALYZE_GROUPS_STORAGE_KEY = "azdodeck:analyze:groups";
 const ANALYZE_GROUPS_EXPORT_SCHEMA = "azdodeck.analyzeGroups";
@@ -129,7 +130,7 @@ export function normalizeAnalyzeGroup(value: unknown): AnalyzeGroup | null {
 
 export function loadAnalyzeGroups(): AnalyzeGroup[] {
   if (typeof window === "undefined") return [];
-  const raw = window.localStorage.getItem(ANALYZE_GROUPS_STORAGE_KEY);
+  const raw = readStoredString(ANALYZE_GROUPS_STORAGE_KEY);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
@@ -145,10 +146,7 @@ export function loadAnalyzeGroups(): AnalyzeGroup[] {
 
 export function saveAnalyzeGroups(groups: AnalyzeGroup[]): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(
-    ANALYZE_GROUPS_STORAGE_KEY,
-    JSON.stringify(groups.slice(0, MAX_ANALYZE_GROUPS)),
-  );
+  writeStoredJson(ANALYZE_GROUPS_STORAGE_KEY, groups.slice(0, MAX_ANALYZE_GROUPS));
 }
 
 export function createAnalyzeGroupId(): string {

@@ -42,6 +42,19 @@ export function readStoredJson<T>(
   }
 }
 
+/**
+ * Reads a raw string from localStorage. Returns null when the key is absent or
+ * storage is unavailable (e.g. SSR, a privacy-locked or data-cleared WebView).
+ */
+export function readStoredString(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
 /** Serializes `value` as JSON into localStorage, ignoring storage failures. */
 export function writeStoredJson(key: string, value: unknown): void {
   if (typeof window === "undefined") return;

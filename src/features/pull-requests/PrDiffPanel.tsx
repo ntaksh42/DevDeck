@@ -16,6 +16,7 @@ import {
   type DiffCommentDraft,
   type ViewMode,
 } from "./PrFilesTabTypes";
+import { writeStoredString } from "@/lib/storage";
 
 export function PrDiffPanel({
   pr,
@@ -125,7 +126,7 @@ export function PrDiffPanel({
             onClick={() => {
               setShowWholeFile((value) => {
                 const next = !value;
-                window.localStorage.setItem(WHOLE_FILE_STORAGE_KEY, String(next));
+                writeStoredString(WHOLE_FILE_STORAGE_KEY, String(next));
                 return next;
               });
             }}
@@ -151,7 +152,7 @@ export function PrDiffPanel({
                 aria-selected={viewMode === mode}
                 onClick={() => {
                   setViewMode(mode);
-                  window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
+                  writeStoredString(VIEW_MODE_STORAGE_KEY, mode);
                 }}
                 className={`rounded px-2 py-px text-[11px] font-medium ${
                   viewMode === mode

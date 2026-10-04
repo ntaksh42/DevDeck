@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readStoredJson, storageKey, writeStoredJson, writeStoredString } from "./storage";
+import {
+  readStoredJson,
+  readStoredString,
+  storageKey,
+  writeStoredJson,
+  writeStoredString,
+} from "./storage";
 
 const KEY = "test:storage";
 
@@ -88,5 +94,20 @@ describe("writeStoredString", () => {
       throw new DOMException("exceeded the quota", "QuotaExceededError");
     });
     expect(() => writeStoredString(KEY, "hello")).not.toThrow();
+  });
+});
+
+describe("readStoredString", () => {
+  it("returns the stored text, or null when absent", () => {
+    expect(readStoredString(KEY)).toBeNull();
+    window.localStorage.setItem(KEY, "hello");
+    expect(readStoredString(KEY)).toBe("hello");
+  });
+
+  it("returns null instead of throwing when storage access throws", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new DOMException("denied", "SecurityError");
+    });
+    expect(readStoredString(KEY)).toBeNull();
   });
 });

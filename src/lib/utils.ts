@@ -1,4 +1,5 @@
 import type { KeyboardEvent } from "react";
+import { readStoredString } from "@/lib/storage";
 
 export type SortDirection = "asc" | "desc";
 
@@ -7,7 +8,7 @@ export function clamp(value: number, min: number, max: number): number {
 }
 
 export function storedNumber(key: string, fallback: number, min: number, max: number): number {
-  const value = window.localStorage.getItem(key);
+  const value = readStoredString(key);
   if (!value) return fallback;
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
@@ -20,7 +21,7 @@ export function storedNumbers(
   mins: number[],
   maxs: number[],
 ): number[] {
-  const value = window.localStorage.getItem(key);
+  const value = readStoredString(key);
   if (!value) return [...fallback];
   try {
     const parsed = JSON.parse(value);

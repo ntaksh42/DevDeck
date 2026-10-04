@@ -77,3 +77,19 @@ describe("handleSearchInputEscape", () => {
     expect(input.blur).not.toHaveBeenCalled();
   });
 });
+
+describe("stored numbers with unavailable storage", () => {
+  it("fall back instead of throwing when localStorage access throws", async () => {
+    const { vi } = await import("vitest");
+    const { storedNumber, storedNumbers } = await import("./utils");
+    const spy = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new DOMException("denied", "SecurityError");
+    });
+    try {
+      expect(storedNumber("k", 7, 0, 10)).toBe(7);
+      expect(storedNumbers("k", [1, 2], [0, 0], [5, 5])).toEqual([1, 2]);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});

@@ -1,4 +1,5 @@
 import { isTauriRuntime } from "@/lib/runtime";
+import { readStoredString, writeStoredJson } from "@/lib/storage";
 
 const PIPELINE_SUBSCRIPTIONS_STORAGE_KEY = "azdodeck:pipelineSubscriptions";
 
@@ -80,7 +81,7 @@ function normalizeSubscription(value: unknown): PipelineSubscription | null {
 
 export function loadPipelineSubscriptions(): PipelineSubscription[] {
   if (typeof window === "undefined") return [];
-  const value = window.localStorage.getItem(PIPELINE_SUBSCRIPTIONS_STORAGE_KEY);
+  const value = readStoredString(PIPELINE_SUBSCRIPTIONS_STORAGE_KEY);
   if (value === null) {
     // ブラウザ/デモ起動で一度も保存が無いときだけ、初期 Watch 済みデモを返す。
     // 本番 (Tauri) には初期値を入れない。空配列を保存済みの場合は尊重する。
@@ -108,10 +109,7 @@ export function loadPipelineSubscriptions(): PipelineSubscription[] {
 
 export function savePipelineSubscriptions(subscriptions: PipelineSubscription[]): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(
-    PIPELINE_SUBSCRIPTIONS_STORAGE_KEY,
-    JSON.stringify(subscriptions.slice(0, MAX_SUBSCRIPTIONS)),
-  );
+  writeStoredJson(PIPELINE_SUBSCRIPTIONS_STORAGE_KEY, subscriptions.slice(0, MAX_SUBSCRIPTIONS));
   window.dispatchEvent(new Event(PIPELINE_SUBSCRIPTIONS_CHANGED_EVENT));
 }
 

@@ -1,4 +1,5 @@
 import { isTauriRuntime } from "@/lib/runtime";
+import { readStoredString, writeStoredJson } from "@/lib/storage";
 
 const QUICK_PIPELINES_STORAGE_KEY = "azdodeck:quickPipelines";
 
@@ -74,7 +75,7 @@ function normalizeQuickPipeline(value: unknown): QuickPipeline | null {
 
 export function loadQuickPipelines(): QuickPipeline[] {
   if (typeof window === "undefined") return [];
-  const value = window.localStorage.getItem(QUICK_PIPELINES_STORAGE_KEY);
+  const value = readStoredString(QUICK_PIPELINES_STORAGE_KEY);
   if (value === null) {
     return isTauriRuntime() ? [] : DEMO_QUICK_PIPELINES.map((entry) => ({ ...entry }));
   }
@@ -99,10 +100,7 @@ export function loadQuickPipelines(): QuickPipeline[] {
 
 export function saveQuickPipelines(pipelines: QuickPipeline[]): void {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(
-    QUICK_PIPELINES_STORAGE_KEY,
-    JSON.stringify(pipelines.slice(0, MAX_QUICK_PIPELINES)),
-  );
+  writeStoredJson(QUICK_PIPELINES_STORAGE_KEY, pipelines.slice(0, MAX_QUICK_PIPELINES));
 }
 
 export function addQuickPipeline(

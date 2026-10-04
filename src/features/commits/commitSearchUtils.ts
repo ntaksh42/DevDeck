@@ -13,6 +13,7 @@ import {
   COMMIT_VIEW_MODE_STORAGE_KEY,
   COMMIT_VISIBLE_COLUMNS_STORAGE_KEY,
 } from "./commitSearchConstants";
+import { readStoredString, writeStoredJson } from "@/lib/storage";
 
 export function prStatusBadgeClass(status: string): string {
   switch (status.toLowerCase()) {
@@ -79,11 +80,11 @@ export function loadCommitSearchViewState(organizationId?: string): CommitSearch
 }
 
 export function storeCommitSearchViewState(state: CommitSearchViewState) {
-  window.localStorage.setItem(COMMIT_SEARCH_VIEW_STORAGE_KEY, JSON.stringify(state));
+  writeStoredJson(COMMIT_SEARCH_VIEW_STORAGE_KEY, state);
 }
 
 export function loadCommitViewMode(): CommitViewMode {
-  return window.localStorage.getItem(COMMIT_VIEW_MODE_STORAGE_KEY) === "activity"
+  return readStoredString(COMMIT_VIEW_MODE_STORAGE_KEY) === "activity"
     ? "activity"
     : "results";
 }

@@ -1,4 +1,5 @@
 import type { PrChangedFile, ReviewPullRequestSummary } from "@/lib/azdoCommands";
+import { readStoredString } from "@/lib/storage";
 
 export const MAX_RENDERED_DIFF_LINES = 2000;
 // Lines of unchanged context kept around each change before folding the rest.
@@ -27,7 +28,7 @@ export type ViewMode = "unified" | "split";
 export const VIEW_MODE_STORAGE_KEY = "azdodeck:view:prDiffViewMode";
 
 export function loadViewMode(): ViewMode {
-  return window.localStorage.getItem(VIEW_MODE_STORAGE_KEY) === "unified"
+  return readStoredString(VIEW_MODE_STORAGE_KEY) === "unified"
     ? "unified"
     : "split";
 }
@@ -35,7 +36,7 @@ export function loadViewMode(): ViewMode {
 export const WHOLE_FILE_STORAGE_KEY = "azdodeck:view:prDiffWholeFile";
 
 export function loadWholeFile(): boolean {
-  return window.localStorage.getItem(WHOLE_FILE_STORAGE_KEY) === "true";
+  return readStoredString(WHOLE_FILE_STORAGE_KEY) === "true";
 }
 
 export function viewedStorageKey(pr: ReviewPullRequestSummary): string {
