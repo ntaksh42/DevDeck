@@ -1,12 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { BranchOverviewItem, Organization } from "@/lib/azdoCommands";
 
 const listRepoBranchOverview = vi.fn();
+const deleteRepoBranch = vi.fn();
+const createRepoBranch = vi.fn();
 vi.mock("@/lib/azdoCommands", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/azdoCommands")>()),
   listRepoBranchOverview: (...args: unknown[]) => listRepoBranchOverview(...args),
+  deleteRepoBranch: (...args: unknown[]) => deleteRepoBranch(...args),
+  createRepoBranch: (...args: unknown[]) => createRepoBranch(...args),
 }));
 const openExternalUrl = vi.fn();
 vi.mock("@/lib/openExternal", () => ({
@@ -53,6 +57,8 @@ function renderView(onBrowseBranch = vi.fn()) {
 }
 
 beforeEach(() => {
+  deleteRepoBranch.mockReset();
+  createRepoBranch.mockReset();
   listRepoBranchOverview.mockReset();
   openExternalUrl.mockReset();
 });
@@ -106,5 +112,54 @@ describe("CodeBranchesView", () => {
     expect(document.activeElement).toBe(second);
     fireEvent.keyDown(second, { key: "k" });
     expect(document.activeElement).toBe(first);
+  });
+
+  it("deletes a non-default branch only after confirmation, guarding on its tip", async () => {
+    deleteRepoBranch.mockResolvedValue(undefined);
+    listRepoBranchOverview.mockResolvedValue([
+      branch({ name: "main", isDefault: true, lastCommitId: "m1" }),
+      branch({ name: "topic", lastCommitId: "t1" }),
+    ]);
+    renderView();
+    await screen.findByText("topic");
+
+    // The default branch cannot be deleted from here.
+    expect(screen.getAllByText("Delete")).toHaveLength(1);
+    fireEvent.click(screen.getByText("Delete"));
+    expect(deleteRepoBranch).not.toHaveBeenCalled();
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete" }));
+
+    await vi.waitFor(() =>
+      expect(deleteRepoBranch).toHaveBeenCalledWith({
+        organizationId: "contoso",
+        project: "p1",
+        repository: "r1",
+        name: "topic",
+        commitId: "t1",
+      }),
+    );
+  });
+
+  it("creates a branch from a row's tip commit", async () => {
+    createRepoBranch.mockResolvedValue(undefined);
+    listRepoBranchOverview.mockResolvedValue([
+      branch({ name: "main", isDefault: true, lastCommitId: "m1" }),
+    ]);
+    renderView();
+    await screen.findByText("main");
+
+    fireEvent.click(screen.getByRole("button", { name: "Branch" }));
+    fireEvent.change(screen.getByLabelText("New branch name"), { target: { value: "feature/y" } });
+    fireEvent.click(screen.getByText("Create"));
+
+    await vi.waitFor(() =>
+      expect(createRepoBranch).toHaveBeenCalledWith({
+        organizationId: "contoso",
+        project: "p1",
+        repository: "r1",
+        name: "feature/y",
+        sourceCommitId: "m1",
+      }),
+    );
   });
 });

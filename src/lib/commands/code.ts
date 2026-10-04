@@ -106,6 +106,28 @@ export async function listRepoBranchOverview(input: {
   return z.array(branchOverviewItemSchema).parse(result);
 }
 
+// Creates a branch at sourceCommitId (a short name such as "feature/x").
+export async function createRepoBranch(input: {
+  organizationId?: string;
+  project: string;
+  repository: string;
+  name: string;
+  sourceCommitId: string;
+}): Promise<void> {
+  await invokeCommand("create_repo_branch", { input });
+}
+
+// Deletes a branch, refused by the server if it moved off commitId meanwhile.
+export async function deleteRepoBranch(input: {
+  organizationId?: string;
+  project: string;
+  repository: string;
+  name: string;
+  commitId: string;
+}): Promise<void> {
+  await invokeCommand("delete_repo_branch", { input });
+}
+
 // Lists a repository's tag names.
 export async function listRepoTags(input: {
   organizationId?: string;

@@ -1,16 +1,19 @@
 import { type KeyboardEvent as ReactKeyboardEvent, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { GitPullRequest, Loader2 } from "lucide-react";
 import {
   type BranchOverviewItem,
   commandErrorMessage,
+  deleteRepoBranch,
   listRepoBranchOverview,
   type Organization,
 } from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
 import { navigateToPullRequest } from "@/lib/crossLinks";
 import { formatRelativeDate } from "@/lib/utils";
+import { ConfirmDialog, useConfirm } from "@/components/ConfirmDialog";
 import { ErrorState } from "@/components/StateDisplay";
+import { CreateBranchDialog } from "./CreateBranchDialog";
 import { CreatePullRequestDialog } from "./CreatePullRequestDialog";
 import {
   branchCompareUrl,
@@ -48,6 +51,29 @@ export function CodeBranchesView({
   });
   const queryClient = useQueryClient();
   const [creatingFrom, setCreatingFrom] = useState<BranchOverviewItem | null>(null);
+  const [branchingFrom, setBranchingFrom] = useState<BranchOverviewItem | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const { confirm, dialogProps } = useConfirm();
+
+  function refreshBranches() {
+    void queryClient.invalidateQueries({ queryKey: ["repoBranchOverview", organizationId, repo.repositoryId] });
+    void queryClient.invalidateQueries({ queryKey: ["repoBranches", organizationId, repo.projectId, repo.repositoryId] });
+  }
+  const deleteBranch = useMutation({
+    mutationFn: (branch: BranchOverviewItem) =>
+      deleteRepoBranch({
+        organizationId,
+        project: repo.projectId,
+        repository: repo.repositoryId,
+        name: branch.name,
+        commitId: branch.lastCommitId as string,
+      }),
+    onSuccess: () => {
+      setDeleteError(null);
+      refreshBranches();
+    },
+    onError: (error) => setDeleteError(commandErrorMessage(error)),
+  });
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
@@ -70,6 +96,11 @@ export function CodeBranchesView({
 
   return (
     <div ref={containerRef} onKeyDown={onKeyDown}>
+      {deleteError ? (
+        <div role="alert" className="border-b border-border bg-red-50 px-3 py-1 text-xs text-destructive dark:bg-red-950/40">
+          {deleteError}
+        </div>
+      ) : null}
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border text-left text-xs text-muted-foreground">
@@ -95,10 +126,35 @@ export function CodeBranchesView({
               repo={repo}
               onBrowseBranch={onBrowseBranch}
               onCreatePullRequest={setCreatingFrom}
+              onCreateBranch={setBranchingFrom}
+              onDelete={(target) =>
+                confirm({
+                  title: "Delete branch",
+                  message: `Delete branch ${target.name}? Commits only on this branch become unreachable.`,
+                  confirmLabel: "Delete",
+                  destructive: true,
+                  onConfirm: () => deleteBranch.mutate(target),
+                })
+              }
+              busy={deleteBranch.isPending}
             />
           ))}
         </tbody>
       </table>
+      {dialogProps ? <ConfirmDialog {...dialogProps} /> : null}
+      {branchingFrom?.lastCommitId ? (
+        <CreateBranchDialog
+          organizationId={organizationId}
+          repo={repo}
+          sourceName={branchingFrom.name}
+          sourceCommitId={branchingFrom.lastCommitId}
+          onClose={() => setBranchingFrom(null)}
+          onCreated={() => {
+            setBranchingFrom(null);
+            refreshBranches();
+          }}
+        />
+      ) : null}
       {creatingFrom && defaultBranch ? (
         <CreatePullRequestDialog
           organizationId={organizationId}
@@ -132,6 +188,9 @@ function BranchRow({
   repo,
   onBrowseBranch,
   onCreatePullRequest,
+  onCreateBranch,
+  onDelete,
+  busy,
 }: {
   branch: BranchOverviewItem;
   defaultBranch: string | undefined;
@@ -139,6 +198,9 @@ function BranchRow({
   repo: RepoOption;
   onBrowseBranch: (branch: string) => void;
   onCreatePullRequest: (branch: BranchOverviewItem) => void;
+  onCreateBranch: (branch: BranchOverviewItem) => void;
+  onDelete: (branch: BranchOverviewItem) => void;
+  busy: boolean;
 }) {
   const canCompare = !!defaultBranch && !branch.isDefault;
   const canOpenPr = canCompare && branch.ahead > 0 && branch.pullRequests.length === 0;
@@ -215,6 +277,27 @@ function BranchRow({
               title={`Compare with ${defaultBranch} in Azure DevOps`}
             >
               Compare
+            </button>
+          ) : null}
+          {branch.lastCommitId ? (
+            <button
+              type="button"
+              onClick={() => onCreateBranch(branch)}
+              className={LINK_BUTTON}
+              title={`Create a new branch from ${branch.name}`}
+            >
+              Branch
+            </button>
+          ) : null}
+          {!branch.isDefault && branch.lastCommitId ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onDelete(branch)}
+              className="text-xs text-destructive hover:underline disabled:opacity-50"
+              title={`Delete ${branch.name}`}
+            >
+              Delete
             </button>
           ) : null}
           {canOpenPr ? (

@@ -47,6 +47,8 @@ export const writeCommands = new Set([
   "submit_pull_request_vote",
   "update_pull_request",
   "set_pull_request_reviewer_required",
+  "create_repo_branch",
+  "delete_repo_branch",
   "create_pull_request",
   "add_pull_request_label",
   "remove_pull_request_label",

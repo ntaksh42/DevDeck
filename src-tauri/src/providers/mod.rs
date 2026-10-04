@@ -20,9 +20,9 @@ use async_trait::async_trait;
 use serde::Serialize;
 
 use crate::code_browse::{
-    BranchOverviewItem, CompareRevisionsInput, GetFileInput, ListBranchesInput, ListHistoryInput,
-    ListPathsInput, ListTreeInput, RepoBranch, RepoCommitInfo, RepoFile, RepoPathList,
-    RepoTreeItem, RevisionComparison,
+    BranchOverviewItem, CompareRevisionsInput, CreateBranchInput, DeleteBranchInput, GetFileInput,
+    ListBranchesInput, ListHistoryInput, ListPathsInput, ListTreeInput, RepoBranch, RepoCommitInfo,
+    RepoFile, RepoPathList, RepoTreeItem, RevisionComparison,
 };
 use crate::code_search::{
     CodeContextResult, CodeSearchResults, GetCodeContextInput, SearchCodeInput,
@@ -257,6 +257,8 @@ pub(crate) trait Provider: Send + Sync {
         &self,
         input: ListBranchesInput,
     ) -> Result<Vec<BranchOverviewItem>>;
+    async fn create_repo_branch(&self, input: CreateBranchInput) -> Result<()>;
+    async fn delete_repo_branch(&self, input: DeleteBranchInput) -> Result<()>;
     async fn list_repo_tags(&self, input: ListBranchesInput) -> Result<Vec<String>>;
     async fn compare_repo_revisions(
         &self,

@@ -3,14 +3,16 @@
 
 use std::collections::HashMap;
 
-use azdo_client::{GitBranchStats, GitPullRequest, PullRequestStatus};
+use azdo_client::{
+    GitBranchStats, GitPullRequest, GitRefUpdateResult, PullRequestStatus, ZERO_OBJECT_ID,
+};
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::util::strip_heads_prefix;
 use super::{CodeBrowseService, ListBranchesInput};
 use crate::auth::client_for_organization;
-use crate::error::Result;
+use crate::error::{AppError, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,6 +36,72 @@ pub struct BranchOverviewItem {
     pub last_comment: Option<String>,
     /// Active pull requests whose source is this branch.
     pub pull_requests: Vec<BranchPullRequest>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateBranchInput {
+    pub organization_id: Option<String>,
+    pub project: String,
+    pub repository: String,
+    /// Short name of the new branch, e.g. `feature/x`.
+    pub name: String,
+    /// The commit the new branch starts at (a branch tip, typically).
+    pub source_commit_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteBranchInput {
+    pub organization_id: Option<String>,
+    pub project: String,
+    pub repository: String,
+    pub name: String,
+    /// The tip the caller saw; the delete is refused if the branch has moved.
+    pub commit_id: String,
+}
+
+/// Checks `name` against Git's ref-name rules (the ones a user can plausibly
+/// break), so a bad name fails here with a clear message.
+fn validate_branch_name(name: &str) -> Result<&str> {
+    let name = name.trim();
+    let invalid = name.is_empty()
+        || name.starts_with('/')
+        || name.ends_with('/')
+        || name.starts_with('-')
+        || name.starts_with('.')
+        || name.ends_with('.')
+        || name.ends_with(".lock")
+        || name.contains("..")
+        || name.contains("//")
+        || name.contains("@{")
+        || name == "@"
+        || name
+            .chars()
+            .any(|c| c.is_whitespace() || c.is_control() || "~^:?*[\\".contains(c))
+        || name
+            .split('/')
+            .any(|part| part.starts_with('.') || part.ends_with(".lock"));
+    if invalid {
+        return Err(AppError::InvalidInput(format!(
+            "invalid branch name: {name}"
+        )));
+    }
+    Ok(name)
+}
+
+/// Turns a refused ref update into an error carrying the server's reason.
+fn require_ref_update(action: &str, result: GitRefUpdateResult) -> Result<()> {
+    if result.success {
+        return Ok(());
+    }
+    let reason = result
+        .custom_message
+        .or(result.update_status)
+        .unwrap_or_else(|| "the update was rejected".to_string());
+    Err(AppError::AzureDevOps(format!(
+        "could not {action}: {reason}"
+    )))
 }
 
 fn build_overview(
@@ -89,6 +157,54 @@ fn build_overview(
 }
 
 impl CodeBrowseService {
+    /// Creates `refs/heads/{name}` at `source_commit_id` (issue #536).
+    pub async fn create_branch(&self, input: CreateBranchInput) -> Result<()> {
+        let name = validate_branch_name(&input.name)?;
+        if input.source_commit_id.trim().is_empty() {
+            return Err(AppError::InvalidInput(
+                "a source commit is required".to_string(),
+            ));
+        }
+        let organization = self
+            .db
+            .resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let result = client
+            .update_ref(
+                &input.project,
+                &input.repository,
+                &format!("refs/heads/{name}"),
+                ZERO_OBJECT_ID,
+                input.source_commit_id.trim(),
+            )
+            .await?;
+        require_ref_update("create the branch", result)
+    }
+
+    /// Deletes `refs/heads/{name}` if it still points at `commit_id` (issue #536).
+    pub async fn delete_branch(&self, input: DeleteBranchInput) -> Result<()> {
+        let name = validate_branch_name(&input.name)?;
+        if input.commit_id.trim().is_empty() {
+            return Err(AppError::InvalidInput(
+                "the branch tip commit is required".to_string(),
+            ));
+        }
+        let organization = self
+            .db
+            .resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let result = client
+            .update_ref(
+                &input.project,
+                &input.repository,
+                &format!("refs/heads/{name}"),
+                input.commit_id.trim(),
+                ZERO_OBJECT_ID,
+            )
+            .await?;
+        require_ref_update("delete the branch", result)
+    }
+
     pub async fn list_branch_overview(
         &self,
         input: ListBranchesInput,
@@ -124,6 +240,66 @@ mod tests {
             "isDraft": draft,
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn branch_names_follow_git_ref_rules() {
+        for ok in [
+            "main",
+            "feature/x",
+            "release/1.2.3",
+            "user/ann/fix-1",
+            "a.b",
+        ] {
+            assert!(validate_branch_name(ok).is_ok(), "{ok}");
+        }
+        assert_eq!(validate_branch_name("  topic  ").unwrap(), "topic");
+        for bad in [
+            "",
+            "  ",
+            "/x",
+            "x/",
+            "-x",
+            ".x",
+            "x.",
+            "x.lock",
+            "a..b",
+            "a//b",
+            "a b",
+            "a~b",
+            "a^b",
+            "a:b",
+            "a?b",
+            "a*b",
+            "a[b",
+            "a\\b",
+            "a@{b",
+            "@",
+            "feature/.hidden",
+            "feature/x.lock/y",
+        ] {
+            assert!(validate_branch_name(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_refused_update_becomes_an_error_with_the_reason() {
+        let ok = GitRefUpdateResult {
+            success: true,
+            update_status: None,
+            custom_message: None,
+        };
+        assert!(require_ref_update("create the branch", ok).is_ok());
+        let refused = GitRefUpdateResult {
+            success: false,
+            update_status: Some("staleOldObjectId".to_string()),
+            custom_message: None,
+        };
+        let message = require_ref_update("delete the branch", refused)
+            .unwrap_err()
+            .to_string();
+        assert!(message.contains("delete the branch"));
+        assert!(message.contains("staleOldObjectId"));
     }
 
     #[test]

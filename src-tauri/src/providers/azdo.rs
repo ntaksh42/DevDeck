@@ -8,9 +8,10 @@ use async_trait::async_trait;
 
 use crate::app_state::run_blocking;
 use crate::code_browse::{
-    BranchOverviewItem, CodeBrowseService, CompareRevisionsInput, GetFileInput, ListBranchesInput,
-    ListHistoryInput, ListPathsInput, ListTreeInput, RepoBranch, RepoCommitInfo, RepoFile,
-    RepoPathList, RepoTreeItem, RevisionComparison,
+    BranchOverviewItem, CodeBrowseService, CompareRevisionsInput, CreateBranchInput,
+    DeleteBranchInput, GetFileInput, ListBranchesInput, ListHistoryInput, ListPathsInput,
+    ListTreeInput, RepoBranch, RepoCommitInfo, RepoFile, RepoPathList, RepoTreeItem,
+    RevisionComparison,
 };
 use crate::code_search::{
     CodeContextResult, CodeSearchResults, CodeSearchService, GetCodeContextInput, SearchCodeInput,
@@ -411,6 +412,14 @@ impl Provider for AzdoProvider {
         input: ListBranchesInput,
     ) -> Result<Vec<BranchOverviewItem>> {
         self.code_browse.list_branch_overview(input).await
+    }
+
+    async fn create_repo_branch(&self, input: CreateBranchInput) -> Result<()> {
+        self.code_browse.create_branch(input).await
+    }
+
+    async fn delete_repo_branch(&self, input: DeleteBranchInput) -> Result<()> {
+        self.code_browse.delete_branch(input).await
     }
 
     async fn list_repo_tags(&self, input: ListBranchesInput) -> Result<Vec<String>> {

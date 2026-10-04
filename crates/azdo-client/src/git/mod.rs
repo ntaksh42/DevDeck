@@ -1,8 +1,10 @@
 mod branch_stats;
+mod ref_updates;
 mod requests;
 mod types;
 
 pub use branch_stats::GitBranchStats;
+pub use ref_updates::{GitRefUpdateResult, ZERO_OBJECT_ID};
 pub use types::*;
 
 #[cfg(test)]

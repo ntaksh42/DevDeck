@@ -1,11 +1,11 @@
 use tauri::State;
 
-use crate::app_state::AppState;
+use crate::app_state::{ensure_write_enabled, AppState};
 use crate::cancellation::run_cancellable;
 use crate::code_browse::{
-    BranchOverviewItem, CompareRevisionsInput, GetFileInput, ListBranchesInput, ListHistoryInput,
-    ListPathsInput, ListTreeInput, RepoBranch, RepoCommitInfo, RepoFile, RepoPathList,
-    RepoTreeItem, RevisionComparison,
+    BranchOverviewItem, CompareRevisionsInput, CreateBranchInput, DeleteBranchInput, GetFileInput,
+    ListBranchesInput, ListHistoryInput, ListPathsInput, ListTreeInput, RepoBranch, RepoCommitInfo,
+    RepoFile, RepoPathList, RepoTreeItem, RevisionComparison,
 };
 use crate::code_search::{
     CodeContextResult, CodeSearchResults, GetCodeContextInput, SearchCodeInput,
@@ -57,6 +57,26 @@ pub async fn list_repo_branch_overview(
         .await?
         .list_repo_branch_overview(input)
         .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn create_repo_branch(
+    input: CreateBranchInput,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    ensure_write_enabled(&state).await?;
+    state.provider().await?.create_repo_branch(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn delete_repo_branch(
+    input: DeleteBranchInput,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    ensure_write_enabled(&state).await?;
+    state.provider().await?.delete_repo_branch(input).await
 }
 
 #[tauri::command]
