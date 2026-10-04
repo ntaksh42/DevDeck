@@ -29,6 +29,9 @@ function nonDefaultSettings(): AppSettings {
     notifyPrReviewRequests: false,
     notifyPrVoteResets: false,
     notifyPrCommentReplies: false,
+    quietHoursEnabled: true,
+    quietHoursStart: "21:30",
+    quietHoursEnd: "06:15",
     reviewStaleThresholdDays: 42,
     workItemStaleThresholdDays: 43,
     notificationRules: [

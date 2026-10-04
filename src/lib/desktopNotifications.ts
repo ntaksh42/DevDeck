@@ -6,6 +6,7 @@ import {
 } from "@tauri-apps/plugin-notification";
 import type { AppSettings } from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
+import { isWithinQuietHours } from "@/lib/quietHours";
 import { isTauriRuntime } from "@/lib/runtime";
 
 export type DesktopNotificationResult = "sent" | "unsupported" | "denied" | "skipped";
@@ -55,7 +56,7 @@ export async function showSyncFailedNotificationEvent(
   event: SyncFailedEvent,
   settings: AppSettings,
 ): Promise<DesktopNotificationResult> {
-  if (!settings.desktopNotificationsEnabled) {
+  if (!settings.desktopNotificationsEnabled || isWithinQuietHours(settings)) {
     return "skipped";
   }
   const retryMinutes = Math.max(1, Math.round(event.retryInSecs / 60));
@@ -121,7 +122,7 @@ export async function showPipelineWatchNotification(
   },
   settings: AppSettings,
 ): Promise<DesktopNotificationResult> {
-  if (!settings.desktopNotificationsEnabled) {
+  if (!settings.desktopNotificationsEnabled || isWithinQuietHours(settings)) {
     return "skipped";
   }
   const title =
@@ -198,7 +199,11 @@ export async function showWorkItemNotificationEvent(
   settings: AppSettings,
   onOpenList?: () => void,
 ): Promise<DesktopNotificationResult> {
-  if (!settings.desktopNotificationsEnabled || event.items.length === 0) {
+  if (
+    !settings.desktopNotificationsEnabled ||
+    event.items.length === 0 ||
+    isWithinQuietHours(settings)
+  ) {
     return "skipped";
   }
 
@@ -240,7 +245,11 @@ export async function showPullRequestNotificationEvent(
   settings: AppSettings,
   onOpenList?: () => void,
 ): Promise<DesktopNotificationResult> {
-  if (!settings.desktopNotificationsEnabled || event.items.length === 0) {
+  if (
+    !settings.desktopNotificationsEnabled ||
+    event.items.length === 0 ||
+    isWithinQuietHours(settings)
+  ) {
     return "skipped";
   }
 

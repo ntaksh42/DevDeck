@@ -328,6 +328,9 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   通知が 4 件以上のときは 1 件の要約通知にまとめ、本文は先頭 3 件 + 「+N more」とする。要約通知のクリックは
   DevDeck ウィンドウを前面化し (`core:window:allow-show` / `allow-unminimize` / `allow-set-focus`)、PR は My Reviews、
   作業項目は My Work Items へ遷移する (ブラウザプレビューなど遷移手段が無い場合のみ先頭項目の URL を開く)。
+  Quiet hours が有効な間は通知の送出 (`desktopNotifications.ts`) のみ抑止し、フロントのローカル
+  時刻で判定する。同期・キャッシュ更新・`sync:updated` は継続するため、アプリ内バッジ・ビューは
+  最新のまま。
 - 通知ルール (`notification_rules`): 種別/プロジェクト/リポジトリ条件で通知を絞り込む。
   `mute` ルールは一致する通知を抑止し allow ルールより優先するため、特定の
   プロジェクト/リポジトリを個別にミュートできる（allow ルールが無ければミュート以外は通知）。
@@ -380,6 +383,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
 | `notify_pr_review_requests` | PR レビュー依頼を通知。 |
 | `notify_pr_vote_resets` | 自分の PR 投票リセットを通知。 |
 | `notify_pr_comment_replies` | 自分の PR コメントへの返信を通知。 |
+| `quiet_hours_enabled` / `quiet_hours_start` / `quiet_hours_end` | Quiet hours。有効時、ローカル時刻 `[start, end)` の間はデスクトップ通知を抑止 (アプリ内バッジ・キャッシュは更新を継続)。`start > end` (例 22:00–08:00) は日跨ぎ。既定 22:00–08:00、無効。 |
 | `review_stale_threshold_days` | レビュー PR を stale 扱いする日数 (候補 2/3/5/7、既定 3)。 |
 | `work_item_stale_threshold_days` | 作業項目を stale 扱いする日数 (候補 2/3/5/7、既定 7)。 |
 | `notification_rules` | 通知フィルタルール配列。types / projects / repositories でフィルタし、`mute` が true なら一致時に抑制、false なら一致時のみ通知する。 |

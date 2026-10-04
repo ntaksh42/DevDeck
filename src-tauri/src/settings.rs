@@ -11,9 +11,9 @@ use chrono::Utc;
 use crate::agent_notes::{ensure_guide, NoteTarget};
 
 use crate::db::{
-    AppDatabase, AppSettings, NotificationRule, DEFAULT_REVIEW_STALE_THRESHOLD_DAYS,
-    DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS, REVIEW_STALE_THRESHOLD_DAY_OPTIONS,
-    WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS,
+    AppDatabase, AppSettings, NotificationRule, DEFAULT_QUIET_HOURS_END, DEFAULT_QUIET_HOURS_START,
+    DEFAULT_REVIEW_STALE_THRESHOLD_DAYS, DEFAULT_WORK_ITEM_STALE_THRESHOLD_DAYS,
+    REVIEW_STALE_THRESHOLD_DAY_OPTIONS, WORK_ITEM_STALE_THRESHOLD_DAY_OPTIONS,
 };
 use crate::diagnostics::{build_report, report_to_json, ConnectionFacts, DiagnosticsInput};
 use crate::error::{AppError, Result};
@@ -34,6 +34,9 @@ pub struct UpdateAppSettingsInput {
     pub notify_pr_review_requests: Option<bool>,
     pub notify_pr_vote_resets: Option<bool>,
     pub notify_pr_comment_replies: Option<bool>,
+    pub quiet_hours_enabled: Option<bool>,
+    pub quiet_hours_start: Option<String>,
+    pub quiet_hours_end: Option<String>,
     pub review_stale_threshold_days: Option<i64>,
     pub work_item_stale_threshold_days: Option<i64>,
     pub notification_rules: Option<Vec<NotificationRule>>,
@@ -204,6 +207,9 @@ pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
         notify_pr_review_requests: input.notify_pr_review_requests.unwrap_or(true),
         notify_pr_vote_resets: input.notify_pr_vote_resets.unwrap_or(true),
         notify_pr_comment_replies: input.notify_pr_comment_replies.unwrap_or(true),
+        quiet_hours_enabled: input.quiet_hours_enabled.unwrap_or(false),
+        quiet_hours_start: normalize_quiet_hour(input.quiet_hours_start, DEFAULT_QUIET_HOURS_START),
+        quiet_hours_end: normalize_quiet_hour(input.quiet_hours_end, DEFAULT_QUIET_HOURS_END),
         review_stale_threshold_days: input
             .review_stale_threshold_days
             .filter(|days| REVIEW_STALE_THRESHOLD_DAY_OPTIONS.contains(days))
@@ -334,4 +340,40 @@ fn normalize_path(value: Option<String>) -> Option<String> {
     value
         .map(|path| path.trim().to_string())
         .filter(|path| !path.is_empty())
+}
+
+// Accept a "HH:MM" time, normalizing to a zero-padded canonical form. Anything
+// unparseable falls back to the provided default so a bad value never disables
+// the window silently.
+fn normalize_quiet_hour(value: Option<String>, fallback: &str) -> String {
+    value
+        .and_then(|raw| {
+            let (h, m) = raw.trim().split_once(':')?;
+            let hour: u32 = h.trim().parse().ok()?;
+            let minute: u32 = m.trim().parse().ok()?;
+            if hour < 24 && minute < 60 {
+                Some(format!("{hour:02}:{minute:02}"))
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| fallback.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_quiet_hour;
+
+    #[test]
+    fn normalize_quiet_hour_pads_valid_times_and_falls_back_otherwise() {
+        assert_eq!(normalize_quiet_hour(Some("7:5".into()), "22:00"), "07:05");
+        assert_eq!(
+            normalize_quiet_hour(Some(" 23:59 ".into()), "22:00"),
+            "23:59"
+        );
+        assert_eq!(normalize_quiet_hour(Some("24:00".into()), "22:00"), "22:00");
+        assert_eq!(normalize_quiet_hour(Some("12:60".into()), "22:00"), "22:00");
+        assert_eq!(normalize_quiet_hour(Some("noon".into()), "22:00"), "22:00");
+        assert_eq!(normalize_quiet_hour(None, "08:00"), "08:00");
+    }
 }
