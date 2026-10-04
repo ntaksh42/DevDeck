@@ -171,6 +171,7 @@ export function demoPipelineRunDetail(buildId: number) {
       timelineUnavailable: false,
       timeline: demoFailedTimeline().map((node, index) => ({
         ...node,
+        identifier: node.nodeType === "Stage" ? node.name.replace(/\W+/g, "_") : null,
         errorCount: node.errorCount ?? 0,
         warningCount: 0,
         startTime: run.startTime,
@@ -188,6 +189,7 @@ export function demoPipelineRunDetail(buildId: number) {
         parentId: null,
         nodeType: "Stage",
         name: "Build",
+        identifier: "Build",
         state: "completed",
         result: run.result ?? "succeeded",
         startTime: run.startTime,
@@ -202,6 +204,7 @@ export function demoPipelineRunDetail(buildId: number) {
         parentId: "stage-1",
         nodeType: "Job",
         name: "Compile",
+        identifier: null,
         state: "completed",
         result: run.result ?? "succeeded",
         startTime: run.startTime,

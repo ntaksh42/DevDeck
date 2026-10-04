@@ -51,6 +51,14 @@ pub(super) fn summarize_test_results(
     }
 }
 
+/// Stage identifiers are plain names; anything else could alter the request path.
+pub(super) fn is_valid_stage_identifier(stage: &str) -> bool {
+    !stage.is_empty()
+        && stage
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+}
+
 pub(super) fn approval_to_summary(approval: Approval) -> PipelineApprovalSummary {
     let assigned_approvers = approval
         .steps
@@ -193,6 +201,7 @@ pub(super) fn timeline_to_nodes(timeline: Timeline) -> Vec<TimelineNode> {
             parent_id: record.parent_id,
             node_type: record.record_type,
             name: record.name,
+            identifier: record.identifier,
             state: record.state,
             result: record.result,
             start_time: record.start_time.map(|t| t.to_rfc3339()),
@@ -353,6 +362,15 @@ mod tests {
             MAX_ERROR_MESSAGE_CHARS
         );
         assert!(!summary.truncated);
+    }
+
+    #[test]
+    fn stage_identifiers_reject_path_altering_characters() {
+        assert!(is_valid_stage_identifier("Deploy_Prod-2.0"));
+        assert!(!is_valid_stage_identifier(""));
+        assert!(!is_valid_stage_identifier("a/b"));
+        assert!(!is_valid_stage_identifier("a?x=1"));
+        assert!(!is_valid_stage_identifier("../x"));
     }
 
     #[test]

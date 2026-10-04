@@ -170,6 +170,23 @@ impl AdoClient {
             .await
     }
 
+    /// Retries a stage of a finished run. With `force_retry_all_jobs` every job
+    /// of the stage runs again; otherwise only the failed jobs do.
+    /// `stage_ref_name` is used as a path segment as-is: stage identifiers are
+    /// plain `[A-Za-z0-9_]` names, which callers validate.
+    pub async fn retry_build_stage(
+        &self,
+        project_id: &str,
+        build_id: i64,
+        stage_ref_name: &str,
+        force_retry_all_jobs: bool,
+    ) -> Result<()> {
+        let path = format!("{project_id}/_apis/build/builds/{build_id}/stages/{stage_ref_name}");
+        let body = json!({ "state": "retry", "forceRetryAllJobs": force_retry_all_jobs });
+        self.patch_json_empty(&path, &[("api-version", "7.1")], &body)
+            .await
+    }
+
     /// Lists pipeline approvals (manual approval checks) for a project, filtered
     /// by `state` (e.g. `"pending"`) and, when non-empty, by the approver
     /// `user_ids` the approval is assigned to.

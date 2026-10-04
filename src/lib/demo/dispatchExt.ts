@@ -144,6 +144,8 @@ export function dispatchExt(command: string, args: unknown): unknown {
         demoPipelineRuns()[2];
       return { ...run, status: "cancelling" };
     }
+    case "retry_pipeline_stage":
+      return null;
     case "list_pipeline_approvals":
       return demoPipelineApprovals();
     case "update_pipeline_approval": {

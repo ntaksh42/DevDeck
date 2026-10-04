@@ -32,7 +32,8 @@ use crate::pipelines::{
     ListPipelineTestResultsInput, PipelineApprovalSummary, PipelineArtifact,
     PipelineDefinitionDetail, PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption,
     PipelineRunDetail, PipelineRunSummary, PipelineTestResults, QueuePipelineRunInput,
-    RerunPipelineRunInput, UpdatePipelineApprovalInput, UpdatePipelineDefinitionInput,
+    RerunPipelineRunInput, RetryPipelineStageInput, UpdatePipelineApprovalInput,
+    UpdatePipelineDefinitionInput,
 };
 use crate::pr_review::{
     DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
@@ -531,6 +532,10 @@ impl Provider for GithubProvider {
         &self,
         _input: QueuePipelineRunInput,
     ) -> Result<PipelineRunSummary> {
+        Err(pipelines_unsupported())
+    }
+
+    async fn retry_pipeline_stage(&self, _input: RetryPipelineStageInput) -> Result<()> {
         Err(pipelines_unsupported())
     }
 

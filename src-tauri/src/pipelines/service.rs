@@ -7,8 +7,8 @@ use crate::projects::ProjectDirectory;
 use crate::secrets::SecretStore;
 
 use super::convert::{
-    approval_to_summary, build_to_summary, definition_to_detail, normalize_optional,
-    resolve_requested_for, summarize_test_results, timeline_to_nodes,
+    approval_to_summary, build_to_summary, definition_to_detail, is_valid_stage_identifier,
+    normalize_optional, resolve_requested_for, summarize_test_results, timeline_to_nodes,
 };
 use super::definition_update::apply_definition_update;
 use super::types::*;
@@ -305,6 +305,33 @@ impl PipelineService {
             &project.name,
             build,
         ))
+    }
+
+    /// Retries one stage of a finished run (its failed jobs, or all of them).
+    pub async fn retry_stage(&self, input: RetryPipelineStageInput) -> Result<()> {
+        let stage = input.stage_identifier.trim();
+        // Used as a URL path segment; real stage identifiers are plain names.
+        if !is_valid_stage_identifier(stage) {
+            return Err(AppError::InvalidInput(format!(
+                "invalid stage identifier: {}",
+                input.stage_identifier
+            )));
+        }
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
+        client
+            .retry_build_stage(
+                &project.id,
+                input.build_id,
+                stage,
+                input.force_retry_all_jobs,
+            )
+            .await?;
+        Ok(())
     }
 
     pub async fn cancel_run(&self, input: CancelPipelineRunInput) -> Result<PipelineRunSummary> {

@@ -348,6 +348,31 @@ impl AdoClient {
         .await
     }
 
+    /// PATCH whose success response carries no body to decode.
+    pub(crate) async fn patch_json_empty<B: Serialize + ?Sized>(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+        body: &B,
+    ) -> Result<()> {
+        let url = join_api_path(&self.base_url, path)?;
+
+        self.send_with_retry(
+            "PATCH",
+            path,
+            true,
+            || {
+                self.http
+                    .patch(url.clone())
+                    .query(query)
+                    .header("Content-Type", "application/json")
+                    .json(body)
+            },
+            |_resp| async move { Ok(()) },
+        )
+        .await
+    }
+
     pub(crate) async fn patch_json<B: Serialize + ?Sized, T: DeserializeOwned>(
         &self,
         path: &str,

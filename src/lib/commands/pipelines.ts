@@ -53,6 +53,8 @@ const timelineNodeSchema = z.object({
   parentId: z.string().nullable(),
   nodeType: z.string().nullable(),
   name: z.string().nullable(),
+  /** Reference name; for a stage, what retryPipelineStage takes. */
+  identifier: z.string().nullable().optional(),
   state: z.string().nullable(),
   result: z.string().nullable(),
   startTime: z.string().nullable(),
@@ -236,6 +238,18 @@ export async function queuePipelineRun(input: {
 }): Promise<PipelineRunSummary> {
   const result = await invokeCommand("queue_pipeline_run", { input });
   return pipelineRunSummarySchema.parse(result);
+}
+
+// Re-runs one stage of a finished run: its failed jobs, or every job when
+// forceRetryAllJobs is set. Unlike rerunPipelineRun this reuses the same run.
+export async function retryPipelineStage(input: {
+  organizationId?: string;
+  projectId: string;
+  buildId: number;
+  stageIdentifier: string;
+  forceRetryAllJobs?: boolean;
+}): Promise<void> {
+  await invokeCommand("retry_pipeline_stage", { input });
 }
 
 export async function cancelPipelineRun(input: {

@@ -31,8 +31,8 @@ use crate::pipelines::{
     ListPipelineTestResultsInput, PipelineApprovalSummary, PipelineArtifact,
     PipelineDefinitionDetail, PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption,
     PipelineRunDetail, PipelineRunSummary, PipelineService, PipelineTestResults,
-    QueuePipelineRunInput, RerunPipelineRunInput, UpdatePipelineApprovalInput,
-    UpdatePipelineDefinitionInput,
+    QueuePipelineRunInput, RerunPipelineRunInput, RetryPipelineStageInput,
+    UpdatePipelineApprovalInput, UpdatePipelineDefinitionInput,
 };
 use crate::pr_review::{
     DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
@@ -485,6 +485,10 @@ impl Provider for AzdoProvider {
 
     async fn queue_pipeline_run(&self, input: QueuePipelineRunInput) -> Result<PipelineRunSummary> {
         self.pipelines.queue_run(input).await
+    }
+
+    async fn retry_pipeline_stage(&self, input: RetryPipelineStageInput) -> Result<()> {
+        self.pipelines.retry_stage(input).await
     }
 
     async fn cancel_pipeline_run(

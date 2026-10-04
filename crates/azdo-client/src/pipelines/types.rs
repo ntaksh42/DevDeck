@@ -141,6 +141,8 @@ pub struct TimelineRecord {
     #[serde(rename = "type")]
     pub record_type: Option<String>,
     pub name: Option<String>,
+    /// The record's reference name; for a stage, the key the stage-retry API takes.
+    pub identifier: Option<String>,
     pub state: Option<String>,
     pub result: Option<String>,
     pub start_time: Option<DateTime<Utc>>,

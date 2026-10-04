@@ -262,6 +262,7 @@ pub fn run() {
             commands::pipelines::get_pipeline_run_log_tail,
             commands::pipelines::rerun_pipeline_run,
             commands::pipelines::queue_pipeline_run,
+            commands::pipelines::retry_pipeline_stage,
             commands::pipelines::cancel_pipeline_run,
             commands::pipelines::list_pipeline_approvals,
             commands::pipelines::update_pipeline_approval,

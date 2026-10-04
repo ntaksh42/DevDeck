@@ -193,6 +193,8 @@ pub struct TimelineNode {
     pub parent_id: Option<String>,
     pub node_type: Option<String>,
     pub name: Option<String>,
+    /// Reference name; for a stage, what the stage-retry command takes.
+    pub identifier: Option<String>,
     pub state: Option<String>,
     pub result: Option<String>,
     pub start_time: Option<String>,
@@ -218,6 +220,19 @@ pub struct PipelineRunDetail {
 pub struct PipelineArtifact {
     pub name: String,
     pub download_url: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RetryPipelineStageInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub build_id: i64,
+    /// The stage's reference name (`TimelineNode::identifier`).
+    pub stage_identifier: String,
+    /// Re-run every job of the stage instead of only the failed ones.
+    #[serde(default)]
+    pub force_retry_all_jobs: bool,
 }
 
 #[derive(Debug, Deserialize)]

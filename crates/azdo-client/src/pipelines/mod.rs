@@ -4,6 +4,8 @@ mod types;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_stage_retry;
 
 pub use test_results::{TestCaseResult, TestRun, TestRunStatistic};
 pub use types::{

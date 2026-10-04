@@ -9,7 +9,8 @@ use crate::pipelines::{
     ListPipelineTestResultsInput, PipelineApprovalSummary, PipelineArtifact,
     PipelineDefinitionDetail, PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption,
     PipelineRunDetail, PipelineRunSummary, PipelineTestResults, QueuePipelineRunInput,
-    RerunPipelineRunInput, UpdatePipelineApprovalInput, UpdatePipelineDefinitionInput,
+    RerunPipelineRunInput, RetryPipelineStageInput, UpdatePipelineApprovalInput,
+    UpdatePipelineDefinitionInput,
 };
 
 #[tauri::command]
@@ -128,6 +129,16 @@ pub async fn queue_pipeline_run(
 ) -> Result<PipelineRunSummary> {
     ensure_write_enabled(&state).await?;
     state.provider().await?.queue_pipeline_run(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn retry_pipeline_stage(
+    input: RetryPipelineStageInput,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    ensure_write_enabled(&state).await?;
+    state.provider().await?.retry_pipeline_stage(input).await
 }
 
 #[tauri::command]
