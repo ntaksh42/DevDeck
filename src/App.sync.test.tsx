@@ -240,7 +240,7 @@ describe("App — Sync", () => {
 
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("trigger_sync", {
-        input: { scope: "myReviews" },
+        input: { scope: "myReviews", force: true },
       });
     });
   });
