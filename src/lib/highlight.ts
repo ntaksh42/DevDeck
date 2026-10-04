@@ -54,17 +54,29 @@ function languageForFile(fileName: string): string | undefined {
   return mapped && hljs.getLanguage(mapped) ? mapped : undefined;
 }
 
+// highlightAuto tries every registered grammar and is far slower than a
+// known-language pass, so it gets a much lower size cap. Above the caps the
+// content is shown as escaped plain text to keep the UI responsive.
+const MAX_AUTO_DETECT_CHARS = 100_000;
+const MAX_HIGHLIGHT_CHARS = 300_000;
+
 export type HighlightedCode = {
   /** Sanitized HTML for the whole file (highlight.js spans). */
   html: string;
   /** The resolved language name, for display. */
   language: string | null;
+  /** True when the file was too large to highlight and is shown as plain text. */
+  skipped: boolean;
 };
 
 // Highlights a file's content, returning sanitized HTML. Uses the extension to
 // pick a grammar, falling back to auto-detection for unknown types.
 export function highlightCode(content: string, fileName: string): HighlightedCode {
   const language = languageForFile(fileName);
+  const maxChars = language ? MAX_HIGHLIGHT_CHARS : MAX_AUTO_DETECT_CHARS;
+  if (content.length > maxChars) {
+    return { html: DOMPurify.sanitize(escapeHtml(content)), language: null, skipped: true };
+  }
   try {
     const result = language
       ? hljs.highlight(content, { language, ignoreIllegals: true })
@@ -72,10 +84,11 @@ export function highlightCode(content: string, fileName: string): HighlightedCod
     return {
       html: DOMPurify.sanitize(result.value, { USE_PROFILES: { html: true } }),
       language: result.language ?? language ?? null,
+      skipped: false,
     };
   } catch {
     // Highlighting should never break rendering; fall back to escaped text.
-    return { html: DOMPurify.sanitize(escapeHtml(content)), language: null };
+    return { html: DOMPurify.sanitize(escapeHtml(content)), language: null, skipped: false };
   }
 }
 

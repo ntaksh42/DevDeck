@@ -224,6 +224,9 @@ export function CodeFileView({
             <span className="uppercase tracking-wide">{highlighted.language}</span>
           ) : null}
           <span>{lines.length} lines</span>
+          {highlighted?.skipped ? (
+            <span>· Syntax highlighting skipped (file is large)</span>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
           <button
