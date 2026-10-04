@@ -7,7 +7,8 @@ import {
   commandErrorMessage,
   getCommitPullRequests,
 } from "@/lib/azdoCommands";
-import { isEditableTarget, focusPrimaryGrid, formatDate } from "@/lib/utils";
+import { isEditableTarget, focusPrimaryGrid, formatDate, formatRelativeDate } from "@/lib/utils";
+import { hasDistinctCommitter } from "./commitIdentity";
 import { openExternalUrl } from "@/lib/openExternal";
 import { usePreviewZoom } from "@/lib/usePreviewZoom";
 import { PreviewZoomControls } from "@/components/PreviewZoomControls";
@@ -211,8 +212,33 @@ export function CommitPreviewPanel({
                 </dd>
                 <dt>Date</dt>
                 <dd className="text-foreground">
-                  {commit.authorDate ? formatDate(commit.authorDate) : "—"}
+                  {commit.authorDate ? (
+                    <>
+                      {formatDate(commit.authorDate)}{" "}
+                      <span className="text-muted-foreground">
+                        ({formatRelativeDate(commit.authorDate)})
+                      </span>
+                    </>
+                  ) : (
+                    "—"
+                  )}
                 </dd>
+                {hasDistinctCommitter(commit) ? (
+                  <>
+                    <dt>Committer</dt>
+                    <dd className="text-foreground">
+                      {commit.committerName ?? "—"}
+                      {commit.committerEmail ? ` <${commit.committerEmail}>` : ""}
+                      {commit.committerDate ? (
+                        <span className="text-muted-foreground">
+                          {" "}
+                          · {formatDate(commit.committerDate)} (
+                          {formatRelativeDate(commit.committerDate)})
+                        </span>
+                      ) : null}
+                    </dd>
+                  </>
+                ) : null}
                 <dt>Repository</dt>
                 <dd className="text-foreground">
                   {commit.projectName} / {commit.repositoryName}

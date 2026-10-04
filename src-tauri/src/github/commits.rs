@@ -217,5 +217,8 @@ fn item_to_summary(org_id: &str, item: CommitSearchItem) -> CommitSummary {
         author_email: author.as_ref().and_then(|a| a.email.clone()),
         author_date: author.as_ref().and_then(|a| a.date.clone()),
         web_url: Some(item.html_url),
+        committer_name: None,
+        committer_email: None,
+        committer_date: None,
     }
 }

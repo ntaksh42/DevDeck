@@ -307,6 +307,9 @@ mod tests {
                 author_email: None,
                 author_date: Some("2026-06-04T00:00:00Z".to_string()),
                 web_url: None,
+                committer_name: None,
+                committer_email: None,
+                committer_date: None,
             }],
         )
         .unwrap();

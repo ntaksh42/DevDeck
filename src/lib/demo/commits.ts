@@ -278,6 +278,9 @@ export function demoCommits(input?: SearchCommitsInput): CommitSummary[] {
       authorName: "Demo User",
       authorEmail: "demo@example.com",
       authorDate: "2026-05-26T14:30:00Z",
+      committerName: "Alice Johnson",
+      committerEmail: "alice@example.com",
+      committerDate: "2026-05-27T09:15:00Z",
       webUrl: "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/commit/beef1234567890abcdef1234567890abcdef1234",
     },
     {

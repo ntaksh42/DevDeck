@@ -12,16 +12,21 @@ pub(crate) fn upsert_commits(conn: &Connection, commits: &[CachedCommit]) -> Res
         r#"
         INSERT INTO commits(
             org_id, project_id, project_name, repository_id, repository_name,
-            commit_id, comment, author_name, author_email, author_date, web_url
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            commit_id, comment, author_name, author_email, author_date, web_url,
+            committer_name, committer_email, committer_date
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
         ON CONFLICT(org_id, repository_id, commit_id) DO UPDATE SET
             project_id = excluded.project_id,
             project_name = excluded.project_name,
             repository_name = excluded.repository_name,
-            web_url = excluded.web_url
+            web_url = excluded.web_url,
+            committer_name = COALESCE(commits.committer_name, excluded.committer_name),
+            committer_email = COALESCE(commits.committer_email, excluded.committer_email),
+            committer_date = COALESCE(commits.committer_date, excluded.committer_date)
         WHERE excluded.project_name IS NOT commits.project_name
            OR excluded.repository_name IS NOT commits.repository_name
            OR excluded.web_url IS NOT commits.web_url
+           OR (commits.committer_date IS NULL AND excluded.committer_date IS NOT NULL)
         "#,
     )?;
     for c in commits {
@@ -36,7 +41,10 @@ pub(crate) fn upsert_commits(conn: &Connection, commits: &[CachedCommit]) -> Res
             c.author_name,
             c.author_email,
             c.author_date,
-            c.web_url
+            c.web_url,
+            c.committer_name,
+            c.committer_email,
+            c.committer_date
         ])?;
     }
     Ok(())
@@ -56,7 +64,8 @@ pub(crate) fn search_commits(
     let author_pattern = author.map(|a| format!("%{}%", escape_like_pattern(&a.to_lowercase())));
     let mut sql = String::from(
         "SELECT org_id, project_id, project_name, repository_id, repository_name, \
-                commit_id, comment, author_name, author_email, author_date, web_url \
+                commit_id, comment, author_name, author_email, author_date, web_url, \
+                committer_name, committer_email, committer_date \
          FROM commits \
          WHERE org_id = ?1",
     );
@@ -164,7 +173,8 @@ pub(crate) fn search_commits_fts(
     };
     let sql = format!(
         "SELECT c.org_id, c.project_id, c.project_name, c.repository_id, c.repository_name, \
-                c.commit_id, c.comment, c.author_name, c.author_email, c.author_date, c.web_url \
+                c.commit_id, c.comment, c.author_name, c.author_email, c.author_date, c.web_url, \
+                c.committer_name, c.committer_email, c.committer_date \
          FROM commits c \
          WHERE c.org_id = ?2{outer}{from_clause}{to_clause} \
            AND (c.commit_id IN ( \
@@ -284,5 +294,8 @@ fn map_cached_commit(row: &rusqlite::Row<'_>) -> rusqlite::Result<CachedCommit> 
         author_email: row.get(8)?,
         author_date: row.get(9)?,
         web_url: row.get(10)?,
+        committer_name: row.get(11)?,
+        committer_email: row.get(12)?,
+        committer_date: row.get(13)?,
     })
 }

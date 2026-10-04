@@ -14,6 +14,10 @@ const commitSummarySchema = z.object({
   authorEmail: z.string().nullable(),
   authorDate: z.string().nullable(),
   webUrl: z.string().nullable(),
+  // Who applied the commit and when; absent for providers/rows without it.
+  committerName: z.string().nullish(),
+  committerEmail: z.string().nullish(),
+  committerDate: z.string().nullish(),
 });
 
 export const commitSummariesSchema = z.array(commitSummarySchema);

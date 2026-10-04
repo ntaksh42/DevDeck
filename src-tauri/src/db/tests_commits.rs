@@ -17,6 +17,9 @@ fn make_cached_commit(commit_id: &str, comment: &str) -> CachedCommit {
         author_email: None,
         author_date: Some("2026-06-01T00:00:00Z".to_string()),
         web_url: None,
+        committer_name: None,
+        committer_email: None,
+        committer_date: None,
     }
 }
 
@@ -162,6 +165,9 @@ fn search_commits_author_filter_survives_limit_cap() {
             }),
             author_date: Some(format!("{year:04}-01-01T00:00:00+00:00")),
             web_url: None,
+            committer_name: None,
+            committer_email: None,
+            committer_date: None,
         });
     }
     db.replace_commits_for_repo("org1", "repo1", &commits)
@@ -205,6 +211,9 @@ fn replace_commits_for_repo_scopes_to_repository() {
         author_email: None,
         author_date: None,
         web_url: None,
+        committer_name: None,
+        committer_email: None,
+        committer_date: None,
     };
 
     // Seed both repos
@@ -249,6 +258,9 @@ fn purge_old_commits_removes_dated_rows_only() {
         author_email: None,
         author_date: date.map(|s| s.to_string()),
         web_url: None,
+        committer_name: None,
+        committer_email: None,
+        committer_date: None,
     };
 
     db.replace_commits_for_repo(
@@ -288,6 +300,9 @@ fn purge_old_commits_removes_null_author_date() {
         author_email: None,
         author_date: date.map(|s| s.to_string()),
         web_url: None,
+        committer_name: None,
+        committer_email: None,
+        committer_date: None,
     };
 
     db.replace_commits_for_repo(
@@ -331,6 +346,9 @@ fn search_commits_fts_date_filter_applied_in_sql() {
         author_email: None,
         author_date: Some(date.to_string()),
         web_url: None,
+        committer_name: None,
+        committer_email: None,
+        committer_date: None,
     };
 
     db.replace_commits_for_repo(
@@ -395,6 +413,9 @@ fn commit_activity_groups_by_day_and_filters_by_author() {
         author_email: Some(email.to_string()),
         author_date: date.map(|s| s.to_string()),
         web_url: None,
+        committer_name: None,
+        committer_email: None,
+        committer_date: None,
     };
 
     db.replace_commits_for_repo(
@@ -478,6 +499,9 @@ fn commit_activity_treats_like_wildcards_in_author_as_literal() {
         author_email: Some(email.to_string()),
         author_date: Some("2026-05-01T08:00:00+00:00".to_string()),
         web_url: None,
+        committer_name: None,
+        committer_email: None,
+        committer_date: None,
     };
 
     db.replace_commits_for_repo(
@@ -553,4 +577,33 @@ fn commit_prs_cache_round_trips_and_respects_freshness() {
         .unwrap()
         .expect("empty marker cached");
     assert!(empty.is_empty());
+}
+
+#[test]
+fn committer_fields_round_trip_and_backfill_rows_cached_without_them() {
+    let tf = NamedTempFile::new().unwrap();
+    let db = AppDatabase::new(tf.path().to_path_buf());
+    db.initialize().unwrap();
+    db.upsert_organization(make_org_draft("org1")).unwrap();
+    let mut commit = make_cached_commit("c1", "rebased");
+    commit.committer_name = Some("Bob".to_string());
+    commit.committer_email = Some("bob@x.com".to_string());
+    commit.committer_date = Some("2026-06-02T00:00:00Z".to_string());
+
+    // A row cached before the committer columns existed has NULL committer
+    // fields; syncing the same commit again fills them in.
+    let old = make_cached_commit("c1", "rebased");
+    db.replace_commits_for_repo("org1", "repo1", &[old])
+        .unwrap();
+    db.replace_commits_for_repo("org1", "repo1", std::slice::from_ref(&commit))
+        .unwrap();
+
+    let stored = db.search_commits("org1", None, None, None, None).unwrap();
+    assert_eq!(stored.len(), 1);
+    assert_eq!(stored[0].committer_name.as_deref(), Some("Bob"));
+    assert_eq!(stored[0].committer_email.as_deref(), Some("bob@x.com"));
+    assert_eq!(
+        stored[0].committer_date.as_deref(),
+        Some("2026-06-02T00:00:00Z")
+    );
 }

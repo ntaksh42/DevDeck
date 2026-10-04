@@ -49,7 +49,7 @@ pub use work_items::*;
 pub(crate) use commits_query::*;
 pub(crate) use work_items_query::*;
 
-pub(crate) const SCHEMA_VERSION: i64 = 21;
+pub(crate) const SCHEMA_VERSION: i64 = 22;
 
 // ── AppDatabase ───────────────────────────────────────────────────────────────
 

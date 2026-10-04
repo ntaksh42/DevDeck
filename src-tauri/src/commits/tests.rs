@@ -208,6 +208,9 @@ async fn delta_commit_sync_merges_without_dropping_existing_commits() {
             author_email: Some("dev@example.com".to_string()),
             author_date: Some(now.clone()),
             web_url: None,
+            committer_name: None,
+            committer_email: None,
+            committer_date: None,
         }],
     )
     .unwrap();
@@ -253,4 +256,52 @@ async fn delta_commit_sync_merges_without_dropping_existing_commits() {
         "delta sync must not drop existing commits"
     );
     assert!(ids.contains(&"new-commit"));
+}
+
+#[test]
+fn commit_to_cached_carries_the_committer_separately_from_the_author() {
+    use azdo_client::{GitCommitRef, GitUserDate};
+
+    let when = |s: &str| DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Utc);
+    let commit = GitCommitRef {
+        commit_id: "abc".to_string(),
+        comment: Some("msg".to_string()),
+        author: Some(GitUserDate {
+            name: Some("Alice".to_string()),
+            email: Some("alice@x.com".to_string()),
+            date: Some(when("2026-06-01T00:00:00Z")),
+        }),
+        committer: Some(GitUserDate {
+            name: Some("Bob".to_string()),
+            email: Some("bob@x.com".to_string()),
+            date: Some(when("2026-06-02T00:00:00Z")),
+        }),
+        remote_url: None,
+        url: None,
+        parents: None,
+    };
+    let org = Organization {
+        id: "contoso".to_string(),
+        name: "contoso".to_string(),
+        display_name: None,
+        base_url: "https://dev.azure.com/contoso".to_string(),
+        auth_provider: "pat".to_string(),
+        credential_key: "k".to_string(),
+        authenticated_user_id: None,
+        authenticated_user_display_name: None,
+        authenticated_user_unique_name: None,
+        created_at: "2026-01-01T00:00:00Z".to_string(),
+        updated_at: "2026-01-01T00:00:00Z".to_string(),
+        provider_kind: "azdo".to_string(),
+    };
+
+    let cached = super::helpers::commit_to_cached(&org, "p", "Proj", "r", "Repo", commit);
+
+    assert_eq!(cached.author_name.as_deref(), Some("Alice"));
+    assert_eq!(cached.committer_name.as_deref(), Some("Bob"));
+    assert_eq!(cached.committer_email.as_deref(), Some("bob@x.com"));
+    assert_eq!(
+        cached.committer_date.as_deref(),
+        Some("2026-06-02T00:00:00+00:00")
+    );
 }

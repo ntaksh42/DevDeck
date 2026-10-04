@@ -67,6 +67,11 @@ pub struct CommitSummary {
     pub author_email: Option<String>,
     pub author_date: Option<String>,
     pub web_url: Option<String>,
+    /// Who applied the commit and when; differs from the author for rebases,
+    /// cherry-picks and patches applied by someone else.
+    pub committer_name: Option<String>,
+    pub committer_email: Option<String>,
+    pub committer_date: Option<String>,
 }
 
 /// Result of a commit search. `total` is the match count before the display

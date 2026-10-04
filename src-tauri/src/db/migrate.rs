@@ -580,5 +580,17 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             "#,
         )?;
     }
+    if current < 22 {
+        // The commit's committer (who applied it), distinct from its author, and
+        // when. Existing rows stay NULL until the next sync re-reads them.
+        if table_exists(conn, "commits")? {
+            for column in ["committer_name", "committer_email", "committer_date"] {
+                if !table_column_exists(conn, "commits", column)? {
+                    conn.execute_batch(&format!("ALTER TABLE commits ADD COLUMN {column} TEXT;"))?;
+                }
+            }
+        }
+        conn.execute_batch("PRAGMA user_version = 22;")?;
+    }
     Ok(())
 }

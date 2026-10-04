@@ -276,7 +276,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
 
 - アクセス: `AppDatabase` がパスラッパとして呼び出しごとに接続を開く (`rusqlite`)。
 - 移行: `src-tauri/src/db.rs` の `migrate()` が `PRAGMA user_version` を使用。
-  **現行スキーマバージョン: 21** (v21 でフォロー中の作業項目 `followed_work_items` を追加、v19 で通知履歴用の `notifications` テーブルを追加、
+  **現行スキーマバージョン: 22** (v22 でコミットの committer 名/メール/日時 `commits.committer_*` を追加、v21 でフォロー中の作業項目 `followed_work_items` を追加、v19 で通知履歴用の `notifications` テーブルを追加、
   v20 で `pull_requests.created_by_id` を追加)。
 - 主なテーブル: 組織、アクティブ/レビュー対象 PR、作業項目、My Work Items スナップショット、
   コミット、コミット↔PR 関連、各種 FTS インデックス、同期状態、スヌーズ、
@@ -739,6 +739,7 @@ format!(
 - 広範なリファクタは要求された変更に必要な場合のみ行う。
 - テキスト入力の Enter / Escape / Tab は IME 変換中 (`isImeComposing`: `isComposing` または `key === "Process"`) は無視する。変換の確定・取り消しで検索実行・候補確定・メンション挿入・フォーカス移動が起きないようにするため、コマンドパレット、Code 検索、設定フィルタ、フィルタ候補、コメント入力、各種インライン編集欄、グローバルの Escape が共通で従う。
 - 破壊的・不可逆な操作の確認 (組織削除、PR コメント削除、レビュアー削除、PR の Complete / Abandon など) はネイティブの `window.confirm` ではなく `ConfirmDialog` (`role="alertdialog"`、初期フォーカスは Cancel、Esc でキャンセル、閉じたら起点要素へフォーカス復帰) を使う。パイプラインの Re-run / Cancel はインライン確認バー。
+- コミットのプレビューは日時に相対表記 (`3d ago` 等) を併記し、committer が author と異なる (メール、無ければ名前で判定) ときだけ「Committer」行 (名前・メール・日時) を表示する。committer は同期時に `commits.committer_*` へ保存し、旧行は次回同期で補完される。
 - diff 表示 (PR ファイル / コミット / Code の Compare) は比較前に両側の改行コードを LF へ正規化する。改行コードだけが変わったファイルは行差分が空になるため、「Only line endings changed (LF → CRLF)」の通知を出し、PR のファイル見出しの ±行数の横に `EOL` バッジを付ける (`eolOnlyChange`)。
   コミットのファイル差分 (`CommitDiffView`) は「Unified / Side by side」を切替でき (選択は localStorage `azdodeck:view:commitDiffMode:v1` に保存)、拡張子から言語が決まるファイルは行単位で構文ハイライトする (`highlightLineHtml`。語単位の強調がある変更行は語強調を優先し、複数行にまたがるトークンは開始行のみ着色)。
 
