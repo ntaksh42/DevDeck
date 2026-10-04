@@ -25,8 +25,15 @@ function isHttpUrl(value: string): boolean {
   return /^https?:\/\//i.test(value);
 }
 
+// Spreadsheets evaluate cells that start with = + - @ (or a tab / CR) as
+// formulas, and PR / work item titles are written by other people. A leading
+// apostrophe makes the cell plain text instead.
+function neutralizeFormula(value: string): string {
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+}
+
 function htmlCell<T>(column: CopyColumn<T>, row: T): string {
-  const text = column.text(row);
+  const text = neutralizeFormula(column.text(row));
   const href = column.href?.(row);
   // An empty cell would collapse in some mail clients; keep it one line tall.
   const inner = text === "" ? "&nbsp;" : escapeHtml(text);
@@ -48,7 +55,7 @@ function tsvCell(value: string): string {
 
 export function rowsToTsv<T>(rows: T[], columns: CopyColumn<T>[]): string {
   const lines = [columns.map((c) => tsvCell(c.label))];
-  for (const row of rows) lines.push(columns.map((c) => tsvCell(c.text(row))));
+  for (const row of rows) lines.push(columns.map((c) => tsvCell(neutralizeFormula(c.text(row)))));
   return lines.map((cells) => cells.join("\t")).join("\n");
 }
 

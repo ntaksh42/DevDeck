@@ -427,7 +427,8 @@ ID とタイトルのセルは Web URL へのハイパーリンクにする。�
 CI・役割・投票などのバッジはラベル文字列にする。Work Items ではビューの追加フィールド列も含める。
 クリップボードには `text/html` (`<table>` + インラインスタイル、Outlook / Gmail / Teams 向け) と
 `text/plain` (ヘッダー付き TSV、Excel / テキストエディタ向け) を同時に書き込み、
-`ClipboardItem` が使えない環境では TSV のみ書き込む (`src/lib/clipboardTable.ts`)。
+`ClipboardItem` が使えない環境、またはリッチ書き込みが拒否された場合は TSV のみ書き込む (`src/lib/clipboardTable.ts`)。
+他人が書いたタイトル等が表計算で数式として評価されないよう、セルの先頭が `=` `+` `-` `@` またはタブ/CR のときは先頭に `'` を付ける。
 Commits は従来どおり URL を改行区切りでコピーする。`C` (1 件の URL) と `L`
 (Markdown リンク) は変わらない。コピー結果はトーストで通知する
 (`Row copied` / `N rows copied` / `Copy failed`、Commits は `URL copied` / `N URLs copied`)。

@@ -126,3 +126,35 @@ describe("copyRowsAsTable", () => {
     expect(setToast).toHaveBeenLastCalledWith(null);
   });
 });
+
+describe("formula injection guard", () => {
+  const formulaRows: Row[] = [
+    { id: 1, title: '=HYPERLINK("http://example.com","click")', url: null },
+    { id: 2, title: "+1+1", url: null },
+    { id: 3, title: "-2", url: null },
+    { id: 4, title: "@SUM(1)", url: null },
+    { id: 5, title: "\t=1+1", url: null },
+    { id: 6, title: "plain = title", url: null },
+  ];
+
+  it("prefixes TSV cells that start with a formula character", () => {
+    const lines = rowsToTsv(formulaRows, columns).split("\n");
+    expect(lines[1]).toBe('#1\t\'=HYPERLINK("http://example.com","click")');
+    expect(lines[2]).toBe("#2\t'+1+1");
+    expect(lines[3]).toBe("#3\t'-2");
+    expect(lines[4]).toBe("#4\t'@SUM(1)");
+    expect(lines[5]).toBe("#5\t' =1+1");
+    expect(lines[6]).toBe("#6\tplain = title");
+  });
+
+  it("prefixes HTML cells that start with a formula character", () => {
+    const html = rowsToTableHtml(formulaRows, columns);
+    expect(html).toContain("'=HYPERLINK(&quot;http://example.com&quot;");
+    expect(html).toContain(">'+1+1</td>");
+    expect(html).toContain(">plain = title</td>");
+  });
+
+  it("leaves ID cells such as #123 untouched", () => {
+    expect(rowsToTsv([formulaRows[5]], columns).split("\n")[1]).toMatch(/^#6\t/);
+  });
+});
