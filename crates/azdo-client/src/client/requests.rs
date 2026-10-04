@@ -78,6 +78,34 @@ impl AdoClient {
         .await
     }
 
+    /// Like `get_json`, but also returns the `x-ms-continuationtoken` response
+    /// header, which APIs such as Refs - List use to signal another page.
+    pub(crate) async fn get_json_with_continuation<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+    ) -> Result<(T, Option<String>)> {
+        let url = join_api_path(&self.base_url, path)?;
+
+        self.send_with_retry(
+            "GET",
+            path,
+            true,
+            || self.http.get(url.clone()).query(query),
+            |resp| async move {
+                let token = resp
+                    .headers()
+                    .get("x-ms-continuationtoken")
+                    .and_then(|value| value.to_str().ok())
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(str::to_string);
+                Ok((decode_json(resp).await?, token))
+            },
+        )
+        .await
+    }
+
     /// GETs raw bytes (e.g. `$format=octetStream` item downloads) with the
     /// shared retry behavior, returning the body and its Content-Type.
     pub(crate) async fn get_bytes(
