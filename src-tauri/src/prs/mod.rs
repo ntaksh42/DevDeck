@@ -13,6 +13,9 @@ mod tests;
 #[cfg(test)]
 mod live_results_tests;
 
+#[cfg(test)]
+mod tests_force_refresh;
+
 pub(crate) use live_results::*;
 pub(crate) use notifications::*;
 pub(crate) use search::*;

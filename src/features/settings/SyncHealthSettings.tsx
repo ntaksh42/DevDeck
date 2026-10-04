@@ -65,7 +65,7 @@ export function SyncHealthSettings({ organizations }: { organizations: Organizat
             <button
               type="button"
               disabled={syncMutation.isPending}
-              onClick={() => syncMutation.mutate({ scope: "all" })}
+              onClick={() => syncMutation.mutate({ scope: "all", force: true })}
               className="inline-flex h-8 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
             >
               {syncMutation.isPending ? (
@@ -130,7 +130,7 @@ export function SyncHealthSettings({ organizations }: { organizations: Organizat
                     <button
                       type="button"
                       disabled={syncMutation.isPending}
-                      onClick={() => syncMutation.mutate({ scope: syncScope(state) })}
+                      onClick={() => syncMutation.mutate({ scope: syncScope(state), force: true })}
                       className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <RefreshCw

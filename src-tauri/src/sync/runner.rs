@@ -48,7 +48,9 @@ impl SyncRunner {
                 }
             }
             let scope = combined_scope(&waiters);
-            let outcome = self.sync_once(&handle, scope).await;
+            // The periodic tick has no waiters, so only an explicit refresh forces.
+            let force = waiters.iter().any(|trigger| trigger.force);
+            let outcome = self.sync_once(&handle, scope, force).await;
             if outcome.is_failure() {
                 consecutive_failures = consecutive_failures.saturating_add(1);
                 let retry_in = backoff_secs(consecutive_failures);
@@ -134,7 +136,12 @@ impl SyncRunner {
             .and_then(|state| state.last_error)
     }
 
-    async fn sync_once(&self, handle: &AppHandle, scope: SyncScope) -> SyncPassOutcome {
+    async fn sync_once(
+        &self,
+        handle: &AppHandle,
+        scope: SyncScope,
+        force_refresh: bool,
+    ) -> SyncPassOutcome {
         let settings = Arc::new(match self.db.get_app_settings() {
             Ok(settings) => settings,
             Err(e) => {
@@ -167,6 +174,7 @@ impl SyncRunner {
                 handle.clone(),
                 org,
                 scope,
+                force_refresh,
                 settings.clone(),
                 self.concurrency.clone(),
                 now.clone(),

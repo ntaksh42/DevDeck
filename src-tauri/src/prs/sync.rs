@@ -25,11 +25,12 @@ pub async fn sync_prs_for_org(
     org: &Organization,
     projects: &[TeamProject],
     budget: &SyncBudget,
+    force_refresh: bool,
 ) -> Result<()> {
     let scope = format!("prs:{}", org.id);
     let error_count = db.get_sync_state(&scope)?.map_or(0, |s| s.error_count);
 
-    match do_sync_prs(db, client, org, projects, budget).await {
+    match do_sync_prs(db, client, org, projects, budget, force_refresh).await {
         Ok(result) => {
             let now = Utc::now().to_rfc3339();
             db.update_sync_state(
@@ -78,20 +79,23 @@ pub(crate) async fn do_sync_prs(
     org: &Organization,
     projects: &[TeamProject],
     budget: &SyncBudget,
+    force_refresh: bool,
 ) -> Result<SyncPrsResult> {
     // Run the active-PR and review-PR passes concurrently; both fan out over the
     // same projects but issue independent queries, all bounded by the shared
     // budget. The review pass is only meaningful when the signed-in user is known.
     let review_user = org.authenticated_user_id.clone();
-    let (active, review) =
-        tokio::join!(fetch_all_active_prs(client, org, projects, budget), async {
+    let (active, review) = tokio::join!(
+        fetch_all_active_prs(client, org, projects, budget, force_refresh),
+        async {
             match review_user.as_deref() {
                 Some(user_id) => {
                     Some(fetch_all_review_prs(client, org, projects, user_id, budget).await)
                 }
                 None => None,
             }
-        });
+        }
+    );
     let active = active?;
 
     // If nothing synced and we have a real error, surface it instead of
@@ -161,6 +165,7 @@ async fn fetch_all_active_prs(
     org: &Organization,
     projects: &[TeamProject],
     budget: &SyncBudget,
+    force_refresh: bool,
 ) -> Result<ActivePrsFetch> {
     let mut tasks: JoinSet<PrProjectFetch> = JoinSet::new();
     for project in projects {
@@ -170,7 +175,7 @@ async fn fetch_all_active_prs(
         let budget = budget.clone();
         tasks.spawn(async move {
             let _permit = budget.acquire_owned().await;
-            fetch_active_prs_for_project(client, org, project).await
+            fetch_active_prs_for_project(client, org, project, force_refresh).await
         });
     }
 

@@ -34,6 +34,8 @@ pub struct SyncRunner {
 
 pub struct SyncTrigger {
     pub scope: SyncScope,
+    /// Set for an explicit user refresh; see `TriggerSyncInput::force`.
+    pub force: bool,
     pub done: oneshot::Sender<()>,
 }
 

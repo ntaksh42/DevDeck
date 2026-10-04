@@ -12,12 +12,14 @@ pub async fn trigger_sync(
     state: State<'_, AppState>,
 ) -> Result<()> {
     let (tx, rx) = oneshot::channel();
+    let force = input.as_ref().is_some_and(|input| input.force);
     state
         .sync_trigger
         .send(SyncTrigger {
             scope: input
                 .and_then(|input| input.scope)
                 .unwrap_or(SyncScope::All),
+            force,
             done: tx,
         })
         .await

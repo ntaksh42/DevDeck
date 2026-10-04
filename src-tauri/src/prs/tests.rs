@@ -203,7 +203,7 @@ async fn pr_sync_skips_failing_project_and_preserves_its_cache() {
 
     let projects = client.list_projects().await.unwrap();
     let budget: SyncBudget = std::sync::Arc::new(tokio::sync::Semaphore::new(8));
-    let result = do_sync_prs(&db, &client, &org, &projects, &budget)
+    let result = do_sync_prs(&db, &client, &org, &projects, &budget, false)
         .await
         .unwrap();
 

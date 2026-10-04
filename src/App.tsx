@@ -375,7 +375,7 @@ function AppShell() {
     readOnlyMode,
     quickPipelines,
     setView,
-    syncAll: () => syncMutation.mutate({ scope: "all" }),
+    syncAll: () => syncMutation.mutate({ scope: "all", force: true }),
     refreshCurrentView,
     runQuickPipeline: (p) => { void runQuickPipeline(p); },
     openHelp,
@@ -385,7 +385,7 @@ function AppShell() {
     activeView,
     organizationsLength: organizations.length,
     syncPending: syncMutation.isPending,
-    syncAll: () => syncMutation.mutate({ scope: "all" }),
+    syncAll: () => syncMutation.mutate({ scope: "all", force: true }),
     keybindings,
     navigateHistory,
     openCommandPalette,
@@ -439,7 +439,7 @@ function AppShell() {
             workItemNavViews.find((view) => view.id === activeWorkItemViewId)?.name
           }
           onToggleSidebar={() => setSidebarCollapsed((c) => !c)}
-          onSync={() => syncMutation.mutate({ scope: "all" })}
+          onSync={() => syncMutation.mutate({ scope: "all", force: true })}
         />
         <AppContent
           activeView={activeView}

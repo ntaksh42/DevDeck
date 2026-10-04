@@ -17,20 +17,27 @@ const SHARED_CACHE_FRESHNESS: Duration = Duration::from_secs(120);
 
 // One project-level query replaces a request per repository; repositories
 // with zero active PRs simply contribute nothing.
+//
+// `force_refresh` (an explicit user refresh) skips the shared-cache shortcut so
+// a manual update never shows a list up to `SHARED_CACHE_FRESHNESS` old; the
+// fetched result is still written back to the shared cache.
 pub(crate) async fn fetch_active_prs_for_project(
     client: AdoClient,
     org: Organization,
     project: TeamProject,
+    force_refresh: bool,
 ) -> PrProjectFetch {
     let project_id = project.id.clone();
     let label = project.name.clone();
 
-    if let Some(cached) = read_active_prs_from_shared_cache(&org, &project) {
-        return PrProjectFetch {
-            project_id,
-            label,
-            result: Ok(cached),
-        };
+    if !force_refresh {
+        if let Some(cached) = read_active_prs_from_shared_cache(&org, &project) {
+            return PrProjectFetch {
+                project_id,
+                label,
+                result: Ok(cached),
+            };
+        }
     }
 
     let prs = match client

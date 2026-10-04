@@ -96,6 +96,10 @@ impl AppState {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TriggerSyncInput {
     pub(crate) scope: Option<SyncScope>,
+    /// An explicit user refresh: bypass the shared-cache shortcut and hit the
+    /// API. Automatic triggers (startup, window focus) leave this unset.
+    #[serde(default)]
+    pub(crate) force: bool,
 }
 
 // Keeps SQLite and file I/O off the main thread, where synchronous Tauri
@@ -138,5 +142,13 @@ mod tests {
             "scope": "notARealScope"
         }))
         .is_err());
+    }
+
+    #[test]
+    fn trigger_sync_input_force_defaults_to_false() {
+        let input = serde_json::from_value::<TriggerSyncInput>(json!({ "scope": "all" })).unwrap();
+        assert!(!input.force);
+        let input = serde_json::from_value::<TriggerSyncInput>(json!({ "force": true })).unwrap();
+        assert!(input.force);
     }
 }

@@ -25,7 +25,7 @@ export function useSyncManager(organizationsLength: number, activeView: View) {
   const lastHotSyncRequestedAtRef = useRef(0);
 
   const syncMutation = useMutation({
-    mutationFn: (input: { scope?: SyncScope }) => triggerSync(input),
+    mutationFn: (input: { scope?: SyncScope; force?: boolean }) => triggerSync(input),
     onSuccess: (_data, input) => {
       invalidateSyncedDataQueries(queryClient, invalidationScopesForSyncScope(input.scope ?? "all"));
       void queryClient.invalidateQueries({ queryKey: ["syncStates"] });
@@ -39,7 +39,7 @@ export function useSyncManager(organizationsLength: number, activeView: View) {
       return;
     }
     if (organizationsLength > 0 && !syncMutation.isPending) {
-      syncMutation.mutate({ scope: currentViewSyncScope(activeView) });
+      syncMutation.mutate({ scope: currentViewSyncScope(activeView), force: true });
     }
   }
 

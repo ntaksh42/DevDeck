@@ -29,6 +29,7 @@ pub(super) async fn sync_org(
     handle: AppHandle,
     org: Organization,
     scope: SyncScope,
+    force_refresh: bool,
     settings: Arc<AppSettings>,
     budget: SyncBudget,
     now: String,
@@ -56,7 +57,17 @@ pub(super) async fn sync_org(
 
     let (pr_outcome, wi_outcome, commit_outcome) = tokio::join!(
         sync_org_prs(
-            &db, &client, &handle, &org, scope, &settings, &snooze, &budget, &now, &projects,
+            &db,
+            &client,
+            &handle,
+            &org,
+            scope,
+            force_refresh,
+            &settings,
+            &snooze,
+            &budget,
+            &now,
+            &projects,
         ),
         sync_org_work_items(
             &db, &client, &handle, &org, scope, &settings, &snooze, &budget, &now, &projects,
@@ -76,6 +87,7 @@ async fn sync_org_prs(
     handle: &AppHandle,
     org: &Organization,
     scope: SyncScope,
+    force_refresh: bool,
     settings: &AppSettings,
     snooze: &SnoozeService,
     budget: &SyncBudget,
@@ -95,7 +107,7 @@ async fn sync_org_prs(
     } else {
         Vec::new()
     };
-    if let Err(e) = sync_prs_for_org(db, client, org, projects, budget).await {
+    if let Err(e) = sync_prs_for_org(db, client, org, projects, budget, force_refresh).await {
         tracing::error!(org = %org.name, error = ?e, "sync: PR sync failed");
         outcome.record_failure();
         return outcome;

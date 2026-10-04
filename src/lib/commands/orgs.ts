@@ -219,6 +219,8 @@ export type GetWorkItemResultPreviewInput = {
 
 export type TriggerSyncInput = {
   scope?: SyncScope;
+  /** An explicit user refresh: skip the shared-cache shortcut and hit the API. */
+  force?: boolean;
 };
 
 export async function listOrganizations(): Promise<Organization[]> {
