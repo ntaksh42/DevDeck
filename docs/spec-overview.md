@@ -697,9 +697,9 @@ format!(
 - サーバ状態は TanStack Query 経由。ミューテーションで画面表示が変わる場合は該当クエリキーを更新/無効化する。
 - 長いリストは既存のローカル windowing で仮想化する。
 - 広範なリファクタは要求された変更に必要な場合のみ行う。
+- diff 表示 (PR ファイル / コミット / Code の Compare) は比較前に両側の改行コードを LF へ正規化する。改行コードだけが変わったファイルは行差分が空になるため、「Only line endings changed (LF → CRLF)」の通知を出し、PR のファイル見出しの ±行数の横に `EOL` バッジを付ける (`eolOnlyChange`)。
 
 ---
-- diff 表示 (PR ファイル / コミット / Code の Compare) は比較前に両側の改行コードを LF へ正規化する。改行コードだけが変わったファイルは行差分が空になるため、「Only line endings changed (LF → CRLF)」の通知を出し、PR のファイル見出しの ±行数の横に `EOL` バッジを付ける (`eolOnlyChange`)。
 
 ## 10. 検証
 
