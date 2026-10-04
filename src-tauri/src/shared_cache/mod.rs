@@ -195,6 +195,23 @@ pub fn mark_synced(
     Ok(())
 }
 
+/// Removes everything cached for `organization`. Called when a connection is
+/// deleted so its PR / work item titles stop being readable by other apps.
+pub fn delete_organization(conn: &Connection, organization: &str) -> Result<()> {
+    for table in [
+        "pull_request_reviewers",
+        "pull_requests",
+        "work_items",
+        "sync_state",
+    ] {
+        conn.execute(
+            &format!("DELETE FROM {table} WHERE organization = ?1"),
+            params![organization],
+        )?;
+    }
+    Ok(())
+}
+
 fn unix_now() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -217,6 +234,51 @@ mod tests {
         )
         .unwrap();
         conn
+    }
+
+    #[test]
+    fn delete_organization_removes_only_that_organizations_rows() {
+        let conn = open().unwrap();
+        for org in ["gone", "kept"] {
+            conn.execute(
+                "INSERT INTO pull_requests (organization, project, repository_id, repository_name,
+                    pull_request_id, title, status, creation_date, source_ref_name, target_ref_name)
+                 VALUES (?1, 'p', 'r', 'repo', 1, 't', 'active', '2026-01-01', 's', 't')",
+                params![org],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO pull_request_reviewers (organization, project, repository_id,
+                    pull_request_id, reviewer_id, vote)
+                 VALUES (?1, 'p', 'r', 1, 'u', 0)",
+                params![org],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO work_items (organization, project, id, title) VALUES (?1, 'p', 1, 't')",
+                params![org],
+            )
+            .unwrap();
+            mark_synced(&conn, org, "p", KIND_PULL_REQUESTS, "devdeck").unwrap();
+        }
+
+        delete_organization(&conn, "gone").unwrap();
+
+        for table in [
+            "pull_requests",
+            "pull_request_reviewers",
+            "work_items",
+            "sync_state",
+        ] {
+            let orgs: Vec<String> = conn
+                .prepare(&format!("SELECT organization FROM {table}"))
+                .unwrap()
+                .query_map([], |row| row.get(0))
+                .unwrap()
+                .collect::<std::result::Result<_, _>>()
+                .unwrap();
+            assert_eq!(orgs, vec!["kept".to_string()], "{table}");
+        }
     }
 
     #[test]

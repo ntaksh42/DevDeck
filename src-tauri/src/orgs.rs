@@ -7,6 +7,7 @@ use serde::Deserialize;
 use crate::db::{AppDatabase, Organization, OrganizationDraft};
 use crate::error::{AppError, Result};
 use crate::secrets::SecretStore;
+use crate::shared_cache;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -92,6 +93,17 @@ impl OrganizationService {
         // becoming an un-authenticatable zombie. delete_credential treats a
         // missing entry as success, so a retried delete remains idempotent.
         self.db.delete_organization(id)?;
+        // Best-effort: the shared cache is also readable by other apps, so drop
+        // this organization's mirrored rows too, but never fail the delete.
+        if let Err(e) = shared_cache::open()
+            .and_then(|conn| shared_cache::delete_organization(&conn, &org.name))
+        {
+            tracing::warn!(
+                org = %org.name,
+                error = %e,
+                "failed to clear the organization from the shared cache"
+            );
+        }
         self.secrets.delete_credential(&org.credential_key)
     }
 

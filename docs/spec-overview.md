@@ -287,6 +287,8 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   `pull_requests` / `work_items` 自体の列を変更しても `shared_cache` 側のマッピングさえ
   追従させれば waypoint 側は壊れない。Work Item は書き込みのみで読み取りゲートは持たない
   (差分/フル同期の込み入った既存ロジックに読み取りスキップを組み込むリスクが高いと判断)。
+  接続 (組織) を削除したときは、その組織の PR / レビュアー / Work Item / 同期状態の行も
+  共有キャッシュから削除する (ベストエフォート。失敗しても接続の削除は成功扱い)。
 
 ### 同期ループ (`sync.rs`)
 
