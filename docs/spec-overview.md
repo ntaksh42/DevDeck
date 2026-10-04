@@ -223,8 +223,13 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   ID 指定で追加・削除できる (`add_work_item_link` / `remove_work_item_link`)。
 - **PR 完了オプション**: complete 時にマージ戦略・ソースブランチ削除に加え、関連 work item を
   次状態へ自動遷移する `transitionWorkItems` を指定できる (`update_pull_request` の complete アクション)。
-- **PR レビュアー管理**: レビューパネルから既存レビュアーの必須/任意切替・削除が可能
-  (`set_pull_request_reviewer_required` / `remove_pull_request_reviewer`)。
+- **PR レビュアー管理**: レビューパネルから既存レビュアーの必須/任意切替・削除に加え、
+  レビュアーの追加ができる。「Add」は @メンションと同じディレクトリ検索 (`search_pull_request_mentions`、
+  2 文字以上、既存レビュアーは除外) の候補を `↑↓` で選び Enter で追加 (「Required」で必須指定、Esc で閉じて
+  「Add」へフォーカスを戻す)、「Add me」はサインイン中のユーザーを即追加する (自分が既にレビュアーなら出さない)。
+  追加は `add_pull_request_reviewer` (レビュアー endpoint の upsert を投票 0 で呼ぶ。`reviewerId` 省略で本人)。
+  GitHub 接続ではレビュー依頼 (`requested_reviewers`) として扱い、必須フラグは無視する。
+  (`add_pull_request_reviewer` / `set_pull_request_reviewer_required` / `remove_pull_request_reviewer`)。
 - **PR 編集**: ライフサイクル操作 (abandon / reactivate / publish / draft / complete、`update_pull_request`) に加え、
   レビューパネルからタイトル・説明をインライン編集できる (`update_pull_request_details`)。
 - **PR 操作**: レビューパネルから publish / Convert to draft (`draft` アクション、Azure DevOps のみ。

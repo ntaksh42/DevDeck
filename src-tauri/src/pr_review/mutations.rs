@@ -227,6 +227,35 @@ impl PrReviewService {
         Ok(())
     }
 
+    /// Adds a reviewer (or the signed-in user when no id is given) to a pull
+    /// request (issue #384). The reviewers endpoint is an upsert, so this is the
+    /// same PUT as marking an existing reviewer required, with a zero vote.
+    pub async fn add_reviewer(&self, input: AddPullRequestReviewerInput) -> Result<()> {
+        let organization = self
+            .db
+            .resolve_organization(input.pr.organization_id.as_deref())?;
+        let reviewer_id = match input.reviewer_id.filter(|id| !id.trim().is_empty()) {
+            Some(id) => id,
+            None => organization.authenticated_user_id.clone().ok_or_else(|| {
+                AppError::InvalidInput(
+                    "organization has no authenticated user id; re-add the organization"
+                        .to_string(),
+                )
+            })?,
+        };
+        let client = client_for_organization(&organization, &self.secrets)?;
+        client
+            .set_pull_request_reviewer_required(
+                &input.pr.project_id,
+                &input.pr.repository_id,
+                input.pr.pull_request_id,
+                &reviewer_id,
+                input.is_required,
+            )
+            .await?;
+        Ok(())
+    }
+
     /// Removes a reviewer from a pull request (issue #384).
     pub async fn remove_reviewer(&self, input: RemovePullRequestReviewerInput) -> Result<()> {
         let organization = self

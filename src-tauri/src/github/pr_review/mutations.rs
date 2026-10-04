@@ -345,6 +345,26 @@ pub async fn set_reviewer_required(
     Ok(())
 }
 
+/// Requests a review from `reviewer_id` (a GitHub login), or from the signed-in
+/// user when none is given. GitHub has no required flag, so `is_required` is
+/// ignored.
+pub async fn add_reviewer(
+    organization: &Organization,
+    secrets: &SecretStore,
+    input: AddPullRequestReviewerInput,
+) -> Result<()> {
+    let (owner, repo) = split_owner_repo(&input.pr.repository_id)?;
+    let client = client(organization, secrets)?;
+    let reviewer = input
+        .reviewer_id
+        .filter(|id| !id.trim().is_empty())
+        .unwrap_or_else(|| login_for(organization));
+    client
+        .request_reviewers(&owner, &repo, input.pr.pull_request_id, &[reviewer])
+        .await?;
+    Ok(())
+}
+
 pub async fn remove_reviewer(
     organization: &Organization,
     secrets: &SecretStore,

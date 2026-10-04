@@ -258,6 +258,18 @@ export async function setPullRequestReviewerRequired(input: {
   await invokeCommand("set_pull_request_reviewer_required", { input });
 }
 
+// Adds a reviewer to a pull request; omit reviewerId to add the signed-in user.
+export async function addPullRequestReviewer(input: {
+  organizationId?: string;
+  projectId: string;
+  repositoryId: string;
+  pullRequestId: number;
+  reviewerId?: string;
+  isRequired?: boolean;
+}): Promise<void> {
+  await invokeCommand("add_pull_request_reviewer", { input });
+}
+
 export async function removePullRequestReviewer(input: {
   organizationId?: string;
   projectId: string;

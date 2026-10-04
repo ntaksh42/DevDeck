@@ -36,10 +36,10 @@ use crate::pipelines::{
     UpdatePipelineDefinitionInput,
 };
 use crate::pr_review::{
-    DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
-    PostPullRequestCommentInput, PrCommit, PrDetailsResult, PrFileDiff, PrLocator, PrReviewer,
-    PrStatusResult, PrThread, PullRequestChanges, PullRequestReview,
-    RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
+    AddPullRequestReviewerInput, DeletePullRequestCommentInput, EditPullRequestCommentInput,
+    GetPullRequestFileDiffInput, PostPullRequestCommentInput, PrCommit, PrDetailsResult,
+    PrFileDiff, PrLocator, PrReviewer, PrStatusResult, PrThread, PullRequestChanges,
+    PullRequestReview, RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
     SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
     SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
 };
@@ -357,6 +357,10 @@ impl Provider for GithubProvider {
         input: SetPullRequestReviewerRequiredInput,
     ) -> Result<()> {
         github::pr_review::set_reviewer_required(&self.org, &self.secrets, input).await
+    }
+
+    async fn add_pull_request_reviewer(&self, input: AddPullRequestReviewerInput) -> Result<()> {
+        github::pr_review::add_reviewer(&self.org, &self.secrets, input).await
     }
 
     async fn remove_pull_request_reviewer(

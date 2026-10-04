@@ -3,10 +3,10 @@ use tauri::State;
 use crate::app_state::{ensure_write_enabled, AppState};
 use crate::error::Result;
 use crate::pr_review::{
-    DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
-    PostPullRequestCommentInput, PrCommit, PrDetailsResult, PrFileDiff, PrLocator, PrReviewer,
-    PrStatusResult, PrThread, PullRequestChanges, PullRequestReview,
-    RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
+    AddPullRequestReviewerInput, DeletePullRequestCommentInput, EditPullRequestCommentInput,
+    GetPullRequestFileDiffInput, PostPullRequestCommentInput, PrCommit, PrDetailsResult,
+    PrFileDiff, PrLocator, PrReviewer, PrStatusResult, PrThread, PullRequestChanges,
+    PullRequestReview, RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
     SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
     SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
 };
@@ -136,6 +136,20 @@ pub async fn set_pull_request_reviewer_required(
         .provider()
         .await?
         .set_pull_request_reviewer_required(input)
+        .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn add_pull_request_reviewer(
+    input: AddPullRequestReviewerInput,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    ensure_write_enabled(&state).await?;
+    state
+        .provider()
+        .await?
+        .add_pull_request_reviewer(input)
         .await
 }
 

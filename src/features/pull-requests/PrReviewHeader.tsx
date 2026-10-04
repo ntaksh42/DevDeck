@@ -13,6 +13,7 @@ import type {
   ReviewPullRequestSummary,
 } from "@/lib/azdoCommands";
 import { VOTE_DOT_CLASSES, voteTone } from "./voteVisual";
+import { type AddReviewerRequest, PrReviewerAdder } from "./PrReviewerAdder";
 
 const BADGE_BASE =
   "inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-medium";
@@ -170,6 +171,7 @@ export function PrReviewHeader({
   reviewerActionsBusy = false,
   onToggleReviewerRequired,
   onRemoveReviewer,
+  onAddReviewer,
   compact = false,
 }: {
   selectedPr: ReviewPullRequestSummary | null;
@@ -177,6 +179,7 @@ export function PrReviewHeader({
   reviewerActionsBusy?: boolean;
   onToggleReviewerRequired?: (reviewer: PrReviewer) => void;
   onRemoveReviewer?: (reviewer: PrReviewer) => void;
+  onAddReviewer?: (request: AddReviewerRequest) => void;
   /** One line (id + title) instead of the full metadata block. */
   compact?: boolean;
 }) {
@@ -253,7 +256,7 @@ export function PrReviewHeader({
           {createdBy ?? "Unknown"}
           {creationDate ? ` · opened ${formatRelativeDate(creationDate)}` : ""}
         </p>
-        {reviewers.length > 0 ? (
+        {reviewers.length > 0 || onAddReviewer ? (
           <div className="flex min-w-0 flex-wrap items-center gap-1">
             <span className="mr-0.5 text-xs text-muted-foreground">Reviewers</span>
             {approvedBadge(review)}
@@ -295,6 +298,17 @@ export function PrReviewHeader({
                 ) : null}
               </span>
             ))}
+            {onAddReviewer ? (
+              <PrReviewerAdder
+                organizationId={selectedPr.organizationId}
+                existingReviewerIds={
+                  new Set(reviewers.flatMap((reviewer) => (reviewer.id ? [reviewer.id] : [])))
+                }
+                canAddMe={!reviewers.some((reviewer) => reviewer.isMe)}
+                busy={reviewerActionsBusy}
+                onAdd={onAddReviewer}
+              />
+            ) : null}
           </div>
         ) : null}
       </div>

@@ -13,12 +13,12 @@ use crate::auth::github_client_for_organization;
 use crate::db::Organization;
 use crate::error::{AppError, Result};
 use crate::pr_review::{
-    DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
-    PostPullRequestCommentInput, PrChangedFile, PrComment, PrCommit, PrDetailsResult, PrFileDiff,
-    PrLocator, PrReviewer, PrStatusResult, PrThread, PullRequestChanges, PullRequestReview,
-    RemovePullRequestReviewerInput, SetPullRequestReviewerRequiredInput,
-    SetPullRequestThreadStatusInput, SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput,
-    UpdatePullRequestInput,
+    AddPullRequestReviewerInput, DeletePullRequestCommentInput, EditPullRequestCommentInput,
+    GetPullRequestFileDiffInput, PostPullRequestCommentInput, PrChangedFile, PrComment, PrCommit,
+    PrDetailsResult, PrFileDiff, PrLocator, PrReviewer, PrStatusResult, PrThread,
+    PullRequestChanges, PullRequestReview, RemovePullRequestReviewerInput,
+    SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
+    SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
 };
 use crate::secrets::SecretStore;
 
@@ -379,6 +379,7 @@ fn commit_to_pr_commit(item: PrCommitItem) -> PrCommit {
 
 mod mutations;
 pub use mutations::{
-    delete_comment, edit_comment, post_comment, remove_reviewer, set_reviewer_required,
-    set_thread_status, submit_vote, update_pull_request, update_pull_request_details,
+    add_reviewer, delete_comment, edit_comment, post_comment, remove_reviewer,
+    set_reviewer_required, set_thread_status, submit_vote, update_pull_request,
+    update_pull_request_details,
 };

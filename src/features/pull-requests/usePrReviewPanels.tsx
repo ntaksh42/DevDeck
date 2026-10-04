@@ -5,6 +5,7 @@ import {
   commandErrorMessage,
   getPullRequestReview,
   prLocator,
+  addPullRequestReviewer,
   removePullRequestReviewer,
   setPullRequestReviewerRequired,
   type ReviewPullRequestSummary,
@@ -103,7 +104,18 @@ export function usePrReviewPanels({
     },
     onError: (error) => setReviewerError(commandErrorMessage(error)),
   });
-  const reviewerActionsBusy = reviewerRequiredMutation.isPending || removeReviewerMutation.isPending;
+  const addReviewerMutation = useMutation({
+    mutationFn: addPullRequestReviewer,
+    onSuccess: () => {
+      setReviewerError(null);
+      invalidateReviewerData();
+    },
+    onError: (error) => setReviewerError(commandErrorMessage(error)),
+  });
+  const reviewerActionsBusy =
+    reviewerRequiredMutation.isPending ||
+    removeReviewerMutation.isPending ||
+    addReviewerMutation.isPending;
   const { confirm: confirmRemoval, dialogProps: removalDialogProps } = useConfirm();
 
   // Esc / ← step back to the grid from anywhere in the preview that is not a
@@ -160,6 +172,9 @@ export function usePrReviewPanels({
               reviewerId: reviewer.id,
               isRequired: !reviewer.isRequired,
             });
+          }}
+          onAddReviewer={(request) => {
+            if (selectedPr) addReviewerMutation.mutate({ ...prLocator(selectedPr), ...request });
           }}
           onRemoveReviewer={(reviewer) => {
             if (!selectedPr || !reviewer.id) return;

@@ -80,6 +80,18 @@ pub struct SetPullRequestReviewerRequiredInput {
     pub is_required: bool,
 }
 
+/// Adds a reviewer to a pull request. `reviewer_id` is the identity to add;
+/// omit it to add the signed-in user ("Add me").
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddPullRequestReviewerInput {
+    #[serde(flatten)]
+    pub pr: PrLocator,
+    pub reviewer_id: Option<String>,
+    #[serde(default)]
+    pub is_required: bool,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemovePullRequestReviewerInput {

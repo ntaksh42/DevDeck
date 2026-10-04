@@ -47,6 +47,7 @@ export const writeCommands = new Set([
   "submit_pull_request_vote",
   "update_pull_request",
   "set_pull_request_reviewer_required",
+  "add_pull_request_reviewer",
   "remove_pull_request_reviewer",
   "update_pull_request_details",
   "edit_pull_request_comment",
@@ -54,6 +55,7 @@ export const writeCommands = new Set([
   "rerun_pipeline_run",
   "queue_pipeline_run",
   "cancel_pipeline_run",
+  "retry_pipeline_stage",
   "update_pipeline_approval",
   "update_pipeline_definition",
 ]);

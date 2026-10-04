@@ -46,10 +46,10 @@ use crate::pipelines::{
     UpdatePipelineDefinitionInput,
 };
 use crate::pr_review::{
-    DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
-    PostPullRequestCommentInput, PrCommit, PrDetailsResult, PrFileDiff, PrLocator, PrReviewer,
-    PrStatusResult, PrThread, PullRequestChanges, PullRequestReview,
-    RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
+    AddPullRequestReviewerInput, DeletePullRequestCommentInput, EditPullRequestCommentInput,
+    GetPullRequestFileDiffInput, PostPullRequestCommentInput, PrCommit, PrDetailsResult,
+    PrFileDiff, PrLocator, PrReviewer, PrStatusResult, PrThread, PullRequestChanges,
+    PullRequestReview, RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
     SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
     SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
 };
@@ -218,6 +218,7 @@ pub(crate) trait Provider: Send + Sync {
         &self,
         input: SetPullRequestReviewerRequiredInput,
     ) -> Result<()>;
+    async fn add_pull_request_reviewer(&self, input: AddPullRequestReviewerInput) -> Result<()>;
     async fn remove_pull_request_reviewer(
         &self,
         input: RemovePullRequestReviewerInput,
