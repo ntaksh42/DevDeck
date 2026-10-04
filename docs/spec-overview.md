@@ -756,6 +756,7 @@ format!(
 - diff 表示 (PR ファイル / コミット / Code の Compare) は比較前に両側の改行コードを LF へ正規化する。改行コードだけが変わったファイルは行差分が空になるため、「Only line endings changed (LF → CRLF)」の通知を出し、PR のファイル見出しの ±行数の横に `EOL` バッジを付ける (`eolOnlyChange`)。
   コミットのファイル差分 (`CommitDiffView`) は「Unified / Side by side」を切替でき (選択は localStorage `azdodeck:view:commitDiffMode:v1` に保存)、拡張子から言語が決まるファイルは行単位で構文ハイライトする (`highlightLineHtml`。語単位の強調がある変更行は語強調を優先し、複数行にまたがるトークンは開始行のみ着色)。
 - **Project info (Settings、issue #541)**: Settings の「Project」カテゴリ。アクティブな接続の 1 プロジェクトについて、チームとメンバー (`list_project_teams`: `projects/{id}/teams` と各チームの `members`。先頭 20 チームまで、超過時は注記)、サービス接続 (`list_service_connections`: `serviceendpoint/endpoints`。資格情報は読まない)、サービスフック (`list_service_hooks`: `hooks/subscriptions` をプロジェクトで絞り込み。Webhook URL などの consumerInputs は読まない) を読み取り専用で表示する。各セクションは `<details>` で、開いたときだけ取得する (権限不足などの失敗はそのセクションだけに表示)。チーム編集・接続/フックの作成・セキュリティ/権限設定の閲覧・Area/Iteration Path の編集は対象外。GitHub 接続は未対応 (`NotSupported`)。
+- **対象外として確定した領域 (issues #538, #540)**: Test Plans (テストケース管理・実行)、Artifacts (パッケージフィード)、Wiki の編集、Azure DevOps 標準の通知購読 (個人/チーム) の閲覧・編集連携は実装しない。DevDeck は PR / Work Item / Commit / Pipeline / Code を横断する個人ダッシュボードで、これらは別プロダクト相当の大型機能になるため。通知は DevDeck 独自のローカルルール (§5) だけで管理し、ADO 側の購読設定とは意図的に非連動とする。Wiki は検索 + 読み取りプレビュー (`wiki:` パレット検索) まで。
 
 ---
 
