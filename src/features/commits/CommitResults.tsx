@@ -19,7 +19,6 @@ import { useKeyedGridSelection } from "@/lib/useKeyedGridSelection";
 import { useGridFocusRestoration } from "@/lib/useGridFocusRestoration";
 import { useRangeSelection } from "@/lib/useRangeSelection";
 import { copyRowUrls } from "@/lib/copyUrls";
-import { ColumnResizeHandle } from "@/components/ResizeHandle";
 import { DockableWorkspace, type DockablePanelSpec } from "@/components/DockableWorkspace";
 import { ColumnVisibilityMenu } from "@/components/ColumnVisibilityMenu";
 import { ActiveFilters } from "@/components/ActiveFilters";
@@ -50,7 +49,9 @@ import {
   compareCommitsByKey,
   defaultCommitSortDir,
 } from "./commitSearchUtils";
-import { CommitSortHeaderButton } from "./CommitGridRow";
+import { CommitGridHeader } from "./CommitGridRow";
+import { UnlinkedFilterToggle } from "./UnlinkedFilterToggle";
+import { useUnlinkedCommitFilter } from "./useUnlinkedCommitFilter";
 import { MemoCommitRow } from "./MemoCommitRow";
 import { CommitPreviewPanel } from "./CommitPreviewPanel";
 import { useCommitPrPrefetch } from "./useCommitPrPrefetch";
@@ -149,14 +150,15 @@ export function CommitResults({
     setVisibleColumns([...COMMIT_COLUMN_KEYS]);
   }
 
+  const unlinkedFilter = useUnlinkedCommitFilter(results);
   const sorted = useMemo(() => {
     const dir = sort.direction === "asc" ? 1 : -1;
-    return [...results].sort((a, b) => {
+    return [...unlinkedFilter.rows].sort((a, b) => {
       const primary = compareCommitsByKey(a, b, sort.key);
       if (primary !== 0) return primary * dir;
       return `${a.repositoryId}:${a.commitId}`.localeCompare(`${b.repositoryId}:${b.commitId}`);
     });
-  }, [results, sort]);
+  }, [unlinkedFilter.rows, sort]);
 
   const { selectedIndex, setSelectedIndex, selectedRow: selectedCommit } =
     useKeyedGridSelection(sorted, (commit) =>
@@ -286,11 +288,14 @@ export function CommitResults({
   const countLabel = useMemo(() => {
     if (loading) return "Searching";
     if (!searched) return "Ready";
+    if (unlinkedFilter.enabled) {
+      return `${sorted.length} unlinked of ${results.length} commits`;
+    }
     if (truncated) {
       return `Showing ${results.length} of ${total ?? results.length} commits`;
     }
     return `${results.length} commit${results.length === 1 ? "" : "s"}`;
-  }, [loading, results.length, searched, truncated, total]);
+  }, [loading, results.length, searched, truncated, total, unlinkedFilter.enabled, sorted.length]);
   const activeFilterCount = Math.max(0, activeExternalFilterCount);
 
   const firstVirtualRow = Math.max(
@@ -316,6 +321,11 @@ export function CommitResults({
       {countLabel}
       {selection.isMultiSelect ? `· ${selection.selectedKeys.size} selected` : ""}
       <ActiveFilters count={activeFilterCount} onClear={onClearExternalFilters ?? (() => {})} />
+      <UnlinkedFilterToggle
+        enabled={unlinkedFilter.enabled}
+        pending={unlinkedFilter.pending}
+        onToggle={unlinkedFilter.toggle}
+      />
       <button
         type="button"
         onClick={(event) => setColumnMenuRect(event.currentTarget.getBoundingClientRect())}
@@ -348,48 +358,13 @@ export function CommitResults({
         >
           <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
           <div ref={gridRef} style={{ minWidth: gridMinWidth }}>
-            <div
-              role="row"
-              className="grid items-center gap-2 border-b border-border bg-muted px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-              style={{ gridTemplateColumns: commitColTemplate }}
-            >
-              {visibleColumns.map((col, i) => {
-                const isLast = i === visibleColumns.length - 1;
-                const resizeHandle = isLast ? undefined : (
-                  <ColumnResizeHandle {...columnResizeProps(col)} />
-                );
-                if (col === "sha") {
-                  return (
-                    <div key={col} role="columnheader" className="relative min-w-0 truncate px-1">
-                      SHA
-                      {resizeHandle}
-                    </div>
-                  );
-                }
-                if (col === "pr") {
-                  return (
-                    <div
-                      key={col}
-                      role="columnheader"
-                      className="relative min-w-0 truncate px-1 text-center"
-                      title="Pull requests containing this commit"
-                    >
-                      PR
-                      {resizeHandle}
-                    </div>
-                  );
-                }
-                return (
-                  <CommitSortHeaderButton
-                    key={col}
-                    column={col}
-                    sort={sort}
-                    onSort={applySort}
-                    resizeHandle={resizeHandle}
-                  />
-                );
-              })}
-            </div>
+            <CommitGridHeader
+              visibleColumns={visibleColumns}
+              columnTemplate={commitColTemplate}
+              sort={sort}
+              onSort={applySort}
+              resizeProps={columnResizeProps}
+            />
             {loading ? (
               <LoadingState />
             ) : (

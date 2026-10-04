@@ -12,10 +12,18 @@ import {
   commitSortLabels,
 } from "./commitSearchConstants";
 import { commitPrQueryKey } from "./commitSearchUtils";
+import { isUnlinkedCommit } from "./commitLinks";
+import { ColumnResizeHandle } from "@/components/ResizeHandle";
+import { type ColumnResizeProps } from "@/lib/useGridColumns";
 import { gridRowStateClass } from "@/lib/gridRowState";
 
 // Cells stay direct grid items (keyed Fragment) so the column template lines up.
-function renderCommitCell(key: CommitColumnKey, commit: CommitSummary, prCount: number): ReactNode {
+function renderCommitCell(
+  key: CommitColumnKey,
+  commit: CommitSummary,
+  prCount: number,
+  unlinked: boolean,
+): ReactNode {
   switch (key) {
     case "sha":
       return (
@@ -40,8 +48,18 @@ function renderCommitCell(key: CommitColumnKey, commit: CommitSummary, prCount: 
     case "comment": {
       const message = commit.comment.split(/\r?\n/, 1)[0] || "(no comment)";
       return (
-        <span className="truncate font-medium text-foreground" title={commit.comment}>
-          {message}
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate font-medium text-foreground" title={commit.comment}>
+            {message}
+          </span>
+          {unlinked ? (
+            <span
+              className="shrink-0 rounded border border-amber-500/50 bg-amber-500/10 px-1 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+              title="No work item (AB#) mention and not in any pull request"
+            >
+              Unlinked
+            </span>
+          ) : null}
         </span>
       );
     }
@@ -118,6 +136,57 @@ export function CommitSortHeaderButton({
   );
 }
 
+export function CommitGridHeader({
+  visibleColumns,
+  columnTemplate,
+  sort,
+  onSort,
+  resizeProps,
+}: {
+  visibleColumns: CommitColumnKey[];
+  columnTemplate: string;
+  sort: CommitSortState;
+  onSort: (column: CommitSortKey) => void;
+  resizeProps: (key: CommitColumnKey) => ColumnResizeProps;
+}) {
+  return (
+    <div
+      role="row"
+      className="grid items-center gap-2 border-b border-border bg-muted px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+      style={{ gridTemplateColumns: columnTemplate }}
+    >
+      {visibleColumns.map((col, i) => {
+        const isLast = i === visibleColumns.length - 1;
+        const resizeHandle = isLast ? undefined : <ColumnResizeHandle {...resizeProps(col)} />;
+        if (col === "sha") {
+          return (
+            <div key={col} role="columnheader" className="relative min-w-0 truncate px-1">
+              SHA
+              {resizeHandle}
+            </div>
+          );
+        }
+        if (col === "pr") {
+          return (
+            <div
+              key={col}
+              role="columnheader"
+              className="relative min-w-0 truncate px-1 text-center"
+              title="Pull requests containing this commit"
+            >
+              PR
+              {resizeHandle}
+            </div>
+          );
+        }
+        return (
+          <CommitSortHeaderButton key={col} column={col} sort={sort} onSort={onSort} resizeHandle={resizeHandle} />
+        );
+      })}
+    </div>
+  );
+}
+
 export const CommitGridRow = forwardRef<
   HTMLDivElement,
   {
@@ -137,6 +206,7 @@ export const CommitGridRow = forwardRef<
     enabled: false,
   });
   const prCount = prQuery.data?.length ?? 0;
+  const unlinked = isUnlinkedCommit(commit, prQuery.data?.length);
   return (
     <div
       ref={ref}
@@ -156,7 +226,7 @@ export const CommitGridRow = forwardRef<
       style={{ gridTemplateColumns: columnTemplate }}
     >
       {visibleColumns.map((key) => (
-        <Fragment key={key}>{renderCommitCell(key, commit, prCount)}</Fragment>
+        <Fragment key={key}>{renderCommitCell(key, commit, prCount, unlinked)}</Fragment>
       ))}
     </div>
   );
