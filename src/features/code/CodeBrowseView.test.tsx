@@ -84,14 +84,12 @@ describe("CodeBrowseView", () => {
       await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
         timeout: 8000,
       });
-      fireEvent.click(screen.getAllByText("README.md")[0]);
+      fireEvent.click(screen.getAllByText("package.json")[0]);
       // The file pane highlights content into a <code class="hljs"> block.
       await waitFor(
         () => {
           const code = lastContainer.querySelector("code.hljs");
-          expect(code?.textContent ?? "").toContain(
-            "A Tauri + React dashboard for Azure DevOps.",
-          );
+          expect(code?.textContent ?? "").toContain("azdo-dashboard");
         },
         { timeout: 8000 },
       );
@@ -143,14 +141,14 @@ describe("CodeBrowseView", () => {
       await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
         timeout: 8000,
       });
-      fireEvent.click(screen.getAllByText("README.md")[0]);
+      fireEvent.click(screen.getAllByText("package.json")[0]);
       await waitFor(() => expect(lastContainer.querySelector("code.hljs")).not.toBeNull(), {
         timeout: 8000,
       });
 
       fireEvent.click(screen.getByRole("button", { name: "Raw" }));
       expect(lastContainer.querySelector("code.hljs")).toBeNull();
-      expect(lastContainer.textContent).toContain("A Tauri + React dashboard for Azure DevOps.");
+      expect(lastContainer.textContent).toContain("azdo-dashboard");
 
       fireEvent.click(screen.getByRole("button", { name: "Highlighted" }));
       expect(lastContainer.querySelector("code.hljs")).not.toBeNull();
@@ -167,7 +165,7 @@ describe("CodeBrowseView", () => {
       await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
         timeout: 8000,
       });
-      fireEvent.click(screen.getAllByText("README.md")[0]);
+      fireEvent.click(screen.getAllByText("package.json")[0]);
       fireEvent.click(await screen.findByRole("button", { name: "Line 1" }, { timeout: 8000 }));
       fireEvent.click(screen.getByRole("button", { name: "Line 3" }), { shiftKey: true });
 
@@ -188,7 +186,7 @@ describe("CodeBrowseView", () => {
       await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
         timeout: 8000,
       });
-      fireEvent.click(screen.getAllByText("README.md")[0]);
+      fireEvent.click(screen.getAllByText("package.json")[0]);
       const line1 = await screen.findByRole("button", { name: "Line 1" }, { timeout: 8000 });
       line1.focus();
       fireEvent.keyDown(line1, { key: "ArrowDown", shiftKey: true });
@@ -212,12 +210,12 @@ describe("CodeBrowseView", () => {
       await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
         timeout: 8000,
       });
-      fireEvent.click(screen.getAllByText("README.md")[0]);
+      fireEvent.click(screen.getAllByText("package.json")[0]);
       fireEvent.click(await screen.findByRole("button", { name: "Line 2" }, { timeout: 8000 }));
       fireEvent.click(screen.getByRole("button", { name: /Copy link/ }));
 
       await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
-      expect(writeText.mock.calls[0][0]).toMatch(/path=%2FREADME\.md.*&line=2&lineEnd=2/);
+      expect(writeText.mock.calls[0][0]).toMatch(/path=%2Fpackage\.json.*&line=2&lineEnd=2/);
     },
     15000,
   );
@@ -279,7 +277,7 @@ describe("CodeBrowseView", () => {
       await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
         timeout: 8000,
       });
-      fireEvent.click(screen.getAllByText("README.md")[0]);
+      fireEvent.click(screen.getAllByText("package.json")[0]);
       const findButton = await screen.findByRole("button", { name: "Find" }, { timeout: 8000 });
       fireEvent.click(findButton);
       fireEvent.change(screen.getByLabelText("Find in file"), {
@@ -300,7 +298,7 @@ describe("CodeBrowseView", () => {
       await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
         timeout: 8000,
       });
-      fireEvent.click(screen.getAllByText("README.md")[0]);
+      fireEvent.click(screen.getAllByText("package.json")[0]);
       fireEvent.pointerDown(await screen.findByRole("tab", { name: "Compare" }, { timeout: 8000 }), { button: 0 });
       const baseCombo = await screen.findByRole("combobox", { name: "Compare base branch" }, { timeout: 8000 });
       fireEvent.mouseDown(baseCombo);
@@ -443,7 +441,7 @@ describe("CodeBrowseView", () => {
       await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
         timeout: 8000,
       });
-      fireEvent.click(screen.getAllByText("README.md")[0]);
+      fireEvent.click(screen.getAllByText("package.json")[0]);
       fireEvent.pointerDown(await screen.findByRole("tab", { name: "History" }, { timeout: 8000 }), { button: 0 });
       const viewButtons = await screen.findAllByRole("button", { name: "View" }, {
         timeout: 8000,
@@ -472,7 +470,7 @@ describe("CodeBrowseView", () => {
       await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
         timeout: 8000,
       });
-      fireEvent.click(screen.getAllByText("README.md")[0]);
+      fireEvent.click(screen.getAllByText("package.json")[0]);
       fireEvent.pointerDown(await screen.findByRole("tab", { name: "Compare" }, { timeout: 8000 }), { button: 0 });
       fireEvent.change(await screen.findByLabelText("Compare base commit or tag", undefined, { timeout: 8000 }), {
         target: { value: "abc1234" },
@@ -495,7 +493,7 @@ describe("CodeBrowseView", () => {
       await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
         timeout: 8000,
       });
-      fireEvent.click(screen.getAllByText("README.md")[0]);
+      fireEvent.click(screen.getAllByText("package.json")[0]);
       await waitFor(() => expect(lastContainer.querySelector("code.hljs")).not.toBeNull(), {
         timeout: 8000,
       });
@@ -513,7 +511,7 @@ describe("CodeBrowseView", () => {
       await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
         timeout: 8000,
       });
-      fireEvent.click(screen.getAllByText("README.md")[0]);
+      fireEvent.click(screen.getAllByText("package.json")[0]);
       await waitFor(() => expect(lastContainer.querySelector("code.hljs")).not.toBeNull(), {
         timeout: 8000,
       });
@@ -524,9 +522,7 @@ describe("CodeBrowseView", () => {
       await waitFor(
         () => {
           const code = lastContainer.querySelector("code.hljs");
-          expect(code?.textContent ?? "").toContain(
-            "A Tauri + React dashboard for Azure DevOps.",
-          );
+          expect(code?.textContent ?? "").toContain("azdo-dashboard");
         },
         { timeout: 8000 },
       );
@@ -552,6 +548,30 @@ describe("CodeBrowseView file finder", () => {
       // Typing "t" into the box must not retrigger the shortcut handler.
       fireEvent.change(box, { target: { value: "rdm" } });
       expect(await screen.findByText("README.md", undefined, { timeout: 8000 })).toBeTruthy();
+    },
+    15000,
+  );
+});
+
+describe("CodeBrowseView markdown and binary files", () => {
+  it(
+    "renders a Markdown file by default and switches to its source",
+    async () => {
+      renderView();
+      await selectDemoRepository();
+      await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
+        timeout: 8000,
+      });
+      fireEvent.click(screen.getAllByText("README.md")[0]);
+
+      expect(await screen.findByText("Markdown preview", undefined, { timeout: 8000 })).toBeTruthy();
+      expect(lastContainer.querySelector("code.hljs")).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Source" }));
+      await waitFor(() => expect(lastContainer.querySelector("code.hljs")).not.toBeNull());
+
+      fireEvent.click(screen.getByRole("button", { name: "Rendered" }));
+      expect(await screen.findByText("Markdown preview")).toBeTruthy();
     },
     15000,
   );

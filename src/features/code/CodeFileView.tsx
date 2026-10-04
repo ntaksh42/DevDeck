@@ -6,21 +6,14 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  Check,
-  ChevronDown,
-  ChevronUp,
-  Copy,
-  Download,
-  Loader2,
-  Search,
-  WrapText,
-  X,
-} from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, Search, X } from "lucide-react";
 import { commandErrorMessage, type Organization, type RepoFileVersion } from "@/lib/azdoCommands";
 import { ErrorState } from "@/components/StateDisplay";
 import { highlightCode, splitHighlightedLines } from "@/lib/highlight";
-import { leafName, type RepoOption, useRepoFile } from "./codeBrowseShared";
+import { openExternalUrl } from "@/lib/openExternal";
+import { isMarkdownPath, leafName, type RepoOption, useRepoFile, webUrl } from "./codeBrowseShared";
+import { CodeFileActions, UnavailableFileNotice } from "./CodeFileActions";
+import { CodeMarkdownPreview } from "./CodeMarkdownPreview";
 import { isSelected, LineNumberButton, LineSelectionBar } from "./CodeLineSelection";
 import { useLineSelection } from "./useLineSelection";
 
@@ -84,6 +77,9 @@ export function CodeFileView({
   const [copied, setCopied] = useState(false);
   // Raw shows the plain source (no syntax colors), reusing the plain-text line renderer.
   const [raw, setRaw] = useState(false);
+  // Markdown files open rendered; this switches to the code view of the source.
+  const [markdownSource, setMarkdownSource] = useState(false);
+  const isMarkdown = isMarkdownPath(path);
   const findInputRef = useRef<HTMLInputElement | null>(null);
   const currentMatchRef = useRef<HTMLElement | null>(null);
 
@@ -94,6 +90,7 @@ export function CodeFileView({
     setCurrent(0);
     setCopied(false);
     setRaw(false);
+    setMarkdownSource(false);
   }, [path]);
 
   // Ctrl/Cmd+F opens find-in-file from anywhere in the Files view while a
@@ -232,21 +229,23 @@ export function CodeFileView({
       </div>
     );
   }
-  if (file.tooLarge) {
+  const openInBrowser = () => void openExternalUrl(webUrl(organization, repo, path, branch));
+  if (file.tooLarge || file.isBinary) {
     return (
       <div>
         {versionBanner}
-        <div className="px-3 py-3 text-sm text-muted-foreground">
-          File is too large to preview.
-        </div>
+        <UnavailableFileNotice
+          message={file.tooLarge ? "File is too large to preview." : "Binary file not shown."}
+          onOpenInBrowser={openInBrowser}
+        />
       </div>
     );
   }
-  if (file.isBinary) {
+  if (isMarkdown && !markdownSource) {
     return (
-      <div>
+      <div className="flex min-h-0 flex-1 flex-col">
         {versionBanner}
-        <div className="px-3 py-3 text-sm text-muted-foreground">Binary file not shown.</div>
+        <CodeMarkdownPreview content={content} onShowSource={() => setMarkdownSource(true)} />
       </div>
     );
   }
@@ -278,49 +277,16 @@ export function CodeFileView({
           ) : null}
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setWrap((value) => !value)}
-            aria-pressed={wrap}
-            title={wrap ? "Disable line wrap" : "Wrap long lines"}
-            className={`flex items-center gap-1 rounded px-1 py-0.5 text-xs hover:text-foreground ${
-              wrap ? "text-foreground" : "text-muted-foreground"
-            }`}
-          >
-            <WrapText className="h-3.5 w-3.5" aria-hidden="true" /> Wrap
-          </button>
-          <button
-            type="button"
-            onClick={() => setRaw((value) => !value)}
-            aria-pressed={raw}
-            title={raw ? "Show highlighted source" : "Show raw source"}
-            className={`flex items-center gap-1 rounded px-1 py-0.5 text-xs hover:text-foreground ${
-              raw ? "text-foreground" : "text-muted-foreground"
-            }`}
-          >
-            {raw ? "Highlighted" : "Raw"}
-          </button>
-          <button
-            type="button"
-            onClick={downloadFile}
-            title="Download file"
-            className="flex items-center gap-1 rounded px-1 py-0.5 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <Download className="h-3.5 w-3.5" aria-hidden="true" /> Download
-          </button>
-          <button
-            type="button"
-            onClick={copyContent}
-            title="Copy file contents"
-            className="flex items-center gap-1 rounded px-1 py-0.5 text-xs text-muted-foreground hover:text-foreground"
-          >
-            {copied ? (
-              <Check className="h-3.5 w-3.5 text-green-600" aria-hidden="true" />
-            ) : (
-              <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-            )}
-            {copied ? "Copied" : "Copy"}
-          </button>
+          <CodeFileActions
+            wrap={wrap}
+            raw={raw}
+            copied={copied}
+            onToggleWrap={() => setWrap((value) => !value)}
+            onToggleRaw={() => setRaw((value) => !value)}
+            onDownload={downloadFile}
+            onCopy={copyContent}
+            onShowRendered={isMarkdown ? () => setMarkdownSource(false) : undefined}
+          />
         {findOpen ? (
           <div className="flex items-center gap-1 text-sm">
             <Search className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />

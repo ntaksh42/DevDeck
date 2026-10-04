@@ -161,6 +161,11 @@ export function blameUrl(
 
 // The last path segment, e.g. `/src/main.py` → `main.py`. The root shows the
 // repository name instead, handled by callers.
+// Whether a path is a Markdown file, which the file viewer renders by default.
+export function isMarkdownPath(path: string): boolean {
+  return /\.(md|markdown)$/i.test(path);
+}
+
 export function leafName(path: string): string {
   const trimmed = path.replace(/\/+$/, "");
   const index = trimmed.lastIndexOf("/");
