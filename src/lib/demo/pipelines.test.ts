@@ -16,4 +16,10 @@ describe("demo pipeline runs", () => {
   it("returns every run when no definition is given", () => {
     expect(demoPipelineRunsFiltered()).toEqual(demoPipelineRuns());
   });
+
+  it("points run links at the demo organization (contoso)", () => {
+    for (const run of demoPipelineRuns()) {
+      expect(run.webUrl.startsWith("https://dev.azure.com/contoso/")).toBe(true);
+    }
+  });
 });
