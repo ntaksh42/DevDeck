@@ -31,6 +31,8 @@ import {
   demoCommits,
   demoGetCodeSearchContext,
   demoRepoBranches,
+  demoRepoTags,
+  demoRevisionComparison,
   demoRepoFile,
   demoRepoHistory,
   demoRepoPaths,
@@ -194,6 +196,10 @@ export function dispatchExt(command: string, args: unknown): unknown {
     }
     case "list_repo_branches":
       return demoRepoBranches();
+    case "list_repo_tags":
+      return demoRepoTags();
+    case "compare_repo_revisions":
+      return demoRevisionComparison();
     case "list_repo_tree": {
       const input = (
         args as { input?: { path?: string; includeLastCommit?: boolean } } | undefined

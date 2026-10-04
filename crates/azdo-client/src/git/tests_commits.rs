@@ -418,3 +418,63 @@ async fn list_items_includes_latest_commit_when_requested() {
         Some("Initial calculator service")
     );
 }
+
+#[tokio::test]
+async fn list_tags_filters_tag_refs() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/project-1/_apis/git/repositories/repo-1/refs"))
+        .and(query_param("filter", "tags/"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "count": 1,
+            "value": [{ "name": "refs/tags/v1.0", "objectId": "abc" }]
+        })))
+        .mount(&server)
+        .await;
+
+    let tags = test_client(&server)
+        .await
+        .list_tags("project-1", "repo-1")
+        .await
+        .unwrap();
+    assert_eq!(tags[0].name, "refs/tags/v1.0");
+}
+
+#[tokio::test]
+async fn compare_revisions_sends_both_versions_and_parses_changes() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(
+            "/project-1/_apis/git/repositories/repo-1/diffs/commits",
+        ))
+        .and(query_param("baseVersion", "main"))
+        .and(query_param("baseVersionType", "branch"))
+        .and(query_param("targetVersion", "abc1234"))
+        .and(query_param("targetVersionType", "commit"))
+        .and(query_param("$top", "500"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "allChangesIncluded": false,
+            "changes": [
+                { "changeType": "edit", "item": { "path": "/src/a.ts" } },
+                { "changeType": "rename", "item": { "path": "/b.ts" }, "originalPath": "/old.ts" },
+                { "changeType": "add", "item": { "path": "/dir", "isFolder": true } }
+            ]
+        })))
+        .mount(&server)
+        .await;
+
+    let diffs = test_client(&server)
+        .await
+        .compare_revisions(
+            "project-1",
+            "repo-1",
+            (GitVersionType::Branch, "main"),
+            (GitVersionType::Commit, "abc1234"),
+            500,
+        )
+        .await
+        .unwrap();
+    assert_eq!(diffs.all_changes_included, Some(false));
+    assert_eq!(diffs.changes.len(), 3);
+    assert_eq!(diffs.changes[1].original_path.as_deref(), Some("/old.ts"));
+}

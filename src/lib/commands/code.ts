@@ -77,6 +77,44 @@ export async function listRepoBranches(input: {
   return z.array(repoBranchSchema).parse(result);
 }
 
+// Lists a repository's tag names.
+export async function listRepoTags(input: {
+  organizationId?: string;
+  project: string;
+  repository: string;
+}): Promise<string[]> {
+  const result = await invokeCommand("list_repo_tags", { input });
+  return z.array(z.string()).parse(result);
+}
+
+const revisionChangeSchema = z.object({
+  path: z.string(),
+  changeType: z.string(),
+  originalPath: z.string().nullable(),
+});
+const revisionComparisonSchema = z.object({
+  changes: z.array(revisionChangeSchema),
+  /** True when the repository diff has more changed files than were returned. */
+  truncated: z.boolean(),
+});
+export type RevisionChange = z.infer<typeof revisionChangeSchema>;
+export type RevisionComparison = z.infer<typeof revisionComparisonSchema>;
+export type RevisionType = "branch" | "tag" | "commit";
+
+// The files changed between two revisions (each a branch, tag or commit).
+export async function compareRepoRevisions(input: {
+  organizationId?: string;
+  project: string;
+  repository: string;
+  baseType: RevisionType;
+  base: string;
+  targetType: RevisionType;
+  target: string;
+}): Promise<RevisionComparison> {
+  const result = await invokeCommand("compare_repo_revisions", { input });
+  return revisionComparisonSchema.parse(result);
+}
+
 const repoCommitInfoSchema = z.object({
   shortId: z.string(),
   commitId: z.string(),

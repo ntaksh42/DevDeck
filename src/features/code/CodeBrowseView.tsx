@@ -319,9 +319,7 @@ export function CodeBrowseView({
         {
           id: "compare",
           title: "Compare",
-          content: selected.isFolder ? (
-            <PreviewEmptyState message="Select a file to compare." />
-          ) : (
+          content: (
             <CodeCompareView
               organizationId={organizationId}
               repo={repo}
@@ -330,6 +328,7 @@ export function CodeBrowseView({
               baseBranch={baseBranch}
               onBaseBranchChange={setBaseBranch}
               path={selected.path}
+              isFolder={selected.isFolder}
             />
           ),
           position: { relativeTo: "contents", direction: "within" },

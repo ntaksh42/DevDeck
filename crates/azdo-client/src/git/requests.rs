@@ -109,6 +109,43 @@ impl AdoClient {
         .await
     }
 
+    /// Lists the tag refs (`refs/tags/*`) of a repository, following continuation
+    /// tokens.
+    pub async fn list_tags(&self, project_id: &str, repository_id: &str) -> Result<Vec<GitRef>> {
+        let path = format!("{project_id}/_apis/git/repositories/{repository_id}/refs");
+        self.list_all_pages(
+            &path,
+            &[("api-version", "7.1-preview"), ("filter", "tags/")],
+        )
+        .await
+    }
+
+    /// The changes between two revisions (`diffs/commits`). Each side is a
+    /// branch, tag or commit; `top` caps the returned change list.
+    pub async fn compare_revisions(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        base: (GitVersionType, &str),
+        target: (GitVersionType, &str),
+        top: u32,
+    ) -> Result<GitCommitDiffs> {
+        let path = format!("{project_id}/_apis/git/repositories/{repository_id}/diffs/commits");
+        let top = top.to_string();
+        self.get_json(
+            &path,
+            &[
+                ("api-version", "7.1-preview"),
+                ("baseVersion", base.1),
+                ("baseVersionType", base.0.as_query_value()),
+                ("targetVersion", target.1),
+                ("targetVersionType", target.0.as_query_value()),
+                ("$top", &top),
+            ],
+        )
+        .await
+    }
+
     /// Lists the children of a folder at the tip of a branch. `scope_path` is
     /// the folder to list, e.g. `/` or `/src`. `recursive` lists the whole
     /// subtree (`recursionLevel=Full`) instead of one level. When

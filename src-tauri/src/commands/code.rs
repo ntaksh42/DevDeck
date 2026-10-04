@@ -3,8 +3,9 @@ use tauri::State;
 use crate::app_state::AppState;
 use crate::cancellation::run_cancellable;
 use crate::code_browse::{
-    GetFileInput, ListBranchesInput, ListHistoryInput, ListPathsInput, ListTreeInput, RepoBranch,
-    RepoCommitInfo, RepoFile, RepoPathList, RepoTreeItem,
+    CompareRevisionsInput, GetFileInput, ListBranchesInput, ListHistoryInput, ListPathsInput,
+    ListTreeInput, RepoBranch, RepoCommitInfo, RepoFile, RepoPathList, RepoTreeItem,
+    RevisionComparison,
 };
 use crate::code_search::{
     CodeContextResult, CodeSearchResults, GetCodeContextInput, SearchCodeInput,
@@ -43,6 +44,24 @@ pub async fn list_repo_branches(
     state: State<'_, AppState>,
 ) -> Result<Vec<RepoBranch>> {
     state.provider().await?.list_repo_branches(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn list_repo_tags(
+    input: ListBranchesInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>> {
+    state.provider().await?.list_repo_tags(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn compare_repo_revisions(
+    input: CompareRevisionsInput,
+    state: State<'_, AppState>,
+) -> Result<RevisionComparison> {
+    state.provider().await?.compare_repo_revisions(input).await
 }
 
 #[tauri::command]

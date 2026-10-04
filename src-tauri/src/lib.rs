@@ -237,6 +237,8 @@ pub fn run() {
             commands::code::search_code,
             commands::code::get_code_search_context,
             commands::code::list_repo_branches,
+            commands::code::list_repo_tags,
+            commands::code::compare_repo_revisions,
             commands::code::list_repo_tree,
             commands::code::get_repo_file,
             commands::code::list_repo_history,

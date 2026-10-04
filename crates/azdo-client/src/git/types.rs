@@ -35,6 +35,34 @@ pub struct GitRef {
     pub object_id: Option<String>,
 }
 
+/// One changed item in a revision comparison (`diffs/commits`).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitDiffChange {
+    /// `edit`, `add`, `delete`, `rename`, ... (possibly several, comma separated).
+    pub change_type: String,
+    pub item: Option<GitDiffItem>,
+    /// Source path of a rename.
+    pub original_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitDiffItem {
+    pub path: Option<String>,
+    pub is_folder: Option<bool>,
+}
+
+/// The changes between two revisions of a repository.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCommitDiffs {
+    #[serde(default)]
+    pub changes: Vec<GitDiffChange>,
+    /// False when the server capped the change list at `$top`.
+    pub all_changes_included: Option<bool>,
+}
+
 /// The kind of ref a `versionDescriptor.version` names in item requests.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GitVersionType {

@@ -6,8 +6,9 @@ use async_trait::async_trait;
 
 use crate::app_state::run_blocking;
 use crate::code_browse::{
-    CodeBrowseService, GetFileInput, ListBranchesInput, ListHistoryInput, ListPathsInput,
-    ListTreeInput, RepoBranch, RepoCommitInfo, RepoFile, RepoPathList, RepoTreeItem,
+    CodeBrowseService, CompareRevisionsInput, GetFileInput, ListBranchesInput, ListHistoryInput,
+    ListPathsInput, ListTreeInput, RepoBranch, RepoCommitInfo, RepoFile, RepoPathList,
+    RepoTreeItem, RevisionComparison,
 };
 use crate::code_search::{
     CodeContextResult, CodeSearchResults, CodeSearchService, GetCodeContextInput, SearchCodeInput,
@@ -360,6 +361,17 @@ impl Provider for AzdoProvider {
 
     async fn list_repo_branches(&self, input: ListBranchesInput) -> Result<Vec<RepoBranch>> {
         self.code_browse.list_branches(input).await
+    }
+
+    async fn list_repo_tags(&self, input: ListBranchesInput) -> Result<Vec<String>> {
+        self.code_browse.list_tags(input).await
+    }
+
+    async fn compare_repo_revisions(
+        &self,
+        input: CompareRevisionsInput,
+    ) -> Result<RevisionComparison> {
+        self.code_browse.compare_revisions(input).await
     }
 
     async fn list_repo_tree(&self, input: ListTreeInput) -> Result<Vec<RepoTreeItem>> {

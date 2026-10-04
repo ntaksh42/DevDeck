@@ -45,6 +45,25 @@ export function demoRepoBranches() {
   ];
 }
 
+export function demoRepoTags() {
+  return ["v1.1.0", "v1.0.0"];
+}
+
+// Changed files between any two demo revisions (the demo file contents are the
+// same at every ref, so the per-file diffs themselves are empty).
+export function demoRevisionComparison() {
+  return {
+    changes: [
+      { path: "/README.md", changeType: "edit", originalPath: null },
+      { path: "/package.json", changeType: "edit", originalPath: null },
+      { path: "/src/App.tsx", changeType: "edit", originalPath: null },
+      { path: "/src/lib/newHelper.ts", changeType: "add", originalPath: null },
+      { path: "/src/lib/renamed.ts", changeType: "rename", originalPath: "/src/lib/old.ts" },
+    ],
+    truncated: false,
+  };
+}
+
 // A tiny virtual repository for the code browser demo. Keyed by the parent
 // folder path; each entry lists that folder's direct children (folders first).
 const DEMO_REPO_TREE: Record<string, { name: string; path: string; isFolder: boolean }[]> = {

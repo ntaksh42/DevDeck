@@ -606,3 +606,40 @@ describe("CodeBrowseView compare options", () => {
     15000,
   );
 });
+
+describe("CodeBrowseView compare any two revisions", () => {
+  async function openCompareTab() {
+    renderView();
+    await selectDemoRepository();
+    await waitFor(() => expect(screen.getAllByText("package.json").length).toBeGreaterThan(0), {
+      timeout: 8000,
+    });
+    fireEvent.click(screen.getAllByText("package.json")[0]);
+    fireEvent.pointerDown(await screen.findByRole("tab", { name: "Compare" }, { timeout: 8000 }), {
+      button: 0,
+    });
+  }
+
+  it(
+    "lists the files changed between a base tag and a target commit and opens one",
+    async () => {
+      await openCompareTab();
+      fireEvent.change(
+        await screen.findByLabelText("Compare base commit or tag", undefined, { timeout: 8000 }),
+        { target: { value: "v1.0.0" } },
+      );
+      fireEvent.change(screen.getByLabelText("Compare target commit or tag"), {
+        target: { value: "abc1234" },
+      });
+
+      expect(await screen.findByText("5 files changed", undefined, { timeout: 8000 })).toBeTruthy();
+      fireEvent.click(screen.getByTitle("/src/lib/old.ts → /src/lib/renamed.ts"));
+      expect(
+        await screen.findByText(/No differences between v1\.0\.0 and abc1234/, undefined, {
+          timeout: 8000,
+        }),
+      ).toBeTruthy();
+    },
+    15000,
+  );
+});

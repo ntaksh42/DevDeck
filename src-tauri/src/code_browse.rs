@@ -1,4 +1,7 @@
+mod compare;
 mod util;
+
+pub use compare::{CompareRevisionsInput, RevisionComparison};
 
 use azdo_client::{CommitSearchCriteria, GitCommitRef};
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;

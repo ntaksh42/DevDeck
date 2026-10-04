@@ -6,8 +6,9 @@
 use async_trait::async_trait;
 
 use crate::code_browse::{
-    GetFileInput, ListBranchesInput, ListHistoryInput, ListPathsInput, ListTreeInput, RepoBranch,
-    RepoCommitInfo, RepoFile, RepoPathList, RepoTreeItem,
+    CompareRevisionsInput, GetFileInput, ListBranchesInput, ListHistoryInput, ListPathsInput,
+    ListTreeInput, RepoBranch, RepoCommitInfo, RepoFile, RepoPathList, RepoTreeItem,
+    RevisionComparison,
 };
 use crate::code_search::{
     CodeContextResult, CodeSearchResults, GetCodeContextInput, SearchCodeInput,
@@ -379,6 +380,21 @@ impl Provider for GithubProvider {
     }
 
     async fn list_repo_branches(&self, _input: ListBranchesInput) -> Result<Vec<RepoBranch>> {
+        Err(AppError::NotSupported(
+            "code browsing is not available for GitHub yet".to_string(),
+        ))
+    }
+
+    async fn list_repo_tags(&self, _input: ListBranchesInput) -> Result<Vec<String>> {
+        Err(AppError::NotSupported(
+            "code browsing is not available for GitHub yet".to_string(),
+        ))
+    }
+
+    async fn compare_repo_revisions(
+        &self,
+        _input: CompareRevisionsInput,
+    ) -> Result<RevisionComparison> {
         Err(AppError::NotSupported(
             "code browsing is not available for GitHub yet".to_string(),
         ))
