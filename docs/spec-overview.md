@@ -230,6 +230,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   追加は `add_pull_request_reviewer` (レビュアー endpoint の upsert を投票 0 で呼ぶ。`reviewerId` 省略で本人)。
   GitHub 接続ではレビュー依頼 (`requested_reviewers`) として扱い、必須フラグは無視する。
   (`add_pull_request_reviewer` / `set_pull_request_reviewer_required` / `remove_pull_request_reviewer`)。
+- **PR ラベル**: レビューパネルのヘッダーに PR のラベル (有効なもののみ) をチップ表示し、「Label」から名前を入力して Enter で付与、各チップの X で削除できる (`add_pull_request_label` / `remove_pull_request_label`、`get_pull_request_review` の `labels`)。Esc で入力を取り消し「Label」へフォーカスを戻す。重複 (大文字小文字無視)・空の名前は送らない。書き込み系のため read-only 検証モードでは拒否する。GitHub 接続は未対応。一覧 (グリッド) のラベル列とラベルによる絞り込みは、ラベルが同期キャッシュに載っていないため未対応。
 - **PR 編集**: ライフサイクル操作 (abandon / reactivate / publish / draft / complete、`update_pull_request`) に加え、
   レビューパネルからタイトル・説明をインライン編集できる (`update_pull_request_details`)。
 - **PR 操作**: レビューパネルから publish / Convert to draft (`draft` アクション、Azure DevOps のみ。

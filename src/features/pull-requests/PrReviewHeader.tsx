@@ -8,12 +8,14 @@ import {
 } from "lucide-react";
 import { formatRelativeDate } from "@/lib/utils";
 import type {
+  PrLabel,
   PrReviewer,
   PullRequestReview,
   ReviewPullRequestSummary,
 } from "@/lib/azdoCommands";
 import { VOTE_DOT_CLASSES, voteTone } from "./voteVisual";
 import { type AddReviewerRequest, PrReviewerAdder } from "./PrReviewerAdder";
+import { PrLabelsRow } from "./PrLabelsRow";
 
 const BADGE_BASE =
   "inline-flex shrink-0 items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-medium";
@@ -172,6 +174,8 @@ export function PrReviewHeader({
   onToggleReviewerRequired,
   onRemoveReviewer,
   onAddReviewer,
+  onAddLabel,
+  onRemoveLabel,
   compact = false,
 }: {
   selectedPr: ReviewPullRequestSummary | null;
@@ -180,6 +184,8 @@ export function PrReviewHeader({
   onToggleReviewerRequired?: (reviewer: PrReviewer) => void;
   onRemoveReviewer?: (reviewer: PrReviewer) => void;
   onAddReviewer?: (request: AddReviewerRequest) => void;
+  onAddLabel?: (name: string) => void;
+  onRemoveLabel?: (label: PrLabel) => void;
   /** One line (id + title) instead of the full metadata block. */
   compact?: boolean;
 }) {
@@ -310,6 +316,14 @@ export function PrReviewHeader({
               />
             ) : null}
           </div>
+        ) : null}
+        {onAddLabel && onRemoveLabel ? (
+          <PrLabelsRow
+            labels={review?.labels ?? []}
+            busy={reviewerActionsBusy}
+            onAdd={onAddLabel}
+            onRemove={onRemoveLabel}
+          />
         ) : null}
       </div>
     </div>

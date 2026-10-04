@@ -144,6 +144,10 @@ export function dispatchExt(command: string, args: unknown): unknown {
         demoPipelineRuns()[2];
       return { ...run, status: "cancelling" };
     }
+    case "add_pull_request_label": {
+      const input = (args as { input?: { name?: string } } | undefined)?.input;
+      return { id: `demo-label-${input?.name ?? "new"}`, name: input?.name ?? "" };
+    }
     case "retry_pipeline_stage":
       return null;
     case "list_pipeline_approvals":

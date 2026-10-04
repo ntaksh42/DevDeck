@@ -21,6 +21,24 @@ pub struct GitPullRequestDetail {
     /// Tip of the source branch; required when completing a PR to guard against
     /// merging a stale revision.
     pub last_merge_source_commit: Option<GitCommitRefId>,
+    /// Labels (tags) on the pull request, including deactivated ones.
+    #[serde(default)]
+    pub labels: Vec<PullRequestLabel>,
+}
+
+/// A pull request label (`WebApiTagDefinition`).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PullRequestLabel {
+    pub id: String,
+    pub name: String,
+    /// False for a label that was removed but still exists as a definition.
+    #[serde(default = "label_active_default")]
+    pub active: bool,
+}
+
+fn label_active_default() -> bool {
+    true
 }
 
 #[derive(Debug, Deserialize)]

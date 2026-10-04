@@ -6,7 +6,7 @@ use crate::git::{GitCommitRef, GitVersionType, IdentityRefWithVote, ListResponse
 
 use super::types::{
     GitChangeEntry, GitItemContent, GitIteration, GitIterationChanges, GitPullRequestDetail,
-    GitThread, GitThreadComment, NewThreadContext, ResourceRef,
+    GitThread, GitThreadComment, NewThreadContext, PullRequestLabel, ResourceRef,
 };
 
 impl AdoClient {
@@ -21,6 +21,39 @@ impl AdoClient {
         );
         self.get_json(&path, &[("api-version", "7.1-preview")])
             .await
+    }
+
+    /// Adds a label to a pull request, creating the label definition if needed.
+    pub async fn add_pull_request_label(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        pull_request_id: i64,
+        name: &str,
+    ) -> Result<PullRequestLabel> {
+        let path = format!(
+            "{project_id}/_apis/git/repositories/{repository_id}/pullRequests/{pull_request_id}/labels"
+        );
+        self.post_json(
+            &path,
+            &[("api-version", "7.1-preview")],
+            &json!({ "name": name }),
+        )
+        .await
+    }
+
+    /// Removes a label from a pull request by its id (a GUID, safe in a path).
+    pub async fn remove_pull_request_label(
+        &self,
+        project_id: &str,
+        repository_id: &str,
+        pull_request_id: i64,
+        label_id: &str,
+    ) -> Result<()> {
+        let path = format!(
+            "{project_id}/_apis/git/repositories/{repository_id}/pullRequests/{pull_request_id}/labels/{label_id}"
+        );
+        self.delete(&path, &[("api-version", "7.1-preview")]).await
     }
 
     pub async fn list_pull_request_threads(

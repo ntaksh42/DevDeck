@@ -36,10 +36,11 @@ use crate::pipelines::{
     UpdatePipelineDefinitionInput,
 };
 use crate::pr_review::{
-    AddPullRequestReviewerInput, DeletePullRequestCommentInput, EditPullRequestCommentInput,
-    GetPullRequestFileDiffInput, PostPullRequestCommentInput, PrCommit, PrDetailsResult,
-    PrFileDiff, PrLocator, PrReviewer, PrStatusResult, PrThread, PullRequestChanges,
-    PullRequestReview, RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
+    AddPullRequestLabelInput, AddPullRequestReviewerInput, DeletePullRequestCommentInput,
+    EditPullRequestCommentInput, GetPullRequestFileDiffInput, PostPullRequestCommentInput,
+    PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator, PrReviewer, PrStatusResult,
+    PrThread, PullRequestChanges, PullRequestReview, RemovePullRequestLabelInput,
+    RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
     SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
     SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
 };
@@ -357,6 +358,18 @@ impl Provider for GithubProvider {
         input: SetPullRequestReviewerRequiredInput,
     ) -> Result<()> {
         github::pr_review::set_reviewer_required(&self.org, &self.secrets, input).await
+    }
+
+    async fn add_pull_request_label(&self, _input: AddPullRequestLabelInput) -> Result<PrLabel> {
+        Err(AppError::NotSupported(
+            "pull request labels are not available for GitHub yet".to_string(),
+        ))
+    }
+
+    async fn remove_pull_request_label(&self, _input: RemovePullRequestLabelInput) -> Result<()> {
+        Err(AppError::NotSupported(
+            "pull request labels are not available for GitHub yet".to_string(),
+        ))
     }
 
     async fn add_pull_request_reviewer(&self, input: AddPullRequestReviewerInput) -> Result<()> {

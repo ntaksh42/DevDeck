@@ -3,10 +3,11 @@ use tauri::State;
 use crate::app_state::{ensure_write_enabled, AppState};
 use crate::error::Result;
 use crate::pr_review::{
-    AddPullRequestReviewerInput, DeletePullRequestCommentInput, EditPullRequestCommentInput,
-    GetPullRequestFileDiffInput, PostPullRequestCommentInput, PrCommit, PrDetailsResult,
-    PrFileDiff, PrLocator, PrReviewer, PrStatusResult, PrThread, PullRequestChanges,
-    PullRequestReview, RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
+    AddPullRequestLabelInput, AddPullRequestReviewerInput, DeletePullRequestCommentInput,
+    EditPullRequestCommentInput, GetPullRequestFileDiffInput, PostPullRequestCommentInput,
+    PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator, PrReviewer, PrStatusResult,
+    PrThread, PullRequestChanges, PullRequestReview, RemovePullRequestLabelInput,
+    RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
     SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
     SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
 };
@@ -136,6 +137,30 @@ pub async fn set_pull_request_reviewer_required(
         .provider()
         .await?
         .set_pull_request_reviewer_required(input)
+        .await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn add_pull_request_label(
+    input: AddPullRequestLabelInput,
+    state: State<'_, AppState>,
+) -> Result<PrLabel> {
+    ensure_write_enabled(&state).await?;
+    state.provider().await?.add_pull_request_label(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn remove_pull_request_label(
+    input: RemovePullRequestLabelInput,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    ensure_write_enabled(&state).await?;
+    state
+        .provider()
+        .await?
+        .remove_pull_request_label(input)
         .await
 }
 

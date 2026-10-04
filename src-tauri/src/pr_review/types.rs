@@ -173,7 +173,33 @@ pub struct PullRequestReview {
     pub is_draft: bool,
     pub auto_complete: bool,
     pub reviewers: Vec<PrReviewer>,
+    /// Active labels (tags) on the pull request.
+    pub labels: Vec<PrLabel>,
     pub threads: Vec<PrThread>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PrLabel {
+    /// Label id, used to target removal.
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddPullRequestLabelInput {
+    #[serde(flatten)]
+    pub pr: PrLocator,
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemovePullRequestLabelInput {
+    #[serde(flatten)]
+    pub pr: PrLocator,
+    pub label_id: String,
 }
 
 #[derive(Debug, Serialize)]

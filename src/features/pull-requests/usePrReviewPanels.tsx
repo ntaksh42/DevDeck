@@ -5,7 +5,9 @@ import {
   commandErrorMessage,
   getPullRequestReview,
   prLocator,
+  addPullRequestLabel,
   addPullRequestReviewer,
+  removePullRequestLabel,
   removePullRequestReviewer,
   setPullRequestReviewerRequired,
   type ReviewPullRequestSummary,
@@ -112,10 +114,28 @@ export function usePrReviewPanels({
     },
     onError: (error) => setReviewerError(commandErrorMessage(error)),
   });
+  const addLabelMutation = useMutation({
+    mutationFn: addPullRequestLabel,
+    onSuccess: () => {
+      setReviewerError(null);
+      invalidateReviewerData();
+    },
+    onError: (error) => setReviewerError(commandErrorMessage(error)),
+  });
+  const removeLabelMutation = useMutation({
+    mutationFn: removePullRequestLabel,
+    onSuccess: () => {
+      setReviewerError(null);
+      invalidateReviewerData();
+    },
+    onError: (error) => setReviewerError(commandErrorMessage(error)),
+  });
   const reviewerActionsBusy =
     reviewerRequiredMutation.isPending ||
     removeReviewerMutation.isPending ||
-    addReviewerMutation.isPending;
+    addReviewerMutation.isPending ||
+    addLabelMutation.isPending ||
+    removeLabelMutation.isPending;
   const { confirm: confirmRemoval, dialogProps: removalDialogProps } = useConfirm();
 
   // Esc / ← step back to the grid from anywhere in the preview that is not a
@@ -175,6 +195,14 @@ export function usePrReviewPanels({
           }}
           onAddReviewer={(request) => {
             if (selectedPr) addReviewerMutation.mutate({ ...prLocator(selectedPr), ...request });
+          }}
+          onAddLabel={(name) => {
+            if (selectedPr) addLabelMutation.mutate({ ...prLocator(selectedPr), name });
+          }}
+          onRemoveLabel={(label) => {
+            if (selectedPr) {
+              removeLabelMutation.mutate({ ...prLocator(selectedPr), labelId: label.id });
+            }
           }}
           onRemoveReviewer={(reviewer) => {
             if (!selectedPr || !reviewer.id) return;

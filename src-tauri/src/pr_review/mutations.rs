@@ -256,6 +256,50 @@ impl PrReviewService {
         Ok(())
     }
 
+    /// Adds a label to a pull request (issue #386); a name already on the PR is
+    /// returned as is.
+    pub async fn add_label(&self, input: AddPullRequestLabelInput) -> Result<PrLabel> {
+        let name = input.name.trim();
+        if name.is_empty() {
+            return Err(AppError::InvalidInput(
+                "label name cannot be empty".to_string(),
+            ));
+        }
+        let organization = self
+            .db
+            .resolve_organization(input.pr.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let label = client
+            .add_pull_request_label(
+                &input.pr.project_id,
+                &input.pr.repository_id,
+                input.pr.pull_request_id,
+                name,
+            )
+            .await?;
+        Ok(PrLabel {
+            id: label.id,
+            name: label.name,
+        })
+    }
+
+    /// Removes a label from a pull request (issue #386).
+    pub async fn remove_label(&self, input: RemovePullRequestLabelInput) -> Result<()> {
+        let organization = self
+            .db
+            .resolve_organization(input.pr.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        client
+            .remove_pull_request_label(
+                &input.pr.project_id,
+                &input.pr.repository_id,
+                input.pr.pull_request_id,
+                &input.label_id,
+            )
+            .await?;
+        Ok(())
+    }
+
     /// Removes a reviewer from a pull request (issue #384).
     pub async fn remove_reviewer(&self, input: RemovePullRequestReviewerInput) -> Result<()> {
         let organization = self

@@ -46,10 +46,11 @@ use crate::pipelines::{
     UpdatePipelineDefinitionInput,
 };
 use crate::pr_review::{
-    AddPullRequestReviewerInput, DeletePullRequestCommentInput, EditPullRequestCommentInput,
-    GetPullRequestFileDiffInput, PostPullRequestCommentInput, PrCommit, PrDetailsResult,
-    PrFileDiff, PrLocator, PrReviewer, PrStatusResult, PrThread, PullRequestChanges,
-    PullRequestReview, RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
+    AddPullRequestLabelInput, AddPullRequestReviewerInput, DeletePullRequestCommentInput,
+    EditPullRequestCommentInput, GetPullRequestFileDiffInput, PostPullRequestCommentInput,
+    PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator, PrReviewer, PrStatusResult,
+    PrThread, PullRequestChanges, PullRequestReview, RemovePullRequestLabelInput,
+    RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
     SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
     SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
 };
@@ -218,6 +219,8 @@ pub(crate) trait Provider: Send + Sync {
         &self,
         input: SetPullRequestReviewerRequiredInput,
     ) -> Result<()>;
+    async fn add_pull_request_label(&self, input: AddPullRequestLabelInput) -> Result<PrLabel>;
+    async fn remove_pull_request_label(&self, input: RemovePullRequestLabelInput) -> Result<()>;
     async fn add_pull_request_reviewer(&self, input: AddPullRequestReviewerInput) -> Result<()>;
     async fn remove_pull_request_reviewer(
         &self,

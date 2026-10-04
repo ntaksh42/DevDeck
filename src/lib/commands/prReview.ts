@@ -42,6 +42,12 @@ const prThreadSchema = z.object({
 
 export type PrThread = z.infer<typeof prThreadSchema>;
 
+const prLabelSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+export type PrLabel = z.infer<typeof prLabelSchema>;
+
 const pullRequestReviewSchema = z.object({
   pullRequestId: z.number(),
   title: z.string(),
@@ -53,6 +59,7 @@ const pullRequestReviewSchema = z.object({
   isDraft: z.boolean(),
   autoComplete: z.boolean().default(false),
   reviewers: z.array(prReviewerSchema),
+  labels: z.array(prLabelSchema).default([]),
   threads: z.array(prThreadSchema),
 });
 
@@ -256,6 +263,28 @@ export async function setPullRequestReviewerRequired(input: {
   isRequired: boolean;
 }): Promise<void> {
   await invokeCommand("set_pull_request_reviewer_required", { input });
+}
+
+// Adds a label (tag) to a pull request; the label definition is created if new.
+export async function addPullRequestLabel(input: {
+  organizationId?: string;
+  projectId: string;
+  repositoryId: string;
+  pullRequestId: number;
+  name: string;
+}): Promise<PrLabel> {
+  const result = await invokeCommand("add_pull_request_label", { input });
+  return prLabelSchema.parse(result);
+}
+
+export async function removePullRequestLabel(input: {
+  organizationId?: string;
+  projectId: string;
+  repositoryId: string;
+  pullRequestId: number;
+  labelId: string;
+}): Promise<void> {
+  await invokeCommand("remove_pull_request_label", { input });
 }
 
 // Adds a reviewer to a pull request; omit reviewerId to add the signed-in user.

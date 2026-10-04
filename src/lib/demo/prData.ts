@@ -433,6 +433,10 @@ export function demoPrReviewDetail(prId: number): PullRequestReview {
     creationDate: summary?.creationDate ?? "2026-05-20T08:00:00Z",
     isDraft: summary?.isDraft ?? false,
     autoComplete: false,
+    labels: [
+      { id: "demo-label-1", name: "frontend" },
+      { id: "demo-label-2", name: "needs design review" },
+    ],
     reviewers: [
       {
         id: "demo-user",

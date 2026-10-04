@@ -414,3 +414,80 @@ async fn get_item_bytes_downloads_octet_stream() {
     assert_eq!(response.bytes, vec![0x89u8, 0x50, 0x4e, 0x47]);
     assert_eq!(response.content_type.as_deref(), Some("image/png"));
 }
+
+#[tokio::test]
+async fn add_pull_request_label_posts_the_name() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path(
+            "/project-1/_apis/git/repositories/repo-1/pullRequests/42/labels",
+        ))
+        .and(body_json(serde_json::json!({ "name": "needs design" })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": "3f2c", "name": "needs design", "active": true
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let label = test_client(&server)
+        .await
+        .add_pull_request_label("project-1", "repo-1", 42, "needs design")
+        .await
+        .unwrap();
+    assert_eq!(
+        (label.id.as_str(), label.name.as_str()),
+        ("3f2c", "needs design")
+    );
+    assert!(label.active);
+}
+
+#[tokio::test]
+async fn remove_pull_request_label_deletes_by_id() {
+    let server = MockServer::start().await;
+    Mock::given(method("DELETE"))
+        .and(path(
+            "/project-1/_apis/git/repositories/repo-1/pullRequests/42/labels/3f2c",
+        ))
+        .respond_with(ResponseTemplate::new(204))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    test_client(&server)
+        .await
+        .remove_pull_request_label("project-1", "repo-1", 42, "3f2c")
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn pull_request_detail_reads_labels() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path(
+            "/project-1/_apis/git/repositories/repo-1/pullrequests/42",
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "pullRequestId": 42, "title": "T",
+            "sourceRefName": "refs/heads/a", "targetRefName": "refs/heads/main",
+            "labels": [
+                { "id": "1", "name": "bug", "active": true },
+                { "id": "2", "name": "old", "active": false }
+            ]
+        })))
+        .mount(&server)
+        .await;
+
+    let detail = test_client(&server)
+        .await
+        .get_pull_request_detail("project-1", "repo-1", 42)
+        .await
+        .unwrap();
+    let labels: Vec<_> = detail
+        .labels
+        .iter()
+        .map(|l| (l.name.as_str(), l.active))
+        .collect();
+    assert_eq!(labels, [("bug", true), ("old", false)]);
+}

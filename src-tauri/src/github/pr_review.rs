@@ -88,6 +88,7 @@ pub async fn get_review(
     threads.extend(fetch_review_threads(&client, &owner, &repo, pr.pull_request_id, &me).await?);
 
     Ok(PullRequestReview {
+        labels: Vec::new(),
         pull_request_id: detail.number as i64,
         title: detail.title,
         description: detail.body,

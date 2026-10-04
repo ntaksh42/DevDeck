@@ -190,6 +190,8 @@ pub fn run() {
             commands::pr_review::submit_pull_request_vote,
             commands::pr_review::update_pull_request,
             commands::pr_review::set_pull_request_reviewer_required,
+            commands::pr_review::add_pull_request_label,
+            commands::pr_review::remove_pull_request_label,
             commands::pr_review::add_pull_request_reviewer,
             commands::pr_review::remove_pull_request_reviewer,
             commands::pr_review::update_pull_request_details,
