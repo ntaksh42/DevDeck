@@ -9,6 +9,7 @@ import type {
   DeletePullRequestCommentInput,
   EditPullRequestCommentInput,
   ExportDiagnosticsInput,
+  FollowWorkItemInput,
   GetPullRequestFileDiffInput,
   GetPullRequestReviewInput,
   GetReviewResultPreviewInput,
@@ -103,6 +104,11 @@ import {
   demoSnoozedKeys,
   demoUnsnoozeItem,
 } from "@/lib/demo/snooze";
+import {
+  demoFollowWorkItem,
+  demoListFollowedWorkItems,
+  demoUnfollowWorkItem,
+} from "@/lib/demo/workItemFollows";
 import { demoCommits } from "@/lib/demo/commits";
 import { dispatchExt } from "@/lib/demo/dispatchExt";
 
@@ -454,6 +460,18 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       const input = (args as { input?: { itemType: string } } | undefined)?.input;
       return demoListSnoozedItems(input?.itemType ?? "");
     }
+    case "follow_work_item": {
+      const input = (args as { input?: FollowWorkItemInput } | undefined)?.input;
+      if (input) demoFollowWorkItem(input);
+      return null;
+    }
+    case "unfollow_work_item": {
+      const input = (args as { input?: { workItemId: number } } | undefined)?.input;
+      if (input) demoUnfollowWorkItem(input.workItemId);
+      return null;
+    }
+    case "list_followed_work_items":
+      return demoListFollowedWorkItems();
     case "get_saved_query": {
       const input = (args as { input?: GetSavedQueryInput } | undefined)?.input;
       const queryId = input?.queryId ?? "";

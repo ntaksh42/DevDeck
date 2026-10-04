@@ -101,6 +101,7 @@ export const workItemQueryKeys = {
     query?: string,
   ) => ['workItemAssignees', organizationId, projectId, workItemId, query] as const,
   assigneesRoot: () => ['workItemAssignees'] as const,
+  follows: (organizationId?: string) => ['workItemFollows', organizationId] as const,
 };
 
 export function invalidateWorkItemQueryViews(

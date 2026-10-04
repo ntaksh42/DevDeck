@@ -15,6 +15,7 @@ mod settings;
 mod snooze;
 mod sync_state;
 mod util;
+mod work_item_follows;
 mod work_items;
 mod work_items_query;
 
@@ -31,6 +32,8 @@ mod tests_notifications;
 #[cfg(test)]
 mod tests_prs;
 #[cfg(test)]
+mod tests_work_item_follows;
+#[cfg(test)]
 mod tests_work_items;
 
 pub use commits::*;
@@ -40,12 +43,13 @@ pub use organizations::*;
 pub use prs::*;
 pub use settings::*;
 pub use sync_state::*;
+pub use work_item_follows::*;
 pub use work_items::*;
 
 pub(crate) use commits_query::*;
 pub(crate) use work_items_query::*;
 
-pub(crate) const SCHEMA_VERSION: i64 = 20;
+pub(crate) const SCHEMA_VERSION: i64 = 21;
 
 // ── AppDatabase ───────────────────────────────────────────────────────────────
 

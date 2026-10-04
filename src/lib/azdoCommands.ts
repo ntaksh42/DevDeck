@@ -4,6 +4,7 @@ export * from "./commands/prs";
 export * from "./commands/prReview";
 export * from "./commands/workItems";
 export * from "./commands/workItemsMutations";
+export * from "./commands/workItemFollows";
 export * from "./commands/commits";
 export * from "./commands/code";
 export * from "./commands/pipelines";

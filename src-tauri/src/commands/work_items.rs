@@ -5,18 +5,19 @@ use crate::error::Result;
 use crate::work_items::{
     AddWorkItemCommentInput, AddWorkItemLinkInput, AssignWorkItemsInput, BulkWorkItemResult,
     ClassificationNodesResult, CountWorkItemQueryHistoryInput, CreateWorkItemInput,
-    DeleteWorkItemCommentInput, FetchWorkItemImageInput, GetSavedQueryInput,
-    GetWorkItemPreviewInput, ListClassificationNodesInput, ListMyWorkItemsInput,
-    ListProjectQueriesInput, ListWorkItemFieldAllowedValuesInput, ListWorkItemFieldsInput,
-    ListWorkItemProjectsInput, ListWorkItemTypeStatesInput, ListWorkItemTypesInput,
-    ListWorkItemUpdatesInput, MentionCandidate, ProjectQueryOption, RecordAssigneeInteractionInput,
-    RecordMentionInteractionInput, RemoveWorkItemLinkInput, RunWorkItemQueryInput,
-    SavedQueryResult, SearchWorkItemAssigneesInput, SearchWorkItemMentionsInput,
-    SearchWorkItemsInput, SetWorkItemCommentReactionInput, SetWorkItemsPriorityInput,
-    SetWorkItemsStateInput, SetWorkItemsTagsInput, UpdateWorkItemCommentInput,
-    UpdateWorkItemFieldsInput, WorkItemAssigneeCandidate, WorkItemComment, WorkItemFieldOption,
-    WorkItemImage, WorkItemPreview, WorkItemProjectOption, WorkItemQueryCountPoint,
-    WorkItemSummary, WorkItemUpdateSummary,
+    DeleteWorkItemCommentInput, FetchWorkItemImageInput, FollowWorkItemInput, GetSavedQueryInput,
+    GetWorkItemPreviewInput, ListClassificationNodesInput, ListFollowedWorkItemsInput,
+    ListMyWorkItemsInput, ListProjectQueriesInput, ListWorkItemFieldAllowedValuesInput,
+    ListWorkItemFieldsInput, ListWorkItemProjectsInput, ListWorkItemTypeStatesInput,
+    ListWorkItemTypesInput, ListWorkItemUpdatesInput, MentionCandidate, ProjectQueryOption,
+    RecordAssigneeInteractionInput, RecordMentionInteractionInput, RemoveWorkItemLinkInput,
+    RunWorkItemQueryInput, SavedQueryResult, SearchWorkItemAssigneesInput,
+    SearchWorkItemMentionsInput, SearchWorkItemsInput, SetWorkItemCommentReactionInput,
+    SetWorkItemsPriorityInput, SetWorkItemsStateInput, SetWorkItemsTagsInput,
+    UnfollowWorkItemInput, UpdateWorkItemCommentInput, UpdateWorkItemFieldsInput,
+    WorkItemAssigneeCandidate, WorkItemComment, WorkItemFieldOption, WorkItemImage,
+    WorkItemPreview, WorkItemProjectOption, WorkItemQueryCountPoint, WorkItemSummary,
+    WorkItemUpdateSummary,
 };
 
 #[tauri::command]
@@ -335,4 +336,36 @@ pub async fn list_project_queries(
     state: State<'_, AppState>,
 ) -> Result<Vec<ProjectQueryOption>> {
     state.work_items.list_project_queries(input).await
+}
+
+// Local follow watchlist (issue #304): no Azure DevOps API involved, so these
+// skip `ensure_write_enabled` the same way `snooze_item` does.
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn follow_work_item(
+    input: FollowWorkItemInput,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    let service = state.work_items.clone();
+    run_blocking(move || service.follow_work_item(input)).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn unfollow_work_item(
+    input: UnfollowWorkItemInput,
+    state: State<'_, AppState>,
+) -> Result<()> {
+    let service = state.work_items.clone();
+    run_blocking(move || service.unfollow_work_item(input)).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn list_followed_work_items(
+    input: ListFollowedWorkItemsInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<WorkItemSummary>> {
+    let service = state.work_items.clone();
+    run_blocking(move || service.list_followed_work_items(input)).await
 }

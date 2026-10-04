@@ -22,6 +22,7 @@ use crate::secrets::SecretStore;
 
 mod candidates;
 mod conversions;
+mod follows;
 mod metadata;
 mod mutations;
 mod query;

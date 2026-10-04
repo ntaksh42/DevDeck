@@ -2,12 +2,15 @@ import { Copy, Share2 } from 'lucide-react';
 import type { WorkItemPreview } from '@/lib/azdoCommands';
 import { openMailtoUrl } from '@/lib/openExternal';
 import { buildWorkItemEmailLink } from './workItemChanges';
+import { useWorkItemFollow } from './useWorkItemFollow';
+import { WorkItemFollowToggle } from './WorkItemFollowToggle';
 
 const buttonClass =
   "inline-flex h-5 w-5 items-center justify-center rounded border border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground";
 
 // Small header-row action buttons for the work item preview panel: "Email a
-// link" (mirrors Azure DevOps Web's own share action) and "Duplicate". Split
+// link" (mirrors Azure DevOps Web's own share action), "Follow" (local watchlist)
+// and "Duplicate". Split
 // out from WorkItemPreviewPanel.tsx to keep that file under the 500-line limit.
 export function WorkItemPreviewActions({
   preview,
@@ -16,12 +19,19 @@ export function WorkItemPreviewActions({
   preview: WorkItemPreview;
   onDuplicate: (() => void) | null;
 }) {
+  const { isFollowed, toggleFollow, pending: followPending } = useWorkItemFollow(preview);
+
   function emailLink() {
     void openMailtoUrl(buildWorkItemEmailLink(preview));
   }
 
   return (
     <>
+      <WorkItemFollowToggle
+        isFollowed={isFollowed}
+        onToggle={toggleFollow}
+        pending={followPending}
+      />
       <button
         type="button"
         aria-label="Email a link"

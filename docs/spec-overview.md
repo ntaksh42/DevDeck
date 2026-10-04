@@ -121,6 +121,12 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   ファイルヒットを `Enter` でブラウザに開く(コード検索は重いため明示接頭辞時のみ実行)。
   横断検索は組織ごとに実行し、一部の組織が失敗しても成功した組織のヒットを返す(失敗はログのみで UI には通知しない)。
   通常の `Enter` でアプリ内、`Ctrl+Enter` でブラウザ。
+- **作業項目のフォロー** (issue #304): プレビューヘッダの星トグルで Follow/Unfollow
+  (`follow_work_item` / `unfollow_work_item`)。Azure DevOps に公開の follow/購読設定 REST API が
+  無いため、フォローはローカルの SQLite ウォッチリスト (`followed_work_items`、フォロー時点の
+  タイトル/状態などのスナップショットを保持) であり、サーバ側の通知購読とは連動しない。
+  My Work Items パネルに「Assigned to me / Followed」の切替トグルがあり、フォロー中の項目を
+  一覧できる (`list_followed_work_items`)。
 - **スヌーズ**: PR / 作業項目の通知を一定期間繰り延べ。プリセットは当日夕方、翌朝、3日後、翌週月曜、1か月後。カスタム日時は現在より後のみ受け付け (過去は UI で確定不可、`snooze_item` も `InvalidInput` で拒否)。My Reviews の範囲選択または作業項目グリッド (My Work Items / Work Item Views のグリッド表示 / Work Item Search) のチェック選択に対して同じ期限を一括適用できる (`Z` またはバルクバーの Snooze)。スヌーズ中の作業項目はこれら3画面の結果から隠れ、ステータスバーの Snoozed トグルで一覧・解除できる (My Items 外の項目のタイトルは表示中の結果から補完)。新たなアクティビティまたは期限で復帰 (アクティビティ判定は My Items の同期キャッシュに基づくため、My Items 外の項目は期限でのみ復帰)。ボード表示とピン留めビューの件数バッジはスヌーズを考慮しない。
   ただし PR のコメント活動による早期復帰は `pr_comment_seen` カーソルに依存し、同カーソルは
   コメント返信通知の処理時（`notify_pr_comment_replies` が有効。`desktop_notifications_enabled`
@@ -274,7 +280,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   v20 で `pull_requests.created_by_id` を追加)。
 - 主なテーブル: 組織、アクティブ/レビュー対象 PR、作業項目、My Work Items スナップショット、
   コミット、コミット↔PR 関連、各種 FTS インデックス、同期状態、スヌーズ、
-  PR コメント既読、メンション/割当先履歴、通知履歴 (`notifications`)、アプリ設定。
+  フォロー中の作業項目 (`followed_work_items`)、PR コメント既読、メンション/割当先履歴、通知履歴 (`notifications`)、アプリ設定。
 - ジャーナル: WAL、`synchronous=NORMAL`、外部キー ON。
 - **共有キャッシュ (`shared_cache/`)**: `azdodeck.sqlite3` 自体は DevDeck 専用で、外部からは
   読まれない。別アプリ waypoint (`C:\Users\<user>\source\repos\waypoint`) が同じ Azure
