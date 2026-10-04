@@ -7,14 +7,25 @@ export function PipelineApprovalsPanel({
   pendingApprovalId,
   error,
   onAct,
+  expanded: expandedProp,
+  onExpandedChange,
 }: {
   approvals: PipelineApprovalSummary[];
   pendingApprovalId: string | null;
   error: string | null;
   onAct: (approvalId: string, status: "approved" | "rejected") => void;
+  /** Controlled open state (the board's approvals pill toggles it); uncontrolled when omitted. */
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
 }) {
   // Folded to a one-line banner (count + first request) until expanded.
-  const [expanded, setExpanded] = useState(false);
+  const [ownExpanded, setOwnExpanded] = useState(false);
+  const expanded = expandedProp ?? ownExpanded;
+  const setExpanded = (update: (value: boolean) => boolean) => {
+    const next = update(expanded);
+    setOwnExpanded(next);
+    onExpandedChange?.(next);
+  };
   const first = approvals[0]?.instructions?.trim() || "Approval required to continue";
   return (
     <div className="shrink-0 rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700/60 dark:bg-amber-950/30">

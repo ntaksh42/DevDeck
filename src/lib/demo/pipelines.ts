@@ -100,9 +100,52 @@ export function demoPipelineRuns() {
   ];
 }
 
+type DemoTimelineNode = {
+  id: string;
+  parentId: string | null;
+  nodeType: string;
+  name: string;
+  state: string;
+  result: string | null;
+  logId: number | null;
+  errorCount?: number;
+  warningCount?: number;
+};
+
+// A failed run gets a realistic multi-stage tree (a folded-away successful
+// branch, a failing job with tasks, and a skipped stage) so the browser
+// preview exercises timeline folding and "first failure".
+function demoFailedTimeline(): DemoTimelineNode[] {
+  return [
+    { id: "stage-1", parentId: null, nodeType: "Stage", name: "Build", state: "completed", result: "failed", logId: null, errorCount: 2 },
+    { id: "job-setup", parentId: "stage-1", nodeType: "Job", name: "Setup", state: "completed", result: "succeeded", logId: 11 },
+    { id: "task-checkout", parentId: "job-setup", nodeType: "Task", name: "Checkout", state: "completed", result: "succeeded", logId: 12 },
+    { id: "task-restore", parentId: "job-setup", nodeType: "Task", name: "Restore packages", state: "completed", result: "succeeded", logId: 13 },
+    { id: "job-test", parentId: "stage-1", nodeType: "Job", name: "Unit tests", state: "completed", result: "succeeded", logId: 14 },
+    { id: "job-publish", parentId: "stage-1", nodeType: "Job", name: "Publish", state: "completed", result: "failed", logId: 15, errorCount: 2 },
+    { id: "task-pack", parentId: "job-publish", nodeType: "Task", name: "Pack", state: "completed", result: "succeeded", logId: 16 },
+    { id: "task-push", parentId: "job-publish", nodeType: "Task", name: "Push to registry", state: "completed", result: "failed", logId: 17, errorCount: 2 },
+    { id: "stage-2", parentId: null, nodeType: "Stage", name: "Deploy", state: "completed", result: "canceled", logId: null },
+  ];
+}
+
 export function demoPipelineRunDetail(buildId: number) {
   const runs = demoPipelineRuns();
   const run = runs.find((r) => r.buildId === buildId) ?? runs[0];
+  if (run.result === "failed") {
+    return {
+      run,
+      timelineUnavailable: false,
+      timeline: demoFailedTimeline().map((node, index) => ({
+        ...node,
+        errorCount: node.errorCount ?? 0,
+        warningCount: 0,
+        startTime: run.startTime,
+        finishTime: run.finishTime,
+        order: index + 1,
+      })),
+    };
+  }
   return {
     run,
     timelineUnavailable: false,
@@ -117,7 +160,7 @@ export function demoPipelineRunDetail(buildId: number) {
         startTime: run.startTime,
         finishTime: run.finishTime,
         logId: null,
-        errorCount: run.result === "failed" ? 1 : 0,
+        errorCount: 0,
         warningCount: 0,
         order: 1,
       },
@@ -131,12 +174,34 @@ export function demoPipelineRunDetail(buildId: number) {
         startTime: run.startTime,
         finishTime: run.finishTime,
         logId: 7,
-        errorCount: run.result === "failed" ? 1 : 0,
+        errorCount: 0,
         warningCount: 0,
         order: 1,
       },
     ],
   };
+}
+
+export function demoPipelineLogTail(logId: number) {
+  if (logId === 17) {
+    return {
+      lines: [
+        "2026-06-13T10:02:10.0000000Z Starting: Push to registry",
+        "2026-06-13T10:02:11.1000000Z Login Succeeded",
+        "2026-06-13T10:02:12.2000000Z Pushing web:20260613.4 ...",
+        "2026-06-13T10:02:13.3000000Z ##[warning]Layer already exists, skipping",
+        "2026-06-13T10:02:14.4000000Z ##[error]unauthorized: authentication required",
+        "2026-06-13T10:02:14.5000000Z ##[error]Process completed with exit code 1.",
+        "2026-06-13T10:02:14.6000000Z 0 errors reported by lint (not a failure line)",
+        "2026-06-13T10:02:14.7000000Z Finishing: Push to registry",
+      ],
+      truncated: false,
+    };
+  }
+  if (logId >= 11 && logId <= 16) {
+    return { lines: ["Starting step", "Step completed successfully"], truncated: false };
+  }
+  return { lines: ["[command] npm run build", "ERROR: build failed (exit 1)"], truncated: false };
 }
 
 // Definitions are cached per session so edits made through

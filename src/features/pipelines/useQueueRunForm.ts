@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   commandErrorMessage,
@@ -7,6 +7,7 @@ import {
   type PipelineVariable,
   queuePipelineRun,
 } from "@/lib/azdoCommands";
+import { loadQueueRecent, type QueueRecent, saveQueueRecent } from "./pipelineQueueRecent";
 
 // The Queue run branch picker (and its free-text fallback) works with short
 // branch names, e.g. "main", but the build API's sourceBranch requires the
@@ -45,6 +46,16 @@ export function useQueueRunForm({
   const [queueParamValues, setQueueParamValues] = useState<Record<string, string>>({});
   const [queueError, setQueueError] = useState<string | null>(null);
   const [queueNotice, setQueueNotice] = useState<string | null>(null);
+  // The branch / variable values last queued for this pipeline, read each time
+  // the form opens. Held in a ref so loading them does not re-render the form.
+  const recentRef = useRef<QueueRecent | null>(null);
+  const pendingRecentRef = useRef<QueueRecent | null>(null);
+
+  useEffect(() => {
+    if (!queueOpen || definitionId == null) return;
+    recentRef.current = loadQueueRecent(organizationId, projectId, definitionId);
+    if (recentRef.current) setQueueBranch(recentRef.current.branch);
+  }, [queueOpen, organizationId, projectId, definitionId]);
 
   // The definition detail (same query PipelineDefinitionPanel uses, so the
   // cache is shared) carries the repository the pipeline builds from. Only a
@@ -77,7 +88,7 @@ export function useQueueRunForm({
   useEffect(() => {
     const defaults: Record<string, string> = {};
     for (const variable of overridableVariables) {
-      defaults[variable.name] = queueParamDefault(variable);
+      defaults[variable.name] = recentRef.current?.variables[variable.name] ?? queueParamDefault(variable);
     }
     setQueueParamValues(defaults);
   }, [overridableVariables]);
@@ -105,9 +116,10 @@ export function useQueueRunForm({
   // TfsGit, or the branch list failed to load.
   const showQueueBranchSelect = canPickQueueBranch && !queueBranchesQuery.isError;
 
-  // Default the branch to the repository's default branch once it loads.
+  // Default the branch to the repository's default branch once it loads,
+  // unless the user queued this pipeline before (then that branch stays).
   useEffect(() => {
-    if (!queueOpen || !canPickQueueBranch) return;
+    if (!queueOpen || !canPickQueueBranch || recentRef.current) return;
     const defaultBranch = queueBranchesQuery.data?.find((branch) => branch.isDefault)?.name;
     if (defaultBranch) setQueueBranch(defaultBranch);
   }, [queueOpen, canPickQueueBranch, queueBranchesQuery.data]);
@@ -117,6 +129,9 @@ export function useQueueRunForm({
     onSuccess: (run) => {
       setQueueError(null);
       setQueueOpen(false);
+      if (pendingRecentRef.current && definitionId != null) {
+        saveQueueRecent(organizationId, projectId, definitionId, pendingRecentRef.current);
+      }
       setQueueNotice(`Queued ${definitionName ?? "pipeline"} #${run.buildId}.`);
       window.setTimeout(() => setQueueNotice(null), 4000);
       void queryClient.invalidateQueries({ queryKey: ["pipelineSubscriptionHistory"] });
@@ -149,6 +164,13 @@ export function useQueueRunForm({
       if (current === undefined || current === queueParamDefault(variable)) continue;
       parameters[variable.name] = current;
     }
+    // Remember the branch and any non-secret variable the user changed.
+    const variables: Record<string, string> = {};
+    for (const variable of overridableVariables) {
+      const current = queueParamValues[variable.name];
+      if (!variable.isSecret && current !== undefined) variables[variable.name] = current;
+    }
+    pendingRecentRef.current = { branch, variables };
     queueMutation.mutate({
       organizationId,
       projectId,

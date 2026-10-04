@@ -17,6 +17,7 @@ import {
   demoPipelineDefinitionDetail,
   demoPipelineDefinitions,
   demoPipelineProjects,
+  demoPipelineLogTail,
   demoPipelineRunDetail,
   demoPipelineRuns,
   demoPipelineRunsFiltered,
@@ -96,11 +97,10 @@ export function dispatchExt(command: string, args: unknown): unknown {
       )?.input;
       return demoUpdatePipelineDefinition(input ?? {});
     }
-    case "get_pipeline_run_log_tail":
-      return {
-        lines: ["[command] npm run build", "ERROR: build failed (exit 1)"],
-        truncated: false,
-      };
+    case "get_pipeline_run_log_tail": {
+      const input = (args as { input?: { logId?: number } } | undefined)?.input;
+      return demoPipelineLogTail(input?.logId ?? 7);
+    }
     case "rerun_pipeline_run": {
       const input = (args as { input?: { buildId?: number } } | undefined)?.input;
       return {

@@ -79,7 +79,7 @@ describe("PipelinesView", () => {
       fireEvent.click(runRows[0]);
 
       // The detail panel now shows a run, not the empty placeholder.
-      await screen.findByText("Branch", undefined, { timeout: 8000 });
+      await screen.findByText("Timeline", undefined, { timeout: 8000 });
       expect(screen.queryByText("Select a run.")).toBeNull();
 
       // Unwatch CI (a different pipeline in the same project).
@@ -90,7 +90,7 @@ describe("PipelinesView", () => {
 
       // The detail panel must still show the Nightly run, not be cleared.
       expect(screen.queryByText("Select a run.")).toBeNull();
-      expect(screen.getByText("Branch")).toBeTruthy();
+      expect(screen.getByText("Timeline")).toBeTruthy();
     },
     15000,
   );
@@ -288,4 +288,76 @@ describe("toSourceBranchRef", () => {
     expect(toSourceBranchRef("refs/heads/main")).toBe("refs/heads/main");
     expect(toSourceBranchRef("refs/tags/v1")).toBe("refs/tags/v1");
   });
+});
+
+describe("PipelinesView queue popover keyboard flow", () => {
+  async function openQueuePopover() {
+    renderView();
+    await screen.findByText("Watched pipelines", undefined, { timeout: 8000 });
+    const pipelineCombo = await screen.findByRole("combobox", { name: "Pipeline" });
+    await waitFor(() => expect((pipelineCombo as HTMLInputElement).disabled).toBe(false), {
+      timeout: 8000,
+    });
+    fireEvent.mouseDown(pipelineCombo);
+    fireEvent.pointerDown(await screen.findByRole("option", { name: "CI" }));
+    const queueRunButton = screen.getByRole("button", { name: "Queue run" });
+    await waitFor(() => expect((queueRunButton as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(queueRunButton);
+    const dialog = await screen.findByRole("dialog", { name: /Queue CI/ });
+    return { dialog, queueRunButton };
+  }
+
+  it(
+    "opens on the Branch field and returns focus to Queue run when Escape closes it",
+    async () => {
+      const { dialog, queueRunButton } = await openQueuePopover();
+      await waitFor(() => expect(document.activeElement).toBe(within(dialog).getByLabelText("Branch")));
+
+      fireEvent.keyDown(dialog, { key: "Escape" });
+
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      await waitFor(() => expect(document.activeElement).toBe(queueRunButton));
+      expect(queuePipelineRun).not.toHaveBeenCalled();
+    },
+    15000,
+  );
+
+  it(
+    "queues with Ctrl+Enter and remembers the branch for the next time",
+    async () => {
+      queuePipelineRun.mockResolvedValueOnce({
+        organizationId: "contoso",
+        projectId: "demo-project",
+        projectName: "Demo Project",
+        buildId: 2001,
+        buildNumber: "2001",
+        definitionId: 1,
+        definitionName: "CI",
+        status: "notStarted",
+        result: null,
+        sourceBranch: "refs/heads/release/9",
+        reason: "manual",
+        requestedFor: "Demo User",
+        queueTime: null,
+        startTime: null,
+        finishTime: null,
+        webUrl: "https://dev.azure.com/demo/demo/_build/results?buildId=2001",
+      });
+      const { dialog, queueRunButton } = await openQueuePopover();
+
+      fireEvent.change(within(dialog).getByLabelText("Branch"), { target: { value: "release/9" } });
+      fireEvent.keyDown(dialog, { key: "Enter", ctrlKey: true });
+
+      await waitFor(() => expect(queuePipelineRun).toHaveBeenCalled());
+      expect(queuePipelineRun.mock.calls[0][0]).toMatchObject({ sourceBranch: "refs/heads/release/9" });
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+      fireEvent.click(queueRunButton);
+      const reopened = await screen.findByRole("dialog", { name: /Queue CI/ });
+      await waitFor(() =>
+        expect((within(reopened).getByLabelText("Branch") as HTMLInputElement).value).toBe("release/9"),
+      );
+    },
+    15000,
+  );
 });

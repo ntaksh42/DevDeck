@@ -482,6 +482,43 @@ Commits プレビューと Pipelines の実行詳細は、PR / 作業項目プ�
 `↑ ↓ / J K / Home / End` で移動、`Enter` で実行プレビュー、`Ctrl+Enter` で
 ブラウザを開く。
 
+Pipelines の見た目と操作 (`src/features/pipelines/`):
+
+- **ボード見出し**: 「N running」(青)・「N failed」(赤、最新実行が失敗のパイプライン数)・「N approvals」
+  (琥珀、選択中プロジェクトの保留承認数) のピルを置く。いずれもボタンで、running / failed は
+  押すとそのパイプラインだけに絞り込み (再押下で解除)、approvals は承認バナーを開閉する。
+  並び順は既定「Status」(実行中 → 失敗 → その他、同順位は購読順)、`Name` / `Last run` に切替でき、
+  選択は `azdodeck:view:pipelinesSort:v1` に保存する。更新ボタンは全パイプラインを再取得し、
+  最終更新時刻を表示する (F5 は Webview 再読込と衝突するため割り当てない)。
+- **ミニ履歴**: 各パイプライン行に直近 8 件の実行を色セル (古い順 → 新しい順) で表示する。幅 560px 未満では非表示。
+  セルのクリックでその実行を選択する (キーボードでは展開した実行グリッドから同じ実行を選べる)。
+- **実行行**: 状態バッジはアイコン (✓ / ✕ / ⚠ / 禁止 / ?、実行中はパルスドット) + ラベル。
+  ボード幅が 900px 以上のときだけ「Requested for」「Reason」の列を追加する (それ未満は従来の 6 列)。
+- **実行履歴フィルタ** (ブランチ / 結果 / My runs) は他のグリッドと同じく折り畳み式の `Ctrl+F` で
+  ドックのタブ帯に入り (`PipelineFilterBar`)、畳んだ状態ではチップで残る。`Esc` で畳み、グリッドへフォーカスを戻す。
+- **Watch が 0 件**のボードは、選択中プロジェクトのパイプラインを 1 クリックで Watch できる候補チップ
+  (と「Watch all」。上限 100) を表示する。
+- **Queue run** はツールバー直下に縦に伸びるフォームではなく、ボタン下のポップオーバー
+  (`PipelineQueuePopover`)。開くと Branch にフォーカス、`Ctrl+Enter` で実行、`Esc` / Cancel で閉じて
+  Queue run ボタンへフォーカスを戻す。パイプラインごとに直近のブランチと**秘密でない**変数値を
+  `azdodeck:pipelines:queueRecent:v1` (localStorage、最大 50 件) に記憶して次回の初期値にする。
+  自由入力の Parameters 欄は秘密を含み得るため保存しない。
+- **実行詳細**: 操作 (Open in Azure DevOps / Re-run / Cancel) はタブ帯右端のアイコンに置く
+  (Cancel は実行中のみ)。見出しは状態バッジ + 定義名 + ビルド番号、続く 2 行にブランチ・理由・起票者と
+  キュー相対時刻・所要時間 (実行中は 1 秒ごとに更新)。
+  Re-run / Cancel の確認は `window.confirm` ではなくヘッダ直下のインライン確認バー
+  (`PipelineConfirmBar`)。初期フォーカスは安全側 (Cancel / Keep running)、`Enter` で確定、
+  `Esc` で閉じて元のアイコンへフォーカスを戻す。
+  実行を開くと**最初の失敗ステップ** (失敗した最も深い Task で、ログを持つもの) を自動選択してログを開く。
+  Timeline は WAI-ARIA tree: `↑↓` 移動、`→` 展開、`←` 折り畳み (折り畳み済みの最上位で `←` はグリッドへ戻る)、
+  `Enter` / `Space` でログ表示、`Home` / `End`。既定では失敗・実行中・警告を含む枝だけ展開し、
+  成功した Stage / Job は畳む。見出し帯に「Expand all / Collapse all」と「First failure」(`F`) を置く。
+  プレビュー内の `R` で Re-run、`X` で Cancel (どちらも確認バーを経由)。
+- **ログ** (`PipelineLogViewer`): 行番号、検索 (`/`、`Enter` / `Shift+Enter` で次/前、`Esc` で閉じてログへ戻る)、
+  折り返し (`W`)、末尾追従 (Follow。上へスクロールすると自動で止まる)、Copy、Errors/warnings only。
+  高さは `max-h` 固定ではなく残り高さを使う (最小 18rem)。重大度は `##[error]` / `##[warning]` を優先し、
+  単語は `error:` `error CS1002:` `npm ERR!` のようにコロンが付く形だけを対象にする ("0 errors" は強調しない)。
+
 Grid と右プレビューを並べる My Reviews / PR Search / Work Items / Commits /
 Pipelines は、利用可能幅の 60% / 40% を既定比率とする。区切り線のドラッグまたは
 キーボード操作で変更した比率は画面ごと (保存済み Work Item View はビューごと) に

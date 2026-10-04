@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Play, Plus } from "lucide-react";
 import {
@@ -10,11 +10,16 @@ import {
 } from "@/lib/azdoCommands";
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { DockableWorkspace, type DockablePanelSpec } from "@/components/DockableWorkspace";
+import { PreviewToolbarSlotProvider, usePreviewToolbarSlot } from "@/components/PreviewToolbarSlot";
 import { FilterableSelect } from "./FilterableSelect";
+import { NO_RUN_FILTERS, type PipelineRunFilters } from "./pipelineBoard";
 import { PipelineApprovalsPanel } from "./PipelineApprovalsPanel";
 import { PipelineDefinitionPanel } from "./PipelineDefinitionPanel";
+import { PipelineFilterBar } from "./PipelineFilterBar";
+import { PipelineQueuePopover } from "./PipelineQueuePopover";
 import { PipelineRunDetailPanel } from "./PipelineRunDetailPanel";
 import { PipelineSubscriptionsBoard } from "./PipelineSubscriptionsBoard";
+import { PipelineWatchSuggestions } from "./PipelineWatchSuggestions";
 import {
   addSubscription,
   isSubscribed,
@@ -49,6 +54,11 @@ export function PipelinesView() {
     loadPipelineSubscriptions(),
   );
   const [watchToast, setWatchToast] = useState<string | null>(null);
+  const [filters, setFilters] = useState<PipelineRunFilters>(NO_RUN_FILTERS);
+  const [approvalsOpen, setApprovalsOpen] = useState(false);
+  const queueButtonRef = useRef<HTMLButtonElement | null>(null);
+  const queueWasOpenRef = useRef(false);
+  const previewToolbar = usePreviewToolbarSlot();
   const projectsQuery = useQuery({
     queryKey: ["pipelineProjects", selectedOrganizationId],
     queryFn: () => listPipelineProjects({ organizationId: selectedOrganizationId }),
@@ -127,6 +137,28 @@ export function PipelinesView() {
     savePipelineSubscriptions(next);
   }
 
+  // Adds candidates in order; a full watch list stops the batch with a toast.
+  function addWatches(candidates: { id: number; name: string }[]) {
+    if (!selectedProject) return;
+    let next = subscriptions;
+    for (const candidate of candidates) {
+      const result = addSubscription(next, {
+        organizationId: selectedOrganizationId,
+        projectId,
+        projectName: selectedProject.name,
+        definitionId: candidate.id,
+        definitionName: candidate.name,
+      });
+      if (result.status === "limit") {
+        setWatchToast(`Watch limit reached (${MAX_SUBSCRIPTIONS}). Remove one to add another.`);
+        window.setTimeout(() => setWatchToast(null), 3000);
+        break;
+      }
+      next = result.subscriptions;
+    }
+    if (next !== subscriptions) persistSubscriptions(next);
+  }
+
   function handleSubscribe() {
     if (!canSubscribe || definitionId == null || !selectedProject || !selectedDefinition) return;
     if (selectedIsSubscribed) {
@@ -135,48 +167,30 @@ export function PipelinesView() {
       );
       return;
     }
-    const result = addSubscription(subscriptions, {
-      organizationId: selectedOrganizationId,
-      projectId,
-      projectName: selectedProject.name,
-      definitionId,
-      definitionName: selectedDefinition.name,
-    });
-    if (result.status === "limit") {
-      setWatchToast(`Watch limit reached (${MAX_SUBSCRIPTIONS}). Remove one to add another.`);
-      window.setTimeout(() => setWatchToast(null), 3000);
-      return;
-    }
-    persistSubscriptions(result.subscriptions);
+    addWatches([{ id: definitionId, name: selectedDefinition.name }]);
   }
 
   const canQueue = definitionId != null && !!selectedProject && !!selectedDefinition;
-  const {
-    queueOpen,
-    setQueueOpen,
-    queueBranch,
-    setQueueBranch,
-    queueParams,
-    setQueueParams,
-    queueParamValues,
-    setQueueParamValues,
-    queueError,
-    setQueueError,
-    queueNotice,
-    setQueueNotice,
-    showQueueBranchSelect,
-    queueBranchOptions,
-    queueBranchesQuery,
-    overridableVariables,
-    queueMutation,
-    submitQueue,
-  } = useQueueRunForm({
+  const queueForm = useQueueRunForm({
     organizationId: selectedOrganizationId,
     projectId,
     definitionId,
     canQueue,
     definitionName: selectedDefinition?.name,
   });
+  const { queueOpen, setQueueOpen, setQueueBranch, setQueueError, setQueueParams, setQueueParamValues, queueNotice, setQueueNotice } =
+    queueForm;
+
+  // When the queue popover closes (Esc, Cancel, or after queueing) focus would
+  // fall to <body>; hand it back to the button that opened it. A click
+  // elsewhere has already moved focus, so that case is left alone.
+  useEffect(() => {
+    if (!queueOpen && queueWasOpenRef.current) {
+      const active = document.activeElement;
+      if (!active || active === document.body) queueButtonRef.current?.focus();
+    }
+    queueWasOpenRef.current = queueOpen;
+  }, [queueOpen]);
 
   useEffect(() => {
     setDefinitionId(null);
@@ -190,7 +204,7 @@ export function PipelinesView() {
   }, [selectedOrganizationId]);
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <div className="shrink-0 rounded-md border border-border bg-card">
+      <div className="relative shrink-0 rounded-md border border-border bg-card">
         {/* One compact row: the selectors carry the view, so they stay, but without a card's worth of height. */}
         <div className="flex flex-wrap items-center gap-2 px-2 py-1.5">
           <div className="w-64">
@@ -241,13 +255,16 @@ export function PipelinesView() {
               {selectedIsSubscribed ? "Watching" : "Watch"}
             </button>
             <button
+              ref={queueButtonRef}
               type="button"
+              data-queue-trigger="true"
               onClick={() => {
                 setQueueError(null);
                 setQueueOpen((open) => !open);
               }}
               disabled={!canQueue}
               aria-expanded={queueOpen}
+              aria-haspopup="dialog"
               title={canQueue ? "Queue a new run of this pipeline" : "Select a pipeline to queue a run"}
               className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -258,93 +275,11 @@ export function PipelinesView() {
         </div>
 
         {queueOpen && canQueue ? (
-          <div className="mt-3 grid gap-2 rounded-md border border-border bg-background p-3">
-            <p className="text-sm font-medium">
-              Queue {selectedDefinition?.name}
-            </p>
-            <label className="grid gap-1">
-              <span className="text-xs text-muted-foreground">Branch</span>
-              {showQueueBranchSelect ? (
-                <FilterableSelect
-                  ariaLabel="Branch"
-                  value={queueBranch}
-                  options={queueBranchOptions}
-                  disabled={queueBranchesQuery.isLoading}
-                  placeholder={queueBranchesQuery.isLoading ? "Loading branches…" : "Select a branch"}
-                  allowCustomValue
-                  onChange={setQueueBranch}
-                />
-              ) : (
-                <input
-                  value={queueBranch}
-                  onChange={(event) => setQueueBranch(event.target.value)}
-                  placeholder="main"
-                  aria-label="Branch"
-                  className="h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-                />
-              )}
-            </label>
-            {overridableVariables.length > 0 ? (
-              <div className="grid gap-2">
-                {overridableVariables.map((variable) => (
-                  <label key={variable.name} className="grid gap-1">
-                    <span className="text-xs text-muted-foreground">{variable.name}</span>
-                    <input
-                      type={variable.isSecret ? "password" : "text"}
-                      value={queueParamValues[variable.name] ?? ""}
-                      onChange={(event) =>
-                        setQueueParamValues((prev) => ({
-                          ...prev,
-                          [variable.name]: event.target.value,
-                        }))
-                      }
-                      placeholder={variable.isSecret ? "Secret value" : undefined}
-                      aria-label={variable.name}
-                      className="h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    />
-                  </label>
-                ))}
-              </div>
-            ) : null}
-            <label className="grid gap-1">
-              <span className="text-xs text-muted-foreground">
-                {overridableVariables.length > 0
-                  ? "Additional parameters (one name=value per line, optional)"
-                  : "Parameters (one name=value per line, optional)"}
-              </span>
-              <textarea
-                value={queueParams}
-                onChange={(event) => setQueueParams(event.target.value)}
-                rows={3}
-                placeholder={"environment=prod\nrunTests=true"}
-                aria-label="Parameters"
-                className="resize-y rounded-md border border-input bg-background px-2 py-1 font-mono text-xs outline-none focus:ring-2 focus:ring-ring"
-              />
-            </label>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={submitQueue}
-                disabled={queueMutation.isPending || !queueBranch.trim()}
-                className="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Play className="h-4 w-4" aria-hidden="true" />
-                Queue
-              </button>
-              <button
-                type="button"
-                onClick={() => setQueueOpen(false)}
-                className="inline-flex h-8 items-center rounded-md border border-border px-3 text-sm hover:bg-accent"
-              >
-                Cancel
-              </button>
-            </div>
-            {queueError ? (
-              <p role="alert" className="text-xs text-destructive">
-                {queueError}
-              </p>
-            ) : null}
-          </div>
+          <PipelineQueuePopover
+            form={queueForm}
+            definitionName={selectedDefinition?.name}
+            onClose={() => setQueueOpen(false)}
+          />
         ) : null}
         {queueNotice ? (
           <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-400">{queueNotice}</p>
@@ -358,6 +293,8 @@ export function PipelinesView() {
           error={
             approvalMutation.isError ? commandErrorMessage(approvalMutation.error) : null
           }
+          expanded={approvalsOpen}
+          onExpandedChange={setApprovalsOpen}
           onAct={(approvalId, status) =>
             approvalMutation.mutate({
               organizationId: selectedOrganizationId,
@@ -376,11 +313,27 @@ export function PipelinesView() {
             id: "grid",
             title: "Pipelines",
             minWidth: 480,
+            headerActions: <PipelineFilterBar filters={filters} onChange={setFilters} />,
             content: (
               <PipelineSubscriptionsBoard
                 organizationId={selectedOrganizationId}
                 subscriptions={subscriptions}
                 selectedBuildId={detailTarget?.buildId ?? null}
+                filters={filters}
+                approvalCount={approvalsQuery.data?.length ?? 0}
+                approvalsOpen={approvalsOpen}
+                onToggleApprovals={() => setApprovalsOpen((open) => !open)}
+                emptyContent={
+                  <PipelineWatchSuggestions
+                    projectName={selectedProject?.name ?? null}
+                    definitions={definitionOptions}
+                    onWatch={(id) => {
+                      const definition = definitionOptions.find((option) => option.id === id);
+                      if (definition) addWatches([definition]);
+                    }}
+                    onWatchAll={() => addWatches(definitionOptions)}
+                  />
+                }
                 onSelectRun={(selection) => setDetailTarget(selection)}
                 onRemove={(removeProjectId, removeDefinitionId) => {
                   persistSubscriptions(
@@ -411,21 +364,25 @@ export function PipelinesView() {
             initialWidth: DEFAULT_PIPELINE_PREVIEW_WIDTH,
             minWidth: MIN_PIPELINE_PREVIEW_WIDTH,
             maxWidth: MAX_PIPELINE_PREVIEW_WIDTH,
-            content:
-              detailTarget == null && definitionId != null && selectedDefinition ? (
-                <PipelineDefinitionPanel
-                  organizationId={selectedOrganizationId}
-                  projectId={projectId}
-                  definitionId={definitionId}
-                  definitionName={selectedDefinition.name}
-                />
-              ) : (
-                <PipelineRunDetailPanel
-                  organizationId={detailTarget?.organizationId ?? selectedOrganizationId}
-                  projectId={detailTarget?.projectId ?? projectId}
-                  buildId={detailTarget?.buildId ?? null}
-                />
-              ),
+            headerActions: previewToolbar.slot,
+            content: (
+              <PreviewToolbarSlotProvider value={previewToolbar.element}>
+                {detailTarget == null && definitionId != null && selectedDefinition ? (
+                  <PipelineDefinitionPanel
+                    organizationId={selectedOrganizationId}
+                    projectId={projectId}
+                    definitionId={definitionId}
+                    definitionName={selectedDefinition.name}
+                  />
+                ) : (
+                  <PipelineRunDetailPanel
+                    organizationId={detailTarget?.organizationId ?? selectedOrganizationId}
+                    projectId={detailTarget?.projectId ?? projectId}
+                    buildId={detailTarget?.buildId ?? null}
+                  />
+                )}
+              </PreviewToolbarSlotProvider>
+            ),
           },
         ] satisfies DockablePanelSpec[]}
       />

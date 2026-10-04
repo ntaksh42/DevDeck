@@ -280,3 +280,83 @@ describe("PipelineSubscriptionsBoard primary grid marker", () => {
     );
   });
 });
+
+describe("PipelineSubscriptionsBoard status pills and sorting", () => {
+  function failedCi() {
+    // CI's latest run failed; Nightly's succeeded.
+    listPipelineRuns.mockImplementation(async (input: { definitionId: number }) =>
+      input.definitionId === 1
+        ? [run({ buildId: 101, definitionId: 1, definitionName: "CI", result: "failed" })]
+        : [run({ buildId: 202, definitionId: 2, definitionName: "Nightly" })],
+    );
+  }
+
+  it("counts pipelines whose latest run failed and filters to them when the pill is pressed", async () => {
+    failedCi();
+    renderBoard(null);
+
+    const pill = await screen.findByRole("button", { name: /1 failed/ });
+    expect(pill.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(pill);
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /Nightly/, expanded: false })).toBeNull();
+    });
+    expect(screen.getByRole("button", { name: /CI/, expanded: false })).toBeTruthy();
+    expect(pill.getAttribute("aria-pressed")).toBe("true");
+
+    // Pressing again clears the filter.
+    fireEvent.click(pill);
+    expect(await screen.findByRole("button", { name: /Nightly/, expanded: false })).toBeTruthy();
+  });
+
+  it("floats failed pipelines above succeeded ones by default and remembers a chosen sort", async () => {
+    // Nightly is watched second but failed; it must sort ahead of the succeeded CI.
+    listPipelineRuns.mockImplementation(async (input: { definitionId: number }) =>
+      input.definitionId === 2
+        ? [run({ buildId: 202, definitionId: 2, definitionName: "Nightly", result: "failed" })]
+        : [run({ buildId: 101, definitionId: 1, definitionName: "CI" })],
+    );
+    renderBoard(null);
+    await screen.findByRole("button", { name: /1 failed/ });
+    const names = () =>
+      Array.from(document.querySelectorAll<HTMLElement>("button[aria-expanded]")).map((b) => b.textContent ?? "");
+    await waitFor(() => expect(names()[0]).toContain("Nightly"));
+
+    fireEvent.change(screen.getByLabelText("Sort pipelines"), { target: { value: "name" } });
+    await waitFor(() => expect(names()[0]).toContain("CI"));
+    expect(window.localStorage.getItem("azdodeck:view:pipelinesSort:v1")).toBe("name");
+  });
+
+  it("applies the run filters passed from the filter bar to every pipeline's history query", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <PipelineSubscriptionsBoard
+          organizationId="contoso"
+          subscriptions={subscriptions}
+          selectedBuildId={null}
+          filters={{ branch: " main ", result: "failed", requestedForMe: true }}
+          onSelectRun={() => {}}
+          onRemove={() => {}}
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(listPipelineRuns).toHaveBeenCalledWith(
+        expect.objectContaining({ branch: "main", result: "failed", requestedForMe: true }),
+      );
+    });
+  });
+
+  it("shows the keyboard legend only once a run is selected", async () => {
+    renderBoard(null);
+    await screen.findByRole("button", { name: /CI/, expanded: false });
+    expect(screen.queryByText(/first failure/)).toBeNull();
+    cleanup();
+
+    renderBoard(101);
+    expect(await screen.findByText(/first failure/)).toBeTruthy();
+  });
+});
