@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { highlightCode } from "./highlight";
+import { highlightCode, splitHighlightedLines } from "./highlight";
 
 describe("highlightCode", () => {
   it("highlights a small file by extension", () => {
@@ -26,5 +26,26 @@ describe("highlightCode", () => {
   it("skips highlighting for very large files even with a known extension", () => {
     const content = "const a = 1;\n".repeat(30_000);
     expect(highlightCode(content, "a.ts").skipped).toBe(true);
+  });
+});
+
+describe("splitHighlightedLines", () => {
+  it("splits plain html on newlines", () => {
+    expect(splitHighlightedLines("a\nb\n")).toEqual(["a", "b", ""]);
+  });
+
+  it("closes and reopens spans that cross a line break", () => {
+    const html = '<span class="hljs-comment">/* a\nb */</span>\nc';
+    expect(splitHighlightedLines(html)).toEqual([
+      '<span class="hljs-comment">/* a</span>',
+      '<span class="hljs-comment">b */</span>',
+      "c",
+    ]);
+  });
+
+  it("returns as many lines as the source content has", () => {
+    const content = "/* a\nb */\nconst x = 1;\n";
+    const { html } = highlightCode(content, "a.ts");
+    expect(splitHighlightedLines(html)).toHaveLength(content.split("\n").length);
   });
 });

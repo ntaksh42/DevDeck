@@ -9,7 +9,7 @@ import {
 import { Check, ChevronDown, ChevronUp, Copy, Loader2, Search, WrapText, X } from "lucide-react";
 import { commandErrorMessage, type RepoFileVersion } from "@/lib/azdoCommands";
 import { ErrorState } from "@/components/StateDisplay";
-import { highlightCode } from "@/lib/highlight";
+import { highlightCode, splitHighlightedLines } from "@/lib/highlight";
 import { leafName, type RepoOption, useRepoFile } from "./codeBrowseShared";
 
 type LineMatch = { start: number; end: number; ordinal: number };
@@ -40,7 +40,12 @@ export function CodeFileView({
   const query = useRepoFile(organizationId, repo, branch, path, version);
 
   const content = query.data?.content ?? "";
-  const lines = useMemo(() => content.split("\n"), [content]);
+  const lines = useMemo(() => {
+    const split = content.split("\n");
+    // A trailing newline terminates the last line; it does not start another.
+    if (split.length > 1 && split[split.length - 1] === "") split.pop();
+    return split;
+  }, [content]);
   const highlighted = useMemo(
     () => (content ? highlightCode(content, leafName(path)) : null),
     [content, path],
@@ -53,6 +58,12 @@ export function CodeFileView({
   const deferredFind = useDeferredValue(find);
   const [current, setCurrent] = useState(0);
   const [wrap, setWrap] = useState(false);
+  // Wrapped lines need the gutter number and the text in the same row, so wrap
+  // mode renders per-line rows instead of a separate gutter column.
+  const highlightedLines = useMemo(
+    () => (wrap && highlighted ? splitHighlightedLines(highlighted.html) : null),
+    [wrap, highlighted],
+  );
   const [copied, setCopied] = useState(false);
   const findInputRef = useRef<HTMLInputElement | null>(null);
   const currentMatchRef = useRef<HTMLElement | null>(null);
@@ -315,6 +326,32 @@ export function CodeFileView({
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
+        {wrap ? (
+          <div className="font-mono text-[12px] leading-5">
+            {lines.map((line, index) => (
+              <div key={index} className="flex">
+                <div
+                  aria-hidden="true"
+                  className="shrink-0 select-none border-r border-border px-2 text-right text-muted-foreground"
+                  style={{ minWidth: `${String(lines.length).length + 2}ch` }}
+                >
+                  {index + 1}
+                </div>
+                {searching || !highlightedLines ? (
+                  <div className={`min-w-0 flex-1 px-3 ${wrapClass}`}>
+                    {renderLineWithMatches(line, lineMatches.get(index), current, currentMatchRef)}
+                  </div>
+                ) : (
+                  <div
+                    className={`hljs min-w-0 flex-1 px-3 ${wrapClass} bg-transparent`}
+                    // The HTML is highlight.js output, sanitized by highlightCode.
+                    dangerouslySetInnerHTML={{ __html: highlightedLines[index] || " " }}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
         <div className="flex font-mono text-[12px] leading-5">
           <div
             aria-hidden="true"
@@ -344,6 +381,7 @@ export function CodeFileView({
             </pre>
           )}
         </div>
+        )}
       </div>
     </div>
   );

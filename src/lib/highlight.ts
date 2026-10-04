@@ -92,6 +92,27 @@ export function highlightCode(content: string, fileName: string): HighlightedCod
   }
 }
 
+// Splits highlight.js HTML into one HTML string per source line. A span that
+// is still open at a line break (e.g. a multi-line comment) is closed there and
+// reopened on the next line, so every line is well-formed on its own.
+export function splitHighlightedLines(html: string): string[] {
+  const lines: string[] = [];
+  const open: string[] = [];
+  let current = "";
+  for (const token of html.split(/(<span[^>]*>|<\/span>|\n)/)) {
+    if (token === "\n") {
+      lines.push(current + "</span>".repeat(open.length));
+      current = open.join("");
+    } else {
+      if (token.startsWith("<span")) open.push(token);
+      else if (token === "</span>") open.pop();
+      current += token;
+    }
+  }
+  lines.push(current + "</span>".repeat(open.length));
+  return lines;
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
