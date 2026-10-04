@@ -79,7 +79,7 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
 | **Work Item Views** | 保存済み WIQL クエリ。件数表示、ナビへのピン留め、並べ替え、ビュー別ソート/列。グリッドの Columns メニューの「Field columns」から、Azure DevOps フィールドを検索 (名前/参照名/型の部分一致、`Enter` で先頭候補を追加) して追加列にでき、チェックを外すと削除する。追加列はビューの Extra columns (ビュー編集ダイアログと同じ設定、最大20列) として保存される。テキストフィルタ (`Ctrl+F`/`/` でフォーカス、`parseSearchQuery`/`matchesWorkItemQuery` によるスマート検索、list/board 両レイアウトに適用)。取得件数の上限はなく (ビュー編集の Limit を空欄にすると無制限、既定)、明示的に件数を指定した場合のみ打ち切る。ビュー一覧はヘッダーのトグルまたは `Ctrl+B` (グリッドからも有効) で折りたたみでき、折りたたみ時も選択中ビュー名・件数・アラート中の件数をヘッダー1行に残す。表示密度はカード / コンパクト行の2種をヘッダーで切り替える。折りたたみ状態 (`azdodeck:workItemViewsCollapsed`) と密度 (`azdodeck:workItemViewsCardMode`) は localStorage に保存する。カードには件数推移のスパークラインを描画する (`azdodeck:workItems:viewCountHistory`、ビューごと最大20点、同値の連続は記録しない。2点未満は非表示。増加=赤/減少=緑/横ばい=灰)。ビュー JSON の Export はデスクトップ版では保存ダイアログで出力先とファイル名を選択し、ブラウザ版では既定のダウンロード先へ保存する。 ビュー一覧のヘッダーは1行 (Views · 件数) で、Pin / Preview / Share / Export / Import はアイコンのみのボタン (名前はツールチップとスクリーンリーダー用テキスト)。カードは名前 → 件数+差分+スパークライン → 制限・ソート等のメタ情報1行の3段。 |
 | **Work Item Search** | キーワード + プロジェクト/状態/種別での作業項目検索。全文検索 (FTS)。グリッドは Tags 列 (`System.Tags` をチップ表示、Columns メニューで表示切替・ソート可) を含む。 |
 | **Commits** | キーワード/プロジェクト/リポジトリ/作者/ブランチ/期間でコミット検索。7d/30d/90d プリセット。期間 (From/To の `YYYY-MM-DD`) は UTC ではなくローカルタイムゾーンの暦日として解釈し (From は当日 00:00、To は当日の最終瞬間まで)、アクティビティヒートマップもローカル日 (SQLite `date(..., 'localtime')`) で集計する。関連 PR の遅延ルックアップ。 |
-| **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。実行の成果物 (artifacts) を一覧表示しブラウザでダウンロード (`list_pipeline_artifacts`)。 |
+| **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。実行の成果物 (artifacts) を一覧表示しブラウザでダウンロード (`list_pipeline_artifacts`)。実行詳細の「Tests」には、ビルドが公開したテスト実行の合計 (passed / failed / skipped・other) と失敗テスト (最大 100 件、超過時は件数を明示。テスト名・実行名・所要時間、クリックで展開してエラーメッセージ) を表示する (`list_pipeline_test_results`: Test Runs API を `buildUri` で引き、失敗件数のある実行のみ `outcomes=Failed` の結果を取得)。テスト未公開のビルドや取得失敗時は欄を出さない。 |
 | **Commits** | キーワード/プロジェクト/リポジトリ/作者/ブランチ/期間でコミット検索。7d/30d/90d プリセット。関連 PR の遅延ルックアップ。検索ボックスの `path:src/auth` 構文で変更パス絞り込み（`searchCriteria.itemPath` を使うサーバ側適用のためリポジトリ選択が必須）。 |
 | **Release Notes** | プロジェクト + 期間からマージ済み (completed) PR を集約し、リポジトリ別にグルーピングした Markdown リリースノートを生成 (`generate_release_notes`、オンデマンド・非キャッシュ)。クリップボードコピー対応。 |
 | **Commits** | キーワード/プロジェクト/リポジトリ/作者/ブランチ/期間でコミット検索。7d/30d/90d プリセット。関連 PR の遅延ルックアップ。 |
@@ -505,7 +505,7 @@ My Pull Requests グリッドも他グリッド同様、`L` で選択行の Mark
 フォーカスがあっても効く。
 Commits プレビューと Pipelines の実行詳細は、PR / 作業項目プレビューと同じ薄い青の帯
 (`src/components/PreviewBand.tsx`) でセクションを区切る (Commits: Details / 関連 PR /
-変更ファイル〔右端に +/- 行数〕、Pipelines: Timeline / Artifacts / Log)。作業項目プレビューの
+変更ファイル〔右端に +/- 行数〕、Pipelines: Timeline / Artifacts / Tests / Log)。作業項目プレビューの
 優先度は 1=赤・2=橙・3=黄・4=灰の色ドットを値の前に表示する (`workItemPriorityDotClass`)。
 行を1件選択中は、ステータスバーに主要な行ショートカットのコンパクトな凡例を表示する
 (My Reviews / 作業項目グリッド)。Pipelines の監視パイプライン実行行でも

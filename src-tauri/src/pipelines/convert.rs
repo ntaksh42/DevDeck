@@ -1,6 +1,6 @@
 use azdo_client::{
     Approval, Build, BuildDefinitionDetail, BuildDefinitionRepository, DefinitionTrigger,
-    DefinitionVariable, Timeline,
+    DefinitionVariable, TestCaseResult, TestRun, Timeline,
 };
 
 use crate::commits::encode_path_segment;
@@ -8,6 +8,48 @@ use crate::db::Organization;
 use crate::error::{AppError, Result};
 
 use super::types::*;
+
+/// Longest error message kept per failed test; stack traces can be huge.
+const MAX_ERROR_MESSAGE_CHARS: usize = 2000;
+
+/// Totals over `runs` plus the failed tests, where `failed_by_run[i]` holds the
+/// failed results fetched for `runs[i]` (possibly fewer than that run's failed
+/// count, because fetching stops at a cap).
+pub(super) fn summarize_test_results(
+    runs: &[TestRun],
+    failed_by_run: Vec<Vec<TestCaseResult>>,
+) -> PipelineTestResults {
+    let total: i64 = runs.iter().map(|run| run.total_tests).sum();
+    let passed: i64 = runs.iter().map(|run| run.passed_tests).sum();
+    let failed: i64 = runs.iter().map(TestRun::failed_tests).sum();
+    let mut failed_tests = Vec::new();
+    for (run, results) in runs.iter().zip(failed_by_run) {
+        for result in results {
+            let name = result
+                .test_case_title
+                .filter(|title| !title.trim().is_empty())
+                .or(result.automated_test_name)
+                .unwrap_or_else(|| "(unnamed test)".to_string());
+            failed_tests.push(PipelineFailedTest {
+                name,
+                run_name: run.name.clone(),
+                error_message: result
+                    .error_message
+                    .filter(|message| !message.trim().is_empty())
+                    .map(|message| message.chars().take(MAX_ERROR_MESSAGE_CHARS).collect()),
+                duration_ms: result.duration_in_ms.map(|ms| ms.round() as i64),
+            });
+        }
+    }
+    PipelineTestResults {
+        total,
+        passed,
+        failed,
+        other: (total - passed - failed).max(0),
+        truncated: (failed_tests.len() as i64) < failed,
+        failed_tests,
+    }
+}
 
 pub(super) fn approval_to_summary(approval: Approval) -> PipelineApprovalSummary {
     let assigned_approvers = approval
@@ -249,6 +291,68 @@ mod tests {
         let repository = detail.repository.as_ref().unwrap();
         assert_eq!(repository.id, "repo-1");
         assert_eq!(repository.repository_type, "TfsGit");
+    }
+
+    fn test_run(json: serde_json::Value) -> TestRun {
+        serde_json::from_value(json).unwrap()
+    }
+
+    #[test]
+    fn test_results_sum_runs_and_flag_a_capped_failed_list() {
+        let runs = vec![
+            test_run(serde_json::json!({
+                "id": 1, "name": "Unit", "totalTests": 10, "passedTests": 6,
+                "runStatistics": [{ "outcome": "Failed", "count": 3 }]
+            })),
+            test_run(serde_json::json!({
+                "id": 2, "name": "Api", "totalTests": 4, "passedTests": 4
+            })),
+        ];
+        let results = vec![
+            vec![serde_json::from_value(serde_json::json!({
+                "testCaseTitle": " ", "automatedTestName": "Calc.adds",
+                "errorMessage": "boom", "durationInMs": 12.6
+            }))
+            .unwrap()],
+            vec![],
+        ];
+
+        let summary = summarize_test_results(&runs, results);
+
+        assert_eq!(
+            (summary.total, summary.passed, summary.failed, summary.other),
+            (14, 10, 3, 1)
+        );
+        assert_eq!(summary.failed_tests.len(), 1);
+        assert_eq!(summary.failed_tests[0].name, "Calc.adds");
+        assert_eq!(summary.failed_tests[0].run_name.as_deref(), Some("Unit"));
+        assert_eq!(summary.failed_tests[0].duration_ms, Some(13));
+        assert!(summary.truncated);
+    }
+
+    #[test]
+    fn long_error_messages_are_cut() {
+        let runs = vec![test_run(serde_json::json!({
+            "id": 1, "totalTests": 1, "passedTests": 0,
+            "runStatistics": [{ "outcome": "Failed", "count": 1 }]
+        }))];
+        let long = "x".repeat(MAX_ERROR_MESSAGE_CHARS + 50);
+        let results = vec![vec![serde_json::from_value(serde_json::json!({
+            "testCaseTitle": "t", "errorMessage": long
+        }))
+        .unwrap()]];
+
+        let summary = summarize_test_results(&runs, results);
+
+        assert_eq!(
+            summary.failed_tests[0]
+                .error_message
+                .as_ref()
+                .unwrap()
+                .len(),
+            MAX_ERROR_MESSAGE_CHARS
+        );
+        assert!(!summary.truncated);
     }
 
     #[test]

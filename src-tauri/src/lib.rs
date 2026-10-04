@@ -256,6 +256,7 @@ pub fn run() {
             commands::pipelines::list_pipeline_definitions,
             commands::pipelines::get_pipeline_run,
             commands::pipelines::list_pipeline_artifacts,
+            commands::pipelines::list_pipeline_test_results,
             commands::pipelines::get_pipeline_definition,
             commands::pipelines::update_pipeline_definition,
             commands::pipelines::get_pipeline_run_log_tail,

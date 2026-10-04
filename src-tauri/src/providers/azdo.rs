@@ -28,8 +28,9 @@ use crate::pipelines::{
     CancelPipelineRunInput, GetPipelineDefinitionInput, GetPipelineRunInput,
     GetPipelineRunLogTailInput, ListPipelineApprovalsInput, ListPipelineArtifactsInput,
     ListPipelineDefinitionsInput, ListPipelineProjectsInput, ListPipelineRunsInput,
-    PipelineApprovalSummary, PipelineArtifact, PipelineDefinitionDetail, PipelineDefinitionOption,
-    PipelineLogTail, PipelineProjectOption, PipelineRunDetail, PipelineRunSummary, PipelineService,
+    ListPipelineTestResultsInput, PipelineApprovalSummary, PipelineArtifact,
+    PipelineDefinitionDetail, PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption,
+    PipelineRunDetail, PipelineRunSummary, PipelineService, PipelineTestResults,
     QueuePipelineRunInput, RerunPipelineRunInput, UpdatePipelineApprovalInput,
     UpdatePipelineDefinitionInput,
 };
@@ -448,6 +449,13 @@ impl Provider for AzdoProvider {
         input: ListPipelineArtifactsInput,
     ) -> Result<Vec<PipelineArtifact>> {
         self.pipelines.list_artifacts(input).await
+    }
+
+    async fn list_pipeline_test_results(
+        &self,
+        input: ListPipelineTestResultsInput,
+    ) -> Result<PipelineTestResults> {
+        self.pipelines.list_test_results(input).await
     }
 
     async fn get_pipeline_definition(

@@ -117,6 +117,25 @@ const pipelineArtifactSchema = z.object({
 const pipelineArtifactsSchema = z.array(pipelineArtifactSchema);
 export type PipelineArtifact = z.infer<typeof pipelineArtifactSchema>;
 
+const pipelineTestResultsSchema = z.object({
+  total: z.number(),
+  passed: z.number(),
+  failed: z.number(),
+  /** Skipped, not executed, inconclusive, ...: neither passed nor failed. */
+  other: z.number(),
+  failedTests: z.array(
+    z.object({
+      name: z.string(),
+      runName: z.string().nullable(),
+      errorMessage: z.string().nullable(),
+      durationMs: z.number().nullable(),
+    }),
+  ),
+  /** True when more tests failed than failedTests lists. */
+  truncated: z.boolean(),
+});
+export type PipelineTestResults = z.infer<typeof pipelineTestResultsSchema>;
+
 export type ListPipelineRunsInput = {
   organizationId?: string;
   projectId: string;
@@ -166,6 +185,16 @@ export async function listPipelineArtifacts(input: {
 }): Promise<PipelineArtifact[]> {
   const result = await invokeCommand("list_pipeline_artifacts", { input });
   return pipelineArtifactsSchema.parse(result);
+}
+
+// Test totals and the failed tests of a build.
+export async function listPipelineTestResults(input: {
+  organizationId?: string;
+  projectId: string;
+  buildId: number;
+}): Promise<PipelineTestResults> {
+  const result = await invokeCommand("list_pipeline_test_results", { input });
+  return pipelineTestResultsSchema.parse(result);
 }
 
 export async function getPipelineDefinition(input: {

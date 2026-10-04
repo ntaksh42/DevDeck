@@ -39,10 +39,10 @@ use crate::pipelines::{
     CancelPipelineRunInput, GetPipelineDefinitionInput, GetPipelineRunInput,
     GetPipelineRunLogTailInput, ListPipelineApprovalsInput, ListPipelineArtifactsInput,
     ListPipelineDefinitionsInput, ListPipelineProjectsInput, ListPipelineRunsInput,
-    PipelineApprovalSummary, PipelineArtifact, PipelineDefinitionDetail, PipelineDefinitionOption,
-    PipelineLogTail, PipelineProjectOption, PipelineRunDetail, PipelineRunSummary,
-    QueuePipelineRunInput, RerunPipelineRunInput, UpdatePipelineApprovalInput,
-    UpdatePipelineDefinitionInput,
+    ListPipelineTestResultsInput, PipelineApprovalSummary, PipelineArtifact,
+    PipelineDefinitionDetail, PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption,
+    PipelineRunDetail, PipelineRunSummary, PipelineTestResults, QueuePipelineRunInput,
+    RerunPipelineRunInput, UpdatePipelineApprovalInput, UpdatePipelineDefinitionInput,
 };
 use crate::pr_review::{
     DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
@@ -275,6 +275,10 @@ pub(crate) trait Provider: Send + Sync {
         &self,
         input: ListPipelineArtifactsInput,
     ) -> Result<Vec<PipelineArtifact>>;
+    async fn list_pipeline_test_results(
+        &self,
+        input: ListPipelineTestResultsInput,
+    ) -> Result<PipelineTestResults>;
     async fn get_pipeline_definition(
         &self,
         input: GetPipelineDefinitionInput,

@@ -19,6 +19,7 @@ import {
   demoPipelineProjects,
   demoPipelineLogTail,
   demoPipelineRunDetail,
+  demoPipelineTestResults,
   demoPipelineRuns,
   demoPipelineRunsFiltered,
   demoUpdatePipelineDefinition,
@@ -92,6 +93,10 @@ export function dispatchExt(command: string, args: unknown): unknown {
         { name: "drop", downloadUrl: `https://dev.azure.com/contoso/_apis/build/builds/${buildId}/artifacts?artifactName=drop` },
         { name: "test-results", downloadUrl: `https://dev.azure.com/contoso/_apis/build/builds/${buildId}/artifacts?artifactName=test-results` },
       ];
+    }
+    case "list_pipeline_test_results": {
+      const input = (args as { input?: { buildId?: number } } | undefined)?.input;
+      return demoPipelineTestResults(input?.buildId ?? 1001);
     }
     case "get_pipeline_definition": {
       const input = (args as { input?: { definitionId?: number } } | undefined)?.input;

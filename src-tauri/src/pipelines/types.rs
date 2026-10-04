@@ -220,6 +220,39 @@ pub struct PipelineArtifact {
     pub download_url: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListPipelineTestResultsInput {
+    pub organization_id: Option<String>,
+    pub project_id: String,
+    pub build_id: i64,
+}
+
+/// One failed test of a run.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PipelineFailedTest {
+    pub name: String,
+    /// The test run (test task) that reported it.
+    pub run_name: Option<String>,
+    pub error_message: Option<String>,
+    pub duration_ms: Option<i64>,
+}
+
+/// Test totals across all the runs a build published, plus the failed tests.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PipelineTestResults {
+    pub total: i64,
+    pub passed: i64,
+    pub failed: i64,
+    /// Skipped, not executed, inconclusive, ...: everything that neither passed nor failed.
+    pub other: i64,
+    pub failed_tests: Vec<PipelineFailedTest>,
+    /// True when more tests failed than `failed_tests` lists.
+    pub truncated: bool,
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PipelineLogTail {

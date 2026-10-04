@@ -26,6 +26,7 @@ import { PipelineConfirmBar } from "./PipelineConfirmBar";
 import { PipelineLogViewer } from "./PipelineLogViewer";
 import { RunBadge } from "./PipelineRunBadge";
 import { PipelineTimeline } from "./PipelineTimeline";
+import { PipelineTestResultsPanel } from "./PipelineTestResultsPanel";
 import { PreviewEmptyState, SELECT_EMPTY_HINT } from "@/components/StateDisplay";
 import { PreviewBand } from "@/components/PreviewBand";
 import { PreviewToolbarPortal } from "@/components/PreviewToolbarSlot";
@@ -421,6 +422,12 @@ export function PipelineRunDetailPanel({
                 </ul>
               </div>
             ) : null}
+
+            <PipelineTestResultsPanel
+              organizationId={organizationId}
+              projectId={projectId}
+              buildId={buildId}
+            />
 
             {selectedLogId == null ? (
               <p className="px-3 py-2 text-xs text-muted-foreground">

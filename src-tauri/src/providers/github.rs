@@ -29,10 +29,10 @@ use crate::pipelines::{
     CancelPipelineRunInput, GetPipelineDefinitionInput, GetPipelineRunInput,
     GetPipelineRunLogTailInput, ListPipelineApprovalsInput, ListPipelineArtifactsInput,
     ListPipelineDefinitionsInput, ListPipelineProjectsInput, ListPipelineRunsInput,
-    PipelineApprovalSummary, PipelineArtifact, PipelineDefinitionDetail, PipelineDefinitionOption,
-    PipelineLogTail, PipelineProjectOption, PipelineRunDetail, PipelineRunSummary,
-    QueuePipelineRunInput, RerunPipelineRunInput, UpdatePipelineApprovalInput,
-    UpdatePipelineDefinitionInput,
+    ListPipelineTestResultsInput, PipelineApprovalSummary, PipelineArtifact,
+    PipelineDefinitionDetail, PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption,
+    PipelineRunDetail, PipelineRunSummary, PipelineTestResults, QueuePipelineRunInput,
+    RerunPipelineRunInput, UpdatePipelineApprovalInput, UpdatePipelineDefinitionInput,
 };
 use crate::pr_review::{
     DeletePullRequestCommentInput, EditPullRequestCommentInput, GetPullRequestFileDiffInput,
@@ -490,6 +490,13 @@ impl Provider for GithubProvider {
         _input: ListPipelineArtifactsInput,
     ) -> Result<Vec<PipelineArtifact>> {
         Ok(Vec::new())
+    }
+
+    async fn list_pipeline_test_results(
+        &self,
+        _input: ListPipelineTestResultsInput,
+    ) -> Result<PipelineTestResults> {
+        Err(pipelines_unsupported())
     }
 
     async fn get_pipeline_definition(

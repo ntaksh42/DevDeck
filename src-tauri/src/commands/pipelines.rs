@@ -6,10 +6,10 @@ use crate::pipelines::{
     CancelPipelineRunInput, GetPipelineDefinitionInput, GetPipelineRunInput,
     GetPipelineRunLogTailInput, ListPipelineApprovalsInput, ListPipelineArtifactsInput,
     ListPipelineDefinitionsInput, ListPipelineProjectsInput, ListPipelineRunsInput,
-    PipelineApprovalSummary, PipelineArtifact, PipelineDefinitionDetail, PipelineDefinitionOption,
-    PipelineLogTail, PipelineProjectOption, PipelineRunDetail, PipelineRunSummary,
-    QueuePipelineRunInput, RerunPipelineRunInput, UpdatePipelineApprovalInput,
-    UpdatePipelineDefinitionInput,
+    ListPipelineTestResultsInput, PipelineApprovalSummary, PipelineArtifact,
+    PipelineDefinitionDetail, PipelineDefinitionOption, PipelineLogTail, PipelineProjectOption,
+    PipelineRunDetail, PipelineRunSummary, PipelineTestResults, QueuePipelineRunInput,
+    RerunPipelineRunInput, UpdatePipelineApprovalInput, UpdatePipelineDefinitionInput,
 };
 
 #[tauri::command]
@@ -59,6 +59,19 @@ pub async fn list_pipeline_artifacts(
     state: State<'_, AppState>,
 ) -> Result<Vec<PipelineArtifact>> {
     state.provider().await?.list_pipeline_artifacts(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn list_pipeline_test_results(
+    input: ListPipelineTestResultsInput,
+    state: State<'_, AppState>,
+) -> Result<PipelineTestResults> {
+    state
+        .provider()
+        .await?
+        .list_pipeline_test_results(input)
+        .await
 }
 
 #[tauri::command]

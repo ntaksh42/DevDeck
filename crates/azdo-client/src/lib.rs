@@ -22,7 +22,8 @@ pub use identity::{AuthenticatedUser, ConnectionData, Identity, IdentityPickerId
 pub use pipelines::{
     Approval, ApprovalStep, Build, BuildDefinitionDetail, BuildDefinitionRef,
     BuildDefinitionRepository, BuildIdentityRef, BuildListCriteria, BuildLogTail,
-    DefinitionTrigger, DefinitionVariable, Timeline, TimelineLogRef, TimelineRecord,
+    DefinitionTrigger, DefinitionVariable, TestCaseResult, TestRun, TestRunStatistic, Timeline,
+    TimelineLogRef, TimelineRecord,
 };
 pub use pr_review::{
     GitChangeEntry, GitChangeItem, GitCommitRefId, GitContentMetadata, GitFilePosition,

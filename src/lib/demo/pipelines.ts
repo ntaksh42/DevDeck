@@ -100,6 +100,39 @@ export function demoPipelineRuns() {
   ];
 }
 
+// Test totals per demo build: 1002 (the failed run) lists failures, a running
+// build has published nothing yet, the rest pass.
+export function demoPipelineTestResults(buildId: number) {
+  if (buildId === 1002) {
+    return {
+      total: 128,
+      passed: 124,
+      failed: 3,
+      other: 1,
+      failedTests: [
+        {
+          name: "RegistryClient.pushes layers in order",
+          runName: "Unit tests",
+          errorMessage: "Expected 3 layers but found 2 (RegistryClient.test.ts:42)",
+          durationMs: 214,
+        },
+        {
+          name: "RegistryClient.retries on 503",
+          runName: "Unit tests",
+          errorMessage: "Timeout of 5000ms exceeded",
+          durationMs: 5003,
+        },
+        { name: "Publish.skips unchanged artifacts", runName: "Unit tests", errorMessage: null, durationMs: null },
+      ],
+      truncated: false,
+    };
+  }
+  if (buildId === 1003) {
+    return { total: 0, passed: 0, failed: 0, other: 0, failedTests: [], truncated: false };
+  }
+  return { total: 128, passed: 127, failed: 0, other: 1, failedTests: [], truncated: false };
+}
+
 type DemoTimelineNode = {
   id: string;
   parentId: string | null;

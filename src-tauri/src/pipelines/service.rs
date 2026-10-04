@@ -8,7 +8,7 @@ use crate::secrets::SecretStore;
 
 use super::convert::{
     approval_to_summary, build_to_summary, definition_to_detail, normalize_optional,
-    resolve_requested_for, timeline_to_nodes,
+    resolve_requested_for, summarize_test_results, timeline_to_nodes,
 };
 use super::definition_update::apply_definition_update;
 use super::types::*;
@@ -16,6 +16,8 @@ use super::types::*;
 const RUN_LIST_TOP: u32 = 50;
 const DEFINITION_LIST_TOP: u32 = 200;
 const DEFAULT_LOG_TAIL_LINES: usize = 200;
+/// Failed tests listed per build; more are reported as `truncated`.
+const MAX_FAILED_TESTS: u32 = 100;
 
 #[derive(Debug, Clone)]
 pub struct PipelineService {
@@ -159,6 +161,38 @@ impl PipelineService {
                 download_url: artifact.resource.and_then(|resource| resource.download_url),
             })
             .collect())
+    }
+
+    /// Test totals and the failed tests of a build (at most `MAX_FAILED_TESTS`
+    /// listed, fetched run by run). A build with no published test runs yields
+    /// zero totals.
+    pub async fn list_test_results(
+        &self,
+        input: ListPipelineTestResultsInput,
+    ) -> Result<PipelineTestResults> {
+        let organization = self.resolve_organization(input.organization_id.as_deref())?;
+        let client = client_for_organization(&organization, &self.secrets)?;
+        let project = self
+            .projects
+            .project(&client, &organization.id, &input.project_id)
+            .await?;
+        let runs = client
+            .list_build_test_runs(&project.id, input.build_id)
+            .await?;
+        let mut remaining = MAX_FAILED_TESTS;
+        let mut failed_by_run = Vec::with_capacity(runs.len());
+        for run in &runs {
+            if remaining == 0 || run.failed_tests() == 0 {
+                failed_by_run.push(Vec::new());
+                continue;
+            }
+            let results = client
+                .list_failed_test_results(&project.id, run.id, remaining)
+                .await?;
+            remaining = remaining.saturating_sub(results.len() as u32);
+            failed_by_run.push(results);
+        }
+        Ok(summarize_test_results(&runs, failed_by_run))
     }
 
     pub async fn get_definition(
