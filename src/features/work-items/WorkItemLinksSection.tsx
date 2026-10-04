@@ -4,6 +4,7 @@ import { Plus, X } from "lucide-react";
 import type { WorkItemLinkType, WorkItemPreview } from "@/lib/azdoCommands";
 import { addWorkItemLink, commandErrorMessage, removeWorkItemLink } from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
+import { parseLinkTargetId } from "./parseLinkTargetId";
 import { workItemQueryKeys } from "./queryKeys";
 import { REMOVABLE_LINK_TYPES, WORK_ITEM_LINK_TYPES } from "./workItemPreviewHelpers";
 import { WorkItemStatePill, WorkItemTypeBadge } from "./WorkItemBadges";
@@ -40,16 +41,16 @@ export function WorkItemLinksSection({ preview }: { preview: WorkItemPreview }) 
   const linkMutationPending = addLinkMutation.isPending || removeLinkMutation.isPending;
 
   function submitNewLink() {
-    const targetId = Number.parseInt(newLinkTargetId.trim(), 10);
-    if (!Number.isFinite(targetId) || targetId <= 0) {
-      setLinkError("Enter a valid work item id.");
+    const parsed = parseLinkTargetId(newLinkTargetId, preview.id);
+    if ("error" in parsed) {
+      setLinkError(parsed.error);
       return;
     }
     addLinkMutation.mutate({
       organizationId: preview.organizationId,
       projectId: preview.projectId,
       workItemId: preview.id,
-      targetId,
+      targetId: parsed.targetId,
       linkType: newLinkType,
     });
   }
