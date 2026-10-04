@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { CommandPalette, type CommandPaletteAction } from "./CommandPalette";
 
 afterEach(cleanup);
@@ -52,5 +52,31 @@ describe("CommandPalette grouping", () => {
       .filter((text) => /Go to|Focus/.test(text));
 
     expect(labels).toEqual(["Go to B", "Go to A", "Focus A", "Focus B"]);
+  });
+});
+
+describe("CommandPalette IME composition", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("does not run the active row or close when Enter/Escape confirm an IME composition", () => {
+    const onClose = vi.fn();
+    render(
+      <CommandPalette
+        actions={[{ id: "nav-a", group: "Navigation", label: "Go to A", run: vi.fn() }]}
+        onClose={onClose}
+      />,
+    );
+    const input = screen.getByPlaceholderText("Type a command...");
+
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    fireEvent.keyDown(input, { key: "Escape", isComposing: true });
+
+    // Running a row (and Escape) both call onClose, so it covers either misfire.
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

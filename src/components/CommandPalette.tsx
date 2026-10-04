@@ -171,6 +171,8 @@ export function CommandPalette({
   }
 
   function handleDialogKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    // Enter/Escape/arrows during IME composition drive the IME, not the palette.
+    if (event.nativeEvent.isComposing) return;
     if (event.key === "Escape") {
       event.preventDefault();
       onClose();
