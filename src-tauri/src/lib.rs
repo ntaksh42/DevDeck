@@ -251,6 +251,7 @@ pub fn run() {
             commands::code::delete_repo_branch,
             commands::code::list_repo_tags,
             commands::code::list_repo_tag_overview,
+            commands::code::list_branch_policies,
             commands::code::create_repo_tag,
             commands::code::delete_repo_tag,
             commands::code::compare_repo_revisions,

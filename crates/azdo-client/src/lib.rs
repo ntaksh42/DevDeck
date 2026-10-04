@@ -5,6 +5,7 @@ pub mod error;
 pub mod git;
 pub mod identity;
 pub mod pipelines;
+pub mod policy;
 pub mod pr_review;
 pub mod pr_status;
 pub mod wiki;
@@ -27,6 +28,7 @@ pub use pipelines::{
     DefinitionTrigger, DefinitionVariable, TestCaseResult, TestRun, TestRunStatistic, Timeline,
     TimelineLogRef, TimelineRecord,
 };
+pub use policy::{PolicyConfiguration, PolicyType};
 pub use pr_review::{
     GitChangeEntry, GitChangeItem, GitCommitRefId, GitContentMetadata, GitFilePosition,
     GitItemContent, GitIteration, GitPullRequestDetail, GitThread, GitThreadComment,

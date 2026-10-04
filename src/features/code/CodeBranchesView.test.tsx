@@ -9,8 +9,10 @@ const createRepoBranch = vi.fn();
 const listRepoTagOverview = vi.fn();
 const createRepoTag = vi.fn();
 const deleteRepoTag = vi.fn();
+const listBranchPolicies = vi.fn();
 vi.mock("@/lib/azdoCommands", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/azdoCommands")>()),
+  listBranchPolicies: (...args: unknown[]) => listBranchPolicies(...args),
   listRepoBranchOverview: (...args: unknown[]) => listRepoBranchOverview(...args),
   listRepoTagOverview: (...args: unknown[]) => listRepoTagOverview(...args),
   createRepoTag: (...args: unknown[]) => createRepoTag(...args),
@@ -69,6 +71,7 @@ beforeEach(() => {
   listRepoTagOverview.mockReset().mockResolvedValue([]);
   createRepoTag.mockReset();
   deleteRepoTag.mockReset();
+  listBranchPolicies.mockReset();
   openExternalUrl.mockReset();
 });
 afterEach(cleanup);
@@ -195,6 +198,58 @@ describe("CodeBranchesView", () => {
       }),
     );
     await vi.waitFor(() => expect(listRepoTagOverview).toHaveBeenCalledTimes(2));
+  });
+
+  it("shows the policies that apply to a branch and links to Azure DevOps to manage them", async () => {
+    listBranchPolicies.mockResolvedValue([
+      { id: 1, name: "Minimum number of reviewers", isEnabled: true, isBlocking: true, detail: "2 approvers" },
+      { id: 2, name: "Work item linking", isEnabled: false, isBlocking: false, detail: null },
+    ]);
+    listRepoBranchOverview.mockResolvedValue([
+      branch({ name: "release/1", isDefault: true, lastCommitId: "m1" }),
+    ]);
+    renderView();
+    await screen.findByText("release/1");
+
+    fireEvent.click(screen.getByRole("button", { name: "Policies" }));
+    const dialog = screen.getByRole("dialog", { name: "Branch policies for release/1" });
+    expect(listBranchPolicies).toHaveBeenCalledWith({
+      organizationId: "contoso",
+      project: "p1",
+      repository: "r1",
+      branch: "release/1",
+    });
+    expect(await within(dialog).findByText("Minimum number of reviewers")).toBeTruthy();
+    expect(within(dialog).getByText("2 approvers")).toBeTruthy();
+    expect(within(dialog).getByText("Required")).toBeTruthy();
+    expect(within(dialog).getByText("Optional")).toBeTruthy();
+    expect(within(dialog).getByText("Disabled")).toBeTruthy();
+
+    fireEvent.click(within(dialog).getByText("Manage in Azure DevOps"));
+    expect(openExternalUrl).toHaveBeenCalledWith(
+      "https://dev.azure.com/contoso/Platform/_settings/repositories?repo=r1&_a=policiesMid&refs=refs%2Fheads%2Frelease%2F1",
+    );
+
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("explains when no policy applies and surfaces load errors", async () => {
+    listBranchPolicies.mockResolvedValueOnce([]).mockRejectedValueOnce("Policy API unavailable");
+    listRepoBranchOverview.mockResolvedValue([
+      branch({ name: "main", isDefault: true }),
+      branch({ name: "dev" }),
+    ]);
+    renderView();
+    await screen.findByText("dev");
+    const [mainPolicies, devPolicies] = screen.getAllByRole("button", { name: "Policies" });
+
+    fireEvent.click(mainPolicies);
+    expect(await screen.findByText("No policies apply to this branch.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    fireEvent.click(devPolicies);
+    expect((await screen.findByRole("alert")).textContent).toBe("Policy API unavailable");
   });
 
   it("lists tags with their commit and deletes one only after confirmation", async () => {

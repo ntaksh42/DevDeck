@@ -8,10 +8,10 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 
 use crate::code_browse::{
-    BranchOverviewItem, CompareRevisionsInput, CreateBranchInput, CreateTagInput,
-    DeleteBranchInput, DeleteTagInput, GetFileInput, ListBranchesInput, ListHistoryInput,
-    ListPathsInput, ListTreeInput, RepoBranch, RepoCommitInfo, RepoFile, RepoPathList,
-    RepoTreeItem, RevisionComparison, TagOverviewItem,
+    BranchOverviewItem, BranchPolicyItem, CompareRevisionsInput, CreateBranchInput, CreateTagInput,
+    DeleteBranchInput, DeleteTagInput, GetFileInput, ListBranchPoliciesInput, ListBranchesInput,
+    ListHistoryInput, ListPathsInput, ListTreeInput, RepoBranch, RepoCommitInfo, RepoFile,
+    RepoPathList, RepoTreeItem, RevisionComparison, TagOverviewItem,
 };
 use crate::code_search::{
     CodeContextResult, CodeSearchResults, GetCodeContextInput, SearchCodeInput,
@@ -485,6 +485,15 @@ impl Provider for GithubProvider {
         &self,
         _input: ListBranchesInput,
     ) -> Result<Vec<TagOverviewItem>> {
+        Err(AppError::NotSupported(
+            "code browsing is not available for GitHub yet".to_string(),
+        ))
+    }
+
+    async fn list_branch_policies(
+        &self,
+        _input: ListBranchPoliciesInput,
+    ) -> Result<Vec<BranchPolicyItem>> {
         Err(AppError::NotSupported(
             "code browsing is not available for GitHub yet".to_string(),
         ))

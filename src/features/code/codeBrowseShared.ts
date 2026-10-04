@@ -109,6 +109,18 @@ export function pullRequestUrl(
   return `${repoBase(organization, repo)}/pullrequest/${pullRequestId}`;
 }
 
+// The Azure DevOps project-settings page that edits the policies of one branch.
+export function branchPoliciesUrl(
+  organization: Organization | undefined,
+  repo: RepoOption,
+  branch: string,
+): string {
+  const base = organization?.baseUrl?.replace(/\/$/, "") ?? "";
+  return `${base}/${encodeURIComponent(repo.projectName)}/_settings/repositories?repo=${encodeURIComponent(
+    repo.repositoryId,
+  )}&_a=policiesMid&refs=${encodeURIComponent(`refs/heads/${branch}`)}`;
+}
+
 export function branchCompareUrl(
   organization: Organization | undefined,
   repo: RepoOption,

@@ -147,6 +147,28 @@ export async function listRepoTagOverview(input: {
   return z.array(tagOverviewItemSchema).parse(result);
 }
 
+const branchPolicyItemSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  isEnabled: z.boolean(),
+  /** A blocking policy must pass to complete a pull request. */
+  isBlocking: z.boolean(),
+  /** A short type-specific summary of the settings, e.g. "2 approvers". */
+  detail: z.string().nullable(),
+});
+export type BranchPolicyItem = z.infer<typeof branchPolicyItemSchema>;
+
+// Lists the branch policies that apply to a branch (read-only; short name).
+export async function listBranchPolicies(input: {
+  organizationId?: string;
+  project: string;
+  repository: string;
+  branch: string;
+}): Promise<BranchPolicyItem[]> {
+  const result = await invokeCommand("list_branch_policies", { input });
+  return z.array(branchPolicyItemSchema).parse(result);
+}
+
 // Creates a lightweight tag (a short name such as "v1.2.0") at commitId.
 export async function createRepoTag(input: {
   organizationId?: string;

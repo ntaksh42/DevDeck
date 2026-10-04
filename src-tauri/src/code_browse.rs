@@ -1,10 +1,12 @@
 mod branches;
 mod compare;
+mod policies;
 mod tags;
 mod util;
 
 pub use branches::{BranchOverviewItem, CreateBranchInput, DeleteBranchInput};
 pub use compare::{CompareRevisionsInput, RevisionComparison};
+pub use policies::{BranchPolicyItem, ListBranchPoliciesInput};
 pub use tags::{CreateTagInput, DeleteTagInput, TagOverviewItem};
 
 use azdo_client::{CommitSearchCriteria, GitCommitRef};

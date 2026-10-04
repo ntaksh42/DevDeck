@@ -8,10 +8,11 @@ use async_trait::async_trait;
 
 use crate::app_state::run_blocking;
 use crate::code_browse::{
-    BranchOverviewItem, CodeBrowseService, CompareRevisionsInput, CreateBranchInput,
-    CreateTagInput, DeleteBranchInput, DeleteTagInput, GetFileInput, ListBranchesInput,
-    ListHistoryInput, ListPathsInput, ListTreeInput, RepoBranch, RepoCommitInfo, RepoFile,
-    RepoPathList, RepoTreeItem, RevisionComparison, TagOverviewItem,
+    BranchOverviewItem, BranchPolicyItem, CodeBrowseService, CompareRevisionsInput,
+    CreateBranchInput, CreateTagInput, DeleteBranchInput, DeleteTagInput, GetFileInput,
+    ListBranchPoliciesInput, ListBranchesInput, ListHistoryInput, ListPathsInput, ListTreeInput,
+    RepoBranch, RepoCommitInfo, RepoFile, RepoPathList, RepoTreeItem, RevisionComparison,
+    TagOverviewItem,
 };
 use crate::code_search::{
     CodeContextResult, CodeSearchResults, CodeSearchService, GetCodeContextInput, SearchCodeInput,
@@ -445,6 +446,13 @@ impl Provider for AzdoProvider {
         input: ListBranchesInput,
     ) -> Result<Vec<TagOverviewItem>> {
         self.code_browse.list_tag_overview(input).await
+    }
+
+    async fn list_branch_policies(
+        &self,
+        input: ListBranchPoliciesInput,
+    ) -> Result<Vec<BranchPolicyItem>> {
+        self.code_browse.list_branch_policies(input).await
     }
 
     async fn create_repo_tag(&self, input: CreateTagInput) -> Result<()> {

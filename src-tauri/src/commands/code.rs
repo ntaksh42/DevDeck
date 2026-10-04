@@ -3,10 +3,10 @@ use tauri::State;
 use crate::app_state::{ensure_write_enabled, AppState};
 use crate::cancellation::run_cancellable;
 use crate::code_browse::{
-    BranchOverviewItem, CompareRevisionsInput, CreateBranchInput, CreateTagInput,
-    DeleteBranchInput, DeleteTagInput, GetFileInput, ListBranchesInput, ListHistoryInput,
-    ListPathsInput, ListTreeInput, RepoBranch, RepoCommitInfo, RepoFile, RepoPathList,
-    RepoTreeItem, RevisionComparison, TagOverviewItem,
+    BranchOverviewItem, BranchPolicyItem, CompareRevisionsInput, CreateBranchInput, CreateTagInput,
+    DeleteBranchInput, DeleteTagInput, GetFileInput, ListBranchPoliciesInput, ListBranchesInput,
+    ListHistoryInput, ListPathsInput, ListTreeInput, RepoBranch, RepoCommitInfo, RepoFile,
+    RepoPathList, RepoTreeItem, RevisionComparison, TagOverviewItem,
 };
 use crate::code_search::{
     CodeContextResult, CodeSearchResults, GetCodeContextInput, SearchCodeInput,
@@ -96,6 +96,15 @@ pub async fn list_repo_tag_overview(
     state: State<'_, AppState>,
 ) -> Result<Vec<TagOverviewItem>> {
     state.provider().await?.list_repo_tag_overview(input).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn list_branch_policies(
+    input: ListBranchPoliciesInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<BranchPolicyItem>> {
+    state.provider().await?.list_branch_policies(input).await
 }
 
 #[tauri::command]
