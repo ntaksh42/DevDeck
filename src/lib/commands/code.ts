@@ -31,8 +31,8 @@ export async function searchCode(input: {
   /** Number of leading results to skip, for "load more" paging. */
   skip?: number;
   operationId?: string;
-}): Promise<CodeSearchResults> {
-  const result = await invokeCommand("search_code", { input });
+}, signal?: AbortSignal): Promise<CodeSearchResults> {
+  const result = await invokeCancellable("search_code", input, signal);
   return codeSearchResultsSchema.parse(result);
 }
 
@@ -105,8 +105,8 @@ export async function listRepoTree(input: {
   path?: string;
   includeLastCommit?: boolean;
   operationId?: string;
-}): Promise<RepoTreeItem[]> {
-  const result = await invokeCommand("list_repo_tree", { input });
+}, signal?: AbortSignal): Promise<RepoTreeItem[]> {
+  const result = await invokeCancellable("list_repo_tree", input, signal);
   return z.array(repoTreeItemSchema).parse(result);
 }
 
@@ -136,8 +136,8 @@ export async function getRepoFile(input: {
   versionType?: RepoFileVersion["versionType"];
   version?: string;
   operationId?: string;
-}): Promise<RepoFile> {
-  const result = await invokeCommand("get_repo_file", { input });
+}, signal?: AbortSignal): Promise<RepoFile> {
+  const result = await invokeCancellable("get_repo_file", input, signal);
   return repoFileSchema.parse(result);
 }
 
@@ -162,8 +162,8 @@ export async function listRepoPaths(input: {
   repository: string;
   branch: string;
   operationId?: string;
-}): Promise<RepoPathList> {
-  const result = await invokeCommand("list_repo_paths", { input });
+}, signal?: AbortSignal): Promise<RepoPathList> {
+  const result = await invokeCancellable("list_repo_paths", input, signal);
   return repoPathListSchema.parse(result);
 }
 
@@ -179,8 +179,8 @@ export async function listRepoHistory(input: {
   /** Number of leading commits to skip, for "load more" paging. */
   skip?: number;
   operationId?: string;
-}): Promise<RepoCommitInfo[]> {
-  const result = await invokeCommand("list_repo_history", { input });
+}, signal?: AbortSignal): Promise<RepoCommitInfo[]> {
+  const result = await invokeCancellable("list_repo_history", input, signal);
   return z.array(repoCommitInfoSchema).parse(result);
 }
 
@@ -190,7 +190,36 @@ export async function cancelOperation(operationId: string): Promise<void> {
   await invokeCommand("cancel_operation", { operationId });
 }
 
-// Generates a unique id for a cancellable operation.
+let operationCounter = 0;
+
+// Generates a unique id for a cancellable operation. The counter keeps ids
+// distinct even for calls made in the same millisecond.
 export function newOperationId(): string {
-  return `op-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  operationCounter += 1;
+  return `op-${Date.now()}-${operationCounter}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// Invokes a cancellable command. When `signal` aborts (TanStack Query aborts it
+// on a key change or unmount), the backend operation is cancelled through a
+// per-call operationId so the in-flight Azure DevOps request stops. Without a
+// signal the command runs exactly as before.
+async function invokeCancellable(
+  command: string,
+  input: object,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  if (!signal) {
+    return invokeCommand(command, { input });
+  }
+  signal.throwIfAborted();
+  const operationId = newOperationId();
+  const cancel = () => {
+    void cancelOperation(operationId).catch(() => {});
+  };
+  signal.addEventListener("abort", cancel, { once: true });
+  try {
+    return await invokeCommand(command, { input: { ...input, operationId } });
+  } finally {
+    signal.removeEventListener("abort", cancel);
+  }
 }

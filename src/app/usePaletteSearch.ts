@@ -81,7 +81,8 @@ export function usePaletteSearch(
   const paletteCodeOrgId = organizations[0]?.id;
   const paletteCodeQuery = useQuery({
     queryKey: ["paletteCode", paletteCodeOrgId, paletteSearch.query],
-    queryFn: () => searchCode({ organizationId: paletteCodeOrgId, query: paletteSearch.query }),
+    queryFn: ({ signal }) =>
+      searchCode({ organizationId: paletteCodeOrgId, query: paletteSearch.query }, signal),
     enabled: paletteCodeEnabled,
     staleTime: 30_000,
     placeholderData: keepPreviousData,

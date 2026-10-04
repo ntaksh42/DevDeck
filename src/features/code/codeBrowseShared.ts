@@ -29,15 +29,18 @@ export function useTreeQuery(
 ) {
   return useQuery({
     queryKey: ["repoTree", organizationId, repo.repositoryId, branch, path, includeLastCommit],
-    queryFn: () =>
-      listRepoTree({
-        organizationId,
-        project: repo.projectId,
-        repository: repo.repositoryId,
-        branch,
-        path,
-        includeLastCommit,
-      }),
+    queryFn: ({ signal }) =>
+      listRepoTree(
+        {
+          organizationId,
+          project: repo.projectId,
+          repository: repo.repositoryId,
+          branch,
+          path,
+          includeLastCommit,
+        },
+        signal,
+      ),
     enabled: !!branch,
     staleTime: 60_000,
   });
@@ -64,16 +67,19 @@ export function useRepoFile(
       version?.versionType ?? "",
       version?.version ?? "",
     ],
-    queryFn: () =>
-      getRepoFile({
-        organizationId,
-        project: repo.projectId,
-        repository: repo.repositoryId,
-        branch,
-        path,
-        versionType: version?.versionType,
-        version: version?.version,
-      }),
+    queryFn: ({ signal }) =>
+      getRepoFile(
+        {
+          organizationId,
+          project: repo.projectId,
+          repository: repo.repositoryId,
+          branch,
+          path,
+          versionType: version?.versionType,
+          version: version?.version,
+        },
+        signal,
+      ),
     enabled: !!branch,
     staleTime: 60_000,
   });

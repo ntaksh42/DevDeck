@@ -38,17 +38,20 @@ export function CodeSearchResults({
 
   const search = useInfiniteQuery({
     queryKey: ["repoCodeSearch", organizationId, repo.repositoryId, branch, query, deferredPath],
-    queryFn: ({ pageParam }) =>
-      searchCode({
-        organizationId,
-        query,
-        projects: [repo.projectName],
-        repositories: [repo.repositoryName],
-        branch,
-        path: deferredPath || undefined,
-        top: PAGE_SIZE,
-        skip: pageParam,
-      }),
+    queryFn: ({ pageParam, signal }) =>
+      searchCode(
+        {
+          organizationId,
+          query,
+          projects: [repo.projectName],
+          repositories: [repo.repositoryName],
+          branch,
+          path: deferredPath || undefined,
+          top: PAGE_SIZE,
+          skip: pageParam,
+        },
+        signal,
+      ),
     enabled: !!query.trim(),
     staleTime: 60_000,
     initialPageParam: 0,

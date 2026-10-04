@@ -31,13 +31,16 @@ export function CodeFilteredTree({
 }) {
   const query = useQuery({
     queryKey: ["repoPaths", organizationId, repo.repositoryId, branch],
-    queryFn: () =>
-      listRepoPaths({
-        organizationId,
-        project: repo.projectId,
-        repository: repo.repositoryId,
-        branch,
-      }),
+    queryFn: ({ signal }) =>
+      listRepoPaths(
+        {
+          organizationId,
+          project: repo.projectId,
+          repository: repo.repositoryId,
+          branch,
+        },
+        signal,
+      ),
     enabled: !!branch,
     staleTime: 60_000,
   });

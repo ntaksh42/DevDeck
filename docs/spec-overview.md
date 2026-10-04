@@ -32,7 +32,7 @@ Rust バックエンド (src-tauri/src/)
     ├── auth.rs                                — PAT / Azure CLI 認証プロバイダ
     ├── db.rs                                  — SQLite キャッシュ (rusqlite, スキーマ移行)
     ├── secrets.rs                             — keyring (Windows 資格情報マネージャ)
-    ├── cancellation.rs                        — 実行中コマンドの協調キャンセル
+    ├── cancellation.rs                        — 実行中コマンドの協調キャンセル (Code の検索・閲覧系 5 コマンドは、TanStack Query の `signal` が abort されると呼び出しごとに一意の `operationId` で `cancel_operation` を送り、実行中の API 呼び出しを中断する)
     └── error.rs                               — AppError (IPC 向けエラー型)
          ↓
 crates/azdo-client/                            — Tauri 非依存の独立 ADO REST クライアント

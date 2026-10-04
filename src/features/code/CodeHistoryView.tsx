@@ -33,16 +33,19 @@ export function CodeHistoryView({
 }) {
   const query = useInfiniteQuery({
     queryKey: ["repoHistory", organizationId, repo.repositoryId, branch, path],
-    queryFn: ({ pageParam }) =>
-      listRepoHistory({
-        organizationId,
-        project: repo.projectId,
-        repository: repo.repositoryId,
-        branch,
-        path,
-        top: HISTORY_PAGE_SIZE,
-        skip: pageParam,
-      }),
+    queryFn: ({ pageParam, signal }) =>
+      listRepoHistory(
+        {
+          organizationId,
+          project: repo.projectId,
+          repository: repo.repositoryId,
+          branch,
+          path,
+          top: HISTORY_PAGE_SIZE,
+          skip: pageParam,
+        },
+        signal,
+      ),
     enabled: !!branch,
     staleTime: 60_000,
     initialPageParam: 0,
