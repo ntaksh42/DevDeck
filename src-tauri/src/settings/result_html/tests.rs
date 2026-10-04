@@ -113,7 +113,10 @@ fn both_services_decode_shift_jis_and_return_large_file_path() {
     let path = temp.path().join("PR42-result.html");
     let html = "<meta charset=shift_jis><p>日本語</p>";
     let (bytes, _, _) = SHIFT_JIS.encode(html);
-    std::fs::write(&path, bytes).unwrap();
+    // A work item result needs its own file: a "PR42" name is not a work item match.
+    let wi_path = temp.path().join("WIT42-result.html");
+    std::fs::write(&path, &bytes).unwrap();
+    std::fs::write(&wi_path, &bytes).unwrap();
     let review = service
         .review_result_preview(GetReviewResultPreviewInput {
             pull_request_id: 42,
@@ -131,10 +134,12 @@ fn both_services_decode_shift_jis_and_return_large_file_path() {
     assert_eq!(json["tooLarge"], false);
     assert!(json["warning"].is_null());
 
-    File::create(&path)
-        .unwrap()
-        .set_len(MAX_HTML_BYTES + 1)
-        .unwrap();
+    for large in [&path, &wi_path] {
+        File::create(large)
+            .unwrap()
+            .set_len(MAX_HTML_BYTES + 1)
+            .unwrap();
+    }
     let review = service
         .review_result_preview(GetReviewResultPreviewInput {
             pull_request_id: 42,
@@ -145,11 +150,11 @@ fn both_services_decode_shift_jis_and_return_large_file_path() {
         .work_item_result_preview(GetWorkItemResultPreviewInput { work_item_id: 42 })
         .unwrap()
         .unwrap();
-    for (file_path, content) in [
-        (review.file_path, review.content),
-        (work_item.file_path, work_item.content),
+    for (file_path, expected, content) in [
+        (review.file_path, &path, review.content),
+        (work_item.file_path, &wi_path, work_item.content),
     ] {
-        assert_eq!(file_path, path.display().to_string());
+        assert_eq!(file_path, expected.display().to_string());
         assert!(content.too_large);
         assert!(content.html.is_empty());
     }

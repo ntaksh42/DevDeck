@@ -351,8 +351,8 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
 
 | 設定 | 内容 |
 |---|---|
-| `review_result_folder_path` | レビュー結果 HTML を格納するフォルダ。My Reviews のプレビューが PR 番号を含むファイルを照合。 |
-| `work_item_result_folder_path` | 作業項目の調査結果 HTML を格納するフォルダ。Work Item Views のプレビューが作業項目 ID の数字列を含むファイルを照合。 |
+| `review_result_folder_path` | レビュー結果 HTML を格納するフォルダ。My Reviews のプレビューが語頭の `PR<番号>` (ゼロ埋め可、`apr12` のように英字が前に付くものは除外) を含むファイルを照合。複数該当する場合は更新日時の新しいものを採用。 |
+| `work_item_result_folder_path` | 作業項目の調査結果 HTML を格納するフォルダ。Work Item Views のプレビューが作業項目 ID の数字列 (先頭・区切り文字の後・`WIT`/`WI`/`WORKITEM` の後。`YYYY-MM-DD` の日付や `v2` のような語中の数字は除外) を含むファイルを照合。複数該当する場合は更新日時の新しいものを採用。 |
 | `show_window_hotkey` | ウィンドウを前面化するグローバルホットキー。 |
 | `agent_command` | Agent notes の「Run agent」(`a`) で結果フォルダから起動するシェルコマンド。`{target}` / `{id}` / `{notes}` を置換。未設定なら非表示。 |
 | `read_only_validation_mode_enabled` | 読み取り専用モード (誤操作によるミューテーションを抑止)。既定 false。 |

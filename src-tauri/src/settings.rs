@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+mod result_files;
 mod result_html;
 
 use serde::{Deserialize, Serialize};
@@ -269,7 +270,9 @@ impl SettingsService {
             )));
         }
 
-        let Some(file_path) = find_review_result_file(&folder, input.pull_request_id)? else {
+        let Some(file_path) =
+            result_files::find_review_result_file(&folder, input.pull_request_id)?
+        else {
             return Ok(None);
         };
         let content = result_html::read_result_html(&file_path)?;
@@ -308,7 +311,9 @@ impl SettingsService {
             )));
         }
 
-        let Some(file_path) = find_work_item_result_file(&folder, input.work_item_id)? else {
+        let Some(file_path) =
+            result_files::find_work_item_result_file(&folder, input.work_item_id)?
+        else {
             return Ok(None);
         };
         let content = result_html::read_result_html(&file_path)?;
@@ -329,158 +334,4 @@ fn normalize_path(value: Option<String>) -> Option<String> {
     value
         .map(|path| path.trim().to_string())
         .filter(|path| !path.is_empty())
-}
-
-fn find_review_result_file(folder: &Path, pull_request_id: i64) -> Result<Option<PathBuf>> {
-    let mut matches = Vec::new();
-    for entry in fs::read_dir(folder)? {
-        let entry = entry?;
-        let path = entry.path();
-        if !path.is_file() || !is_html_file(&path) {
-            continue;
-        }
-        let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
-            continue;
-        };
-        if file_name_matches_pr(file_name, pull_request_id) {
-            matches.push(path);
-        }
-    }
-
-    matches.sort_by_key(|path| {
-        path.file_name()
-            .and_then(|value| value.to_str())
-            .map(|value| value.to_ascii_lowercase())
-            .unwrap_or_default()
-    });
-    Ok(matches.into_iter().next())
-}
-
-fn find_work_item_result_file(folder: &Path, work_item_id: i64) -> Result<Option<PathBuf>> {
-    let mut matches = Vec::new();
-    for entry in fs::read_dir(folder)? {
-        let entry = entry?;
-        let path = entry.path();
-        if !path.is_file() || !is_html_file(&path) {
-            continue;
-        }
-        let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
-            continue;
-        };
-        if file_name_matches_work_item(file_name, work_item_id) {
-            matches.push(path);
-        }
-    }
-
-    matches.sort_by_key(|path| {
-        path.file_name()
-            .and_then(|value| value.to_str())
-            .map(|value| value.to_ascii_lowercase())
-            .unwrap_or_default()
-    });
-    Ok(matches.into_iter().next())
-}
-
-/// Unlike `file_name_matches_pr`, this matches on the work item id alone (no
-/// "WIT"/"WI" prefix required) since result files are not guaranteed to carry
-/// one. A match requires the id to appear as a standalone digit run, so id 42
-/// does not match "1042" or "422".
-fn file_name_matches_work_item(file_name: &str, work_item_id: i64) -> bool {
-    let needle = work_item_id.to_string();
-    let bytes = file_name.as_bytes();
-    let mut index = 0;
-
-    while let Some(relative) = file_name[index..].find(needle.as_str()) {
-        let start = index + relative;
-        let end = start + needle.len();
-        let before_is_digit = start > 0 && bytes[start - 1].is_ascii_digit();
-        let after_is_digit = bytes.get(end).is_some_and(|value| value.is_ascii_digit());
-        if !before_is_digit && !after_is_digit {
-            return true;
-        }
-        index = start + 1;
-    }
-
-    false
-}
-
-fn is_html_file(path: &Path) -> bool {
-    path.extension()
-        .and_then(|value| value.to_str())
-        .map(|value| matches!(value.to_ascii_lowercase().as_str(), "html" | "htm"))
-        .unwrap_or(false)
-}
-
-fn file_name_matches_pr(file_name: &str, pull_request_id: i64) -> bool {
-    let needle = pull_request_id.to_string();
-    let upper = file_name.to_ascii_uppercase();
-    let bytes = upper.as_bytes();
-    let mut index = 0;
-
-    while let Some(relative) = upper[index..].find("PR") {
-        let start = index + relative + 2;
-        let mut number_start = start;
-        while bytes.get(number_start) == Some(&b'0') {
-            number_start += 1;
-        }
-
-        if upper[number_start..].starts_with(&needle) {
-            let end = number_start + needle.len();
-            if !bytes.get(end).is_some_and(|value| value.is_ascii_digit()) {
-                return true;
-            }
-        }
-
-        index = start;
-    }
-
-    false
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn file_name_matches_pr_token_with_optional_zero_padding() {
-        assert!(file_name_matches_pr("review-PR1234.html", 1234));
-        assert!(file_name_matches_pr("PR0007-result.htm", 7));
-        assert!(file_name_matches_pr("prefix-pr42-suffix.html", 42));
-        assert!(!file_name_matches_pr("review-PR12345.html", 1234));
-        assert!(!file_name_matches_pr("review-1234.html", 1234));
-    }
-
-    #[test]
-    fn find_review_result_file_returns_first_matching_html_file() {
-        let temp = tempfile::tempdir().unwrap();
-        fs::write(temp.path().join("notes-PR42.txt"), "ignored").unwrap();
-        fs::write(temp.path().join("b-PR42.html"), "<html>b</html>").unwrap();
-        fs::write(temp.path().join("a-PR42.htm"), "<html>a</html>").unwrap();
-
-        let found = find_review_result_file(temp.path(), 42).unwrap().unwrap();
-        assert_eq!(found.file_name().unwrap(), "a-PR42.htm");
-    }
-
-    #[test]
-    fn file_name_matches_work_item_on_standalone_digit_run() {
-        assert!(file_name_matches_work_item("WIT1234.html", 1234));
-        assert!(file_name_matches_work_item("1234-result.html", 1234));
-        assert!(file_name_matches_work_item("result-1234.html", 1234));
-        assert!(!file_name_matches_work_item("result-11234.html", 1234));
-        assert!(!file_name_matches_work_item("result-12345.html", 1234));
-        assert!(!file_name_matches_work_item("result-999.html", 1234));
-    }
-
-    #[test]
-    fn find_work_item_result_file_returns_first_matching_html_file() {
-        let temp = tempfile::tempdir().unwrap();
-        fs::write(temp.path().join("notes-1234.txt"), "ignored").unwrap();
-        fs::write(temp.path().join("b-1234.html"), "<html>b</html>").unwrap();
-        fs::write(temp.path().join("a-1234.htm"), "<html>a</html>").unwrap();
-
-        let found = find_work_item_result_file(temp.path(), 1234)
-            .unwrap()
-            .unwrap();
-        assert_eq!(found.file_name().unwrap(), "a-1234.htm");
-    }
 }
