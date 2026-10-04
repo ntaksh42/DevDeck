@@ -5,8 +5,9 @@ on:
     tags:
       - 'v*'
   schedule:
-    # 08:00 JST every day.
-    - cron: '0 23 * * *'
+    # 00:00 and 06:30 JST every day.
+    - cron: '0 15 * * *'
+    - cron: '30 21 * * *'
   workflow_dispatch:
     inputs:
       force_release:
