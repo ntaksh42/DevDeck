@@ -16,6 +16,12 @@ function pad(value: number): string {
   return String(value).padStart(2, "0");
 }
 
+// Today in the user's zone. The backend buckets commits by local day, so the
+// default window must end on the local date, not the UTC one.
+function localIsoDate(date: Date): string {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 function isoDate(date: Date): string {
   return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
 }
@@ -122,7 +128,7 @@ export function CommitActivityHeatmap({
   });
 
   const { start, end } = useMemo(() => {
-    const endDate = toDate ? new Date(`${toDate}T00:00:00Z`) : new Date();
+    const endDate = new Date(`${toDate || localIsoDate(new Date())}T00:00:00Z`);
     const startDate = fromDate
       ? new Date(`${fromDate}T00:00:00Z`)
       : new Date(endDate.getTime() - (DEFAULT_WINDOW_DAYS - 1) * 86_400_000);

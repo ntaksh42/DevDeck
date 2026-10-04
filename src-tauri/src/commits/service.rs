@@ -1,5 +1,5 @@
 use azdo_client::CommitSearchCriteria;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local, Utc};
 
 use crate::auth::client_for_organization;
 use crate::db::{AppDatabase, CachedCommit, CachedCommitPr, Organization};
@@ -20,6 +20,8 @@ use super::{
 
 /// How long a commit's related-PR lookup stays cached before being refreshed.
 const COMMIT_PR_CACHE_TTL_MINUTES: i64 = 30;
+/// SQLite `date()` modifier that buckets the activity heatmap by local day.
+const LOCAL_DAY_MODIFIER: &str = "localtime";
 /// Upper bound on commit search rows returned to the UI. When more matches
 /// exist the result is flagged `truncated` so the count is shown honestly.
 const COMMIT_SEARCH_RESULT_LIMIT: usize = 100;
@@ -42,8 +44,8 @@ impl CommitService {
         let author = normalize_optional(input.author);
         let branch = normalize_optional(input.branch);
         let item_path = normalize_optional(input.item_path).map(|p| normalize_item_path(&p));
-        let from_date = normalize_date(input.from_date.as_deref(), false)?;
-        let to_date = normalize_date(input.to_date.as_deref(), true)?;
+        let from_date = normalize_date(input.from_date.as_deref(), false, &Local)?;
+        let to_date = normalize_date(input.to_date.as_deref(), true, &Local)?;
         if let (Some(from_date), Some(to_date)) = (&from_date, &to_date) {
             if from_date > to_date {
                 return Err(AppError::InvalidInput(
@@ -245,8 +247,8 @@ impl CommitService {
         let author = normalize_optional(input.author);
         let project_filter = normalize_optional(input.project_id);
         let repository_filter = normalize_optional(input.repository_id);
-        let from_date = normalize_date(input.from_date.as_deref(), false)?;
-        let to_date = normalize_date(input.to_date.as_deref(), true)?;
+        let from_date = normalize_date(input.from_date.as_deref(), false, &Local)?;
+        let to_date = normalize_date(input.to_date.as_deref(), true, &Local)?;
         if let (Some(from_date), Some(to_date)) = (&from_date, &to_date) {
             if from_date > to_date {
                 return Err(AppError::InvalidInput(
@@ -264,6 +266,7 @@ impl CommitService {
             author.as_deref(),
             from_rfc.as_deref(),
             to_rfc.as_deref(),
+            LOCAL_DAY_MODIFIER,
         )?;
         Ok(rows
             .into_iter()

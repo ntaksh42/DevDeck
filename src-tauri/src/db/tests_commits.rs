@@ -393,7 +393,7 @@ fn commit_activity_groups_by_day_and_filters_by_author() {
 
     // All authors: two commits on 05-01, one on 05-02. NULL date is skipped.
     let all = db
-        .commit_activity("org1", None, None, None, None, None)
+        .commit_activity("org1", None, None, None, None, None, "+0 hours")
         .unwrap();
     assert_eq!(
         all,
@@ -402,7 +402,7 @@ fn commit_activity_groups_by_day_and_filters_by_author() {
 
     // Author substring filter (case-insensitive) narrows to Alice's days.
     let alice = db
-        .commit_activity("org1", None, None, Some("ALICE"), None, None)
+        .commit_activity("org1", None, None, Some("ALICE"), None, None, "+0 hours")
         .unwrap();
     assert_eq!(alice, vec![("2026-05-01".to_string(), 2)]);
 
@@ -415,9 +415,20 @@ fn commit_activity_groups_by_day_and_filters_by_author() {
             None,
             Some("2026-05-02T00:00:00+00:00"),
             None,
+            "+0 hours",
         )
         .unwrap();
     assert_eq!(ranged, vec![("2026-05-02".to_string(), 1)]);
+
+    // Buckets follow the day modifier: in JST (+9h) the 20:00 UTC commit on 05-01
+    // is already 05-02 05:00, so 05-01 keeps only the 08:00 UTC (17:00 JST) one.
+    let jst = db
+        .commit_activity("org1", None, None, None, None, None, "+9 hours")
+        .unwrap();
+    assert_eq!(
+        jst,
+        vec![("2026-05-01".to_string(), 1), ("2026-05-02".to_string(), 2)]
+    );
 }
 
 #[test]
@@ -454,13 +465,13 @@ fn commit_activity_treats_like_wildcards_in_author_as_literal() {
     // `_` is a single-character LIKE wildcard; unescaped, "j_doe" would also
     // match "jXdoe"-style authors. Only the literal author must be counted.
     let underscore = db
-        .commit_activity("org1", None, None, Some("j_doe"), None, None)
+        .commit_activity("org1", None, None, Some("j_doe"), None, None, "+0 hours")
         .unwrap();
     assert_eq!(underscore, vec![("2026-05-01".to_string(), 1)]);
 
     // A bare `%` must match nothing rather than acting as "match everything".
     let percent = db
-        .commit_activity("org1", None, None, Some("%"), None, None)
+        .commit_activity("org1", None, None, Some("%"), None, None, "+0 hours")
         .unwrap();
     assert!(percent.is_empty());
 }

@@ -1,5 +1,5 @@
 use azdo_client::AdoClient;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, FixedOffset, Utc};
 
 use crate::db::{AppDatabase, CachedCommit, Organization};
 use crate::sync::SyncBudget;
@@ -40,20 +40,47 @@ fn normalize_item_path_adds_leading_slash_and_trims() {
 #[test]
 fn normalize_date_expands_date_only_values() {
     assert_eq!(
-        normalize_date(Some("2026-05-24"), false)
+        normalize_date(Some("2026-05-24"), false, &Utc)
             .unwrap()
             .unwrap()
             .to_rfc3339(),
         "2026-05-24T00:00:00+00:00"
     );
     assert_eq!(
-        normalize_date(Some("2026-05-24"), true)
+        normalize_date(Some("2026-05-24"), true, &Utc)
             .unwrap()
             .unwrap()
             .to_rfc3339(),
         "2026-05-24T23:59:59.999999900+00:00"
     );
-    assert!(normalize_date(Some("24/05/2026"), false).is_err());
+    assert!(normalize_date(Some("24/05/2026"), false, &Utc).is_err());
+}
+
+#[test]
+fn normalize_date_treats_a_date_as_a_day_in_the_given_zone() {
+    let jst = FixedOffset::east_opt(9 * 3600).unwrap();
+    // "From 1/31" starts at JST midnight, i.e. 15:00 UTC on 1/30.
+    assert_eq!(
+        normalize_date(Some("2026-01-31"), false, &jst)
+            .unwrap()
+            .unwrap()
+            .to_rfc3339(),
+        "2026-01-30T15:00:00+00:00"
+    );
+    // "To 1/31" ends at the end of JST 1/31, i.e. 14:59:59.9999999 UTC.
+    let to = normalize_date(Some("2026-01-31"), true, &jst)
+        .unwrap()
+        .unwrap();
+    assert_eq!(to.to_rfc3339(), "2026-01-31T14:59:59.999999900+00:00");
+    // A commit at JST 2/1 09:00 (00:00 UTC) is outside; one at JST 1/31 23:59 is inside.
+    let next_morning = DateTime::parse_from_rfc3339("2026-02-01T00:00:00+00:00")
+        .unwrap()
+        .with_timezone(&Utc);
+    let last_minute = DateTime::parse_from_rfc3339("2026-01-31T14:59:00+00:00")
+        .unwrap()
+        .with_timezone(&Utc);
+    assert!(next_morning > to);
+    assert!(last_minute <= to);
 }
 
 #[test]
@@ -64,7 +91,9 @@ fn end_of_day_bound_covers_the_whole_final_second() {
     // SQLite `author_date <= ?` filter and the live `searchCriteria.toDate`
     // query. Both sides are `to_rfc3339()` of a `DateTime<Utc>`, so the
     // string compare SQLite does matches this instant compare.
-    let to = normalize_date(Some("2026-05-24"), true).unwrap().unwrap();
+    let to = normalize_date(Some("2026-05-24"), true, &Utc)
+        .unwrap()
+        .unwrap();
     let late = DateTime::parse_from_rfc3339("2026-05-24T23:59:59.913333300+00:00")
         .unwrap()
         .with_timezone(&Utc);

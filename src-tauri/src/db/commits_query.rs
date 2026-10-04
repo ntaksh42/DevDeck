@@ -201,7 +201,10 @@ pub(crate) fn list_commit_repositories(
 /// Aggregates commit counts per calendar day for the activity heatmap. The
 /// author filter matches the name or email as a case-insensitive substring,
 /// mirroring the commit search behaviour. Dates are derived from `author_date`
-/// via SQLite's `date()`; commits without an `author_date` are skipped.
+/// via SQLite's `date()` shifted by `day_modifier` (a SQLite date modifier such
+/// as `localtime`), so a day boundary follows the user's zone rather than UTC;
+/// commits without an `author_date` are skipped.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn commit_activity(
     conn: &Connection,
     org_id: &str,
@@ -210,6 +213,7 @@ pub(crate) fn commit_activity(
     author: Option<&str>,
     from_date: Option<&str>,
     to_date: Option<&str>,
+    day_modifier: &str,
 ) -> Result<Vec<(String, i64)>> {
     // Escaped like search_commits above, so `%` and `_` in an author filter
     // stay literal instead of acting as wildcards; otherwise the heatmap and
@@ -217,7 +221,7 @@ pub(crate) fn commit_activity(
     let author_like = author.map(|a| format!("%{}%", escape_like_pattern(&a.to_lowercase())));
     let mut stmt = conn.prepare(
         r#"
-        SELECT date(author_date) AS day, COUNT(*) AS count
+        SELECT date(author_date, ?7) AS day, COUNT(*) AS count
         FROM commits
         WHERE org_id = ?1
           AND author_date IS NOT NULL
@@ -239,7 +243,8 @@ pub(crate) fn commit_activity(
             repository_id,
             author_like,
             from_date,
-            to_date
+            to_date,
+            day_modifier
         ],
         |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)),
     )?;

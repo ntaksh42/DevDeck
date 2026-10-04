@@ -72,6 +72,7 @@ impl AppDatabase {
         list_commit_repositories(&conn, org_id)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn commit_activity(
         &self,
         org_id: &str,
@@ -80,6 +81,7 @@ impl AppDatabase {
         author: Option<&str>,
         from_date: Option<&str>,
         to_date: Option<&str>,
+        day_modifier: &str,
     ) -> Result<Vec<(String, i64)>> {
         let conn = self.open()?;
         commit_activity(
@@ -90,6 +92,7 @@ impl AppDatabase {
             author,
             from_date,
             to_date,
+            day_modifier,
         )
     }
 

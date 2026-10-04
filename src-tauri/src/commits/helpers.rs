@@ -1,5 +1,5 @@
 use azdo_client::{AdoClient, AdoError, GitCommitRef};
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, TimeZone, Utc};
 
 use crate::db::{CachedCommit, Organization};
 use crate::error::{AppError, Result};
@@ -85,9 +85,13 @@ pub(super) fn normalize_set(values: Option<Vec<String>>) -> Option<Vec<String>> 
     (!cleaned.is_empty()).then_some(cleaned)
 }
 
-pub(super) fn normalize_date(
+/// Parses a date filter. A date-only `YYYY-MM-DD` is a calendar day in `tz` (the
+/// user's local zone in production), so "To: 1/31" ends at the end of January 31
+/// local time rather than UTC; full RFC3339 values are taken as-is.
+pub(super) fn normalize_date<Tz: TimeZone>(
     value: Option<&str>,
     end_of_day: bool,
+    tz: &Tz,
 ) -> Result<Option<DateTime<Utc>>> {
     let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(None);
@@ -108,7 +112,17 @@ pub(super) fn normalize_date(
             date.and_hms_opt(0, 0, 0)
         }
         .expect("valid date time");
-        return Ok(Some(DateTime::<Utc>::from_naive_utc_and_offset(time, Utc)));
+        // Across a DST change the wall-clock time can be ambiguous or missing:
+        // take the widest reading of the day and fall back to UTC for a gap.
+        let resolved = if end_of_day {
+            tz.from_local_datetime(&time).latest()
+        } else {
+            tz.from_local_datetime(&time).earliest()
+        };
+        return Ok(Some(resolved.map_or_else(
+            || DateTime::<Utc>::from_naive_utc_and_offset(time, Utc),
+            |local| local.with_timezone(&Utc),
+        )));
     }
 
     DateTime::parse_from_rfc3339(value)
