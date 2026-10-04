@@ -98,7 +98,7 @@ export const DEFAULT_DEMO_SYNC_STATES: SyncState[] = [
     errorCount: 0,
     lastError: null,
     lastWarning:
-      "Work item sync fetched more than 200 IDs in 1 query result(s); largest result had 248 IDs and was loaded in batches.",
+      "Work item sync reached the 2000-item query limit in 1 query result(s); older items are not synced.",
   },
 ];
 

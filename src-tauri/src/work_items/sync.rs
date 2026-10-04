@@ -264,8 +264,7 @@ pub(super) async fn do_sync_work_items(
     let mut synced_project_ids: Vec<String> = Vec::new();
     let mut skipped_projects: Vec<String> = Vec::new();
     let mut last_skip_error: Option<AppError> = None;
-    let mut large_query_count = 0usize;
-    let mut largest_query_result = 0usize;
+    let mut capped_query_count = 0usize;
 
     // Fetch every project concurrently, bounded by the shared budget; each
     // project still runs its all/my WIQL queries together internally.
@@ -291,15 +290,13 @@ pub(super) async fn do_sync_work_items(
             Ok(None) => continue,
             Ok(Some((project_all, project_my))) => {
                 synced_project_ids.push(fetch.project_id);
-                if project_all.queried_count > SYNC_WORK_ITEM_BATCH_SIZE {
-                    large_query_count += 1;
-                    largest_query_result = largest_query_result.max(project_all.queried_count);
-                }
+                // Batching a long ID list loses nothing; only reaching the query
+                // cap means the WIQL result may have been cut off.
+                capped_query_count += [project_all.queried_count, project_my.queried_count]
+                    .iter()
+                    .filter(|&&count| count >= SYNC_WORK_ITEM_QUERY_TOP)
+                    .count();
                 all_cached.extend(project_all.items);
-                if project_my.queried_count > SYNC_WORK_ITEM_BATCH_SIZE {
-                    large_query_count += 1;
-                    largest_query_result = largest_query_result.max(project_my.queried_count);
-                }
                 my_cached.extend(project_my.items);
             }
             Err(e) => {
@@ -330,6 +327,19 @@ pub(super) async fn do_sync_work_items(
         db.apply_work_items_delta(&org.id, &synced_ids, &all_cached, &my_cached)?;
     }
 
+    Ok(SyncWorkItemsResult {
+        warning: sync_warning(&skipped_projects, capped_query_count),
+        was_full_sync,
+    })
+}
+
+/// The sync-health warning: projects that failed and were skipped, and query
+/// results that reached the `SYNC_WORK_ITEM_QUERY_TOP` cap (older items beyond it
+/// are not synced). `None` when the pass was clean.
+pub(super) fn sync_warning(
+    skipped_projects: &[String],
+    capped_query_count: usize,
+) -> Option<String> {
     let mut warning_parts: Vec<String> = Vec::new();
     if !skipped_projects.is_empty() {
         warning_parts.push(format!(
@@ -338,21 +348,12 @@ pub(super) async fn do_sync_work_items(
             skipped_projects.join(", ")
         ));
     }
-    if large_query_count > 0 {
+    if capped_query_count > 0 {
         warning_parts.push(format!(
-            "Work item sync fetched more than {SYNC_WORK_ITEM_BATCH_SIZE} IDs in {large_query_count} query result(s); largest result had {largest_query_result} IDs and was loaded in batches."
+            "Work item sync reached the {SYNC_WORK_ITEM_QUERY_TOP}-item query limit in {capped_query_count} query result(s); older items are not synced."
         ));
     }
-    let warning = if warning_parts.is_empty() {
-        None
-    } else {
-        Some(warning_parts.join(" "))
-    };
-
-    Ok(SyncWorkItemsResult {
-        warning,
-        was_full_sync,
-    })
+    (!warning_parts.is_empty()).then(|| warning_parts.join(" "))
 }
 
 pub(super) async fn fetch_sync_work_items(

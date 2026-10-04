@@ -99,6 +99,11 @@ export function SyncHealthSettings({ organizations }: { organizations: Organizat
                   <div>
                     <p className="text-xs text-muted-foreground">Status</p>
                     <p
+                      title={
+                        hasWarning
+                          ? "Limited: the last sync finished, but some data was skipped or truncated (see the message)."
+                          : undefined
+                      }
                       className={
                         hasError
                           ? "font-medium text-destructive"

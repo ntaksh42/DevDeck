@@ -330,8 +330,23 @@ async fn sync_work_items_batches_more_than_two_hundred_ids() {
         .unwrap()
         .unwrap();
     assert_eq!(state.error_count, 0);
-    assert!(state
-        .last_warning
-        .as_deref()
-        .is_some_and(|warning| warning.contains("more than 200 IDs")));
+    // Loading 201 IDs in two batches is routine, not something to warn about.
+    assert_eq!(state.last_warning, None);
+}
+
+#[test]
+fn sync_warning_flags_skipped_projects_and_capped_queries_only() {
+    use super::super::sync::sync_warning;
+
+    assert_eq!(sync_warning(&[], 0), None);
+    let skipped = vec!["Broken".to_string()];
+    assert!(sync_warning(&skipped, 0)
+        .unwrap()
+        .contains("1 project(s) skipped due to sync errors: Broken."));
+    let capped = sync_warning(&[], 2).unwrap();
+    assert!(
+        capped.contains("2000-item query limit in 2 query result(s)"),
+        "{capped}"
+    );
+    assert!(sync_warning(&skipped, 1).unwrap().contains("Broken"));
 }

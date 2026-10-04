@@ -301,6 +301,9 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   ファンアウトが広がっても 429 圧力を一定に保つ (429 は `Retry-After` で吸収)。
 - PR 同期: active PR とレビュー対象 PR の取得を重ね合わせ、CI ステータスは最新 50 件を後段で付与。
 - 作業項目同期: プロジェクト単位で並列。`System.ChangedDate` デルタ取得 (24h ごとにフル) は維持。
+  200 件超の ID は 200 件ずつバッチ取得するだけで欠落しないため警告しない。WIQL の取得上限 (2000 件) に達した
+  クエリ結果がある場合のみ「古い項目は同期されていない」旨を `last_warning` に記録し、Sync health で
+  「Limited」(完了したが一部スキップ/切り詰めあり) と表示する。
 - コミット同期: 全プロジェクトのリポジトリ一覧を並列取得した後、リポジトリ単位でコミットを取得。
   24h ごとにフル取得 (90 日窓を置換)、その間は前回同期以降の差分のみ取得してマージ
   (`merge_commits`)。フル/差分の判定は `commits:{org}` と `internal:commit_full_sync:{org}` の
