@@ -31,6 +31,7 @@ async function selectDemoRepository() {
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
+  window.history.replaceState(null, "", window.location.pathname);
 });
 
 describe("CodeBrowseView", () => {
@@ -154,6 +155,69 @@ describe("CodeBrowseView", () => {
       fireEvent.click(screen.getByRole("button", { name: "Highlighted" }));
       expect(lastContainer.querySelector("code.hljs")).not.toBeNull();
       expect(screen.getByRole("button", { name: /Download/ })).toBeTruthy();
+    },
+    15000,
+  );
+
+  it(
+    "selects a line range by clicking line numbers and reflects it in the URL hash",
+    async () => {
+      renderView();
+      await selectDemoRepository();
+      await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
+        timeout: 8000,
+      });
+      fireEvent.click(screen.getAllByText("README.md")[0]);
+      fireEvent.click(await screen.findByRole("button", { name: "Line 1" }, { timeout: 8000 }));
+      fireEvent.click(screen.getByRole("button", { name: "Line 3" }), { shiftKey: true });
+
+      await waitFor(() => expect(window.location.hash).toBe("#L1-L3"));
+      expect(screen.getByText("Lines 1-3")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Line 2" }).getAttribute("aria-pressed")).toBe(
+        "true",
+      );
+    },
+    15000,
+  );
+
+  it(
+    "extends a line selection with Shift+ArrowDown and clears it with Escape",
+    async () => {
+      renderView();
+      await selectDemoRepository();
+      await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
+        timeout: 8000,
+      });
+      fireEvent.click(screen.getAllByText("README.md")[0]);
+      const line1 = await screen.findByRole("button", { name: "Line 1" }, { timeout: 8000 });
+      line1.focus();
+      fireEvent.keyDown(line1, { key: "ArrowDown", shiftKey: true });
+      await waitFor(() => expect(window.location.hash).toBe("#L1-L2"));
+      expect(screen.getByText("Lines 1-2")).toBeTruthy();
+
+      fireEvent.keyDown(screen.getByRole("button", { name: "Line 2" }), { key: "Escape" });
+      await waitFor(() => expect(window.location.hash).toBe(""));
+      expect(screen.queryByText("Lines 1-2")).toBeNull();
+    },
+    15000,
+  );
+
+  it(
+    "copies a permalink for the selected lines",
+    async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+      renderView();
+      await selectDemoRepository();
+      await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
+        timeout: 8000,
+      });
+      fireEvent.click(screen.getAllByText("README.md")[0]);
+      fireEvent.click(await screen.findByRole("button", { name: "Line 2" }, { timeout: 8000 }));
+      fireEvent.click(screen.getByRole("button", { name: /Copy link/ }));
+
+      await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+      expect(writeText.mock.calls[0][0]).toMatch(/path=%2FREADME\.md.*&line=2&lineEnd=2/);
     },
     15000,
   );

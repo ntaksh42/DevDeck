@@ -17,10 +17,12 @@ import {
   WrapText,
   X,
 } from "lucide-react";
-import { commandErrorMessage, type RepoFileVersion } from "@/lib/azdoCommands";
+import { commandErrorMessage, type Organization, type RepoFileVersion } from "@/lib/azdoCommands";
 import { ErrorState } from "@/components/StateDisplay";
 import { highlightCode, splitHighlightedLines } from "@/lib/highlight";
 import { leafName, type RepoOption, useRepoFile } from "./codeBrowseShared";
+import { isSelected, LineNumberButton, LineSelectionBar } from "./CodeLineSelection";
+import { useLineSelection } from "./useLineSelection";
 
 type LineMatch = { start: number; end: number; ordinal: number };
 
@@ -28,9 +30,12 @@ type LineMatch = { start: number; end: number; ordinal: number };
 // highlight.js syntax coloring, or the image itself for image files. A
 // find-in-file bar (Ctrl+F) highlights matches and scrolls between them; while
 // searching, lines render as plain text with the matches marked so highlight
-// spans don't get in the way. `version` pins the content to an explicit ref
-// (e.g. a commit picked in the History tab) instead of the branch tip.
+// spans don't get in the way. Line numbers are selectable (click, Shift+click or
+// keyboard) to pick a range that can be shared as a permalink. `version` pins
+// the content to an explicit ref (e.g. a commit picked in the History tab)
+// instead of the branch tip.
 export function CodeFileView({
+  organization,
   organizationId,
   repo,
   branch,
@@ -39,6 +44,7 @@ export function CodeFileView({
   versionLabel,
   onExitVersion,
 }: {
+  organization: Organization | undefined;
   organizationId: string;
   repo: RepoOption;
   branch: string;
@@ -60,6 +66,7 @@ export function CodeFileView({
     () => (content ? highlightCode(content, leafName(path)) : null),
     [content, path],
   );
+  const selection = useLineSelection({ organization, repo, branch, path, lines });
 
   const [findOpen, setFindOpen] = useState(false);
   const [find, setFind] = useState("");
@@ -261,6 +268,11 @@ export function CodeFileView({
             <span className="uppercase tracking-wide">{highlighted.language}</span>
           ) : null}
           <span>{lines.length} lines</span>
+          <LineSelectionBar
+            range={selection.range}
+            onCopyLink={() => void selection.copyLink()}
+            onCopyLines={() => void selection.copyLines()}
+          />
           {highlighted?.skipped ? (
             <span>· Syntax highlighting skipped (file is large)</span>
           ) : null}
@@ -370,18 +382,26 @@ export function CodeFileView({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div
+        ref={selection.containerRef}
+        role="group"
+        aria-label="Code lines"
+        tabIndex={0}
+        onFocus={selection.onFocus}
+        onKeyDown={selection.onKeyDown}
+        className="min-h-0 flex-1 overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      >
         {wrap ? (
           <div className="font-mono text-[12px] leading-5">
             {lines.map((line, index) => (
               <div key={index} className="flex">
-                <div
-                  aria-hidden="true"
-                  className="shrink-0 select-none border-r border-border px-2 text-right text-muted-foreground"
+                <LineNumberButton
+                  lineNumber={index + 1}
+                  selected={isSelected(selection.range, index + 1)}
+                  onSelect={selection.selectLine}
+                  className="shrink-0 border-r border-border"
                   style={{ minWidth: `${String(lines.length).length + 2}ch` }}
-                >
-                  {index + 1}
-                </div>
+                />
                 {showPlainText || !highlightedLines ? (
                   <div className={`min-w-0 flex-1 px-3 ${wrapClass}`}>
                     {renderLineWithMatches(line, lineMatches.get(index), current, currentMatchRef)}
@@ -398,12 +418,15 @@ export function CodeFileView({
           </div>
         ) : (
         <div className="flex font-mono text-[12px] leading-5">
-          <div
-            aria-hidden="true"
-            className="shrink-0 select-none border-r border-border px-2 py-1 text-right text-muted-foreground"
-          >
+          <div className="shrink-0 border-r border-border py-1 text-right">
             {lines.map((_, index) => (
-              <div key={index}>{index + 1}</div>
+              <LineNumberButton
+                key={index}
+                lineNumber={index + 1}
+                selected={isSelected(selection.range, index + 1)}
+                onSelect={selection.selectLine}
+                className="w-full"
+              />
             ))}
           </div>
           {showPlainText ? (
@@ -428,6 +451,14 @@ export function CodeFileView({
         </div>
         )}
       </div>
+      {selection.toast ? (
+        <div
+          role="status"
+          className="pointer-events-none fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-foreground px-3 py-1 text-xs text-background shadow-lg"
+        >
+          {selection.toast}
+        </div>
+      ) : null}
     </div>
   );
 }

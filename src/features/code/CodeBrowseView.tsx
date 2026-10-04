@@ -24,6 +24,7 @@ import {
   setLastSelection,
   toggleFavoriteRepository,
 } from "./codeBrowseStorage";
+import { handleTreeKeyDown, type TypeAheadState } from "./codeTreeKeyboard";
 import { TreeLevel } from "./CodeFileTree";
 import { CodeFilteredTree } from "./CodeFilteredTree";
 import { Breadcrumb } from "./CodeBrowseChrome";
@@ -141,6 +142,7 @@ export function CodeBrowseView({
     shortId: string;
   } | null>(null);
   const treeRef = useRef<HTMLDivElement | null>(null);
+  const typeAheadRef = useRef<TypeAheadState>({ text: "", time: 0 });
 
   // Remember the open repository/branch/path so the view reopens here next time.
   useEffect(() => {
@@ -210,45 +212,13 @@ export function CodeBrowseView({
     }
   }
 
-  // Keyboard navigation for the tree: arrows move/expand/collapse, Enter/Space
-  // (native button activation) opens. Only the tree container is a tab stop.
+  // Keyboard navigation for the tree: arrows move/expand/collapse, Home/End jump
+  // to the first/last row, PageUp/PageDown jump by a page, typing a letter jumps
+  // to the next match (type-ahead), and Enter/Space (native button activation)
+  // opens. Only the tree container is a tab stop; the row-finding logic lives in
+  // codeTreeKeyboard so it is unit-testable.
   function onTreeKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
-    const container = treeRef.current;
-    if (!container) return;
-    const rows = Array.from(
-      container.querySelectorAll<HTMLButtonElement>("[data-tree-item]"),
-    );
-    if (rows.length === 0) return;
-    const index = rows.indexOf(document.activeElement as HTMLButtonElement);
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      rows[index < 0 ? 0 : Math.min(index + 1, rows.length - 1)]?.focus();
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      rows[index <= 0 ? 0 : index - 1]?.focus();
-    } else if (event.key === "Home") {
-      event.preventDefault();
-      rows[0]?.focus();
-    } else if (event.key === "End") {
-      event.preventDefault();
-      rows[rows.length - 1]?.focus();
-    } else if (event.key === "ArrowRight" && index >= 0) {
-      const row = rows[index];
-      if (row.dataset.folder === "true") {
-        event.preventDefault();
-        if (row.dataset.open === "true") rows[Math.min(index + 1, rows.length - 1)]?.focus();
-        else if (row.dataset.path) toggleFolder(row.dataset.path);
-      }
-    } else if (event.key === "ArrowLeft" && index >= 0) {
-      const row = rows[index];
-      event.preventDefault();
-      if (row.dataset.folder === "true" && row.dataset.open === "true" && row.dataset.path) {
-        toggleFolder(row.dataset.path);
-      } else if (row.dataset.path) {
-        const parent = row.dataset.path.replace(/\/[^/]+$/, "");
-        rows.find((candidate) => candidate.dataset.path === parent)?.focus();
-      }
-    }
+    handleTreeKeyDown(event, treeRef.current, typeAheadRef, toggleFolder);
   }
 
   // When the tree gains focus via Tab, move into the first row.
@@ -293,6 +263,7 @@ export function CodeBrowseView({
             />
           ) : (
             <CodeFileView
+              organization={organization}
               organizationId={organizationId}
               repo={repo}
               branch={branch}
