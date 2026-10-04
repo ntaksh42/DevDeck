@@ -276,7 +276,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
 
 - アクセス: `AppDatabase` がパスラッパとして呼び出しごとに接続を開く (`rusqlite`)。
 - 移行: `src-tauri/src/db.rs` の `migrate()` が `PRAGMA user_version` を使用。
-  **現行スキーマバージョン: 20** (v19 で通知履歴用の `notifications` テーブルを追加、
+  **現行スキーマバージョン: 21** (v21 でフォロー中の作業項目 `followed_work_items` を追加、v19 で通知履歴用の `notifications` テーブルを追加、
   v20 で `pull_requests.created_by_id` を追加)。
 - 主なテーブル: 組織、アクティブ/レビュー対象 PR、作業項目、My Work Items スナップショット、
   コミット、コミット↔PR 関連、各種 FTS インデックス、同期状態、スヌーズ、
