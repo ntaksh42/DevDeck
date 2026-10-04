@@ -152,6 +152,27 @@ export async function getCommitPullRequests(input: {
   return commitPullRequestsSchema.parse(result);
 }
 
+const commitContainingRefsSchema = z.object({
+  branches: z.array(z.string()),
+  tags: z.array(z.string()),
+  /** Refs whose ancestry was checked. */
+  checked: z.number(),
+  /** Refs the repository has; `checked < total` means the list may be partial. */
+  total: z.number(),
+});
+export type CommitContainingRefs = z.infer<typeof commitContainingRefsSchema>;
+
+// The branches and tags that contain a commit (a bounded number are checked).
+export async function getCommitContainingRefs(input: {
+  organizationId?: string;
+  projectId: string;
+  repositoryId: string;
+  commitId: string;
+}): Promise<CommitContainingRefs> {
+  const result = await invokeCommand("get_commit_containing_refs", { input });
+  return commitContainingRefsSchema.parse(result);
+}
+
 export async function searchCommits(
   input: SearchCommitsInput,
 ): Promise<CommitSearchResult> {

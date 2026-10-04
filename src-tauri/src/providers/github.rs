@@ -14,9 +14,10 @@ use crate::code_search::{
     CodeContextResult, CodeSearchResults, GetCodeContextInput, SearchCodeInput,
 };
 use crate::commits::{
-    CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitFileDiff, CommitPullRequest,
-    CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput, GetCommitFileDiffInput,
-    GetCommitPullRequestsInput, ListCommitRepositoriesInput, SearchCommitsInput,
+    CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitContainingRefs, CommitFileDiff,
+    CommitPullRequest, CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput,
+    GetCommitContainingRefsInput, GetCommitFileDiffInput, GetCommitPullRequestsInput,
+    ListCommitRepositoriesInput, SearchCommitsInput,
 };
 use crate::db::Organization;
 use crate::error::{AppError, Result};
@@ -273,6 +274,15 @@ impl Provider for GithubProvider {
         input: GetCommitPullRequestsInput,
     ) -> Result<Vec<CommitPullRequest>> {
         github::commits::get_commit_pull_requests(&self.org, &self.secrets, input).await
+    }
+
+    async fn get_commit_containing_refs(
+        &self,
+        _input: GetCommitContainingRefsInput,
+    ) -> Result<CommitContainingRefs> {
+        Err(AppError::NotSupported(
+            "containing branches/tags are not available for GitHub yet".to_string(),
+        ))
     }
 
     async fn get_pull_request_review(&self, input: PrLocator) -> Result<PullRequestReview> {

@@ -247,6 +247,7 @@ pub fn run() {
             commands::commits::get_commit_changes,
             commands::commits::get_commit_file_diff,
             commands::commits::get_commit_pull_requests,
+            commands::commits::get_commit_containing_refs,
             commands::pipelines::list_pipeline_projects,
             commands::pipelines::list_pipeline_runs,
             commands::pipelines::list_pipeline_definitions,

@@ -13,6 +13,7 @@ import { openExternalUrl } from "@/lib/openExternal";
 import { usePreviewZoom } from "@/lib/usePreviewZoom";
 import { PreviewZoomControls } from "@/components/PreviewZoomControls";
 import { PreviewBand } from "@/components/PreviewBand";
+import { CommitContainingRefsPanel } from "./CommitContainingRefsPanel";
 import { CommitFilesPanel } from "./CommitFilesPanel";
 import { PR_STATUS_LABELS } from "./commitSearchConstants";
 import { commitPrQueryKey, prStatusBadgeClass } from "./commitSearchUtils";
@@ -247,6 +248,7 @@ export function CommitPreviewPanel({
                 <dd className="break-all font-mono text-foreground">{commit.commitId}</dd>
               </dl>
             </div>
+            <CommitContainingRefsPanel commit={commit} />
             <CommitRelatedPrsPanel commit={commit} onOpenPullRequest={onOpenPullRequest} />
             <CommitFilesPanel
               key={`${commit.organizationId}:${commit.repositoryId}:${commit.commitId}`}

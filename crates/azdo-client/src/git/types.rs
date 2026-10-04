@@ -61,6 +61,8 @@ pub struct GitCommitDiffs {
     pub changes: Vec<GitDiffChange>,
     /// False when the server capped the change list at `$top`.
     pub all_changes_included: Option<bool>,
+    /// The merge base of the two revisions.
+    pub common_commit: Option<String>,
 }
 
 /// The kind of ref a `versionDescriptor.version` names in item requests.

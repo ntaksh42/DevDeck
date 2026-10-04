@@ -161,6 +161,7 @@ mod tests {
                 change("/a.ts", "add", false),
             ],
             all_changes_included: Some(false),
+            common_commit: None,
         });
         let paths: Vec<_> = comparison.changes.iter().map(|c| c.path.as_str()).collect();
         assert_eq!(paths, ["/a.ts", "/z.ts"]);
@@ -172,6 +173,7 @@ mod tests {
         let comparison = map_comparison(GitCommitDiffs {
             changes: vec![],
             all_changes_included: Some(true),
+            common_commit: None,
         });
         assert!(!comparison.truncated);
         assert!(comparison.changes.is_empty());
