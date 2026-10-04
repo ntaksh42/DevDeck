@@ -24,7 +24,7 @@ Release — you do **not** build installers locally.
 
 Read `release.yml` if behavior is unclear, but the contract is:
 
-- **Triggers**: a `v*` tag push, a daily cron (08:00 JST), or manual
+- **Triggers**: a `v*` tag push, a twice-daily cron (00:00 and 06:30 JST), or manual
   `workflow_dispatch` (with an optional `force_release` input).
 - **Version source**: it takes the latest `vX.Y.Z` tag and bumps the patch
   number for the next release. `package.json`, `src-tauri/tauri.conf.json`, and
