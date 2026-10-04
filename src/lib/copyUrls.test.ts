@@ -59,6 +59,13 @@ describe("copyRowUrls", () => {
     expect(setToast).toHaveBeenCalledWith("Copy failed");
   });
 
+  it("reports a failed copy instead of throwing when navigator.clipboard is missing", async () => {
+    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+    const setToast = vi.fn();
+    await expect(copyRowUrls([{ webUrl: "https://a" }], setToast)).resolves.toBeUndefined();
+    expect(setToast).toHaveBeenCalledWith("Copy failed");
+  });
+
   it("clears the toast after the timeout", async () => {
     const setToast = vi.fn();
     await copyRowUrls([{ webUrl: "https://a" }], setToast);

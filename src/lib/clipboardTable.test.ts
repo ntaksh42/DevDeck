@@ -85,6 +85,31 @@ describe("copyRowsAsTable", () => {
     expect(setToast).toHaveBeenCalledWith("Row copied");
   });
 
+  it("falls back to TSV text when the rich clipboard write is rejected", async () => {
+    vi.stubGlobal("ClipboardItem", class {});
+    write.mockRejectedValueOnce(new Error("not allowed"));
+    const setToast = vi.fn();
+    await copyRowsAsTable([rows[0]], columns, setToast);
+    expect(writeText).toHaveBeenCalledWith('#\tTitle\n#1\tA <b> & "c"');
+    expect(setToast).toHaveBeenCalledWith("Row copied");
+  });
+
+  it("reports a failed copy when both the rich and plain writes are rejected", async () => {
+    vi.stubGlobal("ClipboardItem", class {});
+    write.mockRejectedValueOnce(new Error("not allowed"));
+    writeText.mockRejectedValueOnce(new Error("denied"));
+    const setToast = vi.fn();
+    await copyRowsAsTable(rows, columns, setToast);
+    expect(setToast).toHaveBeenCalledWith("Copy failed");
+  });
+
+  it("reports a failed copy instead of throwing when navigator.clipboard is missing", async () => {
+    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+    const setToast = vi.fn();
+    await expect(copyRowsAsTable(rows, columns, setToast)).resolves.toBeUndefined();
+    expect(setToast).toHaveBeenCalledWith("Copy failed");
+  });
+
   it("does not touch the clipboard when there are no rows", async () => {
     const setToast = vi.fn();
     await copyRowsAsTable([], columns, setToast);

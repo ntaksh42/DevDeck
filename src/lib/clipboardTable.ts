@@ -52,10 +52,32 @@ export function rowsToTsv<T>(rows: T[], columns: CopyColumn<T>[]): string {
   return lines.map((cells) => cells.join("\t")).join("\n");
 }
 
+// Writes the rich HTML + TSV pair when the environment supports it. A rejected
+// rich write (focus lost, WebViews without `text/html` blobs) falls back to
+// TSV-only; a missing `navigator.clipboard` makes `writeText` throw, which the
+// caller reports as a failed copy.
+async function writeTable(text: string, html: string): Promise<void> {
+  const clipboard = navigator.clipboard;
+  if (typeof ClipboardItem !== "undefined" && typeof clipboard?.write === "function") {
+    try {
+      await clipboard.write([
+        new ClipboardItem({
+          "text/html": new Blob([html], { type: "text/html" }),
+          "text/plain": new Blob([text], { type: "text/plain" }),
+        }),
+      ]);
+      return;
+    } catch {
+      // Fall through to the plain-text copy below.
+    }
+  }
+  await clipboard.writeText(text);
+}
+
 // Copies the rows as an HTML table + TSV and reports the result through the
 // caller's toast setter. Falls back to TSV-only where rich clipboard writes
 // are unavailable. Returns the promise so tests can await the clipboard write.
-export function copyRowsAsTable<T>(
+export async function copyRowsAsTable<T>(
   rows: T[],
   columns: CopyColumn<T>[],
   setToast: (message: string | null) => void,
@@ -67,21 +89,13 @@ export function copyRowsAsTable<T>(
   };
   if (rows.length === 0 || columns.length === 0) {
     show("No rows to copy");
-    return Promise.resolve();
+    return;
   }
-  const text = rowsToTsv(rows, columns);
-  const clipboard = navigator.clipboard;
-  const write =
-    typeof ClipboardItem !== "undefined" && typeof clipboard?.write === "function"
-      ? clipboard.write([
-          new ClipboardItem({
-            "text/html": new Blob([rowsToTableHtml(rows, columns)], { type: "text/html" }),
-            "text/plain": new Blob([text], { type: "text/plain" }),
-          }),
-        ])
-      : clipboard.writeText(text);
-  return write.then(
-    () => show(rows.length === 1 ? "Row copied" : `${rows.length} rows copied`),
-    () => show("Copy failed"),
-  );
+  try {
+    await writeTable(rowsToTsv(rows, columns), rowsToTableHtml(rows, columns));
+  } catch {
+    show("Copy failed");
+    return;
+  }
+  show(rows.length === 1 ? "Row copied" : `${rows.length} rows copied`);
 }

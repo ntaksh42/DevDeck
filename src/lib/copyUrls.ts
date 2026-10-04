@@ -10,26 +10,28 @@ export function urlsToClipboardText(rows: Array<{ webUrl?: string | null }>): st
 
 // Copies the selected rows' URLs and reports the result through the caller's
 // toast setter. Returns the promise so tests can await the clipboard write.
-export function copyRowUrls(
+export async function copyRowUrls(
   rows: Array<{ webUrl?: string | null }>,
   setToast: (message: string | null) => void,
   toastMs = 2000,
 ): Promise<void> {
+  const show = (message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(null), toastMs);
+  };
   const text = urlsToClipboardText(rows);
   const count = text === "" ? 0 : text.split("\n").length;
   if (count === 0) {
-    setToast("No URL to copy");
-    window.setTimeout(() => setToast(null), toastMs);
-    return Promise.resolve();
+    show("No URL to copy");
+    return;
   }
-  return navigator.clipboard.writeText(text).then(
-    () => {
-      setToast(count === 1 ? "URL copied" : `${count} URLs copied`);
-      window.setTimeout(() => setToast(null), toastMs);
-    },
-    () => {
-      setToast("Copy failed");
-      window.setTimeout(() => setToast(null), toastMs);
-    },
-  );
+  try {
+    // `navigator.clipboard` can be undefined (insecure context), which throws
+    // here rather than rejecting, so it is handled with the rejection case.
+    await navigator.clipboard.writeText(text);
+  } catch {
+    show("Copy failed");
+    return;
+  }
+  show(count === 1 ? "URL copied" : `${count} URLs copied`);
 }
