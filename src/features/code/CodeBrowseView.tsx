@@ -33,7 +33,7 @@ import { CodeFileView } from "./CodeFileView";
 import { CodeHistoryView } from "./CodeHistoryView";
 import { CodeCompareView } from "./CodeCompareView";
 import { CodeSearchResults } from "./CodeSearchResults";
-import { isImeComposing } from "@/lib/utils";
+import { isEditableTarget, isImeComposing } from "@/lib/utils";
 
 const INPUT_CLASS =
   "h-9 w-full rounded-md border border-input bg-background pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring";
@@ -121,6 +121,20 @@ export function CodeBrowseView({
     setRestoredBranch(null);
   }, [branches, restoredBranch]);
 
+  // `T` jumps to the file finder (the name filter, which fuzzy-matches every path
+  // in the repository), like GitHub's `t`. Ignored while typing in a field.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key.toLowerCase() !== "t" || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (isEditableTarget(event.target) || !filterInputRef.current) return;
+      event.preventDefault();
+      filterInputRef.current.focus();
+      filterInputRef.current.select();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const [selected, setSelected] = useState<Selection>(ROOT);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [filterText, setFilterText] = useState("");
@@ -142,6 +156,7 @@ export function CodeBrowseView({
     shortId: string;
   } | null>(null);
   const treeRef = useRef<HTMLDivElement | null>(null);
+  const filterInputRef = useRef<HTMLInputElement | null>(null);
   const typeAheadRef = useRef<TypeAheadState>({ text: "", time: 0 });
 
   // Remember the open repository/branch/path so the view reopens here next time.
@@ -375,6 +390,7 @@ export function CodeBrowseView({
                 aria-hidden="true"
               />
               <input
+                ref={filterInputRef}
                 type="text"
                 value={filterText}
                 onChange={(event) => setFilterText(event.target.value)}

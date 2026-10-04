@@ -165,6 +165,10 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
 
         </div>
         <div className="break-inside-avoid">
+          <p className={section}>Code</p>
+          <div className={row}><span>Find file by name (fuzzy)</span><kbd className={kbd}>T</kbd></div>
+          <div className={row}><span>Move in tree / type-ahead</span><kbd className={kbd}>↑ ↓ · Home / End · type</kbd></div>
+
           <p className={section}>Pipelines</p>
           <div className={row}><span>Move run row</span><kbd className={kbd}>J/K ↑ ↓ Home End</kbd></div>
           <div className={row}><span>Open run preview</span><kbd className={kbd}>Enter</kbd></div>

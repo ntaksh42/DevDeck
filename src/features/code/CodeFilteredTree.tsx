@@ -3,13 +3,15 @@ import { File as FileIcon, Folder as FolderIcon, Loader2 } from "lucide-react";
 import { commandErrorMessage, listRepoPaths } from "@/lib/azdoCommands";
 import { ErrorState } from "@/components/StateDisplay";
 import { type RepoOption } from "./codeBrowseShared";
+import { rankByFuzzy } from "./codeFuzzy";
 
 // Keep the filtered list light: matches beyond this are counted, not rendered.
 const MAX_VISIBLE_MATCHES = 500;
 
-// Replaces the lazy tree while the filter box has text: matches file/folder
+// Replaces the lazy tree while the filter box has text: fuzzy-matches file/folder
 // paths across the whole repository (one recursive listing, cached per
-// branch), so hits inside unexpanded folders are found too. Rows carry the
+// branch, best match first), so hits inside unexpanded folders are found too and
+// "cbv" finds CodeBrowseView.tsx. Rows carry the
 // same data attributes as tree rows, so the container's keyboard navigation
 // keeps working.
 export function CodeFilteredTree({
@@ -56,10 +58,7 @@ export function CodeFilteredTree({
     return <ErrorState message={commandErrorMessage(query.error)} />;
   }
 
-  const needle = filterText.trim().toLowerCase();
-  const matches = (query.data?.items ?? []).filter((item) =>
-    item.path.toLowerCase().includes(needle),
-  );
+  const matches = rankByFuzzy(query.data?.items ?? [], filterText);
   const visible = matches.slice(0, MAX_VISIBLE_MATCHES);
   const hiddenCount = matches.length - visible.length;
 

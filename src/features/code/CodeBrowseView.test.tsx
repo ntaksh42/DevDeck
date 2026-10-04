@@ -534,3 +534,25 @@ describe("CodeBrowseView", () => {
     15000,
   );
 });
+
+describe("CodeBrowseView file finder", () => {
+  it(
+    "focuses the name filter with T and fuzzy-matches paths across folders",
+    async () => {
+      renderView();
+      await selectDemoRepository();
+      await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
+        timeout: 8000,
+      });
+
+      fireEvent.keyDown(document.body, { key: "t" });
+      const box = screen.getByLabelText(/Filter files by name/i) as HTMLInputElement;
+      expect(document.activeElement).toBe(box);
+
+      // Typing "t" into the box must not retrigger the shortcut handler.
+      fireEvent.change(box, { target: { value: "rdm" } });
+      expect(await screen.findByText("README.md", undefined, { timeout: 8000 })).toBeTruthy();
+    },
+    15000,
+  );
+});
