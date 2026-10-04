@@ -223,6 +223,33 @@ describe("CodeBrowseView", () => {
   );
 
   it(
+    "moves focus between the Contents / History / Compare tabs with arrow keys",
+    async () => {
+      renderView();
+      await selectDemoRepository();
+      await waitFor(() => expect(screen.getAllByText("README.md").length).toBeGreaterThan(0), {
+        timeout: 8000,
+      });
+      const contentsTab = screen.getByRole("tab", { name: "Contents" });
+      expect(contentsTab.getAttribute("tabindex")).toBe("0");
+      contentsTab.focus();
+      fireEvent.keyDown(contentsTab, { key: "ArrowRight" });
+      const historyTab = screen.getByRole("tab", { name: "History" });
+      expect(document.activeElement).toBe(historyTab);
+      // Arrow keys only move focus (roving tabindex); Enter activates.
+      expect(historyTab.getAttribute("aria-selected")).toBe("false");
+      fireEvent.keyDown(historyTab, { key: "Enter" });
+      expect(
+        await screen.findByText("Add expression utilities", undefined, { timeout: 8000 }),
+      ).toBeTruthy();
+      expect(screen.getByRole("tab", { name: "History" }).getAttribute("aria-selected")).toBe(
+        "true",
+      );
+    },
+    15000,
+  );
+
+  it(
     "runs a full-text search when Enter is pressed in the box",
     async () => {
       renderView();
