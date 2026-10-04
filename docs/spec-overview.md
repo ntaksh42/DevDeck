@@ -320,7 +320,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   `desktop_notifications_enabled` に関係なく行い、DB エラーは同期を止めず警告ログのみ。
   `list_notifications` / `get_unread_notifications_count` / `mark_notifications_read` /
   `mark_all_notifications_read` / `record_notification` の各コマンドで参照・既読管理する。
-- デスクトップ通知: 設定が有効な場合のみ。初回スナップショットでは過去分を通知しない。
+- デスクトップ通知: 設定が有効な場合のみ。組織の初回同期 (そのスコープで一度も同期が完了していない状態) では過去分を通知しない。同期済みであれば、レビュー待ち/担当が 0 件の状態からの最初の依頼・アサインも通知する (スナップショットの空/非空では判定しない)。
   スヌーズ対象は通知から除外。コメント返信は `pr_comment_seen` で追跡。
 - 通知ルール (`notification_rules`): 種別/プロジェクト/リポジトリ条件で通知を絞り込む。
   `mute` ルールは一致する通知を抑止し allow ルールより優先するため、特定の

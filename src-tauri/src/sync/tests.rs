@@ -256,7 +256,21 @@ fn work_item_notification_items_skips_assignment_on_first_snapshot() {
     };
     let current = vec![work_item(1, "New item", Some("To Do"))];
 
-    assert!(work_item_notification_items(&[], &current, &settings).is_empty());
+    assert!(work_item_notification_items(&[], &current, &settings, false).is_empty());
+}
+
+#[test]
+fn work_item_assignment_notifies_after_a_sync_that_found_nothing_assigned() {
+    let settings = AppSettings {
+        desktop_notifications_enabled: true,
+        ..AppSettings::default()
+    };
+    let current = vec![work_item(1, "First assignment", Some("To Do"))];
+
+    let items = work_item_notification_items(&[], &current, &settings, true);
+
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].kind, WorkItemNotificationKind::Assigned);
 }
 
 fn review_pr(pr_id: i64, my_vote: i32) -> CachedReviewPr {
@@ -296,7 +310,7 @@ fn pr_settings(review: bool, reset: bool) -> AppSettings {
 fn pr_review_items_flags_new_review_and_vote_reset() {
     let prev = vec![review_pr(1, 10), review_pr(2, 0)];
     let curr = vec![review_pr(1, 0), review_pr(2, 0), review_pr(3, 0)];
-    let items = pr_review_notification_items(&prev, &curr, &pr_settings(true, true));
+    let items = pr_review_notification_items(&prev, &curr, &pr_settings(true, true), true);
     assert!(items
         .iter()
         .any(|i| i.pull_request_id == 1 && i.kind == PrNotificationKind::VoteReset));
@@ -325,6 +339,7 @@ fn pr_review_items_distinguish_same_pr_id_across_repos() {
         &[prev_a, prev_b],
         &[curr_a, curr_b],
         &pr_settings(true, true),
+        true,
     );
     // Only repo-a transitioned from approved to no-vote.
     assert_eq!(items.len(), 1);
@@ -336,15 +351,23 @@ fn pr_review_items_distinguish_same_pr_id_across_repos() {
 #[test]
 fn pr_review_items_suppressed_on_first_snapshot() {
     let curr = vec![review_pr(1, 0), review_pr(2, 0)];
-    let items = pr_review_notification_items(&[], &curr, &pr_settings(true, true));
+    let items = pr_review_notification_items(&[], &curr, &pr_settings(true, true), false);
     assert!(items.is_empty());
+}
+
+#[test]
+fn pr_review_request_notifies_after_a_sync_that_found_nothing_waiting() {
+    let curr = vec![review_pr(1, 0)];
+    let items = pr_review_notification_items(&[], &curr, &pr_settings(true, true), true);
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].kind, PrNotificationKind::ReviewRequested);
 }
 
 #[test]
 fn pr_review_items_respect_toggles() {
     let prev = vec![review_pr(1, 10)];
     let curr = vec![review_pr(1, 0), review_pr(2, 0)];
-    let items = pr_review_notification_items(&prev, &curr, &pr_settings(false, false));
+    let items = pr_review_notification_items(&prev, &curr, &pr_settings(false, false), true);
     assert!(items.is_empty());
 }
 
@@ -364,7 +387,7 @@ fn work_item_notification_items_reports_assignment_and_state_changes() {
         work_item(3, "Assigned", Some("To Do")),
     ];
 
-    let notifications = work_item_notification_items(&previous, &current, &settings);
+    let notifications = work_item_notification_items(&previous, &current, &settings, true);
 
     assert_eq!(notifications.len(), 2);
     assert_eq!(

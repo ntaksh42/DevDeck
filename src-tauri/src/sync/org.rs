@@ -20,6 +20,16 @@ use super::notifications::{
 };
 use super::*;
 
+/// Whether a sync of `kind` (`prs` / `work_items`) has completed for the
+/// organization before this pass. Notification baselines key off this rather than
+/// an empty snapshot, because "nothing waiting yet" is also an empty snapshot.
+fn has_completed_sync(db: &AppDatabase, kind: &str, org_id: &str) -> bool {
+    db.get_sync_state(&format!("{kind}:{org_id}"))
+        .ok()
+        .flatten()
+        .is_some_and(|state| state.last_synced_at.is_some())
+}
+
 /// Syncs one organization. Fetches the project list once (shared across the
 /// three sync kinds) and runs the PR, work-item, and commit passes concurrently.
 #[allow(clippy::too_many_arguments)]
@@ -102,6 +112,7 @@ async fn sync_org_prs(
         return outcome;
     }
     let should_collect = should_collect_pr_notifications(settings);
+    let baseline_established = has_completed_sync(db, "prs", &org.id);
     let previous_reviews = if should_collect {
         db.list_review_pull_requests(&org.id).unwrap_or_default()
     } else {
@@ -119,7 +130,12 @@ async fn sync_org_prs(
     // markers that snooze revival then reads.
     let mut items = Vec::new();
     if should_collect {
-        items = pr_review_notification_items(&previous_reviews, &current_reviews, settings);
+        items = pr_review_notification_items(
+            &previous_reviews,
+            &current_reviews,
+            settings,
+            baseline_established,
+        );
         if settings.notify_pr_comment_replies {
             items.extend(crate::prs::collect_pr_comment_notifications(db, client, org).await);
         }
@@ -186,6 +202,7 @@ async fn sync_org_work_items(
         return outcome;
     }
     let should_collect = should_collect_work_item_notifications(settings);
+    let baseline_established = has_completed_sync(db, "work_items", &org.id);
     let previous_my_work_items = if should_collect {
         match db.list_my_work_items(&org.id) {
             Ok(items) => items,
@@ -224,6 +241,7 @@ async fn sync_org_work_items(
                     &previous_my_work_items,
                     &current_my_work_items,
                     settings,
+                    baseline_established,
                 );
                 items.retain(|item| !snoozed_ids.contains(&item.id));
                 items.retain(|item| {

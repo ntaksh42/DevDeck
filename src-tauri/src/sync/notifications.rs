@@ -207,12 +207,15 @@ fn pr_review_item(pr: &CachedReviewPr, kind: PrNotificationKind) -> PrNotificati
 /// Diffs the review-PR cache snapshots taken before and after a sync to find new
 /// review requests (a PR newly present) and vote resets (a reviewer's vote moving
 /// from non-zero back to zero). Comment replies are handled separately because
-/// they require fetching threads. On the very first snapshot (`previous` empty)
-/// review requests are suppressed to avoid backfilling every existing PR.
+/// they require fetching threads. `baseline_established` is false only for the
+/// very first sync of the organization: review requests are then suppressed to
+/// avoid backfilling every existing PR. An empty `previous` after a completed
+/// sync is a real "nothing waiting" state, so the first request there notifies.
 pub fn pr_review_notification_items(
     previous: &[CachedReviewPr],
     current: &[CachedReviewPr],
     settings: &AppSettings,
+    baseline_established: bool,
 ) -> Vec<PrNotificationItem> {
     // Key by (repository, id): a PR number is only unique within a repository,
     // so keying by id alone would let two repositories' PRs collide.
@@ -220,12 +223,11 @@ pub fn pr_review_notification_items(
         .iter()
         .map(|pr| ((pr.repository_id.as_str(), pr.pull_request_id), pr))
         .collect();
-    let first_snapshot = previous.is_empty();
     let mut items = Vec::new();
     for pr in current {
         match prev_by_key.get(&(pr.repository_id.as_str(), pr.pull_request_id)) {
             None => {
-                if settings.notify_pr_review_requests && !first_snapshot {
+                if settings.notify_pr_review_requests && baseline_established {
                     items.push(pr_review_item(pr, PrNotificationKind::ReviewRequested));
                 }
             }
@@ -251,18 +253,17 @@ pub(super) fn still_snoozed_work_item_ids(keys: &[String]) -> HashSet<i64> {
     keys.iter().filter_map(|key| key.parse().ok()).collect()
 }
 
+/// `baseline_established` is false only for the organization's very first sync,
+/// where every assigned item would otherwise look newly assigned.
 pub(super) fn work_item_notification_items(
     previous: &[CachedWorkItem],
     current: &[CachedWorkItem],
     settings: &AppSettings,
+    baseline_established: bool,
 ) -> Vec<WorkItemNotificationItem> {
-    if current.is_empty() {
-        return Vec::new();
-    }
-
     let previous_by_id: HashMap<i64, &CachedWorkItem> =
         previous.iter().map(|item| (item.id, item)).collect();
-    let can_notify_assignments = settings.notify_work_item_assignments && !previous.is_empty();
+    let can_notify_assignments = settings.notify_work_item_assignments && baseline_established;
 
     current
         .iter()
