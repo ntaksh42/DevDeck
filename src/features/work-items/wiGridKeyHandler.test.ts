@@ -136,8 +136,7 @@ describe("createWiKeyHandler — Ctrl+C copies the selection", () => {
     expect(writeText).toHaveBeenCalledWith(
       "#\tTitle\tState\n#456\tFix login\tActive\n#789\tAdd logout\tNew",
     );
-    await Promise.resolve();
-    expect(setCopyToast).toHaveBeenCalledWith("2 rows copied");
+    await vi.waitFor(() => expect(setCopyToast).toHaveBeenCalledWith("2 rows copied"));
   });
 
   it("falls back to the focused row when nothing is checked", () => {
