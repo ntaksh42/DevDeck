@@ -316,11 +316,16 @@ export function demoUpdatePipelineDefinition(input: {
 }
 
 export function demoPipelineRunsFiltered(input?: {
+  definitionId?: number;
   branch?: string;
   result?: string;
   requestedForMe?: boolean;
 }) {
   let runs = demoPipelineRuns();
+  // The real backend passes `definitions=<id>`, returning only that pipeline's runs.
+  if (input?.definitionId != null) {
+    runs = runs.filter((run) => run.definitionId === input.definitionId);
+  }
   if (input?.branch) {
     const needle = input.branch.toLowerCase();
     runs = runs.filter((run) => run.sourceBranch.toLowerCase().includes(needle));
