@@ -54,10 +54,12 @@ export function PipelineTimeline({
 
     switch (event.key) {
       case "ArrowDown":
+      case "j":
         consume();
         focusRow(rows[Math.min(index + 1, rows.length - 1)]?.node.id);
         break;
       case "ArrowUp":
+      case "k":
         consume();
         focusRow(rows[Math.max(index - 1, 0)]?.node.id);
         break;

@@ -504,7 +504,9 @@ Commits プレビューと Pipelines の実行詳細は、PR / 作業項目プ�
 行を1件選択中は、ステータスバーに主要な行ショートカットのコンパクトな凡例を表示する
 (My Reviews / 作業項目グリッド)。Pipelines の監視パイプライン実行行でも
 `↑ ↓ / J K / Home / End` で移動、`Enter` で実行プレビュー、`Ctrl+Enter` で
-ブラウザを開く。
+ブラウザを開く。Code の検索結果リストでも `↑ ↓ / J K` で行移動、`Enter` でファイルを開く、
+`Ctrl+Enter` でブラウザを開く。パイプライン実行詳細パネルのタイムライン行でも
+`↑ ↓ / J K / Home / End` で移動、`← →` で折りたたみ/展開、`Enter` / `Space` で選択行のログを表示する (ログを持たない行は無視)。
 
 Pipelines の見た目と操作 (`src/features/pipelines/`):
 

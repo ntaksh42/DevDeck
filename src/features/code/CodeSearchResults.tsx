@@ -1,4 +1,11 @@
-import { type ReactNode, useDeferredValue, useEffect, useRef, useState } from "react";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+  useDeferredValue,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, FileCode, Loader2, X } from "lucide-react";
 import {
@@ -8,8 +15,9 @@ import {
   searchCode,
 } from "@/lib/azdoCommands";
 import { ErrorState } from "@/components/StateDisplay";
+import { openExternalUrl } from "@/lib/openExternal";
 import { handleSearchInputEscape } from "@/lib/utils";
-import { type RepoOption } from "./codeBrowseShared";
+import { handleRowNavKey, type RepoOption } from "./codeBrowseShared";
 
 const PAGE_SIZE = 50;
 
@@ -79,6 +87,21 @@ export function CodeSearchResults({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pages.length > 0]);
 
+  // Arrow keys / J K / Home / End move between hits (each hit's open-file button
+  // is the stop), Enter opens the file (native button activation), and Ctrl+Enter
+  // opens the hit in Azure DevOps.
+  function onListKeyDown(event: ReactKeyboardEvent<HTMLUListElement>) {
+    const hit = (event.target as HTMLElement).closest<HTMLElement>("[data-search-hit]");
+    if (!hit) return;
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      if (hit.dataset.webUrl) void openExternalUrl(hit.dataset.webUrl);
+      return;
+    }
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    handleRowNavKey(event, listRef.current, "[data-search-hit]");
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center justify-between border-b border-border px-3 py-2 text-sm">
@@ -130,7 +153,7 @@ export function CodeSearchResults({
           </div>
         ) : (
           <>
-            <ul ref={listRef}>
+            <ul ref={listRef} onKeyDown={onListKeyDown}>
               {results.map((hit) => (
                 <CodeSearchHitRow
                   key={`${hit.path}:${hit.branch ?? ""}`}
@@ -217,6 +240,8 @@ function CodeSearchHitRow({
         </button>
         <button
           type="button"
+          data-search-hit
+          data-web-url={hit.webUrl}
           onClick={() => onOpenFile(hit.path)}
           className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pr-3 text-left text-sm hover:bg-muted/50"
           title={hit.path}
