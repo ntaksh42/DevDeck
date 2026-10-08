@@ -8,6 +8,7 @@ use crate::error::{AdoError, Result};
 
 mod helpers;
 mod requests;
+mod throttle;
 
 #[cfg(test)]
 mod tests;
