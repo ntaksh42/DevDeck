@@ -2,7 +2,7 @@ use azdo_client::{AdoClient, GitThread};
 use tokio::task::JoinSet;
 
 use crate::db::{AppDatabase, CachedReviewPr, Organization};
-use crate::sync::{PrNotificationItem, PrNotificationKind};
+use crate::sync::{PrNotificationItem, PrNotificationKind, SyncBudget};
 
 // Threads are only fetched for the most recently created review PRs each sync.
 pub(crate) const PR_COMMENT_SCAN_LIMIT: usize = 50;
@@ -102,6 +102,7 @@ pub(crate) async fn collect_pr_comment_notifications(
     db: &AppDatabase,
     client: &AdoClient,
     org: &Organization,
+    budget: &SyncBudget,
 ) -> Vec<PrNotificationItem> {
     let reviews = match db.list_review_pull_requests(&org.id) {
         Ok(reviews) => reviews,
@@ -125,12 +126,15 @@ pub(crate) async fn collect_pr_comment_notifications(
         let project_id = pr.project_id.clone();
         let repository_id = pr.repository_id.clone();
         let pull_request_id = pr.pull_request_id;
+        let budget = budget.clone();
         while tasks.len() >= PR_COMMENT_FETCH_CONCURRENCY {
             if let Some((idx, Some(threads))) = join_comment_task(&mut tasks).await {
                 threads_by_index.insert(idx, threads);
             }
         }
         tasks.spawn(async move {
+            // Share the sync-wide request budget with the other sync passes.
+            let _permit = budget.acquire_owned().await;
             let value = match client
                 .list_pull_request_threads(&project_id, &repository_id, pull_request_id)
                 .await

@@ -63,6 +63,12 @@ impl AppDatabase {
         Self { path }
     }
 
+    /// Identifies this database file, for process-wide caches that must not
+    /// leak between databases (e.g. separate test databases).
+    pub(crate) fn cache_key(&self) -> String {
+        self.path.display().to_string()
+    }
+
     pub fn initialize(&self) -> Result<()> {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent)?;

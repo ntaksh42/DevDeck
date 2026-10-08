@@ -137,7 +137,9 @@ async fn sync_org_prs(
             baseline_established,
         );
         if settings.notify_pr_comment_replies {
-            items.extend(crate::prs::collect_pr_comment_notifications(db, client, org).await);
+            items.extend(
+                crate::prs::collect_pr_comment_notifications(db, client, org, budget).await,
+            );
         }
     }
     // Revive snoozed PRs past their deadline or with new activity, and learn

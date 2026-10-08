@@ -7,6 +7,7 @@ use crate::error::{AppError, Result};
 use crate::sync::SyncBudget;
 
 use super::helpers::commit_to_cached;
+use super::repo_cache;
 
 /// Sync window in days. Must cover the largest date preset offered by the
 /// commit search UI (`src/features/commits/CommitSearch.tsx`, 90d) so that
@@ -159,7 +160,8 @@ async fn do_sync_commits(
     // List every repository across all projects concurrently, then fan out the
     // per-repository commit fetches. Both phases are bounded by the shared
     // budget, so listing no longer serializes project-by-project.
-    let (repositories, mut skipped) = list_all_repositories(client, org, projects, budget).await;
+    let (repositories, mut skipped) =
+        list_all_repositories(db, client, org, projects, budget).await;
 
     let mut tasks = JoinSet::new();
     for (project, repository) in repositories {
@@ -202,6 +204,7 @@ async fn do_sync_commits(
 /// project. A project whose repository listing fails is logged and skipped so
 /// the rest still sync; its name (as `project/*`) is returned for the warning.
 async fn list_all_repositories(
+    db: &AppDatabase,
     client: &AdoClient,
     org: &Organization,
     projects: &[TeamProject],
@@ -214,13 +217,23 @@ async fn list_all_repositories(
         let org = org.clone();
         let project = project.clone();
         let budget = budget.clone();
+        let db_key = db.cache_key();
         tasks.spawn(async move {
-            let _permit = budget.acquire_owned().await;
-            match client.list_repositories(&project.id).await {
-                Ok(repos) => Ok(repos
+            if let Some(repos) = repo_cache::get(&db_key, &org.id, &project.id) {
+                return Ok(repos
                     .into_iter()
                     .map(|repo| (project.clone(), repo))
-                    .collect()),
+                    .collect());
+            }
+            let _permit = budget.acquire_owned().await;
+            match client.list_repositories(&project.id).await {
+                Ok(repos) => {
+                    repo_cache::put(&db_key, &org.id, &project.id, &repos);
+                    Ok(repos
+                        .into_iter()
+                        .map(|repo| (project.clone(), repo))
+                        .collect())
+                }
                 Err(e) => {
                     tracing::warn!(
                         org = %org.name,
