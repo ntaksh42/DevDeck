@@ -81,7 +81,7 @@ impl Gate {
             .resume_at
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if resume_at.map_or(true, |current| current < until) {
+        if resume_at.is_none_or(|current| current < until) {
             *resume_at = Some(until);
         }
     }
