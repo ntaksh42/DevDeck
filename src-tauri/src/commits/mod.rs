@@ -1,5 +1,6 @@
 mod helpers;
 mod refs;
+mod repo_cache;
 mod service;
 mod sync;
 mod types;
