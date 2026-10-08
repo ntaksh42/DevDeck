@@ -14,6 +14,7 @@ use super::helpers::{
     join_api_path, parse_retry_after, same_azure_devops_organization_url, url_path_is_within_base,
     vssps_base_url,
 };
+use super::throttle::{parse_rate_limit_delay, Gate};
 use super::{AdoClient, BinaryResponse};
 
 impl AdoClient {
@@ -171,14 +172,21 @@ impl AdoClient {
         // not consume a retry attempt, so it works even with `no_retries()`.
         let mut refreshed_after_401 = false;
         let mut attempt = 0;
+        let gate = Gate::for_url(&self.base_url);
         while attempt < self.retry_policy.attempts() {
             attempt += 1;
+            // The slot is held while the request is in flight and released
+            // before any backoff sleep so waiting retries don't starve others.
+            let permit = gate.acquire().await;
             let auth = self.auth.auth_header_value().await?;
             let response = build_request().header("Authorization", &auth).send().await;
 
             match response {
                 Ok(resp) => {
                     let status = resp.status();
+                    if let Some(delay) = parse_rate_limit_delay(resp.headers()) {
+                        gate.pause_for(self.retry_policy.capped_retry_after(delay));
+                    }
                     if status.is_success() {
                         return on_success(resp).await;
                     }
@@ -194,7 +202,14 @@ impl AdoClient {
                     }
 
                     let retry_after = parse_retry_after(resp.headers());
+                    if status == StatusCode::TOO_MANY_REQUESTS {
+                        // Hold back every caller, not just this request.
+                        gate.pause_for(self.retry_policy.capped_retry_after(
+                            retry_after.unwrap_or(self.retry_policy.base_delay),
+                        ));
+                    }
                     if self.should_retry_status(status, attempt, idempotent) {
+                        drop(permit);
                         let delay = self.retry_delay(attempt, retry_after);
                         tracing::warn!(
                             method,
@@ -218,6 +233,7 @@ impl AdoClient {
                     return Err(AdoError::api(status.as_u16(), body));
                 }
                 Err(error) if self.should_retry_error(&error, attempt, idempotent) => {
+                    drop(permit);
                     let delay = self.retry_policy.backoff_delay(attempt);
                     tracing::warn!(
                         method,

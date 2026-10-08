@@ -371,7 +371,8 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
 - 1 ページで打ち切られる一覧 (プロジェクト一覧 `_apis/projects`、ブランチ一覧 refs) は `$top=1000` を明示し、
   `x-ms-continuationtoken` ヘッダーの継続トークンを辿って最後まで取得する (`list_all_pages`)。
   これにより 100 件超のプロジェクトも同期対象から外れない。
-- 401: 即時 `Unauthorized`。429: `Retry-After` を尊重 (上限付き)。5xx/タイムアウト/ネットワーク: リトライ。
+- 401: 即時 `Unauthorized`。429: `Retry-After` を尊重 (上限付き)。
+  全 `AdoClient` 呼び出しはエンドポイント (host:port) ごとのプロセス共通スロットル (`client/throttle.rs`) を通る: 同時実行は最大 8 件、429 の `Retry-After` や成功応答の `X-RateLimit-Delay` を受けたら以降の全リクエストを一時停止する (最大 30 秒)。キャッシュ消去直後に各画面が一斉再取得しても Azure DevOps のレート制限に達しにくくする。5xx/タイムアウト/ネットワーク: リトライ。
   副作用のある POST は 5xx/タイムアウトを再試行せず (429 と接続失敗のみ)、WIQL・バッチ取得・検索など読み取り専用の POST (`post_json_read` / Almsearch) は GET と同様に再試行する。
 - Azure CLI 認証は Windows では `cmd /C az` (`CREATE_NO_WINDOW`) 経由で起動する (`az` は `az.cmd` のため `Command::new("az")` では解決できない)。 `az` 未インストール時は `cmd` が終了コード 9009 を返すため、インストール案内メッセージに読み替える。
 - `azdo-client` は Tauri 非依存を維持し、`wiremock` でテストする。
