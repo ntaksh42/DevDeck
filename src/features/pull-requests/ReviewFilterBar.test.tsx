@@ -52,6 +52,21 @@ describe("ReviewFilterBar", () => {
     expect(onShowDraftsChange).toHaveBeenCalledWith(false);
   });
 
+  it("shows how many drafts are hidden and reveals them on click", () => {
+    const onShowDraftsChange = vi.fn();
+    render(<Harness hiddenDraftCount={2} onShowDraftsChange={onShowDraftsChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "2 drafts hidden" }));
+    expect(onShowDraftsChange).toHaveBeenCalledWith(true);
+  });
+
+  it("shows no hidden-drafts chip when drafts are visible or none exist", () => {
+    const { rerender } = render(<Harness hiddenDraftCount={0} />);
+    expect(screen.queryByText(/drafts? hidden/)).toBeNull();
+    rerender(<Harness hiddenDraftCount={3} showDrafts />);
+    expect(screen.queryByText(/drafts? hidden/)).toBeNull();
+  });
+
   it("focuses the input when opened and folds back on Escape, returning focus", () => {
     const onClose = vi.fn();
     render(<Harness open textFilter="api" onClose={onClose} />);

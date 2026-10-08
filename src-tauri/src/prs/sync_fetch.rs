@@ -37,6 +37,7 @@ pub(crate) async fn fetch_active_prs_for_project(
                 label,
                 result: Ok(cached),
                 capped: false,
+                reviewers: Vec::new(),
             };
         }
     }
@@ -60,6 +61,7 @@ pub(crate) async fn fetch_active_prs_for_project(
                 label,
                 result: Ok(Vec::new()),
                 capped: false,
+                reviewers: Vec::new(),
             };
         }
         Err(e) => {
@@ -68,6 +70,7 @@ pub(crate) async fn fetch_active_prs_for_project(
                 label,
                 result: Err(e.into()),
                 capped: false,
+                reviewers: Vec::new(),
             }
         }
     };
@@ -147,6 +150,7 @@ pub(crate) async fn fetch_active_prs_for_project(
         label,
         result: Ok(cached),
         capped,
+        reviewers: shared_reviewers,
     }
 }
 

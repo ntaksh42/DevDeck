@@ -106,6 +106,28 @@ impl AppDatabase {
         Ok(())
     }
 
+    /// Replaces review rows only for the projects that synced successfully, so a
+    /// failing project keeps its previous rows without freezing every other
+    /// project's list.
+    pub fn replace_review_pull_requests_for_projects(
+        &self,
+        org_id: &str,
+        synced_project_ids: &[&str],
+        prs: &[CachedReviewPr],
+    ) -> Result<()> {
+        let conn = self.open()?;
+        let tx = conn.unchecked_transaction()?;
+        for &project_id in synced_project_ids {
+            tx.execute(
+                "DELETE FROM review_pull_requests WHERE org_id = ?1 AND project_id = ?2",
+                rusqlite::params![org_id, project_id],
+            )?;
+        }
+        upsert_review_pull_requests(&tx, prs)?;
+        tx.commit()?;
+        Ok(())
+    }
+
     /// Reflects a freshly cast vote in the cached review row so the grid does
     /// not show a stale vote until the next background sync. Returns the number
     /// of rows updated; `0` means the PR is not in the My Reviews cache (e.g.
@@ -275,7 +297,7 @@ fn list_review_pull_requests(conn: &Connection, org_id: &str) -> Result<Vec<Cach
         FROM review_pull_requests
         WHERE org_id = ?1
         ORDER BY creation_date DESC
-        LIMIT 500
+        LIMIT 5000
         "#,
     )?;
     let rows = stmt.query_map([org_id], map_cached_review_pr)?;

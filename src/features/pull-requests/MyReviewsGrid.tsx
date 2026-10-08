@@ -280,6 +280,7 @@ export function MyReviewsGrid({
                 filterInputRef={g.filterInputRef}
                 showDrafts={g.showDrafts}
                 onShowDraftsChange={(checked) => { g.setShowDrafts(checked); }}
+                hiddenDraftCount={g.allPrs.filter((pr) => pr.isDraft).length}
                 filterSuggestionPool={g.filterSuggestionPool}
                 open={filterBar.open}
                 onOpen={filterBar.onOpen}
