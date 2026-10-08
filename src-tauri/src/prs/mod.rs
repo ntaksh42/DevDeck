@@ -1,3 +1,4 @@
+mod group_reviews;
 mod live_results;
 mod notifications;
 mod search;

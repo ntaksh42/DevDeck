@@ -8,6 +8,8 @@ type ReviewFilterBarProps = {
   filterInputRef: RefObject<HTMLInputElement | null>;
   showDrafts: boolean;
   onShowDraftsChange: (checked: boolean) => void;
+  /** Drafts currently hidden by the Show Drafts toggle; surfaced so they are never silently missing. */
+  hiddenDraftCount?: number;
   filterSuggestionPool: string[];
   open: boolean;
   onOpen: () => void;
@@ -22,6 +24,7 @@ export function ReviewFilterBar({
   filterInputRef,
   showDrafts,
   onShowDraftsChange,
+  hiddenDraftCount = 0,
   filterSuggestionPool,
   open,
   onOpen,
@@ -30,6 +33,14 @@ export function ReviewFilterBar({
   const chips: DockFilterChip[] = [];
   if (textFilter) chips.push({ label: `“${textFilter}”`, onEdit: onOpen, onClear: () => onTextFilterChange('') });
   if (showDrafts) chips.push({ label: 'Drafts shown', onClear: () => onShowDraftsChange(false) });
+  if (!showDrafts && hiddenDraftCount > 0) {
+    const reveal = () => onShowDraftsChange(true);
+    chips.push({
+      label: `${hiddenDraftCount} draft${hiddenDraftCount === 1 ? '' : 's'} hidden`,
+      onEdit: reveal,
+      onClear: reveal,
+    });
+  }
 
   return (
     <DockFilterBar
