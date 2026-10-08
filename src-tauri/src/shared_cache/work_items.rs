@@ -47,6 +47,9 @@ fn read_work_items(
 }
 
 /// Replaces every work item row for `(organization, project)` with `rows`.
+/// The primary key is `(organization, id)`, so an item that moved here from
+/// another project may still have a row under its old project; it is taken
+/// over rather than failing the whole write.
 pub fn write_work_items(
     conn: &mut Connection,
     organization: &str,
@@ -58,29 +61,7 @@ pub fn write_work_items(
         "DELETE FROM work_items WHERE organization = ?1 AND project = ?2",
         params![organization, project],
     )?;
-    {
-        let mut statement = tx.prepare(
-            "INSERT INTO work_items
-             (organization, project, id, title, work_item_type, state, assigned_to,
-              assigned_to_unique_name, changed_date, web_url, tags)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-        )?;
-        for row in rows {
-            statement.execute(params![
-                organization,
-                project,
-                row.id,
-                row.title,
-                row.work_item_type,
-                row.state,
-                row.assigned_to,
-                row.assigned_to_unique_name,
-                row.changed_date,
-                row.web_url,
-                row.tags,
-            ])?;
-        }
-    }
+    upsert_rows(&tx, organization, project, rows)?;
     tx.commit()?;
     Ok(())
 }
@@ -99,40 +80,48 @@ pub fn upsert_work_items(
         return Ok(());
     }
     let tx = conn.transaction()?;
-    {
-        let mut statement = tx.prepare(
-            "INSERT INTO work_items
-             (organization, project, id, title, work_item_type, state, assigned_to,
-              assigned_to_unique_name, changed_date, web_url, tags)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
-             ON CONFLICT(organization, id) DO UPDATE SET
-                project = excluded.project,
-                title = excluded.title,
-                work_item_type = excluded.work_item_type,
-                state = excluded.state,
-                assigned_to = excluded.assigned_to,
-                assigned_to_unique_name = excluded.assigned_to_unique_name,
-                changed_date = excluded.changed_date,
-                web_url = excluded.web_url,
-                tags = excluded.tags",
-        )?;
-        for row in rows {
-            statement.execute(params![
-                organization,
-                project,
-                row.id,
-                row.title,
-                row.work_item_type,
-                row.state,
-                row.assigned_to,
-                row.assigned_to_unique_name,
-                row.changed_date,
-                row.web_url,
-                row.tags,
-            ])?;
-        }
-    }
+    upsert_rows(&tx, organization, project, rows)?;
     tx.commit()?;
+    Ok(())
+}
+
+fn upsert_rows(
+    conn: &Connection,
+    organization: &str,
+    project: &str,
+    rows: &[SharedWorkItem],
+) -> Result<()> {
+    let mut statement = conn.prepare(
+        "INSERT INTO work_items
+         (organization, project, id, title, work_item_type, state, assigned_to,
+          assigned_to_unique_name, changed_date, web_url, tags)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+         ON CONFLICT(organization, id) DO UPDATE SET
+            project = excluded.project,
+            title = excluded.title,
+            work_item_type = excluded.work_item_type,
+            state = excluded.state,
+            assigned_to = excluded.assigned_to,
+            assigned_to_unique_name = excluded.assigned_to_unique_name,
+            changed_date = excluded.changed_date,
+            web_url = excluded.web_url,
+            tags = excluded.tags",
+    )?;
+    for row in rows {
+        statement.execute(params![
+            organization,
+            project,
+            row.id,
+            row.title,
+            row.work_item_type,
+            row.state,
+            row.assigned_to,
+            row.assigned_to_unique_name,
+            row.changed_date,
+            row.web_url,
+            row.tags,
+        ])?;
+    }
     Ok(())
 }
 
@@ -223,5 +212,19 @@ mod tests {
             read_work_items(&conn, "org", "proj-b").unwrap(),
             vec![sample(2)]
         );
+    }
+
+    #[test]
+    fn full_write_takes_over_an_item_moved_from_another_project() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        schema(&conn);
+        write_work_items(&mut conn, "org", "old", &[sample(1)]).unwrap();
+        // The new project is written before the old one drops the item.
+        write_work_items(&mut conn, "org", "new", &[sample(1)]).unwrap();
+        assert_eq!(
+            read_work_items(&conn, "org", "new").unwrap(),
+            vec![sample(1)]
+        );
+        assert!(read_work_items(&conn, "org", "old").unwrap().is_empty());
     }
 }

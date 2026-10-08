@@ -10,7 +10,7 @@ use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use crate::db::Organization;
-use crate::shared_cache::{self, SharedPullRequest};
+use crate::shared_cache::{self, SharedPullRequest, SharedReviewer};
 
 use super::sync_fetch::fetch_active_prs_for_project;
 
@@ -52,9 +52,30 @@ fn seed_fresh_shared_cache(org: &Organization, project: &TeamProject) {
         source_ref_name: "refs/heads/feature".to_string(),
         target_ref_name: "refs/heads/main".to_string(),
         is_draft: false,
-        web_url: None,
+        // Written by the other app; never reused as-is.
+        web_url: Some("https://example.invalid/elsewhere".to_string()),
     };
-    shared_cache::write_pull_requests(&mut conn, &org.name, &project.name, &[stale], &[]).unwrap();
+    let completed = SharedPullRequest {
+        pull_request_id: 8,
+        title: "Completed elsewhere".to_string(),
+        status: "completed".to_string(),
+        ..stale.clone()
+    };
+    let reviewer = SharedReviewer {
+        repository_id: "repo-1".to_string(),
+        pull_request_id: 7,
+        reviewer_id: "team".to_string(),
+        vote: 0,
+        is_required: true,
+    };
+    shared_cache::write_pull_requests(
+        &mut conn,
+        &org.name,
+        &project.name,
+        &[stale, completed],
+        &[reviewer],
+    )
+    .unwrap();
     shared_cache::mark_synced(
         &conn,
         &org.name,
@@ -111,6 +132,14 @@ async fn automatic_sync_reuses_a_fresh_shared_cache() {
 
     let fetch = fetch_active_prs_for_project(client, org, project, false).await;
 
+    // Reviewers come along (group reviews need them); non-active rows are
+    // dropped and the web URL is rebuilt from this app's own fields.
+    assert_eq!(fetch.reviewers.len(), 1);
+    let prs = fetch.result.as_ref().unwrap();
+    assert_eq!(
+        prs[0].web_url.as_deref(),
+        Some("https://dev.azure.com/contoso/Platform/_git/Repo/pullrequest/7")
+    );
     assert_eq!(titles(fetch), vec!["Already completed in the browser"]);
 }
 

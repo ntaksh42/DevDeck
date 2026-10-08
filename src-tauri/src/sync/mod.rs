@@ -21,10 +21,11 @@ pub use notifications::{PrNotificationItem, PrNotificationKind};
 /// (which keeps rate-limit pressure bounded even as fan-out grows).
 pub type SyncBudget = Arc<Semaphore>;
 
-/// Total concurrent Azure DevOps requests allowed during a sync pass. The REST
-/// API tolerates this comfortably; 429s are still absorbed by the client's
-/// `Retry-After` handling.
-pub const GLOBAL_SYNC_CONCURRENCY: usize = 12;
+/// Total concurrent Azure DevOps requests allowed during a sync pass. Kept
+/// below the client's per-endpoint throttle (8 in flight) so on-demand screens
+/// still get request slots while a sync runs; 429s are still absorbed by the
+/// client's `Retry-After` handling.
+pub const GLOBAL_SYNC_CONCURRENCY: usize = 6;
 
 pub struct SyncRunner {
     db: AppDatabase,

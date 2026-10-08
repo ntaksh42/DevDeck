@@ -17,6 +17,13 @@ fn shared_azure_cli_provider() -> Arc<AzureCliProvider> {
         .clone()
 }
 
+/// Drops the shared Azure CLI token so the next request asks `az` again, e.g.
+/// after a connection was (re-)added under a possibly different `az` account.
+pub fn invalidate_azure_cli_token() {
+    use azdo_client::AdoCredentialProvider;
+    shared_azure_cli_provider().invalidate();
+}
+
 pub fn client_for_organization(
     organization: &Organization,
     secrets: &SecretStore,

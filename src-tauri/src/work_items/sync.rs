@@ -134,7 +134,16 @@ async fn fetch_project_work_items(
         (Err(e), _) | (_, Err(e)) => Err(e),
         (Ok(None), _) | (_, Ok(None)) => Ok(None),
         (Ok(Some(all)), Ok(Some(my))) => {
-            write_all_work_items_to_shared_cache(&org, &project, &all.items, was_full_sync);
+            // A capped full result is truncated (oldest-changed items dropped), so
+            // it is merged like a delta instead of replacing the project's rows.
+            let replace = was_full_sync && all.queried_count < SYNC_WORK_ITEM_QUERY_TOP;
+            let (org, project, items) = (org.clone(), project.clone(), all.items.clone());
+            let path = shared_cache::path();
+            // SQLite I/O with a busy timeout; keep it off the async worker.
+            let _ = tokio::task::spawn_blocking(move || {
+                write_all_work_items_to_shared_cache(path, &org, &project, &items, replace)
+            })
+            .await;
             Ok(Some((all, my)))
         }
     };
@@ -151,10 +160,11 @@ async fn fetch_project_work_items(
 /// full/delta interaction below is intricate enough that adding a read-side
 /// skip here was judged not worth the risk); this is a pure write-through.
 fn write_all_work_items_to_shared_cache(
+    path: Option<std::path::PathBuf>,
     org: &Organization,
     project: &TeamProject,
     items: &[CachedWorkItem],
-    was_full_sync: bool,
+    replace: bool,
 ) {
     let rows: Vec<shared_cache::SharedWorkItem> = items
         .iter()
@@ -171,8 +181,8 @@ fn write_all_work_items_to_shared_cache(
         })
         .collect();
     let outcome = (|| -> Result<()> {
-        let mut conn = shared_cache::open()?;
-        if was_full_sync {
+        let mut conn = shared_cache::open_at(path)?;
+        if replace {
             shared_cache::write_work_items(&mut conn, &org.name, &project.name, &rows)?;
         } else {
             shared_cache::upsert_work_items(&mut conn, &org.name, &project.name, &rows)?;

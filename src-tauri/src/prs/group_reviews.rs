@@ -20,7 +20,7 @@ use super::util::vote_label;
 /// lookups off the 5 minute sync path.
 const GROUP_TTL: Duration = Duration::from_secs(60 * 60);
 
-type Key = (String, String, String);
+type Key = (u64, String, String, String);
 type Entries = HashMap<Key, (Instant, Vec<String>)>;
 
 fn entries() -> &'static Mutex<Entries> {
@@ -28,27 +28,45 @@ fn entries() -> &'static Mutex<Entries> {
     ENTRIES.get_or_init(Default::default)
 }
 
-/// Ids of the groups `user_id` belongs to. A lookup failure is non-fatal: the
-/// sync continues with direct reviews only and the second value carries a
-/// warning so the gap is visible in Sync health instead of silent.
+/// Result of resolving the user's group memberships for one sync pass.
+pub(crate) struct GroupLookup {
+    pub(crate) ids: HashSet<String>,
+    /// Sync-health warning when the live lookup failed.
+    pub(crate) warning: Option<String>,
+    /// False when the lookup failed and no earlier result was available, so the
+    /// caller cannot tell group reviews apart and must not delete review rows.
+    pub(crate) known: bool,
+}
+
+/// Ids of the groups `user_id` belongs to. A failed lookup falls back to the
+/// last successful result (even past its TTL) so group reviews do not vanish
+/// for a pass and then re-notify as new requests when the lookup recovers.
 pub(crate) async fn member_group_ids(
     db: &AppDatabase,
     client: &AdoClient,
     org: &Organization,
     user_id: &str,
-) -> (HashSet<String>, Option<String>) {
-    let key = (db.cache_key(), org.id.clone(), user_id.to_string());
+) -> GroupLookup {
+    let key = (
+        crate::cache_epoch::current(),
+        db.cache_key(),
+        org.id.clone(),
+        user_id.to_string(),
+    );
     let cached = {
         let entries = entries()
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         entries
             .get(&key)
-            .filter(|(stored_at, _)| stored_at.elapsed() < GROUP_TTL)
-            .map(|(_, ids)| ids.clone())
+            .map(|(stored_at, ids)| (stored_at.elapsed() < GROUP_TTL, ids.clone()))
     };
-    if let Some(ids) = cached {
-        return (ids.into_iter().collect(), None);
+    if let Some((true, ids)) = cached {
+        return GroupLookup {
+            ids: ids.into_iter().collect(),
+            warning: None,
+            known: true,
+        };
     }
     match client.list_member_group_ids(user_id).await {
         Ok(ids) => {
@@ -56,16 +74,30 @@ pub(crate) async fn member_group_ids(
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
                 .insert(key, (Instant::now(), ids.clone()));
-            (ids.into_iter().collect(), None)
+            GroupLookup {
+                ids: ids.into_iter().collect(),
+                warning: None,
+                known: true,
+            }
         }
         Err(e) => {
             tracing::warn!(org = %org.name, error = %e, "sync: failed to list group memberships");
-            (
-                HashSet::new(),
-                Some(format!(
-                    "Reviews requested from your groups/teams are not included: {e}."
-                )),
-            )
+            match cached {
+                Some((_, ids)) => GroupLookup {
+                    ids: ids.into_iter().collect(),
+                    warning: Some(format!(
+                        "Group/team memberships could not be refreshed; using the previous result: {e}."
+                    )),
+                    known: true,
+                },
+                None => GroupLookup {
+                    ids: HashSet::new(),
+                    warning: Some(format!(
+                        "Reviews requested from your groups/teams could not be resolved; existing My Reviews rows were kept: {e}."
+                    )),
+                    known: false,
+                },
+            }
         }
     }
 }
@@ -129,6 +161,46 @@ pub(crate) fn group_review_prs(
                 ci_check_count: 0,
             })
         })
+        .collect()
+}
+
+/// Previous review rows to keep for projects whose review list was refreshed
+/// but whose group reviews could not be fully recomputed. `incomplete` maps a
+/// project id to the creation date of the oldest PR its (capped) active list
+/// covered, or `None` when nothing is known (fetch failed, groups unknown).
+///
+/// A previous row is kept only when it is not in `current` and could still be
+/// an active group review: with a known window, rows newer than its oldest PR
+/// that the window did not return are no longer active and are dropped.
+pub(crate) fn carry_forward_reviews(
+    previous: Vec<CachedReviewPr>,
+    current: &[CachedReviewPr],
+    synced_project_ids: &[String],
+    incomplete: &HashMap<String, Option<String>>,
+) -> Vec<CachedReviewPr> {
+    let current_keys: HashSet<(&str, i64)> = current
+        .iter()
+        .map(|pr| (pr.repository_id.as_str(), pr.pull_request_id))
+        .collect();
+    let keep: Vec<bool> = previous
+        .iter()
+        .map(|pr| {
+            if !synced_project_ids.contains(&pr.project_id)
+                || current_keys.contains(&(pr.repository_id.as_str(), pr.pull_request_id))
+            {
+                return false;
+            }
+            match incomplete.get(&pr.project_id) {
+                Some(None) => true,
+                Some(Some(oldest)) => pr.creation_date.as_str() < oldest.as_str(),
+                None => false,
+            }
+        })
+        .collect();
+    previous
+        .into_iter()
+        .zip(keep)
+        .filter_map(|(pr, keep)| keep.then_some(pr))
         .collect()
 }
 
@@ -212,5 +284,51 @@ mod tests {
         let active = vec![active_pr("r", 1, "a")];
         let reviewers = vec![reviewer("r", 1, "team", true)];
         assert!(group_review_prs(&active, &reviewers, &groups(&[]), &[], "me").is_empty());
+    }
+
+    fn review_row(project: &str, id: i64, created: &str) -> CachedReviewPr {
+        CachedReviewPr {
+            project_id: project.into(),
+            creation_date: created.into(),
+            ..group_review_prs(
+                &[active_pr("r", id, "a")],
+                &[reviewer("r", id, "team", false)],
+                &groups(&["team"]),
+                &[],
+                "me",
+            )
+            .remove(0)
+        }
+    }
+
+    #[test]
+    fn carry_forward_keeps_rows_only_where_group_reviews_are_unknown() {
+        let previous = vec![
+            review_row("unknown", 1, "2026-01-01T00:00:00Z"),
+            review_row("capped", 2, "2025-01-01T00:00:00Z"),
+            review_row("capped", 3, "2026-06-01T00:00:00Z"),
+            review_row("complete", 4, "2026-01-01T00:00:00Z"),
+            review_row("unknown", 5, "2026-01-01T00:00:00Z"),
+        ];
+        let current = vec![review_row("unknown", 5, "2026-01-01T00:00:00Z")];
+        let synced: Vec<String> = ["unknown", "capped", "complete"]
+            .iter()
+            .map(|id| id.to_string())
+            .collect();
+        let incomplete = HashMap::from([
+            ("unknown".to_string(), None),
+            (
+                "capped".to_string(),
+                Some("2026-01-01T00:00:00Z".to_string()),
+            ),
+        ]);
+        let kept: Vec<i64> = carry_forward_reviews(previous, &current, &synced, &incomplete)
+            .iter()
+            .map(|pr| pr.pull_request_id)
+            .collect();
+        // 1: unknown project; 2: older than the capped window. 3 is inside the
+        // window but was not returned (so no longer active), 4 is in a complete
+        // project, and 5 is already in the current list.
+        assert_eq!(kept, vec![1, 2]);
     }
 }

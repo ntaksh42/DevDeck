@@ -243,7 +243,7 @@ async fn delta_commit_sync_merges_without_dropping_existing_commits() {
     let projects = client.list_projects().await.unwrap();
     let budget: SyncBudget = Arc::new(Semaphore::new(8));
 
-    sync_commits_for_org(&db, &client, &org, &projects, &budget)
+    sync_commits_for_org(&db, &client, &org, &projects, &budget, false)
         .await
         .unwrap();
 

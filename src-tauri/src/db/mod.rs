@@ -22,6 +22,8 @@ mod work_items_query;
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
+mod tests_cache_retention;
+#[cfg(test)]
 mod tests_commits;
 #[cfg(test)]
 mod tests_migrations;

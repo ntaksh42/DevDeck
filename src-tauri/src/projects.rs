@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, Instant};
 
 use azdo_client::{AdoClient, TeamProject};
@@ -16,17 +16,28 @@ const PROJECT_CACHE_TTL: Duration = Duration::from_secs(300);
 /// trip per command is wasted latency. Sync paths keep calling the API
 /// directly because they want a fresh list.
 ///
-/// The lock is held across the fetch on purpose: concurrent commands for the
-/// same organization then share one request instead of racing.
+/// Each organization has its own lock, held across the fetch on purpose:
+/// concurrent commands for the same organization then share one request
+/// instead of racing, while a slow organization does not block the others.
 #[derive(Debug, Clone, Default)]
 pub struct ProjectDirectory {
-    cache: Arc<Mutex<HashMap<String, CachedProjects>>>,
+    cache: Arc<StdMutex<HashMap<String, OrgSlot>>>,
 }
+
+type OrgSlot = Arc<Mutex<Option<CachedProjects>>>;
 
 #[derive(Debug)]
 struct CachedProjects {
     fetched_at: Instant,
+    /// `cache_epoch` at fetch time; a connection change invalidates the entry.
+    epoch: u64,
     projects: Vec<TeamProject>,
+}
+
+impl CachedProjects {
+    fn fresh(&self) -> bool {
+        self.epoch == crate::cache_epoch::current() && self.fetched_at.elapsed() < PROJECT_CACHE_TTL
+    }
 }
 
 impl ProjectDirectory {
@@ -68,40 +79,48 @@ impl ProjectDirectory {
         )))
     }
 
+    fn slot(&self, org_id: &str) -> OrgSlot {
+        self.cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .entry(org_id.to_string())
+            .or_default()
+            .clone()
+    }
+
     async fn list_with_origin(
         &self,
         client: &AdoClient,
         org_id: &str,
     ) -> Result<(Vec<TeamProject>, bool)> {
-        let mut cache = self.cache.lock().await;
-        if let Some(entry) = cache.get(org_id) {
-            if entry.fetched_at.elapsed() < PROJECT_CACHE_TTL {
-                return Ok((entry.projects.clone(), true));
-            }
+        let slot = self.slot(org_id);
+        let mut entry = slot.lock().await;
+        if let Some(cached) = entry.as_ref().filter(|cached| cached.fresh()) {
+            return Ok((cached.projects.clone(), true));
         }
-        let projects = client.list_projects().await?;
-        cache.insert(
-            org_id.to_string(),
-            CachedProjects {
-                fetched_at: Instant::now(),
-                projects: projects.clone(),
-            },
-        );
+        let projects = fetch_into(&mut entry, client).await?;
         Ok((projects, false))
     }
 
     async fn refresh(&self, client: &AdoClient, org_id: &str) -> Result<Vec<TeamProject>> {
-        let mut cache = self.cache.lock().await;
-        let projects = client.list_projects().await?;
-        cache.insert(
-            org_id.to_string(),
-            CachedProjects {
-                fetched_at: Instant::now(),
-                projects: projects.clone(),
-            },
-        );
-        Ok(projects)
+        let slot = self.slot(org_id);
+        let mut entry = slot.lock().await;
+        fetch_into(&mut entry, client).await
     }
+}
+
+async fn fetch_into(
+    entry: &mut Option<CachedProjects>,
+    client: &AdoClient,
+) -> Result<Vec<TeamProject>> {
+    let epoch = crate::cache_epoch::current();
+    let projects = client.list_projects().await?;
+    *entry = Some(CachedProjects {
+        fetched_at: Instant::now(),
+        epoch,
+        projects: projects.clone(),
+    });
+    Ok(projects)
 }
 
 #[cfg(test)]

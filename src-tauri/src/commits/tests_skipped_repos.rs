@@ -103,7 +103,7 @@ async fn fixture(bad_status: u16) -> Fixture {
 async fn run_sync(fx: &Fixture) {
     let projects = fx.client.list_projects().await.unwrap();
     let budget: SyncBudget = Arc::new(Semaphore::new(8));
-    sync_commits_for_org(&fx.db, &fx.client, &fx.org, &projects, &budget)
+    sync_commits_for_org(&fx.db, &fx.client, &fx.org, &projects, &budget, false)
         .await
         .unwrap();
 }

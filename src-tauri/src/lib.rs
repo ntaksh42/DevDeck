@@ -3,6 +3,7 @@ use std::str::FromStr;
 mod agent_notes;
 mod app_state;
 mod auth;
+mod cache_epoch;
 mod cancellation;
 mod code_browse;
 mod code_search;

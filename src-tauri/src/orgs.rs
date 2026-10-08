@@ -8,7 +8,7 @@ use url::Url;
 use crate::db::{AppDatabase, Organization, OrganizationDraft};
 use crate::error::{AppError, Result};
 use crate::secrets::SecretStore;
-use crate::shared_cache;
+use crate::{cache_epoch, shared_cache};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -67,7 +67,7 @@ impl OrganizationService {
 
         let authenticated_user_unique_name =
             authenticated_user_unique_name(&connection_data.authenticated_user);
-        self.db.upsert_organization(OrganizationDraft {
+        let organization = self.db.upsert_organization(OrganizationDraft {
             id: organization.clone(),
             name: organization.clone(),
             display_name: Some(organization.clone()),
@@ -80,7 +80,9 @@ impl OrganizationService {
                 .provider_display_name,
             authenticated_user_unique_name,
             provider_kind: "azdo".to_string(),
-        })
+        })?;
+        cache_epoch::bump();
+        Ok(organization)
     }
 
     pub fn delete(&self, id: &str) -> Result<()> {
@@ -94,6 +96,7 @@ impl OrganizationService {
         // becoming an un-authenticatable zombie. delete_credential treats a
         // missing entry as success, so a retried delete remains idempotent.
         self.db.delete_organization(id)?;
+        cache_epoch::bump();
         // Best-effort: the shared cache is also readable by other apps, so drop
         // this organization's mirrored rows too, but never fail the delete.
         if let Err(e) = shared_cache::open()
@@ -137,7 +140,7 @@ impl OrganizationService {
 
         let authenticated_user_unique_name =
             authenticated_user_unique_name(&connection_data.authenticated_user);
-        self.db.upsert_organization(OrganizationDraft {
+        let organization = self.db.upsert_organization(OrganizationDraft {
             id: organization.clone(),
             name: organization.clone(),
             display_name: Some(organization.clone()),
@@ -150,7 +153,12 @@ impl OrganizationService {
                 .provider_display_name,
             authenticated_user_unique_name,
             provider_kind: "azdo".to_string(),
-        })
+        })?;
+        // The shared provider may still hold a token for the previous `az`
+        // account; validation above used a fresh one.
+        crate::auth::invalidate_azure_cli_token();
+        cache_epoch::bump();
+        Ok(organization)
     }
 
     /// Validates a GitHub personal access token and stores it as a new
@@ -178,7 +186,7 @@ impl OrganizationService {
         self.secrets.delete_credential(&credential_key)?;
         self.secrets.set_pat(&credential_key, pat)?;
 
-        self.db.upsert_organization(OrganizationDraft {
+        let organization = self.db.upsert_organization(OrganizationDraft {
             id: format!("github:{login_key}"),
             name: format!("github:{login_key}"),
             display_name: Some(login.clone()),
@@ -189,7 +197,9 @@ impl OrganizationService {
             authenticated_user_display_name: user.name.or(Some(login)),
             authenticated_user_unique_name: user.email,
             provider_kind: "github".to_string(),
-        })
+        })?;
+        cache_epoch::bump();
+        Ok(organization)
     }
 }
 

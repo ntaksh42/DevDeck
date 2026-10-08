@@ -97,7 +97,11 @@ pub(crate) fn parse_rate_limit_delay(headers: &HeaderMap) -> Option<Duration> {
         .trim()
         .parse()
         .ok()?;
-    (seconds.is_finite() && seconds > 0.0).then(|| Duration::from_secs_f64(seconds))
+    if seconds <= 0.0 {
+        return None;
+    }
+    // `try_` rejects non-finite and overflowing values instead of panicking.
+    Duration::try_from_secs_f64(seconds).ok()
 }
 
 #[cfg(test)]
@@ -121,6 +125,10 @@ mod tests {
         headers.insert("X-RateLimit-Delay", "0".parse().unwrap());
         assert_eq!(parse_rate_limit_delay(&headers), None);
         headers.insert("X-RateLimit-Delay", "soon".parse().unwrap());
+        assert_eq!(parse_rate_limit_delay(&headers), None);
+        headers.insert("X-RateLimit-Delay", "1e300".parse().unwrap());
+        assert_eq!(parse_rate_limit_delay(&headers), None);
+        headers.insert("X-RateLimit-Delay", "NaN".parse().unwrap());
         assert_eq!(parse_rate_limit_delay(&headers), None);
     }
 
