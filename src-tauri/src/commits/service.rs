@@ -437,27 +437,28 @@ impl CommitService {
         let fresh_after =
             (Utc::now() - chrono::Duration::minutes(COMMIT_PR_CACHE_TTL_MINUTES)).to_rfc3339();
 
-        let mut result = std::collections::HashMap::new();
-        let mut missing: Vec<&str> = Vec::new();
-        for commit_id in &input.commit_ids {
-            match self.db.get_cached_commit_prs(
-                &organization.id,
-                &input.repository_id,
-                commit_id,
-                &fresh_after,
-            )? {
-                Some(cached) => {
-                    result.insert(
-                        commit_id.clone(),
-                        cached
-                            .into_iter()
-                            .map(cached_commit_pr_to_summary)
-                            .collect(),
-                    );
-                }
-                None => missing.push(commit_id),
-            }
-        }
+        let hits = self.db.get_cached_commit_prs_many(
+            &organization.id,
+            &input.repository_id,
+            &input.commit_ids,
+            &fresh_after,
+        )?;
+        let missing: Vec<&str> = input
+            .commit_ids
+            .iter()
+            .filter(|commit_id| !hits.contains_key(*commit_id))
+            .map(String::as_str)
+            .collect();
+        let mut result: std::collections::HashMap<String, Vec<CommitPullRequest>> = hits
+            .into_iter()
+            .map(|(commit_id, cached)| {
+                let prs = cached
+                    .into_iter()
+                    .map(cached_commit_pr_to_summary)
+                    .collect();
+                (commit_id, prs)
+            })
+            .collect();
         if missing.is_empty() {
             return Ok(result);
         }
@@ -466,19 +467,21 @@ impl CommitService {
         let mut by_commit = client
             .list_pull_requests_for_commits(&input.repository_id, &missing)
             .await?;
-        for commit_id in missing {
-            let cached = to_cached_commit_prs(
-                &organization,
-                by_commit.remove(commit_id).unwrap_or_default(),
-            );
-            self.db.replace_commit_prs(
-                &organization.id,
-                &input.repository_id,
-                commit_id,
-                &cached,
-            )?;
+        let fetched: Vec<(String, Vec<CachedCommitPr>)> = missing
+            .into_iter()
+            .map(|commit_id| {
+                let prs = by_commit.remove(commit_id).unwrap_or_default();
+                (
+                    commit_id.to_string(),
+                    to_cached_commit_prs(&organization, prs),
+                )
+            })
+            .collect();
+        self.db
+            .replace_commit_prs_many(&organization.id, &input.repository_id, &fetched)?;
+        for (commit_id, cached) in fetched {
             result.insert(
-                commit_id.to_string(),
+                commit_id,
                 cached
                     .into_iter()
                     .map(cached_commit_pr_to_summary)

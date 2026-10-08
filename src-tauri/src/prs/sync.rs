@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use azdo_client::{summarize_pr_ci, AdoClient, TeamProject};
 use chrono::Utc;
 use tokio::task::JoinSet;
@@ -8,7 +10,7 @@ use crate::error::{AppError, Result};
 use crate::shared_cache::SharedReviewer;
 use crate::sync::SyncBudget;
 
-use super::group_reviews::{group_review_prs, member_group_ids};
+use super::group_reviews::{carry_forward_reviews, group_review_prs, member_group_ids};
 
 // ── Cache sync ────────────────────────────────────────────────────────────────
 
@@ -23,8 +25,7 @@ pub(crate) struct PrProjectFetch {
     /// The live query returned `PROJECT_PR_SYNC_TOP` PRs, so the snapshot may be
     /// truncated and must not be used to delete the project's cached rows.
     pub(crate) capped: bool,
-    /// Reviewer entries of the fetched PRs. Empty when the list came from the
-    /// shared cache, which does not expose reviewers to this app.
+    /// Reviewer entries of the fetched PRs (live or from the shared cache).
     pub(crate) reviewers: Vec<SharedReviewer>,
 }
 
@@ -78,6 +79,10 @@ struct ActivePrsFetch {
     skipped: Vec<String>,
     last_skip_error: Option<AppError>,
     reviewers: Vec<SharedReviewer>,
+    /// Projects whose active list is incomplete, so group reviews cannot be fully
+    /// recomputed: capped ones map to the oldest fetched creation date (the list
+    /// is newest first), failed ones to `None`.
+    incomplete: HashMap<String, Option<String>>,
 }
 
 struct ReviewPrsFetch {
@@ -98,21 +103,14 @@ pub(crate) async fn do_sync_prs(
     // same projects but issue independent queries, all bounded by the shared
     // budget. The review pass is only meaningful when the signed-in user is known.
     let review_user = org.authenticated_user_id.clone();
-    // Reviews requested from a group the user belongs to are found in the active
-    // PR list, which needs live reviewer data, so the shared-cache shortcut is
-    // skipped whenever the user has groups.
-    let (group_ids, group_warning) = match review_user.as_deref() {
-        Some(user_id) => member_group_ids(db, client, org, user_id).await,
-        None => (Default::default(), None),
+    // Reviews requested from a group the user belongs to are found by matching
+    // the active PR list's reviewers (live or shared-cache) against these ids.
+    let groups = match review_user.as_deref() {
+        Some(user_id) => Some(member_group_ids(db, client, org, user_id).await),
+        None => None,
     };
     let (active, review) = tokio::join!(
-        fetch_all_active_prs(
-            client,
-            org,
-            projects,
-            budget,
-            force_refresh || !group_ids.is_empty()
-        ),
+        fetch_all_active_prs(client, org, projects, budget, force_refresh),
         async {
             match review_user.as_deref() {
                 Some(user_id) => {
@@ -140,7 +138,7 @@ pub(crate) async fn do_sync_prs(
     db.replace_pull_requests_for_projects(&org.id, &synced_ids, &active.cached_prs)?;
 
     let mut warning_parts: Vec<String> = Vec::new();
-    warning_parts.extend(group_warning);
+    warning_parts.extend(groups.as_ref().and_then(|groups| groups.warning.clone()));
     if !active.skipped.is_empty() {
         warning_parts.push(format!(
             "{} project(s) skipped due to PR sync errors: {}.",
@@ -159,16 +157,13 @@ pub(crate) async fn do_sync_prs(
     match review {
         Some(review) => {
             let mut review = review?;
-            let mut synced = std::mem::take(&mut review.synced_project_ids);
-            if !group_ids.is_empty() {
-                // Group reviews come from the active list, so a project is only
-                // replaced when that list was complete for it too; otherwise its
-                // previous rows (including group reviews) are kept.
-                synced.retain(|id| active.synced_project_ids.contains(id));
+            let synced = std::mem::take(&mut review.synced_project_ids);
+            let groups = groups.as_ref().expect("review pass implies a known user");
+            if !groups.ids.is_empty() {
                 let extra = group_review_prs(
                     &active.cached_prs,
                     &active.reviewers,
-                    &group_ids,
+                    &groups.ids,
                     &review.cached_reviews,
                     review_user.as_deref().unwrap_or_default(),
                 );
@@ -177,6 +172,22 @@ pub(crate) async fn do_sync_prs(
                         .into_iter()
                         .filter(|pr| synced.contains(&pr.project_id)),
                 );
+            }
+            // Where group reviews could not be fully recomputed, keep previous
+            // rows that may still be group reviews, so they neither vanish for a
+            // pass nor re-notify as new requests when they come back.
+            let incomplete: HashMap<String, Option<String>> = if !groups.known {
+                synced.iter().map(|id| (id.clone(), None)).collect()
+            } else if groups.ids.is_empty() {
+                HashMap::new()
+            } else {
+                active.incomplete.clone()
+            };
+            if !incomplete.is_empty() {
+                let previous = db.list_review_pull_requests(&org.id)?;
+                let carried =
+                    carry_forward_reviews(previous, &review.cached_reviews, &synced, &incomplete);
+                review.cached_reviews.extend(carried);
             }
             if !review.failed_projects.is_empty() {
                 // Only the failed projects keep their previous rows; every other
@@ -243,6 +254,8 @@ async fn fetch_all_active_prs(
         match fetch.result {
             Ok(prs) => {
                 if fetch.capped {
+                    let oldest = prs.iter().map(|pr| pr.creation_date.clone()).min();
+                    out.incomplete.insert(fetch.project_id.clone(), oldest);
                     out.capped.push(fetch.label);
                 } else {
                     out.synced_project_ids.push(fetch.project_id);
@@ -257,6 +270,7 @@ async fn fetch_all_active_prs(
                     error = %e,
                     "PR sync failed for project, preserving cached data"
                 );
+                out.incomplete.insert(fetch.project_id, None);
                 out.skipped.push(fetch.label);
                 out.last_skip_error = Some(e);
             }

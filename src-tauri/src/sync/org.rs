@@ -82,7 +82,16 @@ pub(super) async fn sync_org(
         sync_org_work_items(
             &db, &client, &handle, &org, scope, &settings, &snooze, &budget, &now, &projects,
         ),
-        sync_org_commits(&db, &client, &handle, &org, scope, &budget, &projects),
+        sync_org_commits(
+            &db,
+            &client,
+            &handle,
+            &org,
+            scope,
+            force_refresh,
+            &budget,
+            &projects
+        ),
     );
     outcome.merge(pr_outcome);
     outcome.merge(wi_outcome);
@@ -279,12 +288,14 @@ async fn sync_org_work_items(
     outcome
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn sync_org_commits(
     db: &AppDatabase,
     client: &azdo_client::AdoClient,
     handle: &AppHandle,
     org: &Organization,
     scope: SyncScope,
+    force_refresh: bool,
     budget: &SyncBudget,
     projects: &[TeamProject],
 ) -> SyncPassOutcome {
@@ -292,7 +303,7 @@ async fn sync_org_commits(
     if !matches!(scope, SyncScope::All | SyncScope::Commits) {
         return outcome;
     }
-    if let Err(e) = sync_commits_for_org(db, client, org, projects, budget).await {
+    if let Err(e) = sync_commits_for_org(db, client, org, projects, budget, force_refresh).await {
         tracing::error!(org = %org.name, error = ?e, "sync: commit sync failed");
         outcome.record_failure();
     } else {

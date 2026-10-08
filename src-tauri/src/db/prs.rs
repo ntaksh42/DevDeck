@@ -97,10 +97,7 @@ impl AppDatabase {
     pub fn replace_review_pull_requests(&self, org_id: &str, prs: &[CachedReviewPr]) -> Result<()> {
         let conn = self.open()?;
         let tx = conn.unchecked_transaction()?;
-        tx.execute(
-            "DELETE FROM review_pull_requests WHERE org_id = ?1",
-            [org_id],
-        )?;
+        delete_review_rows_absent_from(&tx, org_id, None, prs)?;
         upsert_review_pull_requests(&tx, prs)?;
         tx.commit()?;
         Ok(())
@@ -118,10 +115,7 @@ impl AppDatabase {
         let conn = self.open()?;
         let tx = conn.unchecked_transaction()?;
         for &project_id in synced_project_ids {
-            tx.execute(
-                "DELETE FROM review_pull_requests WHERE org_id = ?1 AND project_id = ?2",
-                rusqlite::params![org_id, project_id],
-            )?;
+            delete_review_rows_absent_from(&tx, org_id, Some(project_id), prs)?;
         }
         upsert_review_pull_requests(&tx, prs)?;
         tx.commit()?;
@@ -228,6 +222,44 @@ fn search_pull_requests(
     Ok(result)
 }
 
+/// Deletes the review rows (of one project, or the whole org) that are not in
+/// `prs`. Rows that stay are updated in place by the upsert, so values it keeps
+/// on purpose (the last known CI verdict) survive the refresh.
+fn delete_review_rows_absent_from(
+    conn: &Connection,
+    org_id: &str,
+    project_id: Option<&str>,
+    prs: &[CachedReviewPr],
+) -> Result<()> {
+    conn.execute_batch(
+        "CREATE TEMP TABLE IF NOT EXISTS sync_review_keys(
+            repository_id TEXT NOT NULL,
+            pull_request_id INTEGER NOT NULL,
+            PRIMARY KEY (repository_id, pull_request_id)
+        );
+        DELETE FROM sync_review_keys;",
+    )?;
+    {
+        let mut insert = conn.prepare_cached(
+            "INSERT OR IGNORE INTO sync_review_keys(repository_id, pull_request_id) VALUES (?1, ?2)",
+        )?;
+        for pr in prs {
+            insert.execute(params![pr.repository_id, pr.pull_request_id])?;
+        }
+    }
+    conn.execute(
+        "DELETE FROM review_pull_requests
+         WHERE org_id = ?1 AND (?2 IS NULL OR project_id = ?2)
+           AND NOT EXISTS (
+               SELECT 1 FROM sync_review_keys k
+               WHERE k.repository_id = review_pull_requests.repository_id
+                 AND k.pull_request_id = review_pull_requests.pull_request_id
+           )",
+        params![org_id, project_id],
+    )?;
+    Ok(())
+}
+
 fn upsert_review_pull_requests(conn: &Connection, prs: &[CachedReviewPr]) -> Result<()> {
     let mut stmt = conn.prepare_cached(
         r#"
@@ -251,10 +283,12 @@ fn upsert_review_pull_requests(conn: &Connection, prs: &[CachedReviewPr]) -> Res
             my_is_required = excluded.my_is_required,
             is_draft = excluded.is_draft,
             merge_status = excluded.merge_status,
-            ci_status = excluded.ci_status,
-            ci_context = excluded.ci_context,
-            ci_check_count = excluded.ci_check_count,
-            ci_status_updated_at = excluded.ci_status_updated_at
+            -- A NULL verdict means CI was not fetched this pass (beyond the scan
+            -- cap or the fetch failed); keep the last known one.
+            ci_context = CASE WHEN excluded.ci_status IS NULL THEN ci_context ELSE excluded.ci_context END,
+            ci_check_count = CASE WHEN excluded.ci_status IS NULL THEN ci_check_count ELSE excluded.ci_check_count END,
+            ci_status_updated_at = CASE WHEN excluded.ci_status IS NULL THEN ci_status_updated_at ELSE excluded.ci_status_updated_at END,
+            ci_status = COALESCE(excluded.ci_status, ci_status)
         "#,
     )?;
     let now = chrono::Utc::now().to_rfc3339();

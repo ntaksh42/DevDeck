@@ -129,7 +129,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   タイトル/状態などのスナップショットを保持) であり、サーバ側の通知購読とは連動しない。
   My Work Items パネルに「Assigned to me / Followed」の切替トグルがあり、フォロー中の項目を
   一覧できる (`list_followed_work_items`)。
-- **スヌーズ**: PR / 作業項目の通知を一定期間繰り延べ。プリセットは当日夕方、翌朝、3日後、翌週月曜、1か月後。カスタム日時は現在より後のみ受け付け (過去は UI で確定不可、`snooze_item` も `InvalidInput` で拒否)。My Reviews の範囲選択または作業項目グリッド (My Work Items / Work Item Views のグリッド表示 / Work Item Search) のチェック選択に対して同じ期限を一括適用できる (`Z` またはバルクバーの Snooze)。スヌーズ中の作業項目はこれら3画面の結果から隠れ、ステータスバーの Snoozed トグルで一覧・解除できる (My Items 外の項目のタイトルは表示中の結果から補完)。新たなアクティビティまたは期限で復帰 (アクティビティ判定は My Items の同期キャッシュに基づくため、My Items 外の項目は期限でのみ復帰)。ボード表示とピン留めビューの件数バッジはスヌーズを考慮しない。
+- **スヌーズ**: PR / 作業項目の通知を一定期間繰り延べ。プリセットは当日夕方、翌朝、3日後、翌週月曜、1か月後。カスタム日時は現在より後のみ受け付け (過去は UI で確定不可、`snooze_item` も `InvalidInput` で拒否)。My Reviews の範囲選択または作業項目グリッド (My Work Items / Work Item Views のグリッド表示 / Work Item Search) のチェック選択に対して同じ期限を一括適用できる (`Z` またはバルクバーの Snooze)。スヌーズ中の作業項目はこれら3画面の結果から隠れ、ステータスバーの Snoozed トグルで一覧・解除できる (My Items 外の項目のタイトルは表示中の結果から補完)。新たなアクティビティまたは期限で復帰 (アクティビティ判定は My Items の同期キャッシュに基づくため、My Items 外の項目は期限でのみ復帰)。同期でスヌーズが解除されると、`sync:updated` を受けてスヌーズ一覧のクエリ (`snoozedItems`) も無効化し、表示中のグリッドに即座に戻す。ボード表示とピン留めビューの件数バッジはスヌーズを考慮しない。
   ただし PR のコメント活動による早期復帰は `pr_comment_seen` カーソルに依存し、同カーソルは
   コメント返信通知の処理時（`notify_pr_comment_replies` が有効。`desktop_notifications_enabled`
   には依存しない）のみ進むため、同トグルがオフの間はコメント活動では早期復帰せず期限で復帰する。
@@ -265,7 +265,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
 - **認証プロバイダ**: `auth_provider` は `pat` / `azure_cli` (アンダースコア形) / `github_pat`。
   - **組織名の入力 (Azure DevOps)**: 組織名のほか、貼り付けた組織 URL (`https://dev.azure.com/{org}/...` / `https://{org}.visualstudio.com/...`、`dev.azure.com/{org}` のようなスキーム省略形、末尾 `/`) から組織名を取り出して小文字に正規化する。それ以外のホストの URL は例付きのエラーにする。`base_url` はどの入力でも `https://dev.azure.com/{org}`。
   - **PAT (Azure DevOps)**: `Authorization: Basic base64(":{pat}")`。必要スコープは Code(Read)/Work Items(Read)/Project and Team(Read)。
-  - **Azure CLI**: `az account get-access-token` を実行し Bearer トークンを取得。メモリにキャッシュし、CLI 報告の `expires_on`/`expiresOn` から算出した有効期限の 60 秒前まで再利用する (取得できない古い CLI では 5 分の固定 TTL にフォールバック)。`az` の 1 回の実行は 30 秒でタイムアウトし (固まった `az` が全リクエストを止めないよう取得ロックを解放)、REST が 401 を返したらキャッシュを破棄して 1 回だけ再送する。
+  - **Azure CLI**: `az account get-access-token` を実行し Bearer トークンを取得。メモリにキャッシュし、CLI 報告の `expires_on`/`expiresOn` から算出した有効期限の 60 秒前まで再利用する (取得できない古い CLI では 5 分の固定 TTL にフォールバック。期限間近のトークンでもリクエストごとに `az` を起動しないよう、残り寿命を超えない範囲で最低 30 秒はキャッシュする)。トークンはプロセス共通で、Azure CLI 接続を追加したときは別アカウントの古いトークンを使わないよう破棄する。`az` の 1 回の実行は 30 秒でタイムアウトし (固まった `az` が全リクエストを止めないよう取得ロックを解放)、REST が 401 を返したらキャッシュを破棄して 1 回だけ再送する。
   - **GitHub PAT**: `Authorization: Bearer {pat}` (classic / fine-grained)。接続追加時に `GET /user` で
     検証し、認証ユーザーの login から接続 id (`github:{login}`) を導出する。
 - **シークレット保管**: Windows 資格情報マネージャ (`keyring`) のみ。
@@ -298,8 +298,15 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   Work Item を同期成功のたびに中立な第三の SQLite ファイル
   (`%APPDATA%\AzDoSharedCache\cache.db`) へ書き込む (`prs/sync_fetch.rs` /
   `work_items/sync.rs`)。Active PR の同期前にはこの共有キャッシュが直近 (waypoint 側で)
-  更新済みでないか確認し、更新済みならその内容を読んで自分の API 呼び出しをスキップする
-  (`shared_cache::is_fresh`)。ただしユーザーの明示的な更新 (Ctrl+R / Sync now / 設定の同期ボタン。`trigger_sync` の `force: true`) ではこのスキップを行わず必ず API を取りに行き、結果を共有キャッシュへ書き戻す (起動時・ウィンドウ復帰時の Hot 同期と定期同期は従来どおり共有キャッシュを優先)。共有スキーマは DevDeck 自身のテーブル形と無関係な独立の契約
+  更新済みでないか確認し、更新済みならその内容 (PR とレビュアー) を読んで自分の API 呼び出しをスキップする
+  (`shared_cache::is_fresh`。`synced_at` が未来の値なら新鮮とみなさない)。読み取った行は `status = active`
+  のものだけを使い、`web_url` は共有キャッシュの値を使わず自分の `base_url` とプロジェクト/リポジトリ名から
+  組み立て直す。共有キャッシュの PR スナップショットは「そのプロジェクトの全 active PR とその全レビュアー」で
+  なければならない契約とし、DevDeck は取得が上限 (500 件) に達したプロジェクトを共有キャッシュへ書かない。
+  Work Item も上限 (2000 件) に達したプロジェクトはフル同期でも置換せず upsert する。`work_items` の主キーは
+  `(organization, id)` なので、別プロジェクトから移動した項目は旧プロジェクトの行を引き継ぐ (UNIQUE 違反で
+  書き込み全体が失敗しない)。`cache_meta.schema_version` が `1` 以外のファイルは読み書きしない (waypoint 側の
+  スキーマ変更を誤読・上書きしない)。共有キャッシュの I/O は `spawn_blocking` で async ワーカー外で行う。ただしユーザーの明示的な更新 (Ctrl+R / Sync now / 設定の同期ボタン。`trigger_sync` の `force: true`) ではこのスキップを行わず必ず API を取りに行き、結果を共有キャッシュへ書き戻す (起動時・ウィンドウ復帰時の Hot 同期と定期同期は従来どおり共有キャッシュを優先)。共有スキーマは DevDeck 自身のテーブル形と無関係な独立の契約
   (Azure DevOps の生の事実のみ、is_mine 等の per-viewer 判断は持たない) なので、
   `pull_requests` / `work_items` 自体の列を変更しても `shared_cache` 側のマッピングさえ
   追従させれば waypoint 側は壊れない。Work Item は書き込みのみで読み取りゲートは持たない
@@ -314,12 +321,15 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
 - 並列実行: 1 パス内で全組織を並列処理し、各組織の PR / 作業項目 / コミット同期も並列に走らせる。
   プロジェクト一覧 (`_apis/projects`) は組織ごとに 1 回だけ取得して 3 種別で共有する。
   PR コメント通知のスレッド取得も同じ共有セマフォを通る。
-  同時実行中の Azure DevOps リクエスト総数は共有セマフォ (`SyncBudget`, 既定 12) で上限を設け、
-  ファンアウトが広がっても 429 圧力を一定に保つ (429 は `Retry-After` で吸収)。
-- My Reviews の対象: `searchCriteria.reviewerId` は直接指名されたレビュアーにしか一致しないため、自分が所属するグループ/チーム (vssps `identities` の `queryMembership=Expanded` で取得し 1 時間キャッシュ) 宛てのレビュー依頼は、active PR 一覧のレビュアーとグループ ID を突き合わせて補完する (投票は 0。投票済みなら直接レビュアーとして取得済み。この補完が有効な間は共有キャッシュの短絡を使わず live で取得する)。所属グループを取れなかった場合は同期を失敗させず、Sync health の警告に記録する。
+  同時実行中の Azure DevOps リクエスト総数は共有セマフォ (`SyncBudget`, 既定 6) で上限を設け、
+  ファンアウトが広がっても 429 圧力を一定に保つ (429 は `Retry-After` で吸収)。クライアントの
+  エンドポイント単位スロットル (8 件) より小さくし、同期中も画面からのオンデマンド取得に枠を残す。
+- My Reviews の対象: `searchCriteria.reviewerId` は直接指名されたレビュアーにしか一致しないため、自分が所属するグループ/チーム (vssps `identities` の `queryMembership=Expanded` で取得し 1 時間キャッシュ) 宛てのレビュー依頼は、active PR 一覧のレビュアー (live または共有キャッシュ) とグループ ID を突き合わせて補完する (投票は 0。投票済みなら直接レビュアーとして取得済み)。所属グループの取得に失敗した場合は同期を失敗させず Sync health の警告に記録し、前回取得した所属 (TTL 切れでも) を使う。前回値も無ければ、直接レビューに含まれない既存のレビュー行をそのまま残す (グループ宛てレビューが 1 パスだけ消えて、次のパスで新規レビュー依頼として再通知されるのを防ぐ)。active PR 一覧が不完全なプロジェクトでも同様に、取得失敗なら直接レビュー以外の既存行を保持し、上限到達なら取得窓 (新しい順 500 件) の最古の PR より古い既存行だけを保持する (窓内で返らなかった PR は active でないため削除)。
   レビューキャッシュはプロジェクト単位で置換し、取得に失敗したプロジェクトだけ前回の行を保持する (1 プロジェクトの失敗で一覧全体が古いままにならない)。保持上限は 5000 件。
   ドラフトは既定で非表示だが、非表示件数をフィルタバーのチップ (`N drafts hidden`) に出し、クリックで表示する。
 - PR 同期: active PR とレビュー対象 PR の取得を重ね合わせ、CI ステータスは最新 50 件を後段で付与。
+  CI を取得しなかった (50 件外・取得失敗) PR は前回の CI 結果を保持する。そのためレビューキャッシュの置換は
+  「スナップショットに無い行の削除 + upsert」で行い、残る行を一度削除しない。
   active PR のプロジェクト単位クエリが上限 (500 件) に達したプロジェクトも同様に、そのプロジェクトの既存キャッシュを
   削除せず取得分だけ upsert し、警告を記録する (レビュー対象 PR は `$skip` で全件ページングするため対象外)。
 - 作業項目同期: プロジェクト単位で並列。`System.ChangedDate` デルタ取得 (24h ごとにフル) は維持。
@@ -327,7 +337,14 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   プロジェクトは取得結果が切り詰められているため、フル同期でもそのプロジェクトの既存行を削除せずマージ
   (`apply_work_items_delta` 相当) し、「上限より古い項目は更新されない (キャッシュ行は保持)」旨を `last_warning` に
   記録して Sync health で「Limited」(完了したが一部スキップ/切り詰めあり) と表示する。
-- コミット同期: 全プロジェクトのリポジトリ一覧を並列取得した後 (成功した一覧はプロセス内で 1 時間キャッシュし、毎回の再取得を避ける。新規リポジトリの検出は最大 1 時間遅れる)、リポジトリ単位でコミットを取得。
+- コミット同期: 全プロジェクトのリポジトリ一覧を並列取得した後 (成功した一覧はプロセス内で 1 時間キャッシュし、毎回の再取得を避ける。定期同期での新規リポジトリの検出は最大 1 時間遅れるが、明示的な更新 (`force: true`) ではキャッシュを迂回する)、リポジトリ単位でコミットを取得。
+  リポジトリ一覧・プロジェクト一覧 (5 分)・所属グループのプロセス内キャッシュは、接続の追加/削除で
+  世代 (`cache_epoch`) が進むと無効になり、別アカウントで再追加した接続が古い結果を使わない。
+  差分取得は `fromDate` (コミット日) で絞るため、古いコミット日のまま後から push されたコミット
+  (長命ブランチのマージなど) は次回フル同期 (最大 24h) まで取り込まれない。90 日窓の削除も同じ
+  コミット日 (無ければ作成者日時) で判定し、rebase で窓内に入ったコミットを取り込み直後に消さない。
+  コミット → PR の関連キャッシュ (`commit_prs`, 30 分) も窓より古いものを同じタイミングで削除し、
+  表示範囲の一括取得は 1 接続・1 トランザクションで読み書きする。
   24h ごとにフル取得 (90 日窓を置換)、その間は前回同期以降の差分のみ取得してマージ
   (`merge_commits`)。フル/差分の判定は `commits:{org}` と `internal:commit_full_sync:{org}` の
   同期状態に基づく。force-push や削除は次回フル同期で整合される。
@@ -376,7 +393,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   `x-ms-continuationtoken` ヘッダーの継続トークンを辿って最後まで取得する (`list_all_pages`)。
   これにより 100 件超のプロジェクトも同期対象から外れない。
 - 401: 即時 `Unauthorized`。429: `Retry-After` を尊重 (上限付き)。
-  全 `AdoClient` 呼び出しはエンドポイント (host:port) ごとのプロセス共通スロットル (`client/throttle.rs`) を通る: 同時実行は最大 8 件、429 の `Retry-After` や成功応答の `X-RateLimit-Delay` を受けたら以降の全リクエストを一時停止する (最大 30 秒)。キャッシュ消去直後に各画面が一斉再取得しても Azure DevOps のレート制限に達しにくくする。5xx/タイムアウト/ネットワーク: リトライ。
+  全 `AdoClient` 呼び出しはエンドポイント (host:port) ごとのプロセス共通スロットル (`client/throttle.rs`) を通る: 同時実行は最大 8 件、429 の `Retry-After` や成功応答の `X-RateLimit-Delay` を受けたら以降の全リクエストを一時停止する (最大 30 秒。`Duration` に収まらない異常値のヘッダーは無視する)。キャッシュ消去直後に各画面が一斉再取得しても Azure DevOps のレート制限に達しにくくする。5xx/タイムアウト/ネットワーク: リトライ。
   副作用のある POST は 5xx/タイムアウトを再試行せず (429 と接続失敗のみ)、WIQL・バッチ取得・検索など読み取り専用の POST (`post_json_read` / Almsearch) は GET と同様に再試行する。
 - Azure CLI 認証は Windows では `cmd /C az` (`CREATE_NO_WINDOW`) 経由で起動する (`az` は `az.cmd` のため `Command::new("az")` では解決できない)。 `az` 未インストール時は `cmd` が終了コード 9009 を返すため、インストール案内メッセージに読み替える。
 - `azdo-client` は Tauri 非依存を維持し、`wiremock` でテストする。

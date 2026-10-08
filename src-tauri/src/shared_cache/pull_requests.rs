@@ -61,6 +61,31 @@ pub fn read_pull_requests(
     Ok(out)
 }
 
+pub fn read_reviewers(
+    conn: &Connection,
+    organization: &str,
+    project: &str,
+) -> Result<Vec<SharedReviewer>> {
+    let mut statement = conn.prepare(
+        "SELECT repository_id, pull_request_id, reviewer_id, vote, is_required
+         FROM pull_request_reviewers WHERE organization = ?1 AND project = ?2",
+    )?;
+    let rows = statement.query_map(params![organization, project], |row| {
+        Ok(SharedReviewer {
+            repository_id: row.get(0)?,
+            pull_request_id: row.get(1)?,
+            reviewer_id: row.get(2)?,
+            vote: row.get(3)?,
+            is_required: row.get::<_, i64>(4)? != 0,
+        })
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row?);
+    }
+    Ok(out)
+}
+
 /// Replaces every PR/reviewer row for `(organization, project)` with `rows` /
 /// `reviewers`. Both tables are scoped by project, so a caller that only
 /// fetched a subset of an org's projects does not clobber the others.
@@ -183,24 +208,22 @@ mod tests {
             vote: 10,
             is_required: true,
         };
-        write_pull_requests(&mut conn, "org", "proj", &[sample(1)], &[reviewer]).unwrap();
+        write_pull_requests(
+            &mut conn,
+            "org",
+            "proj",
+            &[sample(1)],
+            std::slice::from_ref(&reviewer),
+        )
+        .unwrap();
 
         let rows = read_pull_requests(&conn, "org", "proj").unwrap();
         assert_eq!(rows, vec![sample(1)]);
 
-        // DevDeck never reads reviewers back (it has no use for them), so
-        // verify the write directly instead of through a read helper.
-        let (reviewer_id, vote, is_required): (String, i32, i64) = conn
-            .query_row(
-                "SELECT reviewer_id, vote, is_required FROM pull_request_reviewers
-                 WHERE organization = 'org' AND project = 'proj'",
-                [],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-            )
-            .unwrap();
-        assert_eq!(reviewer_id, "guid-2");
-        assert_eq!(vote, 10);
-        assert_eq!(is_required, 1);
+        assert_eq!(
+            read_reviewers(&conn, "org", "proj").unwrap(),
+            vec![reviewer]
+        );
     }
 
     #[test]

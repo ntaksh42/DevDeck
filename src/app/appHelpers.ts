@@ -19,11 +19,14 @@ export function invalidateSyncedDataQueries(
   const hot = scopeSet.has("hot");
   if (all || hot || scopeSet.has("myReviews")) {
     void queryClient.invalidateQueries({ queryKey: ["myReviews"], refetchType });
+    // Sync revives snoozed items (deadline or new activity) server-side.
+    void queryClient.invalidateQueries({ queryKey: ["snoozedItems", "pull_request"], refetchType });
   }
   if (all || hot || scopeSet.has("myWorkItems")) {
     void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.myItemsRoot(), refetchType });
     invalidateWorkItemQueryViews(queryClient, undefined, refetchType);
     void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot(), refetchType });
+    void queryClient.invalidateQueries({ queryKey: ["snoozedItems", "work_item"], refetchType });
   }
   if (all || scopeSet.has("commits")) {
     void queryClient.invalidateQueries({ queryKey: ["commitRepositories"], refetchType });

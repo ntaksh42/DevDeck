@@ -96,11 +96,12 @@ pub async fn sync_commits_for_org(
     org: &Organization,
     projects: &[TeamProject],
     budget: &SyncBudget,
+    force_refresh: bool,
 ) -> Result<()> {
     let scope = format!("commits:{}", org.id);
     let error_count = db.get_sync_state(&scope)?.map_or(0, |s| s.error_count);
 
-    match do_sync_commits(db, client, org, projects, budget).await {
+    match do_sync_commits(db, client, org, projects, budget, force_refresh).await {
         Ok(outcome) => {
             let now = Utc::now().to_rfc3339();
             let all_synced = outcome.skipped.is_empty();
@@ -151,6 +152,7 @@ async fn do_sync_commits(
     org: &Organization,
     projects: &[TeamProject],
     budget: &SyncBudget,
+    force_refresh: bool,
 ) -> Result<CommitSyncOutcome> {
     let purge_before = (Utc::now() - chrono::Duration::days(COMMIT_SYNC_WINDOW_DAYS)).to_rfc3339();
     let delta_since = commit_delta_since(db, org);
@@ -161,7 +163,7 @@ async fn do_sync_commits(
     // per-repository commit fetches. Both phases are bounded by the shared
     // budget, so listing no longer serializes project-by-project.
     let (repositories, mut skipped) =
-        list_all_repositories(db, client, org, projects, budget).await;
+        list_all_repositories(db, client, org, projects, budget, force_refresh).await;
 
     let mut tasks = JoinSet::new();
     for (project, repository) in repositories {
@@ -209,6 +211,7 @@ async fn list_all_repositories(
     org: &Organization,
     projects: &[TeamProject],
     budget: &SyncBudget,
+    force_refresh: bool,
 ) -> (Vec<(TeamProject, GitRepository)>, Vec<String>) {
     type Listed = std::result::Result<Vec<(TeamProject, GitRepository)>, String>;
     let mut tasks: JoinSet<Listed> = JoinSet::new();
@@ -219,7 +222,10 @@ async fn list_all_repositories(
         let budget = budget.clone();
         let db_key = db.cache_key();
         tasks.spawn(async move {
-            if let Some(repos) = repo_cache::get(&db_key, &org.id, &project.id) {
+            let cached = (!force_refresh)
+                .then(|| repo_cache::get(&db_key, &org.id, &project.id))
+                .flatten();
+            if let Some(repos) = cached {
                 return Ok(repos
                     .into_iter()
                     .map(|repo| (project.clone(), repo))

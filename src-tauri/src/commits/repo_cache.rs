@@ -4,7 +4,9 @@
 //! project's repositories each time, although repositories rarely change. A
 //! stale entry only delays picking up a brand-new repository (or dropping a
 //! deleted one) by at most `TTL`, which is far shorter than the 24 hour full
-//! commit sync that reconciles the rest.
+//! commit sync that reconciles the rest. Entries from before a connection
+//! change (`cache_epoch`) are ignored, and an explicit refresh bypasses the
+//! cache so a just-created repository shows up immediately.
 
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
@@ -14,7 +16,7 @@ use azdo_client::GitRepository;
 
 const TTL: Duration = Duration::from_secs(60 * 60);
 
-type Key = (String, String, String);
+type Key = (u64, String, String, String);
 type Entries = HashMap<Key, (Instant, Vec<GitRepository>)>;
 
 fn entries() -> &'static Mutex<Entries> {
@@ -23,7 +25,12 @@ fn entries() -> &'static Mutex<Entries> {
 }
 
 fn key(db_key: &str, org_id: &str, project_id: &str) -> Key {
-    (db_key.into(), org_id.into(), project_id.into())
+    (
+        crate::cache_epoch::current(),
+        db_key.into(),
+        org_id.into(),
+        project_id.into(),
+    )
 }
 
 pub(super) fn get(db_key: &str, org_id: &str, project_id: &str) -> Option<Vec<GitRepository>> {

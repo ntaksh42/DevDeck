@@ -31,13 +31,22 @@ pub(crate) async fn fetch_active_prs_for_project(
     let label = project.name.clone();
 
     if !force_refresh {
-        if let Some(cached) = read_active_prs_from_shared_cache(&org, &project) {
+        // SQLite I/O with a busy timeout; keep it off the async worker.
+        let (read_org, read_project) = (org.clone(), project.clone());
+        let path = shared_cache::path();
+        let shared = tokio::task::spawn_blocking(move || {
+            read_active_prs_from_shared_cache(path, &read_org, &read_project)
+        })
+        .await
+        .ok()
+        .flatten();
+        if let Some((cached, reviewers)) = shared {
             return PrProjectFetch {
                 project_id,
                 label,
                 result: Ok(cached),
                 capped: false,
-                reviewers: Vec::new(),
+                reviewers,
             };
         }
     }
@@ -143,7 +152,16 @@ pub(crate) async fn fetch_active_prs_for_project(
         })
         .collect();
 
-    write_active_prs_to_shared_cache(&org, &project, &cached, &shared_reviewers);
+    // A truncated snapshot must not be published as the project's full list.
+    if !capped {
+        let (org, project) = (org.clone(), project.clone());
+        let (rows, reviewers) = (cached.clone(), shared_reviewers.clone());
+        let path = shared_cache::path();
+        let _ = tokio::task::spawn_blocking(move || {
+            write_active_prs_to_shared_cache(path, &org, &project, &rows, &reviewers)
+        })
+        .await;
+    }
 
     PrProjectFetch {
         project_id,
@@ -157,11 +175,17 @@ pub(crate) async fn fetch_active_prs_for_project(
 /// `None` when the shared cache is missing, unreadable, or not fresh enough
 /// (including when no one has ever synced this scope) — the caller falls
 /// back to fetching from Azure DevOps itself in every such case.
+///
+/// The snapshot is trusted to be the project's complete active list (see the
+/// `shared_cache` module contract), but only facts are taken from it: rows that
+/// are not active are dropped and the web URL is rebuilt from this app's own
+/// organization and names rather than reused.
 fn read_active_prs_from_shared_cache(
+    path: Option<std::path::PathBuf>,
     org: &Organization,
     project: &TeamProject,
-) -> Option<Vec<CachedPr>> {
-    let conn = shared_cache::open().ok()?;
+) -> Option<(Vec<CachedPr>, Vec<SharedReviewer>)> {
+    let conn = shared_cache::open_at(path).ok()?;
     if !shared_cache::is_fresh(
         &conn,
         &org.name,
@@ -172,9 +196,19 @@ fn read_active_prs_from_shared_cache(
         return None;
     }
     let rows = shared_cache::read_pull_requests(&conn, &org.name, &project.name).ok()?;
-    Some(
-        rows.into_iter()
-            .map(|row| CachedPr {
+    let reviewers = shared_cache::read_reviewers(&conn, &org.name, &project.name).ok()?;
+    let prs = rows
+        .into_iter()
+        .filter(|row| row.status == "active")
+        .map(|row| {
+            let web_url = format!(
+                "{}/{}/_git/{}/pullrequest/{}",
+                org.base_url,
+                encode_path_segment(&project.name),
+                encode_path_segment(&row.repository_name),
+                row.pull_request_id
+            );
+            CachedPr {
                 org_id: org.id.clone(),
                 project_id: project.id.clone(),
                 project_name: project.name.clone(),
@@ -188,17 +222,19 @@ fn read_active_prs_from_shared_cache(
                 creation_date: row.creation_date,
                 source_ref_name: row.source_ref_name,
                 target_ref_name: row.target_ref_name,
-                web_url: row.web_url,
+                web_url: Some(web_url),
                 is_draft: row.is_draft,
-            })
-            .collect(),
-    )
+            }
+        })
+        .collect();
+    Some((prs, reviewers))
 }
 
 /// Best-effort: a failure to reach the shared cache never fails DevDeck's own
 /// sync, since the data is already safely in DevDeck's own cache by the time
 /// this runs.
 fn write_active_prs_to_shared_cache(
+    path: Option<std::path::PathBuf>,
     org: &Organization,
     project: &TeamProject,
     cached: &[CachedPr],
@@ -222,7 +258,7 @@ fn write_active_prs_to_shared_cache(
         })
         .collect();
     let outcome = (|| -> Result<()> {
-        let mut conn = shared_cache::open()?;
+        let mut conn = shared_cache::open_at(path)?;
         shared_cache::write_pull_requests(&mut conn, &org.name, &project.name, &rows, reviewers)?;
         shared_cache::mark_synced(
             &conn,

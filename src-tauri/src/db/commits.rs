@@ -1,5 +1,5 @@
 use chrono::Utc;
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::error::Result;
 
@@ -145,7 +145,15 @@ impl AppDatabase {
     pub fn purge_old_commits(&self, org_id: &str, before_date: &str) -> Result<()> {
         let conn = self.open()?;
         conn.execute(
-            "DELETE FROM commits WHERE org_id = ?1 AND (author_date IS NULL OR author_date < ?2)",
+            "DELETE FROM commits WHERE org_id = ?1 \
+             AND (COALESCE(committer_date, author_date) IS NULL \
+                  OR COALESCE(committer_date, author_date) < ?2)",
+            rusqlite::params![org_id, before_date],
+        )?;
+        // Commit -> PR lookups are a 30-minute cache; nothing older than the
+        // sync window is ever served, so drop it instead of letting it grow.
+        conn.execute(
+            "DELETE FROM commit_prs WHERE org_id = ?1 AND fetched_at < ?2",
             rusqlite::params![org_id, before_date],
         )?;
         Ok(())
@@ -162,43 +170,28 @@ impl AppDatabase {
         fresh_after: &str,
     ) -> Result<Option<Vec<CachedCommitPr>>> {
         let conn = self.open()?;
-        let fetched_at: Option<String> = conn
-            .query_row(
-                "SELECT MAX(fetched_at) FROM commit_prs \
-                 WHERE org_id = ?1 AND repository_id = ?2 AND commit_id = ?3",
-                params![org_id, repository_id, commit_id],
-                |row| row.get(0),
-            )
-            .optional()?
-            .flatten();
-        let Some(fetched_at) = fetched_at else {
-            return Ok(None);
-        };
-        if fetched_at.as_str() < fresh_after {
-            return Ok(None);
+        cached_commit_prs(&conn, org_id, repository_id, commit_id, fresh_after)
+    }
+
+    /// Batch form of [`Self::get_cached_commit_prs`] over one connection:
+    /// fresh hits keyed by commit id; misses are absent.
+    pub fn get_cached_commit_prs_many(
+        &self,
+        org_id: &str,
+        repository_id: &str,
+        commit_ids: &[String],
+        fresh_after: &str,
+    ) -> Result<std::collections::HashMap<String, Vec<CachedCommitPr>>> {
+        let conn = self.open()?;
+        let mut hits = std::collections::HashMap::new();
+        for commit_id in commit_ids {
+            if let Some(prs) =
+                cached_commit_prs(&conn, org_id, repository_id, commit_id, fresh_after)?
+            {
+                hits.insert(commit_id.clone(), prs);
+            }
         }
-        let mut stmt = conn.prepare(
-            "SELECT pull_request_id, pr_repository_id, title, status, my_vote, my_vote_label, web_url \
-             FROM commit_prs \
-             WHERE org_id = ?1 AND repository_id = ?2 AND commit_id = ?3 AND pull_request_id IS NOT NULL \
-             ORDER BY pull_request_id DESC",
-        )?;
-        let rows = stmt.query_map(params![org_id, repository_id, commit_id], |row| {
-            Ok(CachedCommitPr {
-                pull_request_id: row.get(0)?,
-                pr_repository_id: row.get(1)?,
-                title: row.get(2)?,
-                status: row.get(3)?,
-                my_vote: row.get(4)?,
-                my_vote_label: row.get(5)?,
-                web_url: row.get(6)?,
-            })
-        })?;
-        let mut prs = Vec::new();
-        for row in rows {
-            prs.push(row?);
-        }
-        Ok(Some(prs))
+        Ok(hits)
     }
 
     /// Replaces the cached PR list for a single commit. An empty slice records a
@@ -210,43 +203,116 @@ impl AppDatabase {
         commit_id: &str,
         prs: &[CachedCommitPr],
     ) -> Result<()> {
-        let now = Utc::now().to_rfc3339();
         let conn = self.open()?;
         let tx = conn.unchecked_transaction()?;
-        tx.execute(
-            "DELETE FROM commit_prs WHERE org_id = ?1 AND repository_id = ?2 AND commit_id = ?3",
-            params![org_id, repository_id, commit_id],
-        )?;
-        if prs.is_empty() {
-            tx.execute(
-                "INSERT INTO commit_prs(org_id, repository_id, commit_id, pull_request_id, fetched_at) \
-                 VALUES (?1, ?2, ?3, NULL, ?4)",
-                params![org_id, repository_id, commit_id, now],
-            )?;
-        } else {
-            let mut stmt = tx.prepare_cached(
-                "INSERT INTO commit_prs(\
-                    org_id, repository_id, commit_id, pull_request_id, pr_repository_id, \
-                    title, status, my_vote, my_vote_label, web_url, fetched_at) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-            )?;
-            for pr in prs {
-                stmt.execute(params![
-                    org_id,
-                    repository_id,
-                    commit_id,
-                    pr.pull_request_id,
-                    pr.pr_repository_id,
-                    pr.title,
-                    pr.status,
-                    pr.my_vote,
-                    pr.my_vote_label,
-                    pr.web_url,
-                    now
-                ])?;
-            }
+        write_commit_prs(&tx, org_id, repository_id, commit_id, prs)?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Batch form of [`Self::replace_commit_prs`] in one transaction.
+    pub fn replace_commit_prs_many(
+        &self,
+        org_id: &str,
+        repository_id: &str,
+        entries: &[(String, Vec<CachedCommitPr>)],
+    ) -> Result<()> {
+        let conn = self.open()?;
+        let tx = conn.unchecked_transaction()?;
+        for (commit_id, prs) in entries {
+            write_commit_prs(&tx, org_id, repository_id, commit_id, prs)?;
         }
         tx.commit()?;
         Ok(())
     }
+}
+
+fn cached_commit_prs(
+    conn: &Connection,
+    org_id: &str,
+    repository_id: &str,
+    commit_id: &str,
+    fresh_after: &str,
+) -> Result<Option<Vec<CachedCommitPr>>> {
+    let fetched_at: Option<String> = conn
+        .query_row(
+            "SELECT MAX(fetched_at) FROM commit_prs \
+             WHERE org_id = ?1 AND repository_id = ?2 AND commit_id = ?3",
+            params![org_id, repository_id, commit_id],
+            |row| row.get(0),
+        )
+        .optional()?
+        .flatten();
+    let Some(fetched_at) = fetched_at else {
+        return Ok(None);
+    };
+    if fetched_at.as_str() < fresh_after {
+        return Ok(None);
+    }
+    let mut stmt = conn.prepare(
+        "SELECT pull_request_id, pr_repository_id, title, status, my_vote, my_vote_label, web_url \
+         FROM commit_prs \
+         WHERE org_id = ?1 AND repository_id = ?2 AND commit_id = ?3 AND pull_request_id IS NOT NULL \
+         ORDER BY pull_request_id DESC",
+    )?;
+    let rows = stmt.query_map(params![org_id, repository_id, commit_id], |row| {
+        Ok(CachedCommitPr {
+            pull_request_id: row.get(0)?,
+            pr_repository_id: row.get(1)?,
+            title: row.get(2)?,
+            status: row.get(3)?,
+            my_vote: row.get(4)?,
+            my_vote_label: row.get(5)?,
+            web_url: row.get(6)?,
+        })
+    })?;
+    let mut prs = Vec::new();
+    for row in rows {
+        prs.push(row?);
+    }
+    Ok(Some(prs))
+}
+
+fn write_commit_prs(
+    tx: &Connection,
+    org_id: &str,
+    repository_id: &str,
+    commit_id: &str,
+    prs: &[CachedCommitPr],
+) -> Result<()> {
+    let now = Utc::now().to_rfc3339();
+    tx.execute(
+        "DELETE FROM commit_prs WHERE org_id = ?1 AND repository_id = ?2 AND commit_id = ?3",
+        params![org_id, repository_id, commit_id],
+    )?;
+    if prs.is_empty() {
+        tx.execute(
+            "INSERT INTO commit_prs(org_id, repository_id, commit_id, pull_request_id, fetched_at) \
+             VALUES (?1, ?2, ?3, NULL, ?4)",
+            params![org_id, repository_id, commit_id, now],
+        )?;
+    } else {
+        let mut stmt = tx.prepare_cached(
+            "INSERT INTO commit_prs(\
+                org_id, repository_id, commit_id, pull_request_id, pr_repository_id, \
+                title, status, my_vote, my_vote_label, web_url, fetched_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        )?;
+        for pr in prs {
+            stmt.execute(params![
+                org_id,
+                repository_id,
+                commit_id,
+                pr.pull_request_id,
+                pr.pr_repository_id,
+                pr.title,
+                pr.status,
+                pr.my_vote,
+                pr.my_vote_label,
+                pr.web_url,
+                now
+            ])?;
+        }
+    }
+    Ok(())
 }
