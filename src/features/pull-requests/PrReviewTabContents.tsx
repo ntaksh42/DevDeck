@@ -96,7 +96,7 @@ export function ReviewTab({
   const readOnly = settingsQuery.data?.readOnlyValidationModeEnabled ?? false;
 
   // Linked work items: scan the PR description and commit messages for AB#NNN
-  // mentions. Commits share the CommitsTab query key, so this stays warm.
+  // mentions. Commits share the LinkedWorkItemsPanel query key, so this stays warm.
   const commitsQuery = useQuery({
     queryKey: ["prCommits", pr.organizationId, pr.repositoryId, pr.pullRequestId],
     queryFn: () => listPullRequestCommits(prLocator(pr)),

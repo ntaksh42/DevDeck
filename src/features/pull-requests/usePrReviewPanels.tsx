@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import {
@@ -14,24 +14,17 @@ import {
 } from "@/lib/azdoCommands";
 import { focusPrimaryGrid, isEditableTarget } from "@/lib/utils";
 import { usePreviewZoom } from "@/lib/usePreviewZoom";
-import { LoadingState, PreviewEmptyState, SELECT_EMPTY_HINT } from "@/components/StateDisplay";
+import { PreviewEmptyState, SELECT_EMPTY_HINT } from "@/components/StateDisplay";
 import type { DockablePanelSpec } from "@/components/DockableWorkspace";
 import { PrReviewHeader } from "./PrReviewHeader";
 import { PrReviewToolbar } from "./PrReviewToolbar";
 import { ReviewTab } from "./PrReviewTabContents";
-import { CommitsTab } from "./PrCommitsTab";
 import { ResultTab } from "./PrSecondaryTabs";
 import { LINKED_WORK_ITEMS_PANEL_ID, LinkedWorkItemsPanel } from "./LinkedWorkItemsPanel";
 import { ConfirmDialog, useConfirm } from "@/components/ConfirmDialog";
 
-// The Files tab pulls in the `diff` library, so it is code-split to keep that
-// weight out of the startup bundle.
-const PrFilesTab = lazy(() =>
-  import("./PrFilesTab").then((m) => ({ default: m.PrFilesTab })),
-);
-
 /**
- * Builds the PR review tabs (Conversation/Commits/Files changed/Result) as
+ * Builds the PR review tabs (Conversation/Result) as
  * flat `DockablePanelSpec` entries for the caller to place alongside its own
  * results grid in one `DockableWorkspace`.
  *
@@ -274,28 +267,6 @@ export function usePrReviewPanels({
   // Result stays included even without a configured folder since ResultTab
   // renders its own "not configured" empty state.
   const secondary: DockablePanelSpec[] = [
-    {
-      id: "commits",
-      title: "Commits",
-      headerActions: toolbar,
-      content: withChrome(!selectedPr ? noPrSelected : <CommitsTab pr={selectedPr} />),
-      position: { relativeTo: "review", direction: "within" },
-    },
-    {
-      id: "files",
-      title: "Files changed",
-      headerActions: toolbar,
-      content: withChrome(
-        !selectedPr ? (
-          noPrSelected
-        ) : (
-          <Suspense fallback={<LoadingState />}>
-            <PrFilesTab pr={selectedPr} threads={reviewQuery.data?.threads} />
-          </Suspense>
-        ),
-      ),
-      position: { relativeTo: "review", direction: "within" },
-    },
     {
       id: "result",
       title: "Result",

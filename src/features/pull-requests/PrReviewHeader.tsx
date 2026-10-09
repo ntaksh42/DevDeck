@@ -164,9 +164,8 @@ function commentsBadge(review: PullRequestReview | null) {
 }
 
 // Persistent PR header shown above every tab. Pulls live fields from `review`
-// when available (review/files tabs) and falls back to the cached summary
-// `selectedPr` otherwise, so the title/branch/state stay populated on the
-// commits and result tabs where the review query is not enabled.
+// when available and falls back to the cached summary `selectedPr` otherwise,
+// so the title/branch/state stay populated while the review query loads.
 export function PrReviewHeader({
   selectedPr,
   review,

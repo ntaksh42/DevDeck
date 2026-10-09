@@ -202,6 +202,30 @@ describe("DockableWorkspace", () => {
     );
   });
 
+  it("drops panels that no longer exist from a restored layout but keeps its sizes", () => {
+    vi.useFakeTimers();
+    const storageKey = "test:dockable-workspace:removed-panel";
+    const withExtraTab: DockablePanelSpec[] = [
+      ...twoPanels(),
+      {
+        id: "removed",
+        title: "Removed",
+        content: <div>removed content</div>,
+        position: { relativeTo: "preview", direction: "within" },
+      },
+    ];
+    const { unmount } = render(<DockableWorkspace storageKey={storageKey} panels={withExtraTab} />);
+    fireEvent.keyDown(screen.getByRole("separator", { name: "Resize Preview" }), { key: "ArrowLeft" });
+    act(() => vi.advanceTimersByTime(100));
+    unmount();
+
+    render(<DockableWorkspace storageKey={storageKey} panels={twoPanels()} />);
+    expect(screen.queryByText("Removed")).toBeNull();
+    expect(screen.getByRole("separator", { name: "Resize Preview" }).getAttribute("aria-valuenow")).toBe(
+      "436",
+    );
+  });
+
   it("falls back to the default layout when the persisted JSON is corrupt", () => {
     const storageKey = "test:dockable-workspace:corrupt";
     window.localStorage.setItem(`${storageKey}:schema:v3`, "not valid json");

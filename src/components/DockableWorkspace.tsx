@@ -606,6 +606,14 @@ export function DockableWorkspace({
         // before rebuilding from scratch.
         if (!restored) {
           for (const panel of [...api.panels]) api.removePanel(panel);
+        } else {
+          // A saved layout from before a panel was removed (e.g. the PR
+          // review's Commits / Files changed tabs) would otherwise keep that
+          // panel as an empty tab.
+          const knownIds = new Set(initialPanels.map((spec) => spec.id));
+          for (const panel of [...api.panels]) {
+            if (!knownIds.has(panel.id)) api.removePanel(panel);
+          }
         }
       }
 
