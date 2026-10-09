@@ -72,4 +72,23 @@ describe("MyPullRequestsGrid copy shortcuts", () => {
     );
     expect(await screen.findByText("Markdown link copied")).toBeTruthy();
   });
+
+  it("hides draft PRs with the always-visible Show Drafts checkbox", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+    client.setQueryData(["activeOrganization"], { id: "contoso" });
+    const draft = { ...pr, pullRequestId: 78, title: "WIP refactor", isDraft: true };
+    client.setQueryData(["myCreatedPullRequests", "contoso"], { pullRequests: [pr, draft], warnings: [] });
+    render(
+      <QueryClientProvider client={client}>
+        <MyPullRequestsGrid />
+      </QueryClientProvider>,
+    );
+
+    const grid = await screen.findByRole("grid", { name: "My pull requests" });
+    expect(within(grid).getByText("WIP refactor")).toBeTruthy();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Show Drafts (1)" }));
+    expect(within(grid).queryByText("WIP refactor")).toBeNull();
+    expect(within(grid).getByText(pr.title)).toBeTruthy();
+    expect(screen.getByText("1 of 2")).toBeTruthy();
+  });
 });

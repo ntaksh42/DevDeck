@@ -147,8 +147,7 @@ export function PullRequestSearch({
   const advancedFilterCount =
     (targetBranches.length > 0 ? 1 : 0) +
     (fromDate ? 1 : 0) +
-    (toDate ? 1 : 0) +
-    (excludeDrafts ? 1 : 0);
+    (toDate ? 1 : 0);
 
   // Bundles the advanced filter state shared by every search trigger.
   function advancedFilters(): Partial<SearchPullRequestsInput> {
@@ -279,6 +278,15 @@ export function PullRequestSearch({
               disabled={repositoriesQuery.isLoading}
             />
           </div>
+          <label className="flex h-8 shrink-0 items-center gap-2">
+            <input
+              type="checkbox"
+              checked={excludeDrafts}
+              onChange={(e) => setExcludeDrafts(e.target.checked)}
+              className="h-4 w-4"
+            />
+            <span className="text-xs font-medium">Hide drafts</span>
+          </label>
           <FiltersToggle
             open={filtersOpen}
             onToggle={() => setFiltersOpen((open) => !open)}
@@ -353,15 +361,6 @@ export function PullRequestSearch({
                 ))}
               </NativeSelect>
             </FilterField>
-            <label className="flex h-8 items-center gap-2">
-              <input
-                type="checkbox"
-                checked={excludeDrafts}
-                onChange={(e) => setExcludeDrafts(e.target.checked)}
-                className="h-4 w-4"
-              />
-              <span className="text-xs font-medium">Hide drafts</span>
-            </label>
           </div>
         ) : null}
 

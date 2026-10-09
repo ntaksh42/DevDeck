@@ -20,6 +20,7 @@ import { useRangeSelection } from "@/lib/useRangeSelection";
 import { copyRowsAsTable } from "@/lib/clipboardTable";
 import { openExternalUrl } from "@/lib/openExternal";
 import { CreatedPrRow, SortHeaderButton } from "./MyPullRequestsRow";
+import { DraftsCheckbox } from "./DraftsCheckbox";
 import { usePrReviewPanels } from "./usePrReviewPanels";
 import { createdCopyColumns } from "./prCopyColumns";
 import {
@@ -131,6 +132,7 @@ export function MyPullRequestsGrid() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [sort, setSort] = useState<SortState>({ key: "creationDate", direction: "desc" });
   const [textFilter, setTextFilter] = useState("");
+  const [showDrafts, setShowDrafts] = useState(true);
   const { visibleColumns, toggleColumn, resetColumns } = useColumnVisibility({
     keys: GRID_KEYS,
     requiredColumns: REQUIRED_COLUMNS,
@@ -180,6 +182,7 @@ export function MyPullRequestsGrid() {
   const rows = useMemo(() => {
     const terms = splitSearchTerms(textFilter);
     const data = allPrs.filter((pr) =>
+      (showDrafts || !pr.isDraft) &&
       matchesAllSearchTerms(terms, [
         pr.pullRequestId,
         pr.repositoryName,
@@ -190,7 +193,7 @@ export function MyPullRequestsGrid() {
     const factor = sort.direction === "asc" ? 1 : -1;
     data.sort((a, b) => comparePrs(a, b, sort.key) * factor);
     return data;
-  }, [allPrs, textFilter, sort]);
+  }, [allPrs, textFilter, showDrafts, sort]);
 
   useEffect(() => {
     setSelectedIndex((index) => Math.min(index, Math.max(0, rows.length - 1)));
@@ -324,6 +327,7 @@ export function MyPullRequestsGrid() {
 
   // The filter stays folded in the panel's tab strip until Ctrl+F or / opens it.
   const filterActions = (
+      <div className="flex h-full min-w-0 items-center">
         <DockFilterBar
           label="Filter pull requests"
           open={filterBar.open}
@@ -353,6 +357,12 @@ export function MyPullRequestsGrid() {
             />
           </div>
         </DockFilterBar>
+        <DraftsCheckbox
+          checked={showDrafts}
+          onChange={setShowDrafts}
+          draftCount={allPrs.filter((pr) => pr.isDraft).length}
+        />
+      </div>
   );
 
   const gridPane = (
@@ -421,7 +431,7 @@ export function MyPullRequestsGrid() {
       {/* Status bar */}
       <div className="flex items-center justify-between border-t border-border px-2 py-1 text-xs text-muted-foreground">
         <span>
-          {textFilter.trim() ? `${rows.length} of ${allPrs.length}` : `${rows.length} total`}
+          {rows.length !== allPrs.length ? `${rows.length} of ${allPrs.length}` : `${rows.length} total`}
           {selection.isMultiSelect ? ` · ${selection.selectedKeys.size} selected` : ""}
           {query.isFetching ? " · refreshing…" : ""}
         </span>

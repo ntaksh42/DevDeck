@@ -34,37 +34,22 @@ describe("ReviewFilterBar", () => {
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps active values visible as clearable chips while folded", () => {
+  it("keeps the text filter visible as a clearable chip while folded", () => {
     const onTextFilterChange = vi.fn();
-    const onShowDraftsChange = vi.fn();
-    render(
-      <Harness
-        textFilter="api"
-        showDrafts
-        onTextFilterChange={onTextFilterChange}
-        onShowDraftsChange={onShowDraftsChange}
-      />,
-    );
+    render(<Harness textFilter="api" onTextFilterChange={onTextFilterChange} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Clear “api”" }));
-    fireEvent.click(screen.getByRole("button", { name: "Clear Drafts shown" }));
     expect(onTextFilterChange).toHaveBeenCalledWith("");
-    expect(onShowDraftsChange).toHaveBeenCalledWith(false);
   });
 
-  it("shows how many drafts are hidden and reveals them on click", () => {
+  it("shows the Show Drafts checkbox with the draft count while the filter is folded", () => {
     const onShowDraftsChange = vi.fn();
-    render(<Harness hiddenDraftCount={2} onShowDraftsChange={onShowDraftsChange} />);
+    const { rerender } = render(<Harness draftCount={2} onShowDraftsChange={onShowDraftsChange} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "2 drafts hidden" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Show Drafts (2)" }));
     expect(onShowDraftsChange).toHaveBeenCalledWith(true);
-  });
-
-  it("shows no hidden-drafts chip when drafts are visible or none exist", () => {
-    const { rerender } = render(<Harness hiddenDraftCount={0} />);
-    expect(screen.queryByText(/drafts? hidden/)).toBeNull();
-    rerender(<Harness hiddenDraftCount={3} showDrafts />);
-    expect(screen.queryByText(/drafts? hidden/)).toBeNull();
+    rerender(<Harness draftCount={0} />);
+    expect(screen.getByRole("checkbox", { name: "Show Drafts" })).toBeTruthy();
   });
 
   it("focuses the input when opened and folds back on Escape, returning focus", () => {
