@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   searchAll,
-  searchCode,
   searchWiki,
   submitPullRequestVote,
   type Organization,
@@ -13,13 +12,12 @@ import { openExternalUrl } from "@/lib/openExternal";
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { loadRecentPaletteEntries } from "@/lib/recentItems";
 import type { CommandPaletteSearchItem } from "@/components/CommandPalette";
-import { parsePaletteSearch, commitFirstLine } from "./appHelpers";
-import type { PaletteSearchKind, ExternalSearchRequest, View } from "./types";
+import { parsePaletteSearch } from "./appHelpers";
+import type { ExternalSearchRequest, View } from "./types";
 
 export interface PaletteSearchCallbacks {
   setWorkItemSearchRequest: (req: ExternalSearchRequest) => void;
   setPullRequestSearchRequest: (req: ExternalSearchRequest) => void;
-  setCommitSearchRequest: (req: ExternalSearchRequest) => void;
   setView: (view: View) => void;
 }
 
@@ -56,19 +54,13 @@ export function usePaletteSearch(
   const paletteQueryLongEnough = /^\d+$/.test(paletteSearch.query)
     ? paletteSearch.query.length >= 1
     : paletteSearch.query.length >= 2;
-  // Code and wiki search hit the API, so they only run behind the explicit
-  // `code:`/`co:` and `wiki:` prefixes — never on a generic palette query.
+  // Wiki search hits the API, so it only runs behind the explicit `wiki:`
+  // prefix — never on a generic palette query.
   const paletteSearchEnabled =
     commandPaletteOpen &&
     organizations.length > 0 &&
-    paletteSearch.kind !== "code" &&
     paletteSearch.kind !== "wiki" &&
     paletteQueryLongEnough;
-  const paletteCodeEnabled =
-    commandPaletteOpen &&
-    organizations.length > 0 &&
-    paletteSearch.kind === "code" &&
-    paletteSearch.query.length >= 2;
   const paletteWikiEnabled =
     commandPaletteOpen &&
     organizations.length > 0 &&
@@ -85,22 +77,10 @@ export function usePaletteSearch(
     placeholderData: keepPreviousData,
   });
 
-  // Code search targets the active connection (the palette has no org
+  // Wiki search targets the active connection (the palette has no org
   // selector), falling back to the first one until the active id has loaded.
   const activeOrganizationId = useActiveOrganizationId();
   const paletteCodeOrgId = activeOrganizationId || organizations[0]?.id;
-  const paletteCodeQuery = useQuery({
-    queryKey: ["paletteCode", paletteCodeOrgId, paletteSearch.query],
-    queryFn: ({ signal }) =>
-      searchCode({ organizationId: paletteCodeOrgId, query: paletteSearch.query }, signal),
-    enabled: paletteCodeEnabled,
-    staleTime: 30_000,
-    placeholderData: keepPreviousData,
-    // Code Search is an optional extension; a failure is reported as a single
-    // "unavailable" row instead of retrying.
-    retry: false,
-  });
-
   const paletteWikiQuery = useQuery({
     queryKey: ["paletteWiki", paletteCodeOrgId, paletteSearch.query],
     queryFn: () => searchWiki({ organizationId: paletteCodeOrgId, query: paletteSearch.query }),
@@ -113,19 +93,16 @@ export function usePaletteSearch(
   });
 
   function openSearchTarget(
-    kind: PaletteSearchKind,
+    kind: "workItems" | "pullRequests",
     query: string,
     organizationId?: string,
   ): void {
     if (kind === "workItems") {
       callbacks.setWorkItemSearchRequest({ query, requestId: Date.now(), organizationId });
       callbacks.setView("workItems");
-    } else if (kind === "pullRequests") {
+    } else {
       callbacks.setPullRequestSearchRequest({ query, requestId: Date.now(), organizationId });
       callbacks.setView("pullRequestSearch");
-    } else {
-      callbacks.setCommitSearchRequest({ query, requestId: Date.now(), organizationId });
-      callbacks.setView("commits");
     }
   }
 
@@ -158,38 +135,7 @@ export function usePaletteSearch(
     const kind = paletteSearch.kind;
     const showOrg = organizations.length > 1;
 
-    // Code is a distinct, opt-in search (own query); surface its file hits and
-    // return early since searchAll does not cover code.
-    if (kind === "code") {
-      const codeData = paletteCodeEnabled ? paletteCodeQuery.data : undefined;
-      const codeItems: CommandPaletteSearchItem[] = [];
-      if (paletteCodeEnabled && paletteCodeQuery.isError) {
-        codeItems.push({
-          id: "code:unavailable",
-          group: "Code",
-          label: "Code Search is unavailable",
-          detail: "The extension may be disabled or the token lacks permission.",
-          run: () => {},
-        });
-      }
-      for (const hit of codeData?.results ?? []) {
-        codeItems.push({
-          id: `code:${hit.projectName}:${hit.repositoryName}:${hit.branch ?? ""}:${hit.path}`,
-          group: "Code",
-          label: hit.fileName,
-          detail: [hit.path, `${hit.projectName} / ${hit.repositoryName}`]
-            .filter(Boolean)
-            .join(" · "),
-          // No in-app file viewer; open the file in Azure DevOps.
-          run: () => {
-            void openExternalUrl(hit.webUrl);
-          },
-        });
-      }
-      return codeItems;
-    }
-
-    // Wiki is likewise its own opt-in search; a hit opens an in-app page preview
+    // Wiki is its own opt-in search; a hit opens an in-app page preview
     // (edits stay in the browser).
     if (kind === "wiki") {
       const wikiData = paletteWikiEnabled ? paletteWikiQuery.data : undefined;
@@ -310,41 +256,6 @@ export function usePaletteSearch(
         }
       }
     }
-    if (!kind || kind === "commits") {
-      for (const commit of data.commits) {
-        items.push({
-          id: `c:${commit.organizationId}:${commit.repositoryId}:${commit.commitId}`,
-          group: "Commits",
-          label: `${commit.shortCommitId} ${commitFirstLine(commit.comment)}`,
-          detail: [
-            showOrg ? commit.organizationId : null,
-            commit.repositoryName,
-            commit.authorName,
-          ]
-            .filter(Boolean)
-            .join(" · "),
-          run: () => {
-            openSearchTarget("commits", rawQuery, commit.organizationId);
-          },
-          runAlt: commit.webUrl
-            ? () => {
-                void openExternalUrl(commit.webUrl as string);
-              }
-            : undefined,
-        });
-      }
-      if (data.totals.commits > data.commits.length) {
-        items.push({
-          id: "c:more",
-          group: "Commits",
-          label: `Show all ${data.totals.commits} commits…`,
-          run: () => {
-            callbacks.setCommitSearchRequest({ query: rawQuery, requestId: Date.now() });
-            callbacks.setView("commits");
-          },
-        });
-      }
-    }
     return items;
   }, [
     paletteSearch.kind,
@@ -352,9 +263,6 @@ export function usePaletteSearch(
     paletteSearchEnabled,
     searchAllQuery.data,
     votePullRequest,
-    paletteCodeEnabled,
-    paletteCodeQuery.data,
-    paletteCodeQuery.isError,
     paletteWikiEnabled,
     paletteWikiQuery.data,
     paletteWikiQuery.isError,
@@ -366,7 +274,7 @@ export function usePaletteSearch(
   // previously opened item is reachable without re-running a search.
   const paletteRecentItems = useMemo<CommandPaletteSearchItem[]>(() => {
     if (!commandPaletteOpen || organizations.length === 0) return [];
-    // A prefixed search (wi:/pr:/c:) is an explicit live search, not a recents lookup.
+    // A prefixed search (wi:/pr:/wiki:) is an explicit live search, not a recents lookup.
     if (paletteSearch.kind !== null) return [];
     // Once live cross-org search kicks in, those results stand on their own;
     // recents are the fallback for an empty or too-short query.

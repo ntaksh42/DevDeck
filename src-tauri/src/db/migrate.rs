@@ -592,5 +592,26 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         }
         conn.execute_batch("PRAGMA user_version = 22;")?;
     }
+    if current < 23 {
+        // The Commits view and its background sync were removed: drop the
+        // commit cache, the commit -> PR lookup cache, and their sync rows.
+        conn.execute_batch(
+            r#"
+            DROP TRIGGER IF EXISTS commits_fts_au;
+            DROP TRIGGER IF EXISTS commits_fts_ad;
+            DROP TRIGGER IF EXISTS commits_fts_ai;
+            DROP TABLE IF EXISTS commits_fts;
+            DROP TABLE IF EXISTS commits;
+            DROP TABLE IF EXISTS commit_prs;
+            "#,
+        )?;
+        if table_exists(conn, "sync_state")? {
+            conn.execute_batch(
+                "DELETE FROM sync_state \
+                 WHERE scope LIKE 'commits:%' OR scope LIKE 'internal:commit_full_sync:%';",
+            )?;
+        }
+        conn.execute_batch("PRAGMA user_version = 23;")?;
+    }
     Ok(())
 }

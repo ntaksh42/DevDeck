@@ -8,7 +8,7 @@ import { useMutation, useQueries, useQuery } from '@tanstack/react-query';
 import { Info } from 'lucide-react';
 import {
   searchPullRequests,
-  listCommitRepositories,
+  listRepositories,
   listRepoBranches,
   commandErrorMessage,
   type SearchPullRequestsInput,
@@ -74,7 +74,7 @@ export function PullRequestSearch({
 
   const repositoriesQuery = useQuery({
     queryKey: ["prRepositories", organizationId],
-    queryFn: () => listCommitRepositories({ organizationId }),
+    queryFn: () => listRepositories({ organizationId }),
     enabled: !!organizationId,
     staleTime: 5 * 60_000,
   });

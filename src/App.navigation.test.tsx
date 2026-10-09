@@ -86,8 +86,8 @@ describe("App — Navigation", () => {
     fireEvent.click(nav.getAllByRole("button", { name: "Search" })[1]);
     expect(await main.findByRole("heading", { name: "Work Items Search" })).toBeTruthy();
 
-    fireEvent.click(nav.getByRole("button", { name: "Commits" }));
-    expect(await main.findByRole("heading", { name: "Code Commits" })).toBeTruthy();
+    fireEvent.click(nav.getByRole("button", { name: "Analyze" }));
+    expect(await main.findByRole("heading", { name: "Analyze" })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: ",", ctrlKey: true });
     expect(await main.findByRole("heading", { name: "Connections" })).toBeTruthy();
@@ -151,10 +151,10 @@ describe("App — Navigation", () => {
     const nav = within(screen.getByRole("navigation", { name: "Primary navigation" }));
     fireEvent.click(nav.getByRole("button", { name: "Views" }));
     expect(await main.findByRole("heading", { name: "Work Items Views Assigned to me" })).toBeTruthy();
-    fireEvent.click(nav.getByRole("button", { name: "Commits" }));
-    expect(await main.findByRole("heading", { name: "Code Commits" })).toBeTruthy();
+    fireEvent.click(nav.getByRole("button", { name: "Analyze" }));
+    expect(await main.findByRole("heading", { name: "Analyze" })).toBeTruthy();
 
-    // Back: Commits -> Work Item Views -> My Reviews.
+    // Back: Analyze -> Work Item Views -> My Reviews.
     fireEvent.keyDown(window, { key: "ArrowLeft", altKey: true });
     expect(await main.findByRole("heading", { name: "Work Items Views Assigned to me" })).toBeTruthy();
     fireEvent.keyDown(window, { key: "ArrowLeft", altKey: true });
@@ -191,9 +191,6 @@ describe("App — Navigation", () => {
       if (command === "list_my_work_items") {
         return Promise.resolve([]);
       }
-      if (command === "list_commit_repositories") {
-        return Promise.resolve([]);
-      }
       if (command === "list_work_item_projects") {
         return Promise.resolve([]);
       }
@@ -209,8 +206,8 @@ describe("App — Navigation", () => {
     expect(await main.findByRole("heading", { name: "Work Items My Items" })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: "g" });
-    fireEvent.keyDown(window, { key: "c" });
-    expect(await main.findByRole("heading", { name: "Code Commits" })).toBeTruthy();
+    fireEvent.keyDown(window, { key: "a" });
+    expect(await main.findByRole("heading", { name: "Analyze" })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: "g" });
     fireEvent.keyDown(window, { key: "r" });
@@ -226,9 +223,6 @@ describe("App — Navigation", () => {
         return Promise.resolve(organization);
       }
       if (command === "list_my_review_pull_requests") {
-        return Promise.resolve([]);
-      }
-      if (command === "list_commit_repositories") {
         return Promise.resolve([]);
       }
       return Promise.reject(new Error(`Unhandled command: ${command}`));
@@ -287,7 +281,6 @@ describe("App — Navigation", () => {
       "pullRequests",
       "workItems",
       "pipelines",
-      "codeSearch",
       "analyze",
     ]);
 
@@ -297,7 +290,7 @@ describe("App — Navigation", () => {
       altKey: true,
     });
 
-    const expected = ["pullRequests", "pipelines", "workItems", "codeSearch", "analyze"];
+    const expected = ["pullRequests", "pipelines", "workItems", "analyze"];
     await waitFor(() => expect(order()).toEqual(expected));
     expect(
       JSON.parse(window.localStorage.getItem("azdodeck:layout:navOrder") ?? "null"),
@@ -307,7 +300,7 @@ describe("App — Navigation", () => {
   it("restores a saved nav order from localStorage", async () => {
     window.localStorage.setItem(
       "azdodeck:layout:navOrder",
-      JSON.stringify(["codeSearch", "pipelines", "workItems", "pullRequests"]),
+      JSON.stringify(["pipelines", "workItems", "pullRequests"]),
     );
     invokeMock.mockImplementation((command: string) => {
       if (command === "list_organizations") {
@@ -335,6 +328,6 @@ describe("App — Navigation", () => {
       ),
       // "analyze" is absent from the stored order (saved before it existed) and
       // is appended rather than discarding the rest.
-    ).toEqual(["codeSearch", "pipelines", "workItems", "pullRequests", "analyze"]);
+    ).toEqual(["pipelines", "workItems", "pullRequests", "analyze"]);
   });
 });

@@ -70,7 +70,7 @@ describe("App — Pull Requests", () => {
       if (command === "list_my_review_pull_requests") {
         return Promise.resolve([]);
       }
-      if (command === "list_commit_repositories") {
+      if (command === "list_repositories") {
         return Promise.resolve([]);
       }
       if (command === "search_pull_requests") {

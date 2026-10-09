@@ -3,26 +3,8 @@
 //! return `AppError::NotSupported`; `capabilities()` advertises what works so
 //! the UI hides the rest.
 
-use std::collections::HashMap;
-
 use async_trait::async_trait;
 
-use crate::code_browse::{
-    BranchOverviewItem, BranchPolicyItem, CompareRevisionsInput, CreateBranchInput, CreateTagInput,
-    DeleteBranchInput, DeleteTagInput, GetFileInput, ListBranchPoliciesInput, ListBranchesInput,
-    ListHistoryInput, ListPathsInput, ListTreeInput, RepoBranch, RepoCommitInfo, RepoFile,
-    RepoPathList, RepoTreeItem, RevisionComparison, TagOverviewItem,
-};
-use crate::code_search::{
-    CodeContextResult, CodeSearchResults, GetCodeContextInput, SearchCodeInput,
-};
-use crate::commits::{
-    CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitContainingRefs, CommitFileDiff,
-    CommitPullRequest, CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput,
-    GetCommitContainingRefsInput, GetCommitFileDiffInput, GetCommitPullRequestsBatchInput,
-    GetCommitPullRequestsInput, ListCommitRepositoriesInput, ListCommitWorkItemsInput,
-    SearchCommitsInput,
-};
 use crate::db::Organization;
 use crate::error::{AppError, Result};
 use crate::github;
@@ -37,20 +19,20 @@ use crate::pipelines::{
     UpdatePipelineDefinitionInput,
 };
 use crate::pr_review::{
-    AddPullRequestLabelInput, AddPullRequestReviewerInput, CreatePullRequestInput,
-    CreatedPullRequest, DeletePullRequestCommentInput, EditPullRequestCommentInput,
-    GetPullRequestFileDiffInput, PostPullRequestCommentInput, PrCommit, PrDetailsResult,
-    PrFileDiff, PrLabel, PrLocator, PrReviewer, PrStatusResult, PrThread, PullRequestChanges,
-    PullRequestReview, RemovePullRequestLabelInput, RemovePullRequestReviewerInput,
-    SearchPullRequestMentionsInput, SetPullRequestReviewerRequiredInput,
-    SetPullRequestThreadStatusInput, SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput,
-    UpdatePullRequestInput,
+    AddPullRequestLabelInput, AddPullRequestReviewerInput, DeletePullRequestCommentInput,
+    EditPullRequestCommentInput, GetPullRequestFileDiffInput, PostPullRequestCommentInput,
+    PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator, PrReviewer, PrStatusResult,
+    PrThread, PullRequestChanges, PullRequestReview, RemovePullRequestLabelInput,
+    RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
+    SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
+    SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
 };
 use crate::project_info::{ProjectInfoInput, ProjectTeams, ServiceConnectionInfo, ServiceHookInfo};
 use crate::prs::{
     ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestsResult,
     PullRequestSearchResult, ReviewPullRequestSummary, SearchPullRequestsInput,
 };
+use crate::repos::{ListBranchesInput, ListRepositoriesInput, RepoBranch, RepositoryOption};
 use crate::search::{SearchAllInput, SearchAllResult, SearchAllTotals};
 use crate::secrets::SecretStore;
 use crate::wiki::{GetWikiPageInput, SearchWikiInput, WikiPageContent, WikiSearchResults};
@@ -88,9 +70,6 @@ impl Provider for GithubProvider {
             pull_requests: true,
             pull_request_review: true,
             work_items: true,
-            commits: true,
-            code_search: true,
-            code_browse: false,
             pipelines: false,
             work_item_priority: false,
             resolve_review_threads: true,
@@ -254,60 +233,6 @@ impl Provider for GithubProvider {
         Ok(Vec::new())
     }
 
-    async fn search_commits(&self, input: SearchCommitsInput) -> Result<CommitSearchResult> {
-        github::commits::search(&self.org, &self.secrets, &input).await
-    }
-
-    async fn list_commit_repositories(
-        &self,
-        _input: ListCommitRepositoriesInput,
-    ) -> Result<Vec<CommitRepositoryOption>> {
-        // The GitHub commit search spans all repositories; no pre-fetched list.
-        Ok(Vec::new())
-    }
-
-    async fn commit_activity(&self, _input: CommitActivityInput) -> Result<Vec<CommitActivityDay>> {
-        Ok(Vec::new())
-    }
-
-    async fn get_commit_changes(&self, input: GetCommitChangesInput) -> Result<CommitChangeSet> {
-        github::commits::get_commit_changes(&self.org, &self.secrets, input).await
-    }
-
-    async fn get_commit_file_diff(&self, input: GetCommitFileDiffInput) -> Result<CommitFileDiff> {
-        github::commits::get_commit_file_diff(&self.org, &self.secrets, input).await
-    }
-
-    async fn get_commit_pull_requests(
-        &self,
-        input: GetCommitPullRequestsInput,
-    ) -> Result<Vec<CommitPullRequest>> {
-        github::commits::get_commit_pull_requests(&self.org, &self.secrets, input).await
-    }
-
-    async fn get_commit_pull_requests_batch(
-        &self,
-        _input: GetCommitPullRequestsBatchInput,
-    ) -> Result<HashMap<String, Vec<CommitPullRequest>>> {
-        Err(AppError::NotSupported(
-            "batched related pull requests are not available for GitHub yet".to_string(),
-        ))
-    }
-
-    async fn get_commit_containing_refs(
-        &self,
-        _input: GetCommitContainingRefsInput,
-    ) -> Result<CommitContainingRefs> {
-        Err(AppError::NotSupported(
-            "containing branches/tags are not available for GitHub yet".to_string(),
-        ))
-    }
-
-    async fn list_commit_work_items(&self, _input: ListCommitWorkItemsInput) -> Result<Vec<i64>> {
-        // GitHub has no work items; AB# mentions are still picked up client-side.
-        Ok(Vec::new())
-    }
-
     async fn get_pull_request_review(&self, input: PrLocator) -> Result<PullRequestReview> {
         github::pr_review::get_review(&self.org, &self.secrets, input).await
     }
@@ -364,15 +289,6 @@ impl Provider for GithubProvider {
         github::pr_review::set_reviewer_required(&self.org, &self.secrets, input).await
     }
 
-    async fn create_pull_request(
-        &self,
-        _input: CreatePullRequestInput,
-    ) -> Result<CreatedPullRequest> {
-        Err(AppError::NotSupported(
-            "creating pull requests is not available for GitHub yet".to_string(),
-        ))
-    }
-
     async fn add_pull_request_label(&self, _input: AddPullRequestLabelInput) -> Result<PrLabel> {
         Err(AppError::NotSupported(
             "pull request labels are not available for GitHub yet".to_string(),
@@ -424,19 +340,6 @@ impl Provider for GithubProvider {
         github::pr_review::delete_comment(&self.org, &self.secrets, input).await
     }
 
-    async fn search_code(&self, input: SearchCodeInput) -> Result<CodeSearchResults> {
-        github::code::search(&self.org, &self.secrets, &input).await
-    }
-
-    async fn get_code_search_context(
-        &self,
-        _input: GetCodeContextInput,
-    ) -> Result<CodeContextResult> {
-        Err(AppError::NotSupported(
-            "code search context preview is not available for GitHub".to_string(),
-        ))
-    }
-
     async fn list_project_teams(&self, _input: ProjectInfoInput) -> Result<ProjectTeams> {
         Err(AppError::NotSupported(
             "project information is not available for GitHub".to_string(),
@@ -470,99 +373,17 @@ impl Provider for GithubProvider {
         ))
     }
 
+    async fn list_repositories(
+        &self,
+        _input: ListRepositoriesInput,
+    ) -> Result<Vec<RepositoryOption>> {
+        // GitHub PR search spans all repositories; no pre-fetched list.
+        Ok(Vec::new())
+    }
+
     async fn list_repo_branches(&self, _input: ListBranchesInput) -> Result<Vec<RepoBranch>> {
         Err(AppError::NotSupported(
-            "code browsing is not available for GitHub yet".to_string(),
-        ))
-    }
-
-    async fn list_repo_branch_overview(
-        &self,
-        _input: ListBranchesInput,
-    ) -> Result<Vec<BranchOverviewItem>> {
-        Err(AppError::NotSupported(
-            "code browsing is not available for GitHub yet".to_string(),
-        ))
-    }
-
-    async fn create_repo_branch(&self, _input: CreateBranchInput) -> Result<()> {
-        Err(AppError::NotSupported(
-            "code browsing is not available for GitHub yet".to_string(),
-        ))
-    }
-
-    async fn delete_repo_branch(&self, _input: DeleteBranchInput) -> Result<()> {
-        Err(AppError::NotSupported(
-            "code browsing is not available for GitHub yet".to_string(),
-        ))
-    }
-
-    async fn list_repo_tags(&self, _input: ListBranchesInput) -> Result<Vec<String>> {
-        Err(AppError::NotSupported(
-            "code browsing is not available for GitHub yet".to_string(),
-        ))
-    }
-
-    async fn list_repo_tag_overview(
-        &self,
-        _input: ListBranchesInput,
-    ) -> Result<Vec<TagOverviewItem>> {
-        Err(AppError::NotSupported(
-            "code browsing is not available for GitHub yet".to_string(),
-        ))
-    }
-
-    async fn list_branch_policies(
-        &self,
-        _input: ListBranchPoliciesInput,
-    ) -> Result<Vec<BranchPolicyItem>> {
-        Err(AppError::NotSupported(
-            "code browsing is not available for GitHub yet".to_string(),
-        ))
-    }
-
-    async fn create_repo_tag(&self, _input: CreateTagInput) -> Result<()> {
-        Err(AppError::NotSupported(
-            "code browsing is not available for GitHub yet".to_string(),
-        ))
-    }
-
-    async fn delete_repo_tag(&self, _input: DeleteTagInput) -> Result<()> {
-        Err(AppError::NotSupported(
-            "code browsing is not available for GitHub yet".to_string(),
-        ))
-    }
-
-    async fn compare_repo_revisions(
-        &self,
-        _input: CompareRevisionsInput,
-    ) -> Result<RevisionComparison> {
-        Err(AppError::NotSupported(
-            "code browsing is not available for GitHub yet".to_string(),
-        ))
-    }
-
-    async fn list_repo_tree(&self, _input: ListTreeInput) -> Result<Vec<RepoTreeItem>> {
-        Err(AppError::NotSupported(
-            "code browsing is not available for GitHub yet".to_string(),
-        ))
-    }
-
-    async fn get_repo_file(&self, _input: GetFileInput) -> Result<RepoFile> {
-        Err(AppError::NotSupported(
-            "code browsing is not available for GitHub yet".to_string(),
-        ))
-    }
-
-    async fn list_repo_history(&self, _input: ListHistoryInput) -> Result<Vec<RepoCommitInfo>> {
-        Err(AppError::NotSupported(
-            "code browsing is not available for GitHub yet".to_string(),
-        ))
-    }
-
-    async fn list_repo_paths(&self, _input: ListPathsInput) -> Result<RepoPathList> {
-        Err(AppError::NotSupported(
-            "code browsing is not available for GitHub yet".to_string(),
+            "branch listing is not available for GitHub yet".to_string(),
         ))
     }
 
@@ -667,15 +488,13 @@ impl Provider for GithubProvider {
 
     async fn search_all(&self, _input: SearchAllInput) -> Result<SearchAllResult> {
         // The command palette degrades to no results for GitHub (no local cache);
-        // the dedicated PR/Issue/Commit/Code screens cover live GitHub search.
+        // the dedicated PR/Issue screens cover live GitHub search.
         Ok(SearchAllResult {
             work_items: Vec::new(),
             pull_requests: Vec::new(),
-            commits: Vec::new(),
             totals: SearchAllTotals {
                 work_items: 0,
                 pull_requests: 0,
-                commits: 0,
             },
         })
     }

@@ -2,9 +2,9 @@ use azdo_client::WikiSearchRequest;
 use serde::{Deserialize, Serialize};
 
 use crate::auth::client_for_organization;
-use crate::commits::encode_path_segment;
 use crate::db::{AppDatabase, Organization};
 use crate::error::{AppError, Result};
+use crate::repos::encode_path_segment;
 use crate::secrets::SecretStore;
 
 const WIKI_SEARCH_TOP: u32 = 50;

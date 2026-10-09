@@ -91,35 +91,6 @@ export function bucketRangeEnd(buckets: AnalyzeBucket[]): string {
   return last ? isoDate(new Date(last.end.getTime() - DAY_MS)) : "";
 }
 
-/**
- * Assigns each item to its bucket key. Items outside the window are dropped,
- * which keeps a commit from a wider API response out of the first bucket.
- */
-export function groupByBucket<T>(
-  items: T[],
-  buckets: AnalyzeBucket[],
-  dateOf: (item: T) => string | null | undefined,
-): Map<string, T[]> {
-  const grouped = new Map<string, T[]>();
-  for (const bucket of buckets) grouped.set(bucket.key, []);
-  if (buckets.length === 0) return grouped;
-
-  const windowStart = buckets[0].start.getTime();
-  const windowEnd = buckets[buckets.length - 1].end.getTime();
-  const stepMs = (buckets[0].end.getTime() - buckets[0].start.getTime()) || DAY_MS;
-
-  for (const item of items) {
-    const raw = dateOf(item);
-    if (!raw) continue;
-    const time = new Date(raw).getTime();
-    if (!Number.isFinite(time) || time < windowStart || time >= windowEnd) continue;
-    const index = Math.floor((time - windowStart) / stepMs);
-    const bucket = buckets[index];
-    if (bucket) grouped.get(bucket.key)?.push(item);
-  }
-  return grouped;
-}
-
 /** Formats a bucket key for display, e.g. `08-05 (Wed)` or `Week of 08-03`. */
 export function formatBucketLabel(bucket: AnalyzeBucket, granularity: AnalyzeGranularity): string {
   const month = pad(bucket.start.getUTCMonth() + 1);

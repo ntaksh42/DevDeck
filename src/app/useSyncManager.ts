@@ -7,7 +7,6 @@ import { HOT_SYNC_FOCUS_MIN_INTERVAL_MS } from "./types";
 import type { View } from "./types";
 
 function currentViewSyncScope(activeView: View): SyncScope {
-  if (activeView === "commits") return "commits";
   if (
     activeView === "workItems" ||
     activeView === "myWorkItems" ||

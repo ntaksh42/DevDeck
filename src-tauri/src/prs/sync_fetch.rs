@@ -3,9 +3,9 @@ use std::time::Duration;
 use azdo_client::{AdoClient, PullRequestStatus, TeamProject};
 
 use super::*;
-use crate::commits::encode_path_segment;
 use crate::db::{CachedPr, CachedReviewPr, Organization};
 use crate::error::Result;
+use crate::repos::encode_path_segment;
 use crate::shared_cache::{self, SharedPullRequest, SharedReviewer};
 
 /// How stale the shared cache (`shared_cache` module) may be before this app

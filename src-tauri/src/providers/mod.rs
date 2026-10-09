@@ -14,27 +14,9 @@ mod github;
 pub(crate) use azdo::AzdoProvider;
 pub(crate) use github::GithubProvider;
 
-use std::collections::HashMap;
-
 use async_trait::async_trait;
 use serde::Serialize;
 
-use crate::code_browse::{
-    BranchOverviewItem, BranchPolicyItem, CompareRevisionsInput, CreateBranchInput, CreateTagInput,
-    DeleteBranchInput, DeleteTagInput, GetFileInput, ListBranchPoliciesInput, ListBranchesInput,
-    ListHistoryInput, ListPathsInput, ListTreeInput, RepoBranch, RepoCommitInfo, RepoFile,
-    RepoPathList, RepoTreeItem, RevisionComparison, TagOverviewItem,
-};
-use crate::code_search::{
-    CodeContextResult, CodeSearchResults, GetCodeContextInput, SearchCodeInput,
-};
-use crate::commits::{
-    CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitContainingRefs, CommitFileDiff,
-    CommitPullRequest, CommitRepositoryOption, CommitSearchResult, GetCommitChangesInput,
-    GetCommitContainingRefsInput, GetCommitFileDiffInput, GetCommitPullRequestsBatchInput,
-    GetCommitPullRequestsInput, ListCommitRepositoriesInput, ListCommitWorkItemsInput,
-    SearchCommitsInput,
-};
 use crate::error::Result;
 use crate::pipelines::{
     CancelPipelineRunInput, GetPipelineDefinitionInput, GetPipelineRunInput,
@@ -47,20 +29,20 @@ use crate::pipelines::{
     UpdatePipelineDefinitionInput,
 };
 use crate::pr_review::{
-    AddPullRequestLabelInput, AddPullRequestReviewerInput, CreatePullRequestInput,
-    CreatedPullRequest, DeletePullRequestCommentInput, EditPullRequestCommentInput,
-    GetPullRequestFileDiffInput, PostPullRequestCommentInput, PrCommit, PrDetailsResult,
-    PrFileDiff, PrLabel, PrLocator, PrReviewer, PrStatusResult, PrThread, PullRequestChanges,
-    PullRequestReview, RemovePullRequestLabelInput, RemovePullRequestReviewerInput,
-    SearchPullRequestMentionsInput, SetPullRequestReviewerRequiredInput,
-    SetPullRequestThreadStatusInput, SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput,
-    UpdatePullRequestInput,
+    AddPullRequestLabelInput, AddPullRequestReviewerInput, DeletePullRequestCommentInput,
+    EditPullRequestCommentInput, GetPullRequestFileDiffInput, PostPullRequestCommentInput,
+    PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator, PrReviewer, PrStatusResult,
+    PrThread, PullRequestChanges, PullRequestReview, RemovePullRequestLabelInput,
+    RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
+    SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
+    SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
 };
 use crate::project_info::{ProjectInfoInput, ProjectTeams, ServiceConnectionInfo, ServiceHookInfo};
 use crate::prs::{
     ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestsResult,
     PullRequestSearchResult, ReviewPullRequestSummary, SearchPullRequestsInput,
 };
+use crate::repos::{ListBranchesInput, ListRepositoriesInput, RepoBranch, RepositoryOption};
 use crate::wiki::{GetWikiPageInput, SearchWikiInput, WikiPageContent, WikiSearchResults};
 use crate::work_items::{
     AddWorkItemCommentInput, AssignWorkItemsInput, BulkWorkItemResult, DeleteWorkItemCommentInput,
@@ -84,9 +66,6 @@ pub struct ProviderCapabilities {
     pub pull_requests: bool,
     pub pull_request_review: bool,
     pub work_items: bool,
-    pub commits: bool,
-    pub code_search: bool,
-    pub code_browse: bool,
     pub pipelines: bool,
     /// Work-item priority field (Azure DevOps only).
     pub work_item_priority: bool,
@@ -173,29 +152,6 @@ pub(crate) trait Provider: Send + Sync {
         input: SearchWorkItemAssigneesInput,
     ) -> Result<Vec<WorkItemAssigneeCandidate>>;
 
-    // --- Commits ---
-    async fn search_commits(&self, input: SearchCommitsInput) -> Result<CommitSearchResult>;
-    async fn list_commit_repositories(
-        &self,
-        input: ListCommitRepositoriesInput,
-    ) -> Result<Vec<CommitRepositoryOption>>;
-    async fn commit_activity(&self, input: CommitActivityInput) -> Result<Vec<CommitActivityDay>>;
-    async fn get_commit_changes(&self, input: GetCommitChangesInput) -> Result<CommitChangeSet>;
-    async fn get_commit_file_diff(&self, input: GetCommitFileDiffInput) -> Result<CommitFileDiff>;
-    async fn get_commit_pull_requests(
-        &self,
-        input: GetCommitPullRequestsInput,
-    ) -> Result<Vec<CommitPullRequest>>;
-    async fn get_commit_pull_requests_batch(
-        &self,
-        input: GetCommitPullRequestsBatchInput,
-    ) -> Result<HashMap<String, Vec<CommitPullRequest>>>;
-    async fn get_commit_containing_refs(
-        &self,
-        input: GetCommitContainingRefsInput,
-    ) -> Result<CommitContainingRefs>;
-    async fn list_commit_work_items(&self, input: ListCommitWorkItemsInput) -> Result<Vec<i64>>;
-
     // --- Pull request review ---
     async fn get_pull_request_review(&self, input: PrLocator) -> Result<PullRequestReview>;
     async fn list_pull_request_changes(&self, input: PrLocator) -> Result<PullRequestChanges>;
@@ -223,10 +179,6 @@ pub(crate) trait Provider: Send + Sync {
         &self,
         input: SetPullRequestReviewerRequiredInput,
     ) -> Result<()>;
-    async fn create_pull_request(
-        &self,
-        input: CreatePullRequestInput,
-    ) -> Result<CreatedPullRequest>;
     async fn add_pull_request_label(&self, input: AddPullRequestLabelInput) -> Result<PrLabel>;
     async fn remove_pull_request_label(&self, input: RemovePullRequestLabelInput) -> Result<()>;
     async fn add_pull_request_reviewer(&self, input: AddPullRequestReviewerInput) -> Result<()>;
@@ -249,12 +201,7 @@ pub(crate) trait Provider: Send + Sync {
     async fn delete_pull_request_comment(&self, input: DeletePullRequestCommentInput)
         -> Result<()>;
 
-    // --- Code search & browse ---
-    async fn search_code(&self, input: SearchCodeInput) -> Result<CodeSearchResults>;
-    async fn get_code_search_context(
-        &self,
-        input: GetCodeContextInput,
-    ) -> Result<CodeContextResult>;
+    // --- Project info, wiki & repositories ---
     async fn list_project_teams(&self, input: ProjectInfoInput) -> Result<ProjectTeams>;
     async fn list_service_connections(
         &self,
@@ -263,33 +210,11 @@ pub(crate) trait Provider: Send + Sync {
     async fn list_service_hooks(&self, input: ProjectInfoInput) -> Result<Vec<ServiceHookInfo>>;
     async fn search_wiki(&self, input: SearchWikiInput) -> Result<WikiSearchResults>;
     async fn get_wiki_page(&self, input: GetWikiPageInput) -> Result<WikiPageContent>;
+    async fn list_repositories(
+        &self,
+        input: ListRepositoriesInput,
+    ) -> Result<Vec<RepositoryOption>>;
     async fn list_repo_branches(&self, input: ListBranchesInput) -> Result<Vec<RepoBranch>>;
-    async fn list_repo_branch_overview(
-        &self,
-        input: ListBranchesInput,
-    ) -> Result<Vec<BranchOverviewItem>>;
-    async fn create_repo_branch(&self, input: CreateBranchInput) -> Result<()>;
-    async fn delete_repo_branch(&self, input: DeleteBranchInput) -> Result<()>;
-    async fn list_repo_tags(&self, input: ListBranchesInput) -> Result<Vec<String>>;
-    async fn list_repo_tag_overview(
-        &self,
-        input: ListBranchesInput,
-    ) -> Result<Vec<TagOverviewItem>>;
-    async fn list_branch_policies(
-        &self,
-        input: ListBranchPoliciesInput,
-    ) -> Result<Vec<BranchPolicyItem>>;
-    async fn create_repo_tag(&self, input: CreateTagInput) -> Result<()>;
-    async fn delete_repo_tag(&self, input: DeleteTagInput) -> Result<()>;
-    async fn compare_repo_revisions(
-        &self,
-        input: CompareRevisionsInput,
-    ) -> Result<RevisionComparison>;
-    async fn list_repo_tree(&self, input: ListTreeInput) -> Result<Vec<RepoTreeItem>>;
-    async fn get_repo_file(&self, input: GetFileInput) -> Result<RepoFile>;
-    async fn list_repo_history(&self, input: ListHistoryInput) -> Result<Vec<RepoCommitInfo>>;
-    async fn list_repo_paths(&self, input: ListPathsInput) -> Result<RepoPathList>;
-
     // --- Pipelines (GitHub: not supported) ---
     async fn list_pipeline_projects(
         &self,

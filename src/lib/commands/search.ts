@@ -2,16 +2,13 @@ import { z } from "zod";
 import { invokeCommand } from "./runtime";
 import { workItemSummariesSchema } from "./workItems";
 import { pullRequestSummariesSchema } from "./prs";
-import { commitSummariesSchema } from "./commits";
 
 const searchAllResultSchema = z.object({
   workItems: workItemSummariesSchema,
   pullRequests: pullRequestSummariesSchema,
-  commits: commitSummariesSchema,
   totals: z.object({
     workItems: z.number(),
     pullRequests: z.number(),
-    commits: z.number(),
   }),
 });
 

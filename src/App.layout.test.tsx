@@ -278,23 +278,7 @@ describe("App — Layout", () => {
               isDraft: false,
             },
           ],
-          commits: [
-            {
-              organizationId: "contoso",
-              projectId: "project-1",
-              projectName: "Platform",
-              repositoryId: "repo-1",
-              repositoryName: "azdo-dashboard",
-              commitId: "abcdef1234567890",
-              shortCommitId: "abcdef12",
-              comment: "Fix 123 retry delays",
-              authorName: "Alice",
-              authorEmail: null,
-              authorDate: "2026-05-24T00:00:00Z",
-              webUrl: null,
-            },
-          ],
-          totals: { workItems: 1, pullRequests: 1, commits: 1 },
+          totals: { workItems: 1, pullRequests: 1 },
         });
       }
       if (command === "search_work_items") {
@@ -330,7 +314,6 @@ describe("App — Layout", () => {
     });
     expect(await screen.findByText("#123 Fix save workflow")).toBeTruthy();
     expect(screen.getByText("PR 1230 Add retry backoff")).toBeTruthy();
-    expect(screen.getByText("abcdef12 Fix 123 retry delays")).toBeTruthy();
 
     fireEvent.click(screen.getByText("#123 Fix save workflow"));
 

@@ -6,9 +6,7 @@ import { MyReviewsGrid } from "@/features/pull-requests/MyReviewsGrid";
 import type { MyReviewsSelectRequest } from "@/features/pull-requests/MyReviewsGrid";
 import type { WorkItemQueryView } from "@/features/work-items/workItemViewsStorage";
 import {
-  CommitSearch,
   PipelinesView,
-  CodeBrowseView,
   WorkItemSearch,
   WorkItemViewsPanel,
   MyWorkItemsPanel,
@@ -28,12 +26,10 @@ export interface AppContentProps {
   organizationsQuery: Pick<UseQueryResult, "isLoading" | "isError" | "error" | "refetch">;
   pullRequestSearchRequest: ExternalSearchRequest | null;
   workItemSearchRequest: ExternalSearchRequest | null;
-  commitSearchRequest: ExternalSearchRequest | null;
   myReviewsSelectRequest: MyReviewsSelectRequest | null;
   selectedWorkItemViewRequestId: string | null;
   onPullRequestSearchHandled: () => void;
   onWorkItemSearchHandled: () => void;
-  onCommitSearchHandled: () => void;
   onMyReviewsSelectHandled: () => void;
   onSelectedViewChange: (id: string | null) => void;
   onSelectedViewRequestHandled: () => void;
@@ -41,7 +37,6 @@ export interface AppContentProps {
   onOpenSettings: () => void;
   onOpenPullRequest: (query: string, organizationId?: string) => void;
   onOpenView: (view: "pipelines" | "settings" | "myReviews" | "myWorkItems") => void;
-  onOpenCommit: (query: string, organizationId?: string) => void;
 }
 
 export function AppContent({
@@ -50,12 +45,10 @@ export function AppContent({
   organizationsQuery,
   pullRequestSearchRequest,
   workItemSearchRequest,
-  commitSearchRequest,
   myReviewsSelectRequest,
   selectedWorkItemViewRequestId,
   onPullRequestSearchHandled,
   onWorkItemSearchHandled,
-  onCommitSearchHandled,
   onMyReviewsSelectHandled,
   onSelectedViewChange,
   onSelectedViewRequestHandled,
@@ -63,7 +56,6 @@ export function AppContent({
   onOpenSettings,
   onOpenPullRequest,
   onOpenView,
-  onOpenCommit,
 }: AppContentProps) {
   return (
     <section
@@ -108,16 +100,8 @@ export function AppContent({
             onSelectedViewRequestHandled={onSelectedViewRequestHandled}
             onViewsChange={onWorkItemNavViewsChange}
           />
-        ) : activeView === "commits" ? (
-          <CommitSearch
-            externalSearch={commitSearchRequest}
-            onExternalSearchHandled={onCommitSearchHandled}
-            onOpenPullRequest={onOpenPullRequest}
-          />
         ) : activeView === "pipelines" ? (
           <PipelinesView />
-        ) : activeView === "codeSearch" ? (
-          <CodeBrowseView onOpenCommit={onOpenCommit} />
         ) : activeView === "notifications" ? (
           <NotificationsView onOpenPullRequest={onOpenPullRequest} onOpenView={onOpenView} />
         ) : activeView === "crossOrgSummary" ? (

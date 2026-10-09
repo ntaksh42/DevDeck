@@ -1,5 +1,4 @@
-// Analyze groups: a named bundle of WIQL queries and repository branches that
-// are viewed together. Stored locally like the work item views, since the set a
+// Analyze groups: a named bundle of WIQL queries that are viewed together. Stored locally like the work item views, since the set a
 // person watches is a personal working list rather than shared configuration.
 
 import { clamp } from "@/lib/utils";
@@ -9,7 +8,7 @@ const ANALYZE_GROUPS_STORAGE_KEY = "azdodeck:analyze:groups";
 const ANALYZE_GROUPS_EXPORT_SCHEMA = "azdodeck.analyzeGroups";
 
 export const MAX_ANALYZE_GROUPS = 20;
-/** Queries plus branches within a single group. */
+/** Queries within a single group. */
 export const MAX_ANALYZE_GROUP_MEMBERS = 12;
 
 export const ANALYZE_DAY_RANGES = [7, 30, 90] as const;
@@ -25,24 +24,12 @@ export type AnalyzeQueryMember = {
   wiql: string;
 };
 
-export type AnalyzeBranchMember = {
-  id: string;
-  name: string;
-  /** Empty means the group's project is used. */
-  projectId: string;
-  repositoryId: string;
-  repositoryName: string;
-  /** Short branch name, without the `refs/heads/` prefix. */
-  branch: string;
-};
-
 export type AnalyzeGroup = {
   id: string;
   name: string;
   organizationId: string;
   projectId: string;
   queries: AnalyzeQueryMember[];
-  branches: AnalyzeBranchMember[];
   granularity: AnalyzeGranularity;
   /** Days when granularity is "day", weeks when "week". */
   rangeCount: number;
@@ -76,30 +63,6 @@ function normalizeQueryMember(value: unknown): AnalyzeQueryMember | null {
   };
 }
 
-function normalizeBranchMember(value: unknown): AnalyzeBranchMember | null {
-  if (!value || typeof value !== "object") return null;
-  const member = value as Partial<AnalyzeBranchMember>;
-  if (typeof member.id !== "string" || !member.id) return null;
-  if (typeof member.repositoryId !== "string" || !member.repositoryId) return null;
-  const branch = typeof member.branch === "string" ? normalizeBranchName(member.branch) : "";
-  if (!branch) return null;
-  return {
-    id: member.id,
-    name: typeof member.name === "string" && member.name.trim() ? member.name : branch,
-    projectId: typeof member.projectId === "string" ? member.projectId : "",
-    repositoryId: member.repositoryId,
-    repositoryName:
-      typeof member.repositoryName === "string" ? member.repositoryName : member.repositoryId,
-    branch,
-  };
-}
-
-/** Strips the `refs/heads/` prefix so stored names stay in the short form. */
-export function normalizeBranchName(branch: string): string {
-  const trimmed = branch.trim();
-  return trimmed.startsWith("refs/heads/") ? trimmed.slice("refs/heads/".length) : trimmed;
-}
-
 export function normalizeAnalyzeGroup(value: unknown): AnalyzeGroup | null {
   if (!value || typeof value !== "object") return null;
   const group = value as Partial<AnalyzeGroup>;
@@ -110,19 +73,14 @@ export function normalizeAnalyzeGroup(value: unknown): AnalyzeGroup | null {
   const queries = Array.isArray(group.queries)
     ? group.queries.map(normalizeQueryMember).filter((m): m is AnalyzeQueryMember => m !== null)
     : [];
-  const branches = Array.isArray(group.branches)
-    ? group.branches.map(normalizeBranchMember).filter((m): m is AnalyzeBranchMember => m !== null)
-    : [];
 
   return {
     id: group.id,
     name: group.name,
     organizationId: typeof group.organizationId === "string" ? group.organizationId : "",
     projectId: typeof group.projectId === "string" ? group.projectId : "",
-    // Members share one budget so a group cannot fan out into an unbounded
-    // number of requests; queries are kept first because they cost more.
+    // Capped so a group cannot fan out into an unbounded number of requests.
     queries: queries.slice(0, MAX_ANALYZE_GROUP_MEMBERS),
-    branches: branches.slice(0, Math.max(0, MAX_ANALYZE_GROUP_MEMBERS - queries.length)),
     granularity,
     rangeCount: normalizeRangeCount(group.rangeCount, granularity),
   };
@@ -158,10 +116,10 @@ export function createAnalyzeMemberId(): string {
 }
 
 export function groupMemberCount(group: AnalyzeGroup): number {
-  return group.queries.length + group.branches.length;
+  return group.queries.length;
 }
 
-/** A group with nothing to show is not worth saving; either side alone is fine. */
+/** A group with nothing to show is not worth saving. */
 export function isAnalyzeGroupComplete(group: AnalyzeGroup): boolean {
   return group.name.trim().length > 0 && groupMemberCount(group) > 0;
 }

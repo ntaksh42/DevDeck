@@ -1,15 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
-import {
-  listCommitRepositories,
-  listWorkItemProjects,
-} from "@/lib/azdoCommands";
+import { listWorkItemProjects } from "@/lib/azdoCommands";
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { AnalyzeGroupDialog } from "./AnalyzeGroupDialog";
 import { AnalyzeGroupList } from "./AnalyzeGroupList";
 import { AnalyzeSummaryPanel, type AnalyzeSelection } from "./AnalyzeSummaryPanel";
-import { BranchDetailPanel, QueryDetailPanel } from "./AnalyzeDetailPanels";
+import { QueryDetailPanel } from "./AnalyzeDetailPanels";
 import {
   bucketRangeEnd,
   bucketRangeStart,
@@ -24,7 +21,7 @@ import {
   type AnalyzeGranularity,
   type AnalyzeGroup,
 } from "./analyzeGroupsStorage";
-import { useAnalyzeBuckets, useBranchSeries, useQuerySeries } from "./useAnalyzeQueries";
+import { useAnalyzeBuckets, useQuerySeries } from "./useAnalyzeQueries";
 
 function emptyGroup(organizationId: string, projectId: string): AnalyzeGroup {
   return {
@@ -33,7 +30,6 @@ function emptyGroup(organizationId: string, projectId: string): AnalyzeGroup {
     organizationId,
     projectId,
     queries: [],
-    branches: [],
     granularity: "day",
     rangeCount: defaultRangeCount("day"),
   };
@@ -60,16 +56,8 @@ export function AnalyzeView() {
     staleTime: 5 * 60_000,
   });
 
-  const repositoriesQuery = useQuery({
-    queryKey: ["analyzeRepositories", organizationId],
-    queryFn: () => listCommitRepositories({ organizationId }),
-    enabled: !!organizationId,
-    staleTime: 5 * 60_000,
-  });
-
   const buckets = useAnalyzeBuckets(selected);
   const querySeries = useQuerySeries(selected, buckets, !!organizationId);
-  const branchSeries = useBranchSeries(selected, buckets, !!organizationId);
 
   const persist = useCallback((next: AnalyzeGroup[]) => {
     setGroups(next);
@@ -128,9 +116,6 @@ export function AnalyzeView() {
   const activeQuery = selection?.kind === "query"
     ? querySeries.find((series) => series.memberId === selection.memberId)
     : undefined;
-  const activeBranch = selection?.kind === "branch"
-    ? branchSeries.find((series) => series.memberId === selection.memberId)
-    : undefined;
 
   return (
     <div className="grid min-h-0 flex-1 grid-cols-[14rem_1fr] gap-3 overflow-hidden">
@@ -148,7 +133,7 @@ export function AnalyzeView() {
         {!selected ? (
           <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">
             {groups.length === 0
-              ? "グループを追加すると、クエリの推移とブランチのコミットをまとめて確認できます。"
+              ? "グループを追加すると、クエリの推移をまとめて確認できます。"
               : "グループを選択してください。"}
           </div>
         ) : (
@@ -156,10 +141,10 @@ export function AnalyzeView() {
             <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border px-4 py-3">
               <div className="flex min-w-0 flex-col gap-1">
                 <h2 className="truncate text-base font-semibold">
-                  {selection && (activeQuery || activeBranch) ? (
+                  {selection && activeQuery ? (
                     <>
                       <span className="font-medium text-muted-foreground">{selected.name} › </span>
-                      {activeQuery?.name ?? activeBranch?.name}
+                      {activeQuery.name}
                     </>
                   ) : (
                     selected.name
@@ -168,9 +153,6 @@ export function AnalyzeView() {
                 <div className="flex flex-wrap items-baseline gap-2 text-xs text-muted-foreground">
                   <span className="rounded-full border border-border bg-muted/60 px-2 py-0.5">
                     クエリ {selected.queries.length}
-                  </span>
-                  <span className="rounded-full border border-border bg-muted/60 px-2 py-0.5">
-                    ブランチ {selected.branches.length}
                   </span>
                   {buckets.length > 0 && (
                     <span className="tabular-nums">
@@ -264,17 +246,9 @@ export function AnalyzeView() {
                   buckets={buckets}
                   granularity={selected.granularity}
                 />
-              ) : activeBranch ? (
-                <BranchDetailPanel
-                  series={activeBranch}
-                  buckets={buckets}
-                  granularity={selected.granularity}
-                />
               ) : (
                 <AnalyzeSummaryPanel
-                  buckets={buckets}
                   querySeries={querySeries}
-                  branchSeries={branchSeries}
                   onOpen={setSelection}
                 />
               )}
@@ -288,7 +262,6 @@ export function AnalyzeView() {
           group={editing.group}
           isNew={editing.isNew}
           projects={projectsQuery.data ?? []}
-          repositories={repositoriesQuery.data ?? []}
           onSave={saveGroup}
           onClose={() => setEditing(null)}
         />

@@ -133,9 +133,6 @@ const providerCapabilitiesSchema = z.object({
   pullRequests: z.boolean(),
   pullRequestReview: z.boolean(),
   workItems: z.boolean(),
-  commits: z.boolean(),
-  codeSearch: z.boolean(),
-  codeBrowse: z.boolean(),
   pipelines: z.boolean(),
   workItemPriority: z.boolean(),
   resolveReviewThreads: z.boolean(),
@@ -149,7 +146,7 @@ const providerInfoSchema = z.object({
 export type ProviderCapabilities = z.infer<typeof providerCapabilitiesSchema>;
 export type ProviderInfo = z.infer<typeof providerInfoSchema>;
 
-const syncScopeSchema = z.enum(["all", "hot", "myReviews", "myWorkItems", "commits"]);
+const syncScopeSchema = z.enum(["all", "hot", "myReviews", "myWorkItems"]);
 
 export type SyncScope = z.infer<typeof syncScopeSchema>;
 

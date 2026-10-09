@@ -3,9 +3,9 @@ use azdo_client::{
     DefinitionVariable, TestCaseResult, TestRun, Timeline,
 };
 
-use crate::commits::encode_path_segment;
 use crate::db::Organization;
 use crate::error::{AppError, Result};
+use crate::repos::encode_path_segment;
 
 use super::types::*;
 

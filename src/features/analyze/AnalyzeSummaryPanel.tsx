@@ -1,13 +1,10 @@
 import { Loader2 } from "lucide-react";
 import { commandErrorMessage } from "@/lib/azdoCommands";
-import { CommitBars, DeltaBadge, TrendSparkline } from "./AnalyzeCharts";
+import { DeltaBadge, TrendSparkline } from "./AnalyzeCharts";
 import type { ChartPoint } from "./analyzeChartGeometry";
-import { groupByBucket, type AnalyzeBucket } from "./analyzeDateRange";
-import type { BranchSeries, QuerySeries } from "./useAnalyzeQueries";
+import type { QuerySeries } from "./useAnalyzeQueries";
 
-export type AnalyzeSelection =
-  | { kind: "query"; memberId: string }
-  | { kind: "branch"; memberId: string };
+export type AnalyzeSelection = { kind: "query"; memberId: string };
 
 function seriesPoints(series: QuerySeries): ChartPoint[] {
   return series.points.map((point, index) => ({ index, value: point.count }));
@@ -62,14 +59,10 @@ function RowShell({
 }
 
 export function AnalyzeSummaryPanel({
-  buckets,
   querySeries,
-  branchSeries,
   onOpen,
 }: {
-  buckets: AnalyzeBucket[];
   querySeries: QuerySeries[];
-  branchSeries: BranchSeries[];
   onOpen: (selection: AnalyzeSelection) => void;
 }) {
   return (
@@ -123,50 +116,8 @@ export function AnalyzeSummaryPanel({
         </section>
       )}
 
-      {branchSeries.length > 0 && (
-        <section className="flex flex-col gap-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            ブランチのコミット
-          </h3>
-          {branchSeries.map((series) => {
-            const grouped = groupByBucket(series.commits, buckets, (commit) => commit.authorDate);
-            const counts = buckets.map((bucket) => grouped.get(bucket.key)?.length ?? 0);
-            return (
-              <RowShell
-                key={series.memberId}
-                name={series.name}
-                scope={
-                  series.isError
-                    ? commandErrorMessage(series.error)
-                    : `${series.repositoryName} · ${series.branch}`
-                }
-                chart={
-                  series.isError ? (
-                    <span className="block text-xs text-destructive">取得に失敗しました</span>
-                  ) : (
-                    <CommitBars counts={counts} label={series.name} />
-                  )
-                }
-                value={
-                  <span className="flex items-center gap-1.5 text-lg font-bold tabular-nums">
-                    {series.isFetching && series.commits.length === 0 ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                    ) : (
-                      series.commits.length
-                    )}
-                  </span>
-                }
-                meta={<span className="text-[0.7rem] text-muted-foreground">commits</span>}
-                onOpen={() => onOpen({ kind: "branch", memberId: series.memberId })}
-                openLabel={`${series.name} のコミット一覧を開く`}
-              />
-            );
-          })}
-        </section>
-      )}
-
       <p className="text-xs text-muted-foreground">
-        行を選ぶとそのクエリ／ブランチの明細に移動します。
+        行を選ぶとそのクエリの明細に移動します。
       </p>
     </div>
   );

@@ -37,7 +37,6 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
     combo("gotoMyWorkItems"),
     combo("gotoWorkItemSearch"),
     combo("gotoWorkItemViews"),
-    combo("gotoCommits"),
     combo("gotoNotifications"),
     combo("gotoSettings"),
   ].join("/");
@@ -111,13 +110,13 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
 
         </div>
         <div className="break-inside-avoid">
-          <p className={section}>PR Search / WI Search / Commits</p>
+          <p className={section}>PR Search / WI Search</p>
           <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>
           <div className={row}><span>Open / focus preview</span><kbd className={kbd}>Enter / →</kbd></div>
           <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>O / Ctrl+Enter</kbd></div>
           <div className={row}><span>Maximize preview</span><kbd className={kbd}>\</kbd></div>
           <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
-          <div className={row}><span>Copy selected rows as a table (Commits: URLs)</span><kbd className={kbd}>Ctrl+C</kbd></div>
+          <div className={row}><span>Copy selected rows as a table</span><kbd className={kbd}>Ctrl+C</kbd></div>
           <div className={row}><span>Copy as Markdown link</span><kbd className={kbd}>L</kbd></div>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ PgUp PgDn Home End</kbd></div>
           <div className={row}><span>Select multiple</span><kbd className={kbd}>Shift+↑ ↓ · Shift+click · Ctrl+click</kbd></div>

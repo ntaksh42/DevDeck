@@ -25,10 +25,6 @@ export function invalidateSyncedDataQueries(
     invalidateWorkItemQueryViews(queryClient, undefined, refetchType);
     void queryClient.invalidateQueries({ queryKey: workItemQueryKeys.previewRoot(), refetchType });
   }
-  if (all || scopeSet.has("commits")) {
-    void queryClient.invalidateQueries({ queryKey: ["commitRepositories"], refetchType });
-    void queryClient.invalidateQueries({ queryKey: ["commitActivity"], refetchType });
-  }
 }
 
 export function invalidationScopesForSyncScope(scope: SyncScope = "all"): SyncScope[] {
@@ -36,9 +32,8 @@ export function invalidationScopesForSyncScope(scope: SyncScope = "all"): SyncSc
 }
 
 export function parsePaletteSearch(text: string): { kind: PaletteSearchKind | null; query: string } {
-  // `code`/`co` must precede `c` (and `wiki` precede `wi`) in the alternation so
-  // the longer prefix wins.
-  const match = /^(wiki|wi|pr|code|co|c):\s*(.*)$/i.exec(text.trim());
+  // `wiki` must precede `wi` in the alternation so the longer prefix wins.
+  const match = /^(wiki|wi|pr):\s*(.*)$/i.exec(text.trim());
   if (match) {
     const prefix = match[1].toLowerCase();
     const kind: PaletteSearchKind =
@@ -46,19 +41,10 @@ export function parsePaletteSearch(text: string): { kind: PaletteSearchKind | nu
         ? "workItems"
         : prefix === "wiki"
           ? "wiki"
-          : prefix === "pr"
-            ? "pullRequests"
-            : prefix === "code" || prefix === "co"
-              ? "code"
-              : "commits";
+          : "pullRequests";
     return { kind, query: match[2].trim() };
   }
   return { kind: null, query: text.trim() };
-}
-
-export function commitFirstLine(text: string): string {
-  const index = text.indexOf("\n");
-  return index === -1 ? text : text.slice(0, index);
 }
 
 // Resolves the second-key -> view lookup for the goto chain from the current

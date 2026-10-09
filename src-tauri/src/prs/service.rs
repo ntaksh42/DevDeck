@@ -8,6 +8,7 @@ use super::*;
 use crate::auth::client_for_organization;
 use crate::db::{AppDatabase, Organization};
 use crate::error::{AppError, Result};
+use crate::repos::cached_owning_project_ids;
 use crate::secrets::SecretStore;
 
 #[derive(Debug, Clone)]
@@ -263,13 +264,9 @@ impl PullRequestService {
                 .filter(|(id, _)| set.contains(id))
                 .collect()
         } else if let Some(repo_set) = repository_set {
-            let owning: HashSet<String> = self
-                .db
-                .list_commit_repositories(&organization.id)?
-                .into_iter()
-                .filter(|repo| repo_set.contains(&repo.repository_id))
-                .map(|repo| repo.project_id)
-                .collect();
+            // The repository picker's listing leaves the owning projects in the
+            // repository cache; when it has expired, search every project.
+            let owning = cached_owning_project_ids(&self.db, &organization.id, repo_set);
             if owning.is_empty() {
                 all_pairs
             } else {

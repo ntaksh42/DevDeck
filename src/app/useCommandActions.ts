@@ -84,26 +84,10 @@ export function useCommandActions({
     {
       disabled: organizationsLength === 0,
       group: "Navigation",
-      id: "nav.commits",
-      keywords: ["commit", "search"],
-      label: "Go to Commits",
-      run: () => setView("commits"),
-    },
-    {
-      disabled: organizationsLength === 0,
-      group: "Navigation",
       id: "nav.pipelines",
       keywords: ["build", "ci", "pipeline"],
       label: "Go to Pipelines",
       run: () => setView("pipelines"),
-    },
-    {
-      disabled: organizationsLength === 0,
-      group: "Navigation",
-      id: "nav.codeSearch",
-      keywords: ["code", "files", "browse", "repository", "search", "grep"],
-      label: "Go to Code Files",
-      run: () => setView("codeSearch"),
     },
     {
       group: "Navigation",

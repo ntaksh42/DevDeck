@@ -2,28 +2,9 @@
 //! to the Azure DevOps REST API. Holds cheap service clones (path + secret
 //! handles) so swapping the active connection is inexpensive.
 
-use std::collections::HashMap;
-
 use async_trait::async_trait;
 
 use crate::app_state::run_blocking;
-use crate::code_browse::{
-    BranchOverviewItem, BranchPolicyItem, CodeBrowseService, CompareRevisionsInput,
-    CreateBranchInput, CreateTagInput, DeleteBranchInput, DeleteTagInput, GetFileInput,
-    ListBranchPoliciesInput, ListBranchesInput, ListHistoryInput, ListPathsInput, ListTreeInput,
-    RepoBranch, RepoCommitInfo, RepoFile, RepoPathList, RepoTreeItem, RevisionComparison,
-    TagOverviewItem,
-};
-use crate::code_search::{
-    CodeContextResult, CodeSearchResults, CodeSearchService, GetCodeContextInput, SearchCodeInput,
-};
-use crate::commits::{
-    CommitActivityDay, CommitActivityInput, CommitChangeSet, CommitContainingRefs, CommitFileDiff,
-    CommitPullRequest, CommitRepositoryOption, CommitSearchResult, CommitService,
-    GetCommitChangesInput, GetCommitContainingRefsInput, GetCommitFileDiffInput,
-    GetCommitPullRequestsBatchInput, GetCommitPullRequestsInput, ListCommitRepositoriesInput,
-    ListCommitWorkItemsInput, SearchCommitsInput,
-};
 use crate::db::AppDatabase;
 use crate::error::Result;
 use crate::pipelines::{
@@ -37,11 +18,10 @@ use crate::pipelines::{
     UpdatePipelineApprovalInput, UpdatePipelineDefinitionInput,
 };
 use crate::pr_review::{
-    AddPullRequestLabelInput, AddPullRequestReviewerInput, CreatePullRequestInput,
-    CreatedPullRequest, DeletePullRequestCommentInput, EditPullRequestCommentInput,
-    GetPullRequestFileDiffInput, PostPullRequestCommentInput, PrCommit, PrDetailsResult,
-    PrFileDiff, PrLabel, PrLocator, PrReviewService, PrReviewer, PrStatusResult, PrThread,
-    PullRequestChanges, PullRequestReview, RemovePullRequestLabelInput,
+    AddPullRequestLabelInput, AddPullRequestReviewerInput, DeletePullRequestCommentInput,
+    EditPullRequestCommentInput, GetPullRequestFileDiffInput, PostPullRequestCommentInput,
+    PrCommit, PrDetailsResult, PrFileDiff, PrLabel, PrLocator, PrReviewService, PrReviewer,
+    PrStatusResult, PrThread, PullRequestChanges, PullRequestReview, RemovePullRequestLabelInput,
     RemovePullRequestReviewerInput, SearchPullRequestMentionsInput,
     SetPullRequestReviewerRequiredInput, SetPullRequestThreadStatusInput,
     SubmitPullRequestVoteInput, UpdatePullRequestDetailsInput, UpdatePullRequestInput,
@@ -51,6 +31,9 @@ use crate::project_info::{ProjectInfoInput, ProjectTeams, ServiceConnectionInfo,
 use crate::prs::{
     ListMyCreatedPullRequestsInput, ListMyReviewPullRequestsInput, MyCreatedPullRequestsResult,
     PullRequestSearchResult, PullRequestService, ReviewPullRequestSummary, SearchPullRequestsInput,
+};
+use crate::repos::{
+    ListBranchesInput, ListRepositoriesInput, RepoBranch, RepoService, RepositoryOption,
 };
 use crate::search::{self, SearchAllInput, SearchAllResult};
 use crate::wiki::{
@@ -72,9 +55,7 @@ pub(crate) struct AzdoProvider {
     pull_requests: PullRequestService,
     pr_review: PrReviewService,
     work_items: WorkItemService,
-    commits: CommitService,
-    code_search: CodeSearchService,
-    code_browse: CodeBrowseService,
+    repos: RepoService,
     wiki: WikiService,
     project_info: ProjectInfoService,
     pipelines: PipelineService,
@@ -87,9 +68,7 @@ impl AzdoProvider {
         pull_requests: PullRequestService,
         pr_review: PrReviewService,
         work_items: WorkItemService,
-        commits: CommitService,
-        code_search: CodeSearchService,
-        code_browse: CodeBrowseService,
+        repos: RepoService,
         wiki: WikiService,
         project_info: ProjectInfoService,
         pipelines: PipelineService,
@@ -99,9 +78,7 @@ impl AzdoProvider {
             pull_requests,
             pr_review,
             work_items,
-            commits,
-            code_search,
-            code_browse,
+            repos,
             wiki,
             project_info,
             pipelines,
@@ -118,9 +95,6 @@ impl Provider for AzdoProvider {
             pull_requests: true,
             pull_request_review: true,
             work_items: true,
-            commits: true,
-            code_search: true,
-            code_browse: true,
             pipelines: true,
             work_item_priority: true,
             resolve_review_threads: true,
@@ -245,56 +219,6 @@ impl Provider for AzdoProvider {
         self.work_items.search_assignees(input).await
     }
 
-    async fn search_commits(&self, input: SearchCommitsInput) -> Result<CommitSearchResult> {
-        self.commits.search(input).await
-    }
-
-    async fn list_commit_repositories(
-        &self,
-        input: ListCommitRepositoriesInput,
-    ) -> Result<Vec<CommitRepositoryOption>> {
-        let service = self.commits.clone();
-        run_blocking(move || service.list_repositories(input)).await
-    }
-
-    async fn commit_activity(&self, input: CommitActivityInput) -> Result<Vec<CommitActivityDay>> {
-        let service = self.commits.clone();
-        run_blocking(move || service.commit_activity(input)).await
-    }
-
-    async fn get_commit_changes(&self, input: GetCommitChangesInput) -> Result<CommitChangeSet> {
-        self.commits.get_commit_changes(input).await
-    }
-
-    async fn get_commit_file_diff(&self, input: GetCommitFileDiffInput) -> Result<CommitFileDiff> {
-        self.commits.get_commit_file_diff(input).await
-    }
-
-    async fn get_commit_pull_requests(
-        &self,
-        input: GetCommitPullRequestsInput,
-    ) -> Result<Vec<CommitPullRequest>> {
-        self.commits.get_commit_pull_requests(input).await
-    }
-
-    async fn get_commit_pull_requests_batch(
-        &self,
-        input: GetCommitPullRequestsBatchInput,
-    ) -> Result<HashMap<String, Vec<CommitPullRequest>>> {
-        self.commits.get_commit_pull_requests_batch(input).await
-    }
-
-    async fn get_commit_containing_refs(
-        &self,
-        input: GetCommitContainingRefsInput,
-    ) -> Result<CommitContainingRefs> {
-        self.commits.get_commit_containing_refs(input).await
-    }
-
-    async fn list_commit_work_items(&self, input: ListCommitWorkItemsInput) -> Result<Vec<i64>> {
-        self.commits.list_commit_work_items(input).await
-    }
-
     async fn get_pull_request_review(&self, input: PrLocator) -> Result<PullRequestReview> {
         self.pr_review.get_review(input).await
     }
@@ -350,13 +274,6 @@ impl Provider for AzdoProvider {
         self.pr_review.set_reviewer_required(input).await
     }
 
-    async fn create_pull_request(
-        &self,
-        input: CreatePullRequestInput,
-    ) -> Result<CreatedPullRequest> {
-        self.pr_review.create_pull_request(input).await
-    }
-
     async fn add_pull_request_label(&self, input: AddPullRequestLabelInput) -> Result<PrLabel> {
         self.pr_review.add_label(input).await
     }
@@ -404,17 +321,6 @@ impl Provider for AzdoProvider {
         self.pr_review.delete_comment(input).await
     }
 
-    async fn search_code(&self, input: SearchCodeInput) -> Result<CodeSearchResults> {
-        self.code_search.search(input).await
-    }
-
-    async fn get_code_search_context(
-        &self,
-        input: GetCodeContextInput,
-    ) -> Result<CodeContextResult> {
-        self.code_search.get_context(input).await
-    }
-
     async fn list_project_teams(&self, input: ProjectInfoInput) -> Result<ProjectTeams> {
         self.project_info.list_teams(input).await
     }
@@ -438,72 +344,15 @@ impl Provider for AzdoProvider {
         self.wiki.get_page(input).await
     }
 
+    async fn list_repositories(
+        &self,
+        input: ListRepositoriesInput,
+    ) -> Result<Vec<RepositoryOption>> {
+        self.repos.list_repositories(input).await
+    }
+
     async fn list_repo_branches(&self, input: ListBranchesInput) -> Result<Vec<RepoBranch>> {
-        self.code_browse.list_branches(input).await
-    }
-
-    async fn list_repo_branch_overview(
-        &self,
-        input: ListBranchesInput,
-    ) -> Result<Vec<BranchOverviewItem>> {
-        self.code_browse.list_branch_overview(input).await
-    }
-
-    async fn create_repo_branch(&self, input: CreateBranchInput) -> Result<()> {
-        self.code_browse.create_branch(input).await
-    }
-
-    async fn delete_repo_branch(&self, input: DeleteBranchInput) -> Result<()> {
-        self.code_browse.delete_branch(input).await
-    }
-
-    async fn list_repo_tags(&self, input: ListBranchesInput) -> Result<Vec<String>> {
-        self.code_browse.list_tags(input).await
-    }
-
-    async fn list_repo_tag_overview(
-        &self,
-        input: ListBranchesInput,
-    ) -> Result<Vec<TagOverviewItem>> {
-        self.code_browse.list_tag_overview(input).await
-    }
-
-    async fn list_branch_policies(
-        &self,
-        input: ListBranchPoliciesInput,
-    ) -> Result<Vec<BranchPolicyItem>> {
-        self.code_browse.list_branch_policies(input).await
-    }
-
-    async fn create_repo_tag(&self, input: CreateTagInput) -> Result<()> {
-        self.code_browse.create_tag(input).await
-    }
-
-    async fn delete_repo_tag(&self, input: DeleteTagInput) -> Result<()> {
-        self.code_browse.delete_tag(input).await
-    }
-
-    async fn compare_repo_revisions(
-        &self,
-        input: CompareRevisionsInput,
-    ) -> Result<RevisionComparison> {
-        self.code_browse.compare_revisions(input).await
-    }
-
-    async fn list_repo_tree(&self, input: ListTreeInput) -> Result<Vec<RepoTreeItem>> {
-        self.code_browse.list_tree(input).await
-    }
-
-    async fn get_repo_file(&self, input: GetFileInput) -> Result<RepoFile> {
-        self.code_browse.get_file(input).await
-    }
-
-    async fn list_repo_history(&self, input: ListHistoryInput) -> Result<Vec<RepoCommitInfo>> {
-        self.code_browse.list_history(input).await
-    }
-
-    async fn list_repo_paths(&self, input: ListPathsInput) -> Result<RepoPathList> {
-        self.code_browse.list_paths(input).await
+        self.repos.list_branches(input).await
     }
 
     async fn list_pipeline_projects(
@@ -600,13 +449,6 @@ impl Provider for AzdoProvider {
     }
 
     async fn search_all(&self, input: SearchAllInput) -> Result<SearchAllResult> {
-        search::search_all(
-            &self.db,
-            &self.work_items,
-            &self.pull_requests,
-            &self.commits,
-            input,
-        )
-        .await
+        search::search_all(&self.db, &self.work_items, &self.pull_requests, input).await
     }
 }

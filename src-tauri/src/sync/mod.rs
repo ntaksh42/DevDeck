@@ -46,7 +46,6 @@ pub enum SyncScope {
     Hot,
     MyReviews,
     MyWorkItems,
-    Commits,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
