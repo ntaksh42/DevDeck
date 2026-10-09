@@ -29,7 +29,6 @@ export function SyncHealthSettings({ organizations }: { organizations: Organizat
   function syncScope(state: SyncState): SyncScope {
     if (state.scope.startsWith("prs:")) return "myReviews";
     if (state.scope.startsWith("work_items:")) return "myWorkItems";
-    if (state.scope.startsWith("commits:")) return "commits";
     return "all";
   }
 
@@ -164,7 +163,6 @@ export function SyncHealthSettings({ organizations }: { organizations: Organizat
 function formatSyncScope(scope: string): string {
   if (scope.startsWith("prs:")) return "Pull requests / My Reviews";
   if (scope.startsWith("work_items:")) return "Work items / My Items";
-  if (scope.startsWith("commits:")) return "Commits";
   return scope;
 }
 

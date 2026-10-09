@@ -14,10 +14,10 @@ use tokio::sync::Mutex;
 use tokio::task::JoinSet;
 
 use crate::auth::client_for_organization;
-use crate::commits::encode_path_segment;
 use crate::db::{AppDatabase, CachedWorkItem, Organization};
 use crate::error::{AppError, Result};
 use crate::projects::ProjectDirectory;
+use crate::repos::encode_path_segment;
 use crate::secrets::SecretStore;
 
 mod candidates;

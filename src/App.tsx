@@ -106,8 +106,6 @@ function AppShell() {
     useState<ExternalSearchRequest | null>(null);
   const [workItemSearchRequest, setWorkItemSearchRequest] =
     useState<ExternalSearchRequest | null>(null);
-  const [commitSearchRequest, setCommitSearchRequest] =
-    useState<ExternalSearchRequest | null>(null);
   const [myReviewsSelectRequest, setMyReviewsSelectRequest] =
     useState<MyReviewsSelectRequest | null>(null);
   const [quickPipelines, setQuickPipelines] = useState<QuickPipeline[]>(() =>
@@ -197,7 +195,6 @@ function AppShell() {
   } = usePaletteSearch(commandPaletteOpen, organizations, {
     setWorkItemSearchRequest,
     setPullRequestSearchRequest,
-    setCommitSearchRequest,
     setView,
   });
 
@@ -399,17 +396,10 @@ function AppShell() {
     focusNavigation: () => sidebarRef.current?.focusNavigation(),
   });
 
-  // CommitSearch passes a PR query upward; resolve it as a PR search.
+  // Notifications pass a PR query upward; resolve it as a PR search.
   function openPullRequestSearch(query: string, organizationId?: string): void {
     setPullRequestSearchRequest({ query, requestId: Date.now(), organizationId });
     setView("pullRequestSearch");
-  }
-
-  // Code > History rows pass a commit id upward; resolve it as a commit search
-  // so the existing Commits diff infrastructure shows that commit.
-  function openCommitSearch(query: string, organizationId?: string): void {
-    setCommitSearchRequest({ query, requestId: Date.now(), organizationId });
-    setView("commits");
   }
 
   return (
@@ -455,12 +445,10 @@ function AppShell() {
           organizationsQuery={organizationsQuery}
           pullRequestSearchRequest={pullRequestSearchRequest}
           workItemSearchRequest={workItemSearchRequest}
-          commitSearchRequest={commitSearchRequest}
           myReviewsSelectRequest={myReviewsSelectRequest}
           selectedWorkItemViewRequestId={selectedWorkItemViewRequestId}
           onPullRequestSearchHandled={() => setPullRequestSearchRequest(null)}
           onWorkItemSearchHandled={() => setWorkItemSearchRequest(null)}
-          onCommitSearchHandled={() => setCommitSearchRequest(null)}
           onMyReviewsSelectHandled={() => setMyReviewsSelectRequest(null)}
           onSelectedViewChange={setActiveWorkItemViewId}
           onSelectedViewRequestHandled={() => setSelectedWorkItemViewRequestId(null)}
@@ -468,7 +456,6 @@ function AppShell() {
           onOpenSettings={() => setView("settings")}
           onOpenPullRequest={openPullRequestSearch}
           onOpenView={setView}
-          onOpenCommit={openCommitSearch}
         />
       </main>
       <ToastHost />

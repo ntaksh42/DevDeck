@@ -164,7 +164,7 @@ impl SyncRunner {
         let orgs = vec![active];
         let now = chrono::Utc::now().to_rfc3339();
 
-        // The active org's PR/work-item/commit passes run concurrently. The
+        // The active org's PR and work-item passes run concurrently. The
         // shared budget caps total in-flight requests.
         let mut tasks: JoinSet<SyncPassOutcome> = JoinSet::new();
         for org in orgs {

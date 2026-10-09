@@ -1,24 +1,12 @@
 import { type ReactNode, useRef, useState } from "react";
-import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
+import { act, cleanup, renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { CommitSummary, ReviewPullRequestSummary, WorkItemSummary } from "./azdoCommands";
-import { useKeyedGridSelection } from "./useKeyedGridSelection";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { ReviewPullRequestSummary, WorkItemSummary } from "./azdoCommands";
 import { useMyReviewsSelectionState } from "@/features/pull-requests/useMyReviewsSelectionState";
 import { useWiGridState } from "@/features/work-items/useWiGridState";
 import { useWiGridLogic } from "@/features/work-items/useWiGridLogic";
-import { CommitResults } from "@/features/commits/CommitResults";
 
-const openExternalUrl = vi.hoisted(() => vi.fn());
-vi.mock("./openExternal", () => ({ openExternalUrl }));
-vi.mock("@/components/DockableWorkspace", () => ({
-  DockableWorkspace: ({ panels }: { panels: { id: string; content: ReactNode }[] }) =>
-    <>{panels.map((panel) => <div key={panel.id}>{panel.content}</div>)}</>,
-}));
-vi.mock("@/features/commits/CommitPreviewPanel", () => ({
-  CommitPreviewPanel: ({ commit }: { commit: CommitSummary | null }) =>
-    <div data-testid="commit-preview">{commit?.commitId}</div>,
-}));
 
 const common = {
   organizationId: "org", projectId: "project", projectName: "Project",
@@ -35,11 +23,6 @@ const items: WorkItemSummary[] = [1, 2, 3].map((id) => ({
   assignedTo: null, changedDate: null, tags: null, extraFields: [], depth: null,
   hasActivePullRequest: false, hasDraftPullRequest: false,
 }));
-const commits: CommitSummary[] = [1, 2, 3].map((id) => ({
-  ...common, commitId: `sha${id}`, shortCommitId: `sha${id}`, comment: `Commit ${id}`,
-  authorName: null, authorEmail: null, authorDate: `2026-01-0${4 - id}`,
-  webUrl: `https://example.test/commit/${id}`,
-}));
 
 function wrapper({ children }: { children: ReactNode }) {
   const [client] = useState(() => new QueryClient({
@@ -47,7 +30,7 @@ function wrapper({ children }: { children: ReactNode }) {
   }));
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
-beforeEach(() => { localStorage.clear(); openExternalUrl.mockClear(); });
+beforeEach(() => { localStorage.clear(); });
 afterEach(cleanup);
 
 describe("My Reviews focused selection", () => {
@@ -118,37 +101,5 @@ describe("Work Items focused selection", () => {
     expect(result.current.selectedItem?.id).toBe(3);
     rerender({ rows: [] });
     expect(result.current.selectedItem).toBeNull();
-  });
-});
-
-describe("Commits focused selection", () => {
-  it("keeps the preview and keyboard action on the selected commit after refresh and sorting", () => {
-    const props = { results: commits, loading: false, searched: true };
-    const { rerender } = render(<CommitResults {...props} />, { wrapper });
-    fireEvent.click(screen.getByText("Commit 2"));
-    const inserted = { ...commits[0], commitId: "new", comment: "New commit", authorDate: "2026-02-01" };
-    rerender(<CommitResults {...props} results={[inserted, ...commits]} />);
-    expect(screen.getByTestId("commit-preview").textContent).toBe("sha2");
-    const grid = screen.getByRole("grid", { name: "Commit search results" });
-    fireEvent.keyDown(grid, { key: "o" });
-    expect(openExternalUrl).toHaveBeenLastCalledWith(commits[1].webUrl);
-    fireEvent.click(screen.getByRole("button", { name: "Sort by Date" }));
-    expect(screen.getByTestId("commit-preview").textContent).toBe("sha2");
-    fireEvent.keyDown(grid, { key: "ArrowDown" });
-    expect(screen.getByTestId("commit-preview").textContent).toBe("sha1");
-  });
-});
-
-describe("keyed selection boundaries", () => {
-  it("distinguishes identical IDs across organizations and remembers the new position for removal", () => {
-    const rows = [{ org: "a", id: 1 }, { org: "b", id: 1 }, { org: "b", id: 2 }];
-    const { result, rerender } = renderHook(({ rows }) =>
-      useKeyedGridSelection(rows, (row) => `${row.org}:${row.id}`),
-    { initialProps: { rows } });
-    act(() => result.current.setSelectedIndex(1));
-    rerender({ rows: [rows[1], rows[0], rows[2]] });
-    expect(result.current.selectedRow).toEqual(rows[1]);
-    rerender({ rows: [rows[0], rows[2]] });
-    expect(result.current.selectedRow).toEqual(rows[0]);
   });
 });

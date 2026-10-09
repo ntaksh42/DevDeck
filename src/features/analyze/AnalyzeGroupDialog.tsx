@@ -1,24 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useRef, useState } from "react";
 import { Plus, Trash2, X } from "lucide-react";
-import {
-  listRepoBranches,
-  type CommitRepositoryOption,
-  type WorkItemProjectOption,
-} from "@/lib/azdoCommands";
-import { FilterableSelect } from "@/features/pipelines/FilterableSelect";
+import type { WorkItemProjectOption } from "@/lib/azdoCommands";
 import { loadWorkItemQueryViews } from "@/features/work-items/workItemViewsStorage";
 import {
   createAnalyzeMemberId,
   groupMemberCount,
   isAnalyzeGroupComplete,
   MAX_ANALYZE_GROUP_MEMBERS,
-  normalizeBranchName,
   rangeOptions,
   type AnalyzeGranularity,
   type AnalyzeGroup,
 } from "./analyzeGroupsStorage";
-import { isImeComposing } from "@/lib/utils";
 
 /** Mirrors the backend guard so the error surfaces before a request is made. */
 function containsAsof(wiql: string): boolean {
@@ -29,7 +21,6 @@ export type AnalyzeGroupDialogProps = {
   group: AnalyzeGroup;
   isNew: boolean;
   projects: WorkItemProjectOption[];
-  repositories: CommitRepositoryOption[];
   onSave: (group: AnalyzeGroup) => void;
   onClose: () => void;
 };
@@ -38,7 +29,6 @@ export function AnalyzeGroupDialog({
   group,
   isNew,
   projects,
-  repositories,
   onSave,
   onClose,
 }: AnalyzeGroupDialogProps) {
@@ -47,47 +37,6 @@ export function AnalyzeGroupDialog({
   const [wiqlDraft, setWiqlDraft] = useState("");
   const [wiqlName, setWiqlName] = useState("");
   const [showWiqlEditor, setShowWiqlEditor] = useState(false);
-  const [repositoryId, setRepositoryId] = useState(repositories[0]?.repositoryId ?? "");
-  const [branchDraft, setBranchDraft] = useState("");
-
-  const selectedRepository = repositories.find((entry) => entry.repositoryId === repositoryId);
-  const branchesQuery = useQuery({
-    queryKey: [
-      "analyzeRepoBranches",
-      draft.organizationId,
-      selectedRepository?.projectId,
-      repositoryId,
-    ],
-    queryFn: () =>
-      listRepoBranches({
-        organizationId: draft.organizationId || undefined,
-        project: selectedRepository!.projectId,
-        repository: repositoryId,
-      }),
-    enabled: !!repositoryId && !!selectedRepository,
-    staleTime: 5 * 60_000,
-  });
-
-  const branchOptions = useMemo(
-    () =>
-      (branchesQuery.data ?? []).map((branch) => ({
-        value: branch.name,
-        label: branch.isDefault ? `${branch.name} (default)` : branch.name,
-      })),
-    [branchesQuery.data],
-  );
-  // Fall back to free text when the branch list cannot be loaded, so a fetch
-  // failure never blocks adding a branch the user already knows the name of.
-  const showBranchPicker = !!selectedRepository && !branchesQuery.isError;
-
-  // Offer the repository's default branch once the list arrives, but never
-  // overwrite a name the user has already typed or picked.
-  useEffect(() => {
-    if (branchDraft) return;
-    const fallback = branchesQuery.data?.find((branch) => branch.isDefault)?.name;
-    if (fallback) setBranchDraft(fallback);
-  }, [branchesQuery.data, branchDraft]);
-
   const restoreFocusRef = useRef<HTMLElement | null>(
     document.activeElement instanceof HTMLElement ? document.activeElement : null,
   );
@@ -170,36 +119,9 @@ export function AnalyzeGroupDialog({
     setShowWiqlEditor(false);
   }
 
-  function addBranch() {
-    const branch = normalizeBranchName(branchDraft);
-    const repository = repositories.find((entry) => entry.repositoryId === repositoryId);
-    if (!branch || !repository) {
-      setError("リポジトリとブランチ名を指定してください。");
-      return;
-    }
-    if (full) {
-      setError(`メンバーは 1 グループ ${MAX_ANALYZE_GROUP_MEMBERS} 件までです。`);
-      return;
-    }
-    update({
-      branches: [
-        ...draft.branches,
-        {
-          id: createAnalyzeMemberId(),
-          name: branch,
-          projectId: repository.projectId,
-          repositoryId: repository.repositoryId,
-          repositoryName: repository.repositoryName,
-          branch,
-        },
-      ],
-    });
-    setBranchDraft("");
-  }
-
   function save() {
     if (!isAnalyzeGroupComplete(draft)) {
-      setError("グループ名と、クエリまたはブランチを1件以上指定してください。");
+      setError("グループ名と、クエリを1件以上指定してください。");
       return;
     }
     onSave(draft);
@@ -369,95 +291,6 @@ export function AnalyzeGroupDialog({
                 </button>
               </div>
             )}
-          </section>
-
-          <section className="flex flex-col gap-2">
-            <h3 className="text-xs font-semibold">
-              ブランチ{" "}
-              <span className="font-normal text-muted-foreground">{draft.branches.length} 件</span>
-            </h3>
-            {draft.branches.map((member) => (
-              <div
-                key={member.id}
-                className="flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5"
-              >
-                <span className="grid h-5 w-5 shrink-0 place-items-center rounded bg-muted-foreground/20 text-[0.65rem] font-bold text-muted-foreground">
-                  B
-                </span>
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-sm font-semibold">{member.branch}</span>
-                  <span className="truncate text-[0.7rem] text-muted-foreground">
-                    {member.repositoryName}
-                  </span>
-                </span>
-                <button
-                  type="button"
-                  aria-label={`${member.branch} を削除`}
-                  onClick={() =>
-                    update({ branches: draft.branches.filter((entry) => entry.id !== member.id) })
-                  }
-                  className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
-              </div>
-            ))}
-
-            <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/50 px-2.5 py-2">
-              <select
-                value={repositoryId}
-                aria-label="リポジトリ"
-                onChange={(event) => {
-                  setRepositoryId(event.target.value);
-                  // The previous repository's branch almost certainly does not
-                  // exist in the new one, so clear it and let the default land.
-                  setBranchDraft("");
-                }}
-                className="min-w-[7rem] flex-1 rounded-md border border-border bg-card px-2 py-1 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                {repositories.map((repository) => (
-                  <option key={repository.repositoryId} value={repository.repositoryId}>
-                    {repository.repositoryName}
-                  </option>
-                ))}
-              </select>
-              <span className="min-w-[8rem] flex-1">
-                {showBranchPicker ? (
-                  <FilterableSelect
-                    value={branchDraft}
-                    options={branchOptions}
-                    onChange={setBranchDraft}
-                    ariaLabel="ブランチ名"
-                    placeholder={branchesQuery.isFetching ? "読み込み中…" : "ブランチを選択"}
-                    allowCustomValue
-                  />
-                ) : (
-                  <input
-                    type="text"
-                    value={branchDraft}
-                    aria-label="ブランチ名"
-                    placeholder="main"
-                    onChange={(event) => setBranchDraft(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (isImeComposing(event)) return;
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        addBranch();
-                      }
-                    }}
-                    className="w-full rounded-md border border-border bg-card px-2 py-1 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  />
-                )}
-              </span>
-              <button
-                type="button"
-                onClick={addBranch}
-                className="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-card px-2.5 py-1 text-xs hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <Plus className="h-3 w-3" aria-hidden="true" />
-                ブランチを追加
-              </button>
-            </div>
           </section>
 
           <div className="flex gap-3">

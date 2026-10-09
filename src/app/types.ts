@@ -7,17 +7,15 @@ export type View =
   | "workItems"
   | "myWorkItems"
   | "workItemViews"
-  | "commits"
   | "pipelines"
-  | "codeSearch"
   | "notifications"
   | "crossOrgSummary"
   | "analyze"
   | "settings";
 
-export type NavSectionId = "pullRequests" | "workItems" | "code";
+export type NavSectionId = "pullRequests" | "workItems";
 
-export type PaletteSearchKind = "workItems" | "pullRequests" | "commits" | "code" | "wiki";
+export type PaletteSearchKind = "workItems" | "pullRequests" | "wiki";
 
 export type ExternalSearchRequest = { query: string; requestId: number; organizationId?: string };
 
@@ -35,9 +33,7 @@ export const GOTO_BINDING_VIEWS = {
   gotoMyWorkItems: "myWorkItems",
   gotoWorkItemSearch: "workItems",
   gotoWorkItemViews: "workItemViews",
-  gotoCommits: "commits",
   gotoPipelines: "pipelines",
-  gotoCodeSearch: "codeSearch",
   gotoNotifications: "notifications",
   gotoCrossOrgSummary: "crossOrgSummary",
   gotoAnalyze: "analyze",

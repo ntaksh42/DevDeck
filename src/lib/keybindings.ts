@@ -31,9 +31,7 @@ export type KeybindingId =
   | "gotoMyWorkItems"
   | "gotoWorkItemSearch"
   | "gotoWorkItemViews"
-  | "gotoCommits"
   | "gotoPipelines"
-  | "gotoCodeSearch"
   | "gotoNotifications"
   | "gotoCrossOrgSummary"
   | "gotoAnalyze"
@@ -83,9 +81,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   { id: "gotoMyWorkItems", label: "My Work Items", group: "Go to view", defaultCombo: "W", scope: "goto" },
   { id: "gotoWorkItemSearch", label: "Work Item Search", group: "Go to view", defaultCombo: "I", scope: "goto" },
   { id: "gotoWorkItemViews", label: "Work Item Views", group: "Go to view", defaultCombo: "V", scope: "goto" },
-  { id: "gotoCommits", label: "Commits", group: "Go to view", defaultCombo: "C", scope: "goto" },
   { id: "gotoPipelines", label: "Pipelines", group: "Go to view", defaultCombo: "P", scope: "goto" },
-  { id: "gotoCodeSearch", label: "Code", group: "Go to view", defaultCombo: "D", scope: "goto" },
   { id: "gotoNotifications", label: "Notifications", group: "Go to view", defaultCombo: "N", scope: "goto" },
   { id: "gotoCrossOrgSummary", label: "Cross-organization summary", group: "Go to view", defaultCombo: "O", scope: "goto" },
   { id: "gotoAnalyze", label: "Analyze", group: "Go to view", defaultCombo: "A", scope: "goto" },

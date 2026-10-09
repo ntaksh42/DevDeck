@@ -1,16 +1,14 @@
-// Pipeline, commit, code-browser, and repo dispatch cases extracted from
+// Pipeline, repo, notification, and agent-note dispatch cases extracted from
 // demoInvoke to keep the main file within the 500-line limit.
 // Returns `undefined` for unrecognised commands so the caller can fall through.
 import type {
   AgentNoteItem,
   CreateAgentNoteInput,
-  CommitActivityInput,
   ListNotificationsInput,
   RecordNotificationInput,
   ReplyAgentNoteInput,
   AgentNoteTarget,
   UpdateAgentNoteInput,
-  SearchCommitsInput,
 } from "@/lib/azdoCommands";
 import {
   demoPipelineApprovals,
@@ -24,27 +22,9 @@ import {
   demoPipelineRunsFiltered,
   demoUpdatePipelineDefinition,
 } from "@/lib/demo/pipelines";
-import { demoBranchPolicies } from "@/lib/demo/branchPolicies";
 import { demoProjectTeams, demoServiceConnections, demoServiceHooks } from "@/lib/demo/projectInfo";
-import { demoRepoTagOverview } from "@/lib/demo/repoTags";
 import { demoGetWikiPage, demoSearchWiki } from "@/lib/demo/wiki";
-import {
-  demoCommitActivity,
-  demoCommitChanges,
-  demoCommitPullRequests,
-  demoCommitRepositories,
-  demoCommits,
-  demoGetCodeSearchContext,
-  demoBranchOverview,
-  demoRepoBranches,
-  demoRepoTags,
-  demoRevisionComparison,
-  demoRepoFile,
-  demoRepoHistory,
-  demoRepoPaths,
-  demoRepoTree,
-  demoSearchCode,
-} from "@/lib/demo/commits";
+import { demoRepoBranches, demoRepositories } from "@/lib/demo/repos";
 import {
   demoListNotifications,
   demoMarkAllNotificationsRead,
@@ -148,14 +128,6 @@ export function dispatchExt(command: string, args: unknown): unknown {
         demoPipelineRuns()[2];
       return { ...run, status: "cancelling" };
     }
-    case "create_pull_request": {
-      const input = (args as { input?: { title?: string } } | undefined)?.input;
-      return {
-        pullRequestId: 9001,
-        title: input?.title ?? "New pull request",
-        webUrl: "https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/pullrequest/9001",
-      };
-    }
     case "add_pull_request_label": {
       const input = (args as { input?: { name?: string } } | undefined)?.input;
       return { id: `demo-label-${input?.name ?? "new"}`, name: input?.name ?? "" };
@@ -173,59 +145,6 @@ export function dispatchExt(command: string, args: unknown): unknown {
         demoPipelineApprovals()[0];
       return [{ ...approval, status: input?.status ?? "approved" }];
     }
-    // ── Commits ────────────────────────────────────────────────────────────
-    case "search_commits": {
-      const input = (args as { input?: SearchCommitsInput } | undefined)?.input;
-      const all = demoCommits(input);
-      const offset = input?.offset ?? 0;
-      const limit = 100;
-      const page = all.slice(offset, offset + limit);
-      return { commits: page, total: all.length, truncated: (offset + limit) < all.length };
-    }
-    case "commit_activity": {
-      const input = (args as { input?: CommitActivityInput } | undefined)?.input;
-      return demoCommitActivity(input);
-    }
-    case "list_commit_repositories":
-      return demoCommitRepositories();
-    case "get_commit_changes": {
-      const input = (args as { input?: { commitId?: string } } | undefined)?.input;
-      return demoCommitChanges(input?.commitId);
-    }
-    case "get_commit_file_diff": {
-      const input = (args as { input?: { filePath?: string } } | undefined)?.input;
-      return {
-        filePath: input?.filePath ?? "/src/app.ts",
-        baseContent: "const x = 1;\nconst y = 2;\n",
-        targetContent: "const x = 1;\nconst y = 3;\nconst z = 4;\n",
-        baseUnavailableReason: null,
-        targetUnavailableReason: null,
-      };
-    }
-    case "get_commit_pull_requests": {
-      const input = (args as { input?: { commitId?: string } } | undefined)?.input;
-      return demoCommitPullRequests(input?.commitId);
-    }
-    case "get_commit_pull_requests_batch": {
-      const input = (args as { input?: { commitIds?: string[] } } | undefined)?.input;
-      return Object.fromEntries(
-        (input?.commitIds ?? []).map((id) => [id, demoCommitPullRequests(id)]),
-      );
-    }
-    case "list_commit_work_items": {
-      const input = (args as { input?: { commitId?: string } } | undefined)?.input;
-      return input?.commitId?.startsWith("abcdef") ? [1234] : [];
-    }
-    case "get_commit_containing_refs":
-      return { branches: ["main", "release/1.x"], tags: ["v1.1.0"], checked: 5, total: 5 };
-    case "cancel_operation":
-      // Demo searches resolve instantly, so there is nothing to cancel.
-      return null;
-    // ── Code / repo browser ────────────────────────────────────────────────
-    case "search_code": {
-      const input = (args as { input?: { query?: string } } | undefined)?.input;
-      return demoSearchCode(input?.query?.trim() ?? "");
-    }
     case "list_project_teams":
       return demoProjectTeams();
     case "list_service_connections":
@@ -240,38 +159,11 @@ export function dispatchExt(command: string, args: unknown): unknown {
       const input = (args as { input?: { pagePath?: string } } | undefined)?.input;
       return demoGetWikiPage(input?.pagePath ?? "/");
     }
-    case "get_code_search_context": {
-      const input = (args as { input?: { query?: string } } | undefined)?.input;
-      return demoGetCodeSearchContext(input?.query?.trim() || "searchCode");
-    }
+    // ── Repositories ──────────────────────────────────────────────────────
+    case "list_repositories":
+      return demoRepositories();
     case "list_repo_branches":
       return demoRepoBranches();
-    case "list_repo_branch_overview":
-      return demoBranchOverview();
-    case "list_branch_policies":
-      return demoBranchPolicies();
-    case "list_repo_tag_overview":
-      return demoRepoTagOverview();
-    case "list_repo_tags":
-      return demoRepoTags();
-    case "compare_repo_revisions":
-      return demoRevisionComparison();
-    case "list_repo_tree": {
-      const input = (
-        args as { input?: { path?: string; includeLastCommit?: boolean } } | undefined
-      )?.input;
-      return demoRepoTree(input?.path, input?.includeLastCommit);
-    }
-    case "get_repo_file": {
-      const input = (args as { input?: { path?: string } } | undefined)?.input;
-      return demoRepoFile(input?.path ?? "/README.md");
-    }
-    case "list_repo_history": {
-      const input = (args as { input?: { path?: string } } | undefined)?.input;
-      return demoRepoHistory(input?.path ?? "/");
-    }
-    case "list_repo_paths":
-      return demoRepoPaths();
     // ── Notification history ──────────────────────────────────────────────
     case "list_notifications": {
       const input = (args as { input?: ListNotificationsInput } | undefined)?.input;

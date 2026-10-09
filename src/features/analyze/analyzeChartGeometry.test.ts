@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { barHeights, chartGeometry, type ChartPoint } from "./analyzeChartGeometry";
+import { chartGeometry, type ChartPoint } from "./analyzeChartGeometry";
 
 function series(values: (number | null)[]): ChartPoint[] {
   return values.map((value, index) => ({ index, value }));
@@ -57,19 +57,5 @@ describe("chartGeometry", () => {
   it("marks the last drawn coordinate", () => {
     const geometry = chartGeometry(series([1, 5, null]), 100, 40)!;
     expect(geometry.last).toEqual({ x: 50, y: 0 });
-  });
-});
-
-describe("barHeights", () => {
-  it("scales against the busiest bucket", () => {
-    expect(barHeights([0, 5, 10])).toEqual([0, 0.5, 1]);
-  });
-
-  it("returns zeros when nothing happened", () => {
-    expect(barHeights([0, 0])).toEqual([0, 0]);
-  });
-
-  it("returns an empty list for an empty series", () => {
-    expect(barHeights([])).toEqual([]);
   });
 });

@@ -11,17 +11,17 @@ Rust services and the Azure DevOps REST API.
 Key areas:
 
 - `src/` contains the React app. Feature areas live under `src/features/`
-  (`pull-requests`, `work-items`, `commits`, `code`, `pipelines`, `settings`),
+  (`pull-requests`, `work-items`, `pipelines`, `analyze`, `settings`),
   shared UI under `src/components/`, and cross-cutting helpers under `src/lib/`.
 - `src/lib/azdoCommands.ts` is the frontend boundary for all backend commands.
   It validates command results with Zod and provides browser-only demo data
   (backed by `src/lib/azdoDemo.ts`).
 - `src-tauri/src/` contains the Tauri application, IPC commands, domain
   services, auth, SQLite access, and error conversion. Domain services are one
-  module per area: `prs.rs`, `commits.rs`, `orgs.rs`, `projects.rs`,
-  `settings.rs`, `search.rs` (cross-kind command-palette search), `sync.rs`
-  (background cache refresh), `pipelines.rs`, `code_search.rs`, `pr_review.rs`
-  (PR threads/diffs), and `snooze.rs`. Work items are large enough to be their
+  module per area: `prs.rs`, `repos/` (repository and branch listings),
+  `orgs.rs`, `projects.rs`, `settings.rs`, `search.rs` (cross-kind
+  command-palette search), `sync.rs` (background cache refresh),
+  `pipelines.rs`, `pr_review.rs` (PR threads/diffs), and `snooze.rs`. Work items are large enough to be their
   own module directory: `src-tauri/src/work_items/` (`sync`, `mutations`,
   `candidates`, `conversions`, `types`).
 - `crates/azdo-client/` is a standalone Azure DevOps REST client crate. Keep it
@@ -77,9 +77,8 @@ Treat IPC as a four-part contract:
 1. Add or update the `#[tauri::command]` function in `src-tauri/src/lib.rs`, and
    register it in `generate_handler![]`.
 2. Put domain logic in the matching service module under `src-tauri/src/`
-   (`prs.rs`, `work_items/`, `commits.rs`, `orgs.rs`, `projects.rs`,
-   `pipelines.rs`, `code_search.rs`, `pr_review.rs`, `snooze.rs`, `search.rs`,
-   or `settings.rs`).
+   (`prs.rs`, `work_items/`, `repos/`, `orgs.rs`, `projects.rs`,
+   `pipelines.rs`, `pr_review.rs`, `snooze.rs`, `search.rs`, or `settings.rs`).
 3. Update `src/lib/azdoCommands.ts` with the command wrapper, Zod schema, and
    browser demo branch.
 4. Call the wrapper from the relevant React feature/component.
@@ -125,7 +124,7 @@ XService {
 `settings.rs` only needs the database. `AppDatabase` is a cloneable path wrapper that opens SQLite connections per call
 via `rusqlite`. Schema migrations live in `src-tauri/src/db.rs:migrate()` and
 use `PRAGMA user_version`; the current schema version is the `SCHEMA_VERSION`
-constant in `src-tauri/src/db/mod.rs` (currently `22`). `migrate()` applies each
+constant in `src-tauri/src/db/mod.rs` (currently `23`). `migrate()` applies each
 `if current < N` step in order and must stay repeatable; add a new numbered
 step rather than editing an existing one.
 
@@ -153,7 +152,7 @@ serializes to JSON containing a `message`, and the frontend should read that via
 ## Background Sync
 
 `sync.rs` runs a Tokio loop (`SyncRunner`) that periodically refreshes active
-PRs, review PRs, work items, and commits into the SQLite cache, then emits
+PRs, review PRs, and work items into the SQLite cache, then emits
 Tauri events the frontend subscribes to: `sync:updated` after each cache write,
 plus `notifications:pull-requests` / `notifications:work-items` for desktop
 notifications. Read-only feature screens (My Reviews, My Work Items) render from

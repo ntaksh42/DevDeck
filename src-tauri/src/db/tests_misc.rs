@@ -241,12 +241,6 @@ fn cascade_delete_clears_cache() {
         params!["org1", "p1", "P1", 1_i64, "Test task"],
     )
     .unwrap();
-    conn.execute(
-        r#"INSERT OR REPLACE INTO commits(org_id, project_id, project_name, repository_id, repository_name, commit_id, comment)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"#,
-        params!["org1", "p1", "P1", "r1", "Repo", "sha1", "initial commit"],
-    )
-    .unwrap();
 
     let wi_count: i64 = conn
         .query_row("SELECT count(*) FROM work_items", [], |r| r.get(0))
@@ -254,13 +248,7 @@ fn cascade_delete_clears_cache() {
     let fts_wi: i64 = conn
         .query_row("SELECT count(*) FROM work_items_fts", [], |r| r.get(0))
         .unwrap();
-    let c_count: i64 = conn
-        .query_row("SELECT count(*) FROM commits", [], |r| r.get(0))
-        .unwrap();
-    let fts_c: i64 = conn
-        .query_row("SELECT count(*) FROM commits_fts", [], |r| r.get(0))
-        .unwrap();
-    assert_eq!((wi_count, fts_wi, c_count, fts_c), (1, 1, 1, 1));
+    assert_eq!((wi_count, fts_wi), (1, 1));
 
     conn.execute("DELETE FROM organizations WHERE id = 'org1'", [])
         .unwrap();
@@ -271,13 +259,7 @@ fn cascade_delete_clears_cache() {
     let fts_wi: i64 = conn
         .query_row("SELECT count(*) FROM work_items_fts", [], |r| r.get(0))
         .unwrap();
-    let c_count: i64 = conn
-        .query_row("SELECT count(*) FROM commits", [], |r| r.get(0))
-        .unwrap();
-    let fts_c: i64 = conn
-        .query_row("SELECT count(*) FROM commits_fts", [], |r| r.get(0))
-        .unwrap();
-    assert_eq!((wi_count, fts_wi, c_count, fts_c), (0, 0, 0, 0));
+    assert_eq!((wi_count, fts_wi), (0, 0));
 }
 
 #[test]

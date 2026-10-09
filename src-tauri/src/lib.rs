@@ -3,11 +3,7 @@ use std::str::FromStr;
 mod agent_notes;
 mod app_state;
 mod auth;
-mod cancellation;
-mod code_browse;
-mod code_search;
 mod commands;
-mod commits;
 mod db;
 mod diagnostics;
 mod error;
@@ -19,6 +15,7 @@ mod project_info;
 mod projects;
 mod providers;
 mod prs;
+mod repos;
 mod search;
 mod secrets;
 mod settings;
@@ -30,10 +27,6 @@ mod work_items;
 
 use agent_notes::AgentNoteService;
 use app_state::AppState;
-use cancellation::CancellationRegistry;
-use code_browse::CodeBrowseService;
-use code_search::CodeSearchService;
-use commits::CommitService;
 use db::AppDatabase;
 use error::{AppError, Result};
 use orgs::OrganizationService;
@@ -41,6 +34,7 @@ use pipelines::PipelineService;
 use pr_review::PrReviewService;
 use project_info::ProjectInfoService;
 use prs::PullRequestService;
+use repos::RepoService;
 use secrets::SecretStore;
 use settings::SettingsService;
 use snooze::SnoozeService;
@@ -137,16 +131,13 @@ pub fn run() {
                 pull_requests: PullRequestService::new(db.clone(), SecretStore),
                 pr_review: PrReviewService::new(db.clone(), SecretStore),
                 work_items: WorkItemService::new(db.clone(), SecretStore),
-                commits: CommitService::new(db.clone(), SecretStore),
                 pipelines: PipelineService::new(db.clone(), SecretStore),
-                code_search: CodeSearchService::new(db.clone(), SecretStore),
-                code_browse: CodeBrowseService::new(db.clone(), SecretStore),
+                repos: RepoService::new(db.clone(), SecretStore),
                 wiki: WikiService::new(db.clone(), SecretStore),
                 project_info: ProjectInfoService::new(db.clone(), SecretStore),
                 settings: SettingsService::new(db.clone()),
                 agent_notes: AgentNoteService::new(db.clone()),
                 snooze: SnoozeService::new(db.clone()),
-                cancellation: CancellationRegistry::new(),
                 sync_trigger: sync_tx,
                 active_provider: std::sync::Arc::new(tokio::sync::RwLock::new(None)),
             });
@@ -196,7 +187,6 @@ pub fn run() {
             commands::pr_review::submit_pull_request_vote,
             commands::pr_review::update_pull_request,
             commands::pr_review::set_pull_request_reviewer_required,
-            commands::pr_review::create_pull_request,
             commands::pr_review::add_pull_request_label,
             commands::pr_review::remove_pull_request_label,
             commands::pr_review::add_pull_request_reviewer,
@@ -241,37 +231,13 @@ pub fn run() {
             commands::work_items::assign_work_items,
             commands::work_items::set_work_items_priority,
             commands::work_items::set_work_items_tags,
-            commands::commits::search_commits,
-            commands::commits::list_commit_repositories,
-            commands::commits::commit_activity,
-            commands::code::search_code,
-            commands::code::get_code_search_context,
             commands::wiki::search_wiki,
             commands::wiki::get_wiki_page,
             commands::project_info::list_project_teams,
             commands::project_info::list_service_connections,
             commands::project_info::list_service_hooks,
-            commands::code::list_repo_branches,
-            commands::code::list_repo_branch_overview,
-            commands::code::create_repo_branch,
-            commands::code::delete_repo_branch,
-            commands::code::list_repo_tags,
-            commands::code::list_repo_tag_overview,
-            commands::code::list_branch_policies,
-            commands::code::create_repo_tag,
-            commands::code::delete_repo_tag,
-            commands::code::compare_repo_revisions,
-            commands::code::list_repo_tree,
-            commands::code::get_repo_file,
-            commands::code::list_repo_history,
-            commands::code::list_repo_paths,
-            commands::code::cancel_operation,
-            commands::commits::get_commit_changes,
-            commands::commits::get_commit_file_diff,
-            commands::commits::get_commit_pull_requests,
-            commands::commits::get_commit_pull_requests_batch,
-            commands::commits::get_commit_containing_refs,
-            commands::commits::list_commit_work_items,
+            commands::repos::list_repositories,
+            commands::repos::list_repo_branches,
             commands::pipelines::list_pipeline_projects,
             commands::pipelines::list_pipeline_runs,
             commands::pipelines::list_pipeline_definitions,

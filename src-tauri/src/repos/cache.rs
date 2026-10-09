@@ -1,12 +1,11 @@
 //! In-memory cache of each project's repository list.
 //!
-//! The commit sync runs every few minutes and previously re-listed every
-//! project's repositories each time, although repositories rarely change. A
-//! stale entry only delays picking up a brand-new repository (or dropping a
-//! deleted one) by at most `TTL`, which is far shorter than the 24 hour full
-//! commit sync that reconciles the rest.
+//! Repositories rarely change, so the PR search repository picker and the
+//! branch list reuse one listing per project instead of re-listing on every
+//! call. A stale entry only delays picking up a brand-new repository (or
+//! dropping a deleted one) by at most `TTL`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -42,4 +41,25 @@ pub(super) fn put(db_key: &str, org_id: &str, project_id: &str, repos: &[GitRepo
             key(db_key, org_id, project_id),
             (Instant::now(), repos.to_vec()),
         );
+}
+
+/// Ids of the projects that own `repository_ids`, read from fresh cache
+/// entries only (no API call). Repositories not in the cache are skipped.
+pub(super) fn owning_project_ids(
+    db_key: &str,
+    org_id: &str,
+    repository_ids: &HashSet<String>,
+) -> HashSet<String> {
+    let entries = entries()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    entries
+        .iter()
+        .filter(|((db, org, _), (stored_at, _))| {
+            db == db_key && org == org_id && stored_at.elapsed() < TTL
+        })
+        .flat_map(|(_, (_, repos))| repos)
+        .filter(|repo| repository_ids.contains(&repo.id))
+        .filter_map(|repo| repo.project.as_ref().map(|project| project.id.clone()))
+        .collect()
 }

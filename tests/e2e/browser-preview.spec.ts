@@ -86,30 +86,12 @@ test.describe("browser preview", () => {
     await main.getByRole("button", { name: "Post comment" }).click();
     await expect(main.getByText("Comment posted")).toBeVisible();
 
-    await page.getByRole("button", { name: "Commits" }).click();
-    await main.getByPlaceholder("message, author, SHA — or path:src/auth").fill("dashboard");
-    await expect(main.getByLabel("Project")).toBeVisible();
-    await expect(main.getByLabel("Repository")).toBeVisible();
-    // Author/branch/date live behind the collapsed "Filters" panel, which only
-    // starts open when one of those filters already has a value.
-    await main.getByRole("button", { name: /^Filters/ }).click();
-    await main.getByLabel("From", { exact: true }).fill("2026-05-01");
-    await main.getByLabel("To", { exact: true }).fill("2026-05-28");
-    await main.getByRole("button", { name: "Search" }).click();
-    await expect(main.getByText("Add commit search dashboard").first()).toBeVisible();
-
-    // The "/" grid shortcut must return focus to the commit search field.
-    const commitGrid = main.getByRole("grid", { name: "Commit search results" });
-    await commitGrid.getByRole("row").filter({ hasText: "Add commit search dashboard" }).click();
-    await page.keyboard.press("/");
-    await expect(main.getByRole("textbox", { name: "Filter" })).toBeFocused();
-
     await page.getByRole("button", { name: "Settings" }).click();
     await expect(main.getByRole("heading", { name: "Connections" })).toBeVisible();
     await expect(main.getByRole("heading", { name: "Review result previews" })).toBeVisible();
     await expect(main.getByRole("heading", { name: "Sync health" })).toBeVisible();
     await expect(main.getByText("Pull requests / My Reviews")).toBeVisible();
-    await expect(main.getByText("https://dev.azure.com/contoso")).toBeVisible();
+    await expect(main.getByText("https://dev.azure.com/contoso").first()).toBeVisible();
   });
 
   test("renders rich Azure DevOps work item content through the demo harness", async ({

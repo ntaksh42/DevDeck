@@ -109,7 +109,6 @@ import {
   demoListFollowedWorkItems,
   demoUnfollowWorkItem,
 } from "@/lib/demo/workItemFollows";
-import { demoCommits } from "@/lib/demo/commits";
 import { dispatchExt } from "@/lib/demo/dispatchExt";
 
 let demoSettings: AppSettings = { ...DEFAULT_DEMO_SETTINGS };
@@ -141,9 +140,6 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
           pullRequests: true,
           pullRequestReview: true,
           workItems: true,
-          commits: true,
-          codeSearch: true,
-          codeBrowse: true,
           pipelines: true,
           workItemPriority: true,
           resolveReviewThreads: true,
@@ -314,21 +310,17 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
         return {
           workItems: [],
           pullRequests: [],
-          commits: [],
-          totals: { workItems: 0, pullRequests: 0, commits: 0 },
+          totals: { workItems: 0, pullRequests: 0 },
         } satisfies SearchAllResult;
       }
       const workItems = demoWorkItems({ query });
       const pullRequests = demoPullRequests({ query }).pullRequests;
-      const commits = demoCommits({ query });
       return {
         workItems: workItems.slice(0, limit),
         pullRequests: pullRequests.slice(0, limit),
-        commits: commits.slice(0, limit),
         totals: {
           workItems: workItems.length,
           pullRequests: pullRequests.length,
-          commits: commits.length,
         },
       } satisfies SearchAllResult;
     }

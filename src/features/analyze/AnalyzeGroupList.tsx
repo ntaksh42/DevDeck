@@ -118,7 +118,7 @@ export function AnalyzeGroupList({
               >
                 <span className="min-w-0 flex-1 truncate">{group.name}</span>
                 <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                  {group.queries.length}Q / {group.branches.length}B
+                  {group.queries.length}Q
                 </span>
               </button>
             );

@@ -3,7 +3,6 @@ use std::cmp::Ordering;
 use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 
-use crate::commits::{CommitService, CommitSummary, SearchCommitsInput};
 use crate::db::AppDatabase;
 use crate::error::Result;
 use crate::prs::{PullRequestService, PullRequestSummary, SearchPullRequestsInput};
@@ -47,7 +46,6 @@ pub struct SearchAllInput {
 pub struct SearchAllTotals {
     pub work_items: usize,
     pub pull_requests: usize,
-    pub commits: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -55,20 +53,14 @@ pub struct SearchAllTotals {
 pub struct SearchAllResult {
     pub work_items: Vec<WorkItemSummary>,
     pub pull_requests: Vec<PullRequestSummary>,
-    pub commits: Vec<CommitSummary>,
     pub totals: SearchAllTotals,
 }
 
-type OrganizationHits = (
-    Vec<WorkItemSummary>,
-    Vec<PullRequestSummary>,
-    Vec<CommitSummary>,
-);
+type OrganizationHits = (Vec<WorkItemSummary>, Vec<PullRequestSummary>);
 
 async fn search_organization(
     work_items: &WorkItemService,
     pull_requests: &PullRequestService,
-    commits: &CommitService,
     org_id: &str,
     query: &str,
 ) -> Result<OrganizationHits> {
@@ -95,29 +87,13 @@ async fn search_organization(
         })
         .await?
         .pull_requests;
-    let commit_hits = commits
-        .search(SearchCommitsInput {
-            organization_id: Some(org_id.to_string()),
-            query: Some(query.to_string()),
-            author: None,
-            branch: None,
-            item_path: None,
-            from_date: None,
-            to_date: None,
-            project_ids: None,
-            repository_ids: None,
-            offset: None,
-        })
-        .await?
-        .commits;
-    Ok((work_item_hits, pull_request_hits, commit_hits))
+    Ok((work_item_hits, pull_request_hits))
 }
 
 pub async fn search_all(
     db: &AppDatabase,
     work_items: &WorkItemService,
     pull_requests: &PullRequestService,
-    commits: &CommitService,
     input: SearchAllInput,
 ) -> Result<SearchAllResult> {
     let query = input.query.trim().to_string();
@@ -130,11 +106,9 @@ pub async fn search_all(
         return Ok(SearchAllResult {
             work_items: Vec::new(),
             pull_requests: Vec::new(),
-            commits: Vec::new(),
             totals: SearchAllTotals {
                 work_items: 0,
                 pull_requests: 0,
-                commits: 0,
             },
         });
     }
@@ -152,15 +126,13 @@ pub async fn search_all(
 
     let mut work_item_results = Vec::new();
     let mut pull_request_results = Vec::new();
-    let mut commit_results = Vec::new();
     let mut succeeded = 0;
     let mut last_error = None;
     for org_id in &org_ids {
-        match search_organization(work_items, pull_requests, commits, org_id, &query).await {
-            Ok((work_item_hits, pull_request_hits, commit_hits)) => {
+        match search_organization(work_items, pull_requests, org_id, &query).await {
+            Ok((work_item_hits, pull_request_hits)) => {
                 work_item_results.extend(work_item_hits);
                 pull_request_results.extend(pull_request_hits);
-                commit_results.extend(commit_hits);
                 succeeded += 1;
             }
             // One failing connection (e.g. a GitHub outage) must not blank the
@@ -186,25 +158,19 @@ pub async fn search_all(
         pull_request_results.sort_by(|a, b| {
             compare_timestamps_desc(Some(&b.creation_date), Some(&a.creation_date))
         });
-        commit_results.sort_by(|a, b| {
-            compare_timestamps_desc(b.author_date.as_deref(), a.author_date.as_deref())
-        });
     }
 
     // Totals are bounded by each underlying search's own cap, not exact counts.
     let totals = SearchAllTotals {
         work_items: work_item_results.len(),
         pull_requests: pull_request_results.len(),
-        commits: commit_results.len(),
     };
     work_item_results.truncate(limit);
     pull_request_results.truncate(limit);
-    commit_results.truncate(limit);
 
     Ok(SearchAllResult {
         work_items: work_item_results,
         pull_requests: pull_request_results,
-        commits: commit_results,
         totals,
     })
 }
@@ -212,7 +178,7 @@ pub async fn search_all(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::{AppDatabase, CachedCommit, CachedPr, CachedWorkItem, OrganizationDraft};
+    use crate::db::{AppDatabase, CachedPr, CachedWorkItem, OrganizationDraft};
     use crate::secrets::SecretStore;
 
     fn make_services() -> (
@@ -220,7 +186,6 @@ mod tests {
         AppDatabase,
         WorkItemService,
         PullRequestService,
-        CommitService,
     ) {
         let db_file = tempfile::NamedTempFile::new().unwrap();
         let db = AppDatabase::new(db_file.path().to_path_buf());
@@ -292,46 +257,23 @@ mod tests {
             }],
         )
         .unwrap();
-        db.replace_commits_for_repo(
-            "contoso",
-            "repo1",
-            &[CachedCommit {
-                org_id: "contoso".to_string(),
-                project_id: "p1".to_string(),
-                project_name: "Platform".to_string(),
-                repository_id: "repo1".to_string(),
-                repository_name: "platform-api".to_string(),
-                commit_id: "abc1234567890".to_string(),
-                comment: "tune retry delays".to_string(),
-                author_name: Some("Alice".to_string()),
-                author_email: None,
-                author_date: Some("2026-06-04T00:00:00Z".to_string()),
-                web_url: None,
-                committer_name: None,
-                committer_email: None,
-                committer_date: None,
-            }],
-        )
-        .unwrap();
 
         (
             db_file,
             db.clone(),
             WorkItemService::new(db.clone(), SecretStore),
-            PullRequestService::new(db.clone(), SecretStore),
-            CommitService::new(db, SecretStore),
+            PullRequestService::new(db, SecretStore),
         )
     }
 
     #[tokio::test]
     async fn search_all_groups_results_by_kind() {
-        let (_db_file, db, work_items, pull_requests, commits) = make_services();
+        let (_db_file, db, work_items, pull_requests) = make_services();
 
         let result = search_all(
             &db,
             &work_items,
             &pull_requests,
-            &commits,
             SearchAllInput {
                 organization_id: Some("contoso".to_string()),
                 query: "retry".to_string(),
@@ -345,27 +287,23 @@ mod tests {
         assert_eq!(result.work_items[0].id, 42);
         assert_eq!(result.pull_requests.len(), 1);
         assert_eq!(result.pull_requests[0].pull_request_id, 421);
-        assert_eq!(result.commits.len(), 1);
-        assert_eq!(result.commits[0].comment, "tune retry delays");
         assert_eq!(
             result.totals,
             SearchAllTotals {
                 work_items: 1,
                 pull_requests: 1,
-                commits: 1,
             }
         );
     }
 
     #[tokio::test]
     async fn search_all_numeric_query_matches_work_item_and_pr_ids() {
-        let (_db_file, db, work_items, pull_requests, commits) = make_services();
+        let (_db_file, db, work_items, pull_requests) = make_services();
 
         let result = search_all(
             &db,
             &work_items,
             &pull_requests,
-            &commits,
             SearchAllInput {
                 organization_id: Some("contoso".to_string()),
                 query: "42".to_string(),
@@ -384,13 +322,12 @@ mod tests {
 
     #[tokio::test]
     async fn search_all_reports_the_error_when_no_organization_can_be_searched() {
-        let (_db_file, db, work_items, pull_requests, commits) = make_services();
+        let (_db_file, db, work_items, pull_requests) = make_services();
 
         let result = search_all(
             &db,
             &work_items,
             &pull_requests,
-            &commits,
             SearchAllInput {
                 organization_id: Some("missing".to_string()),
                 query: "retry".to_string(),
@@ -404,13 +341,12 @@ mod tests {
 
     #[tokio::test]
     async fn search_all_empty_query_returns_nothing() {
-        let (_db_file, db, work_items, pull_requests, commits) = make_services();
+        let (_db_file, db, work_items, pull_requests) = make_services();
 
         let result = search_all(
             &db,
             &work_items,
             &pull_requests,
-            &commits,
             SearchAllInput {
                 organization_id: Some("contoso".to_string()),
                 query: "   ".to_string(),
@@ -422,12 +358,11 @@ mod tests {
 
         assert!(result.work_items.is_empty());
         assert!(result.pull_requests.is_empty());
-        assert!(result.commits.is_empty());
     }
 
     #[tokio::test]
     async fn search_all_without_organization_searches_every_org() {
-        let (_db_file, db, work_items, pull_requests, commits) = make_services();
+        let (_db_file, db, work_items, pull_requests) = make_services();
         db.upsert_organization(OrganizationDraft {
             id: "fabrikam".to_string(),
             name: "fabrikam".to_string(),
@@ -461,7 +396,6 @@ mod tests {
             &db,
             &work_items,
             &pull_requests,
-            &commits,
             SearchAllInput {
                 organization_id: None,
                 query: "retry".to_string(),
@@ -484,7 +418,7 @@ mod tests {
 
     #[tokio::test]
     async fn search_all_respects_limit_per_kind() {
-        let (_db_file, db, work_items, pull_requests, commits) = make_services();
+        let (_db_file, db, work_items, pull_requests) = make_services();
 
         let extra: Vec<CachedWorkItem> = (100..110)
             .map(|id| CachedWorkItem {
@@ -508,7 +442,6 @@ mod tests {
             &db,
             &work_items,
             &pull_requests,
-            &commits,
             SearchAllInput {
                 organization_id: Some("contoso".to_string()),
                 query: "retry".to_string(),

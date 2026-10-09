@@ -6,7 +6,6 @@ import {
   isAnalyzeGroupComplete,
   loadAnalyzeGroups,
   normalizeAnalyzeGroup,
-  normalizeBranchName,
   parseAnalyzeGroupsImport,
   createAnalyzeGroupsExport,
   saveAnalyzeGroups,
@@ -19,7 +18,6 @@ function group(overrides: Partial<AnalyzeGroup> = {}): AnalyzeGroup {
     organizationId: "org1",
     projectId: "proj1",
     queries: [{ id: "q1", name: "Bugs", projectId: "", wiql: "SELECT [System.Id] FROM WorkItems" }],
-    branches: [],
     granularity: "day",
     rangeCount: 30,
     ...overrides,
@@ -40,23 +38,6 @@ describe("normalizeAnalyzeGroup", () => {
     expect(normalizeAnalyzeGroup({ ...group(), name: "   " })).toBeNull();
   });
 
-  it("accepts a group with only branches", () => {
-    const branchOnly = group({
-      queries: [],
-      branches: [
-        {
-          id: "b1",
-          name: "main",
-          projectId: "",
-          repositoryId: "repo1",
-          repositoryName: "api",
-          branch: "main",
-        },
-      ],
-    });
-    expect(normalizeAnalyzeGroup(branchOnly)?.branches).toHaveLength(1);
-  });
-
   it("drops query members with an empty WIQL", () => {
     const normalized = normalizeAnalyzeGroup(
       group({ queries: [{ id: "q1", name: "x", projectId: "", wiql: "  " }] }),
@@ -64,59 +45,20 @@ describe("normalizeAnalyzeGroup", () => {
     expect(normalized?.queries).toHaveLength(0);
   });
 
-  it("drops branch members without a repository or branch", () => {
-    const normalized = normalizeAnalyzeGroup(
-      group({
-        branches: [
-          { id: "b1", name: "", projectId: "", repositoryId: "", repositoryName: "", branch: "main" },
-          { id: "b2", name: "", projectId: "", repositoryId: "r", repositoryName: "", branch: "  " },
-        ] as AnalyzeGroup["branches"],
-      }),
-    );
-    expect(normalized?.branches).toHaveLength(0);
-  });
-
-  it("stores branches in short form", () => {
-    const normalized = normalizeAnalyzeGroup(
-      group({
-        branches: [
-          {
-            id: "b1",
-            name: "",
-            projectId: "",
-            repositoryId: "r",
-            repositoryName: "api",
-            branch: "refs/heads/release/2.4",
-          },
-        ],
-      }),
-    );
-    expect(normalized?.branches[0].branch).toBe("release/2.4");
-    // The name falls back to the branch when one was not supplied.
-    expect(normalized?.branches[0].name).toBe("release/2.4");
-  });
-
-  it("caps members across queries and branches combined", () => {
-    const many = Array.from({ length: 10 }, (_, index) => ({
+  it("caps the number of query members", () => {
+    const many = Array.from({ length: MAX_ANALYZE_GROUP_MEMBERS + 3 }, (_, index) => ({
       id: `q${index}`,
       name: `Q${index}`,
       projectId: "",
       wiql: "SELECT [System.Id] FROM WorkItems",
     }));
-    const branches = Array.from({ length: 10 }, (_, index) => ({
-      id: `b${index}`,
-      name: `B${index}`,
-      projectId: "",
-      repositoryId: "r",
-      repositoryName: "api",
-      branch: `feature/${index}`,
-    }));
-    const normalized = normalizeAnalyzeGroup(group({ queries: many, branches }));
-    expect(normalized!.queries.length + normalized!.branches.length).toBe(
-      MAX_ANALYZE_GROUP_MEMBERS,
-    );
-    // Queries are the costlier half, so they keep their slots first.
-    expect(normalized?.queries).toHaveLength(10);
+    const normalized = normalizeAnalyzeGroup(group({ queries: many }));
+    expect(normalized?.queries).toHaveLength(MAX_ANALYZE_GROUP_MEMBERS);
+  });
+
+  it("drops branch members left over from the retired branch charts", () => {
+    const legacy = { ...group(), branches: [{ id: "b1", repositoryId: "r", branch: "main" }] };
+    expect(normalizeAnalyzeGroup(legacy)).toEqual(group());
   });
 
   it("falls back to the default range when the stored value is unusable", () => {
@@ -137,17 +79,10 @@ describe("normalizeAnalyzeGroup", () => {
   });
 });
 
-describe("normalizeBranchName", () => {
-  it("strips a refs/heads prefix and trims", () => {
-    expect(normalizeBranchName("  refs/heads/main ")).toBe("main");
-    expect(normalizeBranchName("develop")).toBe("develop");
-  });
-});
-
 describe("isAnalyzeGroupComplete", () => {
   it("requires a name and at least one member", () => {
     expect(isAnalyzeGroupComplete(group())).toBe(true);
-    expect(isAnalyzeGroupComplete(group({ queries: [], branches: [] }))).toBe(false);
+    expect(isAnalyzeGroupComplete(group({ queries: [] }))).toBe(false);
     expect(isAnalyzeGroupComplete(group({ name: " " }))).toBe(false);
   });
 });

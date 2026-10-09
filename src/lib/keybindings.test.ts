@@ -123,8 +123,8 @@ describe("findConflicts", () => {
 
   it("flags duplicate goto keys", () => {
     const map = defaultKeybindingMap();
-    map.gotoCommits = map.gotoMyReviews; // both "R"
+    map.gotoPipelines = map.gotoMyReviews; // both "R"
     const conflicts = findConflicts(map);
-    expect(conflicts.get("gotoCommits")).toContain("gotoMyReviews");
+    expect(conflicts.get("gotoPipelines")).toContain("gotoMyReviews");
   });
 });

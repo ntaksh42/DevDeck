@@ -71,10 +71,3 @@ export function chartGeometry(
 function round(value: number): number {
   return Math.round(value * 100) / 100;
 }
-
-/** Heights (0-1) for a bar series, scaled against the busiest bucket. */
-export function barHeights(counts: number[]): number[] {
-  const max = counts.reduce((peak, count) => Math.max(peak, count), 0);
-  if (max <= 0) return counts.map(() => 0);
-  return counts.map((count) => count / max);
-}

@@ -5,8 +5,6 @@ use rusqlite::Connection;
 
 use crate::error::Result;
 
-mod commits;
-mod commits_query;
 mod migrate;
 mod notifications;
 mod organizations;
@@ -22,7 +20,6 @@ mod work_items_query;
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
-mod tests_commits;
 #[cfg(test)]
 mod tests_migrations;
 #[cfg(test)]
@@ -36,7 +33,6 @@ mod tests_work_item_follows;
 #[cfg(test)]
 mod tests_work_items;
 
-pub use commits::*;
 pub use migrate::migrate;
 pub use notifications::*;
 pub use organizations::*;
@@ -46,10 +42,9 @@ pub use sync_state::*;
 pub use work_item_follows::*;
 pub use work_items::*;
 
-pub(crate) use commits_query::*;
 pub(crate) use work_items_query::*;
 
-pub(crate) const SCHEMA_VERSION: i64 = 22;
+pub(crate) const SCHEMA_VERSION: i64 = 23;
 
 // ── AppDatabase ───────────────────────────────────────────────────────────────
 

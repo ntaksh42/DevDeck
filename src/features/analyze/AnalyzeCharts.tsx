@@ -1,4 +1,4 @@
-import { barHeights, chartGeometry, type ChartPoint } from "./analyzeChartGeometry";
+import { chartGeometry, type ChartPoint } from "./analyzeChartGeometry";
 
 const TREND_CLASSES = {
   // A rising query count is the bad direction (more open bugs), matching the
@@ -52,40 +52,6 @@ export function TrendSparkline({
       />
       <circle cx={geometry.last.x} cy={geometry.last.y} r={2.5} fill="currentColor" />
     </svg>
-  );
-}
-
-/**
- * Commit volume per bucket. Bars rather than a line because commits are a
- * count of things that happened, not a level that persists between buckets.
- */
-export function CommitBars({
-  counts,
-  label,
-}: {
-  counts: number[];
-  label: string;
-}) {
-  const heights = barHeights(counts);
-  const total = counts.reduce((sum, count) => sum + count, 0);
-
-  return (
-    <span
-      className="flex h-11 items-end gap-[2px]"
-      role="img"
-      aria-label={`${label}: ${counts.length} 区間で合計 ${total} コミット`}
-    >
-      {heights.map((height, index) => (
-        <span
-          key={index}
-          className={`block flex-1 rounded-t-[1px] ${
-            index === heights.length - 1 ? "bg-primary" : "bg-muted-foreground/50"
-          }`}
-          // A zero-commit bucket keeps a hairline so the gap stays visible.
-          style={{ height: `${Math.max(height * 100, counts[index] > 0 ? 6 : 2)}%` }}
-        />
-      ))}
-    </span>
   );
 }
 

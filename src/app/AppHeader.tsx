@@ -10,9 +10,7 @@ const VIEW_TITLES: Record<View, string> = {
   workItems: "Work Items",
   myWorkItems: "My Work Items",
   workItemViews: "Work Item Views",
-  commits: "Commits",
   pipelines: "Pipelines",
-  codeSearch: "Code",
   notifications: "Notifications",
   crossOrgSummary: "Cross-organization summary",
   analyze: "Analyze",
@@ -30,8 +28,6 @@ const VIEW_BREADCRUMBS: Partial<Record<View, readonly [string, string]>> = {
   workItems: ["Work Items", "Search"],
   myWorkItems: ["Work Items", "My Items"],
   workItemViews: ["Work Items", "Views"],
-  commits: ["Code", "Commits"],
-  codeSearch: ["Code", "Files"],
 };
 
 const VIEW_DESCRIPTIONS: Record<View, string> = {
@@ -41,12 +37,10 @@ const VIEW_DESCRIPTIONS: Record<View, string> = {
   workItems: "Search Azure DevOps work items across projects",
   myWorkItems: "Work items assigned to you",
   workItemViews: "Saved WIQL views with counts, grid results, and preview",
-  commits: "Search Azure DevOps commits across repositories",
   pipelines: "Azure DevOps build runs by project",
-  codeSearch: "Browse repository files and search code",
   notifications: "History of review requests, work item updates, and pipeline alerts",
   crossOrgSummary: "Reviews and work items totalled across every connection",
-  analyze: "Query count trends and branch commits for a group, by day or week",
+  analyze: "Query count trends for a group, by day or week",
   settings: "Local Azure DevOps organization setup",
 };
 

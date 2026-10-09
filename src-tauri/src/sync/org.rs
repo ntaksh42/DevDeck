@@ -5,7 +5,6 @@ use azdo_client::TeamProject;
 use tauri::{AppHandle, Emitter};
 
 use crate::auth::client_for_organization;
-use crate::commits::sync_commits_for_org;
 use crate::db::{AppSettings, NewNotification, Organization};
 use crate::prs::sync_prs_for_org;
 use crate::secrets::SecretStore;
@@ -31,7 +30,7 @@ fn has_completed_sync(db: &AppDatabase, kind: &str, org_id: &str) -> bool {
 }
 
 /// Syncs one organization. Fetches the project list once (shared across the
-/// three sync kinds) and runs the PR, work-item, and commit passes concurrently.
+/// sync kinds) and runs the PR and work-item passes concurrently.
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn sync_org(
     db: AppDatabase,
@@ -53,7 +52,7 @@ pub(super) async fn sync_org(
             return outcome;
         }
     };
-    // One project listing feeds PRs, work items, and commits, instead of each
+    // One project listing feeds PRs and work items, instead of each
     // sync kind issuing its own identical request.
     let projects = match client.list_projects().await {
         Ok(projects) => projects,
@@ -65,7 +64,7 @@ pub(super) async fn sync_org(
     };
     let snooze = SnoozeService::new(db.clone());
 
-    let (pr_outcome, wi_outcome, commit_outcome) = tokio::join!(
+    let (pr_outcome, wi_outcome) = tokio::join!(
         sync_org_prs(
             &db,
             &client,
@@ -82,11 +81,9 @@ pub(super) async fn sync_org(
         sync_org_work_items(
             &db, &client, &handle, &org, scope, &settings, &snooze, &budget, &now, &projects,
         ),
-        sync_org_commits(&db, &client, &handle, &org, scope, &budget, &projects),
     );
     outcome.merge(pr_outcome);
     outcome.merge(wi_outcome);
-    outcome.merge(commit_outcome);
     outcome
 }
 
@@ -275,29 +272,6 @@ async fn sync_org_work_items(
         Err(e) => {
             tracing::warn!(org = %org.name, error = ?e, "sync: failed to snapshot work items after sync");
         }
-    }
-    outcome
-}
-
-async fn sync_org_commits(
-    db: &AppDatabase,
-    client: &azdo_client::AdoClient,
-    handle: &AppHandle,
-    org: &Organization,
-    scope: SyncScope,
-    budget: &SyncBudget,
-    projects: &[TeamProject],
-) -> SyncPassOutcome {
-    let mut outcome = SyncPassOutcome::default();
-    if !matches!(scope, SyncScope::All | SyncScope::Commits) {
-        return outcome;
-    }
-    if let Err(e) = sync_commits_for_org(db, client, org, projects, budget).await {
-        tracing::error!(org = %org.name, error = ?e, "sync: commit sync failed");
-        outcome.record_failure();
-    } else {
-        outcome.record_success();
-        emit_sync_updated(handle, &org.id, vec![SyncScope::Commits]);
     }
     outcome
 }

@@ -12,7 +12,6 @@ import {
   Bell,
   BookOpen,
   ChartLine,
-  Code,
   GitBranch,
   GitPullRequest,
   Layers,
@@ -92,7 +91,6 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
   const [navExpanded, setNavExpanded] = useState<Record<NavSectionId, boolean>>({
     pullRequests: true,
     workItems: true,
-    code: true,
   });
   const [pinnedViewsExpanded, setPinnedViewsExpanded] = useState(true);
 
@@ -368,32 +366,6 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
         label="Pipelines"
         onClick={() => onNavigate("pipelines")}
       />
-    ),
-    codeSearch: (
-      <NavSection
-        key="codeSearch"
-        id="code"
-        icon={<Code className="h-4 w-4" aria-hidden="true" />}
-        label="Code"
-        disabled={organizationsLength === 0}
-        expanded={navExpanded.code}
-        onExpandedChange={(expanded) => setNavSectionExpanded("code", expanded)}
-      >
-        {capabilities?.codeBrowse !== false ? (
-          <NavSubItem
-            active={activeView === "codeSearch"}
-            disabled={organizationsLength === 0}
-            label="Files"
-            onClick={() => onNavigate("codeSearch")}
-          />
-        ) : null}
-        <NavSubItem
-          active={activeView === "commits"}
-          disabled={organizationsLength === 0}
-          label="Commits"
-          onClick={() => onNavigate("commits")}
-        />
-      </NavSection>
     ),
     analyze: (
       <NavButton

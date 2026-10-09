@@ -4,9 +4,9 @@ use azdo_client::{AdoClient, GitPullRequest, PullRequestStatus};
 use chrono::{DateTime, NaiveDate, NaiveTime, TimeZone, Utc};
 
 use super::*;
-use crate::commits::encode_path_segment;
 use crate::db::{CachedPr, Organization};
 use crate::error::{AppError, Result};
+use crate::repos::encode_path_segment;
 
 /// Resolves the requested search status into either the cached-active fast path
 /// or a live Azure DevOps query for historical statuses. Unknown values are

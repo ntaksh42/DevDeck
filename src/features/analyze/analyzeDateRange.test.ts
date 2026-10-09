@@ -5,7 +5,6 @@ import {
   bucketRangeEnd,
   bucketRangeStart,
   formatBucketLabel,
-  groupByBucket,
   startOfUtcWeek,
 } from "./analyzeDateRange";
 
@@ -67,56 +66,6 @@ describe("analyzeSampleTimestamps", () => {
     for (const timestamp of analyzeSampleTimestamps(buckets, NOW)) {
       expect(timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
     }
-  });
-});
-
-describe("groupByBucket", () => {
-  const buckets = analyzeBuckets("day", 3, NOW);
-  const commit = (date: string) => ({ date });
-
-  it("places items in the bucket covering their date", () => {
-    const grouped = groupByBucket(
-      [commit("2026-08-03T09:00:00Z"), commit("2026-08-05T23:59:00Z")],
-      buckets,
-      (item) => item.date,
-    );
-    expect(grouped.get("2026-08-03")).toHaveLength(1);
-    expect(grouped.get("2026-08-04")).toHaveLength(0);
-    expect(grouped.get("2026-08-05")).toHaveLength(1);
-  });
-
-  it("drops items outside the window instead of folding them into an edge bucket", () => {
-    const grouped = groupByBucket(
-      [commit("2026-07-01T00:00:00Z"), commit("2026-09-01T00:00:00Z")],
-      buckets,
-      (item) => item.date,
-    );
-    expect([...grouped.values()].flat()).toHaveLength(0);
-  });
-
-  it("ignores items with a missing or unparseable date", () => {
-    const grouped = groupByBucket(
-      [{ date: null }, { date: "not-a-date" }],
-      buckets,
-      (item) => item.date,
-    );
-    expect([...grouped.values()].flat()).toHaveLength(0);
-  });
-
-  it("keeps an entry for every bucket, including empty ones", () => {
-    const grouped = groupByBucket([], buckets, (item: { date: string }) => item.date);
-    expect([...grouped.keys()]).toEqual(["2026-08-03", "2026-08-04", "2026-08-05"]);
-  });
-
-  it("groups by week when the buckets are weekly", () => {
-    const weekly = analyzeBuckets("week", 2, NOW);
-    const grouped = groupByBucket(
-      [commit("2026-07-28T00:00:00Z"), commit("2026-08-04T00:00:00Z")],
-      weekly,
-      (item) => item.date,
-    );
-    expect(grouped.get("2026-07-27")).toHaveLength(1);
-    expect(grouped.get("2026-08-03")).toHaveLength(1);
   });
 });
 
