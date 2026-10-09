@@ -17,12 +17,13 @@ pub(super) const SYNC_WI_WIQL: &str =
     "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project \
      ORDER BY [System.ChangedDate] DESC";
 
-// StateCategory (not State) so custom process states are covered. Completed
-// items are excluded so they neither fill the TOP cap nor inflate the badge.
+// Completed items are excluded so they neither fill the TOP cap nor inflate the
+// badge. `[System.StateCategory]` is not a queryable WIQL field (TF51005), so
+// match the built-in Agile/Scrum/CMMI/Basic terminal state names instead.
 pub(super) const SYNC_MY_WI_WIQL: &str =
     "SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = @project \
      AND [System.AssignedTo] = @Me \
-     AND [System.StateCategory] NOT IN ('Completed', 'Removed') \
+     AND [System.State] NOT IN ('Closed', 'Done', 'Completed', 'Removed') \
      ORDER BY [System.ChangedDate] DESC";
 const SYNC_WORK_ITEM_BATCH_SIZE: usize = 200;
 // Between full syncs, only items whose ChangedDate moved past the last sync
