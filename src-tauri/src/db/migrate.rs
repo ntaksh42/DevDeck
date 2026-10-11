@@ -613,5 +613,53 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         }
         conn.execute_batch("PRAGMA user_version = 23;")?;
     }
+    if current < 24 {
+        // Inbox: things the user has to respond to (PR comment mentions and
+        // replies). The lifecycle (open / snoozed / done) is local-only because
+        // Azure DevOps has no API to mark a mention handled. A row is keyed by
+        // the comment that raised it so re-scans never duplicate or reopen it.
+        // `action_inbox_cursor` is the Inbox's own "last comment seen" marker per
+        // PR, independent of `pr_comment_seen` (which belongs to notifications).
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS action_inbox_items(
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                org_id          TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                kind            TEXT NOT NULL,
+                subject_id      INTEGER NOT NULL,
+                project_id      TEXT NOT NULL,
+                project_name    TEXT NOT NULL,
+                repository_id   TEXT NOT NULL DEFAULT '',
+                repository_name TEXT NOT NULL DEFAULT '',
+                thread_id       INTEGER NOT NULL DEFAULT 0,
+                comment_id      INTEGER NOT NULL DEFAULT 0,
+                title           TEXT NOT NULL,
+                author          TEXT,
+                snippet         TEXT,
+                web_url         TEXT,
+                state           TEXT NOT NULL DEFAULT 'open',
+                snoozed_until   TEXT,
+                detected_at     TEXT NOT NULL,
+                done_at         TEXT,
+                UNIQUE (org_id, kind, repository_id, subject_id, comment_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_action_inbox_state
+                ON action_inbox_items(org_id, state, detected_at DESC);
+
+            CREATE TABLE IF NOT EXISTS action_inbox_cursor(
+                org_id               TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                repository_id        TEXT NOT NULL,
+                subject_id           INTEGER NOT NULL,
+                last_seen_comment_id INTEGER NOT NULL,
+                -- Free-form scan marker (work items: the ChangedDate last
+                -- scanned, so unchanged items are not re-fetched).
+                marker               TEXT,
+                PRIMARY KEY (org_id, repository_id, subject_id)
+            );
+
+            PRAGMA user_version = 24;
+            "#,
+        )?;
+    }
     Ok(())
 }

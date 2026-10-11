@@ -258,7 +258,10 @@ pub fn run() {
             commands::notifications::get_unread_notifications_count,
             commands::notifications::mark_notifications_read,
             commands::notifications::mark_all_notifications_read,
-            commands::notifications::record_notification
+            commands::notifications::record_notification,
+            commands::action_inbox::list_action_inbox_items,
+            commands::action_inbox::get_action_inbox_counts,
+            commands::action_inbox::set_action_inbox_item_state
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

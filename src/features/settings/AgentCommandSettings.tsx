@@ -17,10 +17,14 @@ export function AgentCommandSettings() {
     staleTime: 5 * 60_000,
   });
   const [command, setCommand] = useState("");
+  const [workspace, setWorkspace] = useState("");
 
   useEffect(() => {
     setCommand(settingsQuery.data?.agentCommand ?? "");
   }, [settingsQuery.data?.agentCommand]);
+  useEffect(() => {
+    setWorkspace(settingsQuery.data?.agentWorkspacePath ?? "");
+  }, [settingsQuery.data?.agentWorkspacePath]);
 
   const mutation = useMutation({
     mutationFn: updateAppSettings,
@@ -29,7 +33,12 @@ export function AgentCommandSettings() {
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    mutation.mutate(settingsInput(settingsQuery.data, { agentCommand: command }));
+    mutation.mutate(
+      settingsInput(settingsQuery.data, {
+        agentCommand: command,
+        agentWorkspacePath: workspace,
+      }),
+    );
   }
 
   return (
@@ -42,7 +51,9 @@ export function AgentCommandSettings() {
           <div>
             <h2 className="text-base font-semibold">Agent command</h2>
             <p className="text-sm text-muted-foreground">
-              Started by "Run agent" (A) in a result's agent notes, from the result folder.
+              Started by "Run agent" (A) in a result's agent notes and by "Ask agent" (Q) in the
+              Inbox, in the repository's clone inside the workspace folder (else the result
+              folder).
             </p>
           </div>
         </div>
@@ -59,7 +70,25 @@ export function AgentCommandSettings() {
           />
           <span className="text-xs text-muted-foreground">
             Placeholders: <code>{"{target}"}</code> (work-item / pull-request), <code>{"{id}"}</code>,{" "}
-            <code>{"{notes}"}</code> (the item's notes folder). Leave empty to hide Run agent.
+            <code>{"{notes}"}</code> (the item's notes folder), <code>{"{workspace}"}</code>,{" "}
+            <code>{"{repo}"}</code> (the pull request's repository), <code>{"{guide}"}</code> (the
+            agent guide). Leave empty to hide Run agent.
+          </span>
+        </label>
+
+        <label className="grid gap-2">
+          <span className="text-sm font-medium">Workspace folder</span>
+          <input
+            value={workspace}
+            onChange={(event) => setWorkspace(event.target.value)}
+            placeholder="D:\src\workspace"
+            className="h-9 rounded-md border border-input bg-background px-3 font-mono text-sm outline-none focus:ring-2 focus:ring-ring"
+          />
+          <span className="text-xs text-muted-foreground">
+            One folder that holds your repository clones, one subfolder per repository name. The
+            agent starts in the clone of the pull request's repository, or here when there is
+            none. DevDeck never clones or checks anything out. Leave empty to start in the result
+            folder.
           </span>
         </label>
 

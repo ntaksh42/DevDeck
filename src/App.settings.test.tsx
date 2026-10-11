@@ -103,6 +103,7 @@ describe("App — Settings", () => {
           workItemResultFolderPath: null,
           showWindowHotkey: null,
           agentCommand: null,
+          agentWorkspacePath: null,
           readOnlyValidationModeEnabled: false,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
@@ -142,6 +143,7 @@ describe("App — Settings", () => {
           reviewResultFolderPath: "C:\\reports",
           showWindowHotkey: null,
           agentCommand: null,
+          agentWorkspacePath: null,
         });
       }
       if (command === "update_app_settings") {
@@ -177,6 +179,7 @@ describe("App — Settings", () => {
           workItemResultFolderPath: null,
           showWindowHotkey: "Ctrl+Alt+D",
           agentCommand: null,
+          agentWorkspacePath: null,
           readOnlyValidationModeEnabled: false,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
@@ -216,6 +219,7 @@ describe("App — Settings", () => {
           reviewResultFolderPath: null,
           showWindowHotkey: null,
           agentCommand: null,
+          agentWorkspacePath: null,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
           notifyWorkItemAssignments: true,
@@ -249,6 +253,7 @@ describe("App — Settings", () => {
           workItemResultFolderPath: null,
           showWindowHotkey: null,
           agentCommand: null,
+          agentWorkspacePath: null,
           readOnlyValidationModeEnabled: false,
           desktopNotificationsEnabled: true,
           notificationContentPreviewEnabled: false,
@@ -288,6 +293,7 @@ describe("App — Settings", () => {
           reviewResultFolderPath: null,
           showWindowHotkey: null,
           agentCommand: null,
+          agentWorkspacePath: null,
           readOnlyValidationModeEnabled: false,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
@@ -320,6 +326,7 @@ describe("App — Settings", () => {
           workItemResultFolderPath: null,
           showWindowHotkey: null,
           agentCommand: null,
+          agentWorkspacePath: null,
           readOnlyValidationModeEnabled: true,
           desktopNotificationsEnabled: false,
           notificationContentPreviewEnabled: true,
@@ -359,6 +366,7 @@ describe("App — Settings", () => {
           reviewResultFolderPath: null,
           showWindowHotkey: null,
           agentCommand: null,
+          agentWorkspacePath: null,
           ...settings,
         });
       }

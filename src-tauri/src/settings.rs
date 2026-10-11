@@ -26,6 +26,8 @@ pub struct UpdateAppSettingsInput {
     pub show_window_hotkey: Option<String>,
     #[serde(default)]
     pub agent_command: Option<String>,
+    #[serde(default)]
+    pub agent_workspace_path: Option<String>,
     pub read_only_validation_mode_enabled: Option<bool>,
     pub desktop_notifications_enabled: Option<bool>,
     pub notification_content_preview_enabled: Option<bool>,
@@ -197,6 +199,7 @@ pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
         work_item_result_folder_path: normalize_path(input.work_item_result_folder_path),
         show_window_hotkey: normalize_path(input.show_window_hotkey),
         agent_command: normalize_path(input.agent_command),
+        agent_workspace_path: normalize_path(input.agent_workspace_path),
         read_only_validation_mode_enabled: input.read_only_validation_mode_enabled.unwrap_or(false),
         desktop_notifications_enabled: input.desktop_notifications_enabled.unwrap_or(false),
         notification_content_preview_enabled: input

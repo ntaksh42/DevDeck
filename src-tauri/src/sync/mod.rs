@@ -6,9 +6,11 @@ use tokio::sync::{oneshot, Semaphore};
 use crate::db::AppDatabase;
 use crate::secrets::SecretStore;
 
+mod inbox;
 mod notifications;
 mod org;
 mod runner;
+mod wi_mentions;
 
 #[cfg(test)]
 mod tests;

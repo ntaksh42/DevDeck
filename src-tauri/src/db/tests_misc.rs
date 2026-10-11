@@ -162,6 +162,7 @@ fn app_settings_can_be_saved_and_cleared() {
             work_item_result_folder_path: Some("C:/reports/work-items".to_string()),
             show_window_hotkey: Some("Ctrl+Alt+D".to_string()),
             agent_command: None,
+            agent_workspace_path: Some("C:/src/workspace".to_string()),
             read_only_validation_mode_enabled: true,
             desktop_notifications_enabled: true,
             notification_content_preview_enabled: false,

@@ -115,6 +115,10 @@ pub struct DeleteAgentNoteInput {
 pub struct RunAgentInput {
     pub target: NoteTarget,
     pub item_id: i64,
+    /// Repository of the pull request, to start the agent in its clone inside
+    /// the workspace folder.
+    #[serde(default)]
+    pub repository_name: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -215,8 +219,31 @@ impl AgentNoteService {
     pub fn run_agent(&self, input: RunAgentInput) -> Result<()> {
         validate_id(input.item_id)?;
         let folder = self.require_folder(input.target)?;
-        let command = self.db.get_app_settings()?.agent_command;
-        launch::run_agent(&folder, command.as_deref(), input.target, input.item_id)
+        let settings = self.db.get_app_settings()?;
+        let workspace = match settings.agent_workspace_path.as_deref() {
+            Some(path) => {
+                let path = PathBuf::from(path);
+                if !path.is_dir() {
+                    return Err(AppError::InvalidInput(format!(
+                        "agent workspace folder does not exist: {}",
+                        path.display()
+                    )));
+                }
+                Some(path)
+            }
+            None => None,
+        };
+        let context = launch::AgentLaunch {
+            result_folder: &folder,
+            workspace: workspace.as_deref(),
+            repository: input.repository_name.as_deref(),
+        };
+        launch::run_agent(
+            &context,
+            settings.agent_command.as_deref(),
+            input.target,
+            input.item_id,
+        )
     }
 
     fn require_folder(&self, target: NoteTarget) -> Result<PathBuf> {

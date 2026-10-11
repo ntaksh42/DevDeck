@@ -48,6 +48,7 @@ import {
 } from "@/features/navigation/viewHistory";
 import { usePipelineWatchNotifications } from "@/features/pipelines/usePipelineWatchNotifications";
 import { useAgentNoteWatcher } from "@/components/agent-notes/useAgentNoteSummaries";
+import { useInboxBadge } from "@/features/inbox/useInboxEntries";
 import {
   NAVIGATE_WORK_ITEM_EVENT,
   NAVIGATE_PULL_REQUEST_EVENT,
@@ -171,6 +172,13 @@ function AppShell() {
   });
   const notificationsBadge = notificationsUnreadQuery.data ?? null;
 
+  // Everything the Inbox tab lists: stored items (kept current by
+  // `action-inbox:updated`), pending approvals and agent replies.
+  const inboxBadge = useInboxBadge({
+    organizationId: badgeOrganizationId,
+    pipelinesSupported: capabilities?.pipelines !== false,
+  });
+
   // Experimental: the cross-org summary only exists while its flag is on.
   // Falling back here (rather than only hiding the nav entry) keeps the app out
   // of a blank view if the flag is turned off while the summary is open.
@@ -267,6 +275,14 @@ function AppShell() {
   useEffect(() => {
     return subscribeTauriEvent("notifications:inbox-updated", () => {
       void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    });
+  }, [queryClient]);
+
+  // The Inbox (mentions / replies to handle) is a separate store from the
+  // notification history above; its sync pass emits its own event.
+  useEffect(() => {
+    return subscribeTauriEvent("action-inbox:updated", () => {
+      void queryClient.invalidateQueries({ queryKey: ["actionInbox"] });
     });
   }, [queryClient]);
 
@@ -417,6 +433,7 @@ function AppShell() {
         myReviewsBadge={myReviewsBadge}
         myWorkItemsBadge={myWorkItemsBadge}
         notificationsBadge={notificationsBadge}
+        inboxBadge={inboxBadge}
         crossOrgSummaryEnabled={crossOrgSummaryEnabled}
         onNavigate={setView}
         onOpenHelp={openHelp}

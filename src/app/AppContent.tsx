@@ -17,6 +17,7 @@ import {
   AnalyzeView,
   CrossOrgSummaryView,
   NotificationsView,
+  InboxView,
 } from "./lazyViews";
 import type { View, ExternalSearchRequest } from "./types";
 
@@ -102,6 +103,8 @@ export function AppContent({
           />
         ) : activeView === "pipelines" ? (
           <PipelinesView />
+        ) : activeView === "inbox" ? (
+          <InboxView onOpenView={onOpenView} />
         ) : activeView === "notifications" ? (
           <NotificationsView onOpenPullRequest={onOpenPullRequest} onOpenView={onOpenView} />
         ) : activeView === "crossOrgSummary" ? (

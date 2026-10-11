@@ -141,7 +141,13 @@ export async function summarizeAgentNotes(input: {
   return z.array(agentNoteSummarySchema).parse(result);
 }
 
-/** Starts the agent command from Settings for one item's notes. */
-export async function runAgent(input: AgentNoteItem): Promise<void> {
+/**
+ * Starts the agent command from Settings for one item's notes.
+ * `repositoryName` (pull requests) selects the repository's clone inside the
+ * workspace folder as the working directory.
+ */
+export async function runAgent(
+  input: AgentNoteItem & { repositoryName?: string | null },
+): Promise<void> {
   await invokeCommand("run_agent", { input });
 }

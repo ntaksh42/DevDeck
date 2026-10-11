@@ -427,6 +427,7 @@ export function PrThreadCard({
               <div className="flex items-center gap-3 pl-[26px]">
                 <button
                   type="button"
+                  data-thread-reply="true"
                   onClick={() => setReplying(true)}
                   className="rounded text-xs font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring"
                 >

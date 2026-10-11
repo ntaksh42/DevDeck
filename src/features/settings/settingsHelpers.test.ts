@@ -21,6 +21,7 @@ function nonDefaultSettings(): AppSettings {
     workItemResultFolderPath: "C:/work-items",
     showWindowHotkey: "Ctrl+Shift+D",
     agentCommand: "agent --target {target} --id {id}",
+    agentWorkspacePath: "C:/src/workspace",
     readOnlyValidationModeEnabled: true,
     desktopNotificationsEnabled: true,
     notificationContentPreviewEnabled: false,

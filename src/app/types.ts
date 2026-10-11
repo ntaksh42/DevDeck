@@ -9,6 +9,7 @@ export type View =
   | "workItemViews"
   | "pipelines"
   | "notifications"
+  | "inbox"
   | "crossOrgSummary"
   | "analyze"
   | "settings";
@@ -35,6 +36,7 @@ export const GOTO_BINDING_VIEWS = {
   gotoWorkItemViews: "workItemViews",
   gotoPipelines: "pipelines",
   gotoNotifications: "notifications",
+  gotoInbox: "inbox",
   gotoCrossOrgSummary: "crossOrgSummary",
   gotoAnalyze: "analyze",
   gotoSettings: "settings",

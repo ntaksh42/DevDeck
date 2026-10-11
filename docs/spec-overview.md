@@ -90,6 +90,7 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
 | **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。定義パネル (`PipelineDefinitionPanel`) の Edit ボタンから編集フォーム (`PipelineDefinitionEditForm`) を開き、非シークレット変数を行単位で追加/変更/削除 (name / value / allowOverride チェックボックス) できる。シークレット変数は "(secret)" 表示の読み取り専用行として並び、編集・削除操作を提供しない。CI トリガーは有効/無効チェックボックスと branch/path filters (1 行 1 件のテキストエリア) を編集でき、セクションを触っていなければ保存時に `ciTrigger: null` を送りトリガーを変更しない。Save は `update_pipeline_definition` を呼び、成功時は返却された定義でクエリキャッシュを更新して閲覧モードに戻り、失敗時はパネル内にエラーを表示したまま編集状態を維持する。編集モードは Edit ボタンから開始 (最初の入力にフォーカス)、Escape または Cancel/Save で終了しフォーカスを Edit ボタンへ戻す、キー操作はフォーム内に閉じ込めて背後のビューに伝播しない。 |
 | **Settings** | パネルを 7 カテゴリ (Accounts / Appearance & keyboard / Notifications / Views & workflow / Project / Data & sync / Advanced) に分けて表示。左側 (狭い幅では上部) に sticky なセクションナビとフィルタ入力を置く。フィルタは全語 AND・大文字小文字無視でカテゴリ名・パネル名・キーワードに一致するパネルだけを残し、該当なしのカテゴリはナビで無効化、全件不一致なら空状態 + Clear filter。フィルタは `focusFilter` (既定 `Ctrl+F`) でフォーカス、`Enter` で最初の一致パネルの先頭コントロールへ移動、`Escape` は 1 回目でクリア・2 回目でフォーカス解除。ナビは `↑↓`/`←→`/`Home`/`End` でボタン間移動、Enter/クリックでセクションへスクロールしてフォーカス、スクロール位置に応じて現在セクションを `aria-current` で強調。Connections 一覧は Add connection の直前 (先頭) に表示。実験フラグで非表示のパネル (Usage stats / Diagnostics) はフィルタ・ナビの対象外。内容: 組織設定 (PAT / Azure CLI)、通知設定、フォルダパス、グローバルホットキー、キーバインド上書き。Software update パネル (opt-in: 手動で更新確認→適用、失敗時は安全にスキップ。`tauri-plugin-updater`、ブラウザでは無効)。Experimental パネル (マスタースイッチ + 個別フラグ。マスターが false の間は個別フラグの保存値を保持したまま無効化する)。Usage stats パネル (`experimental_usage_stats` が有効なときのみ表示。localStorage `azdodeck:experimental:usageStats` に投票数・解決スレッド数・状態変更数を集計、リセット可能、外部送信なし)。 |
 | **Notifications** | 通知履歴 (`notifications` テーブル) 専用ビュー。サイドバー最上位に固定表示 (ドラッグ並べ替え対象外)、未読件数バッジ付き。フィルタ: Unread only トグル、種別の複数選択 (`MultiSelectFilter`)、組織が2件以上のときのみ表示される単一選択の組織セレクト。一覧は `list_notifications` (`limit=100`、`beforeId` カーソルで「Load more」) を `useInfiniteQuery` で取得し、共有 `useGridVirtualizer` で仮想化。行は未読ドット・タイトル・相対時刻・種別ラベル+詳細+本文冒頭、webUrl があれば行内に外部ブラウザで開くボタン。キーボード: `↑↓`/`J K`/`Home`/`End`/`PageUp`/`PageDown` で行移動、`Enter` でジャンプ (種別ごとに PR Search / Work Item Search / Pipelines / Settings のいずれかへ遷移、または `webUrl` を外部ブラウザで開く。対象を特定できない場合は何もしない) と同時に既読化、`Ctrl+Enter` は `webUrl` を外部ブラウザで開いて既読化、`R` で選択行を既読化 (バックエンドに未読へ戻す手段が無いため、未読の行を既読にするだけの片方向操作)。ヘッダーの「Mark all read」で全既読。既読操作は `mark_notifications_read` / `mark_all_notifications_read` を呼び関連クエリを invalidate。`notifications:inbox-updated` イベント (App 直下で購読) を受けて一覧・未読バッジの両方を invalidate するため、ビューを開いていなくてもバッジは最新化される。パイプライン監視の開始/終了通知 (`usePipelineWatchNotifications`) とパイプライン手動実行のキュー投入 (App の `runQuickPipeline`) は、デスクトップ通知トーストと同じタイミングで `record_notification` を呼び、同じ履歴に記録する (kind: `pipelineWatchStarted` / `pipelineWatchFinished` / `pipelineRunQueued`)。`G` チェーンは `N`。 |
+| **Inbox** | 自分が対応すべきものを 1 か所で見て、その場で処理するビュー (サイドバー最上位に固定表示、ドラッグ並べ替え対象外、Open 件数のバッジ付き。`G` → `I`)。現在の対象は、レビュー対象 PR のコメントのうち**自分へのメンション** (`pr_mention`) と、**自分が参加したスレッドへの返信** (`pr_reply`)。検出は PR 同期 (最新 50 件のレビュー対象 PR) のスレッド取得に相乗りし、通知設定に関係なく動く (通知用の `pr_comment_seen` とは別の `action_inbox_cursor` を持つ。初回観測は基準の記録だけで項目を作らない)。状態 (`open` / `snoozed` / `done`) は Azure DevOps に書き戻さずローカルの `action_inbox_items` だけで持つ。項目はコメントごとに一意で、再スキャンで重複も再オープンもしない。スレッドが Resolved / 削除された、コメントが削除された、自分がその後に返信した場合は同期時に自動で Done にする。Snooze の期限が過ぎた項目は背景ジョブなしで Open に戻る。Done は 30 日で削除する。画面は左に一覧 (タブ: Inbox / Snoozed / Done と件数、タブ帯右端に畳んだ `Ctrl+F` フィルタと、組織が 2 件以上のときの組織セレクト)、右にプレビュー (既存の `PrThreadCard` でスレッドを表示し、返信 / Resolve・Reactivate をその場で行う)。返信の送信とスレッドの Resolve は成功後に項目を Done にする (Reactivate は状態を変えない)。プレビューのスレッドは My Reviews と同じ `prReview` クエリキャッシュを共有する。コメント内のリンク (`AB#n` / `!n` / http(s) URL) はプレビュー下部に番号付きで並べ、`1`-`9` で開く (`AB#n` は Work Item Search、`!n` は My Reviews へ、URL は外部ブラウザ)。Read-only 検証モードでは返信と Resolve を無効にする。キーボード (My Reviews の割当に揃える): `↑↓`/`J K`/`Home`/`End`/`PageUp`/`PageDown` で行移動、`Enter`/`→` でプレビューへ (`Esc` で一覧へ戻る)、`Shift+Enter` で DevDeck 内の対象 PR (My Reviews) を開く、`O` / `Ctrl+Enter` でブラウザ、`E` で Done (Done タブでは Reopen)、`Z` で Snooze (Snoozed タブでは解除)、`R` で返信欄を開く、`C` で URL コピー、`/` でフィルタ。コマンド: `list_action_inbox_items` (`state` = `open` / `snoozed` / `done`、`organizationId`、`limit`) / `get_action_inbox_counts` / `set_action_inbox_item_state` (`ids`、`state`、`snoozedUntil`)。状態が変わると `action-inbox:updated` を emit し、App 直下で購読してバッジと一覧を invalidate する (通知履歴の `notifications:inbox-updated` とは別)。対象の種類は他に、レビュー依頼 (`pr_review_request`) / Returned (`pr_returned`) / 新規アサイン (`wi_assigned`) / WI メンション (`wi_mention`、組織全体の WIQL マクロ `@RecentMentions` で候補を絞り、使えなければ最近変更した割当 WI を走査。このマクロが REST で受理されるかは実サービスで未検証) を同期で保存し、条件が解消すると自動で Done にする。自分が作成した PR (キャッシュ済みの active PR、最新 30 件) への他者のコメントも対象。承認待ちパイプラインとエージェントの返信待ちは同期せず、取得して導出する (Done / Snooze 不可)。承認待ちはビューを開いている間 60 秒ごと、閉じている間はバッジ用に 5 分ごとに取得し (`retry` なし、パイプライン非対応の接続では取得しない)、エージェントの返信待ちはアプリ常駐のメモ要約 (ローカルのフォルダ走査) を使う。サイドバーのバッジと Inbox タブの件数はどちらも「保存済みの Open 件 + 承認待ち + エージェントの返信待ち」で、組織セレクトが未指定のときは一致する (承認待ちはアクティブな接続のぶんだけ数える)。PR / WI のコメント行は、何についてのコメントか分かるよう `!ID repo` の後に PR / WI のタイトルを (最大 16rem で省略して) 表示する。`Q` で右ペインの Agent タブ (質問ノートと返信のスレッド) を開き、既存の Agent notes と `run_agent` で `agent_command` を起動する。設定 `agent_workspace_path` (クローンを置く 1 つのフォルダ) があれば、PR のリポジトリ名と同名のサブフォルダ → Workspace → 結果フォルダの順で作業フォルダを選び、プレースホルダ `{workspace}` / `{repo}` / `{guide}` を使える。同じフォルダで同時に 2 つのエージェントは起動しない。 |
 | **Analyze** | 登録したクエリを**グループ**単位でまとめ、Day / Week の粒度で推移を見るビュー。1 グループにクエリを複数登録できる (0 件のときは保存を拒否)。左のグループ一覧 + 右の詳細。クエリは WIQL に `ASOF` を付けて各時点の件数を取得し (`count_work_item_query_history`、バックエンドで並列度 4・1 回あたり最大 90 点)、1 本ごとに小さな折れ線 + 現在値 + 前期比を並べる。`ASOF` は `ORDER BY` の前に挿入し、文字列リテラル内の同名語は誤検出しない。行を開くと数値テーブル (期間 / 件数 / 前期比 / 備考) に展開し、`Esc` で一覧へ戻る。Azure DevOps が答えられなかった時点は 0 ではなく欠測 (`count: null`) として扱い、テーブルに理由を出しつつ折れ線は前後をつないで線を途切れさせない。粒度と期間 (Day: 7/30/90 日、Week: 4/12/26 週) はグループ単位の設定で、週は月曜起点・UTC。グループは localStorage (`azdodeck:analyze:groups`) に保存する (グループ 20 件、1 グループあたりクエリ 12 件が上限。ブランチ別コミット推移の廃止前に保存したブランチメンバーは読み込み時に捨てる)。`ASOF` を含む WIQL は登録時に拒否し、保存済み Work Item View からの取り込みでも候補から除外する。キーボード: 一覧で `↑↓`/`J K`/`Home`/`End` 移動、`Enter` で詳細へ、`N` 追加 / `E` 編集 / `Delete` 削除、詳細で `D`/`W` 粒度切替。`G` チェーンは `A`。 |
 
 My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnings }`、
@@ -274,11 +275,11 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
 
 - アクセス: `AppDatabase` がパスラッパとして呼び出しごとに接続を開く (`rusqlite`)。
 - 移行: `src-tauri/src/db.rs` の `migrate()` が `PRAGMA user_version` を使用。
-  **現行スキーマバージョン: 23** (v23 で Commits ビュー廃止に伴い `commits` / `commits_fts` / `commit_prs` と commit 同期の `sync_state` 行を削除、v22 でコミットの committer 名/メール/日時 `commits.committer_*` を追加、v21 でフォロー中の作業項目 `followed_work_items` を追加、v19 で通知履歴用の `notifications` テーブルを追加、
+  **現行スキーマバージョン: 24** (v24 で Inbox 用の `action_inbox_items` / `action_inbox_cursor` を追加、v23 で Commits ビュー廃止に伴い `commits` / `commits_fts` / `commit_prs` と commit 同期の `sync_state` 行を削除、v22 でコミットの committer 名/メール/日時 `commits.committer_*` を追加、v21 でフォロー中の作業項目 `followed_work_items` を追加、v19 で通知履歴用の `notifications` テーブルを追加、
   v20 で `pull_requests.created_by_id` を追加)。
 - 主なテーブル: 組織、アクティブ/レビュー対象 PR、作業項目、My Work Items スナップショット、
   各種 FTS インデックス、同期状態、スヌーズ、
-  フォロー中の作業項目 (`followed_work_items`)、PR コメント既読、メンション/割当先履歴、通知履歴 (`notifications`)、アプリ設定。
+  フォロー中の作業項目 (`followed_work_items`)、PR コメント既読、メンション/割当先履歴、通知履歴 (`notifications`)、Inbox (`action_inbox_items` / `action_inbox_cursor`)、アプリ設定。
 - ジャーナル: WAL、`synchronous=NORMAL`、外部キー ON。
 - **共有キャッシュ (`shared_cache/`)**: `azdodeck.sqlite3` 自体は DevDeck 専用で、外部からは
   読まれない。別アプリ waypoint (`C:\Users\<user>\source\repos\waypoint`) が同じ Azure
@@ -317,6 +318,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   記録して Sync health で「Limited」(完了したが一部スキップ/切り詰めあり) と表示する。
 - イベント: 同期完了で `sync:updated` (org_id + 完了スコープ)。
   通知イベントは PR / 作業項目向けに別途 emit。
+  Inbox に項目が増えた / 自動で Done になった場合は `action-inbox:updated` (空ペイロード) を emit する。
 - 通知履歴: ルール/スヌーズ/種別トグルを通過した通知 (PR・作業項目・同期失敗) は
   `notifications` テーブルに記録してから既存イベントを emit し、続けて
   `notifications:inbox-updated` (空ペイロード) を emit する。記録は
@@ -426,11 +428,11 @@ find-next) は、入力欄以外では抑止し、ネイティブ動作が素通
 
 ### Go-To チェーン (`G` リーダー + 第 2 キー)
 
-`R` My Reviews / `P` PR Search / `W` My Work Items / `I` Work Item Search /
-`V` Work Item Views / `B` Pipelines / `N` Notifications /
-`A` Analyze / `S` Settings。
-`R` My Reviews / `Q` PR Search / `W` My Work Items / `I` Work Item Search /
-`V` Work Item Views / `P` Pipelines / `S` Settings。
+`R` My Reviews / `Q` PR Search / `W` My Work Items / `F` Work Item Search /
+`V` Work Item Views / `P` Pipelines / `N` Notifications / `I` Inbox /
+`O` Cross-org summary / `A` Analyze / `S` Settings。
+Work Item Search は以前 `I` だったが、Inbox の追加で `F` (Find) へ移した。Settings で
+上書き済みのキー割当はそのまま残る。
 
 ### グリッド内
 

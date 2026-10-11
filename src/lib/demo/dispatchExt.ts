@@ -4,7 +4,9 @@
 import type {
   AgentNoteItem,
   CreateAgentNoteInput,
+  ListInboxItemsInput,
   ListNotificationsInput,
+  SetInboxItemStateInput,
   RecordNotificationInput,
   ReplyAgentNoteInput,
   AgentNoteTarget,
@@ -32,6 +34,11 @@ import {
   demoRecordNotification,
   demoUnreadNotificationsCount,
 } from "@/lib/demo/notifications";
+import {
+  demoInboxCounts,
+  demoListInboxItems,
+  demoSetInboxItemState,
+} from "@/lib/demo/actionInbox";
 import {
   demoCreateAgentNote,
   demoDeleteAgentNote,
@@ -183,6 +190,21 @@ export function dispatchExt(command: string, args: unknown): unknown {
       const input = (args as { input?: RecordNotificationInput } | undefined)?.input;
       if (input) demoRecordNotification(input);
       return null;
+    }
+    // ── Action inbox ──────────────────────────────────────────────────────
+    case "list_action_inbox_items": {
+      const input = (args as { input?: ListInboxItemsInput } | undefined)?.input;
+      return demoListInboxItems(input);
+    }
+    case "get_action_inbox_counts": {
+      const organizationId = (args as { organizationId?: string | null } | undefined)
+        ?.organizationId;
+      return demoInboxCounts(organizationId ?? undefined);
+    }
+    case "set_action_inbox_item_state": {
+      const input = (args as { input?: SetInboxItemStateInput } | undefined)?.input;
+      if (!input) throw new Error("missing input");
+      return demoSetInboxItemState(input);
     }
     // ── Agent notes ───────────────────────────────────────────────────────
     case "list_agent_notes": {

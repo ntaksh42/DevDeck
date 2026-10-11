@@ -110,11 +110,9 @@ async fn sync_org_prs(
     }
     let should_collect = should_collect_pr_notifications(settings);
     let baseline_established = has_completed_sync(db, "prs", &org.id);
-    let previous_reviews = if should_collect {
-        db.list_review_pull_requests(&org.id).unwrap_or_default()
-    } else {
-        Vec::new()
-    };
+    // Always snapshotted: the Inbox diffs it (vote resets) regardless of the
+    // notification settings.
+    let previous_reviews = db.list_review_pull_requests(&org.id).unwrap_or_default();
     if let Err(e) = sync_prs_for_org(db, client, org, projects, budget, force_refresh).await {
         tracing::error!(org = %org.name, error = ?e, "sync: PR sync failed");
         outcome.record_failure();
@@ -133,10 +131,19 @@ async fn sync_org_prs(
             settings,
             baseline_established,
         );
-        if settings.notify_pr_comment_replies {
-            items.extend(
-                crate::prs::collect_pr_comment_notifications(db, client, org, budget).await,
-            );
+    }
+    // One thread fetch feeds both the reply notifications and the Inbox. The
+    // Inbox is always fed, whatever the notification settings are.
+    let scanned = crate::prs::fetch_pr_threads(db, client, org, budget).await;
+    if should_collect && settings.notify_pr_comment_replies {
+        items.extend(crate::prs::pr_comment_notifications_from(db, org, &scanned));
+    }
+    let inbox_update = crate::prs::update_action_inbox(db, org, &scanned);
+    let state_update =
+        super::inbox::update_review_state_items(db, org, &previous_reviews, &current_reviews);
+    if inbox_update.changed() || state_update.changed() {
+        if let Err(e) = handle.emit("action-inbox:updated", serde_json::json!({})) {
+            tracing::warn!(org = %org.name, error = ?e, "sync: failed to emit action inbox update");
         }
     }
     // Revive snoozed PRs past their deadline or with new activity, and learn
@@ -202,16 +209,14 @@ async fn sync_org_work_items(
     }
     let should_collect = should_collect_work_item_notifications(settings);
     let baseline_established = has_completed_sync(db, "work_items", &org.id);
-    let previous_my_work_items = if should_collect {
-        match db.list_my_work_items(&org.id) {
-            Ok(items) => items,
-            Err(e) => {
-                tracing::warn!(org = %org.name, error = ?e, "sync: failed to snapshot work items before sync");
-                Vec::new()
-            }
+    // Always snapshotted: the Inbox diffs it (new assignments) regardless of
+    // the notification settings.
+    let previous_my_work_items = match db.list_my_work_items(&org.id) {
+        Ok(items) => items,
+        Err(e) => {
+            tracing::warn!(org = %org.name, error = ?e, "sync: failed to snapshot work items before sync");
+            Vec::new()
         }
-    } else {
-        Vec::new()
     };
     if let Err(e) = sync_work_items_for_org(db, client, org, projects, budget).await {
         tracing::error!(org = %org.name, error = ?e, "sync: WI sync failed");
@@ -222,6 +227,23 @@ async fn sync_org_work_items(
     emit_sync_updated(handle, &org.id, vec![SyncScope::MyWorkItems]);
     match db.list_my_work_items(&org.id) {
         Ok(current_my_work_items) => {
+            let mut inbox_update = super::inbox::update_assigned_work_item_items(
+                db,
+                org,
+                &previous_my_work_items,
+                &current_my_work_items,
+                baseline_established,
+            );
+            let mention_update =
+                super::wi_mentions::update_work_item_mentions(db, client, org, projects, budget)
+                    .await;
+            inbox_update.added += mention_update.added;
+            inbox_update.resolved += mention_update.resolved;
+            if inbox_update.changed() {
+                if let Err(e) = handle.emit("action-inbox:updated", serde_json::json!({})) {
+                    tracing::warn!(org = %org.name, error = ?e, "sync: failed to emit action inbox update");
+                }
+            }
             // Revive snoozed work items past their deadline or with a newer
             // ChangedDate; remember which stay snoozed.
             let snoozed_ids = match snooze.reconcile_work_items(

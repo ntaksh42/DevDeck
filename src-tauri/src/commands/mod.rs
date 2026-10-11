@@ -1,3 +1,4 @@
+pub mod action_inbox;
 pub mod agent_notes;
 pub mod notifications;
 pub mod orgs;

@@ -19,7 +19,7 @@ const POLL_MS = 5_000;
 
 export const agentNoteSummariesKey = (target: AgentNoteTarget) => ["agentNoteSummaries", target];
 
-function useSummaries(target: AgentNoteTarget) {
+export function useSummaries(target: AgentNoteTarget) {
   return useQuery({
     queryKey: agentNoteSummariesKey(target),
     queryFn: () => summarizeAgentNotes({ target }),

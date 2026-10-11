@@ -46,6 +46,11 @@ export const AnalyzeView = lazy(() =>
     default: m.AnalyzeView,
   })),
 );
+export const InboxView = lazy(() =>
+  import("@/features/inbox/InboxView").then((m) => ({
+    default: m.InboxView,
+  })),
+);
 export const NotificationsView = lazy(() =>
   import("@/features/notifications/NotificationsView").then((m) => ({
     default: m.NotificationsView,

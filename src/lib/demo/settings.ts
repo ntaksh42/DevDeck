@@ -67,6 +67,7 @@ export const DEFAULT_DEMO_SETTINGS: AppSettings = {
   workItemResultFolderPath: "C:\\reports\\azdo-work-items",
   showWindowHotkey: null,
   agentCommand: null,
+  agentWorkspacePath: null,
   readOnlyValidationModeEnabled: false,
   desktopNotificationsEnabled: false,
   notificationContentPreviewEnabled: true,
@@ -130,6 +131,10 @@ export function applyDemoSettingsUpdate(
       input && "agentCommand" in input
         ? input.agentCommand?.trim() || null
         : current.agentCommand,
+    agentWorkspacePath:
+      input && "agentWorkspacePath" in input
+        ? input.agentWorkspacePath?.trim() || null
+        : current.agentWorkspacePath,
     readOnlyValidationModeEnabled:
       input && "readOnlyValidationModeEnabled" in input
         ? Boolean(input.readOnlyValidationModeEnabled)

@@ -38,6 +38,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
     combo("gotoWorkItemSearch"),
     combo("gotoWorkItemViews"),
     combo("gotoNotifications"),
+    combo("gotoInbox"),
     combo("gotoSettings"),
   ].join("/");
 
@@ -175,6 +176,19 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
 
         </div>
         <div className="break-inside-avoid">
+          <p className={section}>Inbox</p>
+          <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ Home End PgUp PgDn</kbd></div>
+          <div className={row}><span>Focus the preview</span><kbd className={kbd}>Enter / →</kbd></div>
+          <div className={row}><span>Open in DevDeck</span><kbd className={kbd}>Shift+Enter</kbd></div>
+          <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>O / Ctrl+Enter</kbd></div>
+          <div className={row}><span>Done / Reopen</span><kbd className={kbd}>E</kbd></div>
+          <div className={row}><span>Snooze / Unsnooze</span><kbd className={kbd}>Z</kbd></div>
+          <div className={row}><span>Reply</span><kbd className={kbd}>R</kbd></div>
+          <div className={row}><span>Vote (review items) / approve, reject</span><kbd className={kbd}>A S W X 0 · A X</kbd></div>
+          <div className={row}><span>Ask the agent</span><kbd className={kbd}>Q</kbd></div>
+          <div className={row}><span>Open the nth link</span><kbd className={kbd}>1-9</kbd></div>
+          <div className={row}><span>Filter</span><kbd className={kbd}>/ · Ctrl+F</kbd></div>
+
           <p className={section}>Notifications</p>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ Home End PgUp PgDn</kbd></div>
           <div className={row}><span>Open / jump to item (marks read)</span><kbd className={kbd}>Enter</kbd></div>

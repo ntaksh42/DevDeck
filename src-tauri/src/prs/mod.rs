@@ -1,4 +1,5 @@
 mod group_reviews;
+mod inbox;
 mod live_results;
 mod notifications;
 mod search;
@@ -15,11 +16,15 @@ mod tests;
 mod live_results_tests;
 
 #[cfg(test)]
+mod tests_inbox;
+
+#[cfg(test)]
 mod tests_capped;
 
 #[cfg(test)]
 mod tests_force_refresh;
 
+pub(crate) use inbox::*;
 pub(crate) use live_results::*;
 pub(crate) use notifications::*;
 pub(crate) use search::*;

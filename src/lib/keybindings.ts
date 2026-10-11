@@ -33,6 +33,7 @@ export type KeybindingId =
   | "gotoWorkItemViews"
   | "gotoPipelines"
   | "gotoNotifications"
+  | "gotoInbox"
   | "gotoCrossOrgSummary"
   | "gotoAnalyze"
   | "gotoSettings";
@@ -79,10 +80,11 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   { id: "gotoMyReviews", label: "My Reviews", group: "Go to view", defaultCombo: "R", scope: "goto" },
   { id: "gotoPullRequestSearch", label: "Pull Request Search", group: "Go to view", defaultCombo: "Q", scope: "goto" },
   { id: "gotoMyWorkItems", label: "My Work Items", group: "Go to view", defaultCombo: "W", scope: "goto" },
-  { id: "gotoWorkItemSearch", label: "Work Item Search", group: "Go to view", defaultCombo: "I", scope: "goto" },
+  { id: "gotoWorkItemSearch", label: "Work Item Search", group: "Go to view", defaultCombo: "F", scope: "goto" },
   { id: "gotoWorkItemViews", label: "Work Item Views", group: "Go to view", defaultCombo: "V", scope: "goto" },
   { id: "gotoPipelines", label: "Pipelines", group: "Go to view", defaultCombo: "P", scope: "goto" },
   { id: "gotoNotifications", label: "Notifications", group: "Go to view", defaultCombo: "N", scope: "goto" },
+  { id: "gotoInbox", label: "Inbox", group: "Go to view", defaultCombo: "I", scope: "goto" },
   { id: "gotoCrossOrgSummary", label: "Cross-organization summary", group: "Go to view", defaultCombo: "O", scope: "goto" },
   { id: "gotoAnalyze", label: "Analyze", group: "Go to view", defaultCombo: "A", scope: "goto" },
   { id: "gotoSettings", label: "Settings", group: "Go to view", defaultCombo: "S", scope: "goto" },

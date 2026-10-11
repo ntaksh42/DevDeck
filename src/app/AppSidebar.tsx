@@ -14,6 +14,7 @@ import {
   ChartLine,
   GitBranch,
   GitPullRequest,
+  Inbox,
   Layers,
   ListChecks,
   Settings,
@@ -46,6 +47,7 @@ export interface AppSidebarProps {
   myReviewsBadge: number | null;
   myWorkItemsBadge: number | null;
   notificationsBadge: number | null;
+  inboxBadge: number | null;
   crossOrgSummaryEnabled: boolean;
   onNavigate: (view: View) => void;
   onOpenHelp: () => void;
@@ -66,6 +68,7 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
     myReviewsBadge,
     myWorkItemsBadge,
     notificationsBadge,
+    inboxBadge,
     crossOrgSummaryEnabled,
     onNavigate,
     onOpenHelp,
@@ -392,6 +395,16 @@ export const AppSidebar = forwardRef<AppSidebarHandle, AppSidebarProps>(function
         className="flex flex-1 flex-col p-2"
         onKeyDown={handleNavKeyDown}
       >
+        <div className="mb-1">
+          <NavButton
+            active={activeView === "inbox"}
+            disabled={organizationsLength === 0}
+            icon={<Inbox className="h-4 w-4" aria-hidden="true" />}
+            label="Inbox"
+            badge={inboxBadge}
+            onClick={() => onNavigate("inbox")}
+          />
+        </div>
         <div className="space-y-1">
           {navOrder
             .filter(

@@ -14,6 +14,7 @@ export function settingsInput(
     workItemResultFolderPath: settings?.workItemResultFolderPath ?? null,
     showWindowHotkey: settings?.showWindowHotkey ?? null,
     agentCommand: settings?.agentCommand ?? null,
+    agentWorkspacePath: settings?.agentWorkspacePath ?? null,
     readOnlyValidationModeEnabled:
       settings?.readOnlyValidationModeEnabled ?? false,
     desktopNotificationsEnabled: settings?.desktopNotificationsEnabled ?? false,
