@@ -38,13 +38,14 @@ fn review_item(
     }
 }
 
-/// Review requests and returned PRs from the review-PR cache.
+/// Returned PRs from the review-PR cache.
 ///
-/// A non-draft review PR with no vote from the user is a request. When the
-/// user's vote went from set to unset between the two snapshots (the author
-/// pushed), it is a returned PR instead, and the plain request row is finished
-/// so one PR never shows up twice. Items whose PR no longer waits for a vote
-/// (voted, draft, completed, removed) are finished.
+/// When the user's vote on a non-draft review PR went from set to unset
+/// between the two snapshots (the author pushed), it is a returned PR. A PR
+/// merely waiting for a vote is not an item: My Reviews already lists those,
+/// and a mention on one arrives as its own item. Request rows stored by earlier
+/// versions are finished here. Returned items whose PR no longer waits for a
+/// vote (voted, draft, completed, removed) are finished.
 pub(super) fn update_review_state_items(
     db: &AppDatabase,
     org: &Organization,
@@ -60,13 +61,11 @@ pub(super) fn update_review_state_items(
 
     let mut waiting: HashSet<(String, i64)> = HashSet::new();
     let mut new_items = Vec::new();
-    let mut returned: Vec<(String, i64)> = Vec::new();
     for pr in current {
         if pr.is_draft || pr.my_vote != 0 {
             continue;
         }
-        let key = (pr.repository_id.clone(), pr.pull_request_id);
-        waiting.insert(key.clone());
+        waiting.insert((pr.repository_id.clone(), pr.pull_request_id));
         let was_voted = previous_by_key
             .get(&(pr.repository_id.as_str(), pr.pull_request_id))
             .is_some_and(|prev| prev.my_vote != 0);
@@ -74,11 +73,7 @@ pub(super) fn update_review_state_items(
             // A returned PR is told apart per push, so a later return after a
             // finished one is a new item.
             new_items.push(review_item(org, pr, KIND_RETURNED, now_secs));
-            returned.push(key);
         }
-        // Keeps one request row per PR; a returned PR gets its request row
-        // finished below so it is not re-created as a duplicate next sync.
-        new_items.push(review_item(org, pr, KIND_REVIEW_REQUEST, 0));
     }
     match db.insert_inbox_items(&new_items) {
         Ok(count) => update.added += count,
@@ -86,25 +81,15 @@ pub(super) fn update_review_state_items(
             tracing::warn!(org = %org.name, error = ?e, "inbox: failed to store review items")
         }
     }
-    for (repository_id, pull_request_id) in &returned {
-        match db.finish_inbox_subject(
-            &org.id,
-            KIND_REVIEW_REQUEST,
-            repository_id,
-            *pull_request_id,
-        ) {
-            Ok(count) => update.resolved += count,
-            Err(e) => {
-                tracing::warn!(org = %org.name, error = ?e, "inbox: failed to supersede review request")
-            }
-        }
-    }
 
     match db.unfinished_inbox_refs(&org.id, &[KIND_REVIEW_REQUEST, KIND_RETURNED]) {
         Ok(open) => {
             let finished: Vec<i64> = open
                 .into_iter()
-                .filter(|item| !waiting.contains(&(item.repository_id.clone(), item.subject_id)))
+                .filter(|item| {
+                    item.kind == KIND_REVIEW_REQUEST
+                        || !waiting.contains(&(item.repository_id.clone(), item.subject_id))
+                })
                 .map(|item| item.id)
                 .collect();
             if !finished.is_empty() {
@@ -277,30 +262,39 @@ mod tests {
     }
 
     #[test]
-    fn unvoted_non_draft_reviews_become_requests() {
+    fn a_pr_waiting_for_a_vote_is_not_an_item() {
         let (_tf, db, org) = setup();
         let current = [pr(1, 0, false), pr(2, 10, false), pr(3, 0, true)];
-        let update = update_review_state_items(&db, &org, &[], &current);
-        assert_eq!(update.added, 1);
-        assert_eq!(open_kinds(&db), vec![("pr_review_request".into(), 1)]);
-
-        // Re-running is idempotent.
-        assert_eq!(
-            update_review_state_items(&db, &org, &current, &current).added,
-            0
-        );
+        let update = update_review_state_items(&db, &org, &current, &current);
+        assert_eq!(update.added, 0);
+        assert!(open_kinds(&db).is_empty());
     }
 
     #[test]
-    fn voting_or_losing_the_pr_finishes_the_request() {
+    fn request_rows_from_earlier_versions_are_finished() {
         let (_tf, db, org) = setup();
-        let before = [pr(1, 0, false), pr(2, 0, false)];
-        update_review_state_items(&db, &org, &[], &before);
+        let waiting = [pr(1, 0, false)];
+        db.insert_inbox_items(&[review_item(&org, &waiting[0], KIND_REVIEW_REQUEST, 0)])
+            .unwrap();
+        assert_eq!(open_kinds(&db), vec![("pr_review_request".into(), 1)]);
+
+        // Still waiting for a vote, yet the row is closed.
+        let update = update_review_state_items(&db, &org, &waiting, &waiting);
+        assert_eq!(update.resolved, 1);
+        assert!(open_kinds(&db).is_empty());
+    }
+
+    #[test]
+    fn voting_or_losing_the_pr_finishes_the_returned_item() {
+        let (_tf, db, org) = setup();
+        let voted = [pr(1, 10, false), pr(2, 10, false)];
+        let reset = [pr(1, 0, false), pr(2, 0, false)];
+        update_review_state_items(&db, &org, &voted, &reset);
         assert_eq!(open_kinds(&db).len(), 2);
 
-        // PR 1 voted, PR 2 left the review list.
+        // PR 1 voted again, PR 2 left the review list.
         let after = [pr(1, 10, false)];
-        let update = update_review_state_items(&db, &org, &before, &after);
+        let update = update_review_state_items(&db, &org, &reset, &after);
         assert_eq!(update.resolved, 2);
         assert!(open_kinds(&db).is_empty());
     }

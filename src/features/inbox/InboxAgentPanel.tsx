@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Bot } from "lucide-react";
 import {
@@ -55,17 +55,17 @@ export function InboxAgentPanel({
   entry,
   readOnly,
   askRequest,
-  previewRef,
+  onAskHandled,
   onReturnToList,
 }: {
-  entry: InboxEntry;
+  entry: InboxEntry | null;
   readOnly: boolean;
-  /** Bumped when the user asked (Q) so the composer takes focus. */
-  askRequest: number;
-  previewRef: RefObject<HTMLDivElement | null>;
+  /** True after the user asked (Q) so the composer takes focus once mounted. */
+  askRequest: boolean;
+  onAskHandled: () => void;
   onReturnToList: () => void;
 }) {
-  const item = agentItemOf(entry);
+  const item = entry ? agentItemOf(entry) : null;
   const settingsQuery = useQuery({
     queryKey: ["appSettings"],
     queryFn: getAppSettings,
@@ -78,24 +78,30 @@ export function InboxAgentPanel({
   );
   const composerRef = useRef<HTMLDivElement | null>(null);
 
+  // The panel may only just have been brought to the front of its dock group.
   useEffect(() => {
-    if (askRequest === 0) return;
-    composerRef.current?.querySelector("textarea")?.focus();
-  }, [askRequest]);
+    if (!askRequest) return;
+    const textarea = composerRef.current?.querySelector("textarea");
+    if (!textarea) return;
+    textarea.focus();
+    onAskHandled();
+  });
 
   const run = useMutation({
     mutationFn: () =>
       runAgent({
         target: item?.target ?? "pull-request",
         itemId: item?.itemId ?? 0,
-        repositoryName: entry.repositoryName || null,
+        repositoryName: entry?.repositoryName || null,
       }),
   });
 
   if (!item) {
     return (
-      <div ref={previewRef} data-primary-preview="true" tabIndex={-1} className="px-3 py-3 text-xs text-muted-foreground outline-none">
-        The agent can only be asked about a pull request or a work item.
+      <div tabIndex={-1} className="px-3 py-3 text-xs text-muted-foreground outline-none">
+        {entry
+          ? "The agent can only be asked about a pull request or a work item."
+          : "Select an item to ask the agent about it."}
       </div>
     );
   }
@@ -125,7 +131,7 @@ export function InboxAgentPanel({
       await actions.create.mutateAsync({
         ...item,
         body: content,
-        quote: entry.snippet,
+        quote: entry?.snippet,
         kind: "question",
       });
     }
@@ -141,8 +147,6 @@ export function InboxAgentPanel({
 
   return (
     <div
-      ref={previewRef}
-      data-primary-preview="true"
       tabIndex={-1}
       onKeyDown={(event) => {
         if (event.key === "Escape" && !(event.target instanceof HTMLTextAreaElement)) {

@@ -75,7 +75,7 @@ export function InboxListPane({
   return (
     <section
       aria-label="Inbox"
-      className="flex min-h-0 w-[48%] min-w-[340px] flex-col overflow-hidden rounded border border-border bg-card"
+      className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card"
     >
       <div
         role="tablist"
@@ -197,7 +197,7 @@ export function InboxListPane({
           Open {tabCounts.open} · Snoozed {tabCounts.snoozed} · Done {tabCounts.done}
         </span>
         <span className="ml-auto">
-          E done · Z snooze · R reply · A/S/W/X vote · Shift+Enter open in DevDeck · O browser · 1-9
+          E done · Z snooze · R reply · Q agent · A/S/W/X vote · Shift+Enter open in DevDeck · O browser · 1-9
           links
         </span>
       </div>

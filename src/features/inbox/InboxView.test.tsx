@@ -9,7 +9,7 @@ import { InboxView } from "./InboxView";
 vi.mock("@/lib/openExternal", () => ({ openExternalUrl: vi.fn() }));
 
 // The view reads the browser demo's seeded Inbox: stored items for PR !42
-// (mention), !103 (reply), !189 (mention), !210 (review request) and work item
+// (mention), !103 (reply), !189 (mention), !210 (returned for another review) and work item
 // #123 (mention), plus the demo's pending pipeline approvals, which the view
 // derives and lists too.
 
@@ -77,7 +77,7 @@ describe("InboxView", () => {
     expect(rows[0].textContent).toContain("Add pull request search dashboard");
     expect(rows[1].textContent).toContain("WI mention");
     expect(rows[1].textContent).toContain("#123 Platform");
-    expect(rows[2].textContent).toContain("Review");
+    expect(rows[2].textContent).toContain("Returned");
     expect(rows[2].textContent).toContain("!210 web-app");
     expect(rows[3].textContent).toContain("Reply");
     expect(rows[3].textContent).toContain("!103 api-gateway");
@@ -235,6 +235,23 @@ describe("InboxView", () => {
     });
   });
 
+  it("replies to a work item comment by quoting it and mentioning its author", async () => {
+    renderView();
+    const list = await openList();
+    fireEvent.click(rowFor(list, "#123"));
+
+    const replyButtons = await screen.findAllByRole("button", { name: "Reply" });
+    fireEvent.click(replyButtons[0]);
+
+    const input = (await screen.findByPlaceholderText("Reply…")) as HTMLTextAreaElement;
+    expect(input.value).toBe("> LGTM — shipped this in the last sprint, no blockers.\n\n@Alice Johnson ");
+    await waitFor(() => expect(document.activeElement).toBe(input));
+    expect(screen.getByText("Replying to Alice Johnson")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(((await screen.findByPlaceholderText("Comment…")) as HTMLTextAreaElement).value).toBe("");
+  });
+
   it("asks the agent about the selected item from its own tab with q", async () => {
     renderView();
     const list = await openList();
@@ -262,8 +279,9 @@ describe("InboxView", () => {
     fireEvent.click(agentRow);
 
     expect(await screen.findByRole("heading", { name: /Agent ·/ })).toBeTruthy();
-    // No Conversation tab for a row that only exists to carry the agent's reply.
-    expect(screen.queryByRole("tab", { name: "Conversation" })).toBeNull();
+    // The row only exists to carry the agent's reply; the conversation points there.
+    fireEvent.pointerDown(screen.getByRole("tab", { name: "Conversation" }), { button: 0 });
+    expect(await screen.findByText(/answer it in the Agent panel/)).toBeTruthy();
   });
 
   it("does not offer Done or Snooze for a derived approval entry", async () => {

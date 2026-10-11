@@ -405,7 +405,7 @@ export function PrThreadCard({
               </div>
             ))}
           </div>
-          <div className="mt-1">
+          <div className="mt-1" data-thread-reply-area="true">
             {replying ? (
               <CommentComposer
                 placeholder="Reply…"

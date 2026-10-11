@@ -1,5 +1,12 @@
-import { useState } from "react";
-import type { MentionCandidate, PrThread, PullRequestReview, WorkItemPreview } from "@/lib/azdoCommands";
+import { useEffect, useRef, useState } from "react";
+import type {
+  MentionCandidate,
+  PrThread,
+  PullRequestReview,
+  WorkItemComment,
+  WorkItemPreview,
+} from "@/lib/azdoCommands";
+import type { SelectedMention } from "@/features/work-items/workItemMentions";
 import { formatRelativeDate } from "@/lib/utils";
 import { CommentComposer } from "@/features/pull-requests/CommentComposer";
 import { PrThreadCard } from "@/features/pull-requests/PrThreadCard";
@@ -116,6 +123,29 @@ export function VotePanel({
   );
 }
 
+/**
+ * Work item comments have no reply threads, so a reply is a new comment that
+ * quotes the comment and @mentions its author (a real, notifying mention when
+ * the author's id is known).
+ */
+export function workItemReplyDraft(comment: WorkItemComment): {
+  text: string;
+  mentions: SelectedMention[];
+} {
+  const plain =
+    new DOMParser().parseFromString(comment.text ?? "", "text/html").body.textContent ?? "";
+  const line = plain.replace(/\s+/g, " ").trim();
+  const quote = line.length > 120 ? `${line.slice(0, 119)}…` : line;
+  const name = comment.createdBy;
+  return {
+    text: `${quote ? `> ${quote}\n\n` : ""}${name ? `@${name} ` : ""}`,
+    mentions:
+      name && comment.createdById
+        ? [{ id: comment.createdById, displayName: name, uniqueName: comment.createdByUniqueName ?? null }]
+        : [],
+  };
+}
+
 /** The work item behind an assignment or a mention, with its latest comments. */
 export function WorkItemPanel({
   item,
@@ -135,6 +165,16 @@ export function WorkItemPanel({
   onComment: (markdown: string) => Promise<void>;
 }) {
   const [showAll, setShowAll] = useState(false);
+  // The comment being answered; `key` remounts the composer with its draft.
+  const [replyTo, setReplyTo] = useState<{ comment: WorkItemComment; key: number } | null>(null);
+  const composerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!replyTo) return;
+    const textarea = composerRef.current?.querySelector("textarea");
+    textarea?.focus();
+    textarea?.setSelectionRange(textarea.value.length, textarea.value.length);
+  }, [replyTo]);
+
   if (!workItem) {
     return (
       <p className="py-2 text-xs text-muted-foreground">
@@ -143,7 +183,9 @@ export function WorkItemPanel({
     );
   }
   // Newest first from the service; show the mention and what followed it.
-  const latest = workItem.comments.slice(0, showAll ? undefined : 3);
+  const mentionIndex = workItem.comments.findIndex((comment) => comment.id === item.commentId);
+  const shown = Math.max(3, mentionIndex + 1);
+  const latest = workItem.comments.slice(0, showAll ? undefined : shown);
   const mentionDisplayNames = new Map<string, string>();
   return (
     <div className="space-y-1.5 py-1">
@@ -166,6 +208,16 @@ export function WorkItemPanel({
               <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                 <span className="font-medium text-foreground">{comment.createdBy ?? "Unknown"}</span>
                 {comment.createdDate ? <span>{formatRelativeDate(comment.createdDate)}</span> : null}
+                {readOnly ? null : (
+                  <button
+                    type="button"
+                    data-inbox-mention-reply={comment.id === item.commentId ? "true" : undefined}
+                    onClick={() => setReplyTo((current) => ({ comment, key: (current?.key ?? 0) + 1 }))}
+                    className="ml-auto rounded px-1 font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    Reply
+                  </button>
+                )}
               </div>
               <RichHtmlFrame
                 baseUrl={workItem.webUrl}
@@ -181,13 +233,13 @@ export function WorkItemPanel({
           ))}
         </div>
       )}
-      {workItem.comments.length > 3 && !showAll ? (
+      {workItem.comments.length > shown && !showAll ? (
         <button
           type="button"
           onClick={() => setShowAll(true)}
           className="text-[11px] text-muted-foreground hover:text-foreground hover:underline"
         >
-          Show {workItem.comments.length - 3} older comments
+          Show {workItem.comments.length - shown} older comments
         </button>
       ) : null}
       {readOnly ? (
@@ -195,13 +247,30 @@ export function WorkItemPanel({
           Read-only validation mode: commenting is disabled.
         </p>
       ) : (
-        <div data-inbox-composer="true">
+        // Pinned to the bottom of the preview so it stays in reach of long discussions.
+        <div ref={composerRef} data-inbox-composer="true" className="sticky bottom-0 z-10 bg-card pt-1">
+          {replyTo ? (
+            <div className="mb-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <span>Replying to {replyTo.comment.createdBy ?? "Unknown"}</span>
+              <button
+                type="button"
+                onClick={() => setReplyTo(null)}
+                className="rounded px-1 hover:text-foreground hover:underline focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : null}
           <CommentComposer
-            placeholder="Comment…"
-            submitLabel="Comment"
+            key={replyTo?.key ?? 0}
+            placeholder={replyTo ? "Reply…" : "Comment…"}
+            submitLabel={replyTo ? "Reply" : "Comment"}
+            initialValue={replyTo ? workItemReplyDraft(replyTo.comment).text : ""}
+            initialMentions={replyTo ? workItemReplyDraft(replyTo.comment).mentions : undefined}
             busy={busy}
             mentionSearch={mentionSearch}
             onSubmit={onComment}
+            onSubmitted={() => setReplyTo(null)}
           />
         </div>
       )}

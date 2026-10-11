@@ -16,6 +16,8 @@ import { fetchWorkItemImageCached } from "@/lib/workItemImageCache";
 import { clamp, focusPrimaryPreview, isEditableTarget } from "@/lib/utils";
 import { useGridVirtualizer } from "@/lib/useGridVirtualizer";
 import { useDockFilter } from "@/components/DockFilterBar";
+import { DockableWorkspace, type DockablePanelSpec } from "@/components/DockableWorkspace";
+import { PreviewEmptyState } from "@/components/StateDisplay";
 import { SnoozeMenu } from "@/components/SnoozeMenu";
 import { InboxAgentPanel } from "./InboxAgentPanel";
 import { InboxListPane } from "./InboxListPane";
@@ -35,6 +37,7 @@ import { useInboxDetail, type VoteValue } from "./useInboxDetail";
 import { useInboxEntries } from "./useInboxEntries";
 
 const OVERSCAN = 8;
+const LAYOUT_STORAGE_KEY = "azdodeck:layout:inbox:dockview:v1";
 const VOTE_KEYS: Record<string, VoteValue> = { a: 10, s: 5, w: -5, x: -10, "0": 0 };
 
 export function InboxView({
@@ -48,8 +51,8 @@ export function InboxView({
   const [filterText, setFilterText] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [snoozeAnchor, setSnoozeAnchor] = useState<DOMRect | null>(null);
-  const [previewTab, setPreviewTab] = useState<"conversation" | "agent">("conversation");
-  const [askRequest, setAskRequest] = useState(0);
+  const [activateRequest, setActivateRequest] = useState<{ id: string; key: number }>();
+  const [askRequest, setAskRequest] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
   const filterInputRef = useRef<HTMLInputElement | null>(null);
@@ -97,11 +100,15 @@ export function InboxView({
   // A reply from the agent has no conversation of its own to show.
   const agentOnly = selected?.kind === "agent_reply";
   const canAskAgent = !!selected && agentItemOf(selected) !== null;
-  const activePreviewTab = agentOnly ? "agent" : canAskAgent ? previewTab : "conversation";
+
+  /** Brings a dock panel to the front of its group (a no-op when it is already visible). */
+  function activatePanel(id: "conversation" | "agent") {
+    setActivateRequest((current) => ({ id, key: (current?.key ?? 0) + 1 }));
+  }
   useEffect(() => {
     // Each item opens on its conversation; the agent thread is one key away.
-    setPreviewTab("conversation");
-  }, [selected?.id]);
+    if (selected) activatePanel(agentOnly ? "agent" : "conversation");
+  }, [selected?.id, agentOnly]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const mentionSearch = useCallback(
     (query: string): Promise<MentionCandidate[]> =>
@@ -282,16 +289,21 @@ export function InboxView({
       else openSnoozeMenu();
     } else if (lower === "r") {
       event.preventDefault();
-      const target = previewRef.current?.querySelector<HTMLElement>(
-        '[data-thread-reply="true"], [data-inbox-composer="true"] textarea',
-      );
-      if (target instanceof HTMLTextAreaElement) target.focus();
-      else target?.click();
+      activatePanel("conversation");
+      // Wait for the panel to mount if it was stacked behind the agent's tab.
+      window.setTimeout(() => {
+        const preview = previewRef.current;
+        const target =
+          preview?.querySelector<HTMLElement>('[data-inbox-mention-reply="true"], [data-thread-reply="true"]') ??
+          preview?.querySelector<HTMLElement>('[data-inbox-composer="true"] textarea');
+        if (target instanceof HTMLTextAreaElement) target.focus();
+        else target?.click();
+      }, 0);
     } else if (lower === "q") {
       event.preventDefault();
       if (canAskAgent) {
-        setPreviewTab("agent");
-        setAskRequest((value) => value + 1);
+        activatePanel("agent");
+        setAskRequest(true);
       }
     } else if (lower === "c") {
       event.preventDefault();
@@ -313,109 +325,85 @@ export function InboxView({
     }
   }
 
-  return (
-    <div className="flex min-h-0 flex-1 gap-2">
-      <InboxListPane
-        tab={tab}
-        tabCounts={tabCounts}
-        onTabChange={switchTab}
-        organizations={organizationsQuery.data ?? []}
-        organizationId={organizationId}
-        onOrganizationChange={(id) => {
-          setOrganizationId(id);
-          setSelectedIndex(0);
-        }}
-        filterText={filterText}
-        onFilterTextChange={(value) => {
-          setFilterText(value);
-          setSelectedIndex(0);
-        }}
-        filterBar={filterBar}
-        filterInputRef={filterInputRef}
-        listRef={listRef}
-        rowRefs={rowRefs}
-        virtual={virtual}
-        entries={entries}
-        selectedIndex={index}
-        isLoading={isLoading}
-        error={error ? commandErrorMessage(error) : null}
-        onRetry={refetch}
-        onSelect={setSelectedIndex}
-        onOpen={openInApp}
-        onKeyDown={handleListKeyDown}
-      />
+  const returnToList = (event: React.KeyboardEvent) => {
+    if (event.key === "Escape" && !isEditableTarget(event.target)) {
+      event.preventDefault();
+      listRef.current?.focus();
+    }
+  };
 
-      <section
-        aria-label="Inbox preview"
-        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded border border-border bg-card"
-      >
-        <div className="flex h-8 shrink-0 items-stretch border-b border-border bg-muted">
-          <div role="tablist" aria-label="Preview" className="flex items-stretch">
-            {(agentOnly
-              ? ([["agent", "Agent"]] as const)
-              : ([
-                  ["conversation", "Conversation"],
-                  ...(canAskAgent ? ([["agent", "Agent"]] as const) : []),
-                ] as const)
-            ).map(([id, label]) => {
-              const active = activePreviewTab === id;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setPreviewTab(id)}
-                  className={`px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
-                    active
-                      ? "bg-background font-semibold text-foreground shadow-[inset_0_-2px_0_hsl(var(--primary))]"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-          <div className="ml-auto flex items-center gap-1 pr-2">
-            <button
-              type="button"
-              disabled={!selected}
-              onClick={() => selected && openInApp(selected)}
-              title="Open in DevDeck (Shift+Enter)"
-              className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary disabled:opacity-50"
-            >
-              Open in DevDeck
-            </button>
-            <button
-              type="button"
-              disabled={!selected?.webUrl}
-              onClick={() => selected && openInBrowser(selected)}
-              title="Open in Azure DevOps (O)"
-              className="inline-flex items-center gap-1 rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary disabled:opacity-50"
-            >
-              <ExternalLink className="h-3 w-3" aria-hidden="true" />
-              Browser
-            </button>
-          </div>
-        </div>
-        <div
-          className="flex min-h-0 flex-1 flex-col"
-          onKeyDown={(event) => {
-            if (event.key === "Escape" && !isEditableTarget(event.target)) {
-              event.preventDefault();
-              listRef.current?.focus();
-            }
+  const panels: DockablePanelSpec[] = [
+    {
+      id: "list",
+      title: "Items",
+      minWidth: 340,
+      content: (
+        <InboxListPane
+          tab={tab}
+          tabCounts={tabCounts}
+          onTabChange={switchTab}
+          organizations={organizationsQuery.data ?? []}
+          organizationId={organizationId}
+          onOrganizationChange={(id) => {
+            setOrganizationId(id);
+            setSelectedIndex(0);
           }}
-        >
-          {activePreviewTab === "agent" && selected ? (
-            <InboxAgentPanel
-              entry={selected}
-              readOnly={readOnly}
-              askRequest={askRequest}
-              previewRef={previewRef}
-              onReturnToList={() => listRef.current?.focus()}
-            />
+          filterText={filterText}
+          onFilterTextChange={(value) => {
+            setFilterText(value);
+            setSelectedIndex(0);
+          }}
+          filterBar={filterBar}
+          filterInputRef={filterInputRef}
+          listRef={listRef}
+          rowRefs={rowRefs}
+          virtual={virtual}
+          entries={entries}
+          selectedIndex={index}
+          isLoading={isLoading}
+          error={error ? commandErrorMessage(error) : null}
+          onRetry={refetch}
+          onSelect={setSelectedIndex}
+          onOpen={openInApp}
+          onKeyDown={handleListKeyDown}
+        />
+      ),
+    },
+    {
+      id: "conversation",
+      title: "Conversation",
+      position: { relativeTo: "list", direction: "right" },
+      initialWidth: 560,
+      minWidth: 360,
+      headerActions: (
+        <div className="flex items-center gap-1 pr-1">
+          <button
+            type="button"
+            disabled={!selected}
+            onClick={() => selected && openInApp(selected)}
+            title="Open in DevDeck (Shift+Enter)"
+            className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary disabled:opacity-50"
+          >
+            Open in DevDeck
+          </button>
+          <button
+            type="button"
+            disabled={!selected?.webUrl}
+            onClick={() => selected && openInBrowser(selected)}
+            title="Open in Azure DevOps (O)"
+            className="inline-flex items-center gap-1 rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary disabled:opacity-50"
+          >
+            <ExternalLink className="h-3 w-3" aria-hidden="true" />
+            Browser
+          </button>
+        </div>
+      ),
+      content: (
+        <div className="flex h-full min-h-0 flex-col bg-card" onKeyDown={returnToList}>
+          {agentOnly ? (
+            <div ref={previewRef} data-primary-preview="true" tabIndex={-1} className="min-h-0 flex-1 outline-none">
+              <PreviewEmptyState message="This is the agent's reply. Read and answer it in the Agent panel (Q)." />
+            </div>
           ) : (
             <InboxPreview
               item={selected}
@@ -439,7 +427,31 @@ export function InboxView({
             />
           )}
         </div>
-      </section>
+      ),
+    },
+    {
+      // Starts as a tab beside the conversation; move it below or beside to see both at once.
+      id: "agent",
+      title: "Agent",
+      position: { relativeTo: "conversation", direction: "within" },
+      minWidth: 280,
+      content: (
+        <div className="flex h-full min-h-0 flex-col bg-card" onKeyDown={returnToList}>
+          <InboxAgentPanel
+            entry={selected}
+            readOnly={readOnly}
+            askRequest={askRequest}
+            onAskHandled={() => setAskRequest(false)}
+            onReturnToList={() => listRef.current?.focus()}
+          />
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <div className="flex min-h-0 flex-1">
+      <DockableWorkspace storageKey={LAYOUT_STORAGE_KEY} panels={panels} activatePanel={activateRequest} />
 
       {snoozeAnchor && selected ? (
         <SnoozeMenu

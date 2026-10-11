@@ -97,7 +97,8 @@ export function InboxPreview({
       ref={previewRef}
       data-primary-preview="true"
       tabIndex={-1}
-      className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2 outline-none"
+      // A thread's reply box stays pinned to the bottom while its thread is in view.
+      className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2 outline-none [&_[data-thread-reply-area]]:sticky [&_[data-thread-reply-area]]:bottom-0 [&_[data-thread-reply-area]]:z-10 [&_[data-thread-reply-area]]:bg-card [&_[data-thread-reply-area]]:py-0.5"
     >
       <h2 className="line-clamp-2 text-sm font-semibold leading-snug">{heading}</h2>
       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
@@ -139,6 +140,7 @@ export function InboxPreview({
       ) : null}
       {isWorkItemItem(item) && !detail.isLoading ? (
         <WorkItemPanel
+          key={item.id}
           item={item}
           workItem={workItem}
           busy={detail.busy}

@@ -464,23 +464,4 @@ impl AppDatabase {
         )?;
         Ok(())
     }
-
-    /// Finishes every item of one kind for one subject (e.g. the "review
-    /// requested" row of a PR that came back as "returned").
-    pub fn finish_inbox_subject(
-        &self,
-        organization_id: &str,
-        kind: &str,
-        repository_id: &str,
-        subject_id: i64,
-    ) -> Result<usize> {
-        let conn = self.open()?;
-        let now = format_time(Utc::now());
-        Ok(conn.execute(
-            "UPDATE action_inbox_items SET state = 'done', snoozed_until = NULL, done_at = ?1 \
-             WHERE org_id = ?2 AND kind = ?3 AND repository_id = ?4 AND subject_id = ?5 \
-               AND state != 'done'",
-            params![now, organization_id, kind, repository_id, subject_id],
-        )?)
-    }
 }

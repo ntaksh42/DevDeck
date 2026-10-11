@@ -43,7 +43,7 @@ function buildSeed(): InboxItem[] {
     {
       ...base,
       id: 6,
-      kind: "pr_review_request",
+      kind: "pr_returned",
       subjectId: 210,
       repositoryId: "web-app",
       repositoryName: "web-app",

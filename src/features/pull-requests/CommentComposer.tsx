@@ -14,6 +14,8 @@ import {
   usePersistedTextareaHeight,
 } from "@/lib/usePersistedTextareaHeight";
 
+const NO_MENTIONS: SelectedMention[] = [];
+
 /**
  * Reusable comment editor with optional @mention autocomplete. Owns its own
  * draft so it can keep the text when a submit fails. `onSubmit` is awaited; the
@@ -23,6 +25,7 @@ export function CommentComposer({
   placeholder,
   submitLabel = "Comment",
   initialValue = "",
+  initialMentions = NO_MENTIONS,
   autoFocus = false,
   busy = false,
   onSubmit,
@@ -34,6 +37,8 @@ export function CommentComposer({
   placeholder: string;
   submitLabel?: string;
   initialValue?: string;
+  /** Mentions already present in `initialValue` (e.g. a reply addressed to someone). */
+  initialMentions?: SelectedMention[];
   autoFocus?: boolean;
   busy?: boolean;
   onSubmit: (content: string) => Promise<void>;
@@ -56,7 +61,7 @@ export function CommentComposer({
   // Mentions chosen from the picker, kept so their plain "@Name" text can be
   // converted back to the "@<guid>" markdown Azure DevOps needs to create a
   // real (notifying) mention instead of leaving inert text.
-  const [selectedMentions, setSelectedMentions] = useState<SelectedMention[]>([]);
+  const [selectedMentions, setSelectedMentions] = useState<SelectedMention[]>(initialMentions);
 
   async function submit() {
     const trimmed = text.trim();
