@@ -23,7 +23,10 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
     return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [onClose]);
 
-  const section = "text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 mt-4 first:mt-0";
+  const section = "text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2";
+  // Spacing sits on the section wrapper: each heading is its own wrapper's
+  // first child, so a `first:` margin on the heading never separated sections.
+  const group = "break-inside-avoid mt-4 first:mt-0";
   const row = "flex items-center justify-between gap-8 py-0.5";
   const kbd = "rounded bg-muted px-1.5 py-0.5 text-xs font-mono";
 
@@ -72,7 +75,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
 
         <div className="min-h-0 flex-1 overflow-y-auto pr-1 text-sm" tabIndex={0}>
         <div className="md:columns-2 md:gap-8">
-        <div className="break-inside-avoid">
+        <div className={group}>
           <p className={section}>Navigation</p>
           <div className={row}><span>Settings</span><kbd className={kbd}>{combo("openSettings")}</kbd></div>
           <div className={row}><span>Focus left navigation</span><kbd className={kbd}>{combo("focusNavigation")}</kbd></div>
@@ -92,7 +95,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Focus views panel</span><kbd className={kbd}>{combo("focusViewsPanel")}</kbd></div>
 
         </div>
-        <div className="break-inside-avoid">
+        <div className={group}>
           <p className={section}>My Reviews</p>
           <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>
           <div className={row}><span>Open / focus preview</span><kbd className={kbd}>Enter / →</kbd></div>
@@ -110,7 +113,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Select multiple (check file-overlap conflict risk)</span><kbd className={kbd}>Shift+↑ ↓ · Shift+click · Ctrl+click</kbd></div>
 
         </div>
-        <div className="break-inside-avoid">
+        <div className={group}>
           <p className={section}>PR Search / WI Search</p>
           <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>
           <div className={row}><span>Open / focus preview</span><kbd className={kbd}>Enter / →</kbd></div>
@@ -124,7 +127,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Mark done / restore (My Reviews, My Items)</span><kbd className={kbd}>E</kbd></div>
 
         </div>
-        <div className="break-inside-avoid">
+        <div className={group}>
           <p className={section}>Work Items</p>
           <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>
           <div className={row}><span>Open detail preview</span><kbd className={kbd}>Enter / →</kbd></div>
@@ -156,7 +159,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Note box: send / add to drafts / send all drafts</span><kbd className={kbd}>Ctrl+Enter / Alt+Enter / Ctrl+Shift+Enter</kbd></div>
 
         </div>
-        <div className="break-inside-avoid">
+        <div className={group}>
           <p className={section}>Work Item Views</p>
           <div className={row}><span>Move view card</span><kbd className={kbd}>← → ↑ ↓</kbd></div>
           <div className={row}><span>Add / edit view</span><kbd className={kbd}>N / E</kbd></div>
@@ -164,7 +167,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Save (in dialog)</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
 
         </div>
-        <div className="break-inside-avoid">
+        <div className={group}>
           <p className={section}>Code</p>
           <div className={row}><span>Find file by name (fuzzy)</span><kbd className={kbd}>T</kbd></div>
           <div className={row}><span>Move in tree / type-ahead</span><kbd className={kbd}>↑ ↓ · Home / End · type</kbd></div>
@@ -175,7 +178,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Open run in browser</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
 
         </div>
-        <div className="break-inside-avoid">
+        <div className={group}>
           <p className={section}>Inbox</p>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ Home End PgUp PgDn</kbd></div>
           <div className={row}><span>Focus the preview</span><kbd className={kbd}>Enter / →</kbd></div>
@@ -196,7 +199,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Mark selected read</span><kbd className={kbd}>R</kbd></div>
 
         </div>
-        <div className="break-inside-avoid">
+        <div className={group}>
           <p className={section}>General</p>
           <div className={row}><span>Go to view</span><kbd className={kbd}>{combo("gotoLeader")} then {gotoKeys}</kbd></div>
           <div className={row}><span>Apply pending work item changes</span><kbd className={kbd}>{combo("applyStaged")}</kbd></div>

@@ -247,7 +247,7 @@ export function workItemCellValue(item: WorkItemSummary, column: WiSortKey): Rea
           {tags.map((tag) => (
             <span
               key={tag}
-              className="max-w-full shrink-0 truncate rounded border border-border bg-muted px-1.5 text-[11px] leading-[18px] text-muted-foreground"
+              className="min-w-0 max-w-full truncate rounded border border-border bg-muted px-1.5 text-[11px] leading-[18px] text-muted-foreground"
             >
               {tag}
             </span>

@@ -25,22 +25,15 @@ function rowCells(row: HTMLElement): HTMLElement[] {
 }
 
 /**
- * Width the cell would need to show its content without truncation: its own
- * scroll width plus whatever its truncated (overflow-clipped) descendants hide.
- */
-export function naturalCellWidth(cell: HTMLElement): number {
-  let hidden = 0;
-  cell.querySelectorAll<HTMLElement>("*").forEach((el) => {
-    const overflow = el.scrollWidth - el.clientWidth;
-    if (overflow > 0 && getComputedStyle(el).overflowX !== "visible") hidden += overflow;
-  });
-  return cell.scrollWidth + hidden;
-}
-
-/**
  * Max natural width per visible column across all rendered rows. Columns with
  * no measurable cell come back as `null`. `trackOffset` skips fixed prefix
  * tracks (e.g. a checkbox column).
+ *
+ * Each cell is briefly sized to its own `max-content`, so the reading does not
+ * depend on the column's current track width. A stretched cell can never read
+ * narrower than its track (and a header's absolutely positioned resize handle
+ * pokes past its right edge), which made every fit grow the column a little.
+ * The inline width is restored before returning, so nothing paints in between.
  */
 export function measureColumnContentWidths(
   root: HTMLElement,
@@ -50,13 +43,26 @@ export function measureColumnContentWidths(
 ): (number | null)[] {
   const result: (number | null)[] = Array.from({ length: count }, () => null);
   const rows = gridRows(root);
-  for (const row of headerOnly ? rows.slice(0, 1) : rows) {
-    const cells = rowCells(row);
-    if (cells.length < trackOffset + count) continue;
-    for (let i = 0; i < count; i += 1) {
-      const width = naturalCellWidth(cells[trackOffset + i]);
-      if (width > 0) result[i] = Math.max(result[i] ?? 0, width);
+  const measuredRows = (headerOnly ? rows.slice(0, 1) : rows)
+    .map(rowCells)
+    .filter((cells) => cells.length >= trackOffset + count)
+    .map((cells) => cells.slice(trackOffset, trackOffset + count));
+  const cells = measuredRows.flat();
+  const savedWidths = cells.map((cell) => cell.style.width);
+  cells.forEach((cell) => {
+    cell.style.width = "max-content";
+  });
+  try {
+    for (const row of measuredRows) {
+      row.forEach((cell, i) => {
+        const width = cell.getBoundingClientRect().width;
+        if (width > 0) result[i] = Math.max(result[i] ?? 0, width);
+      });
     }
+  } finally {
+    cells.forEach((cell, i) => {
+      cell.style.width = savedWidths[i];
+    });
   }
   return result;
 }
