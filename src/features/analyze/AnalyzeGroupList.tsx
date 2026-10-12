@@ -1,5 +1,6 @@
 import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ListStatusBar, itemCount } from "@/components/ListStatusBar";
+import { PreviewEmptyState } from "@/components/StateDisplay";
 import type { AnalyzeGroup } from "./analyzeGroupsStorage";
 
 export type AnalyzeGroupListProps = {
@@ -84,12 +85,25 @@ export function AnalyzeGroupList({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-card" data-primary-grid="true" tabIndex={-1}>
+    <div
+      className="flex h-full min-h-0 flex-col bg-card"
+      data-primary-grid="true"
+      tabIndex={-1}
+      onKeyDown={(event) => {
+        // With no rows the container itself holds focus, so it owns "N".
+        if (groups.length === 0 && (event.key === "n" || event.key === "N")) {
+          event.preventDefault();
+          event.stopPropagation();
+          onAdd();
+        }
+      }}
+    >
       <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2">
         {groups.length === 0 ? (
-          <p className="px-2 py-3 text-sm text-muted-foreground">
-            No groups yet. Add one to track a set of queries together.
-          </p>
+          <PreviewEmptyState
+            message="No groups yet."
+            hint="Press N to add one and track a set of queries together."
+          />
         ) : (
           groups.map((group, index) => {
             const selected = group.id === selectedId;

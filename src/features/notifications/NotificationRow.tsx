@@ -6,7 +6,7 @@ import { openExternalUrl } from "@/lib/openExternal";
 import { notificationKindLabel } from "./notificationKinds";
 import { notificationWebUrl } from "./notificationJump";
 
-export const NOTIFICATION_ROW_HEIGHT = 52;
+export const NOTIFICATION_ROW_HEIGHT = 44;
 
 export const NotificationRow = forwardRef<
   HTMLDivElement,
@@ -27,20 +27,20 @@ export const NotificationRow = forwardRef<
       role="row"
       aria-selected={selected}
       onClick={onSelect}
-      className={`flex h-[52px] cursor-pointer select-none items-start gap-2 border-b border-border px-3 py-1.5 text-left outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
+      className={`flex h-[44px] cursor-pointer select-none items-start gap-2 border-b border-border px-3 py-1 text-left outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
         selected ? "bg-secondary" : "hover:bg-muted/50"
       }`}
     >
       <span
         aria-hidden="true"
-        className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
+        className={`mt-2 h-1.5 w-1.5 shrink-0 rounded-full ${
           record.isRead ? "bg-transparent" : "bg-primary"
         }`}
       />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span
-            className={`min-w-0 truncate text-sm ${record.isRead ? "font-normal text-foreground" : "font-semibold text-foreground"}`}
+            className={`min-w-0 truncate text-sm leading-5 ${record.isRead ? "font-normal text-foreground" : "font-semibold text-foreground"}`}
             title={record.title}
           >
             {record.title}
@@ -52,7 +52,7 @@ export const NotificationRow = forwardRef<
             {formatRelativeDate(record.createdAt)}
           </span>
         </div>
-        <div className="truncate text-xs text-muted-foreground">
+        <div className="truncate text-xs leading-4 text-muted-foreground">
           {notificationKindLabel(record.kind)}
           {organizationLabel ? ` · ${organizationLabel}` : ""}
           {detail ? ` · ${detail}` : ""}
@@ -62,7 +62,8 @@ export const NotificationRow = forwardRef<
         <button
           type="button"
           aria-label="Open in Azure DevOps"
-          title="Open in Azure DevOps"
+          title="Open in Azure DevOps (Ctrl+Enter)"
+          tabIndex={-1}
           onClick={(event) => {
             event.stopPropagation();
             void openExternalUrl(webUrl);

@@ -1,6 +1,6 @@
 import { useQueries } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Loader2, RefreshCw, X } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePublishAgentSubject } from "@/components/agent/agentSubject";
 import { listPipelineRuns, type PipelineRunSummary } from "@/lib/azdoCommands";
@@ -180,6 +180,31 @@ export function PipelineSubscriptionsBoard({
     setStatusFilter((current) => (current === next ? null : next));
   }
 
+  // The pipeline headers form one roving tab stop: arrows / J K move between
+  // them and Delete unwatches, so Tab reaches the board once instead of twice
+  // per pipeline.
+  const rovingKey = boardRows.some(({ key }) => key === activeKey) ? activeKey : boardRows[0]?.key;
+
+  function onHeaderKeyDown(event: KeyboardEvent<HTMLButtonElement>, sub: (typeof boardRows)[number]["sub"]) {
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    const headers = Array.from(rootEl?.querySelectorAll<HTMLElement>("[data-board-header]") ?? []);
+    const current = headers.indexOf(event.currentTarget);
+    const target =
+      event.key === "ArrowDown" || event.key === "j" ? current + 1
+        : event.key === "ArrowUp" || event.key === "k" ? current - 1
+          : event.key === "Home" ? 0
+            : event.key === "End" ? headers.length - 1
+              : null;
+    if (target !== null) {
+      event.preventDefault();
+      event.stopPropagation();
+      headers[target]?.focus();
+    } else if (event.key === "Delete") {
+      event.preventDefault();
+      onRemove(sub.projectId, sub.definitionId);
+    }
+  }
+
   function changeSort(next: BoardSort) {
     setSort(next);
     saveBoardSort(next);
@@ -278,6 +303,10 @@ export function PipelineSubscriptionsBoard({
                   type="button"
                   onClick={() => toggle(key)}
                   onFocus={() => setActiveKey(key)}
+                  onKeyDown={(event) => onHeaderKeyDown(event, sub)}
+                  tabIndex={key === rovingKey ? 0 : -1}
+                  data-board-header=""
+                  data-grid-focus-fallback={key === rovingKey ? "true" : undefined}
                   aria-expanded={isOpen}
                   className="flex min-w-0 flex-1 items-center gap-2 text-left"
                 >
@@ -324,7 +353,8 @@ export function PipelineSubscriptionsBoard({
                 <button
                   type="button"
                   onClick={() => onRemove(sub.projectId, sub.definitionId)}
-                  title="Remove from watched pipelines"
+                  tabIndex={-1}
+                  title="Remove from watched pipelines (Delete)"
                   aria-label={`Remove ${sub.definitionName} from watched pipelines`}
                   className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
                 >

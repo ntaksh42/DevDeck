@@ -43,9 +43,20 @@ pub struct AppSettings {
     pub review_result_folder_path: Option<String>,
     pub work_item_result_folder_path: Option<String>,
     pub show_window_hotkey: Option<String>,
-    /// Shell command that starts an agent on an item's notes (`{target}`,
+    /// Shell command that starts Claude Code on an item's notes (`{target}`,
     /// `{id}`, `{notes}` placeholders). Run from the result folder.
     pub agent_command: Option<String>,
+    /// The same for Codex.
+    pub codex_command: Option<String>,
+    /// Agent a request goes to unless the composer picks another: `codex`, or
+    /// unset for Claude Code.
+    pub default_agent: Option<String>,
+    /// Model each agent starts with (unset: the agent's own setting), and the
+    /// extra models the Agent panel offers, comma-separated.
+    pub claude_model: Option<String>,
+    pub codex_model: Option<String>,
+    pub claude_model_choices: Option<String>,
+    pub codex_model_choices: Option<String>,
     /// One folder holding the repository clones (`{workspace}\{repo}`). The
     /// agent runs in the clone of the pull request's repository when it exists,
     /// else here; unset, it runs in the result folder.
@@ -94,6 +105,12 @@ impl Default for AppSettings {
             work_item_result_folder_path: None,
             show_window_hotkey: None,
             agent_command: None,
+            codex_command: None,
+            default_agent: None,
+            claude_model: None,
+            codex_model: None,
+            claude_model_choices: None,
+            codex_model_choices: None,
             agent_workspace_path: None,
             read_only_validation_mode_enabled: false,
             desktop_notifications_enabled: false,
@@ -141,33 +158,6 @@ impl AppDatabase {
         let conn = self.open()?;
         set_setting(&conn, "active_organization_id", id)
     }
-
-    pub fn get_pr_comment_seen(
-        &self,
-        org_id: &str,
-        repository_id: &str,
-        pull_request_id: i64,
-    ) -> Result<Option<i64>> {
-        let conn = self.open()?;
-        get_pr_comment_seen(&conn, org_id, repository_id, pull_request_id)
-    }
-
-    pub fn set_pr_comment_seen(
-        &self,
-        org_id: &str,
-        repository_id: &str,
-        pull_request_id: i64,
-        last_seen_comment_id: i64,
-    ) -> Result<()> {
-        let conn = self.open()?;
-        set_pr_comment_seen(
-            &conn,
-            org_id,
-            repository_id,
-            pull_request_id,
-            last_seen_comment_id,
-        )
-    }
 }
 
 pub(crate) fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
@@ -176,6 +166,12 @@ pub(crate) fn get_app_settings(conn: &Connection) -> Result<AppSettings> {
         work_item_result_folder_path: get_setting(conn, "work_item_result_folder_path")?,
         show_window_hotkey: get_setting(conn, "show_window_hotkey")?,
         agent_command: get_setting(conn, "agent_command")?,
+        codex_command: get_setting(conn, "codex_command")?,
+        default_agent: get_setting(conn, "default_agent")?,
+        claude_model: get_setting(conn, "claude_model")?,
+        codex_model: get_setting(conn, "codex_model")?,
+        claude_model_choices: get_setting(conn, "claude_model_choices")?,
+        codex_model_choices: get_setting(conn, "codex_model_choices")?,
         agent_workspace_path: get_setting(conn, "agent_workspace_path")?,
         read_only_validation_mode_enabled: get_bool_setting(
             conn,
@@ -287,6 +283,16 @@ pub(crate) fn update_app_settings(conn: &Connection, settings: AppSettings) -> R
         settings.show_window_hotkey.as_deref(),
     )?;
     set_setting(conn, "agent_command", settings.agent_command.as_deref())?;
+    set_setting(conn, "codex_command", settings.codex_command.as_deref())?;
+    set_setting(conn, "default_agent", settings.default_agent.as_deref())?;
+    for (key, value) in [
+        ("claude_model", &settings.claude_model),
+        ("codex_model", &settings.codex_model),
+        ("claude_model_choices", &settings.claude_model_choices),
+        ("codex_model_choices", &settings.codex_model_choices),
+    ] {
+        set_setting(conn, key, value.as_deref())?;
+    }
     set_setting(
         conn,
         "agent_workspace_path",
@@ -419,47 +425,6 @@ fn set_setting(conn: &Connection, key: &str, value: Option<&str>) -> Result<()> 
             conn.execute("DELETE FROM app_settings WHERE key = ?1", [key])?;
         }
     }
-    Ok(())
-}
-
-pub(crate) fn get_pr_comment_seen(
-    conn: &Connection,
-    org_id: &str,
-    repository_id: &str,
-    pull_request_id: i64,
-) -> Result<Option<i64>> {
-    Ok(conn
-        .query_row(
-            "SELECT last_seen_comment_id FROM pr_comment_seen \
-             WHERE organization_id = ?1 AND repository_id = ?2 AND pull_request_id = ?3",
-            params![org_id, repository_id, pull_request_id],
-            |row| row.get(0),
-        )
-        .optional()?)
-}
-
-pub(crate) fn set_pr_comment_seen(
-    conn: &Connection,
-    org_id: &str,
-    repository_id: &str,
-    pull_request_id: i64,
-    last_seen_comment_id: i64,
-) -> Result<()> {
-    conn.execute(
-        r#"
-        INSERT INTO pr_comment_seen(organization_id, repository_id, pull_request_id, last_seen_comment_id, updated_at)
-        VALUES (?1, ?2, ?3, ?4, ?5)
-        ON CONFLICT(organization_id, repository_id, pull_request_id)
-        DO UPDATE SET last_seen_comment_id = excluded.last_seen_comment_id, updated_at = excluded.updated_at
-        "#,
-        params![
-            org_id,
-            repository_id,
-            pull_request_id,
-            last_seen_comment_id,
-            Utc::now().to_rfc3339()
-        ],
-    )?;
     Ok(())
 }
 

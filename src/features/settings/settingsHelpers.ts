@@ -14,6 +14,12 @@ export function settingsInput(
     workItemResultFolderPath: settings?.workItemResultFolderPath ?? null,
     showWindowHotkey: settings?.showWindowHotkey ?? null,
     agentCommand: settings?.agentCommand ?? null,
+    codexCommand: settings?.codexCommand ?? null,
+    defaultAgent: settings?.defaultAgent ?? null,
+    claudeModel: settings?.claudeModel ?? null,
+    codexModel: settings?.codexModel ?? null,
+    claudeModelChoices: settings?.claudeModelChoices ?? null,
+    codexModelChoices: settings?.codexModelChoices ?? null,
     agentWorkspacePath: settings?.agentWorkspacePath ?? null,
     readOnlyValidationModeEnabled:
       settings?.readOnlyValidationModeEnabled ?? false,

@@ -75,6 +75,23 @@ describe("MyPullRequestsGrid copy shortcuts", () => {
     expect(await screen.findByText("Markdown link copied")).toBeTruthy();
   });
 
+  it("opens the folded filter with / like Ctrl+F", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+    client.setQueryData(["activeOrganization"], { id: "contoso" });
+    client.setQueryData(["myCreatedPullRequests", "contoso"], { pullRequests: [pr], warnings: [] });
+    render(
+      <QueryClientProvider client={client}>
+        <MyPullRequestsGrid />
+      </QueryClientProvider>,
+    );
+
+    const grid = await screen.findByRole("grid", { name: "My pull requests" });
+    expect(screen.queryByRole("combobox", { name: "Filter pull requests" })).toBeNull();
+    fireEvent.keyDown(grid, { key: "/" });
+
+    expect(document.activeElement).toBe(await screen.findByRole("combobox", { name: "Filter pull requests" }));
+  });
+
   it("hides draft PRs with the always-visible Show Drafts checkbox", async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
     client.setQueryData(["activeOrganization"], { id: "contoso" });

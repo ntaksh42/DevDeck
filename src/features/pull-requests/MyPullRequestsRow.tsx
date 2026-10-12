@@ -17,7 +17,8 @@ export function renderCell(key: SortKey, pr: MyCreatedPullRequestSummary): React
             if (pr.webUrl) openExternalUrl(pr.webUrl);
           }}
           className="truncate text-left font-mono text-xs text-link hover:underline"
-          title={`PR #${pr.pullRequestId}`}
+          title={`PR #${pr.pullRequestId} (Ctrl+Enter)`}
+          tabIndex={-1}
         >
           #{pr.pullRequestId}
         </button>

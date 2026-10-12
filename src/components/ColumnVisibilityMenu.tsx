@@ -45,8 +45,11 @@ export function ColumnVisibilityMenu<K extends string>({
       '[data-colvis-item="true"]:not([disabled])',
     );
     first?.focus();
+    const menu = ref.current;
     return () => {
       window.setTimeout(() => {
+        // Still attached means StrictMode's simulated remount (dev), not a close.
+        if (menu?.isConnected) return;
         document.querySelector<HTMLElement>('[data-primary-grid="true"]')?.focus();
       }, 0);
     };
@@ -141,6 +144,7 @@ export function ColumnVisibilityMenu<K extends string>({
               <input
                 type="checkbox"
                 data-colvis-item="true"
+                aria-label={label}
                 checked={visibleColumns.includes(key)}
                 disabled={required}
                 onChange={() => onToggle(key)}

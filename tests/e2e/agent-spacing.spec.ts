@@ -70,6 +70,11 @@ test("reaches the context chips from the input with Shift+Tab and drives them by
   await page.keyboard.press("Control+j");
   const input = panel.getByRole("textbox", { name: /^Ask about/ });
   await expect(input).toBeFocused();
+  // The model and agent pickers sit between the chips and the input.
+  await page.keyboard.press("Shift+Tab");
+  await expect(panel.getByRole("combobox", { name: "Model" })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(panel.getByRole("radio", { name: "Claude" })).toBeFocused();
   await page.keyboard.press("Shift+Tab");
   await expect(subject).toBeFocused();
 

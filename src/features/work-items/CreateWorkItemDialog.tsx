@@ -16,6 +16,7 @@ import {
   type WorkItemSummary,
 } from "@/lib/azdoCommands";
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 import { invalidateWorkItemMutationCaches, workItemQueryKeys } from "./queryKeys";
 
 /**
@@ -71,6 +72,8 @@ export function CreateWorkItemDialog({
 
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  useFocusTrap(dialogRef);
   // Focus returns to whatever opened the dialog (button, preview pane, grid).
   const restoreFocusRef = useRef<HTMLElement | null>(
     document.activeElement instanceof HTMLElement ? document.activeElement : null,
@@ -181,6 +184,7 @@ export function CreateWorkItemDialog({
       onKeyDown={handleKeyDown}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="wi-create-dialog-title"

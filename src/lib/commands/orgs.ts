@@ -42,6 +42,12 @@ export const appSettingsSchema = z.object({
   workItemResultFolderPath: z.string().nullable().default(null),
   showWindowHotkey: z.string().nullable().default(null),
   agentCommand: z.string().nullable().default(null),
+  codexCommand: z.string().nullable().default(null),
+  defaultAgent: z.enum(["codex"]).nullable().catch(null).default(null),
+  claudeModel: z.string().nullable().default(null),
+  codexModel: z.string().nullable().default(null),
+  claudeModelChoices: z.string().nullable().default(null),
+  codexModelChoices: z.string().nullable().default(null),
   agentWorkspacePath: z.string().nullable().default(null),
   readOnlyValidationModeEnabled: z.boolean().default(false),
   desktopNotificationsEnabled: z.boolean().default(false),
@@ -191,6 +197,12 @@ export type UpdateAppSettingsInput = {
   workItemResultFolderPath?: string | null;
   showWindowHotkey?: string | null;
   agentCommand?: string | null;
+  codexCommand?: string | null;
+  defaultAgent?: "codex" | null;
+  claudeModel?: string | null;
+  codexModel?: string | null;
+  claudeModelChoices?: string | null;
+  codexModelChoices?: string | null;
   agentWorkspacePath?: string | null;
   readOnlyValidationModeEnabled?: boolean;
   desktopNotificationsEnabled?: boolean;

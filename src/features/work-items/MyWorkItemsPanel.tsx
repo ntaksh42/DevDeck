@@ -56,14 +56,14 @@ export function MyWorkItemsPanel() {
         <div
           role="group"
           aria-label="Work item scope"
-          className="inline-flex h-8 items-center rounded-md border border-border p-0.5"
+          className="inline-flex h-7 items-center rounded-md border border-border p-0.5"
         >
           <button
             type="button"
             aria-pressed={scope === 'assigned'}
             onClick={() => setScope('assigned')}
             title="Work items assigned to you"
-            className={`inline-flex h-7 items-center rounded px-2 text-xs font-medium ${scope === 'assigned' ? 'bg-secondary text-foreground' : 'hover:bg-secondary/60'}`}
+            className={`inline-flex h-5 items-center rounded px-2 text-xs font-medium ${scope === 'assigned' ? 'bg-secondary text-foreground' : 'hover:bg-secondary/60'}`}
           >
             Assigned to me
           </button>
@@ -72,7 +72,7 @@ export function MyWorkItemsPanel() {
             aria-pressed={scope === 'followed'}
             onClick={() => setScope('followed')}
             title="Work items you are following"
-            className={`inline-flex h-7 items-center gap-1 rounded px-2 text-xs font-medium ${scope === 'followed' ? 'bg-secondary text-foreground' : 'hover:bg-secondary/60'}`}
+            className={`inline-flex h-5 items-center gap-1 rounded px-2 text-xs font-medium ${scope === 'followed' ? 'bg-secondary text-foreground' : 'hover:bg-secondary/60'}`}
           >
             <Star className="h-3 w-3" aria-hidden="true" />
             Followed
@@ -82,7 +82,7 @@ export function MyWorkItemsPanel() {
           type="button"
           onClick={() => setCreateDraft({})}
           title="Create a new work item"
-          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+          className="inline-flex h-7 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
         >
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
           New item

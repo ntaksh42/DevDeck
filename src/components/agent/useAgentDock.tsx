@@ -1,4 +1,4 @@
-import { useEffect, useId, type RefObject } from "react";
+import { useEffect, useId, useRef, type RefObject } from "react";
 import type { DockviewApi, IDockviewPanel } from "dockview-react";
 import { readStoredJson, writeStoredJson } from "@/lib/storage";
 import { AgentPanelContent } from "./AgentPanelHost";
@@ -80,12 +80,20 @@ function fit(saved: number, min: number, available: number | undefined): number 
  * Returns the width the docked panel needs, so the workspace can grow by it
  * (and scroll) instead of clipping a panel; 0 while it is not docked here.
  */
-export function useAgentDock(apiRef: RefObject<DockviewApi | null>, ready: boolean, storageKey: string): number {
+export function useAgentDock(
+  apiRef: RefObject<DockviewApi | null>,
+  ready: boolean,
+  storageKey: string,
+  onDocked?: (api: DockviewApi) => void,
+): number {
   const hostId = useId();
   const state = useAgentPanelState();
   const { dockHosts } = state;
   const open = isAgentPanelShown(state);
   const isHost = dockHosts[dockHosts.length - 1] === hostId;
+
+  const onDockedRef = useRef(onDocked);
+  onDockedRef.current = onDocked;
 
   useEffect(() => registerDockHost(hostId), [hostId]);
 
@@ -120,6 +128,8 @@ export function useAgentDock(apiRef: RefObject<DockviewApi | null>, ready: boole
           : // First time: a full-height column at the workspace's right edge.
             { position: { direction: "right" as const }, initialWidth: DEFAULT_WIDTH }),
       });
+      // After dockview has laid the new column out.
+      requestAnimationFrame(() => onDockedRef.current?.(api));
     } else if ((!open || !isHost) && existing) {
       const position = positionOf(api, existing);
       if (position) writeStoredJson(positionKey(storageKey), position);

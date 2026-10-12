@@ -145,7 +145,7 @@ export function MultiSelectFilter({
         onKeyDown={onTriggerKeyDown}
         className={`flex w-full items-center justify-between gap-2 rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60 ${
           selected.length > 0 ? "border-primary text-foreground" : "border-input"
-        } ${className || "h-9"}`}
+        } ${className || "h-7"}`}
       >
         <span
           className={`truncate ${selected.length === 0 ? "text-muted-foreground" : ""} ${

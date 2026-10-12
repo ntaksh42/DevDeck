@@ -413,7 +413,7 @@ export function WorkItemViewsPanel({
           ) : null}
 
           {layout === "board" ? (
-          <div className="flex h-8 shrink-0 items-center rounded-md border border-input bg-background px-2 focus-within:ring-2 focus-within:ring-ring">
+          <div className="flex h-7 shrink-0 items-center rounded-md border border-input bg-background px-2 focus-within:ring-2 focus-within:ring-ring">
             <Search className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
             <input
               value={filter}

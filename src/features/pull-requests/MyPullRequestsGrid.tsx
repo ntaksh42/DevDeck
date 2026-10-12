@@ -268,6 +268,10 @@ export function MyPullRequestsGrid() {
         event.preventDefault();
         focusPrimaryPreview();
         break;
+      case "/":
+        event.preventDefault();
+        filterBar.onOpen();
+        break;
       case "\\":
         event.preventDefault();
         setMaximized((value) => !value);

@@ -9,6 +9,7 @@ mod action_inbox;
 mod migrate;
 mod notifications;
 mod organizations;
+mod pr_comment_seen;
 mod prs;
 mod settings;
 mod snooze;

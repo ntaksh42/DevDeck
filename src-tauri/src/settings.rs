@@ -29,6 +29,18 @@ pub struct UpdateAppSettingsInput {
     #[serde(default)]
     pub agent_command: Option<String>,
     #[serde(default)]
+    pub codex_command: Option<String>,
+    #[serde(default)]
+    pub default_agent: Option<String>,
+    #[serde(default)]
+    pub claude_model: Option<String>,
+    #[serde(default)]
+    pub codex_model: Option<String>,
+    #[serde(default)]
+    pub claude_model_choices: Option<String>,
+    #[serde(default)]
+    pub codex_model_choices: Option<String>,
+    #[serde(default)]
     pub agent_workspace_path: Option<String>,
     pub read_only_validation_mode_enabled: Option<bool>,
     pub desktop_notifications_enabled: Option<bool>,
@@ -207,6 +219,16 @@ pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
         work_item_result_folder_path: normalize_path(input.work_item_result_folder_path),
         show_window_hotkey: normalize_path(input.show_window_hotkey),
         agent_command: normalize_path(input.agent_command),
+        codex_command: normalize_path(input.codex_command),
+        claude_model: normalize_path(input.claude_model),
+        codex_model: normalize_path(input.codex_model),
+        claude_model_choices: normalize_path(input.claude_model_choices),
+        codex_model_choices: normalize_path(input.codex_model_choices),
+        // Only Codex is stored; anything else means the default, Claude Code.
+        default_agent: input
+            .default_agent
+            .filter(|agent| agent == "codex")
+            .map(|_| "codex".to_string()),
         agent_workspace_path: normalize_path(input.agent_workspace_path),
         read_only_validation_mode_enabled: input.read_only_validation_mode_enabled.unwrap_or(false),
         desktop_notifications_enabled: input.desktop_notifications_enabled.unwrap_or(false),

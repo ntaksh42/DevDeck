@@ -157,6 +157,7 @@ export function OrganizationSettings({
                   onClick={() => jumpToGroup(group.id)}
                   disabled={!matches}
                   aria-current={active ? "true" : undefined}
+                  data-grid-focus-fallback={active ? "true" : undefined}
                   className={`w-full rounded-md px-2.5 py-1.5 text-left text-sm disabled:cursor-default disabled:opacity-40 ${
                     active
                       ? "bg-secondary font-medium text-foreground"

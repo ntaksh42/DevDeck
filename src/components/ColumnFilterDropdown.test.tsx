@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { ColumnFilterDropdown } from "./ColumnFilterDropdown";
@@ -92,5 +93,33 @@ describe("ColumnFilterDropdown keyboard navigation", () => {
     vi.useRealTimers();
 
     expect(document.activeElement).toBe(button);
+  });
+
+  it("keeps focus inside the popup under StrictMode's simulated remount", () => {
+    const button = document.createElement("button");
+    document.body.appendChild(button);
+    const restoreFocusRef = { current: button as HTMLElement | null };
+
+    vi.useFakeTimers();
+    render(
+      <StrictMode>
+        <ColumnFilterDropdown
+          anchorRect={anchorRect()}
+          allValues={["Active"]}
+          activeValues={undefined}
+          onToggle={vi.fn()}
+          onClearAll={vi.fn()}
+          onUncheckAll={vi.fn()}
+          onClose={vi.fn()}
+          restoreFocusRef={restoreFocusRef}
+        />
+      </StrictMode>,
+    );
+    vi.runAllTimers();
+    vi.useRealTimers();
+
+    // The dev-only unmount/remount is not a close: focus must stay on the
+    // search box instead of being handed back to the header button.
+    expect(activeLabel()).toBe("search");
   });
 });

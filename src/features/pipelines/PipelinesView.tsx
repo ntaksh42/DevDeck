@@ -251,7 +251,7 @@ export function PipelinesView() {
                     : "Watch this pipeline's run history"
               }
               aria-pressed={selectedIsSubscribed}
-              className={`flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 ${
+              className={`flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 ${
                 selectedIsSubscribed
                   ? "border-emerald-500 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
                   : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -272,7 +272,7 @@ export function PipelinesView() {
               aria-expanded={queueOpen}
               aria-haspopup="dialog"
               title={canQueue ? "Queue a new run of this pipeline" : "Select a pipeline to queue a run"}
-              className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Play className="h-4 w-4" aria-hidden="true" />
               Queue run

@@ -1,6 +1,7 @@
 use rusqlite::params;
 use tempfile::NamedTempFile;
 
+use super::pr_comment_seen::{get_pr_comment_seen, set_pr_comment_seen};
 use super::snooze::{list_snoozed_items, upsert_snoozed_item};
 use super::test_support::make_org_draft;
 use super::*;
@@ -162,6 +163,12 @@ fn app_settings_can_be_saved_and_cleared() {
             work_item_result_folder_path: Some("C:/reports/work-items".to_string()),
             show_window_hotkey: Some("Ctrl+Alt+D".to_string()),
             agent_command: None,
+            codex_command: Some("codex exec {notes}".to_string()),
+            default_agent: Some("codex".to_string()),
+            claude_model: Some("opus".to_string()),
+            codex_model: None,
+            claude_model_choices: None,
+            codex_model_choices: Some("gpt-5.1, gpt-5.1-mini".to_string()),
             agent_workspace_path: Some("C:/src/workspace".to_string()),
             read_only_validation_mode_enabled: true,
             desktop_notifications_enabled: true,

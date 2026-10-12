@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   formatRelativeDate,
   focusPrimaryGrid,
@@ -135,5 +135,40 @@ describe("isImeComposing", () => {
     expect(isImeComposing({ key: "Enter" })).toBe(false);
     expect(isImeComposing({ key: "Enter", isComposing: false })).toBe(false);
     expect(isImeComposing({ key: "Escape", nativeEvent: { isComposing: false } })).toBe(false);
+  });
+});
+
+describe("handleSearchInputEscape focus hand-off", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  function escapeIn(input: HTMLInputElement) {
+    handleSearchInputEscape({ key: "Escape", preventDefault: vi.fn(), currentTarget: input } as any);
+  }
+
+  it("moves focus to the results grid's selected row", () => {
+    document.body.innerHTML = `
+      <input id="q" />
+      <div data-primary-grid="true" tabindex="-1">
+        <div role="row" aria-selected="false" tabindex="-1"></div>
+        <div role="row" aria-selected="true" tabindex="-1" id="selected"></div>
+      </div>`;
+    const input = document.getElementById("q") as HTMLInputElement;
+    input.focus();
+
+    escapeIn(input);
+
+    expect(document.activeElement).toBe(document.getElementById("selected"));
+  });
+
+  it("falls back to the grid placeholder pane while there are no results", () => {
+    document.body.innerHTML = `<input id="q" /><div data-grid-focus-fallback="true" tabindex="-1" id="pane"></div>`;
+    const input = document.getElementById("q") as HTMLInputElement;
+    input.focus();
+
+    escapeIn(input);
+
+    expect(document.activeElement).toBe(document.getElementById("pane"));
   });
 });

@@ -189,9 +189,10 @@ export function CommentComposer({
     if (event.key === "Escape" && onCancel) {
       event.stopPropagation();
       onCancel();
-    } else if (event.key === "Escape" && collapsible && !text.trim()) {
+    } else if (event.key === "Escape" && collapsible) {
       event.stopPropagation();
-      setExpanded(false);
+      // A draft stays open (and kept); focus still leaves the box for its owner.
+      if (!text.trim()) setExpanded(false);
       if (onCollapse) {
         onCollapse();
         return;
@@ -211,9 +212,10 @@ export function CommentComposer({
       <button
         type="button"
         onClick={() => setExpanded(true)}
-        className="flex h-7 w-full items-center rounded border border-input bg-background px-2 text-left text-xs text-muted-foreground hover:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
+        title={placeholder}
+        className="flex h-7 w-full min-w-0 items-center rounded border border-input bg-background px-2 text-left text-xs text-muted-foreground hover:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
       >
-        {placeholder}
+        <span className="min-w-0 truncate">{placeholder}</span>
       </button>
     );
   }

@@ -9,6 +9,9 @@ import { invokeCommand } from "./runtime";
 
 export type AgentNoteTarget = "work-item" | "pull-request" | "ask";
 
+/** The coding agent a request is handed to. */
+export type AgentKind = "claude" | "codex";
+
 export type AgentNoteKind = "fix" | "question" | "redo" | "investigate" | "summarize";
 
 const noteReplySchema = z.object({
@@ -151,10 +154,12 @@ export async function summarizeAgentNotes(input: {
 /**
  * Starts the agent command from Settings for one item's notes.
  * `repositoryName` (pull requests) selects the repository's clone inside the
- * workspace folder as the working directory.
+ * workspace folder as the working directory. `agent` defaults to the one
+ * chosen in Settings, `model` to that agent's model there ("" for the agent's
+ * own setting).
  */
 export async function runAgent(
-  input: AgentNoteItem & { repositoryName?: string | null },
+  input: AgentNoteItem & { repositoryName?: string | null; agent?: AgentKind; model?: string },
 ): Promise<void> {
   await invokeCommand("run_agent", { input });
 }

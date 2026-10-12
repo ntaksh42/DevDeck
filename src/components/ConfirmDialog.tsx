@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 type ConfirmRequest = {
   title: string;
@@ -55,14 +56,11 @@ export function ConfirmDialog({
   onCancel: () => void;
 }) {
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, { restoreFocus: true });
 
   useEffect(() => {
-    // Remember the opener so focus returns there on close.
-    const opener = document.activeElement as HTMLElement | null;
     cancelRef.current?.focus();
-    return () => {
-      window.setTimeout(() => opener?.focus(), 0);
-    };
   }, []);
 
   useEffect(() => {
@@ -85,6 +83,7 @@ export function ConfirmDialog({
       }}
     >
       <div
+        ref={dialogRef}
         role="alertdialog"
         aria-modal="true"
         aria-label={title}

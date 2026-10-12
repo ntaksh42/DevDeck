@@ -122,7 +122,9 @@ export function DockFilterBar({
       onClick={(event) => {
         if (event.target === event.currentTarget) inputRef.current?.focus();
       }}
-      onKeyDown={(event) => {
+      // Capture phase: a child's own Escape handling (e.g. an open autocomplete
+      // dropdown) must not swallow the press that folds the bar.
+      onKeyDownCapture={(event) => {
         if (event.key === 'Escape') {
           event.preventDefault();
           event.stopPropagation();

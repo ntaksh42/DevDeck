@@ -84,7 +84,7 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
 | **Work Item Search** | キーワード + プロジェクト/状態/種別 (いずれも複数選択可) での作業項目検索。全文検索 (FTS)。 |
 | **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。 |
 | **Settings** | パネルを 7 カテゴリ (Accounts / Appearance & keyboard / Notifications / Views & workflow / Project / Data & sync / Advanced) に分けて表示。左側 (狭い幅では上部) に sticky なセクションナビとフィルタ入力を置く。フィルタは全語 AND・大文字小文字無視でカテゴリ名・パネル名・キーワードに一致するパネルだけを残し、該当なしのカテゴリはナビで無効化、全件不一致なら空状態 + Clear filter。フィルタは `focusFilter` (既定 `Ctrl+F`) でフォーカス、`Enter` で最初の一致パネルの先頭コントロールへ移動、`Escape` は 1 回目でクリア・2 回目でフォーカス解除。ナビは `↑↓`/`←→`/`Home`/`End` でボタン間移動、Enter/クリックでセクションへスクロールしてフォーカス、スクロール位置に応じて現在セクションを `aria-current` で強調。Connections 一覧は Add connection の直前 (先頭) に表示。実験フラグで非表示のパネル (Usage stats / Diagnostics) はフィルタ・ナビの対象外。内容: 組織設定 (PAT / Azure CLI)、通知設定、フォルダパス、グローバルホットキー、キーバインド上書き、行の条件付き色ルール (Work Item グリッドの行を条件で着色、先勝ち、localStorage 永続化)。Software update パネル (opt-in: 手動で更新確認→適用、失敗時は安全にスキップ。`tauri-plugin-updater`、ブラウザでは無効)。Experimental パネル (マスタースイッチ + 個別フラグ。マスターが false の間は個別フラグの保存値を保持したまま無効化する)。Usage stats パネル (`experimental_usage_stats` が有効なときのみ表示。localStorage `azdodeck:experimental:usageStats` に投票数・解決スレッド数・状態変更数を集計、リセット可能、外部送信なし)。 |
-| **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。パイプラインを Watch (購読、localStorage、最大 100) すると実行履歴を常時追跡し、最新実行の開始/終了をデスクトップ通知 (`desktop_notifications_enabled` に従う)。Watched pipelines ボードにペイン内の見出し行は無い。ペインのタブ名は「Watched pipelines」で、Sort セレクトと更新時刻つきの更新ボタンはドックのタブ帯の右側 (フィルタの右) に置く (ボードが `toolbarSlot` へ portal で描画する)。件数は下端の共通ステータスバーに `N items · ● N running · N failed · N approvals` (既存のピルの色とフィルタ/トグル動作はそのまま) として出し、右端の `?` が Help の Pipelines の節を開く (run を選択中は従来のキー操作ヒント行もステータスバーの上に出る)。実行中 (最新実行が active) のパイプライン数は「N running」ピル (パルスドット) で示し、該当行を青の左アクセント + パルスドットで強調して、いま実行中のパイプラインが一目で分かる。実行中の購読は表示順のみ一覧の先頭に固定表示 (安定ソート。実行中同士・非実行中同士は元の購読順を維持し、localStorage の購読順自体は変更しない)。行の見出しボタンにフォーカスすると、その pipeline の最新実行が Agent パネルの対象になる (実行の詳細を開くとその実行が優先)。承認待ちが選択中プロジェクトにあるときは、Agent パネルの `+ Pending approvals (N)` で承認待ちの表を足せる (承認は実行 ID を持たないため、実行の対象にはならない)。 |
+| **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。パイプラインを Watch (購読、localStorage、最大 100) すると実行履歴を常時追跡し、最新実行の開始/終了をデスクトップ通知 (`desktop_notifications_enabled` に従う)。Watched pipelines ボードにペイン内の見出し行は無い。ペインのタブ名は「Watched pipelines」で、Sort セレクトと更新時刻つきの更新ボタンはドックのタブ帯の右側 (フィルタの右) に置く (ボードが `toolbarSlot` へ portal で描画する)。件数は下端の共通ステータスバーに `N items · ● N running · N failed · N approvals` (既存のピルの色とフィルタ/トグル動作はそのまま) として出し、右端の `?` が Help の Pipelines の節を開く (run を選択中は従来のキー操作ヒント行もステータスバーの上に出る)。実行中 (最新実行が active) のパイプライン数は「N running」ピル (パルスドット) で示し、該当行を青の左アクセント + パルスドットで強調して、いま実行中のパイプラインが一目で分かる。実行中の購読は表示順のみ一覧の先頭に固定表示 (安定ソート。実行中同士・非実行中同士は元の購読順を維持し、localStorage の購読順自体は変更しない)。見出しボタンは 1 つの Tab 停止 (roving) で、`↑↓`/`J K`/`Home`/`End` で見出し間を移動、`Enter`/`Space` で実行履歴を開閉、`Delete` で Watch を外す (行の ✕ は Tab 順から外す)。行の見出しボタンにフォーカスすると、その pipeline の最新実行が Agent パネルの対象になる (実行の詳細を開くとその実行が優先)。承認待ちが選択中プロジェクトにあるときは、Agent パネルの `+ Pending approvals (N)` で承認待ちの表を足せる (承認は実行 ID を持たないため、実行の対象にはならない)。 |
 | **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。Queue run のブランチ欄は、選択中のパイプライン定義 (`get_pipeline_definition` が返す `repository`) が Azure Repos (TfsGit) を参照していればそのブランチ一覧 (`list_repo_branches`) をキーボード操作対応の候補選択欄 (`FilterableSelect`、既定値はリポジトリの既定ブランチ) で提示し、候補にない値の自由入力も許可する。リポジトリ情報が無い/TfsGit 以外/ブランチ取得失敗の場合は従来どおりの自由入力欄にフォールバックする。選択・入力したブランチ名は `refs/heads/` 形式に正規化してから `queue_pipeline_run` に渡す。Queue run のパラメータ欄は、選択中の定義が上書き可能な変数 (`allowOverride === true`) を持つ場合、変数ごとのラベル付き入力欄 (シークレット変数は空欄始まりのパスワード入力) を表示し、既定値から変更した変数のみを `parameters` として送信する。上書き可能な変数が無い/定義詳細が未取得の場合は従来どおり `name=value` 改行区切りの自由入力欄のみを表示する (両方表示時は「追加パラメータ」欄として残り、変数入力欄と同名キーがあれば変数入力欄側が優先される)。 |
 | **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。定義の非シークレット変数の追加/変更/削除と CI トリガー (継続的インテグレーション) の有効化/無効化・ブランチ/パスフィルタ編集を `update_pipeline_definition` で行える (書き込みガード対象)。実装は定義の生 JSON を取得→変更→PUT で送信し、`isSecret: true` の変数は常に温存され、入力に同名エントリがあれば拒否される。CI トリガーを有効化する際はブランチフィルタが 1 件以上必要、無効化するとトリガーエントリを削除する。他のトリガー種別 (schedule / pullRequest 等) は変更されない。 |
 | **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。定義パネル (`PipelineDefinitionPanel`) の Edit ボタンから編集フォーム (`PipelineDefinitionEditForm`) を開き、非シークレット変数を行単位で追加/変更/削除 (name / value / allowOverride チェックボックス) できる。シークレット変数は "(secret)" 表示の読み取り専用行として並び、編集・削除操作を提供しない。CI トリガーは有効/無効チェックボックスと branch/path filters (1 行 1 件のテキストエリア) を編集でき、セクションを触っていなければ保存時に `ciTrigger: null` を送りトリガーを変更しない。Save は `update_pipeline_definition` を呼び、成功時は返却された定義でクエリキャッシュを更新して閲覧モードに戻り、失敗時はパネル内にエラーを表示したまま編集状態を維持する。編集モードは Edit ボタンから開始 (最初の入力にフォーカス)、Escape または Cancel/Save で終了しフォーカスを Edit ボタンへ戻す、キー操作はフォーム内に閉じ込めて背後のビューに伝播しない。 |
@@ -151,6 +151,14 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
     点線の `+` チップになり、押すと選択に追従する状態へ戻る。キー: 入力欄から `Shift+Tab` でチップへ、
     `←` `→` で移動、`Space` / `Enter` で付け外し、`P` で対象の固定 (対象のチップ上)、`Esc` で入力欄へ戻る
     (パネルは閉じない)。付け外し後もフォーカスは同じチップに残る。
+  - **依頼先エージェントとモデル (文脈チップと入力欄の間)**: `To [Claude] [Codex] [モデル ▾]` で、次の送信をどのエージェント・
+    モデルで起動するか選ぶ (`AgentPicker`)。エージェントのラジオ (タブ停止 1 つ) の初期値は設定 `default_agent`。モデルの
+    選択肢は `CLI default` (エージェント自身の設定に任せる)、Claude Code の別名 `opus` / `sonnet` / `haiku` (Claude のみ)、
+    設定の `claude_model` / `codex_model`、設定の追加候補 (`*_model_choices`) で、初期値は設定のモデル (未設定なら
+    `CLI default`)。エージェントを切り替えるとモデルはそのエージェントの設定値に戻る。送信 (新しい依頼・返信) が成功すると
+    両方とも設定の値へ戻る。返信・Run now・下書きの送信も選択中のエージェント・モデルで起動する。キー: 入力欄から
+    `Shift+Tab` でモデル、もう一度でエージェントへ、エージェント上で `←` `→` 切り替え、モデル上で `↑` `↓` 選択、`Esc` で
+    入力欄へ戻る。Read-only 検証モードでは起動しないため出さない。
   - **「この一覧」の文脈**: View が `usePublishAgentListScope` で表示中の一覧 (`{ id, label, count, markdown }`) を公開すると、
     点線の `+ This list (N)` チップで足せる。既定では付かない。付いている間は送信時に `contextDocument` へ、選択項目の資料に続けて
     Markdown の表 (最大 200 行、超過は件数のみ) と有効なフィルタ / クエリの行を加える (対象なしでも一覧だけで送れ、`ask` の会話になる。
@@ -179,20 +187,25 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
     `url.devdeck-push-blocked://.pushInsteadOf` (`https://` / `ssh://` / `git@`) を与えて push 先を無効にする。
     既定コマンドは加えて `--disallowedTools "Bash(az:*)" "Bash(git push:*)"` を付ける。Windows 資格情報マネージャーの PAT は OS 上の
     読み取りまでは防げない。WI / PR へのコメント投稿は人が DevDeck から行う (ガイドも投稿を指示しない)。
-  - **会話の表示**: 会話 (1 メモ + 返信) は 1 件ずつ折りたためる。畳むと状態点 (Needs you は赤・太字)
-    と 1 行目だけの 1 行。展開すると見出し行は 1 行目の代わりに「You · 時刻 · 種類 · About 対象」を出し (1 行目は直下の
-    本文と重複するため)、本文・引用 (最大 2 行)・返信を続ける。既定では Needs you と最新の 1 件だけ開き、Done は畳む。
+  - **会話の表示**: 会話 (1 メモ + 返信) は PR のコメントスレッド (`PrThreadCard`) と同じ見た目で 1 件ずつ折りたためる。
+    Done 以外は未解決スレッドと同じ琥珀の左線、Done は灰色の背景。見出し行の右端に状態ピル (`Needs you` 赤 / `Open` 琥珀 /
+    `Draft` 点線 / `Done` 灰) を置く。畳むとアバター・1 行目 (Needs you は太字)・返信数・状態ピルの 1 行。展開すると見出し行は 1 行目の
+    代わりに「You · 時刻 · 種類 · About 対象」を出し (1 行目は直下の本文と重複するため)、本文・引用 (最大 2 行)・返信を続ける。
+    返信は PR コメントと同じくアバター + 投稿者 + 時刻の下に本文を字下げして並べる (エージェント名は紫)。
+    キー一覧の `?` は入力欄の右上に置き、押したときだけキー一覧の行を出す。既定では Needs you と最新の 1 件だけ開き、Done は畳む。
     Agent のドック枠自体はスクロールせず、会話一覧だけをスクロールする。下部の入力欄は常に表示する。
     一括開閉のボタンは無い。ドック時はヘッダーを出さない (ドロワー時だけ「Agent」と閉じるボタン)。
   - **返信欄**: 展開した会話ごとに、その会話の末尾へ返信欄を置く (普段は 1 行に畳まれ、クリックか `R` で広がる。
     畳んだ会話には出さない)。下部の入力欄は新しい依頼専用で、返信先の切り替えは無い。返信欄の中のキーは返信欄のもので、
     一覧のキー (`X` / `P` / `↑↓` など) は効かない。`Ctrl+Enter` で送信、空のまま `Esc` でその会話の見出しへ戻る。
-  - **送信**: 下部の入力欄は新しいメモを作り、`run_agent` で起動する (PR はリポジトリ名を渡す)。会話の返信欄は
+  - **送信**: 下部の入力欄は新しいメモを作り、`run_agent` で起動する (PR はリポジトリ名を渡す)。選択中のエージェントを `agent`
+    (`claude` / `codex`)、モデルを `model` (空文字は CLI の設定のまま) で渡す。無ければ設定 `default_agent` と
+    そのエージェントの設定モデルで起動する。会話の返信欄は
     `reply_agent_note` で追記して起動する。`Shift+Enter` (Run now) は新しいメモを作らず、選択中の会話 (なければ対象) のメモで起動する。
     Read-only 検証モードではメモの保存だけ行い、起動しない。
   - **キーボード**: `↑↓` 会話の移動、`→ ←` 開閉、`R` 選択中の会話の返信欄へ (閉じていれば開く)、`M` 新しい依頼の入力欄へ (他の View の
     コメント欄と同じ)、`X` Resolve / Reopen、`P` 対象の固定、`Shift+Enter` Run now、`Esc` 閉じる。入力欄から `Shift+Tab`
-    で文脈チップへ (上記)。キーのヒントは常時出さず、一覧の下の `?` (キーでも `?`) で開く。入力欄は他のコメント欄と同じく普段は 1 行に畳まれ、
+    で依頼先のモデル・エージェント、さらに戻ると文脈チップへ (上記)。キーのヒントは常時出さず、一覧の下の `?` (キーでも `?`) で開く。入力欄は他のコメント欄と同じく普段は 1 行に畳まれ、
     フォーカスで広がる。会話一覧が残りの高さを占め、入力欄はパネルの下端に固定する。長い会話では一覧だけスクロールする。`Ctrl+Enter` で送信、空のまま `Esc` で畳んで会話一覧へ戻る。ドック時はタブ名と重なる見出しを出さない。Inbox の `Q`、Result パネルの `a` (と Bot ボタン) は、このパネルをその項目を対象に開く。
   - **通知**: `useAgentNoteWatcher` は `ask` の要約も監視し、依頼への返信をデスクトップ通知する (クリックでパネルを開く)。
 - **エージェントへの申し送り (Agent notes)**: 作業項目グリッドの Result パネル (調査結果 HTML) と
@@ -216,7 +229,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
     `delete_agent_note` (`_trash/` へ移動) / `restore_agent_note` / `reply_agent_note` / `update_agent_note`
     (本文編集はエージェントの返信前のみ、`anchor` で引用の付け替え) / `set_agent_note_status` (ユーザーによる Resolve /
     Reopen、Resolve は `resolved: Resolved in DevDeck`) / `submit_agent_note_drafts` / `summarize_agent_notes`
-    (項目ごとの open / needsYou / drafts / done 件数と最終更新) / `run_agent` (設定 `agent_command`、未設定なら既定コマンドをシェルで起動)。
+    (項目ごとの open / needsYou / drafts / done 件数と最終更新) / `run_agent` (`agent` が `codex` なら設定 `codex_command`、それ以外は `agent_command`。未設定なら各既定コマンドをシェルで起動。`model` か設定のモデルがあればモデル指定を末尾に足す)。
     / `list_agent_asks` (依頼の会話一覧)。入力は `target` (`work-item` / `pull-request` / `ask`) と `itemId` で、
     `pull-request` は `agent-notes/pr-{id}/` を使う (前提は `review_result_folder_path` の設定)。`ask` は結果フォルダ不要で、
     ガイドは `agent-notes/AGENTS.md` に置く (内容は下記「ガイド」と同じ)。`kind` は `fix` / `question` / `redo` /
@@ -467,7 +480,11 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
 | `review_result_folder_path` | レビュー結果 HTML を格納するフォルダ。My Reviews のプレビューが語頭の `PR<番号>` (ゼロ埋め可、`apr12` のように英字が前に付くものは除外) を含むファイルを照合。複数該当する場合は更新日時の新しいものを採用。 |
 | `work_item_result_folder_path` | 作業項目の調査結果 HTML を格納するフォルダ。Work Item Views のプレビューが作業項目 ID の数字列 (先頭・区切り文字の後・`WIT`/`WI`/`WORKITEM` の後。`YYYY-MM-DD` の日付や `v2` のような語中の数字は除外) を含むファイルを照合。複数該当する場合は更新日時の新しいものを採用。 |
 | `show_window_hotkey` | ウィンドウを前面化するグローバルホットキー。 |
-| `agent_command` | Agent パネルからの依頼・返信・Run now (`Shift+Enter`) で起動するシェルコマンド。`{target}` / `{id}` / `{notes}` / `{workspace}` / `{repo}` / `{guide}` を置換。未設定なら既定コマンド `claude -p "Read {guide} and handle the open notes in {notes}" --add-dir "{notes}" --disallowedTools "Bash(az:*)" "Bash(git push:*)" --dangerously-skip-permissions` (Claude Code をバックグラウンドで権限確認なしに実行。Azure CLI は未ログイン、git push は不可の状態で起動) を使う (`agent_notes/launch.rs` の `DEFAULT_AGENT_COMMAND`)。 |
+| `default_agent` | Agent パネルの依頼先エージェントの初期値。`codex` か未設定 (Claude Code)。 |
+| `claude_model` / `codex_model` | 各エージェントを起動するときのモデル。コマンドの末尾に `--model "<名前>"` (Claude Code) / `-m "<名前>"` (Codex) を足す。未設定ならモデルを指定せず、各 CLI 自身の設定 (`~/.claude/settings.json` / `~/.codex/config.toml`) に任せる。シェルに渡すため、英数字と `._:/[]-` 以外を含む名前は起動時にエラーにする。 |
+| `claude_model_choices` / `codex_model_choices` | Agent パネルのモデル選択に足す候補 (カンマ / 空白区切り)。 |
+| `codex_command` | Codex で起動するときのシェルコマンド。プレースホルダは `agent_command` と同じ。未設定なら既定コマンド `codex exec --skip-git-repo-check --sandbox workspace-write --add-dir "{notes}" "Read {guide} and handle the open notes in {notes}"` (Codex を非対話で、書き込みを作業フォルダとメモフォルダに限るサンドボックスで実行。Azure CLI 未ログイン・git push 不可は Claude Code と同じ) を使う (`agent_notes/launch.rs` の `DEFAULT_CODEX_COMMAND`)。 |
+| `agent_command` | Claude Code で Agent パネルからの依頼・返信・Run now (`Shift+Enter`) を起動するシェルコマンド。`{target}` / `{id}` / `{notes}` / `{workspace}` / `{repo}` / `{guide}` を置換。未設定なら既定コマンド `claude -p "Read {guide} and handle the open notes in {notes}" --add-dir "{notes}" --disallowedTools "Bash(az:*)" "Bash(git push:*)" --dangerously-skip-permissions` (Claude Code をバックグラウンドで権限確認なしに実行。Azure CLI は未ログイン、git push は不可の状態で起動) を使う (`agent_notes/launch.rs` の `DEFAULT_CLAUDE_COMMAND`)。 |
 | `read_only_validation_mode_enabled` | 読み取り専用モード (誤操作によるミューテーションを抑止)。既定 false。 |
 | `desktop_notifications_enabled` | デスクトップ通知の総合トグル。既定 false。 |
 | `notification_content_preview_enabled` | 通知に本文プレビューを含めるか。既定 true。 |
@@ -512,7 +529,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
 | `?` / `F1` | ヘルプ (全ショートカット一覧) |
 | `G` → 第 2 キー | ビュー切替 (下表) |
 | `Ctrl+F` / `/` | フィルタにフォーカス (My Reviews のように畳まれたフィルタは開いてからフォーカス) |
-| `Escape` (検索/フィルタ入力内) | フォーカスを外す (ライブフィルタは文字列もクリア、検索クエリは保持) |
+| `Escape` (検索/フィルタ入力内) | フォーカスを外して結果グリッドの選択行へ移す (結果がまだ無い検索画面ではグリッド領域へ。ドックの畳み式フィルタは開いた候補リストの有無に関わらず 1 回で畳み、値はチップとして残る。それ以外のライブフィルタは文字列もクリア、検索クエリは保持) |
 | `Ctrl+\` | 左ナビゲーションの折りたたみ / 展開 |
 | `Ctrl+J` | Agent パネルの開閉 (選択中の項目についてエージェントに依頼。ドックのある View では既定で表示済みなので、最初の `Ctrl+J` は閉じる) |
 
@@ -524,8 +541,21 @@ find-next) は、入力欄以外では抑止し、ネイティブ動作が素通
 `R` My Reviews / `Q` PR Search / `W` My Work Items / `F` Work Item Search /
 `V` Work Item Views / `P` Pipelines / `N` Notifications / `I` Inbox /
 `O` Cross-org summary / `A` Analyze / `S` Settings。
+移動後はコマンドパレットと同じく、遅延読み込みの完了を待って移動先の一覧 (選択行、無ければ一覧領域。
+Pipelines は Watched pipelines の見出し) にフォーカスする。
 Work Item Search は以前 `I` だったが、Inbox の追加で `F` (Find) へ移した。Settings で
 上書き済みのキー割当はそのまま残る。
+
+### フォーカスの戻り先
+
+- モーダルダイアログ (確認ダイアログ・New Work Item・Analyze の Add group など) は `useFocusTrap` (`src/lib/useFocusTrap.ts`) で
+  `Tab` / `Shift+Tab` を中に閉じ込め、閉じると開いた要素へ戻す。確認ダイアログの初期フォーカスは Cancel。
+- 列ヘッダーのフィルタと Columns メニューは開くとポップアップ内 (検索欄 / 最初のトグル) にフォーカスし、閉じると開いた要素 / グリッドへ戻す。
+- Agent パネル: 会話の見出しで `Esc` はパネルを閉じてグリッドへ、畳んだ返信欄で `Esc` はその会話の見出しへ、
+  見出しで `Delete` は隣の会話 (無ければ入力欄) へフォーカスを移す。入力欄 (PR のコメント欄を含む) は下書きがあっても
+  `Esc` で持ち主 (会話の見出し / プレビュー) へ戻り、下書きは残す。
+- Pipelines の実行行で `Enter` は実行を選んでプレビューへフォーカスする (`→` は読み取り専用プレビューを飛ばす規則どおり)。
+- コマンドパレットには全 View への移動 (Inbox / My Pull Requests / Analyze / Notifications を含む) を並べる。
 
 ### 一覧ペインのステータスバー
 
@@ -665,7 +695,7 @@ Pipelines の見た目と操作 (`src/features/pipelines/`):
 
 各 View の最上段のツールバー (Pipelines の Project / Pipeline / Watch / Queue run、Notifications の
 Unread only / 種別 / Mark all read、My Items の Assigned to me | Followed / New item / Templates、Work Item Views の
-ビューのチップ行) は、PR Search / Work Item Search の検索行と同じ「枠なし・1 行・高さ `h-8`」に揃える
+ビューのチップ行) は、PR Search / Work Item Search の検索行と同じ「枠なし・1 行・高さ `h-7` (28px)」に揃える
 (カードの枠線と余白は付けない。Notifications の Mark all read は右寄せ)。Pipelines の承認待ちの琥珀色の帯は
 ツールバーの下にそのまま残す。一覧ペインの名前は PR Search が「Pull requests」(Work Item Search の「Work items」と対)。
 プレビューが空のときは、選択を促す中央の文言 (`PreviewEmptyState`) だけを出し、「No PR selected」のような
@@ -678,6 +708,11 @@ Pipelines は、利用可能幅の 60% / 40% を既定比率とする。区切�
 localStorage へ保存し、画面切り替えやウィンドウサイズ変更後も同じ比率で再計算する。
 プレビューの既存最小幅を守りつつ Grid に 480px 以上を残し、区切り線の
 ダブルクリックまたは Escape で 60% / 40% に戻す。
+新しく組んだ既定レイアウトに Agent の列が初めて入るときは、その列が一覧から幅を取るため、
+一覧とプレビューの幅を 55% / 45% に配分し直す (`balanceListAndPreview`。保存済みのレイアウトは変えない)。
+各グリッドの Title 列は残り幅を取る可変列で、最小幅は 240px (My Reviews / My Pull Requests / PR Search / Work Items)。
+一覧は 1 つの Tab 停止にまとめる。行内の ID リンク・チェックボックス・Notifications の「Open in Azure DevOps」は
+Tab 順から外し、同じ操作はキー (`Ctrl+Enter`、`Shift+↑↓` の範囲選択) で行う。
 ドックの各グループは、自分 (または自分を含む列/行) が分割の2番目以降にある境界ごとに
 リサイズハンドルを持つ。プレビューの下に別ペインを積んだ入れ子レイアウトでも、
 列の境界全体を幅ハンドル (外側の分割のものは「Resize <パネル> width」) でドラッグできる。

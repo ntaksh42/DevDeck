@@ -241,7 +241,7 @@ export function NotificationsView({
             onChange={setKinds}
             placeholder="All kinds"
             ariaLabel="Filter by notification kind"
-            className="h-8"
+            className="h-7"
           />
         </div>
 
@@ -252,7 +252,7 @@ export function NotificationsView({
               value={organizationId}
               onChange={(event) => setOrganizationId(event.target.value)}
               aria-label="Filter by organization"
-              className="h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              className="h-7 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="">All organizations</option>
               {organizations.map((org) => (
@@ -268,7 +268,7 @@ export function NotificationsView({
           type="button"
           onClick={() => markAllReadMutation.mutate()}
           disabled={markAllReadMutation.isPending}
-          className="ml-auto inline-flex h-8 items-center rounded-md border border-border bg-card px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+          className="ml-auto inline-flex h-7 items-center rounded-md border border-border bg-card px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
         >
           Mark all read
         </button>
