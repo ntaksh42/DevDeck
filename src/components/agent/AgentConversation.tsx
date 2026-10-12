@@ -76,8 +76,9 @@ function lastActivity(note: AgentNote): string {
 /**
  * A conversation (one note and its replies) that folds to a single line:
  * status dot and first line (bold while it waits for the user). The header is
- * the keyboard target; the list moves focus between headers. Rows are flat,
- * divided by a line; the selected one is shaded and shows its actions.
+ * the keyboard target; the list moves focus between headers. Each conversation
+ * is its own bordered card (expanded: shaded header band), so threads read as
+ * separate; the selected one gets an accent border and shows its actions.
  */
 export const AgentConversation = forwardRef<
   HTMLButtonElement,
@@ -112,7 +113,7 @@ export const AgentConversation = forwardRef<
   const done = note.status === "done";
   return (
     <div
-      className={`border-b border-border/60 ${selected ? "bg-accent/40" : ""}`}
+      className={`overflow-hidden rounded-md border ${selected ? "border-primary/60 bg-accent/30" : "border-border"}`}
       data-agent-conversation={note.id}
     >
       <button
@@ -122,7 +123,7 @@ export const AgentConversation = forwardRef<
         tabIndex={selected ? 0 : -1}
         onClick={onToggle}
         onFocus={onFocus}
-        className={`flex w-full min-w-0 items-center gap-1.5 px-1 py-1 text-left text-xs outline-none focus-visible:ring-1 focus-visible:ring-ring ${done ? "text-muted-foreground" : ""}`}
+        className={`flex w-full min-w-0 items-center gap-1.5 px-2 py-1 text-left text-xs outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring ${expanded ? "border-b border-border bg-muted/60" : ""} ${done ? "text-muted-foreground" : ""}`}
       >
         <Chevron className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
         <Status note={note} />
@@ -135,7 +136,7 @@ export const AgentConversation = forwardRef<
         )}
       </button>
       {expanded ? (
-        <div className="space-y-2 pb-2 pl-5 pr-1">
+        <div className="space-y-2 py-2 pl-6 pr-2">
           <AgentMessage author="user" when={note.createdAt} text={note.body} quote={note.quote} hideMeta />
           {note.replies.map((reply, index) => (
             <AgentMessage key={`${note.id}-${index}`} author={reply.author} when={reply.createdAt} text={reply.body} />
