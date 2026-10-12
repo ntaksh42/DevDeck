@@ -1,31 +1,32 @@
 import { expect, test } from "@playwright/test";
 
-test("keeps the Agent composer next to short conversations", async ({ page }) => {
+test("shows the Agent panel by default with its composer at the bottom", async ({ page }) => {
   await page.setViewportSize({ width: 1800, height: 900 });
   await page.goto("/");
-  await expect(page.getByRole("grid", { name: "My review pull requests" })).toBeVisible();
-  await page.keyboard.press("Control+j");
+  const grid = page.getByRole("grid", { name: "My review pull requests" });
+  await expect(grid).toBeVisible();
   const panel = page.getByRole("complementary", { name: "Agent", exact: true });
-  // The input names the subject when one is selected ("Ask about …").
-  const askName = /^Ask (about .+|the agent)… \(M\)$/;
-  const input = panel.getByRole("textbox", { name: askName });
+  await expect(panel).toBeVisible();
+  // Shown by default, so it does not take the focus from the grid.
+  await expect(panel.getByRole("textbox")).toHaveCount(0);
+  await expect(panel.locator("[data-agent-composer]").getByRole("button")).toBeVisible();
+
+  const trailingSpace = () =>
+    panel.evaluate((element) => {
+      const composer = element.querySelector("[data-agent-composer]")!;
+      return element.getBoundingClientRect().bottom - composer.getBoundingClientRect().bottom;
+    });
+  await expect.poll(trailingSpace).toBeLessThanOrEqual(12);
+
+  // Ctrl+J closes it, then opens it focused on the input.
+  await page.keyboard.press("Control+j");
+  await expect(panel).toHaveCount(0);
+  await page.keyboard.press("Control+j");
+  const input = panel.getByRole("textbox", { name: /^Ask (about|the agent)/ });
   await expect(input).toBeFocused();
   await page.keyboard.press("Escape");
-  const composer = panel.locator("[data-agent-composer]");
-  await expect(composer.getByRole("button", { name: askName })).toBeVisible();
-
-  const measure = () => panel.evaluate((element) => {
-    const list = element.querySelector('[aria-label="Agent conversations"]')!;
-    const composer = element.querySelector("[data-agent-composer]")!;
-    return {
-      trailingSpace: list.getBoundingClientRect().bottom - list.lastElementChild!.getBoundingClientRect().bottom,
-      gap: composer.getBoundingClientRect().top - list.getBoundingClientRect().bottom,
-    };
-  });
-  await expect.poll(async () => {
-    return (await measure()).trailingSpace;
-  }).toBeLessThanOrEqual(8);
-  expect((await measure()).gap).toBeLessThan(80);
+  await expect(panel.locator("[data-agent-composer]").getByRole("button", { name: /^Ask (about|the agent)/ })).toBeVisible();
+  await expect.poll(trailingSpace).toBeLessThanOrEqual(12);
 
   await page.keyboard.press("m");
   await expect(input).toBeFocused();

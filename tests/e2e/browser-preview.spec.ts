@@ -244,8 +244,9 @@ test("replies to, deletes and resolves notes from the Agent panel keyboard", asy
   await page.getByRole("button", { name: /^My Items/ }).click();
   const main = page.getByRole("main");
   await main.getByText("Validate onboarding with PAT credentials").first().click();
-  await page.keyboard.press("Control+j");
+  // The Agent panel is shown by default in a docked view.
   const panel = page.getByRole("complementary", { name: "Agent" });
+  await expect(panel).toBeVisible();
   const header = (text: string) =>
     panel.locator("button[aria-expanded]").filter({ hasText: text });
 

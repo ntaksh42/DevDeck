@@ -130,7 +130,8 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   タブのドラッグで左右上下の分割・タブ化・リサイズが自由にできる。閉じたときの位置 (隣のパネルと方向、幅 / 高さ) を
   `{レイアウトのキー}:agent-dock` に保存し、次に開くとそこへ戻す (初回は一番右のパネルの右、幅 360px)。ドックの
   レイアウト保存にはパネルが含まれるが、閉じている状態で復元すると未知のパネルとして外れる。ドックの無い View
-  (Analyze / Notifications / Settings など) では右端に幅 360px のドロワーとして出す。開くと入力欄にフォーカスし、
+  (Analyze / Notifications / Settings など) では右端に幅 360px のドロワーとして出す。ドックのある View では、ユーザーが開閉するまで最初から表示する (フォーカスは奪わない)。
+  `Ctrl+J` で開くと入力欄にフォーカスし、
   `Esc` で閉じて開く前のフォーカス (グリッドの行など) に戻す。
   - **対象 (文脈)**: 各 View が選択中のものを `usePublishAgentSubject` で公開し、パネルはそれを自動で対象にする。
     PR (My Reviews / My Pull Requests / PR Search)、WI (My Items / Views / Search)、パイプライン実行 (Pipelines の詳細)、
@@ -165,7 +166,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   - **キーボード**: `↑↓` 会話の移動、`→ ←` 開閉、`R` 選択中の会話に返信、`M` 新しい依頼の入力欄へ (他の View の
     コメント欄と同じ)、`X` Resolve / Reopen、`P` 対象の固定、`Shift+Enter` Run now、`Esc` 閉じる。
     キーのヒントは常時出さず、一覧の下の `?` (キーでも `?`) で開く (対象の固定・外すボタンもここ)。入力欄は他のコメント欄と同じく普段は 1 行に畳まれ、
-    フォーカスで広がる。会話一覧は内容に合わせた高さで表示し、入力欄をその直下に置く。長い会話では一覧だけスクロールする。`Ctrl+Enter` で送信、空のまま `Esc` で畳んで会話一覧へ戻る。ドック時はタブ名と重なる見出しを出さない。Inbox の `Q`、Result パネルの `a` (と Bot ボタン) は、このパネルをその項目を対象に開く。
+    フォーカスで広がる。会話一覧が残りの高さを占め、入力欄はパネルの下端に固定する。長い会話では一覧だけスクロールする。`Ctrl+Enter` で送信、空のまま `Esc` で畳んで会話一覧へ戻る。ドック時はタブ名と重なる見出しを出さない。Inbox の `Q`、Result パネルの `a` (と Bot ボタン) は、このパネルをその項目を対象に開く。
   - **通知**: `useAgentNoteWatcher` は `ask` の要約も監視し、依頼への返信をデスクトップ通知する (クリックでパネルを開く)。
 - **エージェントへの申し送り (Agent notes)**: 作業項目グリッドの Result パネル (調査結果 HTML) と
   PR (My Reviews / PR Search) の Result タブ (レビュー結果 HTML) に、調査・レビューを行う外部 AI
@@ -476,7 +477,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
 | `Ctrl+F` / `/` | フィルタにフォーカス (My Reviews のように畳まれたフィルタは開いてからフォーカス) |
 | `Escape` (検索/フィルタ入力内) | フォーカスを外す (ライブフィルタは文字列もクリア、検索クエリは保持) |
 | `Ctrl+\` | 左ナビゲーションの折りたたみ / 展開 |
-| `Ctrl+J` | Agent パネルの開閉 (選択中の項目についてエージェントに依頼) |
+| `Ctrl+J` | Agent パネルの開閉 (選択中の項目についてエージェントに依頼。ドックのある View では既定で表示済みなので、最初の `Ctrl+J` は閉じる) |
 
 アプリに割り当てていない WebView 既定ショートカット (`Ctrl+P` 印刷、`Ctrl+G`
 find-next) は、入力欄以外では抑止し、ネイティブ動作が素通りしないようにする。

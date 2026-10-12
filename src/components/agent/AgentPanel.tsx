@@ -14,7 +14,7 @@ import {
   useAgentSubject,
   type AgentQuote,
 } from "./agentSubject";
-import { focusAgentComposer, type SubjectOverride } from "./agentPanelStore";
+import { consumeAgentFocusRequest, focusAgentComposer, type SubjectOverride } from "./agentPanelStore";
 import { useAgentPanelData, type Conversation } from "./useAgentPanelData";
 
 /**
@@ -91,12 +91,16 @@ export function AgentPanel({
     else listRef.current?.focus();
   }
 
-  // Focus after the render: replying swaps in a fresh composer.
-  const [composerFocus, setComposerFocus] = useState(1);
+  // Focus after the render: replying swaps in a fresh composer. A panel shown
+  // by default (not opened by the user) leaves the focus where it is.
+  const [composerFocus, setComposerFocus] = useState(0);
   useEffect(() => {
     if (composerFocus) focusComposer();
   }, [composerFocus]);
   const requestComposerFocus = () => setComposerFocus((n) => n + 1);
+  useEffect(() => {
+    if (consumeAgentFocusRequest()) requestComposerFocus();
+  }, []);
 
   // Opened on a request (e.g. from the Inbox): show it and answer it.
   useEffect(() => {
@@ -267,7 +271,7 @@ export function AgentPanel({
         ref={listRef}
         tabIndex={-1}
         aria-label="Agent conversations"
-        className="min-h-0 shrink space-y-2 overflow-y-auto px-2 py-1 outline-none"
+        className="min-h-0 flex-1 space-y-2 overflow-y-auto px-2 py-1 outline-none"
         onKeyDown={onListKeyDown}
       >
         {data.loading ? <LoadingState /> : null}

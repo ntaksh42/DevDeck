@@ -25,6 +25,8 @@ export type AgentPanelState = {
   focusNoteId: string | null;
   /** Docked workspaces currently mounted, newest last; the last one hosts the panel. */
   dockHosts: string[];
+  /** Until the user opens or closes the panel, a docked workspace shows it by default. */
+  dockDefault: boolean;
 };
 
 // One shared store even when this module is hot-reloaded in development:
@@ -32,13 +34,16 @@ export type AgentPanelState = {
 type Store = {
   state: AgentPanelState;
   returnFocus: HTMLElement | null;
+  /** Set by an explicit open; the panel focuses its input once when it mounts for it. */
+  focusPending: boolean;
   listeners: Set<() => void>;
   windowListeners: boolean;
 };
 const holder = globalThis as { __devdeckAgentPanel?: Store };
 const store: Store = (holder.__devdeckAgentPanel ??= {
-  state: { open: false, override: null, focusAskId: null, replyRequest: 0, quote: null, focusNoteId: null, dockHosts: [] },
+  state: { open: false, override: null, focusAskId: null, replyRequest: 0, quote: null, focusNoteId: null, dockHosts: [], dockDefault: true },
   returnFocus: null,
+  focusPending: false,
   listeners: new Set(),
   windowListeners: false,
 });
@@ -58,6 +63,18 @@ export function useAgentPanelState(): AgentPanelState {
   );
 }
 
+/** Whether a docked workspace shows the panel: opened by the user, or still on its default. */
+export function isAgentPanelShown(state: AgentPanelState): boolean {
+  return state.open || (state.dockDefault && state.dockHosts.length > 0);
+}
+
+/** True once per explicit open, so a panel shown by default does not take focus. */
+export function consumeAgentFocusRequest(): boolean {
+  const pending = store.focusPending;
+  store.focusPending = false;
+  return pending;
+}
+
 function remember(): void {
   const active = document.activeElement;
   if (active instanceof HTMLElement && !active.closest("[data-agent-panel]")) store.returnFocus = active;
@@ -75,7 +92,8 @@ export function focusAgentComposer(): void {
 
 export function closeAgentPanel(): void {
   // A pending reply request must not carry over to the next opening.
-  set({ open: false, focusAskId: null, replyRequest: 0, quote: null, focusNoteId: null });
+  store.focusPending = false;
+  set({ open: false, dockDefault: false, focusAskId: null, replyRequest: 0, quote: null, focusNoteId: null });
   const target = store.returnFocus;
   store.returnFocus = null;
   window.setTimeout(() => {
@@ -94,8 +112,11 @@ export function clearAgentQuote(): void {
 function onOpen(event: Event): void {
   const detail = (event as CustomEvent<OpenAgentPanelDetail>).detail ?? {};
   remember();
+  // Already shown: it is focused below, and a later mount must not focus again.
+  store.focusPending = !isAgentPanelShown(store.state);
   set({
     open: true,
+    dockDefault: false,
     // No subject given: follow the selection (the caller's own item).
     override: detail.subject !== undefined ? { subject: detail.subject } : null,
     focusAskId: detail.askId ?? null,
@@ -108,13 +129,14 @@ function onOpen(event: Event): void {
 }
 
 function onToggle(): void {
-  if (store.state.open) {
+  if (isAgentPanelShown(store.state)) {
     closeAgentPanel();
     return;
   }
   remember();
+  store.focusPending = true;
   // A fresh open follows the selection again.
-  set({ open: true, override: null, focusAskId: null, replyRequest: 0, quote: null, focusNoteId: null });
+  set({ open: true, dockDefault: false, override: null, focusAskId: null, replyRequest: 0, quote: null, focusNoteId: null });
 }
 
 if (typeof window !== "undefined" && !store.windowListeners) {
@@ -132,5 +154,15 @@ export function registerDockHost(id: string): () => void {
 /** Test helper: back to the initial state. */
 export function resetAgentPanelState(): void {
   store.returnFocus = null;
-  set({ open: false, override: null, focusAskId: null, replyRequest: 0, quote: null, focusNoteId: null, dockHosts: [] });
+  store.focusPending = false;
+  set({
+    open: false,
+    override: null,
+    focusAskId: null,
+    replyRequest: 0,
+    quote: null,
+    focusNoteId: null,
+    dockHosts: [],
+    dockDefault: true,
+  });
 }

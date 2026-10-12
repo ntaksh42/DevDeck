@@ -2,7 +2,7 @@ import { useEffect, useId, type RefObject } from "react";
 import type { DockviewApi, IDockviewPanel } from "dockview-react";
 import { readStoredJson, writeStoredJson } from "@/lib/storage";
 import { AgentPanelContent } from "./AgentPanelHost";
-import { registerDockHost, useAgentPanelState } from "./agentPanelStore";
+import { isAgentPanelShown, registerDockHost, useAgentPanelState } from "./agentPanelStore";
 
 export const AGENT_DOCK_PANEL_ID = "agent";
 const DEFAULT_WIDTH = 360;
@@ -82,7 +82,9 @@ function fit(saved: number, min: number, available: number | undefined): number 
  */
 export function useAgentDock(apiRef: RefObject<DockviewApi | null>, ready: boolean, storageKey: string): number {
   const hostId = useId();
-  const { open, dockHosts } = useAgentPanelState();
+  const state = useAgentPanelState();
+  const { dockHosts } = state;
+  const open = isAgentPanelShown(state);
   const isHost = dockHosts[dockHosts.length - 1] === hostId;
 
   useEffect(() => registerDockHost(hostId), [hostId]);

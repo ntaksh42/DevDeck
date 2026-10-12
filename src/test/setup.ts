@@ -1,4 +1,6 @@
 import { configure } from "@testing-library/react";
+import { beforeEach } from "vitest";
+import { closeAgentPanel } from "@/components/agent/agentPanelStore";
 
 // The App integration tests render the whole application and chain several
 // asynchronous queries. They run in parallel across vitest workers, so under
@@ -15,3 +17,6 @@ if (typeof globalThis.ResizeObserver === "undefined") {
     disconnect() {}
   };
 }
+
+// The Agent panel is shown by default in docked views; tests opt in explicitly.
+beforeEach(() => closeAgentPanel());
