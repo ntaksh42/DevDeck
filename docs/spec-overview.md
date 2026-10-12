@@ -166,8 +166,8 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
     対象なしなら対象なしで送った依頼だけ (`contextIsAbout`)。見出しなしの 1 本の一覧にし、
     Needs you → Open → Done の順、各グループ内は最終更新の新しい順に並べる。他の対象への返信待ちは Inbox に出る。
   - **依頼の種類**: 画面では選ばせない。新しいメモの `kind` は付けず (空)、エージェントが本文から判断する
-    (`agent_notes/guide.md`: 引用があれば `fix`、無ければ結果の修正・やり直しの依頼か、質問・要約かで決める。
-    `guide_ask.md`: 無ければ `question`)。既存メモの `kind` は展開した会話に表示するだけ。front-matter に
+    (`agent_notes/notes_guide.md`: WI / PR は引用があれば `fix`、無ければ結果の修正・やり直しの依頼か、質問・要約かで決める。
+    `ask` は無ければ `question`)。既存メモの `kind` は展開した会話に表示するだけ。front-matter に
     `context` (対象を 1 行で) を書く。
   - **資料の受け渡し**: エージェントには Azure DevOps の権限を与えない。送信時に DevDeck が対象の情報を取得して
     Markdown にまとめ (`contextDocument.ts`: PR は説明・変更ファイル・コメントスレッド、WI はフィールド・説明・コメント、
@@ -219,7 +219,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
     (項目ごとの open / needsYou / drafts / done 件数と最終更新) / `run_agent` (設定 `agent_command`、未設定なら既定コマンドをシェルで起動)。
     / `list_agent_asks` (依頼の会話一覧)。入力は `target` (`work-item` / `pull-request` / `ask`) と `itemId` で、
     `pull-request` は `agent-notes/pr-{id}/` を使う (前提は `review_result_folder_path` の設定)。`ask` は結果フォルダ不要で、
-    ガイドは `agent-notes/AGENTS.md` (`agent_notes/guide_ask.md`) に置く。`kind` は `fix` / `question` / `redo` /
+    ガイドは `agent-notes/AGENTS.md` に置く (内容は下記「ガイド」と同じ)。`kind` は `fix` / `question` / `redo` /
     `investigate` / `summarize`。
   - **旧保存先からの移行**: 以前は結果フォルダ配下の `.to-agent-msg/{wi|pr}-{id}/` に保存していた。起動時と設定保存時に、
     両結果フォルダの `.to-agent-msg` から各項目フォルダをファイル単位で `agent-notes/` へ移す (移動先に同名ファイルがあれば
@@ -250,11 +250,18 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
     変化した項目のメモ一覧を即時再取得、エージェントの返信・完了をデスクトップ通知する (`desktop_notifications_enabled` に従い、
     初回取得は基準のみ)。メモ一覧自体の定期再取得は 60 秒 (保険)。
   - **ガイド**: 起動時と設定保存時、結果フォルダの `AGENTS.md` に DevDeck 管理区間
-    (`<!-- devdeck:agent-notes:start ... -->` 〜 `end`、`agent_notes/guide.md` を WI / PR 向けに置換し、メモの場所は
+    (`<!-- devdeck:agent-notes:start ... -->` 〜 `end`、メモの場所は
     `agent-notes` の絶対パスで書く) を置く / 更新する。
     ファイルが無ければ作成、区間があれば区間だけ差し替え、旧版 (区間なし) の DevDeck 製ガイドは全体を置き換え、
     それ以外の既存 `AGENTS.md` は変更しない。配置失敗は警告ログのみ。
-    ガイドは返信を 3 行以内・結論先頭で書くよう指示する (細い Agent パネルで読めるようにするため。詳細は結果 HTML / ファイルに書く)。
+    ガイド本文 (Note の置き場所・形式・`kind` ごとの対応・返信の書き方・終え方・禁止事項) の元は
+    `agent_notes/notes_guide.md` の 1 ファイルだけで、`AGENTS.md` には対象 (WI / PR / ask) とメモの場所の 1 行を前に付けて書く。
+    返信は 3 行以内・結論先頭で書くよう指示する (細い Agent パネルで読めるようにするため。詳細は結果 HTML / ファイルに書く)。
+  - **Skill (`devdeck-notes`)**: 同じ時点で、同じガイド本文を Claude Code / Codex の skill として
+    `{CLAUDE_CONFIG_DIR または %USERPROFILE%\.claude}\skills\devdeck-notes\SKILL.md` と
+    `{CODEX_HOME または %USERPROFILE%\.codex}\skills\devdeck-notes\SKILL.md` に置く / 更新する (`agent_notes/skill.rs`)。
+    設定フォルダ (`.claude` / `.codex`) が無いエージェントには置かない。DevDeck 製の印
+    (`<!-- devdeck:managed ... -->`) が無い既存の `SKILL.md` は変更しない。配置失敗は警告ログのみ。
 - **作業項目の新規作成**: My Work Items の「New item」ボタン、テンプレート適用
   (`WorkItemTemplatesPanel`)、またはプレビューの Duplicate (`D` キー / ヘッダーボタン) から
   作成ダイアログを開き、プロジェクト・種別 (`list_work_item_types`)・タイトル・説明・

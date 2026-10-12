@@ -30,6 +30,7 @@ mod launch;
 mod migrate;
 mod ops;
 mod replies;
+mod skill;
 mod summary;
 
 pub use asks::AgentAsk;
@@ -40,6 +41,7 @@ pub use ops::{
     UpdateAgentNoteInput,
 };
 pub use replies::{NoteReply, ReplyAgentNoteInput};
+pub(crate) use skill::ensure_skills;
 pub use summary::{AgentNoteSummary, SummarizeAgentNotesInput};
 
 use create::clean_body;

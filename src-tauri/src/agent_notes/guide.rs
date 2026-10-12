@@ -1,4 +1,5 @@
-//! The agent-facing instructions (`AGENTS.md`) placed in each result folder.
+//! The agent-facing instructions (`AGENTS.md`) placed in each result folder
+//! (and in the notes root for free-standing requests).
 
 use std::fs;
 use std::path::Path;
@@ -51,15 +52,20 @@ pub(crate) fn ensure_guide(folder: &Path, target: NoteTarget, notes_root: &Path)
 
 fn render(target: NoteTarget, notes_root: &Path) -> String {
     let kind = match target {
-        NoteTarget::Ask => {
-            return include_str!("guide_ask.md")
-                .replace("{notes_root}", &notes_root.display().to_string());
-        }
-        NoteTarget::WorkItem => "調査",
-        NoteTarget::PullRequest => "レビュー",
+        NoteTarget::WorkItem => "Work Item の調査",
+        NoteTarget::PullRequest => "Pull Request のレビュー",
+        NoteTarget::Ask => "対象に紐づかない依頼",
     };
-    include_str!("guide.md")
-        .replace("{kind}", kind)
-        .replace("{notes_root}", &notes_root.display().to_string())
-        .replace("{prefix}", target.dir_prefix())
+    format!(
+        "このフォルダの Note ({kind}): `{}\\{}-{{番号}}\\*.md`\n\n{}",
+        notes_root.display(),
+        target.dir_prefix(),
+        render_common(notes_root)
+    )
+}
+
+/// The target-neutral guide, shared by every `AGENTS.md` block and the
+/// `devdeck-notes` skill so the two never drift apart.
+pub(crate) fn render_common(notes_root: &Path) -> String {
+    include_str!("notes_guide.md").replace("{notes_root}", &notes_root.display().to_string())
 }
