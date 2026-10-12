@@ -87,6 +87,22 @@ export function inboxKindLabel(kind: string): string {
   return KIND_LABELS[kind] ?? kind;
 }
 
+const AGENT_TARGET_LABELS: Record<AgentNoteTarget, string> = {
+  "pull-request": "PR",
+  "work-item": "WI",
+  ask: "Ask",
+};
+
+/**
+ * The label of a row's first column. An agent row says what it is about
+ * (PR / WI / Ask); "Agent" would add nothing, since its comment already reads
+ * "agent: N notes waiting for your answer".
+ */
+export function inboxEntryKindLabel(entry: InboxEntry): string {
+  const target = entry.extra?.agentTarget;
+  return target ? AGENT_TARGET_LABELS[target] : inboxKindLabel(entry.kind);
+}
+
 export function inboxKindClass(kind: string): string {
   return KIND_CLASSES[kind] ?? "text-muted-foreground";
 }

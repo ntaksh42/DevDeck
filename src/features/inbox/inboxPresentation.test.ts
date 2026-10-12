@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { InboxItem } from "@/lib/azdoCommands";
 import {
   extractInboxLinks,
+  inboxEntryKindLabel,
   inboxKindLabel,
   inboxRowTitle,
   matchesInboxFilter,
@@ -79,6 +80,15 @@ describe("inbox presentation helpers", () => {
     expect(inboxKindLabel("wi_mention")).toBe("WI mention");
     expect(inboxKindLabel("pr_review_request")).toBe("Review");
     expect(inboxKindLabel("future_kind")).toBe("future_kind");
+  });
+
+  it("labels an agent row by what it is about, other rows by their kind", () => {
+    const agent = (agentTarget: "pull-request" | "work-item" | "ask") =>
+      inboxEntryKindLabel({ ...item({ kind: "agent_reply" }), extra: { agentTarget } });
+    expect(agent("pull-request")).toBe("PR");
+    expect(agent("work-item")).toBe("WI");
+    expect(agent("ask")).toBe("Ask");
+    expect(inboxEntryKindLabel(item())).toBe("Mention");
   });
 
   it("shortens branch refs", () => {

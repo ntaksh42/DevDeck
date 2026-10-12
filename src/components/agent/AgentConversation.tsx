@@ -2,6 +2,7 @@ import { forwardRef } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { noteNeedsYou, type AgentNote } from "@/lib/azdoCommands";
 import { NoteMarkdown } from "@/components/agent-notes/NoteMarkdown";
+import { CommentComposer } from "@/features/pull-requests/CommentComposer";
 import { formatRelativeDate } from "@/lib/utils";
 
 const KIND_LABELS: Record<string, string> = {
@@ -21,23 +22,32 @@ export function AgentMessage({
   when,
   text,
   quote,
+  hideMeta = false,
 }: {
   author: string;
   when: string;
   text: string;
   quote?: string | null;
+  /** The author and time are shown elsewhere (the expanded header). */
+  hideMeta?: boolean;
 }) {
   const mine = author === "user";
   return (
     <div className={`pl-2 ${mine ? "border-l-2 border-transparent" : "border-l-2 border-violet-400 dark:border-violet-700"}`}>
-      <div className="flex items-baseline gap-1.5 text-[11px] text-muted-foreground">
-        <span className={`font-medium ${mine ? "text-foreground" : "text-violet-700 dark:text-violet-300"}`}>
-          {mine ? "You" : `@${author}`}
-        </span>
-        <span>{formatRelativeDate(when)}</span>
-      </div>
-      {quote ? <p className="truncate text-[11px] text-muted-foreground" title={quote}>“{quote}”</p> : null}
-      <NoteMarkdown text={text} className="text-xs text-foreground" />
+      {hideMeta ? null : (
+        <div className="flex items-baseline gap-1.5 text-[11px] text-muted-foreground">
+          <span className={`font-medium ${mine ? "text-foreground" : "text-violet-700 dark:text-violet-300"}`}>
+            {mine ? "You" : `@${author}`}
+          </span>
+          <span>{formatRelativeDate(when)}</span>
+        </div>
+      )}
+      {quote ? (
+        <p className="line-clamp-2 break-words text-[11px] text-muted-foreground" title={quote}>
+          “{quote}”
+        </p>
+      ) : null}
+      <NoteMarkdown text={text} className="text-[13px] leading-5 text-foreground" />
     </div>
   );
 }
@@ -75,21 +85,34 @@ export const AgentConversation = forwardRef<
     note: AgentNote;
     expanded: boolean;
     selected: boolean;
-    replying: boolean;
     onToggle: () => void;
     onFocus: () => void;
     /** Shown on the selected, expanded conversation; keys in the panel mirror them. */
     actions?: { label: string; keys: string; run: () => void }[];
+    /** Sends a reply in this conversation; the box under it folds to one line while empty. */
+    onReply: (body: string) => Promise<void>;
+    replyBusy: boolean;
+    /** The reply box's wrapper, so the panel can focus it (R). */
+    replyRef: (el: HTMLDivElement | null) => void;
+    /** Esc in an empty reply box: back to this conversation's header. */
+    onReplyCollapse: () => void;
   }
->(function AgentConversation({ note, expanded, selected, replying, onToggle, onFocus, actions = [] }, ref) {
+>(function AgentConversation(
+  { note, expanded, selected, onToggle, onFocus, actions = [], onReply, replyBusy, replyRef, onReplyCollapse },
+  ref,
+) {
   const Chevron = expanded ? ChevronDown : ChevronRight;
   const firstLine = note.body.split("\n")[0];
   const kind = note.kind ? (KIND_LABELS[note.kind] ?? note.kind) : null;
-  const about = [kind, note.context ? `About ${note.context}` : null].filter(Boolean).join(" · ");
+  // Expanded, the header carries who/when/what about instead of repeating the
+  // first line, which the message right below shows in full.
+  const meta = ["You", formatRelativeDate(note.createdAt), kind, note.context ? `About ${note.context}` : null]
+    .filter(Boolean)
+    .join(" · ");
   const done = note.status === "done";
   return (
     <div
-      className={`border-b border-border/60 ${selected ? "bg-accent/40" : ""} ${replying ? "shadow-[inset_2px_0_0] shadow-primary" : ""}`}
+      className={`border-b border-border/60 ${selected ? "bg-accent/40" : ""}`}
       data-agent-conversation={note.id}
     >
       <button
@@ -103,16 +126,17 @@ export const AgentConversation = forwardRef<
       >
         <Chevron className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
         <Status note={note} />
-        <span className={`min-w-0 flex-1 truncate ${noteNeedsYou(note) ? "font-semibold" : ""}`}>{firstLine}</span>
+        {expanded ? (
+          <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground" title={meta}>
+            {meta}
+          </span>
+        ) : (
+          <span className={`min-w-0 flex-1 truncate ${noteNeedsYou(note) ? "font-semibold" : ""}`}>{firstLine}</span>
+        )}
       </button>
       {expanded ? (
-        <div className="space-y-1.5 pb-2 pl-5 pr-1">
-          {about ? (
-            <p className="truncate text-[11px] text-muted-foreground" title={about}>
-              {about}
-            </p>
-          ) : null}
-          <AgentMessage author="user" when={note.createdAt} text={note.body} quote={note.quote} />
+        <div className="space-y-2 pb-2 pl-5 pr-1">
+          <AgentMessage author="user" when={note.createdAt} text={note.body} quote={note.quote} hideMeta />
           {note.replies.map((reply, index) => (
             <AgentMessage key={`${note.id}-${index}`} author={reply.author} when={reply.createdAt} text={reply.body} />
           ))}
@@ -133,6 +157,16 @@ export const AgentConversation = forwardRef<
               ))}
             </div>
           ) : null}
+          <div ref={replyRef} data-agent-reply={note.id}>
+            <CommentComposer
+              placeholder="Reply… (R)"
+              submitLabel="Reply"
+              busy={replyBusy}
+              collapsible
+              onCollapse={onReplyCollapse}
+              onSubmit={onReply}
+            />
+          </div>
         </div>
       ) : null}
     </div>

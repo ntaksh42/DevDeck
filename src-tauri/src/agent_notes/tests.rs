@@ -177,6 +177,7 @@ fn ensure_guide_owns_only_its_marked_block() {
     let guide = fs::read_to_string(&path).unwrap();
     assert!(guide.contains("C:/data/agent-notes\\pr-{番号}\\*.md"));
     assert!(guide.contains("Azure DevOps には書き込まない"));
+    assert!(guide.contains("3 行以内"));
     assert!(!guide.contains("{report}"));
     assert!(!guide.contains("{kind}"));
 
@@ -344,5 +345,6 @@ fn ask_guide_points_at_the_notes_root() {
     let guide = fs::read_to_string(temp.path().join("AGENTS.md")).unwrap();
     assert!(guide.contains(r"C:/data/agent-notes\ask-{番号}\*.md"));
     assert!(guide.contains("`summarize`"));
+    assert!(guide.contains("3 行以内"));
     assert!(!guide.contains("{notes_root}"));
 }

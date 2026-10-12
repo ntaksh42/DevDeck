@@ -38,8 +38,8 @@ function renderView(props: { onOpenView?: (view: "pipelines") => void } = {}) {
 
 const isApproval = (row: HTMLElement) => row.textContent?.startsWith("Approval") ?? false;
 /** Derived rows: live pipeline approvals and agent replies waiting for the user. */
-const isDerived = (row: HTMLElement) =>
-  isApproval(row) || (row.textContent?.startsWith("Agent") ?? false);
+const isAgentRow = (row: HTMLElement) => /agent: \d+ notes? waiting/.test(row.textContent ?? "");
+const isDerived = (row: HTMLElement) => isApproval(row) || isAgentRow(row);
 
 /** Rows of stored items (everything except the derived rows). */
 function storedRows(list: HTMLElement): HTMLElement[] {
@@ -241,7 +241,7 @@ describe("InboxView", () => {
   it("opens an agent reply's PR in the browser after resolving its metadata", async () => {
     renderView();
     const list = await openList();
-    const agentRow = await within(list).findByRole("option", { name: /Agent.*!101/ });
+    const agentRow = await within(list).findByRole("option", { name: /PR.*!101.*agent:/ });
     fireEvent.click(agentRow);
     await waitFor(() => expect((screen.getByRole("button", {
       name: "Open in Azure DevOps (O / Ctrl+Enter)",
@@ -372,11 +372,11 @@ describe("InboxView", () => {
     renderView();
     const list = await openList();
     await waitFor(() => {
-      expect(within(list).queryAllByRole("option").some((row) => row.textContent?.startsWith("Agent"))).toBe(true);
+      expect(within(list).queryAllByRole("option").some(isAgentRow)).toBe(true);
     });
-    const agentRow = within(list)
-      .getAllByRole("option")
-      .find((row) => row.textContent?.startsWith("Agent")) as HTMLElement;
+    const agentRow = within(list).getAllByRole("option").find(isAgentRow) as HTMLElement;
+    // Labelled by what it is about, not "Agent".
+    expect(agentRow.textContent).toMatch(/^(PR|WI|Ask)/);
     fireEvent.click(agentRow);
 
     // The row only exists to carry the agent's reply; the conversation points to Q.
