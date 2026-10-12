@@ -5,7 +5,7 @@ import { PreviewBand } from "@/components/PreviewBand";
 import { ErrorState, LoadingState, PreviewEmptyState } from "@/components/StateDisplay";
 import {
   inboxKindClass,
-  inboxKindLabel,
+  inboxEntryKindLabel,
   isDerivedEntry,
   isPullRequestItem,
   isThreadItem,
@@ -110,7 +110,7 @@ export function InboxPreview({
     >
       <h2 className="line-clamp-2 text-sm font-semibold leading-snug">{heading}</h2>
       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-        <span className={`font-semibold ${inboxKindClass(item.kind)}`}>{inboxKindLabel(item.kind)}</span>
+        <span className={`font-semibold ${inboxKindClass(item.kind)}`}>{inboxEntryKindLabel(item)}</span>
         <span>
           {item.projectName}
           {item.repositoryName ? ` / ${item.repositoryName}` : ""}

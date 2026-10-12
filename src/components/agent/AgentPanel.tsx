@@ -68,8 +68,8 @@ export function AgentPanel({
   const [help, setHelp] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [replyKey, setReplyKey] = useState<string | null>(null);
   const headerRefs = useRef(new Map<string, HTMLButtonElement>());
+  const replyRefs = useRef(new Map<string, HTMLDivElement>());
   const composerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -87,7 +87,6 @@ export function AgentPanel({
   const toggle = (c: Conversation, value = !isExpanded(c)) => setExpanded((prev) => ({ ...prev, [c.key]: value }));
 
   const selected = conversations.find((c) => c.key === selectedKey) ?? null;
-  const replyTo = conversations.find((c) => c.key === replyKey) ?? null;
   // Run now: the selected conversation's notes, else the subject's.
   const runTarget = selected?.item ?? noteItemOf(subject);
   const pinned = override !== null;
@@ -112,6 +111,22 @@ export function AgentPanel({
     if (consumeAgentFocusRequest()) requestComposerFocus();
   }, []);
 
+  // A conversation's own reply box: unfold the conversation, then focus the box
+  // once it is rendered (it unfolds from its one-line button on focus).
+  const [replyFocus, setReplyFocus] = useState<{ key: string; n: number }>({ key: "", n: 0 });
+  function requestReplyFocus(key: string): void {
+    setExpanded((prev) => ({ ...prev, [key]: true }));
+    setSelectedKey(key);
+    setReplyFocus((prev) => ({ key, n: prev.n + 1 }));
+  }
+  useEffect(() => {
+    if (!replyFocus.n) return;
+    const box = replyRefs.current.get(replyFocus.key);
+    const textarea = box?.querySelector("textarea");
+    if (textarea) textarea.focus();
+    else box?.querySelector("button")?.click();
+  }, [replyFocus]);
+
   // Opened on a request (e.g. from the Inbox): show it and answer it.
   useEffect(() => {
     if (focusAskId === null) return;
@@ -119,13 +134,12 @@ export function AgentPanel({
     if (!match) return;
     setSelectedKey(match.key);
     toggle(match, true);
-    if (noteNeedsYou(match.note)) setReplyKey(match.key);
+    if (noteNeedsYou(match.note)) requestReplyFocus(match.key);
   }, [focusAskId, conversations.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A quote from the Result panel starts a note about it.
   useEffect(() => {
     if (!quote) return;
-    setReplyKey(null);
     requestComposerFocus();
   }, [quote]);
 
@@ -162,13 +176,12 @@ export function AgentPanel({
     const target = selected ?? conversations.find((c) => noteNeedsYou(c.note)) ?? null;
     if (!target) return;
     handledReply.current = replyRequest;
-    setSelectedKey(target.key);
-    setReplyKey(target.key);
-    toggle(target, true);
-    requestComposerFocus();
+    requestReplyFocus(target.key);
   }, [replyRequest, conversations.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function onListKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
+    // Keys typed into a conversation's reply box belong to the box.
+    if (event.target instanceof HTMLElement && event.target.closest("textarea, input, [contenteditable='true']")) return;
     // The focused header decides, even before its focus has re-rendered.
     const focusedKey = conversations.find((c) => headerRefs.current.get(c.key) === event.target)?.key;
     const index = conversations.findIndex((c) => c.key === (focusedKey ?? selectedKey));
@@ -223,7 +236,6 @@ export function AgentPanel({
       // M: a new request, as M focuses the comment box elsewhere.
       event.preventDefault();
       event.stopPropagation();
-      setReplyKey(null);
       requestComposerFocus();
     } else if (event.key === "?") {
       event.preventDefault();
@@ -237,9 +249,7 @@ export function AgentPanel({
     } else if ((event.key === "r" || event.key === "R") && current && !event.ctrlKey && !event.metaKey) {
       event.preventDefault();
       event.stopPropagation();
-      setReplyKey(current.key);
-      toggle(current, true);
-      requestComposerFocus();
+      requestReplyFocus(current.key);
     } else if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
@@ -301,10 +311,18 @@ export function AgentPanel({
             note={c.note}
             expanded={isExpanded(c)}
             selected={c.key === (selectedKey ?? conversations[0]?.key)}
-            replying={c.key === replyKey}
             onToggle={() => toggle(c)}
             onFocus={() => setSelectedKey(c.key)}
             actions={actionsOf(c)}
+            replyRef={(el) => {
+              if (el) replyRefs.current.set(c.key, el);
+              else replyRefs.current.delete(c.key);
+            }}
+            replyBusy={data.send.isPending && data.send.variables?.replyTo?.key === c.key}
+            onReply={async (body) => {
+              await data.send.mutateAsync({ body, replyTo: c, quote: null });
+            }}
+            onReplyCollapse={() => headerRefs.current.get(c.key)?.focus()}
           />
         ))}
         {data.deleted ? (
@@ -364,21 +382,13 @@ export function AgentPanel({
             </button>
           </p>
         ) : null}
-        {quote && !replyTo ? (
+        {quote ? (
           <p className="mb-1 flex items-center gap-1 text-[11px] text-muted-foreground">
             Quoting
             <span className="min-w-0 flex-1 truncate border-l-2 border-yellow-400 pl-1 text-foreground" title={quote.quote}>
               {quote.quote}
             </span>
             <button type="button" onClick={onClearQuote} aria-label="Drop the quote" className="rounded hover:bg-accent">
-              <X className="h-3 w-3" />
-            </button>
-          </p>
-        ) : null}
-        {replyTo ? (
-          <p className="mb-1 flex items-center gap-1 text-[11px] text-muted-foreground">
-            Replying to <span className="min-w-0 flex-1 truncate text-foreground">{replyTo.note.body.split("\n")[0]}</span>
-            <button type="button" onClick={() => setReplyKey(null)} aria-label="Start a new request instead" className="rounded hover:bg-accent">
               <X className="h-3 w-3" />
             </button>
           </p>
@@ -399,18 +409,14 @@ export function AgentPanel({
         />
         <div ref={composerRef} data-agent-composer="true">
           <CommentComposer
-            key={replyKey ?? "new"}
-            placeholder={
-              replyTo ? "Reply to the agent… (M)" : subject ? `Ask about ${subjectLabel(subject)}… (M)` : "Ask the agent… (M)"
-            }
-            submitLabel={replyTo ? "Reply" : "Ask"}
-            busy={data.send.isPending}
+            placeholder={subject ? `Ask about ${subjectLabel(subject)}… (M)` : "Ask the agent… (M)"}
+            submitLabel="Ask"
+            busy={data.send.isPending && !data.send.variables?.replyTo}
             collapsible
             onCollapse={focusList}
             onSubmit={async (body) => {
-              await data.send.mutateAsync({ body, replyTo, quote: replyTo ? null : quote });
-              setReplyKey(null);
-              if (!replyTo) onClearQuote();
+              await data.send.mutateAsync({ body, replyTo: null, quote });
+              onClearQuote();
             }}
           />
         </div>

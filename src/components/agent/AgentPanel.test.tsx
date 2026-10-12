@@ -178,14 +178,18 @@ describe("Agent panel", () => {
     expect(within(panel).getByRole("button", { name: /Ask the agent/ })).toBeTruthy();
   });
 
-  it("replies to the selected conversation with r", async () => {
+  it("replies to the selected conversation with r, in the box under it", async () => {
     renderHost();
     const panel = await openPanel();
     const [waiting] = within(panel).getAllByRole("button").filter((b) => b.hasAttribute("aria-expanded"));
     waiting.focus();
     fireEvent.keyDown(waiting, { key: "r" });
-    const input = await within(panel).findByPlaceholderText(/Reply to the agent/);
+    const input = await within(panel).findByPlaceholderText(/^Reply…/);
     await waitFor(() => expect(document.activeElement).toBe(input));
+    // The box sits inside the conversation, and typing in it does not trigger list keys.
+    expect(input.closest("[data-agent-conversation]")).toBe(waiting.closest("[data-agent-conversation]"));
+    fireEvent.keyDown(input, { key: "x" });
+    expect(setAgentNoteStatus).not.toHaveBeenCalled();
     fireEvent.change(input, { target: { value: "Pin en-US" } });
     fireEvent.click(within(panel).getByRole("button", { name: "Reply" }));
     await waitFor(() => expect(replyAgentNote).toHaveBeenCalledWith(
@@ -193,15 +197,33 @@ describe("Agent panel", () => {
     ));
     expect(runAgent).toHaveBeenCalled();
   });
-});
 
-describe("Agent panel keys", () => {
-  it("lists urgent conversations first and shows no kind, count or time on a row", async () => {
+  it("gives every open conversation its own reply box and Esc returns to its header", async () => {
     renderHost();
     const panel = await openPanel();
     const [waiting, done] = within(panel).getAllByRole("button").filter((b) => b.hasAttribute("aria-expanded"));
-    expect(waiting.textContent).toContain("Why did run 412 fail?");
-    // Status (screen-reader label) and first line only: no kind, reply count or time.
+    // Unfolded conversations carry a one-line reply box; folded ones carry none.
+    expect(within(waiting.closest("[data-agent-conversation]") as HTMLElement).getByRole("button", { name: /^Reply…/ })).toBeTruthy();
+    expect(within(done.closest("[data-agent-conversation]") as HTMLElement).queryByRole("button", { name: /^Reply…/ })).toBeNull();
+
+    fireEvent.click(within(waiting.closest("[data-agent-conversation]") as HTMLElement).getByRole("button", { name: /^Reply…/ }));
+    const input = await within(panel).findByPlaceholderText(/^Reply…/);
+    await waitFor(() => expect(document.activeElement).toBe(input));
+    fireEvent.keyDown(input, { key: "Escape" });
+    await waitFor(() => expect(document.activeElement).toBe(waiting));
+  });
+});
+
+describe("Agent panel keys", () => {
+  it("lists urgent conversations first and shows no kind, count or time on a folded row", async () => {
+    renderHost();
+    const panel = await openPanel();
+    const [waiting, done] = within(panel).getAllByRole("button").filter((b) => b.hasAttribute("aria-expanded"));
+    // Expanded, the header names who/when/kind and the message below shows the text once.
+    expect(waiting.getAttribute("aria-expanded")).toBe("true");
+    expect(waiting.textContent).toContain("You · ");
+    expect(within(panel).getAllByText("Why did run 412 fail?")).toHaveLength(1);
+    // Folded: status (screen-reader label) and first line only: no kind, reply count or time.
     expect(done.textContent).toBe("DoneSummarize last week");
   });
 
@@ -228,7 +250,7 @@ describe("Agent panel M key", () => {
     const [first] = within(panel).getAllByRole("button").filter((b) => b.hasAttribute("aria-expanded"));
     first.focus();
     fireEvent.keyDown(first, { key: "r" });
-    await within(panel).findByPlaceholderText(/Reply to the agent/);
+    await within(panel).findByPlaceholderText(/^Reply…/);
     first.focus();
     fireEvent.keyDown(first, { key: "m" });
     const input = await within(panel).findByPlaceholderText(/Ask the agent/);
@@ -241,13 +263,13 @@ describe("Agent panel reply request", () => {
     renderHost();
     act(() => openAgentPanel({ subject: null, reply: true }));
     const panel = await screen.findByRole("complementary", { name: "Agent" });
-    await within(panel).findByPlaceholderText(/Reply to the agent/);
+    await within(panel).findByPlaceholderText(/^Reply…/);
     act(() => closeAgentPanel());
     await waitFor(() => expect(screen.queryByRole("complementary", { name: "Agent" })).toBeNull());
     act(() => toggleAgentPanel());
     const reopened = await screen.findByRole("complementary", { name: "Agent" });
     await within(reopened).findAllByText("Why did run 412 fail?");
-    expect(within(reopened).queryByPlaceholderText(/Reply to the agent/)).toBeNull();
+    expect(within(reopened).queryByPlaceholderText(/^Reply…/)).toBeNull();
   });
 });
 
