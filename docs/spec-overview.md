@@ -134,12 +134,17 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   `Esc` で閉じて開く前のフォーカス (グリッドの行など) に戻す。
   - **対象 (文脈)**: 各 View が選択中のものを `usePublishAgentSubject` で公開し、パネルはそれを自動で対象にする。
     PR (My Reviews / My Pull Requests / PR Search)、WI (My Items / Views / Search)、パイプライン実行 (Pipelines の詳細)、
-    Wiki ページ (Wiki プレビューの「Ask agent」)。対象はチップで表示し、ピンで固定 (行を移っても変わらない)、× で外して
-    対象なしの依頼にできる。
+    Wiki ページ (Wiki プレビューの「Ask agent」)。対象は入力欄の placeholder
+    (`Ask about !45 …` / 対象なしは `Ask the agent…`) に出し、既定ではチップを出さない。`P` (または `?` 行の「Pin the
+    subject」) で固定すると入力欄の上にチップが出て (行を移っても変わらない)、× で外して対象なしの依頼にできる
+    (「No subject」と「follow selection」が出る)。
   - **会話の単位**: 対象が PR / WI なら従来の項目ごとのメモ (`agent-notes/{pr|wi}-{id}/`、結果フォルダの設定が前提)。
     それ以外と対象なしは依頼ごとの会話 (`target` = `ask`、`agent-notes/ask-{yyyyMMddHHmmss}/`、結果フォルダ不要)。
-    パネルは「This item」(対象の PR / WI のメモ) と「Requests」(最近の依頼 30 件、`list_agent_asks`) を並べる。
-  - **依頼の種類**: Investigate (`investigate`) / Summarize (`summarize`) / Question (`question`)。front-matter に
+    パネルは対象の PR / WI のメモと最近の依頼 30 件 (`list_agent_asks`) を見出しなしの 1 本の一覧にし、
+    Needs you → Open → Done の順、各グループ内は最終更新の新しい順に並べる。
+  - **依頼の種類**: 画面では選ばせない。新しいメモの `kind` は付けず (空)、エージェントが本文から判断する
+    (`agent_notes/guide.md`: 引用があれば `fix`、無ければ結果の修正・やり直しの依頼か、質問・要約かで決める。
+    `guide_ask.md`: 無ければ `question`)。既存メモの `kind` は展開した会話に表示するだけ。front-matter に
     `context` (対象を 1 行で) を書く。
   - **資料の受け渡し**: エージェントには Azure DevOps の権限を与えない。送信時に DevDeck が対象の情報を取得して
     Markdown にまとめ (`contextDocument.ts`: PR は説明・変更ファイル・コメントスレッド、WI はフィールド・説明・コメント、
@@ -151,13 +156,15 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
     `url.devdeck-push-blocked://.pushInsteadOf` (`https://` / `ssh://` / `git@`) を与えて push 先を無効にする。
     既定コマンドは加えて `--disallowedTools "Bash(az:*)" "Bash(git push:*)"` を付ける。Windows 資格情報マネージャーの PAT は OS 上の
     読み取りまでは防げない。WI / PR へのコメント投稿は人が DevDeck から行う (ガイドも投稿を指示しない)。
-  - **会話の表示**: 会話 (1 メモ + 返信) は 1 件ずつ折りたためる。畳むと状態 (Needs you / Open / Done)・種類・
-    1 行目・返信数・最終更新の 1 行。既定では Needs you と最新の 1 件だけ開き、Done は畳む。ヘッダーのボタンで一括開閉。
+  - **会話の表示**: 会話 (1 メモ + 返信) は 1 件ずつ折りたためる。畳むと状態点 (Needs you は赤・太字)
+    と 1 行目だけの 1 行 (種類・返信数・時刻は展開した会話の中に出す)。既定では Needs you と最新の 1 件だけ開き、Done は畳む。
+    一括開閉のボタンは無い。ドック時はヘッダーを出さない (ドロワー時だけ「Agent」と閉じるボタン)。
   - **送信**: 返信先がなければ新しいメモを作り、`run_agent` で起動する (PR はリポジトリ名を渡す)。返信先があれば
-    `reply_agent_note` で追記して起動する。「Run now」(▶) は新しいメモを作らず、選択中の会話 (なければ対象) のメモで起動する。
+    `reply_agent_note` で追記して起動する。`Shift+Enter` (Run now) は新しいメモを作らず、選択中の会話 (なければ対象) のメモで起動する。
     Read-only 検証モードではメモの保存だけ行い、起動しない。
   - **キーボード**: `↑↓` 会話の移動、`→ ←` 開閉、`R` 選択中の会話に返信、`M` 新しい依頼の入力欄へ (他の View の
-    コメント欄と同じ)、`Esc` 閉じる。一覧の下に同じキーのヒントを出す。入力欄は他のコメント欄と同じく普段は 1 行に畳まれ、
+    コメント欄と同じ)、`X` Resolve / Reopen、`P` 対象の固定、`Shift+Enter` Run now、`Esc` 閉じる。
+    キーのヒントは常時出さず、一覧の下の `?` (キーでも `?`) で開く (対象の固定・外すボタンもここ)。入力欄は他のコメント欄と同じく普段は 1 行に畳まれ、
     フォーカスで広がる。会話一覧は内容に合わせた高さで表示し、入力欄をその直下に置く。長い会話では一覧だけスクロールする。`Ctrl+Enter` で送信、空のまま `Esc` で畳んで会話一覧へ戻る。ドック時はタブ名と重なる見出しを出さない。Inbox の `Q`、Result パネルの `a` (と Bot ボタン) は、このパネルをその項目を対象に開く。
   - **通知**: `useAgentNoteWatcher` は `ask` の要約も監視し、依頼への返信をデスクトップ通知する (クリックでパネルを開く)。
 - **エージェントへの申し送り (Agent notes)**: 作業項目グリッドの Result パネル (調査結果 HTML) と
@@ -192,14 +199,15 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   - **エージェントの権限**: メモはエージェントが起動するフォルダ (ワークスペース / 結果フォルダ) の外にあるため、
     作業フォルダ外を制限するエージェントでは `agent_command` で許可を与える (Claude Code なら `--add-dir {notes}`。既定コマンドは付与済み)。
     許可が無いとメモを読めない・`_done/` へ移せないが、DevDeck 側にはエラーとして現れず未対応のまま残る。
-  - **一覧と入力 (Agent パネルに統合)**: Result パネル横のメモ一覧と入力欄は廃止し、メモは Agent パネルの「This item」に
-    会話として並ぶ (状態チップ・種別・本文は `#123` / `!45` をアプリ内リンクにする Markdown・返信)。下書き (以前の版で
-    作られたもの) は「Draft」で表示し、ヘッダーの「Send drafts (n)」で送ってエージェントを起動する。展開した会話には
+  - **一覧と入力 (Agent パネルに統合)**: Result パネル横のメモ一覧と入力欄は廃止し、メモは Agent パネルに
+    会話として並ぶ (状態点・本文は `#123` / `!45` をアプリ内リンクにする Markdown・返信)。下書き (以前の版で
+    作られたもの) は「Draft」で表示し、入力欄の上の「n drafts not sent」バナーの「Send」で送ってエージェントを起動する
+    (下書きがある時だけ出る)。展開した会話には
     操作ボタンを出し、一覧のキーと対応する: `Enter` 結果の該当箇所へ (Done はエージェントが `data-agent-note` を付けた
     変更箇所)、`L` 付け替え、`X` Resolve / Reopen、`Del` 削除 (`Ctrl+Z` で取り消し)。本文の編集は無く、返信で補う。
   - **Result パネル**: 結果 HTML とピンだけを表示する。上端に「C で選択範囲についてエージェントに頼める」旨の案内、
     Needs you / Open の件数、Agent パネルを開くボタン (`a`) とブラウザで開くボタン (`o`)。テキストを選択して Comment
-    (またはブロック選択で `C`) を押すと、引用付きで Agent パネルが開き、種別「Fix」(既定) で入力欄にフォーカスする。
+    (またはブロック選択で `C`) を押すと、引用付きで Agent パネルが開き、入力欄にフォーカスする (引用付きのメモは `kind` 空 = `fix` として扱う)。
     引用は入力欄の上に「Quoting」として出て、× で外せる。ピンを押すと結果の該当箇所を示し、Agent パネルでそのメモを選ぶ。
     Agent パネルからの「結果の該当箇所へ」「付け替え」は window イベント (`devdeck:agent-note-reveal` /
     `devdeck:agent-note-reattach`) で Result パネルに届く。付け替え中は次の選択でそのメモの引用を差し替え (`Esc` で中止)。
@@ -423,7 +431,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
 | `review_result_folder_path` | レビュー結果 HTML を格納するフォルダ。My Reviews のプレビューが語頭の `PR<番号>` (ゼロ埋め可、`apr12` のように英字が前に付くものは除外) を含むファイルを照合。複数該当する場合は更新日時の新しいものを採用。 |
 | `work_item_result_folder_path` | 作業項目の調査結果 HTML を格納するフォルダ。Work Item Views のプレビューが作業項目 ID の数字列 (先頭・区切り文字の後・`WIT`/`WI`/`WORKITEM` の後。`YYYY-MM-DD` の日付や `v2` のような語中の数字は除外) を含むファイルを照合。複数該当する場合は更新日時の新しいものを採用。 |
 | `show_window_hotkey` | ウィンドウを前面化するグローバルホットキー。 |
-| `agent_command` | Agent パネルからの依頼・返信・Run now で起動するシェルコマンド。`{target}` / `{id}` / `{notes}` / `{workspace}` / `{repo}` / `{guide}` を置換。未設定なら既定コマンド `claude -p "Read {guide} and handle the open notes in {notes}" --add-dir "{notes}" --disallowedTools "Bash(az:*)" "Bash(git push:*)" --dangerously-skip-permissions` (Claude Code をバックグラウンドで権限確認なしに実行。Azure CLI は未ログイン、git push は不可の状態で起動) を使う (`agent_notes/launch.rs` の `DEFAULT_AGENT_COMMAND`)。 |
+| `agent_command` | Agent パネルからの依頼・返信・Run now (`Shift+Enter`) で起動するシェルコマンド。`{target}` / `{id}` / `{notes}` / `{workspace}` / `{repo}` / `{guide}` を置換。未設定なら既定コマンド `claude -p "Read {guide} and handle the open notes in {notes}" --add-dir "{notes}" --disallowedTools "Bash(az:*)" "Bash(git push:*)" --dangerously-skip-permissions` (Claude Code をバックグラウンドで権限確認なしに実行。Azure CLI は未ログイン、git push は不可の状態で起動) を使う (`agent_notes/launch.rs` の `DEFAULT_AGENT_COMMAND`)。 |
 | `read_only_validation_mode_enabled` | 読み取り専用モード (誤操作によるミューテーションを抑止)。既定 false。 |
 | `desktop_notifications_enabled` | デスクトップ通知の総合トグル。既定 false。 |
 | `notification_content_preview_enabled` | 通知に本文プレビューを含めるか。既定 true。 |

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { Bot, ChevronsDownUp, ChevronsUpDown, Pin, PinOff, Play, X } from "lucide-react";
-import { commandErrorMessage, noteNeedsYou, type AgentNoteKind } from "@/lib/azdoCommands";
+import { Bot, Pin, PinOff, X } from "lucide-react";
+import { commandErrorMessage, noteNeedsYou } from "@/lib/azdoCommands";
 import { CommentComposer } from "@/features/pull-requests/CommentComposer";
 import { ErrorState, LoadingState } from "@/components/StateDisplay";
 import { RowShortcutHints } from "@/components/RowShortcutHints";
@@ -17,19 +17,12 @@ import {
 import { focusAgentComposer, type SubjectOverride } from "./agentPanelStore";
 import { useAgentPanelData, type Conversation } from "./useAgentPanelData";
 
-const KINDS: { kind: AgentNoteKind; label: string; hint: string }[] = [
-  { kind: "investigate", label: "Investigate", hint: "Look into it and report the cause or conclusion" },
-  { kind: "summarize", label: "Summarize", hint: "Summarize it in a reply" },
-  { kind: "question", label: "Question", hint: "Answer a question" },
-];
-
-/** Offered while the new note quotes the result: point at text to fix. */
-const FIX_KIND = { kind: "fix" as const, label: "Fix", hint: "Fix the quoted part of the result" };
-
 /**
  * The app-wide Agent panel (Ctrl+J): asks the external agent to investigate,
  * summarize or answer something about the item selected in any view, or about
- * nothing in particular. Each conversation folds to one line.
+ * nothing in particular. Each conversation folds to one line. Only the
+ * conversations and one input are always shown; the subject chip, drafts
+ * banner and quote appear when they apply, and `?` lists the keys.
  */
 export function AgentPanel({
   docked = false,
@@ -62,7 +55,7 @@ export function AgentPanel({
   const data = useAgentPanelData(subject, true);
   const { conversations } = data;
 
-  const [kind, setKind] = useState<AgentNoteKind>("investigate");
+  const [help, setHelp] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [replyKey, setReplyKey] = useState<string | null>(null);
@@ -82,10 +75,13 @@ export function AgentPanel({
   const isExpanded = (c: Conversation) =>
     expanded[c.key] ?? (c.note.status !== "done" && (noteNeedsYou(c.note) || c.key === latestKey));
   const toggle = (c: Conversation, value = !isExpanded(c)) => setExpanded((prev) => ({ ...prev, [c.key]: value }));
-  const allExpanded = conversations.length > 0 && conversations.every(isExpanded);
 
   const selected = conversations.find((c) => c.key === selectedKey) ?? null;
   const replyTo = conversations.find((c) => c.key === replyKey) ?? null;
+  // Run now: the selected conversation's notes, else the subject's.
+  const runTarget = selected?.item ?? noteItemOf(subject);
+  const pinned = override !== null;
+  const togglePin = () => onOverrideChange(pinned ? null : subject ? { subject } : null);
 
   const focusComposer = focusAgentComposer;
   function focusList(): void {
@@ -112,16 +108,12 @@ export function AgentPanel({
     if (noteNeedsYou(match.note)) setReplyKey(match.key);
   }, [focusAskId, conversations.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // A quote from the Result panel starts a "fix" note about it.
+  // A quote from the Result panel starts a note about it.
   useEffect(() => {
     if (!quote) return;
     setReplyKey(null);
-    setKind("fix");
     requestComposerFocus();
   }, [quote]);
-  useEffect(() => {
-    if (!quote && kind === "fix") setKind("investigate");
-  }, [quote]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A pin clicked in the result selects its note here.
   useEffect(() => {
@@ -182,6 +174,13 @@ export function AgentPanel({
       data.undoDelete.mutate();
       return;
     }
+    if (event.key === "Enter" && event.shiftKey) {
+      // Shift+Enter: run the agent now on the open notes, without a new request.
+      event.preventDefault();
+      event.stopPropagation();
+      if (runTarget && !data.readOnly) data.runNow.mutate(runTarget);
+      return;
+    }
     const keyed =
       event.key === "Enter" && current && event.target === headerRefs.current.get(current.key)
         ? action("Show in result")
@@ -212,6 +211,15 @@ export function AgentPanel({
       event.stopPropagation();
       setReplyKey(null);
       requestComposerFocus();
+    } else if (event.key === "?") {
+      event.preventDefault();
+      event.stopPropagation();
+      setHelp((open) => !open);
+    } else if (plain && lower === "p" && (subject || pinned)) {
+      // P: pin the subject (or follow the selection again).
+      event.preventDefault();
+      event.stopPropagation();
+      togglePin();
     } else if ((event.key === "r" || event.key === "R") && current && !event.ctrlKey && !event.metaKey) {
       event.preventDefault();
       event.stopPropagation();
@@ -225,22 +233,16 @@ export function AgentPanel({
     }
   }
 
-  const sections: { id: Conversation["section"]; title: string }[] = [
-    { id: "item", title: subject && (subject.kind === "pull-request" || subject.kind === "work-item") ? "This item" : "" },
-    { id: "ask", title: "Requests" },
-  ];
-  const kinds = quote ? [FIX_KIND, ...KINDS] : KINDS;
   const drafts = conversations.filter((c) => c.section === "item" && c.note.status === "draft").length;
   const failure = data.error ?? data.send.error ?? data.runNow.error;
   const error = failure ? commandErrorMessage(failure) : null;
-  // Run now: the selected conversation's notes, else the subject's.
-  const runTarget = selected?.item ?? noteItemOf(subject);
-  const pinned = override !== null;
+  const starting = data.send.isPending || data.runNow.isPending;
 
   return (
     <aside
       aria-label="Agent"
       data-agent-panel="true"
+      data-agent-subject={subjectKey(subject)}
       // min-h-0 / overflow-hidden: inside a dock panel the list scrolls, not the whole panel.
       className={`flex h-full min-h-0 flex-col overflow-hidden bg-card text-xs ${docked ? "w-full min-w-0" : "w-[360px] shrink-0 border-l border-border"}`}
       onKeyDown={(event) => {
@@ -248,91 +250,18 @@ export function AgentPanel({
         if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter"].includes(event.key)) event.stopPropagation();
       }}
     >
-      <div className="flex shrink-0 items-center gap-1.5 border-b border-border px-2 py-1">
-        {/* Docked, the tab already names the panel. */}
-        {docked ? null : (
-          <>
-            <Bot className="h-4 w-4" aria-hidden="true" />
-            <span className="text-sm font-semibold">Agent</span>
-            <span className="text-[11px] text-muted-foreground">Ctrl+J</span>
-          </>
-        )}
-        {data.send.isPending || data.runNow.isPending ? (
-          <span className="text-[11px] text-muted-foreground">Starting…</span>
-        ) : null}
-        <span className="flex-1" />
-        {drafts ? (
-          <button
-            type="button"
-            onClick={() => data.submitDrafts.mutate()}
-            disabled={data.submitDrafts.isPending}
-            title="Send the drafts of this item to the agent"
-            className="rounded border border-border px-1.5 text-[11px] hover:bg-accent"
-          >
-            Send drafts ({drafts})
+      {/* Docked, the tab already names the panel and closes it. */}
+      {docked ? null : (
+        <div className="flex shrink-0 items-center gap-1.5 border-b border-border px-2 py-1">
+          <Bot className="h-4 w-4" aria-hidden="true" />
+          <span className="text-sm font-semibold">Agent</span>
+          <span className="text-[11px] text-muted-foreground">Ctrl+J</span>
+          <span className="flex-1" />
+          <button type="button" onClick={onClose} title="Close (Esc)" aria-label="Close the agent panel" className="rounded p-0.5 hover:bg-accent">
+            <X className="h-3.5 w-3.5" />
           </button>
-        ) : null}
-        {runTarget && !data.readOnly ? (
-          <button
-            type="button"
-            onClick={() => data.runNow.mutate(runTarget)}
-            disabled={data.runNow.isPending}
-            title="Run the agent now on the open notes of the selected conversation or item"
-            aria-label="Run the agent now"
-            className="rounded p-0.5 hover:bg-accent"
-          >
-            <Play className="h-3.5 w-3.5" />
-          </button>
-        ) : null}
-        <button
-          type="button"
-          onClick={() => setExpanded(Object.fromEntries(conversations.map((c) => [c.key, !allExpanded])))}
-          title={allExpanded ? "Collapse all conversations" : "Expand all conversations"}
-          aria-label={allExpanded ? "Collapse all conversations" : "Expand all conversations"}
-          className="rounded p-0.5 hover:bg-accent"
-        >
-          {allExpanded ? <ChevronsDownUp className="h-3.5 w-3.5" /> : <ChevronsUpDown className="h-3.5 w-3.5" />}
-        </button>
-        <button type="button" onClick={onClose} title="Close (Esc)" aria-label="Close the agent panel" className="rounded p-0.5 hover:bg-accent">
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-
-      <div className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1" data-agent-subject={subjectKey(subject)}>
-        <span className="text-[11px] text-muted-foreground">About</span>
-        {subject ? (
-          <span className="flex min-w-0 items-center gap-1 rounded-full border border-primary/40 bg-primary/5 px-1.5">
-            <span className="truncate" title={subjectLabel(subject)}>{subjectLabel(subject)}</span>
-            <button
-              type="button"
-              onClick={() => onOverrideChange(pinned ? null : { subject })}
-              title={pinned ? "Follow the selection again" : "Keep this subject while you move around"}
-              aria-label={pinned ? "Unpin the subject" : "Pin the subject"}
-              className="rounded hover:bg-accent"
-            >
-              {pinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
-            </button>
-            <button
-              type="button"
-              onClick={() => onOverrideChange({ subject: null })}
-              title="Ask without a subject"
-              aria-label="Remove the subject"
-              className="rounded hover:bg-accent"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </span>
-        ) : (
-          <span className="text-muted-foreground">
-            nothing in particular
-            {pinned ? (
-              <button type="button" onClick={() => onOverrideChange(null)} className="ml-1 text-primary underline">
-                follow selection
-              </button>
-            ) : null}
-          </span>
-        )}
-      </div>
+        </div>
+      )}
 
       <div
         ref={listRef}
@@ -343,31 +272,22 @@ export function AgentPanel({
       >
         {data.loading ? <LoadingState /> : null}
         {error ? <ErrorState message={error} /> : null}
-        {sections.map(({ id, title }) => {
-          const items = conversations.filter((c) => c.section === id);
-          if (!items.length) return null;
-          return (
-            <div key={id} className="">
-              {title ? <p className="pt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</p> : null}
-              {items.map((c) => (
-                <AgentConversation
-                  key={c.key}
-                  ref={(el) => {
-                    if (el) headerRefs.current.set(c.key, el);
-                    else headerRefs.current.delete(c.key);
-                  }}
-                  note={c.note}
-                  expanded={isExpanded(c)}
-                  selected={c.key === (selectedKey ?? conversations[0]?.key)}
-                  replying={c.key === replyKey}
-                  onToggle={() => toggle(c)}
-                  onFocus={() => setSelectedKey(c.key)}
-                  actions={actionsOf(c)}
-                />
-              ))}
-            </div>
-          );
-        })}
+        {conversations.map((c) => (
+          <AgentConversation
+            key={c.key}
+            ref={(el) => {
+              if (el) headerRefs.current.set(c.key, el);
+              else headerRefs.current.delete(c.key);
+            }}
+            note={c.note}
+            expanded={isExpanded(c)}
+            selected={c.key === (selectedKey ?? conversations[0]?.key)}
+            replying={c.key === replyKey}
+            onToggle={() => toggle(c)}
+            onFocus={() => setSelectedKey(c.key)}
+            actions={actionsOf(c)}
+          />
+        ))}
         {data.deleted ? (
           <p className="text-[11px] text-muted-foreground">
             Deleted.{" "}
@@ -380,19 +300,95 @@ export function AgentPanel({
           <p className="py-2 text-muted-foreground">No conversations yet. Ask below; the agent replies here.</p>
         ) : null}
       </div>
-      <div className="shrink-0 border-t border-border px-2 py-0.5">
-        <RowShortcutHints
-          hints={[
-            { keys: "↑↓", label: "move" },
-            { keys: "→←", label: "fold" },
-            { keys: "R", label: "reply" },
-            { keys: "M", label: "ask" },
-            { keys: "Esc", label: "close" },
-          ]}
-        />
+      <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 border-t border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+        {help ? (
+          <>
+            <RowShortcutHints
+              hints={[
+                { keys: "↑↓", label: "move" },
+                { keys: "→←", label: "fold" },
+                { keys: "R", label: "reply" },
+                { keys: "M", label: "ask" },
+                { keys: "X", label: "resolve" },
+                { keys: "⇧Enter", label: "run now" },
+                { keys: "P", label: "pin" },
+                { keys: "Esc", label: "close" },
+              ]}
+            />
+            {subject || pinned ? (
+              <>
+                <button type="button" onClick={togglePin} className="underline-offset-2 hover:text-foreground hover:underline">
+                  {pinned ? "Follow the selection" : "Pin the subject"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOverrideChange({ subject: null })}
+                  className="underline-offset-2 hover:text-foreground hover:underline"
+                >
+                  Ask without a subject
+                </button>
+              </>
+            ) : null}
+          </>
+        ) : null}
+        {starting ? <span>Starting…</span> : null}
+        <span className="flex-1" />
+        <button
+          type="button"
+          onClick={() => setHelp((open) => !open)}
+          aria-expanded={help}
+          aria-label="Show keys and subject options"
+          title="Keys and subject options (?)"
+          className="rounded px-1 hover:bg-accent"
+        >
+          ?
+        </button>
       </div>
 
       <div className="shrink-0 border-t border-border px-2 py-1.5">
+        {drafts ? (
+          <p className="mb-1 flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-[11px] text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+            <span className="flex-1">{drafts} {drafts === 1 ? "draft" : "drafts"} not sent</span>
+            <button
+              type="button"
+              onClick={() => data.submitDrafts.mutate()}
+              disabled={data.submitDrafts.isPending}
+              title="Send the drafts of this item to the agent"
+              className="rounded border border-amber-400 px-1.5 hover:bg-amber-200 dark:hover:bg-amber-900"
+            >
+              Send
+            </button>
+          </p>
+        ) : null}
+        {pinned ? (
+          <p className="mb-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+            {subject ? (
+              <span className="flex min-w-0 items-center gap-1 rounded-full border border-primary/40 bg-primary/5 px-1.5 text-foreground">
+                <Pin className="h-3 w-3 shrink-0" aria-hidden="true" />
+                <span className="truncate" title={subjectLabel(subject)}>{subjectLabel(subject)}</span>
+                <button type="button" onClick={togglePin} title="Follow the selection again" aria-label="Unpin the subject" className="rounded hover:bg-accent">
+                  <PinOff className="h-3 w-3" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOverrideChange({ subject: null })}
+                  title="Ask without a subject"
+                  aria-label="Remove the subject"
+                  className="rounded hover:bg-accent"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ) : (
+              <>
+                No subject
+                <button type="button" onClick={() => onOverrideChange(null)} className="text-primary underline">
+                  follow selection
+                </button>
+              </>
+            )}
+          </p>
+        ) : null}
         {quote && !replyTo ? (
           <p className="mb-1 flex items-center gap-1 text-[11px] text-muted-foreground">
             Quoting
@@ -411,36 +407,22 @@ export function AgentPanel({
               <X className="h-3 w-3" />
             </button>
           </p>
-        ) : (
-          <div role="radiogroup" aria-label="Request kind" className="mb-1 inline-flex overflow-hidden rounded border border-border">
-            {kinds.map((option) => (
-              <button
-                key={option.kind}
-                type="button"
-                role="radio"
-                aria-checked={kind === option.kind}
-                title={option.hint}
-                onClick={() => setKind(option.kind)}
-                className={`border-l border-border px-2 py-0.5 text-[11px] first:border-l-0 ${kind === option.kind ? "bg-secondary font-semibold text-foreground" : "text-muted-foreground hover:bg-accent"}`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        )}
+        ) : null}
         {data.readOnly ? (
           <p className="mb-1 text-[11px] text-muted-foreground">Read-only validation mode: the request is saved but the agent is not started.</p>
         ) : null}
         <div ref={composerRef} data-agent-composer="true">
           <CommentComposer
             key={replyKey ?? "new"}
-            placeholder={replyTo ? "Reply to the agent… (M)" : "Ask the agent… (M)"}
+            placeholder={
+              replyTo ? "Reply to the agent… (M)" : subject ? `Ask about ${subjectLabel(subject)}… (M)` : "Ask the agent… (M)"
+            }
             submitLabel={replyTo ? "Reply" : "Ask"}
             busy={data.send.isPending}
             collapsible
             onCollapse={focusList}
             onSubmit={async (body) => {
-              await data.send.mutateAsync({ body, kind, replyTo, quote: replyTo ? null : quote });
+              await data.send.mutateAsync({ body, replyTo, quote: replyTo ? null : quote });
               setReplyKey(null);
               if (!replyTo) onClearQuote();
             }}

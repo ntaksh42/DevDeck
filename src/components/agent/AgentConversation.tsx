@@ -42,18 +42,11 @@ export function AgentMessage({
   );
 }
 
-/** A small dot (and a word only where it asks for something) instead of a badge. */
+/** A small dot instead of a badge; red when the agent waits for the user. */
 function Status({ note }: { note: AgentNote }) {
-  if (noteNeedsYou(note)) {
-    return (
-      <span className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-red-600 dark:text-red-400">
-        <span className="h-1.5 w-1.5 rounded-full bg-red-500" aria-hidden="true" />
-        Needs you
-      </span>
-    );
-  }
-  const [dot, label] =
-    note.status === "draft"
+  const [dot, label] = noteNeedsYou(note)
+    ? ["bg-red-500", "Needs you"]
+    : note.status === "draft"
       ? ["border border-dashed border-gray-500", "Draft"]
       : note.status === "done"
         ? ["bg-gray-400", "Done"]
@@ -72,8 +65,8 @@ function lastActivity(note: AgentNote): string {
 
 /**
  * A conversation (one note and its replies) that folds to a single line:
- * status, kind, first line, reply count and last activity. The header is the
- * keyboard target; the list moves focus between headers. Rows are flat,
+ * status dot and first line (bold while it waits for the user). The header is
+ * the keyboard target; the list moves focus between headers. Rows are flat,
  * divided by a line; the selected one is shaded and shows its actions.
  */
 export const AgentConversation = forwardRef<
@@ -92,6 +85,7 @@ export const AgentConversation = forwardRef<
   const Chevron = expanded ? ChevronDown : ChevronRight;
   const firstLine = note.body.split("\n")[0];
   const kind = note.kind ? (KIND_LABELS[note.kind] ?? note.kind) : null;
+  const about = [kind, note.context ? `About ${note.context}` : null].filter(Boolean).join(" · ");
   const done = note.status === "done";
   return (
     <div
@@ -109,20 +103,13 @@ export const AgentConversation = forwardRef<
       >
         <Chevron className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
         <Status note={note} />
-        <span className="min-w-0 flex-1 truncate">{firstLine}</span>
-        {kind ? <span className="shrink-0 text-[11px] text-muted-foreground">{kind}</span> : null}
-        {note.replies.length ? (
-          <span className="shrink-0 text-[11px] text-muted-foreground" title={`${note.replies.length} replies`}>
-            {note.replies.length}↩
-          </span>
-        ) : null}
-        <span className="w-12 shrink-0 text-right text-[11px] text-muted-foreground">{formatRelativeDate(lastActivity(note))}</span>
+        <span className={`min-w-0 flex-1 truncate ${noteNeedsYou(note) ? "font-semibold" : ""}`}>{firstLine}</span>
       </button>
       {expanded ? (
         <div className="space-y-1.5 pb-2 pl-5 pr-1">
-          {note.context ? (
-            <p className="truncate text-[11px] text-muted-foreground" title={note.context}>
-              About {note.context}
+          {about ? (
+            <p className="truncate text-[11px] text-muted-foreground" title={about}>
+              {about}
             </p>
           ) : null}
           <AgentMessage author="user" when={note.createdAt} text={note.body} quote={note.quote} />
