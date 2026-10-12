@@ -4,6 +4,7 @@ import {
   isEditableTarget,
   isImeComposing,
   focusWorkItemCommentInput,
+  focusPullRequestCommentInput,
   focusFilterInput,
   focusPrimaryGrid,
   focusPrimaryPreview,
@@ -12,6 +13,7 @@ import {
 import { dispatchWorkItemCommand, gotoViewMapFromKeybindings } from "./appHelpers";
 import { GOTO_CHAIN_TIMEOUT_MS } from "./types";
 import { toggleAgentPanel } from "@/components/agent/agentSubject";
+import { bindFramePaneFocus } from "@/lib/paneFocus";
 import type { View } from "./types";
 
 export interface UseKeyboardShortcutsParams {
@@ -47,6 +49,18 @@ export function useKeyboardShortcuts({
   refreshCurrentView,
   focusNavigation,
 }: UseKeyboardShortcutsParams): void {
+  useEffect(() => {
+    // An iframe can gain focus before its images finish loading and onLoad
+    // fires. Bind its current document as soon as focus enters it as well.
+    function onWindowBlur() {
+      const frame = document.activeElement;
+      if (frame instanceof HTMLIFrameElement && frame.hasAttribute("srcdoc") && frame.sandbox.contains("allow-same-origin")) {
+        bindFramePaneFocus(frame);
+      }
+    }
+    window.addEventListener("blur", onWindowBlur);
+    return () => window.removeEventListener("blur", onWindowBlur);
+  }, []);
   // Stable ref so the effects below don't need syncAll in their dep arrays
   // (it's a new lambda every render). The ref is always current.
   const syncAllRef = useRef(syncAll);
@@ -204,6 +218,15 @@ export function useKeyboardShortcuts({
           event.preventDefault();
           focusViewsPanel();
         }
+        return;
+      }
+
+      if (!inEditableTarget && activeView === "myReviews" && (
+        matchesCombo(keybindings.focusComment, event) ||
+        (event.key.toLowerCase() === "m" && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey)
+      )) {
+        event.preventDefault();
+        focusPullRequestCommentInput();
         return;
       }
 

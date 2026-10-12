@@ -46,16 +46,16 @@ export function QueryDetailPanel({
           <thead>
             <tr>
               <th className="border-b border-border px-2.5 py-1.5 text-left text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground">
-                期間
+                Period
               </th>
               <th className="border-b border-border px-2.5 py-1.5 text-right text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground">
-                件数
+                Count
               </th>
               <th className="border-b border-border px-2.5 py-1.5 text-right text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground">
-                前期比
+                Change
               </th>
               <th className="border-b border-border px-2.5 py-1.5 text-left text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground">
-                備考
+                Note
               </th>
             </tr>
           </thead>

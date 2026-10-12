@@ -1,7 +1,8 @@
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { usePublishAgentSubject } from "@/components/agent/agentSubject";
+import { pipelineRunSubject } from "./pipelineAgent";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ExternalLink, Loader2, Play, Square } from "lucide-react";
+import { AlertTriangle, ExternalLink, Loader2 } from "lucide-react";
 import {
   cancelPipelineRun,
   commandErrorMessage,
@@ -32,12 +33,12 @@ import { PipelineStageRetryPanel } from "./PipelineStageRetryPanel";
 import { PreviewEmptyState, SELECT_EMPTY_HINT } from "@/components/StateDisplay";
 import { PreviewBand } from "@/components/PreviewBand";
 import { PreviewToolbarPortal } from "@/components/PreviewToolbarSlot";
+import { PreviewToolbar } from "@/components/PreviewToolbar";
+import { handlePreviewZoomKey, usePreviewZoom } from "@/lib/usePreviewZoom";
 
 const LOG_REFRESH_INTERVAL_MS = 15_000;
 const NO_LINES: string[] = [];
 
-const TOOLBAR_BUTTON =
-  "shrink-0 rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 const BAND_BUTTON =
   "inline-flex h-5 items-center gap-1 rounded border border-border bg-card px-1.5 text-[11px] font-medium normal-case tracking-normal text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -59,8 +60,8 @@ export function PipelineRunDetailPanel({
   const [now, setNow] = useState(() => Date.now());
   const initializedFor = useRef<number | null>(null);
   const timelineRef = useRef<HTMLDivElement | null>(null);
-  const rerunButtonRef = useRef<HTMLButtonElement | null>(null);
-  const cancelButtonRef = useRef<HTMLButtonElement | null>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const { canZoomIn, canZoomOut, resetZoom, zoom, zoomIn, zoomOut } = usePreviewZoom();
 
   // Log ids and timeline node ids are scoped to a single run, so a leftover
   // selection or expansion would point at nodes that do not exist on the newly
@@ -90,18 +91,8 @@ export function PipelineRunDetailPanel({
   });
   const detail = runQuery.data ?? null;
   const run = detail?.run ?? null;
-  usePublishAgentSubject(
-    run
-      ? {
-          kind: "pipeline-run",
-          id: run.buildId,
-          title: `${run.buildNumber ?? run.buildId} (${run.definitionName ?? "pipeline"}${run.result ? `, ${run.result}` : ""})`,
-          organizationId,
-          projectId,
-          webUrl: run.webUrl,
-        }
-      : null,
-  );
+  // Without a run this leaves the subject to the board (a selected watched pipeline's latest run).
+  usePublishAgentSubject(run ? pipelineRunSubject(run, organizationId, projectId) : undefined);
   const inProgress = !!run && isInProgressStatus(run.status);
 
   const tree = useMemo(() => (detail ? buildTimelineTree(detail.timeline) : []), [detail]);
@@ -203,10 +194,9 @@ export function PipelineRunDetailPanel({
   }
 
   function closeConfirm() {
-    const target = confirm === "cancel" ? cancelButtonRef.current : rerunButtonRef.current;
     setConfirm(null);
-    // Return focus to the button that opened the bar so keyboard use resumes there.
-    window.setTimeout(() => (target?.isConnected ? target : null)?.focus(), 0);
+    // Return focus to the View options button that opened the bar so keyboard use resumes there.
+    window.setTimeout(() => (menuTriggerRef.current?.isConnected ? menuTriggerRef.current : null)?.focus(), 0);
   }
 
   function runConfirmed() {
@@ -217,6 +207,7 @@ export function PipelineRunDetailPanel({
   }
 
   function handleKeyDown(event: ReactKeyboardEvent) {
+    if (handlePreviewZoomKey(event, { zoomIn, zoomOut, resetZoom })) return;
     if (isEditableTarget(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.key === "Escape" || event.key === "ArrowLeft") {
       event.preventDefault();
@@ -264,54 +255,32 @@ export function PipelineRunDetailPanel({
             {commandErrorMessage(runQuery.error) || "Run unavailable."}
           </div>
         ) : (
-          <div className="flex min-h-full flex-col">
+          <div className="flex min-h-full flex-col" style={{ zoom }}>
             {/* In the dock tab strip when the host provides a slot; inline otherwise. */}
             <PreviewToolbarPortal>
-              <div className="flex shrink-0 items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => openExternalUrl(run.webUrl)}
-                  aria-label="Open in Azure DevOps"
-                  title="Open in Azure DevOps"
-                  className={`${TOOLBAR_BUTTON} text-primary`}
-                >
-                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
-                <button
-                  ref={rerunButtonRef}
-                  type="button"
-                  onClick={() => askConfirm("rerun")}
-                  disabled={!canRerun || readOnly || rerun.isPending}
-                  aria-keyshortcuts="R"
-                  aria-label="Re-run"
-                  title={readOnly ? "Read-only validation mode is enabled" : "Re-run (R)"}
-                  className={TOOLBAR_BUTTON}
-                >
-                  {rerun.isPending ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                  ) : (
-                    <Play className="h-3.5 w-3.5" aria-hidden="true" />
-                  )}
-                </button>
-                {canCancel ? (
-                  <button
-                    ref={cancelButtonRef}
-                    type="button"
-                    onClick={() => askConfirm("cancel")}
-                    disabled={readOnly || cancel.isPending}
-                    aria-keyshortcuts="X"
-                    aria-label="Cancel run"
-                    title={readOnly ? "Read-only validation mode is enabled" : "Cancel run (X)"}
-                    className={TOOLBAR_BUTTON}
-                  >
-                    {cancel.isPending ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                    ) : (
-                      <Square className="h-3.5 w-3.5" aria-hidden="true" />
-                    )}
-                  </button>
-                ) : null}
-              </div>
+              <PreviewToolbar
+                zoom={{ zoom, canZoomIn, canZoomOut, onZoomIn: zoomIn, onZoomOut: zoomOut, onResetZoom: resetZoom }}
+                menuTriggerRef={menuTriggerRef}
+                items={[
+                  { label: "Open in Azure DevOps", onSelect: () => openExternalUrl(run.webUrl) },
+                  {
+                    label: readOnly ? "Re-run (read-only mode)" : "Re-run",
+                    hint: "R",
+                    onSelect: () => askConfirm("rerun"),
+                    disabled: !canRerun || readOnly || rerun.isPending,
+                  },
+                  ...(canCancel
+                    ? [
+                        {
+                          label: readOnly ? "Cancel run (read-only mode)" : "Cancel run",
+                          hint: "X",
+                          onSelect: () => askConfirm("cancel"),
+                          disabled: readOnly || cancel.isPending,
+                        },
+                      ]
+                    : []),
+                ]}
+              />
             </PreviewToolbarPortal>
 
             <div className="border-b border-border px-3 py-2">

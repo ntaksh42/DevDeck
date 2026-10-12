@@ -122,11 +122,13 @@ describe("PrReviewPanel status actions", () => {
   );
 
   it(
-    "shows an Email a link button in the review tab strip",
+    "keeps Email a link in the View options menu of the review tab strip",
     async () => {
       renderPanel();
       await screen.findByRole("button", { name: "Complete" }, { timeout: 8000 });
-      expect(screen.getByRole("button", { name: "Email a link" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Email a link" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "View options" }));
+      expect(screen.getByRole("menuitem", { name: "Email a link" })).toBeTruthy();
     },
     15000,
   );

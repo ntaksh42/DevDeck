@@ -73,7 +73,7 @@ export function AnalyzeGroupDialog({
     const view = savedViews.find((entry) => entry.id === viewId);
     if (!view) return;
     if (full) {
-      setError(`メンバーは 1 グループ ${MAX_ANALYZE_GROUP_MEMBERS} 件までです。`);
+      setError(`A group can have up to ${MAX_ANALYZE_GROUP_MEMBERS} queries.`);
       return;
     }
     update({
@@ -92,15 +92,15 @@ export function AnalyzeGroupDialog({
   function addQueryFromWiql() {
     const wiql = wiqlDraft.trim();
     if (!wiql) {
-      setError("WIQL を入力してください。");
+      setError("Enter a WIQL query.");
       return;
     }
     if (containsAsof(wiql)) {
-      setError("ASOF は Analyze 側で付与するため、WIQL には記述しないでください。");
+      setError("Analyze adds ASOF itself, so leave it out of the WIQL.");
       return;
     }
     if (full) {
-      setError(`メンバーは 1 グループ ${MAX_ANALYZE_GROUP_MEMBERS} 件までです。`);
+      setError(`A group can have up to ${MAX_ANALYZE_GROUP_MEMBERS} queries.`);
       return;
     }
     update({
@@ -121,7 +121,7 @@ export function AnalyzeGroupDialog({
 
   function save() {
     if (!isAnalyzeGroupComplete(draft)) {
-      setError("グループ名と、クエリを1件以上指定してください。");
+      setError("Enter a group name and add at least one query.");
       return;
     }
     onSave(draft);
@@ -156,11 +156,11 @@ export function AnalyzeGroupDialog({
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h2 id="analyze-group-dialog-title" className="text-sm font-semibold">
-            {isNew ? "グループを追加" : "グループを編集"}
+            {isNew ? "Add group" : "Edit group"}
           </h2>
           <button
             type="button"
-            aria-label="ダイアログを閉じる"
+            aria-label="Close dialog"
             onClick={close}
             className="rounded p-1 text-muted-foreground hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
@@ -170,7 +170,7 @@ export function AnalyzeGroupDialog({
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
           <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-semibold">グループ名</span>
+            <span className="text-xs font-semibold">Group name</span>
             <input
               autoFocus
               type="text"
@@ -181,18 +181,18 @@ export function AnalyzeGroupDialog({
           </label>
 
           <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-semibold">既定のプロジェクト</span>
+            <span className="text-xs font-semibold">Default project</span>
             <select
               value={draft.projectId}
               onChange={(event) => update({ projectId: event.target.value })}
               className="rounded-md border border-border bg-card px-2.5 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <option value="">選択してください…</option>
+              <option value="">Select…</option>
               {/* A stored project the account can no longer list would otherwise
                   be dropped silently on the next save, so keep it selectable. */}
               {draft.projectId &&
                 !projects.some((project) => project.projectId === draft.projectId) && (
-                  <option value={draft.projectId}>{draft.projectId} (一覧にありません)</option>
+                  <option value={draft.projectId}>{draft.projectId} (not in the list)</option>
                 )}
               {projects.map((project) => (
                 <option key={project.projectId} value={project.projectId}>
@@ -204,8 +204,8 @@ export function AnalyzeGroupDialog({
 
           <section className="flex flex-col gap-2">
             <h3 className="text-xs font-semibold">
-              クエリ{" "}
-              <span className="font-normal text-muted-foreground">{draft.queries.length} 件</span>
+              Queries{" "}
+              <span className="font-normal text-muted-foreground">{draft.queries.length}</span>
             </h3>
             {draft.queries.map((member) => (
               <div
@@ -223,7 +223,7 @@ export function AnalyzeGroupDialog({
                 </span>
                 <button
                   type="button"
-                  aria-label={`${member.name} を削除`}
+                  aria-label={`Remove ${member.name}`}
                   onClick={() =>
                     update({ queries: draft.queries.filter((entry) => entry.id !== member.id) })
                   }
@@ -235,17 +235,17 @@ export function AnalyzeGroupDialog({
             ))}
 
             <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/50 px-2.5 py-2">
-              <span className="whitespace-nowrap text-xs">保存済みビューから追加</span>
+              <span className="whitespace-nowrap text-xs">Add from a saved view</span>
               <select
                 value=""
-                aria-label="保存済みビュー"
+                aria-label="Saved view"
                 onChange={(event) => {
                   addQueryFromView(event.target.value);
                   event.target.value = "";
                 }}
                 className="min-w-[7rem] flex-1 rounded-md border border-border bg-card px-2 py-1 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <option value="">選択してください…</option>
+                <option value="">Select…</option>
                 {savedViews.map((view) => (
                   <option key={view.id} value={view.id}>
                     {view.name}
@@ -257,7 +257,7 @@ export function AnalyzeGroupDialog({
                 onClick={() => setShowWiqlEditor((value) => !value)}
                 className="whitespace-nowrap rounded-md border border-border bg-card px-2.5 py-1 text-xs hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                WIQL を直接書く
+                Write WIQL
               </button>
             </div>
 
@@ -266,7 +266,7 @@ export function AnalyzeGroupDialog({
                 <input
                   type="text"
                   value={wiqlName}
-                  placeholder="名前"
+                  placeholder="Name"
                   onChange={(event) => setWiqlName(event.target.value)}
                   className="rounded-md border border-border bg-card px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
@@ -279,7 +279,7 @@ export function AnalyzeGroupDialog({
                   className="resize-y rounded-md border border-border bg-card px-2 py-1 font-mono text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
                 <span className="text-[0.7rem] text-muted-foreground">
-                  ASOF は Analyze 側で自動的に付与します。WIQL には書かないでください。
+                  Analyze adds ASOF automatically. Do not write it in the WIQL.
                 </span>
                 <button
                   type="button"
@@ -287,7 +287,7 @@ export function AnalyzeGroupDialog({
                   className="flex items-center gap-1.5 self-start rounded-md border border-border bg-card px-2.5 py-1 text-xs hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <Plus className="h-3 w-3" aria-hidden="true" />
-                  クエリを追加
+                  Add query
                 </button>
               </div>
             )}
@@ -296,7 +296,7 @@ export function AnalyzeGroupDialog({
           <div className="flex gap-3">
             <div className="flex flex-1 flex-col gap-1.5">
               <span className="text-xs font-semibold" id="analyze-granularity-label">
-                既定の粒度
+                Default granularity
               </span>
               <div
                 className="flex overflow-hidden rounded-md border border-border"
@@ -321,7 +321,7 @@ export function AnalyzeGroupDialog({
               </div>
             </div>
             <label className="flex flex-1 flex-col gap-1.5">
-              <span className="text-xs font-semibold">既定の期間</span>
+              <span className="text-xs font-semibold">Default range</span>
               <select
                 value={draft.rangeCount}
                 onChange={(event) => update({ rangeCount: Number(event.target.value) })}
@@ -329,7 +329,7 @@ export function AnalyzeGroupDialog({
               >
                 {rangeOptions(draft.granularity).map((option) => (
                   <option key={option} value={option}>
-                    直近 {option} {draft.granularity === "day" ? "日" : "週"}
+                    Last {option} {draft.granularity === "day" ? "days" : "weeks"}
                   </option>
                 ))}
               </select>
@@ -341,7 +341,7 @@ export function AnalyzeGroupDialog({
 
         <div className="flex items-center justify-between gap-3 border-t border-border bg-muted/35 px-4 py-3">
           <span className="text-[0.7rem] text-muted-foreground">
-            Esc で閉じる · Ctrl+Enter で保存
+            Esc to close · Ctrl+Enter to save
           </span>
           <div className="flex gap-2">
             <button
@@ -349,14 +349,14 @@ export function AnalyzeGroupDialog({
               onClick={close}
               className="rounded-md border border-border bg-card px-3.5 py-1.5 text-sm hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              キャンセル
+              Cancel
             </button>
             <button
               type="button"
               onClick={save}
               className="rounded-md border border-primary bg-primary px-3.5 py-1.5 text-sm font-semibold text-primary-foreground hover:brightness-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              保存
+              Save
             </button>
           </div>
         </div>

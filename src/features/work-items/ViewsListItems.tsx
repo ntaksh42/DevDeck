@@ -134,6 +134,10 @@ export function ViewCard({
   );
 }
 
+/**
+ * The compact row doubles as the chip in the one-row display (`chip`): same
+ * content, but a fixed toolbar height and no grid placement.
+ */
 export function ViewCompactRow({
   view,
   query,
@@ -142,7 +146,8 @@ export function ViewCompactRow({
   buttonRef,
   onSelect,
   onEdit,
-}: ViewItemProps) {
+  chip = false,
+}: ViewItemProps & { chip?: boolean }) {
   const metaTitle = [
     `${view.sortKey ?? "changedDate"} ${(view.sortDirection ?? "desc").toUpperCase()}`,
     view.limit !== undefined ? `${view.limit} max results` : "no result limit",
@@ -162,7 +167,11 @@ export function ViewCompactRow({
       onClick={onSelect}
       onDoubleClick={onEdit}
       title={metaTitle}
-      className={`inline-flex w-fit max-w-full items-center gap-2 justify-self-start rounded border px-2 py-1 text-left outline-none transition-colors focus:ring-2 focus:ring-inset focus:ring-ring ${selectionClasses(
+      className={`inline-flex items-center text-left outline-none transition-colors focus:ring-2 focus:ring-inset focus:ring-ring ${
+        chip
+          ? "h-8 shrink-0 gap-1.5 rounded-md border px-2.5"
+          : "w-fit max-w-full gap-2 justify-self-start rounded border px-2 py-1"
+      } ${selectionClasses(
         selected,
         stats.alerting,
       )}`}

@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { commandErrorMessage, type Organization } from "@/lib/azdoCommands";
 import { LoadingState, ErrorState } from "@/components/StateDisplay";
+import { handlePaneFocusKey } from "@/lib/paneFocus";
 import { MyReviewsGrid } from "@/features/pull-requests/MyReviewsGrid";
 import type { MyReviewsSelectRequest } from "@/features/pull-requests/MyReviewsGrid";
 import type { WorkItemQueryView } from "@/features/work-items/workItemViewsStorage";
@@ -60,7 +61,10 @@ export function AppContent({
 }: AppContentProps) {
   return (
     <section
-      className={`flex min-h-0 flex-1 flex-col px-3 py-3 lg:px-5 ${
+      data-focus-pane="view"
+      tabIndex={-1}
+      onKeyDownCapture={handlePaneFocusKey}
+      className={`flex min-h-0 flex-1 flex-col px-3 py-3 lg:px-5 outline-none ${
         activeView === "settings" || organizations.length === 0
           ? "overflow-auto"
           : "overflow-hidden"

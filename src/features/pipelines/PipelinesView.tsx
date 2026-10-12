@@ -10,6 +10,8 @@ import {
 } from "@/lib/azdoCommands";
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { DockableWorkspace, type DockablePanelSpec } from "@/components/DockableWorkspace";
+import { usePublishAgentListScope } from "@/components/agent/agentListScope";
+import { approvalsAgentList } from "./pipelineAgent";
 import { PreviewToolbarSlotProvider, usePreviewToolbarSlot } from "@/components/PreviewToolbarSlot";
 import { FilterableSelect } from "./FilterableSelect";
 import { NO_RUN_FILTERS, type PipelineRunFilters } from "./pipelineBoard";
@@ -59,6 +61,7 @@ export function PipelinesView() {
   const queueButtonRef = useRef<HTMLButtonElement | null>(null);
   const queueWasOpenRef = useRef(false);
   const previewToolbar = usePreviewToolbarSlot();
+  const boardToolbar = usePreviewToolbarSlot();
   const projectsQuery = useQuery({
     queryKey: ["pipelineProjects", selectedOrganizationId],
     queryFn: () => listPipelineProjects({ organizationId: selectedOrganizationId }),
@@ -96,6 +99,9 @@ export function PipelinesView() {
     enabled: !!selectedOrganizationId && !!selectedProject,
     staleTime: 30_000,
   });
+  usePublishAgentListScope(
+    approvalsQuery.data?.length ? approvalsAgentList(approvalsQuery.data, selectedProject?.name) : null,
+  );
   const approvalMutation = useMutation({
     mutationFn: updatePipelineApproval,
     onSuccess: () => {
@@ -204,9 +210,9 @@ export function PipelinesView() {
   }, [selectedOrganizationId]);
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <div className="relative shrink-0 rounded-md border border-border bg-card">
-        {/* One compact row: the selectors carry the view, so they stay, but without a card's worth of height. */}
-        <div className="flex flex-wrap items-center gap-2 px-2 py-1.5">
+      <div className="relative shrink-0">
+        {/* One borderless row, same height as the PR / WI Search rows. */}
+        <div className="flex flex-wrap items-center gap-2">
           <div className="w-64">
             <FilterableSelect
               ariaLabel="Project"
@@ -311,9 +317,14 @@ export function PipelinesView() {
         panels={[
           {
             id: "grid",
-            title: "Pipelines",
+            title: "Watched pipelines",
             minWidth: 480,
-            headerActions: <PipelineFilterBar filters={filters} onChange={setFilters} />,
+            headerActions: (
+              <div className="flex h-full min-w-0 items-center gap-1">
+                <PipelineFilterBar filters={filters} onChange={setFilters} />
+                {boardToolbar.slot}
+              </div>
+            ),
             content: (
               <PipelineSubscriptionsBoard
                 organizationId={selectedOrganizationId}
@@ -322,6 +333,7 @@ export function PipelinesView() {
                 filters={filters}
                 approvalCount={approvalsQuery.data?.length ?? 0}
                 approvalsOpen={approvalsOpen}
+                toolbarSlot={boardToolbar.element}
                 onToggleApprovals={() => setApprovalsOpen((open) => !open)}
                 emptyContent={
                   <PipelineWatchSuggestions

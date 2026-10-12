@@ -109,7 +109,8 @@ describe("App — Work Items", () => {
     expect(previewLabels).not.toContain("Created");
     expect(previewLabels).not.toContain("Changed");
     expect(previewLabels).not.toContain("Severity");
-    fireEvent.click(screen.getByRole("button", { name: "Configure preview fields" }));
+    fireEvent.click(screen.getByRole("button", { name: "View options" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Configure preview fields…" }));
     fireEvent.click(screen.getByLabelText("Severity"));
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     const updatedPreviewLabels = [...document.querySelectorAll("dt")].map((node) =>
@@ -349,7 +350,8 @@ describe("App — Work Items", () => {
     fireEvent.keyDown(workItemsGrid, { key: "s" });
     fireEvent.click(await screen.findByRole("button", { name: "Closed" }));
     expect(await screen.findByText("1 pending")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Field presets" }));
+    fireEvent.click(screen.getByRole("button", { name: "View options" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Field presets/ }));
     fireEvent.change(screen.getByLabelText("New preset name"), {
       target: { value: "Close it" },
     });

@@ -3,6 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
 import { MessageSquarePlus } from "lucide-react";
 import { useLatestRef } from "@/lib/useLatestRef";
 import { focusPrimaryGrid } from "@/lib/utils";
+import { bindFramePaneFocus } from "@/lib/paneFocus";
 import { anchorFromRange, blockSpanRange, collapseWhitespace } from "./resultAnchoring";
 import { PIN_CLASS, type CommentRequest, type FrameState, type NoteAnchor, type NoteTone } from "./types";
 
@@ -157,6 +158,7 @@ export function ResultFrame({
   }, [frame, frameRef, updateMarkers]);
 
   function handleLoad() {
+    if (frameRef.current) bindFramePaneFocus(frameRef.current);
     const doc = frameRef.current?.contentDocument;
     if (doc?.head) {
       const style = doc.createElement("style");
@@ -245,6 +247,7 @@ export function ResultFrame({
       role="region"
       aria-label="Investigation result. Comment mode: arrow keys move between blocks, C comments, Enter opens a note, Escape returns to the grid."
       data-agent-result-frame="true"
+      data-pane-focus-target="true"
       onKeyDown={handleKeyDown}
       onFocus={(e) => e.target === wrapRef.current && setBlockMode(true)}
       onBlur={(e) => e.target === wrapRef.current && setBlockMode(false)}

@@ -1,5 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { commandErrorMessage } from '@/lib/azdoCommands';
+import { focusPrimaryGrid, isEditableTarget } from '@/lib/utils';
+import { ListStateChip } from '@/components/ListStatusBar';
 import { CreateWorkItemDialog, type CreateWorkItemDraft } from './CreateWorkItemDialog';
 import { SnoozeMenu } from '@/components/SnoozeMenu';
 import { SnoozedItemsPanel } from '@/components/SnoozedItemsPanel';
@@ -29,7 +31,9 @@ import { WiFieldColumnsSection } from './WiFieldColumnsSection';
 import { useWiGridState } from './useWiGridState';
 import { useWiGridLogic } from './useWiGridLogic';
 import type { WorkItemSummary } from '@/lib/azdoCommands';
+import { usePublishAgentListScope } from '@/components/agent/agentListScope';
 import { usePublishAgentSubject } from '@/components/agent/agentSubject';
+import { wiAgentList, wiFilterNotes, type WiAgentListInfo } from './wiAgentList';
 
 // Re-export so existing importers (e.g. bulkSelectionSummary.test.ts) keep working.
 export { summarizeBy } from './BulkActionBar';
@@ -60,7 +64,10 @@ export function WorkItemsGrid({
   triageScope,
   snoozeOrganizationId,
   filterBar,
+  agentList,
 }: {
+  /** Offered to the Agent panel as "This list" (the visible rows and these notes). */
+  agentList?: WiAgentListInfo;
   results: WorkItemSummary[];
   loading: boolean;
   searched: boolean;
@@ -96,6 +103,11 @@ export function WorkItemsGrid({
     { results, loading, triageScope, extraColumns, activeExternalFilterCount, onClearExternalFilters, autoFocus },
     state,
   );
+  usePublishAgentListScope(
+    agentList && searched
+      ? wiAgentList(agentList, g.displayed, () => wiFilterNotes(state.columnFilters, state.staleOnly))
+      : undefined,
+  );
   const selectedForAgent = g.selectedItem;
   usePublishAgentSubject(
     selectedForAgent
@@ -129,8 +141,25 @@ export function WorkItemsGrid({
     ? `${WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY}:${storageKeyScope}`
     : WORK_ITEM_PREVIEW_WIDTH_STORAGE_KEY;
 
+  /** Back from the Done / Snoozed list to the open one, keeping keyboard focus in the grid. */
+  function leaveStateView() {
+    state.setShowDone(false);
+    state.setShowSnoozed(false);
+    window.setTimeout(focusPrimaryGrid, 0);
+  }
+  const stateView = state.showSnoozed ? 'Snoozed' : state.showDone ? 'Done' : null;
+
   const gridPane = (
-    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card">
+    <div data-grid-focus-fallback="true" tabIndex={-1}
+      className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card"
+      onKeyDown={(event) => {
+        // Escape from the Done / Snoozed list (rows or status bar) goes back to the open list.
+        if (event.key !== 'Escape' || !stateView || state.openFilterCol || g.checkedItems.length > 0) return;
+        if (isEditableTarget(event.target)) return;
+        event.preventDefault();
+        leaveStateView();
+      }}
+    >
       {state.showSnoozed && snoozeOrganizationId ? (
         <SnoozedItemsPanel
           organizationId={snoozeOrganizationId}
@@ -160,6 +189,7 @@ export function WorkItemsGrid({
             extraColumns={extraColumns}
           />
           <WiGridBody
+            paneWidth={state.gridViewport.width}
             showBlockingLoading={g.showBlockingLoading}
             searched={searched}
             sorted={g.sorted}
@@ -203,6 +233,7 @@ export function WorkItemsGrid({
         snoozeEnabled={state.snoozeEnabled}
         showSnoozed={state.showSnoozed}
         setShowSnoozed={state.setShowSnoozed}
+        snoozedCount={state.snoozedKeys.size}
         activeFilterCount={g.activeFilterCount}
         clearAllFilters={g.clearAllFilters}
         staleOnly={state.staleOnly}
@@ -340,7 +371,12 @@ export function WorkItemsGrid({
         <DockableWorkspace
           storageKey={`${previewStorageKey}:dockview:v1`}
           panels={[
-            { id: 'grid', title: 'Work items', content: gridPane, minWidth: 480, headerActions: filterBar },
+            { id: 'grid', title: 'Work items', content: gridPane, minWidth: 480, headerActions: (
+              <div className="flex h-full min-w-0 items-center gap-1">
+                {stateView ? <ListStateChip label={stateView} onClear={leaveStateView} /> : null}
+                {filterBar}
+              </div>
+            ) },
             {
               id: 'preview',
               title: 'Preview',

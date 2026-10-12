@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { Trash2, Zap } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { ShortcutHint } from '@/components/ShortcutHint';
 import { useCloseOnOutsidePointer } from './PreviewEditors';
 import { MAX_FIELD_PRESETS, type WorkItemFieldPreset } from './fieldPresetsStorage';
 
+// Popover half of the "Field presets…" View options item: no trigger of its
+// own, the toolbar's menu opens it and gets focus back on `onClose`.
 export function PresetMenu({
+  open,
+  onClose,
   canSave,
   onApply,
   onDelete,
@@ -12,6 +16,8 @@ export function PresetMenu({
   presets,
   stagedCount,
 }: {
+  open: boolean;
+  onClose: () => void;
   canSave: boolean;
   onApply: (preset: WorkItemFieldPreset) => void;
   onDelete: (id: string) => void;
@@ -19,21 +25,12 @@ export function PresetMenu({
   presets: WorkItemFieldPreset[];
   stagedCount: number;
 }) {
-  const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const menuRef = useCloseOnOutsidePointer<HTMLDivElement>(open, () => setOpen(false));
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useCloseOnOutsidePointer<HTMLDivElement>(open, onClose);
   const popoverRef = useRef<HTMLDivElement>(null);
-  const wasOpenRef = useRef(false);
-  // Open onto the first control; on close return focus to the trigger so
-  // keyboard users resume from the preview header, not <body>.
+  // Open onto the first control.
   useEffect(() => {
-    if (open && !wasOpenRef.current) {
-      popoverRef.current?.querySelector<HTMLElement>("button, input")?.focus();
-    } else if (!open && wasOpenRef.current) {
-      triggerRef.current?.focus();
-    }
-    wasOpenRef.current = open;
+    if (open) popoverRef.current?.querySelector<HTMLElement>("button, input")?.focus();
   }, [open]);
 
   return (
@@ -44,21 +41,10 @@ export function PresetMenu({
         if (event.key === "Escape" && open) {
           event.preventDefault();
           event.stopPropagation();
-          setOpen(false);
+          onClose();
         }
       }}
     >
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-expanded={open}
-        aria-label="Field presets"
-        title="Field presets — press 1-9 to apply"
-        onClick={() => setOpen((current) => !current)}
-        className="inline-flex h-5 w-5 items-center justify-center rounded border border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground"
-      >
-        <Zap className="h-3 w-3" aria-hidden="true" />
-      </button>
       {open ? (
         <div
           ref={popoverRef}
@@ -77,7 +63,7 @@ export function PresetMenu({
                   type="button"
                   onClick={() => {
                     onApply(preset);
-                    setOpen(false);
+                    onClose();
                   }}
                   title={preset.fields
                     .map((field) => `${field.label}: ${field.value}`)

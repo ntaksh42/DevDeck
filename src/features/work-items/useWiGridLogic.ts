@@ -278,7 +278,11 @@ export function useWiGridLogic(
     if (!scroller) return;
     const scrollerElement = scroller;
     function updateViewport() {
-      setGridViewport({ height: scrollerElement.clientHeight, scrollTop: scrollerElement.scrollTop });
+      setGridViewport({
+        width: scrollerElement.clientWidth,
+        height: scrollerElement.clientHeight,
+        scrollTop: scrollerElement.scrollTop,
+      });
     }
     updateViewport();
     scrollerElement.addEventListener("scroll", updateViewport, { passive: true });

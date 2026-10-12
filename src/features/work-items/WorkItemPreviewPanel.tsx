@@ -23,7 +23,7 @@ import {
   type WorkItemDuplicateDraft,
 } from './workItemChanges';
 import { makeWorkItemPreviewKeyDown } from './workItemPreviewKeyDown';
-import { WorkItemPreviewActions } from './WorkItemPreviewActions';
+import { WorkItemPreviewToolbar } from './WorkItemPreviewToolbar';
 import {
   AssigneePicker,
   ClassificationPicker,
@@ -34,13 +34,11 @@ import {
 } from './PreviewEditors';
 import { CommentComposer } from './CommentComposer';
 import { WorkItemPreviewDetails } from './WorkItemPreviewDetails';
-import { PresetMenu } from './PreviewPresetMenu';
 import { StagedStatusChip } from './StagedStatusChip';
 import { useWorkItemStagedChanges } from './useWorkItemStagedChanges';
 import { useWorkItemPickerState } from './useWorkItemPickerState';
 import { usePreviewZoom } from '@/lib/usePreviewZoom';
 import { useMentionDisplayNames } from './useMentionDisplayNames';
-import { PreviewZoomControls } from '@/components/PreviewZoomControls';
 
 // Re-exported so existing importers (and the unit tests) keep a single entry
 // point; the implementations live in the sibling modules linked below.
@@ -237,10 +235,8 @@ export function WorkItemPreviewPanel({
   return (
     <aside
       ref={panelRef}
-      // The focus ring lives on an ::after overlay so it is painted above the
-      // opaque children (e.g. the side-by-side comments column) instead of
-      // being hidden underneath them like an inset box-shadow would be.
-      className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-border bg-card shadow-sm transition-[border-color] after:pointer-events-none after:absolute after:inset-0 after:z-10 after:rounded-[inherit] after:content-[''] focus-within:border-primary focus-within:after:ring-4 focus-within:after:ring-inset focus-within:after:ring-primary/25"
+      data-focus-pane="work-item-preview"
+      className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-border bg-card shadow-sm"
       onKeyDown={handlePreviewPanelKeyDown}
     >
       {!selectedItem ? (
@@ -280,32 +276,38 @@ export function WorkItemPreviewPanel({
                     applyError={applyError}
                   />
                 }
-                actionsControl={
-                  <WorkItemPreviewActions
+                renderToolbar={(layout) => (
+                  <WorkItemPreviewToolbar
                     preview={preview}
                     onDuplicate={onDuplicate ? duplicateSelected : null}
+                    zoom={{
+                      zoom,
+                      canZoomIn,
+                      canZoomOut,
+                      onZoomIn: zoomIn,
+                      onZoomOut: zoomOut,
+                      onResetZoom: resetZoom,
+                    }}
+                    presets={{
+                      canSave: stagedEntries.length > 0,
+                      onApply: applyPreset,
+                      onDelete: deletePreset,
+                      onSave: savePresetFromStaged,
+                      presets,
+                      stagedCount: stagedEntries.length,
+                    }}
+                    sideBySide={layout.sideBySide}
+                    onToggleCommentsLayout={layout.onToggle}
+                    fieldConfig={{
+                      organizationId: preview.organizationId,
+                      projectId: preview.projectId,
+                      selectedFieldKeys: selectedPreviewFieldKeys,
+                      onSelectedFieldKeysChange: setSelectedPreviewFieldKeys,
+                      customPreviewFields,
+                      onCustomPreviewFieldsChange,
+                    }}
                   />
-                }
-                presetsControl={
-                  <PresetMenu
-                    canSave={stagedEntries.length > 0}
-                    onApply={applyPreset}
-                    onDelete={deletePreset}
-                    onSave={savePresetFromStaged}
-                    presets={presets}
-                    stagedCount={stagedEntries.length}
-                  />
-                }
-                zoomControl={
-                  <PreviewZoomControls
-                    canZoomIn={canZoomIn}
-                    canZoomOut={canZoomOut}
-                    zoom={zoom}
-                    onZoomIn={zoomIn}
-                    onZoomOut={zoomOut}
-                    onReset={resetZoom}
-                  />
-                }
+                )}
                 deleteCommentError={deleteCommentError}
                 deletingCommentId={deletingCommentId}
                 deletePending={deletePending}
@@ -317,14 +319,12 @@ export function WorkItemPreviewPanel({
                 mentionPriorityNames={mentionPriorityNames}
                 selfOrg={selfOrg}
                 onMentionApplied={handleMentionApplied}
-                onCustomPreviewFieldsChange={onCustomPreviewFieldsChange}
                 onDeleteComment={deleteComment}
                 onEditComment={editComment}
                 onToggleCommentReaction={toggleCommentReaction}
                 reactionPendingCommentId={reactionPendingCommentId}
                 preview={preview}
                 selectedFieldKeys={selectedPreviewFieldKeys}
-                onSelectedFieldKeysChange={setSelectedPreviewFieldKeys}
                 tagsPending={applying}
                 onTagsChange={stageTags}
                 titlePending={updateFieldsPending}

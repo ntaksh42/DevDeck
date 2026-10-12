@@ -1,5 +1,6 @@
 import type { RefObject } from 'react';
 import { DockFilterBar, type DockFilterChip } from '@/components/DockFilterBar';
+import { ListStateChip } from '@/components/ListStatusBar';
 import { FilterAutocomplete } from '@/components/FilterAutocomplete';
 import { DraftsCheckbox } from './DraftsCheckbox';
 
@@ -12,6 +13,8 @@ type ReviewFilterBarProps = {
   /** Drafts in the unfiltered list, shown next to the Show Drafts toggle. */
   draftCount?: number;
   filterSuggestionPool: string[];
+  /** Set while the list shows its Done / Snoozed state; the chip returns to the open list. */
+  stateView?: { label: string; onClear: () => void };
   open: boolean;
   onOpen: () => void;
   /** `returnFocus` is false when focus already moved elsewhere (blur). */
@@ -27,6 +30,7 @@ export function ReviewFilterBar({
   onShowDraftsChange,
   draftCount = 0,
   filterSuggestionPool,
+  stateView,
   open,
   onOpen,
   onClose,
@@ -36,6 +40,7 @@ export function ReviewFilterBar({
 
   return (
     <div className="flex h-full min-w-0 items-center">
+      {stateView ? <ListStateChip {...stateView} /> : null}
       <DockFilterBar
         label="Filter reviews"
         open={open}

@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, Plus, SlidersHorizontal, X } from "lucide-react";
+import { Loader2, Plus, X } from "lucide-react";
 import type { WorkItemFieldOption } from "@/lib/azdoCommands";
 import { commandErrorMessage, listWorkItemFields } from "@/lib/azdoCommands";
 import {
@@ -17,7 +17,12 @@ import {
   PREVIEW_FIELD_DEFINITIONS,
 } from "./workItemPreviewHelpers";
 
+// Popover half of the "Configure preview fields…" View options item: no
+// trigger of its own, the toolbar's menu opens it and gets focus back on
+// `onClose`.
 export function FieldConfigMenu({
+  open: fieldMenuOpen,
+  onClose,
   organizationId,
   projectId,
   selectedFieldKeys,
@@ -25,6 +30,8 @@ export function FieldConfigMenu({
   customPreviewFields,
   onCustomPreviewFieldsChange,
 }: {
+  open: boolean;
+  onClose: () => void;
   organizationId: string;
   projectId: string;
   selectedFieldKeys: PreviewFieldKey[];
@@ -32,29 +39,22 @@ export function FieldConfigMenu({
   customPreviewFields: CustomPreviewField[];
   onCustomPreviewFieldsChange: (fields: CustomPreviewField[]) => void;
 }) {
-  const [fieldMenuOpen, setFieldMenuOpen] = useState(false);
   const [customFieldLabel, setCustomFieldLabel] = useState("");
   const [customFieldReferenceName, setCustomFieldReferenceName] = useState("");
   const [customFieldSearch, setCustomFieldSearch] = useState("");
   const [customFieldError, setCustomFieldError] = useState<string | null>(null);
   const fieldMenuRef = useCloseOnOutsidePointer<HTMLDivElement>(
     fieldMenuOpen,
-    () => setFieldMenuOpen(false),
+    onClose,
   );
-  const fieldMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const fieldMenuPopoverRef = useRef<HTMLDivElement>(null);
-  const fieldMenuWasOpenRef = useRef(false);
-  // Open onto the first checkbox; on close hand focus back to the gear trigger
-  // so keyboard users aren't dropped onto <body> (mirrors the field pickers).
+  // Open onto the first checkbox.
   useEffect(() => {
-    if (fieldMenuOpen && !fieldMenuWasOpenRef.current) {
+    if (fieldMenuOpen) {
       fieldMenuPopoverRef.current
         ?.querySelector<HTMLInputElement>('input[type="checkbox"]')
         ?.focus();
-    } else if (!fieldMenuOpen && fieldMenuWasOpenRef.current) {
-      fieldMenuTriggerRef.current?.focus();
     }
-    fieldMenuWasOpenRef.current = fieldMenuOpen;
   }, [fieldMenuOpen]);
   const fieldOptionsQuery = useQuery({
     queryKey: workItemQueryKeys.fields(organizationId, projectId),
@@ -131,21 +131,10 @@ export function FieldConfigMenu({
           // panel (which would discard staged edits / leave the panel).
           event.preventDefault();
           event.stopPropagation();
-          setFieldMenuOpen(false);
+          onClose();
         }
       }}
     >
-      <button
-        ref={fieldMenuTriggerRef}
-        type="button"
-        aria-expanded={fieldMenuOpen}
-        aria-label="Configure preview fields"
-        title="Configure preview fields"
-        onClick={() => setFieldMenuOpen((open) => !open)}
-        className="inline-flex h-5 w-5 items-center justify-center rounded border border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground"
-      >
-        <SlidersHorizontal className="h-3 w-3" aria-hidden="true" />
-      </button>
       {fieldMenuOpen ? (
         <div
           ref={fieldMenuPopoverRef}
@@ -284,7 +273,7 @@ export function FieldConfigMenu({
             </button>
             <button
               type="button"
-              onClick={() => setFieldMenuOpen(false)}
+              onClick={onClose}
               className="rounded bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:bg-primary/90"
             >
               Done

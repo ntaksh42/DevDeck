@@ -87,55 +87,83 @@ export function ViewsListPanel({
   onKeyDown,
 }: ViewsListPanelProps) {
   const stats = views.map((view, index) => viewCardStats(view, viewCountQueries[index]));
-  const selectedCount = selectedView
-    ? viewCountQueries[views.findIndex((view) => view.id === selectedView.id)]?.data
-    : undefined;
-  const alertingCount = stats.filter((stat) => stat.alerting).length;
+
+  // "Collapsed" is the default one-row chip display (a borderless toolbar row,
+  // same height as the search rows); expanded is the card/compact-row grid.
+  const chips = collapsed;
+  const iconBtn = chips ? "h-8 w-8" : "h-7 w-7";
+  const textBtn = chips ? "h-8" : "h-7";
+
+  const toggle = (
+    <button
+      ref={collapseToggleRef}
+      type="button"
+      onClick={onCollapsedToggle}
+      aria-expanded={!collapsed}
+      aria-keyshortcuts="Control+B"
+      title={collapsed ? "Show view cards (Ctrl+B)" : "Collapse to one row of chips (Ctrl+B)"}
+      className={`inline-flex shrink-0 items-center justify-center rounded-md border border-border hover:bg-secondary ${iconBtn}`}
+    >
+      {collapsed ? (
+        <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+      ) : (
+        <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+      )}
+    </button>
+  );
 
   return (
-    <div className="shrink-0 overflow-hidden rounded-md border border-border bg-card">
-      <div className="flex items-center justify-between border-b border-border px-2 py-1">
-        <div className="flex min-w-0 items-center gap-2">
-          <button
-            ref={collapseToggleRef}
-            type="button"
-            onClick={onCollapsedToggle}
-            aria-expanded={!collapsed}
-            aria-keyshortcuts="Control+B"
-            title={collapsed ? "Show the view list (Ctrl+B)" : "Hide the view list (Ctrl+B)"}
-            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border hover:bg-secondary"
-          >
-            {collapsed ? (
-              <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+    <div
+      className={
+        chips ? "shrink-0" : "shrink-0 overflow-hidden rounded-md border border-border bg-card"
+      }
+    >
+      <div
+        className={
+          chips
+            ? "flex items-center gap-2"
+            : "flex items-center justify-between border-b border-border px-2 py-1"
+        }
+      >
+        {chips ? (
+          <>
+            {toggle}
+            <h2 className="shrink-0 text-sm font-semibold">Views</h2>
+            {views.length === 0 ? (
+              <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                No saved WIQL views (N to add one)
+              </p>
             ) : (
-              <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+              <div
+                role="listbox"
+                aria-label="Saved work item views"
+                aria-orientation="horizontal"
+                data-views-panel="true"
+                className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto"
+                style={{ scrollbarWidth: "thin" }}
+                onKeyDown={onKeyDown}
+              >
+                {views.map((view, index) => (
+                  <ViewCompactRow
+                    key={view.id}
+                    chip
+                    view={view}
+                    query={viewCountQueries[index]}
+                    stats={stats[index]}
+                    selected={selectedView?.id === view.id}
+                    buttonRef={(element) => {
+                      viewButtonRefs.current[index] = element;
+                    }}
+                    onSelect={() => onSelectView(view)}
+                    onEdit={() => onEditView(view)}
+                  />
+                ))}
+              </div>
             )}
-          </button>
-          {collapsed ? (
-            // Collapsed keeps the essentials on one line so hiding the list does
-            // not also hide which view is on screen.
-            <div className="flex min-w-0 items-center gap-2">
-              <h2 className="shrink-0 text-sm font-semibold">Views</h2>
-              {selectedView ? (
-                <>
-                  <span className="text-xs text-muted-foreground">·</span>
-                  <span className="min-w-0 truncate text-sm font-medium" title={selectedView.name}>
-                    {selectedView.name}
-                  </span>
-                  {typeof selectedCount === "number" ? (
-                    <span className="shrink-0 rounded border border-border px-1.5 text-xs tabular-nums text-muted-foreground">
-                      {selectedCount}
-                    </span>
-                  ) : null}
-                </>
-              ) : null}
-              {alertingCount > 0 ? (
-                <span className="shrink-0 rounded border border-destructive/40 bg-destructive/10 px-1.5 text-xs font-medium text-destructive">
-                  {alertingCount} alert{alertingCount === 1 ? "" : "s"}
-                </span>
-              ) : null}
-            </div>
-          ) : (
+          </>
+        ) : (
+          <div className="flex min-w-0 items-center gap-2">
+            {toggle}
             <div className="flex min-w-0 items-baseline gap-2">
               <h2 className="text-sm font-semibold">Views</h2>
               <p className="text-xs text-muted-foreground">
@@ -144,9 +172,11 @@ export function ViewsListPanel({
                   : `${views.length} saved view${views.length === 1 ? "" : "s"}`}
               </p>
             </div>
-          )}
-        </div>
-        <div className="flex items-center gap-1.5">
+          </div>
+        )}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {chips ? null : (
+          <>
           <div
             role="group"
             aria-label="View list density"
@@ -154,7 +184,6 @@ export function ViewsListPanel({
           >
             <button
               type="button"
-              disabled={collapsed}
               aria-pressed={cardMode === "card"}
               onClick={() => onCardModeChange("card")}
               title="Card view list"
@@ -166,7 +195,6 @@ export function ViewsListPanel({
             </button>
             <button
               type="button"
-              disabled={collapsed}
               aria-pressed={cardMode === "compact"}
               onClick={() => onCardModeChange("compact")}
               title="Compact view list"
@@ -177,6 +205,8 @@ export function ViewsListPanel({
               <Rows3 className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </div>
+          </>
+          )}
           <div
             role="group"
             aria-label="Result layout"
@@ -209,6 +239,8 @@ export function ViewsListPanel({
               Board
             </button>
           </div>
+          {chips ? null : (
+          <>
           <button
             type="button"
             disabled={!selectedView}
@@ -259,7 +291,23 @@ export function ViewsListPanel({
             )}
             <span className="sr-only">Preview</span>
           </button>
+          </>
+          )}
           <WorkItemViewsOverflowMenu
+            viewActions={
+              chips
+                ? {
+                    pinned: !!selectedView?.pinned,
+                    previewVisible: selectedView?.previewVisible !== false,
+                    canMoveLeft: !!selectedView && selectedViewIndex > 0,
+                    canMoveRight: !!selectedView && selectedViewIndex < views.length - 1,
+                    onPinToggle,
+                    onPreviewToggle,
+                    onMoveLeft,
+                    onMoveRight,
+                  }
+                : undefined
+            }
             hasSelectedView={!!selectedView}
             hasViews={views.length > 0}
             importInputRef={importInputRef}
@@ -274,7 +322,7 @@ export function ViewsListPanel({
             onClick={onEditOpen}
             aria-keyshortcuts="E"
             title="Edit selected view (E)"
-            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+            className={`inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50 ${textBtn}`}
           >
             Edit
           </button>
@@ -283,7 +331,7 @@ export function ViewsListPanel({
             disabled={views.length === 0}
             onClick={onRun}
             title="Run all views (R)"
-            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
+            className={`inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50 ${textBtn}`}
           >
             <Play className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
@@ -292,7 +340,7 @@ export function ViewsListPanel({
             aria-keyshortcuts="N"
             onClick={onAddOpen}
             title="Add new view (N)"
-            className="inline-flex h-7 items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+            className={`inline-flex items-center gap-1.5 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 ${textBtn}`}
           >
             <Plus className="h-3.5 w-3.5" aria-hidden="true" />
             Add
@@ -303,13 +351,15 @@ export function ViewsListPanel({
       {viewMessage ? (
         <div
           role="status"
-          className="border-b border-border px-3 py-1 text-xs text-muted-foreground"
+          className={`text-xs text-muted-foreground ${
+            chips ? "pt-1" : "border-b border-border px-3 py-1"
+          }`}
         >
           {viewMessage}
         </div>
       ) : null}
 
-      {collapsed ? null : views.length === 0 ? (
+      {chips ? null : views.length === 0 ? (
         <div className="px-3 py-6 text-center text-sm text-muted-foreground">
           Save a WIQL view to start tracking result counts.
         </div>

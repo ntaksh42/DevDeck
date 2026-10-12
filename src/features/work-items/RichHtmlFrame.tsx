@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { buildRichHtmlDocument, hydrateAuthenticatedImages } from "./workItemHtml";
 import { useIsDarkMode } from "@/lib/useIsDarkMode";
+import { bindFramePaneFocus } from "@/lib/paneFocus";
 
 export function RichHtmlFrame({
   baseUrl,
@@ -90,6 +91,7 @@ export function RichHtmlFrame({
         const doc = frame.contentDocument;
         const body = doc?.body;
         if (!body) return;
+        bindFramePaneFocus(frame);
         const syncHeight = () => {
           const next = Math.max(minHeight, Math.ceil(body.scrollHeight));
           setHeight(next);

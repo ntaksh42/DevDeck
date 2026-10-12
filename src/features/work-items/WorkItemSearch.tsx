@@ -173,6 +173,7 @@ export function WorkItemSearch({
           ) : undefined
         }
         snoozeOrganizationId={organizationId}
+        agentList={{ id: 'work-item-search', title: 'Work item search results', notes: [resultFilter.trim() && `Result filter: ${resultFilter.trim()}`] }}
       />
     </div>
   );

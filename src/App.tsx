@@ -27,6 +27,7 @@ import { applyTheme, loadThemePreference, THEME_CHANGED_EVENT, watchSystemTheme 
 import { useActiveOrganizationId } from "@/lib/useActiveConnection";
 import { storedNumber, focusPrimaryGrid } from "@/lib/utils";
 import { HelpDialog } from "@/components/HelpDialog";
+import { OPEN_HELP_EVENT, type HelpSection } from "@/lib/helpEvents";
 import { WikiPreviewHost } from "@/features/wiki/WikiPreviewHost";
 import { CommandPalette } from "@/components/CommandPalette";
 import { ToastHost } from "@/components/ToastHost";
@@ -58,6 +59,7 @@ import { AppHeader } from "./app/AppHeader";
 import { AppContent } from "./app/AppContent";
 import { useKeybindings } from "./app/useKeybindings";
 import { usePaletteSearch } from "./app/usePaletteSearch";
+import { usePaletteNavigation } from "./app/usePaletteNavigation";
 import { useCommandActions } from "./app/useCommandActions";
 import { useNotificationEvents } from "./app/useNotificationEvents";
 import { useSyncManager } from "./app/useSyncManager";
@@ -81,6 +83,8 @@ function AppShell() {
   viewHistoryRef.current = viewHistory;
   const navigatingHistoryRef = useRef(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  // Section a view asked Help to open at (its status bar's `?` button).
+  const [helpSection, setHelpSection] = useState<HelpSection | undefined>();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   // Element focused when an overlay opened; restored on close so keyboard nav
   // resumes instead of stranding focus on <body>.
@@ -168,6 +172,8 @@ function AppShell() {
 
   useNotificationEvents(appSettingsQuery.data, (target) => setView(target));
 
+  const navigateFromPalette = usePaletteNavigation(setView);
+
   const {
     setPaletteSearchText,
     paletteSearchItems,
@@ -177,7 +183,7 @@ function AppShell() {
   } = usePaletteSearch(commandPaletteOpen, organizations, {
     setWorkItemSearchRequest,
     setPullRequestSearchRequest,
-    setView,
+    setView: navigateFromPalette,
   });
 
   // Keep the palette's pipeline actions in sync with edits made in Settings.
@@ -287,6 +293,16 @@ function AppShell() {
     };
   }, []);
 
+  useEffect(() => {
+    function onOpenHelpEvent(event: Event) {
+      setHelpSection((event as CustomEvent<{ section?: HelpSection }>).detail?.section);
+      helpReturnRef.current ??= document.activeElement as HTMLElement | null;
+      setHelpOpen(true);
+    }
+    window.addEventListener(OPEN_HELP_EVENT, onOpenHelpEvent);
+    return () => window.removeEventListener(OPEN_HELP_EVENT, onOpenHelpEvent);
+  }, []);
+
   function restoreOverlayFocus(target: HTMLElement | null): void {
     window.setTimeout(() => {
       if (target && document.contains(target)) target.focus();
@@ -313,6 +329,7 @@ function AppShell() {
 
   function closeHelp(): void {
     setHelpOpen(false);
+    setHelpSection(undefined);
     restoreOverlayFocus(helpReturnRef.current);
     helpReturnRef.current = null;
   }
@@ -362,7 +379,7 @@ function AppShell() {
     syncPending: syncMutation.isPending,
     readOnlyMode,
     quickPipelines,
-    setView,
+    setView: navigateFromPalette,
     syncAll: () => syncMutation.mutate({ scope: "all", force: true }),
     refreshCurrentView,
     runQuickPipeline: (p) => { void runQuickPipeline(p); },
@@ -456,7 +473,7 @@ function AppShell() {
       </main>
       <ToastHost />
       <WikiPreviewHost />
-      {helpOpen && <HelpDialog onClose={() => closeHelp()} />}
+      {helpOpen && <HelpDialog section={helpSection} onClose={() => closeHelp()} />}
       {commandPaletteOpen && (
         <CommandPalette
           actions={commandActions}

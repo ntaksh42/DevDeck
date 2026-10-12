@@ -7,7 +7,9 @@ import {
   getWorkItemPreview,
   listPullRequestChanges,
 } from "@/lib/azdoCommands";
+import type { AgentListScope } from "./agentListScope";
 import type { AgentSubject } from "./agentSubject";
+import { getAnalyzeGroupContext } from "./analyzeGroupContext";
 
 // The agent runs without Azure DevOps access, so DevDeck gathers what it may
 // need about the subject and hands it over as one Markdown document saved
@@ -50,8 +52,12 @@ async function pullRequest(subject: Extract<AgentSubject, { kind: "pull-request"
         .filter((c) => !c.isSystem && c.content)
         .map((c) => `  - ${c.author ?? "?"}: ${c.content}`)
         .join("\n");
-      return `- Thread ${thread.id} [${status}]${where}\n${comments}`;
-    });
+      const mark = subject.threadId === thread.id ? " <- the thread this request is about" : "";
+      return { target: subject.threadId === thread.id, text: `- Thread ${thread.id} [${status}]${where}${mark}\n${comments}` };
+    })
+    // The thread the request is about (an Inbox mention / reply) comes first.
+    .sort((a, b) => Number(b.target) - Number(a.target))
+    .map((thread) => thread.text);
   return [
     `# Pull request !${review.pullRequestId}: ${review.title}`,
     fields([
@@ -160,14 +166,43 @@ async function wikiPage(subject: Extract<AgentSubject, { kind: "wiki-page" }>): 
   return [`# Wiki page ${page.pagePath}`, `- URL: ${page.webUrl}`, page.content].join("\n\n");
 }
 
+function analyzeGroup(subject: Extract<AgentSubject, { kind: "analyze-group" }>): string {
+  const context = getAnalyzeGroupContext(subject.id);
+  if (!context) return `# Analyze group: ${subject.title}\n\n(no data loaded)`;
+  const unit = context.granularity === "day" ? "days" : "weeks";
+  const queries = context.queries.map((query) => {
+    const rows = context.periods.map((period, index) => `| ${period} | ${query.values[index] ?? "—"} |`);
+    return [
+      `### ${query.name}`,
+      "```wiql\n" + query.wiql + "\n```",
+      query.error
+        ? `(could not load: ${query.error})`
+        : ["| Period | Count |", "| --- | ---: |", ...rows].join("\n"),
+    ].join("\n\n");
+  });
+  return [
+    `# Analyze group: ${subject.title}`,
+    fields([
+      ["Granularity", context.granularity],
+      ["Range", `last ${context.rangeCount} ${unit}`],
+      ["Queries", String(context.queries.length)],
+    ]),
+    "Counts are the number of work items each query matched at the end of the period (WIQL ASOF).",
+    "## Queries",
+    queries.join("\n\n") || "(none)",
+  ].join("\n\n");
+}
+
 /**
- * Markdown describing the subject, for the agent. Failures are written into
- * the document instead of blocking the request.
+ * Markdown describing the subject and, when attached, the view's list, for the
+ * agent. Failures are written into the document instead of blocking the request.
  */
-export async function buildContextDocument(subject: AgentSubject): Promise<string> {
-  let text: string;
+export async function buildContextDocument(subject: AgentSubject | null, list?: AgentListScope | null): Promise<string> {
+  let text = "";
   try {
-    switch (subject.kind) {
+    switch (subject?.kind) {
+      case undefined:
+        break;
       case "pull-request":
         text = await pullRequest(subject);
         break;
@@ -180,9 +215,21 @@ export async function buildContextDocument(subject: AgentSubject): Promise<strin
       case "wiki-page":
         text = await wikiPage(subject);
         break;
+      case "analyze-group":
+        text = analyzeGroup(subject);
+        break;
     }
   } catch (error) {
-    text = `# ${subject.title}\n\nDevDeck could not gather the details: ${commandErrorMessage(error)}`;
+    text = `# ${subject?.title ?? ""}\n\nDevDeck could not gather the details: ${commandErrorMessage(error)}`;
+  }
+  if (list) {
+    let section: string;
+    try {
+      section = list.markdown();
+    } catch (error) {
+      section = `## ${list.label}\n\n(unavailable: ${commandErrorMessage(error)})`;
+    }
+    text = [text, section].filter(Boolean).join("\n\n");
   }
   const header = `<!-- Gathered by DevDeck at ${new Date().toISOString()}. Read-only material for the agent. -->\n\n`;
   return (header + text).slice(0, MAX_CHARS);

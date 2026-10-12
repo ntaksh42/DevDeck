@@ -273,10 +273,29 @@ describe("DockableWorkspace", () => {
     expect(previewResize.getAttribute("aria-valuenow")).toBe("280");
     expect(resultResize.getAttribute("aria-valuenow")).toBe("320");
 
-    fireEvent.keyDown(resultResize, { key: "ArrowLeft" });
-    expect(resultResize.getAttribute("aria-valuenow")).toBe("336");
-    // Resizing Result does not disturb Preview's own reported width.
-    expect(previewResize.getAttribute("aria-valuenow")).toBe("280");
+    fireEvent.keyDown(resultResize, { key: "ArrowRight" });
+    expect(resultResize.getAttribute("aria-valuenow")).toBe("304");
+    // The adjacent Preview takes the space released by Result.
+    expect(previewResize.getAttribute("aria-valuenow")).toBe("296");
+  });
+
+  it("moves the Grid/Preview boundary without moving the Agent boundary", () => {
+    const panels = twoPanels();
+    panels.push({ id: "assistant", title: "Agent", content: <div>agent content</div>,
+      position: { relativeTo: "preview", direction: "right" }, initialWidth: 320, minWidth: 200 });
+    renderWorkspace("test:dockable-workspace:adjacent-boundary", panels);
+    const preview = screen.getByRole("separator", { name: "Resize Preview" });
+    const agent = screen.getByRole("separator", { name: "Resize Agent" });
+    const previewWidth = Number(preview.getAttribute("aria-valuenow"));
+    const agentWidth = agent.getAttribute("aria-valuenow");
+    fireEvent.pointerDown(preview, { clientX: 600, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 560, pointerId: 1 });
+    fireEvent.pointerUp(window, { clientX: 560, pointerId: 1 });
+    expect(Number(preview.getAttribute("aria-valuenow"))).toBe(previewWidth + 40);
+    expect(agent.getAttribute("aria-valuenow")).toBe(agentWidth);
+    fireEvent.keyDown(preview, { key: "ArrowRight" });
+    expect(Number(preview.getAttribute("aria-valuenow"))).toBe(previewWidth + 24);
+    expect(agent.getAttribute("aria-valuenow")).toBe(agentWidth);
   });
 
   describe("move menu", () => {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { Plus } from "lucide-react";
+import { ListStatusBar, itemCount } from "@/components/ListStatusBar";
 import type { AnalyzeGroup } from "./analyzeGroupsStorage";
 
 export type AnalyzeGroupListProps = {
@@ -84,16 +84,11 @@ export function AnalyzeGroupList({
   }
 
   return (
-    <div className="flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-card">
-      <div className="flex items-center justify-between border-b border-border px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        <span>Groups</span>
-        <span className="tabular-nums">{groups.length}</span>
-      </div>
-
+    <div className="flex h-full min-h-0 flex-col bg-card" data-primary-grid="true" tabIndex={-1}>
       <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2">
         {groups.length === 0 ? (
           <p className="px-2 py-3 text-sm text-muted-foreground">
-            グループがまだありません。クエリやブランチをまとめて登録してください。
+            No groups yet. Add one to track a set of queries together.
           </p>
         ) : (
           groups.map((group, index) => {
@@ -106,6 +101,7 @@ export function AnalyzeGroupList({
                 }}
                 type="button"
                 aria-current={selected ? "true" : undefined}
+                data-pane-focus-row="true"
                 tabIndex={selected || (selectedIndex === -1 && index === 0) ? 0 : -1}
                 onClick={() => onSelect(group.id)}
                 onDoubleClick={onOpen}
@@ -117,8 +113,9 @@ export function AnalyzeGroupList({
                 }`}
               >
                 <span className="min-w-0 flex-1 truncate">{group.name}</span>
-                <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                  {group.queries.length}Q
+                <span className="shrink-0 text-xs font-normal text-muted-foreground">
+                  {group.queries.length} {group.queries.length === 1 ? "query" : "queries"} ·{" "}
+                  {group.granularity === "day" ? "Day" : "Week"}
                 </span>
               </button>
             );
@@ -126,14 +123,7 @@ export function AnalyzeGroupList({
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={onAdd}
-        className="m-2 flex items-center gap-1.5 rounded-md border border-dashed border-border px-2.5 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-        グループを追加
-      </button>
+      <ListStatusBar summary={[itemCount(groups.length)]} />
     </div>
   );
 }

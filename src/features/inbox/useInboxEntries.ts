@@ -16,6 +16,7 @@ import {
   useSummaries as useAgentNoteSummaries,
 } from "@/components/agent-notes/useAgentNoteSummaries";
 import { matchesInboxFilter, type InboxEntry, type InboxTab } from "./inboxPresentation";
+import { useInboxAgentEntries } from "./useInboxAgentEntries";
 
 /** Approvals are project-scoped, so cap how many projects one refresh asks. */
 const MAX_APPROVAL_PROJECTS = 20;
@@ -228,7 +229,7 @@ export function useInboxEntries({
     retry: false,
     enabled: tab === "open",
   });
-  const agentEntries = useMemo<InboxEntry[]>(() => {
+  const agentSummaries = useMemo<InboxEntry[]>(() => {
     const organization = organizationId || activeOrganizationQuery.data?.id || "";
     const build = (target: AgentNoteTarget, data: AgentNoteSummary[] | undefined) =>
       (data ?? [])
@@ -246,6 +247,7 @@ export function useInboxEntries({
     workItemSummaries.data,
     askSummaries.data,
   ]);
+  const agentEntries = useInboxAgentEntries(tab === "open" ? agentSummaries : [], organizationId);
 
   const entries = useMemo(() => {
     const stored: InboxEntry[] = listQuery.data ?? [];

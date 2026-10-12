@@ -93,6 +93,25 @@ describe("App — Navigation", () => {
     expect(await main.findByRole("heading", { name: "Connections" })).toBeTruthy();
   });
 
+  it.each(["Go to My Reviews", "Go to Work Item Search", "Go to Pull Request Search"])(
+    "focuses the list when the palette executes %s",
+    async (command) => {
+      delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+      renderApp();
+      await screen.findByRole("heading", { name: "Pull Requests My Reviews" });
+      const origin = screen.getByRole("button", { name: "Settings" });
+      origin.focus();
+      fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+      const input = await screen.findByPlaceholderText("Type a command or search…");
+      fireEvent.change(input, { target: { value: command } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      await waitFor(() => {
+        const target = document.activeElement as HTMLElement;
+        expect(target.closest("[data-primary-grid='true'], [data-grid-focus-fallback='true'], [data-focus-pane='grid']")).toBeTruthy();
+      });
+    },
+  );
+
   it("returns focus to the original element after Ctrl+K is pressed twice", async () => {
     invokeMock.mockImplementation((command: string) => {
       if (command === "list_organizations") {

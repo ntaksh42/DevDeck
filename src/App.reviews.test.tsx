@@ -71,6 +71,24 @@ describe("App — Reviews", () => {
     cleanup();
   });
 
+  it("focuses the collapsed PR comment with M and Ctrl+M without interrupting typing", async () => {
+    delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+    renderApp();
+    const grid = await screen.findByRole("grid", { name: "My review pull requests" });
+    await screen.findByRole("button", { name: "Add a comment…" });
+    grid.focus();
+    fireEvent.keyDown(grid, { key: "m" });
+    const input = await screen.findByRole("textbox", { name: "Add a comment…" });
+    await waitFor(() => expect(document.activeElement).toBe(input));
+    fireEvent.change(input, { target: { value: "Draft comment" } });
+    fireEvent.keyDown(input, { key: "m" });
+    expect(document.activeElement).toBe(input);
+    expect((input as HTMLTextAreaElement).value).toBe("Draft comment");
+    grid.focus();
+    fireEvent.keyDown(grid, { key: "m", ctrlKey: true });
+    await waitFor(() => expect(document.activeElement).toBe(input));
+  });
+
   it("groups my reviews into collapsible sections and opens the selected row", async () => {
     invokeMock.mockImplementation((command: string, args?: unknown) => {
       if (command === "list_organizations") {
@@ -358,15 +376,26 @@ describe("App — Reviews", () => {
     expect(within(grid).getByText("Beta review")).toBeTruthy();
 
     // The done view lists it; E restores it back to the inbox.
-    fireEvent.click(screen.getByRole("button", { name: "Done (1)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done 1" }));
     expect(await within(grid).findByText("Alpha review")).toBeTruthy();
     expect(within(grid).queryByText("Beta review")).toBeNull();
     fireEvent.keyDown(grid, { key: "e" });
     await waitFor(() => {
       expect(within(grid).queryByText("Alpha review")).toBeNull();
     });
-    fireEvent.click(screen.getByRole("button", { name: "Back to inbox" }));
+    // The Done button toggles the list back; the tab-band chip shows while it is active.
+    expect(screen.getByRole("button", { name: "Back to open list (leave done view)" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Done 0" }));
     expect(await within(grid).findByText("Alpha review")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Back to open list/ })).toBeNull();
+
+    // Escape also leaves the Done list.
+    fireEvent.click(screen.getByRole("button", { name: "Done 0" }));
+    expect(await screen.findByRole("button", { name: /Back to open list/ })).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole("button", { name: "Done 0" }), { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /Back to open list/ })).toBeNull();
+    });
     expect(within(grid).getByText("Beta review")).toBeTruthy();
   });
 });

@@ -23,7 +23,10 @@ import { MultiSelectFilter } from "@/components/MultiSelectFilter";
 import { ErrorState, LoadingState } from "@/components/StateDisplay";
 import { NotificationRow, NOTIFICATION_ROW_HEIGHT } from "./NotificationRow";
 import { NOTIFICATION_KIND_OPTIONS } from "./notificationKinds";
-import { notificationWebUrl, resolveNotificationJump } from "./notificationJump";
+import { notificationWebUrl, resolveNotificationAgentSubject, resolveNotificationJump } from "./notificationJump";
+import { usePublishAgentSubject } from "@/components/agent/agentSubject";
+import { useAgentDrawerDefault } from "@/components/agent/useAgentDrawerDefault";
+import { ListStatusBar, itemCount } from "@/components/ListStatusBar";
 
 const PAGE_SIZE = 100;
 const OVERSCAN = 8;
@@ -104,6 +107,11 @@ export function NotificationsView({
     overscan: OVERSCAN,
   });
   const virtualRows = items.slice(firstVirtualRow, lastVirtualRow);
+
+  // The Agent panel (the drawer; this view has no dock) follows the selected notification's PR / work item.
+  useAgentDrawerDefault();
+  const selectedRecord = items[selectedIndex];
+  usePublishAgentSubject(selectedRecord ? resolveNotificationAgentSubject(selectedRecord) : null);
 
   useEffect(() => {
     setSelectedIndex((index) => Math.min(index, Math.max(items.length - 1, 0)));
@@ -215,7 +223,7 @@ export function NotificationsView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex shrink-0 flex-wrap items-center gap-3 rounded-md border border-border bg-card px-3 py-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         <label className="flex items-center gap-1.5 text-sm">
           <input
             type="checkbox"
@@ -260,7 +268,7 @@ export function NotificationsView({
           type="button"
           onClick={() => markAllReadMutation.mutate()}
           disabled={markAllReadMutation.isPending}
-          className="ml-auto rounded-md border border-border bg-card px-2.5 py-1 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
+          className="ml-auto inline-flex h-8 items-center rounded-md border border-border bg-card px-2.5 text-xs font-medium hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
         >
           Mark all read
         </button>
@@ -273,7 +281,7 @@ export function NotificationsView({
         />
       ) : null}
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card">
+      <div data-grid-focus-fallback="true" tabIndex={-1} className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card">
         {listQuery.isLoading ? (
           <LoadingState />
         ) : items.length === 0 ? (
@@ -329,6 +337,9 @@ export function NotificationsView({
             ) : null}
           </div>
         )}
+        <ListStatusBar
+          summary={[itemCount(items.length), `${items.filter((record) => !record.isRead).length} unread`]}
+        />
       </div>
     </div>
   );

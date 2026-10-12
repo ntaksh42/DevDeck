@@ -116,6 +116,26 @@
   border-radius: 4px;
 }
 
+/* Paint above opaque pane contents; nested panes highlight only the focus owner. */
+[data-focus-pane] {
+  position: relative;
+}
+
+[data-focus-pane]:focus-within:not(:has([data-focus-pane]:focus-within))::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px hsl(var(--primary)), inset 0 0 0 4px hsl(var(--primary) / 0.25);
+}
+
+/* Agent owns its conversation scroll area; the dock frame must not scroll. */
+.dv-dockview .dv-view:has([data-agent-panel]) {
+  overflow: hidden;
+}
+
 .dv-tab.dv-active-tab {
   font-weight: 600;
   box-shadow: inset 0 -2px 0 hsl(var(--primary));

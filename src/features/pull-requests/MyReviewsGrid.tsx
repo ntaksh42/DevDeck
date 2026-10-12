@@ -17,6 +17,7 @@ import { copyRowsAsTable } from '@/lib/clipboardTable';
 import { reviewCopyColumns } from './prCopyColumns';
 import { toggleTriageArchived } from '@/lib/triage';
 import { usePrReviewPanels } from './usePrReviewPanels';
+import { myReviewsAgentList } from './prAgentList';
 import { focusLinkedWorkItems, LINKED_WORK_ITEMS_PANEL_ID, LinkedWorkItemsToggle } from './LinkedWorkItemsPanel';
 import { MemoReviewPrRow } from './MemoReviewPrRow';
 import { ReviewFilterBar } from './ReviewFilterBar';
@@ -78,10 +79,16 @@ export function MyReviewsGrid({
     onToggleMaximize: () => g.setMaximized((v) => !v),
     onOpenLinkedWorkItems: openLinkedWorkItems,
     resultCommentRequest,
+    agentList: myReviewsAgentList(g),
   });
 
   function handleKeyDown(e: React.KeyboardEvent) {
     const editable = isEditableTarget(e.target);
+    if (e.key === 'Escape' && !editable && !g.openFilterCol && (g.showDone || g.showSnoozed)) {
+      e.preventDefault();
+      g.leaveStateView();
+      return;
+    }
     const buttonTarget = (e.target instanceof HTMLElement ? e.target : null)?.closest('button');
 
     // The snoozed panel replaces the inbox grid, but this handler still sits on
@@ -275,6 +282,7 @@ export function MyReviewsGrid({
             minWidth: 480,
             headerActions: (
               <ReviewFilterBar
+                stateView={g.showDone || g.showSnoozed ? { label: g.showSnoozed ? 'Snoozed' : 'Done', onClear: g.leaveStateView } : undefined}
                 textFilter={g.textFilter}
                 onTextFilterChange={(v) => { g.setTextFilter(v); }}
                 filterInputRef={g.filterInputRef}
@@ -288,7 +296,7 @@ export function MyReviewsGrid({
               />
             ),
             content: (
-        <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card">
+        <div data-grid-focus-fallback="true" tabIndex={-1} className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card">
           {g.showSnoozed ? (
             <SnoozedItemsPanel
               organizationId={g.organizationId}
@@ -391,6 +399,7 @@ export function MyReviewsGrid({
             showDone={g.showDone}
             archivedKeys={g.archivedKeys}
             showSnoozed={g.showSnoozed}
+            snoozedCount={g.snoozedCount}
             activeFilterCount={g.activeFilterCount}
             sortedPrsCount={g.sortedPrs.length}
             onToggleOverlapPopup={() => g.setOverlapPopupOpen((v) => !v)}

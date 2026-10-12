@@ -223,6 +223,7 @@ export function PrThreadCard({
   thread,
   busy,
   showFilePath = true,
+  showReply = true,
   onReply,
   onToggleStatus,
   onEditComment,
@@ -234,6 +235,7 @@ export function PrThreadCard({
   thread: PrThread;
   busy: boolean;
   showFilePath?: boolean;
+  showReply?: boolean;
   onReply: (content: string) => Promise<void>;
   onToggleStatus: () => void;
   onEditComment?: (commentId: number, content: string) => Promise<void>;
@@ -425,14 +427,16 @@ export function PrThreadCard({
               />
             ) : (
               <div className="flex items-center gap-3 pl-[26px]">
-                <button
-                  type="button"
-                  data-thread-reply="true"
-                  onClick={() => setReplying(true)}
-                  className="rounded text-xs font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  Reply
-                </button>
+                {showReply ? (
+                  <button
+                    type="button"
+                    data-thread-reply="true"
+                    onClick={() => setReplying(true)}
+                    className="rounded text-xs font-medium text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    Reply
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   disabled={busy}

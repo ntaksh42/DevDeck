@@ -116,10 +116,24 @@ export function focusWorkItemCommentInput(): boolean {
   return true;
 }
 
+export function focusPullRequestCommentInput(): boolean {
+  const composer = document.querySelector<HTMLElement>("[data-pr-comment-composer='true']");
+  const input = composer?.querySelector<HTMLTextAreaElement>("textarea");
+  if (input) {
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+    return true;
+  }
+  const expand = composer?.querySelector<HTMLButtonElement>("button");
+  if (!expand) return false;
+  expand.click();
+  return true;
+}
+
 export function focusPrimaryGrid(): boolean {
   const grid = document.querySelector<HTMLElement>("[data-primary-grid='true']");
   if (!grid) return false;
-  const selectedRow = grid.querySelector<HTMLElement>("[role='row'][aria-selected='true']");
+  const selectedRow = grid.querySelector<HTMLElement>("[role='row'][aria-selected='true'], [role='option'][aria-selected='true']");
   const focusTarget =
     selectedRow ?? grid.querySelector<HTMLElement>("[tabindex='0']") ?? grid;
   focusTarget.focus();

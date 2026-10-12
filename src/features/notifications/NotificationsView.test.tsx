@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AgentPanelHost } from "@/components/agent/AgentPanelHost";
+import { resetAgentPanelState } from "@/components/agent/agentPanelStore";
+import { useAgentSubject } from "@/components/agent/agentSubject";
 import { openExternalUrl } from "@/lib/openExternal";
 import { NotificationsView } from "./NotificationsView";
 
@@ -125,5 +128,61 @@ describe("NotificationsView", () => {
     await waitFor(() => {
       expect(within(grid).getAllByRole("row")).toHaveLength(unreadCountBefore - 1);
     });
+  });
+});
+
+describe("NotificationsView Agent context", () => {
+  function Probe() {
+    const subject = useAgentSubject();
+    return <output data-testid="subject">{subject ? JSON.stringify(subject) : ""}</output>;
+  }
+
+  function renderWithAgent() {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <Probe />
+        <NotificationsView onOpenPullRequest={vi.fn()} onOpenView={vi.fn()} />
+        <AgentPanelHost />
+      </QueryClientProvider>,
+    );
+  }
+
+  afterEach(() => resetAgentPanelState());
+
+  it("follows the selected notification's PR or work item, and none for a pipeline notification", async () => {
+    renderWithAgent();
+    const grid = await screen.findByRole("grid", { name: "Notifications" });
+    await waitFor(() => expect(within(grid).getAllByRole("row")).toHaveLength(10));
+    const subject = () => screen.getByTestId("subject").textContent ?? "";
+
+    // Newest row: review request for PR !42 (the demo payload names the project, not its id).
+    await waitFor(() =>
+      expect(JSON.parse(subject())).toMatchObject({
+        kind: "pull-request",
+        id: 42,
+        organizationId: "contoso",
+        projectId: "Platform",
+        repositoryId: "azdo-dashboard",
+        repositoryName: "azdo-dashboard",
+        // A free-text body has no title line, so the title comes from after the "kind: " prefix.
+        title: "Add pull request search dashboard",
+      }),
+    );
+    expect(document.body.textContent).toMatch(/10 items · \d+ unread/);
+    fireEvent.keyDown(grid, { key: "j" });
+    fireEvent.keyDown(grid, { key: "j" });
+    fireEvent.keyDown(grid, { key: "j" });
+    await waitFor(() => expect(JSON.parse(subject())).toMatchObject({ kind: "work-item", id: 123 }));
+    fireEvent.keyDown(grid, { key: "j" });
+    fireEvent.keyDown(grid, { key: "j" });
+    fireEvent.keyDown(grid, { key: "j" });
+    await waitFor(() => expect(subject()).toBe(""));
+  });
+
+  it("shows the Agent drawer by default", async () => {
+    resetAgentPanelState();
+    renderWithAgent();
+    expect(await screen.findByRole("complementary", { name: "Agent" })).toBeTruthy();
   });
 });

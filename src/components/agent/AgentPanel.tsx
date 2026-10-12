@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { Bot, Pin, PinOff, X } from "lucide-react";
+import { Bot, X } from "lucide-react";
 import { commandErrorMessage, noteNeedsYou } from "@/lib/azdoCommands";
 import { CommentComposer } from "@/features/pull-requests/CommentComposer";
 import { ErrorState, LoadingState } from "@/components/StateDisplay";
 import { RowShortcutHints } from "@/components/RowShortcutHints";
 import { AgentConversation, lastActivity } from "./AgentConversation";
+import { AgentContextChips } from "./AgentContextChips";
+import { useAgentListScope } from "./agentListScope";
+import { handlePaneFocusKey } from "@/lib/paneFocus";
 import {
   noteItemOf,
   requestNoteReattach,
@@ -21,13 +24,15 @@ import { useAgentPanelData, type Conversation } from "./useAgentPanelData";
  * The app-wide Agent panel (Ctrl+J): asks the external agent to investigate,
  * summarize or answer something about the item selected in any view, or about
  * nothing in particular. Each conversation folds to one line. Only the
- * conversations and one input are always shown; the subject chip, drafts
+ * conversations, the context chips and one input are always shown; the drafts
  * banner and quote appear when they apply, and `?` lists the keys.
  */
 export function AgentPanel({
   docked = false,
   override,
   onOverrideChange,
+  listAttached,
+  onListAttachedChange,
   focusAskId,
   replyRequest,
   quote,
@@ -39,6 +44,9 @@ export function AgentPanel({
   docked?: boolean;
   override: SubjectOverride;
   onOverrideChange: (next: SubjectOverride) => void;
+  /** Id of the view list attached as context, if any. */
+  listAttached: string | null;
+  onListAttachedChange: (next: string | null) => void;
   /** Expand and select this request when it appears. */
   focusAskId: number | null;
   /** Bumped to start replying to the selected (or waiting) conversation. */
@@ -52,7 +60,9 @@ export function AgentPanel({
 }) {
   const live = useAgentSubject();
   const subject = override ? override.subject : live;
-  const data = useAgentPanelData(subject, true);
+  const liveList = useAgentListScope();
+  const attachedList = liveList && listAttached === liveList.id ? liveList : null;
+  const data = useAgentPanelData(subject, true, attachedList);
   const { conversations } = data;
 
   const [help, setHelp] = useState(false);
@@ -246,6 +256,10 @@ export function AgentPanel({
     <aside
       aria-label="Agent"
       data-agent-panel="true"
+      data-pane-editable="true"
+      data-focus-pane={docked ? undefined : "agent"}
+      tabIndex={-1}
+      onKeyDownCapture={handlePaneFocusKey}
       data-agent-subject={subjectKey(subject)}
       // min-h-0 / overflow-hidden: inside a dock panel the list scrolls, not the whole panel.
       className={`flex h-full min-h-0 flex-col overflow-hidden bg-card text-xs ${docked ? "w-full min-w-0" : "w-[360px] shrink-0 border-l border-border"}`}
@@ -271,6 +285,7 @@ export function AgentPanel({
         ref={listRef}
         tabIndex={-1}
         aria-label="Agent conversations"
+        data-pane-focus-target="true"
         className="min-h-0 flex-1 space-y-2 overflow-y-auto px-2 py-1 outline-none"
         onKeyDown={onListKeyDown}
       >
@@ -306,34 +321,19 @@ export function AgentPanel({
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 border-t border-border px-2 py-0.5 text-[11px] text-muted-foreground">
         {help ? (
-          <>
-            <RowShortcutHints
-              hints={[
-                { keys: "↑↓", label: "move" },
-                { keys: "→←", label: "fold" },
-                { keys: "R", label: "reply" },
-                { keys: "M", label: "ask" },
-                { keys: "X", label: "resolve" },
-                { keys: "⇧Enter", label: "run now" },
-                { keys: "P", label: "pin" },
-                { keys: "Esc", label: "close" },
-              ]}
-            />
-            {subject || pinned ? (
-              <>
-                <button type="button" onClick={togglePin} className="underline-offset-2 hover:text-foreground hover:underline">
-                  {pinned ? "Follow the selection" : "Pin the subject"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onOverrideChange({ subject: null })}
-                  className="underline-offset-2 hover:text-foreground hover:underline"
-                >
-                  Ask without a subject
-                </button>
-              </>
-            ) : null}
-          </>
+          <RowShortcutHints
+            hints={[
+              { keys: "↑↓", label: "move" },
+              { keys: "→←", label: "fold" },
+              { keys: "R", label: "reply" },
+              { keys: "M", label: "ask" },
+              { keys: "X", label: "resolve" },
+              { keys: "⇧Enter", label: "run now" },
+              { keys: "P", label: "pin" },
+              { keys: "⇧Tab", label: "context (from the input)" },
+              { keys: "Esc", label: "close" },
+            ]}
+          />
         ) : null}
         {starting ? <span>Starting…</span> : null}
         <span className="flex-1" />
@@ -364,35 +364,6 @@ export function AgentPanel({
             </button>
           </p>
         ) : null}
-        {pinned ? (
-          <p className="mb-1 flex items-center gap-1 text-[11px] text-muted-foreground">
-            {subject ? (
-              <span className="flex min-w-0 items-center gap-1 rounded-full border border-primary/40 bg-primary/5 px-1.5 text-foreground">
-                <Pin className="h-3 w-3 shrink-0" aria-hidden="true" />
-                <span className="truncate" title={subjectLabel(subject)}>{subjectLabel(subject)}</span>
-                <button type="button" onClick={togglePin} title="Follow the selection again" aria-label="Unpin the subject" className="rounded hover:bg-accent">
-                  <PinOff className="h-3 w-3" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onOverrideChange({ subject: null })}
-                  title="Ask without a subject"
-                  aria-label="Remove the subject"
-                  className="rounded hover:bg-accent"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            ) : (
-              <>
-                No subject
-                <button type="button" onClick={() => onOverrideChange(null)} className="text-primary underline">
-                  follow selection
-                </button>
-              </>
-            )}
-          </p>
-        ) : null}
         {quote && !replyTo ? (
           <p className="mb-1 flex items-center gap-1 text-[11px] text-muted-foreground">
             Quoting
@@ -415,6 +386,17 @@ export function AgentPanel({
         {data.readOnly ? (
           <p className="mb-1 text-[11px] text-muted-foreground">Read-only validation mode: the request is saved but the agent is not started.</p>
         ) : null}
+        <AgentContextChips
+          subject={subject}
+          offered={override && !override.subject ? live : null}
+          pinned={!!override?.subject}
+          list={liveList}
+          listAttached={!!attachedList}
+          onTogglePin={togglePin}
+          onSubjectChange={(attach) => onOverrideChange(attach ? null : { subject: null })}
+          onListAttachedChange={(attach) => onListAttachedChange(attach && liveList ? liveList.id : null)}
+          onEscape={focusComposer}
+        />
         <div ref={composerRef} data-agent-composer="true">
           <CommentComposer
             key={replyKey ?? "new"}

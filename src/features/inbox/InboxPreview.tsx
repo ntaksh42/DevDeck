@@ -37,6 +37,7 @@ function bandTitle(item: InboxEntry): string {
 export function InboxPreview({
   item,
   tab,
+  zoom,
   detail,
   readOnly,
   previewRef,
@@ -56,6 +57,7 @@ export function InboxPreview({
 }: {
   item: InboxEntry | null;
   tab: InboxTab;
+  zoom: number;
   detail: InboxDetail;
   readOnly: boolean;
   previewRef: RefObject<HTMLDivElement | null>;
@@ -91,12 +93,18 @@ export function InboxPreview({
     ? `${shortRefName(review.sourceRefName)} → ${shortRefName(review.targetRefName)}`
     : null;
   const derived = isDerivedEntry(item);
+  const editable = !readOnly && !detail.isLoading && (
+    (isThreadItem(item) && !!thread) || (isWorkItemItem(item) && !!workItem) ||
+    (isVoteItem(item) && !!review) || item.kind === "pipeline_approval"
+  );
 
   return (
     <div
       ref={previewRef}
       data-primary-preview="true"
+      data-pane-editable={editable ? "true" : undefined}
       tabIndex={-1}
+      style={{ zoom }}
       // A thread's reply box stays pinned to the bottom while its thread is in view.
       className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2 outline-none [&_[data-thread-reply-area]]:sticky [&_[data-thread-reply-area]]:bottom-0 [&_[data-thread-reply-area]]:z-10 [&_[data-thread-reply-area]]:bg-card [&_[data-thread-reply-area]]:py-0.5"
     >
@@ -125,6 +133,7 @@ export function InboxPreview({
 
       {isThreadItem(item) && !detail.isLoading ? (
         <ThreadPanel
+          key={item.id}
           item={item}
           thread={thread}
           busy={detail.busy}

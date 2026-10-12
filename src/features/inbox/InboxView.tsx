@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink } from "lucide-react";
 import {
   commandErrorMessage,
   getActionInboxCounts,
@@ -15,16 +14,22 @@ import { openExternalUrl } from "@/lib/openExternal";
 import { fetchWorkItemImageCached } from "@/lib/workItemImageCache";
 import { clamp, focusPrimaryPreview, isEditableTarget } from "@/lib/utils";
 import { useGridVirtualizer } from "@/lib/useGridVirtualizer";
+import { handlePreviewZoomKey, usePreviewZoom } from "@/lib/usePreviewZoom";
 import { useDockFilter } from "@/components/DockFilterBar";
 import { DockableWorkspace, type DockablePanelSpec } from "@/components/DockableWorkspace";
 import { PreviewEmptyState } from "@/components/StateDisplay";
 import { SnoozeMenu } from "@/components/SnoozeMenu";
-import { openAgentPanel } from "@/components/agent/agentSubject";
+import { usePublishAgentListScope } from "@/components/agent/agentListScope";
+import { openAgentPanel, usePublishAgentSubject } from "@/components/agent/agentSubject";
+import { inboxAgentList } from "./inboxAgentList";
+import { InboxListHeader } from "./InboxListHeader";
 import { InboxListPane } from "./InboxListPane";
 import { INBOX_ROW_HEIGHT } from "./InboxRow";
 import { InboxPreview } from "./InboxPreview";
+import { InboxPreviewToolbar } from "./InboxPreviewToolbar";
 import {
   agentRequestOf,
+  inboxAgentSubject,
   isDerivedEntry,
   isPullRequestItem,
   isVoteItem,
@@ -35,6 +40,7 @@ import {
 } from "./inboxPresentation";
 import { useInboxDetail, type VoteValue } from "./useInboxDetail";
 import { useInboxEntries } from "./useInboxEntries";
+import { useInboxListFocus } from "./useInboxListFocus";
 
 const OVERSCAN = 8;
 const LAYOUT_STORAGE_KEY = "azdodeck:layout:inbox:dockview:v1";
@@ -57,6 +63,7 @@ export function InboxView({
   const filterInputRef = useRef<HTMLInputElement | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
 
+  const { zoom, canZoomIn, canZoomOut, zoomIn, zoomOut, resetZoom } = usePreviewZoom();
   const filterBar = useDockFilter(filterInputRef, () => listRef.current?.focus());
 
   const organizationsQuery = useQuery({
@@ -95,6 +102,9 @@ export function InboxView({
   }, [entries.length]);
 
   const detail = useInboxDetail(selected);
+  // The Agent panel follows the selected entry's pull request / work item.
+  usePublishAgentSubject(selected ? inboxAgentSubject(selected) : null);
+  usePublishAgentListScope(inboxAgentList(entries, tab, filterText));
 
   // A reply from the agent has no conversation of its own to show.
   const agentOnly = selected?.kind === "agent_reply";
@@ -131,14 +141,14 @@ export function InboxView({
     overscan: OVERSCAN,
   });
 
-  function focusList() {
-    window.setTimeout(() => listRef.current?.focus(), 0);
-  }
+  const listFocus = useInboxListFocus({ listRef, rowRefs, index, entries, scrollRowIntoView: virtual.scrollRowIntoView });
+  const { focusList, focusRow } = listFocus;
 
   function moveSelectionTo(next: number) {
     const target = clamp(next, 0, entries.length - 1);
     virtual.scrollRowIntoView(target);
     setSelectedIndex(target);
+    window.setTimeout(() => focusRow(target), 0);
   }
 
   /** Stored items change state locally; derived entries have none and are skipped. */
@@ -320,9 +330,10 @@ export function InboxView({
   }
 
   const returnToList = (event: React.KeyboardEvent) => {
+    if (handlePreviewZoomKey(event, { zoomIn, zoomOut, resetZoom })) return;
     if (event.key === "Escape" && !isEditableTarget(event.target)) {
       event.preventDefault();
-      listRef.current?.focus();
+      focusList();
     }
   };
 
@@ -331,11 +342,13 @@ export function InboxView({
       id: "list",
       title: "Items",
       minWidth: 340,
-      content: (
-        <InboxListPane
+      headerActions: (
+        <InboxListHeader
           tab={tab}
-          tabCounts={tabCounts}
-          onTabChange={switchTab}
+          onLeaveTab={() => {
+            switchTab("open");
+            focusList();
+          }}
           organizations={organizationsQuery.data ?? []}
           organizationId={organizationId}
           onOrganizationChange={(id) => {
@@ -349,7 +362,17 @@ export function InboxView({
           }}
           filterBar={filterBar}
           filterInputRef={filterInputRef}
+        />
+      ),
+      content: (
+        <InboxListPane
+          tab={tab}
+          tabCounts={tabCounts}
+          onTabChange={switchTab}
+          filterText={filterText}
           listRef={listRef}
+          focusHandlers={listFocus}
+          onFocusList={() => focusRow(index)}
           rowRefs={rowRefs}
           virtual={virtual}
           entries={entries}
@@ -357,7 +380,10 @@ export function InboxView({
           isLoading={isLoading}
           error={error ? commandErrorMessage(error) : null}
           onRetry={refetch}
-          onSelect={setSelectedIndex}
+          onSelect={(target) => {
+            setSelectedIndex(target);
+            focusRow(target);
+          }}
           onOpen={openInApp}
           onKeyDown={handleListKeyDown}
         />
@@ -370,27 +396,17 @@ export function InboxView({
       initialWidth: 560,
       minWidth: 360,
       headerActions: (
-        <div className="flex items-center gap-1 pr-1">
-          <button
-            type="button"
-            disabled={!selected}
-            onClick={() => selected && openInApp(selected)}
-            title="Open in DevDeck (Shift+Enter)"
-            className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary disabled:opacity-50"
-          >
-            Open in DevDeck
-          </button>
-          <button
-            type="button"
-            disabled={!selected?.webUrl}
-            onClick={() => selected && openInBrowser(selected)}
-            title="Open in Azure DevOps (O)"
-            className="inline-flex items-center gap-1 rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary disabled:opacity-50"
-          >
-            <ExternalLink className="h-3 w-3" aria-hidden="true" />
-            Browser
-          </button>
-        </div>
+        <InboxPreviewToolbar
+          zoom={{ zoom, canZoomIn, canZoomOut, onZoomIn: zoomIn, onZoomOut: zoomOut, onResetZoom: resetZoom }}
+          canOpenInApp={!!selected}
+          canOpenInBrowser={!!selected?.webUrl}
+          canCopyLink={!!selected?.webUrl}
+          canAskAgent={!!selected}
+          onOpenInApp={() => selected && openInApp(selected)}
+          onOpenInBrowser={() => selected && openInBrowser(selected)}
+          onCopyLink={() => selected?.webUrl && void navigator.clipboard?.writeText(selected.webUrl)}
+          onAskAgent={() => selected && openAgentPanel(agentRequestOf(selected))}
+        />
       ),
       content: (
         <div className="flex h-full min-h-0 flex-col bg-card" onKeyDown={returnToList}>
@@ -402,6 +418,7 @@ export function InboxView({
             <InboxPreview
               item={selected}
               tab={tab}
+              zoom={zoom}
               detail={detail}
               readOnly={readOnly}
               previewRef={previewRef}
@@ -426,7 +443,19 @@ export function InboxView({
   ];
 
   return (
-    <div className="flex min-h-0 flex-1">
+    <div
+      className="flex min-h-0 flex-1"
+      onKeyDown={(event) => {
+        if (
+          !event.defaultPrevented && !isEditableTarget(event.target) &&
+          event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey &&
+          event.key === "Enter" && selected
+        ) {
+          event.preventDefault();
+          openInBrowser(selected);
+        }
+      }}
+    >
       <DockableWorkspace storageKey={LAYOUT_STORAGE_KEY} panels={panels} activatePanel={activateRequest} />
 
       {snoozeAnchor && selected ? (

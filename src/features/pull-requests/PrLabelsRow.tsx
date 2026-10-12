@@ -52,53 +52,55 @@ export function PrLabelsRow({
   }
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1">
-      <span className="mr-0.5 text-xs text-muted-foreground">Labels</span>
-      {labels.map((label) => (
-        <span
-          key={label.id}
-          className="inline-flex items-center gap-0.5 rounded-full border border-border bg-muted px-1.5 py-0.5 text-[11px] text-foreground"
-        >
-          {label.name}
+    <div className="grid min-w-0 grid-cols-[4rem_minmax(0,1fr)] items-baseline gap-1">
+      <span className="text-xs text-muted-foreground">Labels</span>
+      <div className="flex min-w-0 flex-wrap items-center gap-1">
+        {labels.map((label) => (
+          <span
+            key={label.id}
+            className="inline-flex max-w-full items-center gap-0.5 rounded-full border border-border bg-muted px-1.5 py-0.5 text-[11px] text-foreground [overflow-wrap:anywhere]"
+          >
+            {label.name}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onRemove(label)}
+              aria-label={`Remove label ${label.name}`}
+              title="Remove label"
+              className="rounded p-0.5 text-muted-foreground hover:bg-background hover:text-destructive disabled:opacity-50"
+            >
+              <X className="h-3 w-3" aria-hidden="true" />
+            </button>
+          </span>
+        ))}
+        {adding ? (
+          <input
+            ref={inputRef}
+            type="text"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={onKeyDown}
+            onBlur={() => {
+              setAdding(false);
+              setDraft("");
+            }}
+            aria-label="New label name"
+            placeholder="Label, Enter to add"
+            className="w-36 rounded border border-input bg-background px-1.5 py-0.5 text-[11px] focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        ) : (
           <button
+            ref={addButtonRef}
             type="button"
             disabled={busy}
-            onClick={() => onRemove(label)}
-            aria-label={`Remove label ${label.name}`}
-            title="Remove label"
-            className="rounded p-0.5 text-muted-foreground hover:bg-background hover:text-destructive disabled:opacity-50"
+            onClick={() => setAdding(true)}
+            title="Add a label"
+            className={CHIP_BUTTON}
           >
-            <X className="h-3 w-3" aria-hidden="true" />
+            <Plus className="h-3 w-3" aria-hidden="true" /> Label
           </button>
-        </span>
-      ))}
-      {adding ? (
-        <input
-          ref={inputRef}
-          type="text"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={onKeyDown}
-          onBlur={() => {
-            setAdding(false);
-            setDraft("");
-          }}
-          aria-label="New label name"
-          placeholder="Label, Enter to add"
-          className="w-36 rounded border border-input bg-background px-1.5 py-0.5 text-[11px] focus:outline-none focus:ring-2 focus:ring-ring"
-        />
-      ) : (
-        <button
-          ref={addButtonRef}
-          type="button"
-          disabled={busy}
-          onClick={() => setAdding(true)}
-          title="Add a label"
-          className={CHIP_BUTTON}
-        >
-          <Plus className="h-3 w-3" aria-hidden="true" /> Label
-        </button>
-      )}
+        )}
+      </div>
     </div>
   );
 }

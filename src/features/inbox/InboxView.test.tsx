@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { OPEN_AGENT_PANEL_EVENT, type OpenAgentPanelDetail } from "@/components/agent/agentSubject";
+import { OPEN_AGENT_PANEL_EVENT, useAgentSubject, type OpenAgentPanelDetail } from "@/components/agent/agentSubject";
+import { useAgentListScope } from "@/components/agent/agentListScope";
 import { closeAgentPanel, resetAgentPanelState } from "@/components/agent/agentPanelStore";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -90,18 +91,49 @@ describe("InboxView", () => {
     expect(rows[5].textContent).toContain("#118 Platform");
   });
 
-  it("shows tab counts and includes the derived approvals in Inbox", async () => {
+  it("shows the item count and Done / Snoozed buttons in the status bar, and includes the derived approvals", async () => {
     renderView();
     const list = await openList();
     await approvalRows(list);
     const derived = within(list).getAllByRole("option").filter(isDerived);
 
-    const inboxTab = screen.getByRole("tab", { name: /Inbox/ });
     await waitFor(() => {
-      expect(inboxTab.textContent).toContain(String(6 + derived.length));
+      expect(screen.getByText(`${6 + derived.length} items`)).toBeTruthy();
     });
-    expect(screen.getByRole("tab", { name: /Snoozed/ }).textContent).toContain("0");
-    expect(screen.getByRole("tab", { name: /Done/ }).textContent).toContain("0");
+    expect(screen.getByRole("button", { name: "Snoozed 0" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Done 0" })).toBeTruthy();
+    // The old Inbox / Snoozed / Done tabs and the key-hint footer are gone.
+    expect(screen.queryByRole("tab", { name: /Done/ })).toBeNull();
+    expect(screen.queryByText(/E done · Z snooze/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Show keyboard shortcuts for this view" })).toBeTruthy();
+  });
+
+  it("returns from the Done list with the chip and with Escape", async () => {
+    renderView();
+    const list = await openList();
+    fireEvent.click(rowFor(list, "!42"));
+    fireEvent.keyDown(list, { key: "e" });
+    fireEvent.click(await screen.findByRole("button", { name: "Done 1" }));
+
+    const done = await screen.findByRole("listbox", { name: "Inbox items" });
+    await waitFor(() => {
+      expect(within(done).getAllByRole("option")).toHaveLength(1);
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Back to open list/ }));
+    await waitFor(() => {
+      expect(storedRows(screen.getByRole("listbox", { name: "Inbox items" }))).toHaveLength(5);
+    });
+    expect(screen.queryByRole("button", { name: /Back to open list/ })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Done 1" }));
+    const again = await screen.findByRole("listbox", { name: "Inbox items" });
+    await waitFor(() => {
+      expect(within(again).getAllByRole("option")).toHaveLength(1);
+    });
+    fireEvent.keyDown(again, { key: "Escape" });
+    await waitFor(() => {
+      expect(storedRows(screen.getByRole("listbox", { name: "Inbox items" }))).toHaveLength(5);
+    });
   });
 
   it("selects with j/k and shows the item in the preview", async () => {
@@ -133,7 +165,7 @@ describe("InboxView", () => {
     });
     expect(storedRows(list).some((row) => row.textContent?.includes("!42"))).toBe(false);
 
-    fireEvent.click(screen.getByRole("tab", { name: /Done/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Done 1" }));
     const done = await screen.findByRole("listbox", { name: "Inbox items" });
     await waitFor(() => {
       expect(within(done).getAllByRole("option")).toHaveLength(1);
@@ -145,7 +177,7 @@ describe("InboxView", () => {
     await waitFor(() => {
       expect(within(done).queryAllByRole("option")).toHaveLength(0);
     });
-    fireEvent.click(screen.getByRole("tab", { name: /Inbox/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Done \d+$/ }));
     const reopened = await screen.findByRole("listbox", { name: "Inbox items" });
     await waitFor(() => {
       expect(storedRows(reopened)).toHaveLength(6);
@@ -163,7 +195,7 @@ describe("InboxView", () => {
     await waitFor(() => {
       expect(storedRows(list)).toHaveLength(5);
     });
-    fireEvent.click(screen.getByRole("tab", { name: /Snoozed/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Snoozed 1" }));
     const snoozed = await screen.findByRole("listbox", { name: "Inbox items" });
     await waitFor(() => {
       expect(within(snoozed).getAllByRole("option")).toHaveLength(1);
@@ -206,6 +238,68 @@ describe("InboxView", () => {
     window.removeEventListener(NAVIGATE_PULL_REQUEST_EVENT, listener);
   });
 
+  it("opens an agent reply's PR in the browser after resolving its metadata", async () => {
+    renderView();
+    const list = await openList();
+    const agentRow = await within(list).findByRole("option", { name: /Agent.*!101/ });
+    fireEvent.click(agentRow);
+    await waitFor(() => expect((screen.getByRole("button", {
+      name: "Open in Azure DevOps (O / Ctrl+Enter)",
+    }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.keyDown(list, { key: "Enter", ctrlKey: true });
+    expect(openExternalUrl).toHaveBeenCalledWith(
+      "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/101",
+    );
+  });
+
+  it("opens the browser from the preview and toolbar with Ctrl+Enter", async () => {
+    renderView();
+    const list = await openList();
+    fireEvent.click(rowFor(list, "!42"));
+    const heading = await screen.findByRole("heading", { name: /!42/ });
+    fireEvent.keyDown(heading.closest('[data-primary-preview="true"]')!, { key: "Enter", ctrlKey: true });
+    fireEvent.keyDown(screen.getByRole("button", { name: "Open in DevDeck (Shift+Enter)" }), { key: "Enter", ctrlKey: true });
+    expect(openExternalUrl).toHaveBeenCalledTimes(2);
+    expect(openExternalUrl).toHaveBeenCalledWith("https://dev.azure.com/contoso/Platform/_git/azdo-dashboard/pullrequest/42");
+  });
+
+  it("replies in place with R and Ctrl+Enter, then finishes the item", async () => {
+    renderView();
+    const list = await openList();
+    fireEvent.click(rowFor(list, "!42"));
+    const input = await screen.findByPlaceholderText("Reply…");
+    fireEvent.keyDown(list, { key: "r" });
+    await waitFor(() => expect(document.activeElement).toBe(input));
+    fireEvent.change(input, { target: { value: "Confirmed the null handling." } });
+    fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
+    await waitFor(() => {
+      expect(storedRows(list).some((row) => row.textContent?.includes("!42"))).toBe(false);
+    });
+    expect(openExternalUrl).not.toHaveBeenCalled();
+    await waitFor(() => expect(document.activeElement).toBe(within(list).getByRole("option", { selected: true })));
+  });
+
+  it("clears the reply draft when selecting another inbox thread", async () => {
+    renderView();
+    const list = await openList();
+    fireEvent.click(rowFor(list, "!42"));
+    fireEvent.change(await screen.findByPlaceholderText("Reply…"), { target: { value: "For PR 42 only" } });
+    fireEvent.click(rowFor(list, "!189"));
+    await screen.findByRole("heading", { name: /!189/ });
+    await waitFor(() => expect((screen.getByPlaceholderText("Reply…") as HTMLTextAreaElement).value).toBe(""));
+  });
+
+  it("resolves the selected thread in place and finishes the item", async () => {
+    renderView();
+    const list = await openList();
+    fireEvent.click(rowFor(list, "!42"));
+    fireEvent.click(await screen.findByRole("button", { name: "Resolve + Done" }));
+    await waitFor(() => {
+      expect(storedRows(list).some((row) => row.textContent?.includes("!42"))).toBe(false);
+    });
+    expect(openExternalUrl).not.toHaveBeenCalled();
+  });
+
   it("votes on a review request with a and finishes the item", async () => {
     renderView();
     const list = await openList();
@@ -217,7 +311,7 @@ describe("InboxView", () => {
     await waitFor(() => {
       expect(storedRows(list).some((row) => row.textContent?.includes("!210"))).toBe(false);
     });
-    fireEvent.click(screen.getByRole("tab", { name: /Done/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Done 1" }));
     const done = await screen.findByRole("listbox", { name: "Inbox items" });
     await waitFor(() => {
       expect(within(done).getAllByRole("option")[0].textContent).toContain("!210");
@@ -302,8 +396,8 @@ describe("InboxView", () => {
     fireEvent.click(approval);
 
     expect(await screen.findByRole("button", { name: /^Approve\s*A$/ })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /^Done/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /^Snooze/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Done\s*E$/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Snooze\s*Z$/ })).toBeNull();
     // e does nothing to a derived entry.
     const before = within(list).getAllByRole("option").length;
     fireEvent.keyDown(list, { key: "e" });
@@ -322,5 +416,63 @@ describe("InboxView", () => {
       expect(within(list).getAllByRole("option")).toHaveLength(1);
     });
     expect(within(list).getByRole("option").textContent).toContain("!189 android-app");
+  });
+});
+
+describe("InboxView Agent context", () => {
+  function Probe() {
+    const subject = useAgentSubject();
+    const scope = useAgentListScope();
+    return (
+      <>
+        <output data-testid="subject">{subject ? JSON.stringify(subject) : ""}</output>
+        <output data-testid="list">{scope ? `${scope.id}:${scope.count}` : ""}</output>
+      </>
+    );
+  }
+  function renderWithProbe() {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <Probe />
+        <InboxView />
+      </QueryClientProvider>,
+    );
+  }
+  const published = () => screen.getByTestId("subject").textContent ?? "";
+
+  it("publishes the selected entry's pull request with its thread, and the work item for a WI entry", async () => {
+    renderWithProbe();
+    const list = await openList();
+    fireEvent.click(rowFor(list, "!42"));
+    await waitFor(() => expect(published()).toContain('"kind":"pull-request"'));
+    const pr = JSON.parse(published());
+    expect(pr).toMatchObject({ id: 42, repositoryName: "azdo-dashboard" });
+    expect(pr.threadId).toBeGreaterThan(0);
+
+    fireEvent.click(rowFor(list, "#123"));
+    await waitFor(() => expect(JSON.parse(published())).toMatchObject({ kind: "work-item", id: 123 }));
+  });
+
+  it("leaves a pipeline approval without a subject", async () => {
+    renderWithProbe();
+    const list = await openList();
+    fireEvent.click(rowFor(list, "!42"));
+    await waitFor(() => expect(published()).not.toBe(""));
+    const [approval] = await approvalRows(list);
+    fireEvent.click(approval);
+    await waitFor(() => expect(published()).toBe(""));
+  });
+
+  it("offers the visible entries as the Inbox list, following the text filter", async () => {
+    renderWithProbe();
+    const list = await openList();
+    await waitFor(() => expect(screen.getByTestId("list").textContent).toMatch(/^inbox:\d+$/));
+    const total = Number(screen.getByTestId("list").textContent?.split(":")[1]);
+    expect(total).toBe(within(list).getAllByRole("option").length);
+
+    fireEvent.keyDown(list, { key: "/" });
+    fireEvent.change(await screen.findByLabelText("Filter inbox items"), { target: { value: "android" } });
+    await waitFor(() => expect(screen.getByTestId("list").textContent).toBe("inbox:1"));
   });
 });

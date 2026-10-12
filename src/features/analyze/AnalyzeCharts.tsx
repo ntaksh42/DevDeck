@@ -22,13 +22,13 @@ export function TrendSparkline({
   if (!geometry) {
     return (
       <span className="block text-xs text-muted-foreground">
-        推移を描くにはデータ点が足りません
+        Not enough data points to draw a trend
       </span>
     );
   }
 
   const direction =
-    geometry.trend === "up" ? "増加" : geometry.trend === "down" ? "減少" : "横ばい";
+    geometry.trend === "up" ? "rising" : geometry.trend === "down" ? "falling" : "flat";
 
   return (
     <svg
@@ -37,7 +37,7 @@ export function TrendSparkline({
       height={CHART_HEIGHT}
       preserveAspectRatio="none"
       role="img"
-      aria-label={`${label}: ${geometry.first} から ${geometry.latest} へ${direction} (最小 ${geometry.min} / 最大 ${geometry.max})`}
+      aria-label={`${label}: ${direction} from ${geometry.first} to ${geometry.latest} (min ${geometry.min} / max ${geometry.max})`}
       className={`block ${TREND_CLASSES[geometry.trend]}`}
     >
       <polygon points={geometry.area} fill="currentColor" opacity={0.12} />

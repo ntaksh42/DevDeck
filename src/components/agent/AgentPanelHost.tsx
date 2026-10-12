@@ -1,5 +1,12 @@
 import { AgentPanel } from "./AgentPanel";
-import { clearAgentQuote, closeAgentPanel, setAgentSubjectOverride, useAgentPanelState } from "./agentPanelStore";
+import {
+  clearAgentQuote,
+  closeAgentPanel,
+  isAgentPanelShown,
+  setAgentListAttached,
+  setAgentSubjectOverride,
+  useAgentPanelState,
+} from "./agentPanelStore";
 
 /** The Agent panel wired to the app-wide store, for a dock panel or the drawer. */
 export function AgentPanelContent({ docked = false }: { docked?: boolean }) {
@@ -9,6 +16,8 @@ export function AgentPanelContent({ docked = false }: { docked?: boolean }) {
       docked={docked}
       override={state.override}
       onOverrideChange={setAgentSubjectOverride}
+      listAttached={state.listAttached}
+      onListAttachedChange={setAgentListAttached}
       focusAskId={state.focusAskId}
       replyRequest={state.replyRequest}
       quote={state.quote}
@@ -25,7 +34,7 @@ export function AgentPanelContent({ docked = false }: { docked?: boolean }) {
  * can be dragged, split and tabbed like any other panel.
  */
 export function AgentPanelHost() {
-  const { open, dockHosts } = useAgentPanelState();
-  if (!open || dockHosts.length > 0) return null;
+  const state = useAgentPanelState();
+  if (!isAgentPanelShown(state) || state.dockHosts.length > 0) return null;
   return <AgentPanelContent />;
 }

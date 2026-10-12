@@ -115,7 +115,7 @@ export function useWiGridState({
   }, []);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
   const previousResultKeysRef = useRef<string | null>(null);
-  const [gridViewport, setGridViewport] = useState({ height: 0, scrollTop: 0 });
+  const [gridViewport, setGridViewport] = useState({ width: 0, height: 0, scrollTop: 0 });
   const queryClient = useQueryClient();
   const [showDone, setShowDone] = useState(false);
   const [triageVersion, setTriageVersion] = useState(0);

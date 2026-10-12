@@ -20,6 +20,7 @@ import { ColumnResizeHandle } from '@/components/ResizeHandle';
 import { ColumnVisibilityMenu } from '@/components/ColumnVisibilityMenu';
 import { LoadingState, PreviewEmptyState, SEARCH_EMPTY_HINT } from '@/components/StateDisplay';
 import { ActiveFilters } from '@/components/ActiveFilters';
+import { ListStatusBar } from '@/components/ListStatusBar';
 import { ColumnFilterDropdown } from '@/components/ColumnFilterDropdown';
 import {
   activeColumnFilterCount,
@@ -27,7 +28,7 @@ import {
   columnFilterUniqueValues,
   toggleColumnFilterValue,
 } from '@/lib/columnFilters';
-import { usePrReviewPanels } from './usePrReviewPanels';
+import { columnFilterNotes, prAgentList, usePrReviewPanels } from './usePrReviewPanels';
 import { DockableWorkspace, type DockablePanelSpec } from '@/components/DockableWorkspace';
 import { MemoPrSearchRow } from './MemoPrSearchRow';
 import {
@@ -141,16 +142,16 @@ export function PullRequestResults({
   }, [results]);
 
   const countLabel = useMemo(() => {
-    if (loading) return "Searching";
-    if (!searched) return "Ready";
+    if (loading) return "Searching…";
+    if (!searched) return "No search yet";
     // When the backend capped the result set, show the cap (e.g. "100+") so the
     // count does not read as the full match total.
     const shown = truncated ? `${results.length}+` : `${results.length}`;
     if (hasActiveColumnFilters) {
-      return `${filteredResults.length} of ${shown} pull request${results.length === 1 ? "" : "s"}`;
+      return `${filteredResults.length} of ${shown} items`;
     }
     const suffix = truncated ? ` (showing first ${results.length} of ${total}+)` : "";
-    return `${shown} pull request${results.length === 1 ? "" : "s"}${suffix}`;
+    return `${shown} item${results.length === 1 ? "" : "s"}${suffix}`;
   }, [filteredResults.length, hasActiveColumnFilters, loading, results.length, searched, total, truncated]);
 
   const selection = useRangeSelection({
@@ -311,26 +312,11 @@ export function PullRequestResults({
     maximized,
     onToggleMaximize: () => setMaximized((value) => !value),
     resultCommentRequest,
+    agentList: searched ? prAgentList("pr-search", "Pull request search results", filteredResults, () => [...columnFilterNotes(columnFilters), truncated && `Only the first ${results.length} of ${total} matches were loaded`]) : undefined,
   });
 
-  // Count, filter state and Columns sit in the dock tab strip, not a row of their own.
-  const resultsHeader = (
-    <span className="flex items-center gap-2 pr-1 text-[11px] text-muted-foreground">
-      {countLabel}
-      {selection.isMultiSelect ? `· ${selection.selectedKeys.size} selected` : ""}
-      <ActiveFilters count={activeFilterCount} onClear={clearAllFilters} />
-      <button
-        type="button"
-        onClick={(event) => setColumnMenuRect(event.currentTarget.getBoundingClientRect())}
-        className="flex h-4 items-center rounded border border-border bg-card px-1.5 text-[11px] hover:bg-secondary"
-      >
-        Columns
-      </button>
-    </span>
-  );
-
   const gridPane = (
-      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card">
+      <div data-grid-focus-fallback="true" tabIndex={-1} className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card">
       {!searched && !loading ? (
         <PreviewEmptyState message="Run a search to load pull requests." hint={SEARCH_EMPTY_HINT} />
       ) : results.length === 0 && !loading ? (
@@ -424,6 +410,12 @@ export function PullRequestResults({
           </div>
         </div>
       )}
+      <ListStatusBar
+        summary={[countLabel, selection.isMultiSelect ? `${selection.selectedKeys.size} selected` : null]}
+        filters={<ActiveFilters count={activeFilterCount} onClear={clearAllFilters} />}
+        onColumns={setColumnMenuRect}
+        helpSection="pr-search"
+      />
       </div>
   );
 
@@ -432,7 +424,7 @@ export function PullRequestResults({
       <DockableWorkspace
         storageKey={`${PR_SEARCH_PREVIEW_WIDTH_STORAGE_KEY}:dockview:v2`}
         panels={[
-          { id: 'grid', title: 'Results', content: gridPane, minWidth: 480, headerActions: resultsHeader },
+          { id: 'grid', title: 'Pull requests', content: gridPane, minWidth: 480 },
           {
             ...reviewAnchor,
             position: { relativeTo: 'grid', direction: 'right' },

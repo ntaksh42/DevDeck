@@ -63,6 +63,30 @@ describe("useGridFocusRestoration", () => {
     expect(restoreFocus).not.toHaveBeenCalled();
   });
 
+  it("restores a primary listbox's focused option after it is removed", () => {
+    const replacement = document.createElement("div");
+    replacement.setAttribute("role", "option");
+    replacement.tabIndex = 0;
+    const restoreFocus = vi.fn(() => {
+      replacement.focus();
+      return true;
+    });
+    const { result, rerender, container, row } = setup(restoreFocus);
+    container.setAttribute("role", "listbox");
+    container.dataset.primaryGrid = "true";
+    row.setAttribute("role", "option");
+    act(() => {
+      row.focus();
+      result.current.onFocusCapture({ target: row } as never);
+      row.remove();
+      result.current.onBlurCapture({ relatedTarget: null } as never);
+      container.appendChild(replacement);
+    });
+    rerender({ signature: "b" });
+    act(() => vi.advanceTimersByTime(20));
+    expect(document.activeElement).toBe(replacement);
+  });
+
   it("keeps focus ownership when a node-removal blur reports a null relatedTarget", () => {
     const restoreFocus = vi.fn(() => true);
     const { result, row } = setup(restoreFocus);

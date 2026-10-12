@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { MyCreatedPullRequestSummary } from "@/lib/azdoCommands";
+import { useAgentListScope } from "@/components/agent/agentListScope";
+import { useAgentSubject } from "@/components/agent/agentSubject";
 import { MyPullRequestsGrid } from "./MyPullRequestsGrid";
 
 afterEach(cleanup);
@@ -89,6 +91,38 @@ describe("MyPullRequestsGrid copy shortcuts", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Show Drafts (1)" }));
     expect(within(grid).queryByText("WIP refactor")).toBeNull();
     expect(within(grid).getByText(pr.title)).toBeTruthy();
-    expect(screen.getByText("1 of 2")).toBeTruthy();
+    expect(screen.getByText("1 of 2 items")).toBeTruthy();
+  });
+
+  it("offers the visible list and the selected PR to the Agent panel", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+    client.setQueryData(["activeOrganization"], { id: "contoso" });
+    const draft = { ...pr, pullRequestId: 78, title: "WIP refactor", isDraft: true };
+    client.setQueryData(["myCreatedPullRequests", "contoso"], { pullRequests: [pr, draft], warnings: [] });
+    function Probe() {
+      const scope = useAgentListScope();
+      const subject = useAgentSubject();
+      return (
+        <>
+          <output data-testid="scope">{scope ? `${scope.id}:${scope.count}` : ""}</output>
+          <output data-testid="subject">{subject && subject.kind === "pull-request" ? `${subject.kind}:${subject.id}` : ""}</output>
+          <output data-testid="markdown">{scope?.markdown() ?? ""}</output>
+        </>
+      );
+    }
+    render(
+      <QueryClientProvider client={client}>
+        <Probe />
+        <MyPullRequestsGrid />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByRole("grid", { name: "My pull requests" });
+    await waitFor(() => expect(screen.getByTestId("scope").textContent).toBe("my-pull-requests:2"));
+    expect(screen.getByTestId("subject").textContent).toBe("pull-request:77");
+    expect(screen.getByTestId("markdown").textContent).toContain("| !78 | WIP refactor |");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Show Drafts (1)" }));
+    await waitFor(() => expect(screen.getByTestId("scope").textContent).toBe("my-pull-requests:1"));
   });
 });

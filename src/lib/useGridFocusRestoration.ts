@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 
-const GRID_FOCUS_SELECTOR = '[role="grid"], [role="row"]';
+const GRID_FOCUS_SELECTOR = '[role="grid"], [role="row"], [data-primary-grid="true"]';
 
 /**
  * Keeps keyboard focus on the selected grid row across data updates.

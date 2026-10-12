@@ -97,43 +97,77 @@ describe("App — Work Item Views UX", () => {
     cleanup();
   });
 
-  it("collapses the view list and keeps the selected view summary on screen", async () => {
+  it("shows the views as one row of chips by default and switches to cards with the toggle", async () => {
     await openViewsScreen();
     const list = await screen.findByRole("listbox", { name: "Saved work item views" });
+    // Chip row: no card density switch, one option per view.
+    expect(screen.queryByRole("button", { name: "Compact view list" })).toBeNull();
     const firstView = within(list).getAllByRole("option")[0];
-    fireEvent.click(firstView);
+    expect(firstView.textContent).toContain("Assigned to me");
 
-    const toggle = screen.getByRole("button", { name: /Hide the view list/ });
-    expect(toggle.getAttribute("aria-expanded")).toBe("true");
-
-    fireEvent.click(toggle);
-
-    // The list itself is gone, but the header still names the selected view.
-    expect(screen.queryByRole("listbox", { name: "Saved work item views" })).toBeNull();
-    const expandToggle = screen.getByRole("button", { name: /Show the view list/ });
+    const expandToggle = screen.getByRole("button", { name: /Show view cards/ });
     expect(expandToggle.getAttribute("aria-expanded")).toBe("false");
-    expect(screen.getAllByText("Assigned to me").length).toBeGreaterThan(0);
-    // Focus lands on the toggle rather than <body> so the keyboard is not stranded.
-    await waitFor(() => expect(document.activeElement).toBe(expandToggle));
-
     fireEvent.click(expandToggle);
-    expect(screen.getByRole("listbox", { name: "Saved work item views" })).toBeTruthy();
+
+    // The card display is back, with its density switch, and focus is on a card.
+    const cards = screen.getByRole("listbox", { name: "Saved work item views" });
+    expect(within(cards).getAllByRole("option").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Compact view list" })).toBeTruthy();
+    const collapseToggle = screen.getByRole("button", { name: /Collapse to one row of chips/ });
+    expect(collapseToggle.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(collapseToggle);
+    expect(screen.queryByRole("button", { name: "Compact view list" })).toBeNull();
+    // Focus lands on the toggle rather than <body> so the keyboard is not stranded.
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: /Show view cards/ })),
+    );
   });
 
-  it("restores the collapsed state on the next visit", async () => {
+  it("moves the selected chip with the arrow keys", async () => {
+    await openViewsScreen();
+    const list = await screen.findByRole("listbox", { name: "Saved work item views" });
+    const options = within(list).getAllByRole("option");
+    expect(options.length).toBeGreaterThan(1);
+    fireEvent.click(options[0]);
+    expect(options[0].getAttribute("aria-selected")).toBe("true");
+
+    fireEvent.keyDown(options[0], { key: "ArrowRight" });
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("listbox", { name: "Saved work item views" }))
+          .getAllByRole("option")[1]
+          .getAttribute("aria-selected"),
+      ).toBe("true"),
+    );
+  });
+
+  it("keeps pin, preview and reorder reachable from the chip row's more menu", async () => {
     await openViewsScreen();
     await screen.findByRole("listbox", { name: "Saved work item views" });
-    fireEvent.click(screen.getByRole("button", { name: /Hide the view list/ }));
+    expect(screen.queryByRole("button", { name: "Pin selected view" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "More view actions" }));
+    const menu = await screen.findByRole("menu", { name: "More view actions" });
+    expect(within(menu).getByRole("menuitem", { name: /Pin view|Unpin view/ })).toBeTruthy();
+    expect(within(menu).getByRole("menuitem", { name: /Hide preview|Show preview/ })).toBeTruthy();
+    expect(within(menu).getByRole("menuitem", { name: /Move view right/ })).toBeTruthy();
+  });
+
+  it("restores the card display on the next visit", async () => {
+    await openViewsScreen();
+    await screen.findByRole("listbox", { name: "Saved work item views" });
+    fireEvent.click(screen.getByRole("button", { name: /Show view cards/ }));
     cleanup();
 
     await openViewsScreen();
-    expect(await screen.findByRole("button", { name: /Show the view list/ })).toBeTruthy();
-    expect(screen.queryByRole("listbox", { name: "Saved work item views" })).toBeNull();
+    expect(await screen.findByRole("button", { name: /Collapse to one row of chips/ })).toBeTruthy();
   });
 
-  it("switches the view list to the compact density and persists it", async () => {
+  it("switches the card list to the compact density and persists it", async () => {
     await openViewsScreen();
     await screen.findByRole("listbox", { name: "Saved work item views" });
+    fireEvent.click(screen.getByRole("button", { name: /Show view cards/ }));
 
     const compact = screen.getByRole("button", { name: "Compact view list" });
     expect(compact.getAttribute("aria-pressed")).toBe("false");

@@ -136,37 +136,39 @@ export function ReviewTab({
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col" data-pane-editable={readOnly ? undefined : "true"}>
       {confirmDialogProps ? <ConfirmDialog {...confirmDialogProps} /> : null}
       {/* Vote + primary merge action in one row; secondary actions (publish,
           auto-complete, branch / work-item toggles, abandon) live in the ⋯ menu
           so the row stays compact, matching the reference layout. */}
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-2 py-1.5 text-xs">
-        <label htmlFor="pr-vote-select" className="font-medium text-muted-foreground">
-          Your vote
-        </label>
-        <select
-          id="pr-vote-select"
-          value={myVote}
-          disabled={voteMutation.isPending}
-          onChange={(event) =>
-            voteMutation.mutate({
-              ...prLocator(pr),
-              vote: Number(event.target.value) as VoteValue,
-            })
-          }
-          aria-label="Your vote"
-          className={`h-7 rounded-md border px-2 font-medium outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 ${VOTE_BADGE_CLASSES[voteTone(myVote)]}`}
-        >
-          {VOTE_OPTIONS.map((option) => (
-            <option key={option.vote} value={option.vote}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        {voteMutation.isPending ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden="true" />
-        ) : null}
+      <div className="flex shrink-0 flex-wrap items-center gap-x-1.5 gap-y-1 border-b border-border px-2 py-1 text-xs">
+        <div className="flex items-center gap-1.5">
+          <label htmlFor="pr-vote-select" className="font-medium text-muted-foreground">
+            Your vote
+          </label>
+          <select
+            id="pr-vote-select"
+            value={myVote}
+            disabled={voteMutation.isPending}
+            onChange={(event) =>
+              voteMutation.mutate({
+                ...prLocator(pr),
+                vote: Number(event.target.value) as VoteValue,
+              })
+            }
+            aria-label="Your vote"
+            className={`h-7 rounded-md border px-2 font-medium outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 ${VOTE_BADGE_CLASSES[voteTone(myVote)]}`}
+          >
+            {VOTE_OPTIONS.map((option) => (
+              <option key={option.vote} value={option.vote}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          {voteMutation.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden="true" />
+          ) : null}
+        </div>
 
         <div className="ml-auto flex items-center gap-1.5">
           <NativeSelect
@@ -227,7 +229,7 @@ export function ReviewTab({
         <PrPreviewSection
           title="Description"
           collapseId="description"
-          className="px-3"
+          className="px-2"
           headerAction={
             !editingDetails ? (
               <button
@@ -308,7 +310,7 @@ export function ReviewTab({
               </div>
             </div>
           ) : (
-            <div className="pb-2">
+            <div className="pb-1">
               {review.description ? (
                 <MarkdownView
                   text={review.description}
@@ -328,7 +330,7 @@ export function ReviewTab({
           <PrPreviewSection
             title={`Work Items (${linkedWorkItemIds.length})`}
             collapseId="workItems"
-            className="px-3"
+            className="px-2"
           >
             <div className="flex flex-wrap gap-1 pb-2">
               {linkedWorkItemIds.map((id) => (
@@ -352,7 +354,7 @@ export function ReviewTab({
         <PrPreviewSection
           title={`Comments (${userThreads.length})`}
           collapseId="comments"
-          className="px-3"
+          className="px-2"
         >
           <div className="flex flex-col gap-2 pb-2">
             {userThreads.length === 0 ? (
@@ -404,7 +406,7 @@ export function ReviewTab({
       </div>
 
       {/* New comment */}
-      <div className="shrink-0 border-t border-border p-2">
+      <div data-pr-comment-composer="true" className="shrink-0 border-t border-border p-2">
         <CommentComposer
           collapsible
           placeholder="Add a comment…"

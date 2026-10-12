@@ -349,6 +349,9 @@ export function WorkItemBoard({
     <div className="flex min-h-0 flex-1 gap-3">
       <div
         ref={containerRef}
+        data-focus-pane="board"
+        data-pane-focus-target="true"
+        data-pane-arrow-keys="local"
         tabIndex={-1}
         role="group"
         aria-label="Work item board. Use arrow keys to move between cards, Shift+Arrow to change a card's state, Enter to open the preview."
@@ -381,7 +384,7 @@ export function WorkItemBoard({
           />
         ))}
       </div>
-      <div className="hidden w-[380px] shrink-0 lg:flex lg:flex-col">
+      <div className="hidden w-[380px] shrink-0 lg:flex lg:flex-col" data-focus-pane="board-preview" tabIndex={-1}>
         <WorkItemPreviewPanel
           customPreviewFields={customPreviewFields}
           onCustomPreviewFieldsChange={(fields) => {

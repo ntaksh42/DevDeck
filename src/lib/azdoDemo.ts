@@ -315,6 +315,16 @@ export async function demoInvoke(command: string, args?: unknown): Promise<unkno
       }
       const workItems = demoWorkItems({ query });
       const pullRequests = demoPullRequests({ query }).pullRequests;
+      // Numeric Inbox lookups also reach PRs seeded only in the review cache.
+      const reviewPr = demoReviewPullRequests().find((pr) => String(pr.pullRequestId) === query);
+      if (reviewPr && !pullRequests.some((pr) => pr.pullRequestId === reviewPr.pullRequestId)) {
+        pullRequests.push({
+          ...reviewPr,
+          status: "active",
+          closedDate: null,
+          sourceRefName: demoPrReviewDetail(reviewPr.pullRequestId).sourceRefName,
+        });
+      }
       return {
         workItems: workItems.slice(0, limit),
         pullRequests: pullRequests.slice(0, limit),

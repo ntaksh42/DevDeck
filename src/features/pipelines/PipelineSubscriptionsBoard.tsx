@@ -1,9 +1,11 @@
 import { useQueries } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Loader2, RefreshCw, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { usePublishAgentSubject } from "@/components/agent/agentSubject";
 import { listPipelineRuns, type PipelineRunSummary } from "@/lib/azdoCommands";
 import { formatDate, formatRelativeDate } from "@/lib/utils";
-import { NativeSelect } from "@/components/SearchBar";
+import { itemCount, ListStatusBar } from "@/components/ListStatusBar";
 import {
   type BoardSort,
   type BoardStatusFilter,
@@ -16,6 +18,7 @@ import {
   saveBoardSort,
   sortBoardRows,
 } from "./pipelineBoard";
+import { pipelineRunSubject } from "./pipelineAgent";
 import { PipelineHistorySpark } from "./PipelineHistorySpark";
 import { RunBadge, RunningDot } from "./PipelineRunBadge";
 import { PipelineRunsGrid, type RunSelection } from "./PipelineRunsGrid";
@@ -53,6 +56,7 @@ export function PipelineSubscriptionsBoard({
   onSelectRun,
   onRemove,
   onToggleApprovals,
+  toolbarSlot,
 }: {
   organizationId: string;
   subscriptions: PipelineSubscription[];
@@ -65,8 +69,11 @@ export function PipelineSubscriptionsBoard({
   onSelectRun: (selection: RunSelection) => void;
   onRemove: (projectId: string, definitionId: number) => void;
   onToggleApprovals?: () => void;
+  /** Dock tab-band element that receives the Sort select and refresh button. */
+  toolbarSlot?: HTMLElement | null;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [activeKey, setActiveKey] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<BoardStatusFilter>(null);
   const [sort, setSort] = useState<BoardSort>(() => loadBoardSort());
   const [rootEl, setRootEl] = useState<HTMLElement | null>(null);
@@ -192,6 +199,17 @@ export function PipelineSubscriptionsBoard({
     return expandedRows[0]?.key ?? null;
   }, [allRows, expanded, selectedBuildId]);
 
+  // The Agent panel follows the watched pipeline last focused here (its latest run) until a
+  // run's details are opened, which publish their own run.
+  const agentRun = allRows.find(({ key }) => key === activeKey)?.latest;
+  usePublishAgentSubject(
+    selectedBuildId != null
+      ? undefined
+      : agentRun
+        ? pipelineRunSubject(agentRun, agentRun.organizationId, agentRun.projectId)
+        : null,
+  );
+
   if (orgSubscriptions.length === 0) {
     return (
       emptyContent ?? (
@@ -206,78 +224,38 @@ export function PipelineSubscriptionsBoard({
     );
   }
 
+  // Sort and refresh sit in the dock tab band when the host gives a slot for them.
+  const toolbarControls = (
+    <>
+      <select
+        value={sort}
+        onChange={(event) => changeSort(event.target.value as BoardSort)}
+        aria-label="Sort pipelines"
+        className="h-4 rounded border border-input bg-background px-1 text-[11px] outline-none focus:ring-2 focus:ring-ring"
+      >
+        <option value="status">Sort: Status</option>
+        <option value="name">Sort: Name</option>
+        <option value="lastRun">Sort: Last run</option>
+      </select>
+      <button
+        type="button"
+        onClick={() => queries.forEach((query) => void query.refetch())}
+        title={lastUpdated ? `Updated ${formatClock(lastUpdated)} — click to refresh` : "Refresh runs"}
+        aria-label="Refresh runs"
+        className="inline-flex h-4 items-center gap-1 rounded border border-border bg-card px-1.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+      >
+        <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
+        {lastUpdated ? <span className="tabular-nums">{formatClock(lastUpdated)}</span> : null}
+      </button>
+    </>
+  );
+
   return (
     <div
       ref={setRootEl}
       className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-card"
     >
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
-        <h2 className="text-base font-semibold">Watched pipelines</h2>
-        <span className="text-sm text-muted-foreground">{orgSubscriptions.length}</span>
-        {runningCount > 0 || statusFilter === "running" ? (
-          <button
-            type="button"
-            aria-pressed={statusFilter === "running"}
-            onClick={() => toggleStatusFilter("running")}
-            title={`${runningCount} watched pipeline${runningCount === 1 ? "" : "s"} currently running — click to show only these`}
-            className={`${PILL_BASE} bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 ${
-              statusFilter === "running" ? "ring-2 ring-blue-500" : ""
-            }`}
-          >
-            <RunningDot />
-            {runningCount} running
-          </button>
-        ) : null}
-        {failedCount > 0 || statusFilter === "failed" ? (
-          <button
-            type="button"
-            aria-pressed={statusFilter === "failed"}
-            onClick={() => toggleStatusFilter("failed")}
-            title={`${failedCount} watched pipeline${failedCount === 1 ? "" : "s"} whose latest run failed — click to show only these`}
-            className={`${PILL_BASE} bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 ${
-              statusFilter === "failed" ? "ring-2 ring-red-500" : ""
-            }`}
-          >
-            <X className="h-3 w-3" aria-hidden="true" />
-            {failedCount} failed
-          </button>
-        ) : null}
-        {approvalCount > 0 && onToggleApprovals ? (
-          <button
-            type="button"
-            aria-pressed={approvalsOpen}
-            onClick={onToggleApprovals}
-            title="Pending approvals assigned to you in the selected project — click to show or hide them"
-            className={`${PILL_BASE} bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 ${
-              approvalsOpen ? "ring-2 ring-amber-500" : ""
-            }`}
-          >
-            {approvalCount} {approvalCount === 1 ? "approval" : "approvals"}
-          </button>
-        ) : null}
-        <div className="ml-auto flex items-center gap-2">
-          <NativeSelect
-            compact
-            value={sort}
-            onChange={(event) => changeSort(event.target.value as BoardSort)}
-            aria-label="Sort pipelines"
-          >
-            <option value="status">Sort: Status</option>
-            <option value="name">Sort: Name</option>
-            <option value="lastRun">Sort: Last run</option>
-          </NativeSelect>
-          <button
-            type="button"
-            onClick={() => queries.forEach((query) => void query.refetch())}
-            title={lastUpdated ? `Updated ${formatClock(lastUpdated)} — click to refresh` : "Refresh runs"}
-            aria-label="Refresh runs"
-            className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-card px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
-            {lastUpdated ? <span className="tabular-nums">{formatClock(lastUpdated)}</span> : null}
-          </button>
-        </div>
-      </div>
+      {toolbarSlot ? createPortal(toolbarControls, toolbarSlot) : toolbarControls}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {boardRows.length === 0 ? (
           <div className="px-3 py-6 text-center text-sm text-muted-foreground">
@@ -299,6 +277,7 @@ export function PipelineSubscriptionsBoard({
                 <button
                   type="button"
                   onClick={() => toggle(key)}
+                  onFocus={() => setActiveKey(key)}
                   aria-expanded={isOpen}
                   className="flex min-w-0 flex-1 items-center gap-2 text-left"
                 >
@@ -382,6 +361,56 @@ export function PipelineSubscriptionsBoard({
           <kbd className="font-mono">R</kbd> re-run · <kbd className="font-mono">X</kbd> cancel
         </div>
       ) : null}
+      <ListStatusBar
+        summary={[
+          itemCount(orgSubscriptions.length),
+          runningCount > 0 || statusFilter === "running" ? (
+            <button
+              key="running"
+              type="button"
+              aria-pressed={statusFilter === "running"}
+              onClick={() => toggleStatusFilter("running")}
+              title={`${runningCount} watched pipeline${runningCount === 1 ? "" : "s"} currently running — click to show only these`}
+              className={`${PILL_BASE} bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 ${
+                statusFilter === "running" ? "ring-2 ring-blue-500" : ""
+              }`}
+            >
+              <RunningDot />
+              {runningCount} running
+            </button>
+          ) : null,
+          failedCount > 0 || statusFilter === "failed" ? (
+            <button
+              key="failed"
+              type="button"
+              aria-pressed={statusFilter === "failed"}
+              onClick={() => toggleStatusFilter("failed")}
+              title={`${failedCount} watched pipeline${failedCount === 1 ? "" : "s"} whose latest run failed — click to show only these`}
+              className={`${PILL_BASE} bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 ${
+                statusFilter === "failed" ? "ring-2 ring-red-500" : ""
+              }`}
+            >
+              <X className="h-3 w-3" aria-hidden="true" />
+              {failedCount} failed
+            </button>
+          ) : null,
+          approvalCount > 0 && onToggleApprovals ? (
+            <button
+              key="approvals"
+              type="button"
+              aria-pressed={approvalsOpen}
+              onClick={onToggleApprovals}
+              title="Pending approvals assigned to you in the selected project — click to show or hide them"
+              className={`${PILL_BASE} bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 ${
+                approvalsOpen ? "ring-2 ring-amber-500" : ""
+              }`}
+            >
+              {approvalCount} {approvalCount === 1 ? "approval" : "approvals"}
+            </button>
+          ) : null,
+        ]}
+        helpSection="pipelines"
+      />
     </div>
   );
 }

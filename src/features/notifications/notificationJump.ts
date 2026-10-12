@@ -1,4 +1,5 @@
 import { parseNotificationPayload, type NotificationRecord } from "@/lib/azdoCommands";
+import type { AgentSubject } from "@/components/agent/agentSubject";
 
 // Where `Enter`/click on a notification row should take the user, resolved
 // from its kind + payload. `payload` is only validated as an untyped record by
@@ -59,4 +60,49 @@ export function resolveNotificationJump(record: NotificationRecord): Notificatio
 export function notificationWebUrl(record: NotificationRecord): string | null {
   const parsed = parseNotificationPayload(record);
   return stringField(parsed.payload as Record<string, unknown>, "webUrl");
+}
+
+/**
+ * The PR / work item title in a notification's body: its first line (a reply puts it in
+ * quotes), which the backend follows with a "repository / organization" line. Free-text
+ * bodies have no such line and fall back to the notification title after its "kind: " prefix.
+ */
+function bodyTitle(record: NotificationRecord): string {
+  const [first, ...rest] = record.body?.split("\n") ?? [];
+  if (!first || rest.length === 0) return record.title?.match(/^[^:：]+[:：]\s*(.+)$/)?.[1] ?? "";
+  return first.match(/ on "(.*)"$/)?.[1] ?? first;
+}
+
+/**
+ * The pull request / work item a notification is about, as the Agent panel's
+ * subject. The payload carries the project's name, not its id; Azure DevOps
+ * accepts either in the REST path, so the name stands in for the id.
+ */
+export function resolveNotificationAgentSubject(record: NotificationRecord): AgentSubject | null {
+  const parsed = parseNotificationPayload(record);
+  const payload = parsed.payload as Record<string, unknown>;
+  const organizationId = record.organizationId ?? undefined;
+  const projectId = stringField(payload, "projectId") ?? stringField(payload, "projectName");
+  const webUrl = stringField(payload, "webUrl");
+  const title = bodyTitle(record);
+  if (!projectId) return null;
+  const target = resolveNotificationJump(record);
+  if (target.type === "pullRequest") {
+    const repositoryId = stringField(payload, "repositoryId");
+    if (!repositoryId) return null;
+    return {
+      kind: "pull-request",
+      id: target.pullRequestId,
+      title,
+      organizationId,
+      projectId,
+      repositoryId,
+      repositoryName: stringField(payload, "repositoryName") ?? "",
+      webUrl,
+    };
+  }
+  if (target.type === "workItem") {
+    return { kind: "work-item", id: target.workItemId, title, organizationId, projectId, webUrl };
+  }
+  return null;
 }

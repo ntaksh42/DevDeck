@@ -14,6 +14,8 @@ export type AgentSubject =
       repositoryId: string;
       repositoryName: string;
       webUrl: string | null;
+      /** A thread the request is about (an Inbox mention / reply); its comments come first in the material. */
+      threadId?: number;
     }
   | {
       kind: "work-item";
@@ -41,6 +43,14 @@ export type AgentSubject =
       wikiName: string;
       pagePath: string;
       webUrl: string | null;
+    }
+  | {
+      kind: "analyze-group";
+      /** The Analyze group's id; the numbers shown come from `analyzeGroupContext`. */
+      id: string;
+      title: string;
+      organizationId?: string;
+      webUrl: null;
     };
 
 let current: AgentSubject | null = null;
@@ -54,7 +64,7 @@ export function subjectKey(subject: AgentSubject | null): string {
   if (!subject) return "";
   return subject.kind === "wiki-page"
     ? `wiki-page:${subject.wikiId}:${subject.pagePath}`
-    : `${subject.kind}:${subject.organizationId ?? ""}:${subject.id}`;
+    : `${subject.kind}:${subject.organizationId ?? ""}:${subject.id}${subject.kind === "pull-request" && subject.threadId ? `:t${subject.threadId}` : ""}`;
 }
 
 export function publishAgentSubject(subject: AgentSubject | null): void {
@@ -76,17 +86,20 @@ export function useAgentSubject(): AgentSubject | null {
 /**
  * Publishes a view's selection while the view is mounted. Pass `null` when
  * nothing is selected; unmounting clears it unless another view took over.
+ * `undefined` leaves the subject to another publisher in the same view.
  */
-export function usePublishAgentSubject(subject: AgentSubject | null): void {
-  const key = subjectKey(subject);
+export function usePublishAgentSubject(subject: AgentSubject | null | undefined): void {
+  const key = subjectKey(subject ?? null);
   const title = subject?.title;
+  const mode = subject === undefined ? 0 : 1;
   useEffect(() => {
+    if (subject === undefined) return;
     publishAgentSubject(subject);
     return () => {
       if (subjectKey(current) === key) publishAgentSubject(null);
     };
     // The key and title identify the subject; the object itself is rebuilt each render.
-  }, [key, title]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [key, title, mode]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /** Short label for chips and notifications. */
@@ -100,18 +113,43 @@ export function subjectLabel(subject: AgentSubject): string {
       return `Run ${subject.title}`;
     case "wiki-page":
       return `Wiki ${subject.pagePath}`;
+    case "analyze-group":
+      return subject.title;
   }
 }
 
 /** The one-line `context` written into the note's front-matter. */
-export function contextLine(subject: AgentSubject): string {
-  const kind = {
-    "pull-request": "Pull request",
-    "work-item": "Work item",
-    "pipeline-run": "Pipeline run",
-    "wiki-page": "Wiki page",
-  }[subject.kind];
-  return [kind, subjectLabel(subject), subject.webUrl].filter(Boolean).join(" · ");
+export function contextLine(subject: AgentSubject | null, list?: { label: string; count: number } | null): string {
+  const kind = subject
+    ? {
+        "pull-request": "Pull request",
+        "work-item": "Work item",
+        "pipeline-run": "Pipeline run",
+        "wiki-page": "Wiki page",
+        "analyze-group": "Analyze group",
+      }[subject.kind]
+    : null;
+  return [
+    kind,
+    subject ? subjectLabel(subject) : null,
+    subject?.webUrl,
+    list ? `${list.label} (${list.count})` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+const SUBJECT_CONTEXT = /^(Pull request|Work item|Pipeline run|Wiki page|Analyze group) · /;
+
+/**
+ * Whether a request (whose front-matter `context` was written by `contextLine`) is about
+ * `subject`; with no subject, whether it was asked without one. Runs and wiki pages match
+ * by URL because a run's label changes with its result.
+ */
+export function contextIsAbout(context: string | null | undefined, subject: AgentSubject | null): boolean {
+  if (!subject) return !context || !SUBJECT_CONTEXT.test(context);
+  if (subject.webUrl) return !!context?.includes(subject.webUrl);
+  return !!context?.startsWith(contextLine(subject));
 }
 
 /** Pull requests and work items keep their notes per item; the rest are requests. */

@@ -13,7 +13,6 @@ import type {
 import { richFieldHtml } from "./workItemHtml";
 import { focusPrimaryGrid, formatRelativeDate, isEditableTarget } from "@/lib/utils";
 import { readStoredJson, writeStoredJson } from "@/lib/storage";
-import { Columns2, Rows2 } from "lucide-react";
 import type { CustomPreviewField, PreviewFieldKey } from "./previewFieldsStorage";
 import { TitleEditor } from "./PreviewEditors";
 import { WorkItemStatePill, WorkItemTypeBadge } from "./WorkItemBadges";
@@ -25,7 +24,6 @@ import { RichHtmlFrame } from "./RichHtmlFrame";
 import { PreviewToolbarPortal } from "@/components/PreviewToolbarSlot";
 import { WorkItemCommentsSection } from "./WorkItemCommentsSection";
 import { WorkItemHistorySection } from "./WorkItemHistorySection";
-import { FieldConfigMenu } from "./FieldConfigMenu";
 import { WorkItemLinksSection } from "./WorkItemLinksSection";
 import {
   isWidePreviewField,
@@ -52,22 +50,18 @@ export function WorkItemPreviewDetails({
   deletingCommentId,
   editingCommentId,
   editPending,
-  actionsControl,
   deletePending,
   mentionDisplayNames,
   recentMentionOptions,
   mentionPriorityNames,
   selfOrg,
   onMentionApplied,
-  onCustomPreviewFieldsChange,
   onDeleteComment,
   onEditComment,
   onToggleCommentReaction,
   reactionPendingCommentId,
-  onSelectedFieldKeysChange,
   priorityControl,
   reasonControl,
-  presetsControl,
   renderCustomFieldControl,
   resolveImageSource,
   selectedFieldKeys,
@@ -78,12 +72,11 @@ export function WorkItemPreviewDetails({
   onTitleChange,
   titlePending,
   zoom,
-  zoomControl,
+  renderToolbar,
   composer,
 }: {
   customPreviewFields: CustomPreviewField[];
   preview: WorkItemPreview;
-  actionsControl?: ReactNode;
   areaControl?: ReactNode;
   assigneeControl: ReactNode;
   iterationControl?: ReactNode;
@@ -98,13 +91,10 @@ export function WorkItemPreviewDetails({
   mentionPriorityNames: string[];
   selfOrg: Organization | undefined;
   onMentionApplied: (candidate: MentionCandidate) => void;
-  onCustomPreviewFieldsChange: (fields: CustomPreviewField[]) => void;
   onDeleteComment: (commentId: number) => void;
   onEditComment: (commentId: number, markdown: string) => void;
   onToggleCommentReaction?: (commentId: number, reactionType: string, engaged: boolean) => void;
   reactionPendingCommentId?: number | null;
-  onSelectedFieldKeysChange: (keys: PreviewFieldKey[]) => void;
-  presetsControl?: ReactNode;
   priorityControl: ReactNode;
   reasonControl: ReactNode;
   renderCustomFieldControl: (field: CustomPreviewField) => ReactNode;
@@ -117,7 +107,8 @@ export function WorkItemPreviewDetails({
   onTitleChange: (title: string) => void;
   titlePending: boolean;
   zoom: number;
-  zoomControl?: ReactNode;
+  /** Tab-strip controls; gets the comments layout state that lives here. */
+  renderToolbar: (layout: { sideBySide: boolean; onToggle: () => void }) => ReactNode;
   /** The new-comment box; follows the comments into the side column. */
   composer?: ReactNode;
 }) {
@@ -253,6 +244,8 @@ export function WorkItemPreviewDetails({
         sections.dragging ? "[&_iframe]:pointer-events-none" : ""
       }`}
       data-primary-preview="true"
+      data-pane-editable="true"
+      data-focus-pane={sideBySide ? "work-item-details" : undefined}
       {...sections.columnDropProps(mainColumn)}
       style={sideBySide ? undefined : { zoom }}
       onKeyDown={(event) => {
@@ -304,33 +297,7 @@ export function WorkItemPreviewDetails({
           {/* In the dock tab strip when the host provides a slot (Work Items
               grid); inline at the end of this row otherwise (board, PR pane). */}
           <PreviewToolbarPortal>
-            <div className="flex shrink-0 items-center gap-1">
-              {actionsControl}
-              {presetsControl}
-              {zoomControl}
-              <button
-                type="button"
-                onClick={toggleCommentsLayout}
-                aria-pressed={sideBySide}
-                aria-label={sideBySide ? "Show comments below the details" : "Show comments beside the details"}
-                title={sideBySide ? "Show comments below the details" : "Show comments beside the details"}
-                className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                {sideBySide ? (
-                  <Rows2 className="h-3.5 w-3.5" aria-hidden="true" />
-                ) : (
-                  <Columns2 className="h-3.5 w-3.5" aria-hidden="true" />
-                )}
-              </button>
-              <FieldConfigMenu
-                organizationId={preview.organizationId}
-                projectId={preview.projectId}
-                selectedFieldKeys={selectedFieldKeys}
-                onSelectedFieldKeysChange={onSelectedFieldKeysChange}
-                customPreviewFields={customPreviewFields}
-                onCustomPreviewFieldsChange={onCustomPreviewFieldsChange}
-              />
-            </div>
+            {renderToolbar({ sideBySide, onToggle: toggleCommentsLayout })}
           </PreviewToolbarPortal>
         </div>
         {/* Chips instead of a fixed-column grid: a short value (e.g. Priority
@@ -425,7 +392,11 @@ export function WorkItemPreviewDetails({
           </div>
           <div className="flex w-[42%] min-w-48 max-w-xl shrink-0 flex-col border-l border-border bg-card text-xs">
             <div
-              className={`min-h-0 flex-1 overflow-auto px-2 pb-2 pt-1.5 ${
+              data-focus-pane="work-item-side"
+              data-pane-editable={commentsInSide && composer ? "true" : undefined}
+              data-pane-focus-target="true"
+              tabIndex={-1}
+              className={`min-h-0 flex-1 overflow-auto px-2 pb-2 pt-1.5 outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${
                 sections.dragging ? "[&_iframe]:pointer-events-none" : ""
               }`}
               {...sections.columnDropProps("side")}

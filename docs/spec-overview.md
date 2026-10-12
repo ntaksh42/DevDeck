@@ -70,12 +70,12 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
 
 | ビュー | 用途 |
 |---|---|
-| **My Reviews** | 自分がレビュアーの PR。投票状態・マージコンフリクト/CI バッジ・stale 強調・ローカルの done/archive トリアージ・ローカルのレビュー結果プレビュー。自分のレビュー後に author の push で投票がリセットされた PR を「Returned」バッジで強調（投票スナップショットの差分でローカル検出、開く/再投票で解除）。ソート可能な「Review age」列 (作成からの経過日数、stale 閾値超過で強調)。テキストフィルタは読み込み済みデータの値 (リポジトリ/作者) をキーボード操作可能なオートコンプリートで候補表示 (`FilterAutocomplete`)。フィルタは Reviews ペインのドックのタブ帯に置き、既定では小さな「Ctrl+F」ボタンに畳んでおく。`Ctrl+F` / `/` / ボタンで開いて入力欄にフォーカスし、`Escape` で畳んでグリッドの選択行へフォーカスを戻す。畳んでも値は保持し、有効なテキストはタブ帯にチップ (✕ でクリア) として残す。Show Drafts チェックボックス (ドラフト件数付き、`D` で切替) はフィルタの横に常時表示する。空のままフォーカスが外れた場合も畳む。プレビューヘッダー (`PrReviewHeader`) は上から「PR タイトル (全幅、常時表示、最大2行) → 状態と問題点のバッジ (Active/Draft・CI・Conflicts・コメント) → `source → target` のブランチ行 → `#ID · 作成者 · 経過` (この2行は幅が足りなければ末尾を省略) → Reviewers (承認数 + レビュアー)」の順に並べる。ズーム・Email a link・Work Items・最大化の操作ボタン (`PrReviewToolbar`) はヘッダーではなく、Conversation / Result の各タブのドックのタブ帯右端に置く。タブ帯の幅がタブ全部とアイコン全部に足りないとき (初期幅など) は、最大化以外を「⋯」(View options) メニューにまとめ、タブが dockview のオーバーフローに隠れないようにする。メニューは開くと先頭項目にフォーカスし、↑↓ で移動、Enter/Space で実行、Escape で閉じてトリガーへフォーカスを返す (ズーム項目は実行後も開いたまま)。PR / Work Item プレビューのセクション見出し (Description・Comments など) は薄い青の帯 + 左アクセントバーで区切る。Result タブでは結果を広く見せるため、`#ID タイトル` だけの 1 行に縮める。コメントバッジは未解決があれば「N unresolved」で強調し、すべて解決済みなら「N resolved」を控えめに表示する (人間コメントを含むスレッドのみ集計しシステムスレッドは除外、0件は非表示)。システムスレッド (投票・push などの自動イベント) は Conversation に表示しない。。グリッドの下に「Work Items」ドックペイン (`LinkedWorkItemsPanel`) がある。既定ではタブ帯だけに畳まれており (状態は `azdodeck:myReviews:linkedWorkItemsCollapsed` に保存)、タブ帯のトグル (リンク件数 + Show/Hide) で開閉する。開くときは畳む前の高さに戻し、畳んだまま再起動した場合など高さが分からないときは同じ列の半分の高さで開く。畳んだまま Move panel で移動しても畳んだ状態を保つ。`t` キーまたはプレビューヘッダの clipboard ボタンで展開してフォーカスする。このペインはPR にリンクされた作業項目を `list_pull_request_work_items` (Azure DevOps の PR work items API、GitHub は空) の結果と説明文/コミットの `AB#NNN` 言及を統合して取得し、既存の `WorkItemPreviewPanel` でプレビューする。複数ある場合はタブ上部のラジオリストから `↑↓`/`←→` で選択 (`Esc` でグリッドへフォーカス復帰)。取得結果は TanStack Query キャッシュ (60 秒) を利用 |
+| **My Reviews** | 自分がレビュアーの PR。投票状態・マージコンフリクト/CI バッジ・stale 強調・ローカルの done/archive トリアージ・ローカルのレビュー結果プレビュー。自分のレビュー後に author の push で投票がリセットされた PR を「Returned」バッジで強調（投票スナップショットの差分でローカル検出、開く/再投票で解除）。ソート可能な「Review age」列 (作成からの経過日数、stale 閾値超過で強調)。テキストフィルタは読み込み済みデータの値 (リポジトリ/作者) をキーボード操作可能なオートコンプリートで候補表示 (`FilterAutocomplete`)。フィルタは Reviews ペインのドックのタブ帯に置き、既定では小さな「Ctrl+F」ボタンに畳んでおく。`Ctrl+F` / `/` / ボタンで開いて入力欄にフォーカスし、`Escape` で畳んでグリッドの選択行へフォーカスを戻す。畳んでも値は保持し、有効なテキストはタブ帯にチップ (✕ でクリア) として残す。Show Drafts チェックボックス (ドラフト件数付き、`D` で切替) はフィルタの横に常時表示する。空のままフォーカスが外れた場合も畳む。プレビューヘッダー (`PrReviewHeader`) は上から「PR タイトル + Active/Draft → 問題点のバッジ (CI・Conflicts・コメント、該当時のみ) → `source → target` と `#ID · 作成者 · 経過` → Reviewers (承認数 + レビュアー) → Labels」の順にコンパクトに並べる。タイトルとメタデータは省略せず幅に応じて折り返し、Reviewers / Labels は見出し幅を揃え、チップは折り返す。その直下に投票を左、マージ戦略 / Complete / その他操作を右に置き、狭い幅では操作グループ単位で折り返す。ズーム・Email a link・Work Items・最大化の操作ボタン (`PrReviewToolbar`) はヘッダーではなく、Conversation / Result の各タブのドックのタブ帯右端に置く。タブ帯の幅がタブ全部とアイコン全部に足りないとき (初期幅など) は、最大化以外を「⋯」(View options) メニューにまとめ、タブが dockview のオーバーフローに隠れないようにする。メニューは開くと先頭項目にフォーカスし、↑↓ で移動、Enter/Space で実行、Escape で閉じてトリガーへフォーカスを返す (ズーム項目は実行後も開いたまま)。PR / Work Item プレビューのセクション見出し (Description・Comments など) は薄い青の帯 + 左アクセントバーで区切る。Result タブでは結果を広く見せるため、`#ID タイトル` だけの 1 行に縮める。コメントバッジは未解決があれば「N unresolved」で強調し、すべて解決済みなら「N resolved」を控えめに表示する (人間コメントを含むスレッドのみ集計しシステムスレッドは除外、0件は非表示)。システムスレッド (投票・push などの自動イベント) は Conversation に表示しない。。グリッドの下に「Work Items」ドックペイン (`LinkedWorkItemsPanel`) がある。既定ではタブ帯だけに畳まれており (状態は `azdodeck:myReviews:linkedWorkItemsCollapsed` に保存)、タブ帯のトグル (リンク件数 + Show/Hide) で開閉する。開くときは畳む前の高さに戻し、畳んだまま再起動した場合など高さが分からないときは同じ列の半分の高さで開く。畳んだまま Move panel で移動しても畳んだ状態を保つ。`t` キーまたはプレビューヘッダの clipboard ボタンで展開してフォーカスする。このペインはPR にリンクされた作業項目を `list_pull_request_work_items` (Azure DevOps の PR work items API、GitHub は空) の結果と説明文/コミットの `AB#NNN` 言及を統合して取得し、既存の `WorkItemPreviewPanel` でプレビューする。複数ある場合はタブ上部のラジオリストから `↑↓`/`←→` で選択 (`Esc` でグリッドへフォーカス復帰)。取得結果は TanStack Query キャッシュ (60 秒) を利用 |
 | **My Reviews** | 自分がレビュアーの PR。投票状態・マージコンフリクト/CI バッジ・stale 強調・ローカルの done/archive トリアージ・ローカルのレビュー結果プレビュー。自分のレビュー後に author の push で投票がリセットされた PR を「Returned」バッジで強調（投票スナップショットの差分でローカル検出、開く/再投票で解除）。ソート可能な「Review age」列 (作成からの経過日数、stale 閾値超過で強調)。コメントスレッドカード (`PrThreadCard`、Conversation タブで使用) は Azure DevOps 準拠の見た目: コメントごとに著者名から生成したイニシャル円アバター、カード右上に折りたたみトグルと Active/Resolved のステータスドロップダウン (バックエンドが対応する2状態のみ)。ファイルパスの無いスレッドは先頭コメントの著者行がそのままカードの見出し行を兼ねる。未解決スレッドはカード左端の琥珀色の線で示し、Resolved のスレッドは既定で折りたたむ (折りたたみ時はファイル名・先頭コメントの著者・1行サマリ・コメント数だけの1行)。カード下部は「Reply」「Resolve/Reactivate」のリンク型ボタン (Reply で返信コンポーザーに展開、Escape で畳んでプレビューへフォーカスを返す)。 |
 | **My Pull Requests** | 自分が作成した active PR を一覧 (`list_my_created_pull_requests`、`searchCriteria.creatorId` でサーバ側フィルタ、全プロジェクトを並列取得しライブ取得・非キャッシュ)。グリッドは My Reviews と同じ CSS グリッド構成・行スタイル・ステータスバーで、列 (PR# / Repository / Title〔Draft バッジ込み〕/ Created / Target / Approvals〔vote==10 の人数/レビュアー総数〕) はヘッダクリックでソート可能、ドラッグで列幅リサイズ (localStorage 永続化)、Columns メニューで表示列を切替 (PR#/Title は必須)。タブ帯のフィルタ横に Show Drafts チェックボックス (既定オン、ドラフト件数付き) を常時表示し、オフでドラフトを除外する。テキストフィルタは読み込み済みデータの値 (リポジトリ/タイトル/ターゲット) をオートコンプリート候補表示するクライアント側絞り込み (`FilterAutocomplete`)。フィルタはグリッド上端のタイトル帯に「Ctrl+F」ボタンとして畳んでおき、My Reviews と同じ操作 (`DockFilterBar`: `Ctrl+F`/`/`/ボタンで開く、`Escape` で畳んで行へフォーカスを戻す、値はチップで残す) で使う。右側には My Reviews と同じ PR レビューパネル (Conversation / Result) をドックし、選択中の PR を表示する (レイアウトは `azdodeck:layout:myPullRequestsPreview:dockview:v1` に保存)。キーボード操作 (`↑↓`/`J K`/`Home`/`End`、`Enter`/`→` でプレビューへフォーカス、`O`/`Ctrl+Enter` でブラウザ、`\` でプレビュー最大化、`C` で URL コピー)。複数組織は組織セレクタで切替。ライブ取得のため Sync (キャッシュ同期) の対象外で、データはビュー再訪時に再取得される。 |
-| **Pull Request Search** | プロジェクト/リポジトリ/ステータス (active/completed/abandoned、いずれも複数選択可。空=既定 active)/ターゲットブランチ/期間 (作成日 or 完了日基準)/ドラフト除外 (検索入力行の Hide drafts チェックボックス) で PR を検索。並び替え (作成日・完了日・タイトル)。active はキャッシュ、それ以外はライブ取得 (ターゲットブランチ・期間はサーバ側フィルタ)。リポジトリ欄の候補は組織の全プロジェクトのリポジトリ一覧 (`list_repositories`: プロジェクトごとのリポジトリ一覧をプロセス内で 1 時間キャッシュ) から作る。ターゲットブランチ欄は選択中のリポジトリの実ブランチ (`list_repo_branches`) を複数選択候補として表示 (`MultiSelectFilter`、候補検索とキーボード操作に対応)。複数選択時は選択ブランチごとの結果を統合する。結果は先頭 100 件で打ち切り、超過時はインジケータ表示。ソート可能グリッド、列リサイズ、`C` で URL コピー。 検索フォームはラベルを小さくした2行に詰め、キャッシュ/ライブ取得の説明は Hide drafts 横の情報アイコンのツールチップにする。結果の件数・アクティブな列フィルタ数・Columns ボタンは Results ペインのタブ帯に置く (ペイン内に見出し行は持たない)。 |
+| **Pull Request Search** | プロジェクト/リポジトリ/ステータス (active/completed/abandoned、いずれも複数選択可。空=既定 active)/ターゲットブランチ/期間 (作成日 or 完了日基準)/ドラフト除外 (検索入力行の Hide drafts チェックボックス) で PR を検索。並び替え (作成日・完了日・タイトル)。active はキャッシュ、それ以外はライブ取得 (ターゲットブランチ・期間はサーバ側フィルタ)。リポジトリ欄の候補は組織の全プロジェクトのリポジトリ一覧 (`list_repositories`: プロジェクトごとのリポジトリ一覧をプロセス内で 1 時間キャッシュ) から作る。ターゲットブランチ欄は選択中のリポジトリの実ブランチ (`list_repo_branches`) を複数選択候補として表示 (`MultiSelectFilter`、候補検索とキーボード操作に対応)。複数選択時は選択ブランチごとの結果を統合する。結果は先頭 100 件で打ち切り、超過時はインジケータ表示。ソート可能グリッド、列リサイズ、`C` で URL コピー。 検索フォームはラベルを小さくした2行に詰め、キャッシュ/ライブ取得の説明は Hide drafts 横の情報アイコンのツールチップにする。結果の件数 (`N items`、検索前は `No search yet`)・アクティブな列フィルタ数・Columns ボタン・`?` は Results ペイン下端の共通ステータスバーに置く (以前はタブ帯にあった Columns もここへ移した。ペイン内に見出し行は持たない)。 |
 | **My Work Items** | 自分に割当中の未完了の作業項目 (同期 WIQL で `System.State` が Closed / Done / Completed / Removed の項目は除外 (`System.StateCategory` は WIQL で参照できない)。サイドバーのバッジも同じ集合の件数)。スマートフィルタは Work items ペインのタブ帯に「Ctrl+F」ボタンとして畳んでおく (`WorkItemFilterBar`、操作は My Reviews と同じ。Work Item Views の list レイアウトと Work Items Search の結果フィルタも同じ)。状態・種別・割当先・タグ (`System.Tags`、各タグをチップ表示)・更新日時。最後に開いてから変更された項目に未読マーカー (ChangedDate の差分でローカル検出、開くと消える)。 |
-| **Work Item Views** | 保存済み WIQL クエリ。件数表示、ナビへのピン留め、並べ替え、ビュー別ソート/列。グリッドの Columns メニューの「Field columns」から、Azure DevOps フィールドを検索 (名前/参照名/型の部分一致、`Enter` で先頭候補を追加) して追加列にでき、チェックを外すと削除する。追加列はビューの Extra columns (ビュー編集ダイアログと同じ設定、最大20列) として保存される。テキストフィルタ (`Ctrl+F`/`/` でフォーカス、`parseSearchQuery`/`matchesWorkItemQuery` によるスマート検索、list/board 両レイアウトに適用)。取得件数の上限はなく (ビュー編集の Limit を空欄にすると無制限、既定)、明示的に件数を指定した場合のみ打ち切る。ビュー一覧はヘッダーのトグルまたは `Ctrl+B` (グリッドからも有効) で折りたたみでき、折りたたみ時も選択中ビュー名・件数・アラート中の件数をヘッダー1行に残す。表示密度はカード / コンパクト行の2種をヘッダーで切り替える。折りたたみ状態 (`azdodeck:workItemViewsCollapsed`) と密度 (`azdodeck:workItemViewsCardMode`) は localStorage に保存する。カードには件数推移のスパークラインを描画する (`azdodeck:workItems:viewCountHistory`、ビューごと最大20点、同値の連続は記録しない。2点未満は非表示。増加=赤/減少=緑/横ばい=灰)。ビュー JSON の Export はデスクトップ版では保存ダイアログで出力先とファイル名を選択し、ブラウザ版では既定のダウンロード先へ保存する。 ビュー一覧のヘッダーは1行 (Views · 件数) で、Pin / Preview / Share / Export / Import はアイコンのみのボタン (名前はツールチップとスクリーンリーダー用テキスト)。カードは名前 → 件数+差分+スパークライン → 制限・ソート等のメタ情報1行の3段。 |
+| **Work Item Views** | 保存済み WIQL クエリ。件数表示、ナビへのピン留め、並べ替え、ビュー別ソート/列。グリッドの Columns メニューの「Field columns」から、Azure DevOps フィールドを検索 (名前/参照名/型の部分一致、`Enter` で先頭候補を追加) して追加列にでき、チェックを外すと削除する。追加列はビューの Extra columns (ビュー編集ダイアログと同じ設定、最大20列) として保存される。テキストフィルタ (`Ctrl+F`/`/` でフォーカス、`parseSearchQuery`/`matchesWorkItemQuery` によるスマート検索、list/board 両レイアウトに適用)。取得件数の上限はなく (ビュー編集の Limit を空欄にすると無制限、既定)、明示的に件数を指定した場合のみ打ち切る。ビュー一覧は既定で**枠なし 1 行のチップ列** (ビュー名 + 件数 + 差分。選択中は強調、アラート中・ピン留めはチップ内のアイコン/色で示す。高さは検索行と同じ `h-8`) で、同じ行の右端に List / Board の切替・「⋯」・Edit・Run all・+ Add を置く。チップは `role="option"` で、`←→` (`↑↓` も同じく前後) で移動、`Home` / `End`、クリック・フォーカス移動で選択、`Shift+←→` で並べ替え、`Delete` / `N` / `E` / `R` はカード表示と同じ。幅が足りなければチップ列だけが横スクロールする。チップ表示ではカード用の Pin / 左右移動 / Preview 表示切替ボタンと表示密度スイッチは行から外し、Pin・Preview 表示切替・左右移動は「⋯」メニューの先頭に置く。ヘッダー左端の ▸/▾ トグルまたは `Ctrl+B` (グリッドからも有効) でカード表示 (従来の枠付きヘッダー + カード / コンパクト行のグリッド。Pin / 左右移動 / Preview 切替ボタンと密度スイッチ付き) と切り替える。表示の選択 (`azdodeck:workItemViewsCollapsed`、保存値が無い・`true` ならチップ、`false` ならカード) と密度 (`azdodeck:workItemViewsCardMode`、カード表示のみ) は localStorage に保存する。トグルで表示を切り替えた後、フォーカスはチップ→トグル / カード→選択中のカードへ戻す。カードには件数推移のスパークラインを描画する (`azdodeck:workItems:viewCountHistory`、ビューごと最大20点、同値の連続は記録しない。2点未満は非表示。増加=赤/減少=緑/横ばい=灰)。ビュー JSON の Export はデスクトップ版では保存ダイアログで出力先とファイル名を選択し、ブラウザ版では既定のダウンロード先へ保存する。 カード表示のヘッダーは1行 (Views · 件数) で、Pin / Preview / Share / Export / Import はアイコンのみのボタン (名前はツールチップとスクリーンリーダー用テキスト)。カードは名前 → 件数+差分+スパークライン → 制限・ソート等のメタ情報1行の3段。 |
 | **Work Item Search** | キーワード + プロジェクト/状態/種別での作業項目検索。全文検索 (FTS)。グリッドは Tags 列 (`System.Tags` をチップ表示、Columns メニューで表示切替・ソート可) を含む。 |
 | **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。実行の成果物 (artifacts) を一覧表示しブラウザでダウンロード (`list_pipeline_artifacts`)。終了済みの実行で失敗 (failed / canceled) したステージがあると、実行詳細の「Failed stages」に各ステージの「Retry failed jobs」(失敗ジョブのみ) / 「Retry all jobs」(全ジョブ) を出し、インライン確認の後に同じ実行内でそのステージだけを再実行する (`retry_pipeline_stage`: `PATCH build/builds/{id}/stages/{identifier}` に `state=retry`・`forceRetryAllJobs`。ステージ識別子は Timeline の `identifier`。実行全体の Re-run (新規実行を Queue) とは別操作で、書き込み系なので read-only 検証モードでは出さず、バックエンドも拒否する)。実行詳細の「Tests」には、ビルドが公開したテスト実行の合計 (passed / failed / skipped・other) と失敗テスト (最大 100 件、超過時は件数を明示。テスト名・実行名・所要時間、クリックで展開してエラーメッセージ) を表示する (`list_pipeline_test_results`: Test Runs API を `buildUri` で引き、失敗件数のある実行のみ `outcomes=Failed` の結果を取得)。テスト未公開のビルドや取得失敗時は欄を出さない。 |
 | **Release Notes** | プロジェクト + 期間からマージ済み (completed) PR を集約し、リポジトリ別にグルーピングした Markdown リリースノートを生成 (`generate_release_notes`、オンデマンド・非キャッシュ)。クリップボードコピー対応。 |
@@ -84,14 +84,14 @@ Notifications (未読通知件数、99 超は「99+」)。0/未取得時は非�
 | **Work Item Search** | キーワード + プロジェクト/状態/種別 (いずれも複数選択可) での作業項目検索。全文検索 (FTS)。 |
 | **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。 |
 | **Settings** | パネルを 7 カテゴリ (Accounts / Appearance & keyboard / Notifications / Views & workflow / Project / Data & sync / Advanced) に分けて表示。左側 (狭い幅では上部) に sticky なセクションナビとフィルタ入力を置く。フィルタは全語 AND・大文字小文字無視でカテゴリ名・パネル名・キーワードに一致するパネルだけを残し、該当なしのカテゴリはナビで無効化、全件不一致なら空状態 + Clear filter。フィルタは `focusFilter` (既定 `Ctrl+F`) でフォーカス、`Enter` で最初の一致パネルの先頭コントロールへ移動、`Escape` は 1 回目でクリア・2 回目でフォーカス解除。ナビは `↑↓`/`←→`/`Home`/`End` でボタン間移動、Enter/クリックでセクションへスクロールしてフォーカス、スクロール位置に応じて現在セクションを `aria-current` で強調。Connections 一覧は Add connection の直前 (先頭) に表示。実験フラグで非表示のパネル (Usage stats / Diagnostics) はフィルタ・ナビの対象外。内容: 組織設定 (PAT / Azure CLI)、通知設定、フォルダパス、グローバルホットキー、キーバインド上書き、行の条件付き色ルール (Work Item グリッドの行を条件で着色、先勝ち、localStorage 永続化)。Software update パネル (opt-in: 手動で更新確認→適用、失敗時は安全にスキップ。`tauri-plugin-updater`、ブラウザでは無効)。Experimental パネル (マスタースイッチ + 個別フラグ。マスターが false の間は個別フラグの保存値を保持したまま無効化する)。Usage stats パネル (`experimental_usage_stats` が有効なときのみ表示。localStorage `azdodeck:experimental:usageStats` に投票数・解決スレッド数・状態変更数を集計、リセット可能、外部送信なし)。 |
-| **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。パイプラインを Watch (購読、localStorage、最大 100) すると実行履歴を常時追跡し、最新実行の開始/終了をデスクトップ通知 (`desktop_notifications_enabled` に従う)。Watched pipelines ボードは実行中 (最新実行が active) のパイプライン数をヘッダーに「N running」ピル (パルスドット) で示し、該当行を青の左アクセント + パルスドットで強調して、いま実行中のパイプラインが一目で分かる。実行中の購読は表示順のみ一覧の先頭に固定表示 (安定ソート。実行中同士・非実行中同士は元の購読順を維持し、localStorage の購読順自体は変更しない)。 |
+| **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。パイプラインを Watch (購読、localStorage、最大 100) すると実行履歴を常時追跡し、最新実行の開始/終了をデスクトップ通知 (`desktop_notifications_enabled` に従う)。Watched pipelines ボードにペイン内の見出し行は無い。ペインのタブ名は「Watched pipelines」で、Sort セレクトと更新時刻つきの更新ボタンはドックのタブ帯の右側 (フィルタの右) に置く (ボードが `toolbarSlot` へ portal で描画する)。件数は下端の共通ステータスバーに `N items · ● N running · N failed · N approvals` (既存のピルの色とフィルタ/トグル動作はそのまま) として出し、右端の `?` が Help の Pipelines の節を開く (run を選択中は従来のキー操作ヒント行もステータスバーの上に出る)。実行中 (最新実行が active) のパイプライン数は「N running」ピル (パルスドット) で示し、該当行を青の左アクセント + パルスドットで強調して、いま実行中のパイプラインが一目で分かる。実行中の購読は表示順のみ一覧の先頭に固定表示 (安定ソート。実行中同士・非実行中同士は元の購読順を維持し、localStorage の購読順自体は変更しない)。行の見出しボタンにフォーカスすると、その pipeline の最新実行が Agent パネルの対象になる (実行の詳細を開くとその実行が優先)。承認待ちが選択中プロジェクトにあるときは、Agent パネルの `+ Pending approvals (N)` で承認待ちの表を足せる (承認は実行 ID を持たないため、実行の対象にはならない)。 |
 | **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。Queue run のブランチ欄は、選択中のパイプライン定義 (`get_pipeline_definition` が返す `repository`) が Azure Repos (TfsGit) を参照していればそのブランチ一覧 (`list_repo_branches`) をキーボード操作対応の候補選択欄 (`FilterableSelect`、既定値はリポジトリの既定ブランチ) で提示し、候補にない値の自由入力も許可する。リポジトリ情報が無い/TfsGit 以外/ブランチ取得失敗の場合は従来どおりの自由入力欄にフォールバックする。選択・入力したブランチ名は `refs/heads/` 形式に正規化してから `queue_pipeline_run` に渡す。Queue run のパラメータ欄は、選択中の定義が上書き可能な変数 (`allowOverride === true`) を持つ場合、変数ごとのラベル付き入力欄 (シークレット変数は空欄始まりのパスワード入力) を表示し、既定値から変更した変数のみを `parameters` として送信する。上書き可能な変数が無い/定義詳細が未取得の場合は従来どおり `name=value` 改行区切りの自由入力欄のみを表示する (両方表示時は「追加パラメータ」欄として残り、変数入力欄と同名キーがあれば変数入力欄側が優先される)。 |
 | **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。定義の非シークレット変数の追加/変更/削除と CI トリガー (継続的インテグレーション) の有効化/無効化・ブランチ/パスフィルタ編集を `update_pipeline_definition` で行える (書き込みガード対象)。実装は定義の生 JSON を取得→変更→PUT で送信し、`isSecret: true` の変数は常に温存され、入力に同名エントリがあれば拒否される。CI トリガーを有効化する際はブランチフィルタが 1 件以上必要、無効化するとトリガーエントリを削除する。他のトリガー種別 (schedule / pullRequest 等) は変更されない。 |
 | **Pipelines** | ビルド実行をプロジェクト/定義/ブランチ/結果/状態で一覧。タイムライン・ログ末尾の表示、再実行・キャンセル。定義パネル (`PipelineDefinitionPanel`) の Edit ボタンから編集フォーム (`PipelineDefinitionEditForm`) を開き、非シークレット変数を行単位で追加/変更/削除 (name / value / allowOverride チェックボックス) できる。シークレット変数は "(secret)" 表示の読み取り専用行として並び、編集・削除操作を提供しない。CI トリガーは有効/無効チェックボックスと branch/path filters (1 行 1 件のテキストエリア) を編集でき、セクションを触っていなければ保存時に `ciTrigger: null` を送りトリガーを変更しない。Save は `update_pipeline_definition` を呼び、成功時は返却された定義でクエリキャッシュを更新して閲覧モードに戻り、失敗時はパネル内にエラーを表示したまま編集状態を維持する。編集モードは Edit ボタンから開始 (最初の入力にフォーカス)、Escape または Cancel/Save で終了しフォーカスを Edit ボタンへ戻す、キー操作はフォーム内に閉じ込めて背後のビューに伝播しない。 |
 | **Settings** | パネルを 7 カテゴリ (Accounts / Appearance & keyboard / Notifications / Views & workflow / Project / Data & sync / Advanced) に分けて表示。左側 (狭い幅では上部) に sticky なセクションナビとフィルタ入力を置く。フィルタは全語 AND・大文字小文字無視でカテゴリ名・パネル名・キーワードに一致するパネルだけを残し、該当なしのカテゴリはナビで無効化、全件不一致なら空状態 + Clear filter。フィルタは `focusFilter` (既定 `Ctrl+F`) でフォーカス、`Enter` で最初の一致パネルの先頭コントロールへ移動、`Escape` は 1 回目でクリア・2 回目でフォーカス解除。ナビは `↑↓`/`←→`/`Home`/`End` でボタン間移動、Enter/クリックでセクションへスクロールしてフォーカス、スクロール位置に応じて現在セクションを `aria-current` で強調。Connections 一覧は Add connection の直前 (先頭) に表示。実験フラグで非表示のパネル (Usage stats / Diagnostics) はフィルタ・ナビの対象外。内容: 組織設定 (PAT / Azure CLI)、通知設定、フォルダパス、グローバルホットキー、キーバインド上書き。Software update パネル (opt-in: 手動で更新確認→適用、失敗時は安全にスキップ。`tauri-plugin-updater`、ブラウザでは無効)。Experimental パネル (マスタースイッチ + 個別フラグ。マスターが false の間は個別フラグの保存値を保持したまま無効化する)。Usage stats パネル (`experimental_usage_stats` が有効なときのみ表示。localStorage `azdodeck:experimental:usageStats` に投票数・解決スレッド数・状態変更数を集計、リセット可能、外部送信なし)。 |
-| **Notifications** | 通知履歴 (`notifications` テーブル) 専用ビュー。サイドバー最上位に固定表示 (ドラッグ並べ替え対象外)、未読件数バッジ付き。フィルタ: Unread only トグル、種別の複数選択 (`MultiSelectFilter`)、組織が2件以上のときのみ表示される単一選択の組織セレクト。一覧は `list_notifications` (`limit=100`、`beforeId` カーソルで「Load more」) を `useInfiniteQuery` で取得し、共有 `useGridVirtualizer` で仮想化。行は未読ドット・タイトル・相対時刻・種別ラベル+詳細+本文冒頭、webUrl があれば行内に外部ブラウザで開くボタン。キーボード: `↑↓`/`J K`/`Home`/`End`/`PageUp`/`PageDown` で行移動、`Enter` でジャンプ (種別ごとに PR Search / Work Item Search / Pipelines / Settings のいずれかへ遷移、または `webUrl` を外部ブラウザで開く。対象を特定できない場合は何もしない) と同時に既読化、`Ctrl+Enter` は `webUrl` を外部ブラウザで開いて既読化、`R` で選択行を既読化 (バックエンドに未読へ戻す手段が無いため、未読の行を既読にするだけの片方向操作)。ヘッダーの「Mark all read」で全既読。既読操作は `mark_notifications_read` / `mark_all_notifications_read` を呼び関連クエリを invalidate。`notifications:inbox-updated` イベント (App 直下で購読) を受けて一覧・未読バッジの両方を invalidate するため、ビューを開いていなくてもバッジは最新化される。パイプライン監視の開始/終了通知 (`usePipelineWatchNotifications`) とパイプライン手動実行のキュー投入 (App の `runQuickPipeline`) は、デスクトップ通知トーストと同じタイミングで `record_notification` を呼び、同じ履歴に記録する (kind: `pipelineWatchStarted` / `pipelineWatchFinished` / `pipelineRunQueued`)。`G` チェーンは `N`。 |
-| **Inbox** | 自分が対応すべきものを 1 か所で見て、その場で処理するビュー (サイドバー最上位に固定表示、ドラッグ並べ替え対象外、Open 件数のバッジ付き。`G` → `I`)。現在の対象は、レビュー対象 PR のコメントのうち**自分へのメンション** (`pr_mention`) と、**自分が参加したスレッドへの返信** (`pr_reply`)。検出は PR 同期 (最新 50 件のレビュー対象 PR) のスレッド取得に相乗りし、通知設定に関係なく動く (通知用の `pr_comment_seen` とは別の `action_inbox_cursor` を持つ。初回観測は基準の記録だけで項目を作らない)。状態 (`open` / `snoozed` / `done`) は Azure DevOps に書き戻さずローカルの `action_inbox_items` だけで持つ。項目はコメントごとに一意で、再スキャンで重複も再オープンもしない。スレッドが Resolved / 削除された、コメントが削除された、自分がその後に返信した場合は同期時に自動で Done にする。Snooze の期限が過ぎた項目は背景ジョブなしで Open に戻る。Done は 30 日で削除する。画面は `DockableWorkspace` (レイアウトは `azdodeck:layout:inbox:dockview:v1` に保存) で、Items (一覧。タブ: Inbox / Snoozed / Done と件数、タブ帯右端に畳んだ `Ctrl+F` フィルタと、組織が 2 件以上のときの組織セレクト)、その右に Conversation (プレビュー。既存の `PrThreadCard` でスレッドを表示し、返信 / Resolve・Reactivate をその場で行う。タブ帯右端に Open in DevDeck / Browser)、の 2 パネル。エージェントとの会話は全 View 共通の Agent パネル (後述) で行う。項目を選ぶと Conversation を前面に出す (エージェントの返信待ちの項目では Conversation に `Q` で Agent パネルを開く案内だけを出す)。返信欄 (PR スレッドの返信欄と WI のコメント欄) はプレビューの下端に固定し、長いスレッドでもスクロールせずに書ける。WI のコメントには 1 件ごとに Reply を付け、押すとそのコメントの 1 行引用と投稿者への @メンション (`createdById` があれば通知される `@<id>` に変換) を入れた返信欄にフォーカスする (WI コメントには返信スレッドが無いため新規コメントとして投稿する)。メンション元のコメントは古くても常に表示する。返信の送信、WI へのコメント、スレッドの Resolve は成功後に項目を Done にする (Reactivate は状態を変えない)。プレビューのスレッドは My Reviews と同じ `prReview` クエリキャッシュを共有する。コメント内のリンク (`AB#n` / `!n` / http(s) URL) はプレビュー下部に番号付きで並べ、`1`-`9` で開く (`AB#n` は Work Item Search、`!n` は My Reviews へ、URL は外部ブラウザ)。Read-only 検証モードでは返信と Resolve を無効にする。キーボード (My Reviews の割当に揃える): `↑↓`/`J K`/`Home`/`End`/`PageUp`/`PageDown` で行移動、`Enter`/`→` でプレビューへ (`Esc` で一覧へ戻る)、`Shift+Enter` で DevDeck 内の対象 PR (My Reviews) を開く、`O` / `Ctrl+Enter` でブラウザ、`E` で Done (Done タブでは Reopen)、`Z` で Snooze (Snoozed タブでは解除)、`R` で返信欄を開く (WI メンションはメンション元コメントへの Reply、無ければコメント欄)、`Q` で Agent パネルをその項目の PR / WI を対象に開く (エージェントの返信待ちの項目ではその会話への返信から始める)、`C` で URL コピー、`/` でフィルタ。コマンド: `list_action_inbox_items` (`state` = `open` / `snoozed` / `done`、`organizationId`、`limit`) / `get_action_inbox_counts` / `set_action_inbox_item_state` (`ids`、`state`、`snoozedUntil`)。状態が変わると `action-inbox:updated` を emit し、App 直下で購読してバッジと一覧を invalidate する (通知履歴の `notifications:inbox-updated` とは別)。対象の種類は他に、Returned (`pr_returned`、投票後に author の push で投票がリセットされた PR) / 新規アサイン (`wi_assigned`) / WI メンション (`wi_mention`、組織全体の WIQL マクロ `@RecentMentions` で候補を絞り、使えなければ最近変更した割当 WI を走査。このマクロが REST で受理されるかは実サービスで未検証) を同期で保存し、条件が解消すると自動で Done にする。投票待ちなだけの PR は項目にしない (My Reviews が一覧し、その PR でのメンションは `pr_mention` として届く)。以前のバージョンが保存したレビュー依頼 (`pr_review_request`) の行は次の同期で Done にする。自分が作成した PR (キャッシュ済みの active PR、最新 30 件) への他者のコメントも対象。承認待ちパイプラインとエージェントの返信待ちは同期せず、取得して導出する (Done / Snooze 不可)。承認待ちはビューを開いている間 60 秒ごと、閉じている間はバッジ用に 5 分ごとに取得し (`retry` なし、パイプライン非対応の接続では取得しない)、エージェントの返信待ちはアプリ常駐のメモ要約 (ローカルのフォルダ走査) を使う。サイドバーのバッジと Inbox タブの件数はどちらも「保存済みの Open 件 + 承認待ち + エージェントの返信待ち」で、組織セレクトが未指定のときは一致する (承認待ちはアクティブな接続のぶんだけ数える)。PR / WI のコメント行は、何についてのコメントか分かるよう `!ID repo` の後に PR / WI のタイトルを (最大 16rem で省略して) 表示する。エージェントの返信待ちには、PR / WI のメモに加えて依頼 (`ask`) の会話も含む。設定 `agent_workspace_path` (クローンを置く 1 つのフォルダ) があれば、PR のリポジトリ名と同名のサブフォルダ → Workspace → 結果フォルダの順で作業フォルダを選び、プレースホルダ `{workspace}` / `{repo}` / `{guide}` を使える。同じフォルダで同時に 2 つのエージェントは起動しない。 |
-| **Analyze** | 登録したクエリを**グループ**単位でまとめ、Day / Week の粒度で推移を見るビュー。1 グループにクエリを複数登録できる (0 件のときは保存を拒否)。左のグループ一覧 + 右の詳細。クエリは WIQL に `ASOF` を付けて各時点の件数を取得し (`count_work_item_query_history`、バックエンドで並列度 4・1 回あたり最大 90 点)、1 本ごとに小さな折れ線 + 現在値 + 前期比を並べる。`ASOF` は `ORDER BY` の前に挿入し、文字列リテラル内の同名語は誤検出しない。行を開くと数値テーブル (期間 / 件数 / 前期比 / 備考) に展開し、`Esc` で一覧へ戻る。Azure DevOps が答えられなかった時点は 0 ではなく欠測 (`count: null`) として扱い、テーブルに理由を出しつつ折れ線は前後をつないで線を途切れさせない。粒度と期間 (Day: 7/30/90 日、Week: 4/12/26 週) はグループ単位の設定で、週は月曜起点・UTC。グループは localStorage (`azdodeck:analyze:groups`) に保存する (グループ 20 件、1 グループあたりクエリ 12 件が上限。ブランチ別コミット推移の廃止前に保存したブランチメンバーは読み込み時に捨てる)。`ASOF` を含む WIQL は登録時に拒否し、保存済み Work Item View からの取り込みでも候補から除外する。キーボード: 一覧で `↑↓`/`J K`/`Home`/`End` 移動、`Enter` で詳細へ、`N` 追加 / `E` 編集 / `Delete` 削除、詳細で `D`/`W` 粒度切替。`G` チェーンは `A`。 |
+| **Notifications** | 通知履歴 (`notifications` テーブル) 専用ビュー。サイドバー最上位に固定表示 (ドラッグ並べ替え対象外)、未読件数バッジ付き。フィルタ: Unread only トグル、種別の複数選択 (`MultiSelectFilter`)、組織が2件以上のときのみ表示される単一選択の組織セレクト。一覧は `list_notifications` (`limit=100`、`beforeId` カーソルで「Load more」) を `useInfiniteQuery` で取得し、共有 `useGridVirtualizer` で仮想化。行は未読ドット・タイトル・相対時刻・種別ラベル+詳細+本文冒頭、webUrl があれば行内に外部ブラウザで開くボタン。キーボード: `↑↓`/`J K`/`Home`/`End`/`PageUp`/`PageDown` で行移動、`Enter` でジャンプ (種別ごとに PR Search / Work Item Search / Pipelines / Settings のいずれかへ遷移、または `webUrl` を外部ブラウザで開く。対象を特定できない場合は何もしない) と同時に既読化、`Ctrl+Enter` は `webUrl` を外部ブラウザで開いて既読化、`R` で選択行を既読化 (バックエンドに未読へ戻す手段が無いため、未読の行を既読にするだけの片方向操作)。選択行の PR / WI 通知は Agent パネルの対象になる (ペイロードに PR / WI の ID・リポジトリ・プロジェクト名が入る種別のみ。プロジェクト ID は通知に無いため名前で代用する。タイトルは本文が「タイトル + 改行 + リポジトリ / 組織」形式のときだけ付く)。ドックが無いため Agent パネルは右端のドロワーで、最初から表示し、`Ctrl+J` で開閉する。一覧の下端には他の一覧と同じ共通ステータスバー (`N items · N unread` と `?`) を置く。本文にタイトル行が無い通知は、通知タイトルの「種別: 」より後ろを Agent の対象のタイトルにする。ヘッダーの「Mark all read」で全既読。既読操作は `mark_notifications_read` / `mark_all_notifications_read` を呼び関連クエリを invalidate。`notifications:inbox-updated` イベント (App 直下で購読) を受けて一覧・未読バッジの両方を invalidate するため、ビューを開いていなくてもバッジは最新化される。パイプライン監視の開始/終了通知 (`usePipelineWatchNotifications`) とパイプライン手動実行のキュー投入 (App の `runQuickPipeline`) は、デスクトップ通知トーストと同じタイミングで `record_notification` を呼び、同じ履歴に記録する (kind: `pipelineWatchStarted` / `pipelineWatchFinished` / `pipelineRunQueued`)。`G` チェーンは `N`。 |
+| **Inbox** | 自分が対応すべきものを 1 か所で見て、その場で処理するビュー (サイドバー最上位に固定表示、ドラッグ並べ替え対象外、Open 件数のバッジ付き。`G` → `I`)。現在の対象は、レビュー対象 PR のコメントのうち**自分へのメンション** (`pr_mention`) と、**自分が参加したスレッドへの返信** (`pr_reply`)。検出は PR 同期 (最新 50 件のレビュー対象 PR) のスレッド取得に相乗りし、通知設定に関係なく動く (通知用の `pr_comment_seen` とは別の `action_inbox_cursor` を持つ。初回観測は基準の記録だけで項目を作らない)。状態 (`open` / `snoozed` / `done`) は Azure DevOps に書き戻さずローカルの `action_inbox_items` だけで持つ。項目はコメントごとに一意で、再スキャンで重複も再オープンもしない。スレッドが Resolved / 削除された、コメントが削除された、自分がその後に返信した場合は同期時に自動で Done にする。Snooze の期限が過ぎた項目は背景ジョブなしで Open に戻る。Done は 30 日で削除する。画面は `DockableWorkspace` (レイアウトは `azdodeck:layout:inbox:dockview:v1` に保存) で、Items (一覧。以前の Inbox / Snoozed / Done タブは廃止し、他の一覧と同じ共通ステータスバー (下記「一覧ペインのステータスバー」) の `Done N` / `Snoozed N` ボタンで一覧をその状態に切り替える。押すと一覧が Done / Snoozed に切り替わり、タブ帯に解除チップ (`Done ✕` / `Snoozed ✕`) が出る。チップの ✕、もう一度同じボタン、一覧上の `Esc` で Open の一覧へ戻り、フォーカスは一覧へ戻る。ステータスバーの左は `N items`、右端の `?` が Help の Inbox の節を開く。以前の 3 行のキー操作ヒントは `?` に置き換えた。タブ帯右端に解除チップ、組織が 2 件以上のときの組織セレクト、畳んだ `Ctrl+F` フィルタを置く)、その右に Conversation (プレビュー。既存の `PrThreadCard` でスレッドを表示し、返信 / Resolve・Reactivate をその場で行う。タブ帯右端に「Open in DevDeck (Shift+Enter)」「Open in Azure DevOps (O)」のアイコンボタン + 共通のズーム + `⋯` View options (Copy URL / Ask the agent))、の 2 パネル。エージェントとの会話は全 View 共通の Agent パネル (後述) で行う。項目を選ぶと Conversation を前面に出す (エージェントの返信待ちの項目では Conversation に `Q` で Agent パネルを開く案内だけを出す)。返信欄 (PR スレッドの返信欄と WI のコメント欄) はプレビューの下端に固定し、長いスレッドでもスクロールせずに書ける。PR の返信欄はスレッドの開閉に関係なく常時表示し、項目を切り替えると下書きをクリアする。WI のコメントには 1 件ごとに Reply を付け、押すとそのコメントの 1 行引用と投稿者への @メンション (`createdById` があれば通知される `@<id>` に変換) を入れた返信欄にフォーカスする (WI コメントには返信スレッドが無いため新規コメントとして投稿する)。メンション元のコメントは古くても常に表示する。返信の送信、WI へのコメント、スレッドの Resolve は成功後に項目を Done にする (Reactivate は状態を変えない)。プレビューのスレッドは My Reviews と同じ `prReview` クエリキャッシュを共有する。コメント内のリンク (`AB#n` / `!n` / http(s) URL) はプレビュー下部に番号付きで並べ、`1`-`9` で開く (`AB#n` は Work Item Search、`!n` は My Reviews へ、URL は外部ブラウザ)。Read-only 検証モードでは返信と Resolve を無効にする。一覧は他のグリッドと同じ選択行の色とフォーカス枠を使い、選択行だけを Tab 順に入れる。クリック / 行移動で行自体にフォーカスし、`Ctrl+G` はプレビューや Agent の会話一覧から選択行へ戻る。同期・返信 / Resolve・フィルタ等で行が入れ替わっても一覧が持っていたフォーカスを復帰し、プレビュー入力中のフォーカスは奪わない。キーボード (My Reviews の割当に揃える): `↑↓`/`J K`/`Home`/`End`/`PageUp`/`PageDown` で行移動、`Enter`/`→` でプレビューへ (`Esc` で一覧へ戻る)、`Shift+Enter` で DevDeck 内の対象 PR (My Reviews) を開く、`O` / `Ctrl+Enter` でブラウザ (`Ctrl+Enter` はプレビュー・ツールバーからも有効、返信入力中は送信)、`E` で Done (Done の一覧では Reopen)、`Z` で Snooze (Snoozed の一覧では解除)、`Esc` で Done / Snoozed の一覧から Open へ戻る、`R` で返信欄を開く (WI メンションはメンション元コメントへの Reply、無ければコメント欄)、`Q` で Agent パネルをその項目の PR / WI を対象に開く (エージェントの返信待ちの項目ではその会話への返信から始める。PR のメンション / 返信は対象スレッドも渡す)、`C` で URL コピー、`/` でフィルタ。項目を選ぶだけで (`Q` を押さなくても) Agent パネルの対象がその項目の PR / WI (メンション / 返信は対象スレッド付き)、エージェントの返信待ちはその会話の項目になり、承認待ちと依頼 (`ask`) は対象なし。表示中の一覧 (Done / Snoozed の切替・組織・テキストフィルタ適用後) は Agent パネルの `+ This list (N)` で足せる。コマンド: `list_action_inbox_items` (`state` = `open` / `snoozed` / `done`、`organizationId`、`limit`) / `get_action_inbox_counts` / `set_action_inbox_item_state` (`ids`、`state`、`snoozedUntil`)。状態が変わると `action-inbox:updated` を emit し、App 直下で購読してバッジと一覧を invalidate する (通知履歴の `notifications:inbox-updated` とは別)。対象の種類は他に、Returned (`pr_returned`、投票後に author の push で投票がリセットされた PR) / 新規アサイン (`wi_assigned`) / WI メンション (`wi_mention`、組織全体の WIQL マクロ `@RecentMentions` で候補を絞り、使えなければ最近変更した割当 WI を走査。このマクロが REST で受理されるかは実サービスで未検証) を同期で保存し、条件が解消すると自動で Done にする。投票待ちなだけの PR は項目にしない (My Reviews が一覧し、その PR でのメンションは `pr_mention` として届く)。以前のバージョンが保存したレビュー依頼 (`pr_review_request`) の行は次の同期で Done にする。自分が作成した PR (キャッシュ済みの active PR、最新 30 件) への他者のコメントも対象。承認待ちパイプラインとエージェントの返信待ちは同期せず、取得して導出する (Done / Snooze 不可)。承認待ちはビューを開いている間 60 秒ごと、閉じている間はバッジ用に 5 分ごとに取得し (`retry` なし、パイプライン非対応の接続では取得しない)、エージェントの返信待ちはアプリ常駐のメモ要約 (ローカルのフォルダ走査) を使う。サイドバーのバッジと Inbox の Open 件数 (一覧が Open のときのステータスバー `N items`) はどちらも「保存済みの Open 件 + 承認待ち + エージェントの返信待ち」で、組織セレクトが未指定のときは一致する (承認待ちはアクティブな接続のぶんだけ数える)。PR / WI のコメント行は、何についてのコメントか分かるよう `!ID repo` の後に PR / WI のタイトルを (最大 16rem で省略して) 表示する。エージェントの返信待ちには、PR / WI のメモに加えて依頼 (`ask`) の会話も含む。PR / WI の返信待ち行はキャッシュ検索から対象のタイトル・組織・プロジェクト・リポジトリ・Web URL を補い、`O` / `Ctrl+Enter` で対象をブラウザで開ける (同じ番号の対象が複数組織にあれば組織フィルタで絞る。対象が見つからない場合と `ask` はブラウザ操作を無効にする)。設定 `agent_workspace_path` (クローンを置く 1 つのフォルダ) があれば、PR のリポジトリ名と同名のサブフォルダ → Workspace → 結果フォルダの順で作業フォルダを選び、プレースホルダ `{workspace}` / `{repo}` / `{guide}` を使える。同じフォルダで同時に 2 つのエージェントは起動しない。 |
+| **Analyze** | 登録したクエリを**グループ**単位でまとめ、Day / Week の粒度で推移を見るビュー。1 グループにクエリを複数登録できる (0 件のときは保存を拒否)。`DockableWorkspace` (レイアウトのキー `azdodeck:layout:analyze:dockview:v1`) に載せ、左のグループ一覧 (タブ名 `Groups`、タブ帯右に `+ Add group`、下端のステータスバーに `N items` と `?` ボタン = Help を開く) + 右の詳細 (タブ名 `Trend`、タブ帯右に Day / Week の切替)。Agent パネルもドックに加わる。画面の文言はすべて英語。クエリは WIQL に `ASOF` を付けて各時点の件数を取得し (`count_work_item_query_history`、バックエンドで並列度 4・1 回あたり最大 90 点)、1 本ごとに小さな折れ線 + 現在値 + 前期比を並べる。`ASOF` は `ORDER BY` の前に挿入し、文字列リテラル内の同名語は誤検出しない。行を開くと数値テーブル (Period / Count / Change / Note) に展開し、`Esc` で一覧へ戻る。Azure DevOps が答えられなかった時点は 0 ではなく欠測 (`count: null`) として扱い、テーブルに理由を出しつつ折れ線は前後をつないで線を途切れさせない。粒度と期間 (Day: 7/30/90 日、Week: 4/12/26 週) はグループ単位の設定で、週は月曜起点・UTC。グループは localStorage (`azdodeck:analyze:groups`) に保存する (グループ 20 件、1 グループあたりクエリ 12 件が上限。ブランチ別コミット推移の廃止前に保存したブランチメンバーは読み込み時に捨てる)。`ASOF` を含む WIQL は登録時に拒否し、保存済み Work Item View からの取り込みでも候補から除外する。キーボード: 一覧で `↑↓`/`J K`/`Home`/`End` 移動、`Enter` で詳細へ、`N` 追加 / `E` 編集 / `Delete` 削除、詳細で `D`/`W` 粒度切替、`Esc` で一覧へ戻る。ダイアログを閉じるとフォーカスは開いた要素へ、グループ削除後は一覧へ戻る。選択中のグループは Agent パネルの対象になる (下記)。`G` チェーンは `A`。 |
 
 My Pull Requests の `list_my_created_pull_requests` は `{ pullRequests, warnings }`、
 PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warnings }` を返す。
@@ -114,13 +114,13 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   ヒットを `Enter` でアプリ内プレビューダイアログ (`get_wiki_page`、本文を Markdown としてサニタイズ表示。Esc で閉じ、フォーカスは元に戻る) に開き、`Ctrl+Enter` でブラウザに開く。Wiki の編集はブラウザへジャンプする方針で、アプリ内編集はしない。GitHub 接続では未対応 (`NotSupported`)。
   横断検索は組織ごとに実行し、一部の組織が失敗しても成功した組織のヒットを返す(失敗はログのみで UI には通知しない)。
   通常の `Enter` でアプリ内、`Ctrl+Enter` でブラウザ。
-- **作業項目のフォロー** (issue #304): プレビューヘッダの星トグルで Follow/Unfollow
+- **作業項目のフォロー** (issue #304): プレビューのタブ帯 `⋯` メニューの Follow 項目 (✓ で現在の状態を表示) で Follow/Unfollow
   (`follow_work_item` / `unfollow_work_item`)。Azure DevOps に公開の follow/購読設定 REST API が
   無いため、フォローはローカルの SQLite ウォッチリスト (`followed_work_items`、フォロー時点の
   タイトル/状態などのスナップショットを保持) であり、サーバ側の通知購読とは連動しない。
   My Work Items パネルに「Assigned to me / Followed」の切替トグルがあり、フォロー中の項目を
   一覧できる (`list_followed_work_items`)。
-- **スヌーズ**: PR / 作業項目の通知を一定期間繰り延べ。プリセットは当日夕方、翌朝、3日後、翌週月曜、1か月後。カスタム日時は現在より後のみ受け付け (過去は UI で確定不可、`snooze_item` も `InvalidInput` で拒否)。My Reviews の範囲選択または作業項目グリッド (My Work Items / Work Item Views のグリッド表示 / Work Item Search) のチェック選択に対して同じ期限を一括適用できる (`Z` またはバルクバーの Snooze)。スヌーズ中の作業項目はこれら3画面の結果から隠れ、ステータスバーの Snoozed トグルで一覧・解除できる (My Items 外の項目のタイトルは表示中の結果から補完)。新たなアクティビティまたは期限で復帰 (アクティビティ判定は My Items の同期キャッシュに基づくため、My Items 外の項目は期限でのみ復帰)。ボード表示とピン留めビューの件数バッジはスヌーズを考慮しない。
+- **スヌーズ**: PR / 作業項目の通知を一定期間繰り延べ。プリセットは当日夕方、翌朝、3日後、翌週月曜、1か月後。カスタム日時は現在より後のみ受け付け (過去は UI で確定不可、`snooze_item` も `InvalidInput` で拒否)。My Reviews の範囲選択または作業項目グリッド (My Work Items / Work Item Views のグリッド表示 / Work Item Search) のチェック選択に対して同じ期限を一括適用できる (`Z` またはバルクバーの Snooze)。スヌーズ中の作業項目はこれら3画面の結果から隠れ、ステータスバーの `Snoozed N` ボタン (N は有効なスヌーズ件数) で一覧・解除できる (My Items 外の項目のタイトルは表示中の結果から補完)。新たなアクティビティまたは期限で復帰 (アクティビティ判定は My Items の同期キャッシュに基づくため、My Items 外の項目は期限でのみ復帰)。ボード表示とピン留めビューの件数バッジはスヌーズを考慮しない。
   ただし PR のコメント活動による早期復帰は `pr_comment_seen` カーソルに依存し、同カーソルは
   コメント返信通知の処理時（`notify_pr_comment_replies` が有効。`desktop_notifications_enabled`
   には依存しない）のみ進むため、同トグルがオフの間はコメント活動では早期復帰せず期限で復帰する。
@@ -130,26 +130,48 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   タブのドラッグで左右上下の分割・タブ化・リサイズが自由にできる。閉じたときの位置 (隣のパネルと方向、幅 / 高さ) を
   `{レイアウトのキー}:agent-dock` に保存し、次に開くとそこへ戻す (初回は一番右のパネルの右、幅 360px)。ドックの
   レイアウト保存にはパネルが含まれるが、閉じている状態で復元すると未知のパネルとして外れる。ドックの無い View
-  (Analyze / Notifications / Settings など) では右端に幅 360px のドロワーとして出す。ドックのある View では、ユーザーが開閉するまで最初から表示する (フォーカスは奪わない)。
+  (Notifications / Settings など) では右端に幅 360px のドロワーとして出す。ドックのある View では、ユーザーが開閉するまで最初から表示する (フォーカスは奪わない)。
+  ドックの無い View のうち Notifications は `useAgentDrawerDefault` で同じく最初からドロワーを表示する
+  (`agentPanelStore` の `drawerHosts`。ユーザーが `Ctrl+J` / `Esc` で閉じたら、以後は開かない)。
   `Ctrl+J` で開くと入力欄にフォーカスし、
   `Esc` で閉じて開く前のフォーカス (グリッドの行など) に戻す。
   - **対象 (文脈)**: 各 View が選択中のものを `usePublishAgentSubject` で公開し、パネルはそれを自動で対象にする。
-    PR (My Reviews / My Pull Requests / PR Search)、WI (My Items / Views / Search)、パイプライン実行 (Pipelines の詳細)、
-    Wiki ページ (Wiki プレビューの「Ask agent」)。対象は入力欄の placeholder
-    (`Ask about !45 …` / 対象なしは `Ask the agent…`) に出し、既定ではチップを出さない。`P` (または `?` 行の「Pin the
-    subject」) で固定すると入力欄の上にチップが出て (行を移っても変わらない)、× で外して対象なしの依頼にできる
-    (「No subject」と「follow selection」が出る)。
+    PR (My Reviews / My Pull Requests / PR Search / Inbox の PR 項目 / Notifications の PR 通知)、
+    WI (My Items / Views / Search / Inbox の WI 項目 / Notifications の WI 通知)、
+    パイプライン実行 (Pipelines の実行詳細、詳細を開く前は Watched pipelines で最後にフォーカスした行の最新実行)、
+    Wiki ページ (Wiki プレビューの「Ask agent」)、Analyze のグループ (種類 `analyze-group`: id = グループ id、title = グループ名。表示中のクエリごとの WIQL と期間別の件数を、再取得せず `analyzeGroupContext` に保持して文脈ドキュメントに書き出す)。対象は入力欄の placeholder
+    (`Ask about !45 …` / 対象なしは `Ask the agent…`) にも出す。Inbox の PR メンション / 返信は対象スレッド
+    (`threadId`) も渡し、資料ではそのスレッドを先頭に置いて印を付ける。承認待ち (実行 ID を持たない) と依頼
+    (`ask`) の項目は対象なし。
+    `usePublishAgentSubject` に `undefined` を渡すと同じ View 内の別の公開元に任せる (Pipelines は実行詳細を開くと
+    詳細パネルが、閉じると一覧が公開する)。
+  - **文脈チップ (入力欄の直上に常時表示)**: 「Context」の後ろに、付いている文脈を実線の青いチップ、
+    足せる文脈を点線の `+ <名前>` チップで並べる (`AgentContextChips`、ツールバー、タブ停止は 1 つ)。長いタイトルは省略する。
+    対象のチップはピンのボタン (固定 / 固定を外す、行を移っても変わらない) と ✕ (対象なしで依頼) を持ち、✕ で外した後は
+    点線の `+` チップになり、押すと選択に追従する状態へ戻る。キー: 入力欄から `Shift+Tab` でチップへ、
+    `←` `→` で移動、`Space` / `Enter` で付け外し、`P` で対象の固定 (対象のチップ上)、`Esc` で入力欄へ戻る
+    (パネルは閉じない)。付け外し後もフォーカスは同じチップに残る。
+  - **「この一覧」の文脈**: View が `usePublishAgentListScope` で表示中の一覧 (`{ id, label, count, markdown }`) を公開すると、
+    点線の `+ This list (N)` チップで足せる。既定では付かない。付いている間は送信時に `contextDocument` へ、選択項目の資料に続けて
+    Markdown の表 (最大 200 行、超過は件数のみ) と有効なフィルタ / クエリの行を加える (対象なしでも一覧だけで送れ、`ask` の会話になる。
+    front-matter の `context` には `This list (N)` を足す)。付いた状態は一覧の `id` に紐づき、別の View の一覧には引き継がない。
+    公開元: My Reviews / My Pull Requests / PR Search (フィルタ後の PR 一覧とテキスト / 列フィルタ)、
+    My Items / Followed / Work Item Search / Work Item Views のグリッド表示 (表示中の WI。Views は WIQL も。ボード表示は対象外)、
+    Inbox (表示中の項目、Done / Snoozed の切替とテキストフィルタ)、Pipelines (`+ Pending approvals (N)`: 選択中プロジェクトの承認待ち)。
   - **会話の単位**: 対象が PR / WI なら従来の項目ごとのメモ (`agent-notes/{pr|wi}-{id}/`、結果フォルダの設定が前提)。
-    それ以外と対象なしは依頼ごとの会話 (`target` = `ask`、`agent-notes/ask-{yyyyMMddHHmmss}/`、結果フォルダ不要)。
-    パネルは対象の PR / WI のメモと最近の依頼 30 件 (`list_agent_asks`) を見出しなしの 1 本の一覧にし、
-    Needs you → Open → Done の順、各グループ内は最終更新の新しい順に並べる。
+    それ以外 (パイプライン実行 / Wiki / Analyze グループ) と対象なしは依頼ごとの会話 (`target` = `ask`、`agent-notes/ask-{yyyyMMddHHmmss}/`、結果フォルダ不要)。
+    パネルに出すのは今の対象についての会話だけ。対象が PR / WI ならその項目のメモだけで、依頼は出さない。
+    それ以外の対象なら最近の依頼 30 件 (`list_agent_asks`) のうちその対象についての依頼 (front-matter の `context` で判定。
+    パイプライン実行と Wiki は URL、Analyze グループは context 行で照合する。実行は結果で表示名が変わるため URL で照合)、
+    対象なしなら対象なしで送った依頼だけ (`contextIsAbout`)。見出しなしの 1 本の一覧にし、
+    Needs you → Open → Done の順、各グループ内は最終更新の新しい順に並べる。他の対象への返信待ちは Inbox に出る。
   - **依頼の種類**: 画面では選ばせない。新しいメモの `kind` は付けず (空)、エージェントが本文から判断する
     (`agent_notes/guide.md`: 引用があれば `fix`、無ければ結果の修正・やり直しの依頼か、質問・要約かで決める。
     `guide_ask.md`: 無ければ `question`)。既存メモの `kind` は展開した会話に表示するだけ。front-matter に
     `context` (対象を 1 行で) を書く。
   - **資料の受け渡し**: エージェントには Azure DevOps の権限を与えない。送信時に DevDeck が対象の情報を取得して
     Markdown にまとめ (`contextDocument.ts`: PR は説明・変更ファイル・コメントスレッド、WI はフィールド・説明・コメント、
-    パイプライン実行はタイムラインと失敗ステップのログ末尾、Wiki はページ本文。最大 512 KiB)、`create_agent_note` の
+    パイプライン実行はタイムラインと失敗ステップのログ末尾、Wiki はページ本文、「この一覧」が付いていればその表。最大 512 KiB)、`create_agent_note` の
     `contextDocument` として渡す。バックエンドは `{メモのフォルダ}/_context/{メモのファイル名}` に保存し、front-matter の
     `context_file` に絶対パスを書く。エージェントは `AZURE_CONFIG_DIR` を空のフォルダ (`agent-notes/.az-signed-out`) に
     向け、`AZURE_DEVOPS_EXT_PAT` などのトークン用環境変数を外した状態で起動するため `az` は未ログインになる。
@@ -159,13 +181,14 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
     読み取りまでは防げない。WI / PR へのコメント投稿は人が DevDeck から行う (ガイドも投稿を指示しない)。
   - **会話の表示**: 会話 (1 メモ + 返信) は 1 件ずつ折りたためる。畳むと状態点 (Needs you は赤・太字)
     と 1 行目だけの 1 行 (種類・返信数・時刻は展開した会話の中に出す)。既定では Needs you と最新の 1 件だけ開き、Done は畳む。
+    Agent のドック枠自体はスクロールせず、会話一覧だけをスクロールする。下部の入力欄は常に表示する。
     一括開閉のボタンは無い。ドック時はヘッダーを出さない (ドロワー時だけ「Agent」と閉じるボタン)。
   - **送信**: 返信先がなければ新しいメモを作り、`run_agent` で起動する (PR はリポジトリ名を渡す)。返信先があれば
     `reply_agent_note` で追記して起動する。`Shift+Enter` (Run now) は新しいメモを作らず、選択中の会話 (なければ対象) のメモで起動する。
     Read-only 検証モードではメモの保存だけ行い、起動しない。
   - **キーボード**: `↑↓` 会話の移動、`→ ←` 開閉、`R` 選択中の会話に返信、`M` 新しい依頼の入力欄へ (他の View の
-    コメント欄と同じ)、`X` Resolve / Reopen、`P` 対象の固定、`Shift+Enter` Run now、`Esc` 閉じる。
-    キーのヒントは常時出さず、一覧の下の `?` (キーでも `?`) で開く (対象の固定・外すボタンもここ)。入力欄は他のコメント欄と同じく普段は 1 行に畳まれ、
+    コメント欄と同じ)、`X` Resolve / Reopen、`P` 対象の固定、`Shift+Enter` Run now、`Esc` 閉じる。入力欄から `Shift+Tab`
+    で文脈チップへ (上記)。キーのヒントは常時出さず、一覧の下の `?` (キーでも `?`) で開く。入力欄は他のコメント欄と同じく普段は 1 行に畳まれ、
     フォーカスで広がる。会話一覧が残りの高さを占め、入力欄はパネルの下端に固定する。長い会話では一覧だけスクロールする。`Ctrl+Enter` で送信、空のまま `Esc` で畳んで会話一覧へ戻る。ドック時はタブ名と重なる見出しを出さない。Inbox の `Q`、Result パネルの `a` (と Bot ボタン) は、このパネルをその項目を対象に開く。
   - **通知**: `useAgentNoteWatcher` は `ask` の要約も監視し、依頼への返信をデスクトップ通知する (クリックでパネルを開く)。
 - **エージェントへの申し送り (Agent notes)**: 作業項目グリッドの Result パネル (調査結果 HTML) と
@@ -471,7 +494,9 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
 
 | キー | 動作 |
 |---|---|
-| `Ctrl+K` | コマンドパレット |
+| `←` / `→` (一覧行・プレビュー本体) | 現在の画面配置で左 / 右にある Grid または編集可能なペイン (Conversation・Work Item Preview・Agent など) へフォーカス。Grid へ戻ると選択行にフォーカスする。結果 HTML・読み取り専用プレビュー・非表示のタブ・畳まれたペインは移動先から除外し、その方向に対象ペインがなければその場に留まる。`Ctrl+G` でも一覧へ戻れる。入力欄・ボタン・メニュー・ツリー・ボード・ビュー選択の既存の矢印操作は維持。結果 HTML / リッチテキスト内の本文でも有効 (入力欄・リンク・文字列選択中は除外) |
+| `Ctrl+K` | コマンドパレット。画面移動後は移動先の Grid (空の場合は一覧領域) に初期フォーカス。同じ画面への移動も対象。キャンセル時は元の要素へ戻る |
+| ペインのフォーカス表示 | Grid / プレビュー / Agent など、フォーカスを含むペインを青い枠でハイライト。コメント欄やボタンへのフォーカスも対象。入れ子の場合は最も内側のペインだけを表示 |
 | `?` / `F1` | ヘルプ (全ショートカット一覧) |
 | `G` → 第 2 キー | ビュー切替 (下表) |
 | `Ctrl+F` / `/` | フィルタにフォーカス (My Reviews のように畳まれたフィルタは開いてからフォーカス) |
@@ -489,6 +514,15 @@ find-next) は、入力欄以外では抑止し、ネイティブ動作が素通
 `O` Cross-org summary / `A` Analyze / `S` Settings。
 Work Item Search は以前 `I` だったが、Inbox の追加で `F` (Find) へ移した。Settings で
 上書き済みのキー割当はそのまま残る。
+
+### 一覧ペインのステータスバー
+
+ドックの一覧ペイン (My Reviews / My Pull Requests / PR Search の結果 / Work Items 系グリッド (My Items・Views・WI Search) / Inbox / Pipelines の Watched board) の下端は、共通コンポーネント `ListStatusBar` (`src/components/ListStatusBar.tsx`) で同じ書式にする。
+
+- 左: `N items` + View 固有の補足を ` · ` で区切る (例: `6 items · 2 not voted · 3 changed files`、`5 items · updated just now`、PR Search の検索前は `No search yet`)。複数選択の件数・衝突リスクなどの操作ボタンも左に置く。
+- 右 (この順で固定、持たない View は出さない): 有効フィルタ数と Clear filters → `Done N` → `Snoozed N` → `Stale N` → `Columns` → `?`。
+- `Done N` / `Snoozed N` は一覧をその状態に切り替えるトグル (`aria-pressed`)。有効な間はタブ帯に解除チップを出し、チップの ✕ か一覧上の `Esc` で Open の一覧へ戻る (フォーカスはグリッドへ戻す)。件数は Done がローカルのトリアージ件数、Snoozed が有効なスヌーズ件数 (`useSnoozedCount`)。
+- `?` (aria-label「Show keyboard shortcuts for this view」) は window イベント `azdodeck:help:open` (`src/lib/helpEvents.ts`) で App に Help を開かせ、その View のキー一覧の節 (reviews / pr-search / work-items / pipelines / inbox) へスクロールして見出しを強調する。押す前にグリッドへフォーカスを移すので、Help を閉じるとグリッドに戻る。
 
 ### グリッド内
 
@@ -516,6 +550,7 @@ My Reviews は既存の `selectedKeys` (ファイル重複検知と共有)、作
 `src/features/work-items/wiRowSelection.ts`) を選択状態として使い、My Pull Requests /
 PR 検索は共通フック `src/lib/useRangeSelection.ts` を使う。作業項目グリッドでは
 `S` 状態 / `A` 割当 / `P` 優先度 / `F` フィールド循環、`Ctrl+S` で適用、`M` でコメント。
+My Reviews でも `M` / `Ctrl+M` で PR の新規コメント欄へフォーカスし、畳まれている場合は展開する。入力欄で編集中は発動しない。
 プレビューの `D` は選択中の作業項目を複製ドラフト (タイトル `[Copy] ` 接頭辞 + 種別・
 優先度・エリア/イテレーション・タグ・担当者) として作成ダイアログに引き継ぐ。
 コメント欄の `Ctrl+Enter` は投稿 (+保留変更の適用) と同時にコメント入力からフォーカスを
@@ -539,13 +574,30 @@ Pull Requests / Attachments / History) は VSCode のビューのように配置
 PR の Conversation タブ下部の新規コメント欄は、空の間は1行のボタンに畳んでおき、クリック /
 Enter で展開してフォーカスする。空のまま `Escape` またはフォーカスが外れると畳み、`Escape`
 のときはその PR のプレビューへフォーカスを返す。
-作業項目プレビューの操作ボタン (Email a link・Duplicate・プリセット・ズーム・コメント配置・表示フィールド設定) は、Work Items グリッドではドックの Preview タブのタブ帯右端に置き (`PreviewToolbarSlot` の portal。状態はプレビュー側に残る)、タイトルをプレビュー最上段に表示する。ボードや PR の Work Items ペインなどタブ帯の無い配置では、`#ID`・種別・状態の行の右端に置く。「Email a link」ボタンはタイトルと URL を
-本文に入れた `mailto:` リンクで既定のメールクライアントを開く (Azure DevOps Web の
-Share 相当、Duplicate ボタンの隣、Tab キーで到達可能)。
-PR レビューパネルのタブ帯 (ズーム/最大化ボタンの並び) にも同様の「Email a link」ボタンがあり、
-件名 `!{id} {title}`、本文にタイトルと URL を入れた `mailto:` を開く。
+全プレビューのタブ帯は同じ規則で並ぶ (`src/components/PreviewToolbar.tsx`): 常時表示は
+ズーム (縮小 / 倍率 / 拡大) と最大化 (最大化を持つ PR レビューパネルのみ) と `⋯` View options
+メニューで、それ以外の操作はすべて `⋯` に入れる (幅によって出し入れはしない)。対象は PR の
+Conversation / Result、作業項目の Preview、Inbox の Conversation、Pipelines の Preview。
+`⋯` は `src/components/ViewOptionsMenu.tsx` で、開くと先頭の項目にフォーカスし、`↑` `↓` で移動、
+`Enter` / `Space` で実行、`Esc` で閉じてトリガーへフォーカスを戻す (ナビゲーションキーは
+メニュー内で止め、背後のグリッドに伝えない)。Follow やコメント配置のような切替項目は
+`menuitemcheckbox` でチェック状態を示し、ショートカットがある項目は右端に表示する。
+- 作業項目 (Work Items グリッドでは Preview タブのタブ帯右端、`PreviewToolbarSlot` の portal。状態はプレビュー側に残り、
+  タイトルをプレビュー最上段に表示する。ボードや PR の Work Items ペインなどタブ帯の無い配置では
+  `#ID`・種別・状態の行の右端に置く): `⋯` に Follow (✓)・Email a link・Duplicate work item (`D`)・
+  Field presets… (`1`-`9`)・Comments beside details (✓)・Configure preview fields… を入れる。
+  Field presets… / Configure preview fields… は `⋯` の下にポップオーバーを開き (開いた時点で先頭の
+  コントロールにフォーカス、`Esc` / Done / 適用で閉じると `⋯` へフォーカスを戻す)、独自のトリガーボタンは持たない。
+  「Email a link」はタイトルと URL を本文に入れた `mailto:` リンクで既定のメールクライアントを開く
+  (Azure DevOps Web の Share 相当)。
+- PR レビューパネル: `⋯` に Email a link (件名 `!{id} {title}`、本文にタイトルと URL を入れた `mailto:`) と
+  Preview linked work items (`T`)。
+- Inbox: Open in DevDeck / Open in Azure DevOps はツールチップとアクセシブル名にショートカットを含む
+  アイコンボタンで、ズームの左に置く。`⋯` は Copy URL (`C`) と Ask the agent (`Q`)。
+- Pipelines: `⋯` に Open in Azure DevOps・Re-run (`R`)・Cancel run (`X`、実行中のみ)。確認バーを閉じると
+  フォーカスは `⋯` に戻る。
 My Pull Requests グリッドも他グリッド同様、`L` で選択行の Markdown リンクをコピーできる。
-作業項目 / PR の各プレビューパネルには共通のズームコントロール
+作業項目 / PR / Inbox / Pipelines の各プレビューパネルには共通のズームコントロール
 (縮小 / 現在の倍率 / 拡大の3ボタン、`src/components/PreviewZoomControls.tsx`) があり、
 70%〜160% の範囲で 10% 刻みにプレビュー内のテキストとレイアウトを拡大縮小する
 (CSS `zoom` を適用)。倍率は `usePreviewZoom` フックが localStorage
@@ -599,6 +651,15 @@ Pipelines の見た目と操作 (`src/features/pipelines/`):
   高さは `max-h` 固定ではなく残り高さを使う (最小 18rem)。重大度は `##[error]` / `##[warning]` を優先し、
   単語は `error:` `error CS1002:` `npm ERR!` のようにコロンが付く形だけを対象にする ("0 errors" は強調しない)。
 
+各 View の最上段のツールバー (Pipelines の Project / Pipeline / Watch / Queue run、Notifications の
+Unread only / 種別 / Mark all read、My Items の Assigned to me | Followed / New item / Templates、Work Item Views の
+ビューのチップ行) は、PR Search / Work Item Search の検索行と同じ「枠なし・1 行・高さ `h-8`」に揃える
+(カードの枠線と余白は付けない。Notifications の Mark all read は右寄せ)。Pipelines の承認待ちの琥珀色の帯は
+ツールバーの下にそのまま残す。一覧ペインの名前は PR Search が「Pull requests」(Work Item Search の「Work items」と対)。
+プレビューが空のときは、選択を促す中央の文言 (`PreviewEmptyState`) だけを出し、「No PR selected」のような
+見出し行は出さない。Work Item Search / Views の空グリッドの案内文は、列グリッドの幅ではなくペインの可視幅の
+中央に置き、狭いペインでは折り返す。
+
 Grid と右プレビューを並べる My Reviews / PR Search / Work Items /
 Pipelines は、利用可能幅の 60% / 40% を既定比率とする。区切り線のドラッグまたは
 キーボード操作で変更した比率は画面ごと (保存済み Work Item View はビューごと) に
@@ -609,6 +670,7 @@ localStorage へ保存し、画面切り替えやウィンドウサイズ変更�
 リサイズハンドルを持つ。プレビューの下に別ペインを積んだ入れ子レイアウトでも、
 列の境界全体を幅ハンドル (外側の分割のものは「Resize <パネル> width」) でドラッグできる。
 タブ帯のボタン類 (フィルタ・移動メニュー等) はこのハンドルより前面にある。
+境界の調整は両隣のペインの幅・高さを交換し、反対側の境界 (Agent 等) を動かさない。隣接ペインの最小・最大サイズで止まる。
 各グループは自前の枠線 (角丸) を持ち、隣り合うペインの境界が一目で分かるようにする。
 畳んだフィルタ (`DockFilterBar`) を閉じた後に戻す行が無い (結果0件など) 場合や、チップの ✕ で
 チップが消えた場合は、フォーカスをタブ帯の「Ctrl+F」ボタンに置き、`<body>` に取り残さない。

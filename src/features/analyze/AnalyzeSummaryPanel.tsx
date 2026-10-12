@@ -70,7 +70,7 @@ export function AnalyzeSummaryPanel({
       {querySeries.length > 0 && (
         <section className="flex flex-col gap-2">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            クエリの推移
+            Query trends
           </h3>
           {querySeries.map((series) => {
             const values = drawnValues(series);
@@ -84,12 +84,12 @@ export function AnalyzeSummaryPanel({
                   series.isError
                     ? commandErrorMessage(series.error)
                     : values.length > 0
-                      ? `最小 ${Math.min(...values)} / 最大 ${Math.max(...values)}`
-                      : "データなし"
+                      ? `Min ${Math.min(...values)} / Max ${Math.max(...values)}`
+                      : "No data"
                 }
                 chart={
                   series.isError ? (
-                    <span className="block text-xs text-destructive">取得に失敗しました</span>
+                    <span className="block text-xs text-destructive">Failed to load</span>
                   ) : (
                     <TrendSparkline points={seriesPoints(series)} label={series.name} />
                   )
@@ -109,7 +109,7 @@ export function AnalyzeSummaryPanel({
                   />
                 }
                 onOpen={() => onOpen({ kind: "query", memberId: series.memberId })}
-                openLabel={`${series.name} の明細を開く`}
+                openLabel={`Open details for ${series.name}`}
               />
             );
           })}
@@ -117,7 +117,7 @@ export function AnalyzeSummaryPanel({
       )}
 
       <p className="text-xs text-muted-foreground">
-        行を選ぶとそのクエリの明細に移動します。
+        Select a row to see that query's details.
       </p>
     </div>
   );

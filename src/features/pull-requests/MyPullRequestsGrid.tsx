@@ -19,9 +19,10 @@ import { useColumnVisibility } from "@/lib/useColumnVisibility";
 import { useRangeSelection } from "@/lib/useRangeSelection";
 import { copyRowsAsTable } from "@/lib/clipboardTable";
 import { openExternalUrl } from "@/lib/openExternal";
+import { itemCount, ListStatusBar } from "@/components/ListStatusBar";
 import { CreatedPrRow, SortHeaderButton } from "./MyPullRequestsRow";
 import { DraftsCheckbox } from "./DraftsCheckbox";
-import { usePrReviewPanels } from "./usePrReviewPanels";
+import { prAgentList, usePrReviewPanels } from "./usePrReviewPanels";
 import { createdCopyColumns } from "./prCopyColumns";
 import {
   DEFAULT_REVIEW_PREVIEW_WIDTH,
@@ -318,6 +319,7 @@ export function MyPullRequestsGrid() {
     selectedPr,
     maximized,
     onToggleMaximize: () => setMaximized((value) => !value),
+    agentList: prAgentList("my-pull-requests", "My Pull Requests", rows, () => [textFilter.trim() && `Text filter: ${textFilter.trim()}`, !showDrafts && "Drafts hidden"]),
   });
 
   const filterInputRef = useRef<HTMLInputElement | null>(null);
@@ -366,7 +368,7 @@ export function MyPullRequestsGrid() {
   );
 
   const gridPane = (
-    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card">
+    <div data-grid-focus-fallback="true" tabIndex={-1} className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card">
       {query.data && query.data.warnings.length > 0 && (
         <p role="status" className="shrink-0 px-2 py-1 text-xs text-amber-600 dark:text-amber-400">
           Could not fetch {query.data.warnings.length} project(s): {query.data.warnings.join(", ")}.
@@ -428,21 +430,15 @@ export function MyPullRequestsGrid() {
         </div>
       )}
 
-      {/* Status bar */}
-      <div className="flex items-center justify-between border-t border-border px-2 py-1 text-xs text-muted-foreground">
-        <span>
-          {rows.length !== allPrs.length ? `${rows.length} of ${allPrs.length}` : `${rows.length} total`}
-          {selection.isMultiSelect ? ` · ${selection.selectedKeys.size} selected` : ""}
-          {query.isFetching ? " · refreshing…" : ""}
-        </span>
-        <button
-          type="button"
-          onClick={(event) => setColumnMenuRect(event.currentTarget.getBoundingClientRect())}
-          className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary"
-        >
-          Columns
-        </button>
-      </div>
+      <ListStatusBar
+        summary={[
+          rows.length !== allPrs.length ? `${rows.length} of ${allPrs.length} items` : itemCount(rows.length),
+          selection.isMultiSelect ? `${selection.selectedKeys.size} selected` : null,
+          query.isFetching ? "refreshing…" : null,
+        ]}
+        onColumns={setColumnMenuRect}
+        helpSection="reviews"
+      />
     </div>
   );
 

@@ -188,13 +188,7 @@ export function PrReviewHeader({
   /** One line (id + title) instead of the full metadata block. */
   compact?: boolean;
 }) {
-  if (!selectedPr) {
-    return (
-      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-1.5">
-        <span className="text-sm text-muted-foreground">No PR selected</span>
-      </div>
-    );
-  }
+  if (!selectedPr) return null;
 
   const title = review?.title ?? selectedPr.title;
 
@@ -230,90 +224,96 @@ export function PrReviewHeader({
   ].filter(Boolean);
   const reviewers = review?.reviewers ?? [];
 
-  // Read top-down: what the PR is (title, full width), what needs attention
-  // (status badges), where it
-  // came from (branch, then id / author), then who reviews.
+  // Keep title/state together, then metadata and aligned reviewer/label rows.
   return (
-    <div className="flex shrink-0 flex-col gap-1.5 border-b border-border px-2 py-1.5">
-      <h2
-        className="line-clamp-2 min-w-0 text-sm font-semibold leading-snug text-foreground"
-        title={title}
-      >
-        {title}
-      </h2>
+    <div className="flex shrink-0 flex-col gap-1 border-b border-border px-2 py-1">
+      <div className="flex min-w-0 items-start gap-2">
+        <h2
+          className="min-w-0 flex-1 break-words text-sm font-semibold leading-snug text-foreground"
+          title={title}
+        >
+          {title}
+        </h2>
+        <StateBadge isDraft={isDraft} />
+      </div>
       <div
         role="group"
         aria-label="Pull request metadata"
         className="flex min-w-0 flex-col gap-1"
       >
-        <div className="flex min-w-0 flex-wrap items-center gap-1">
-          <StateBadge isDraft={isDraft} />
-          {statusBadges}
-        </div>
-        <p className="min-w-0 truncate font-mono text-xs text-foreground" title={branchTitle}>
-          {branchLabel}
-        </p>
-        <p className="min-w-0 truncate text-xs text-muted-foreground">
-          <span className="font-mono font-semibold text-foreground">
-            #{selectedPr.pullRequestId}
-          </span>
-          {" · "}
-          {createdBy ?? "Unknown"}
-          {creationDate ? ` · opened ${formatRelativeDate(creationDate)}` : ""}
-        </p>
-        {reviewers.length > 0 || onAddReviewer ? (
+        {statusBadges.length > 0 ? (
           <div className="flex min-w-0 flex-wrap items-center gap-1">
-            <span className="mr-0.5 text-xs text-muted-foreground">Reviewers</span>
-            {approvedBadge(review)}
-            {reviewers.map((reviewer) => (
-              <span
-                key={reviewer.id ?? `${reviewer.displayName}-${reviewer.isMe}`}
-                className="inline-flex items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5 text-[11px] text-foreground"
-                title={`${reviewer.voteLabel}${reviewer.isRequired ? " (Required)" : ""}`}
-              >
-                {reviewer.displayName}
-                {reviewer.isMe ? " (you)" : ""}
+            {statusBadges}
+          </div>
+        ) : null}
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <p className="min-w-0 break-all font-mono text-xs text-foreground" title={branchTitle}>
+            {branchLabel}
+          </p>
+          <p className="min-w-0 break-words text-xs text-muted-foreground">
+            <span className="font-mono font-semibold text-foreground">
+              #{selectedPr.pullRequestId}
+            </span>
+            {" · "}
+            {createdBy ?? "Unknown"}
+            {creationDate ? ` · opened ${formatRelativeDate(creationDate)}` : ""}
+          </p>
+        </div>
+        {reviewers.length > 0 || onAddReviewer ? (
+          <div className="grid min-w-0 grid-cols-[4rem_minmax(0,1fr)] items-baseline gap-1">
+            <span className="text-xs text-muted-foreground">Reviewers</span>
+            <div className="flex min-w-0 flex-wrap items-center gap-1">
+              {approvedBadge(review)}
+              {reviewers.map((reviewer) => (
                 <span
-                  className={`inline-block h-1.5 w-1.5 rounded-full ${VOTE_DOT_CLASSES[voteTone(reviewer.vote)]}`}
-                  aria-hidden="true"
+                  key={reviewer.id ?? `${reviewer.displayName}-${reviewer.isMe}`}
+                  className="inline-flex max-w-full flex-wrap items-center gap-1 rounded border border-border bg-muted px-1.5 py-0.5 text-[11px] text-foreground [overflow-wrap:anywhere]"
+                  title={`${reviewer.voteLabel}${reviewer.isRequired ? " (Required)" : ""}`}
+                >
+                  {reviewer.displayName}
+                  {reviewer.isMe ? " (you)" : ""}
+                  <span
+                    className={`inline-block h-1.5 w-1.5 rounded-full ${VOTE_DOT_CLASSES[voteTone(reviewer.vote)]}`}
+                    aria-hidden="true"
+                  />
+                  {reviewer.id && onToggleReviewerRequired && onRemoveReviewer ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={reviewerActionsBusy}
+                        onClick={() => onToggleReviewerRequired(reviewer)}
+                        title={reviewer.isRequired ? "Make optional" : "Make required"}
+                        aria-label={`${reviewer.isRequired ? "Make optional" : "Make required"}: ${reviewer.displayName}`}
+                        className="rounded px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-50"
+                      >
+                        {reviewer.isRequired ? "Req" : "Opt"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={reviewerActionsBusy}
+                        onClick={() => onRemoveReviewer(reviewer)}
+                        aria-label={`Remove reviewer ${reviewer.displayName}`}
+                        title="Remove reviewer"
+                        className="rounded p-0.5 text-muted-foreground hover:bg-background hover:text-destructive disabled:opacity-50"
+                      >
+                        <X className="h-3 w-3" aria-hidden="true" />
+                      </button>
+                    </>
+                  ) : null}
+                </span>
+              ))}
+              {onAddReviewer ? (
+                <PrReviewerAdder
+                  organizationId={selectedPr.organizationId}
+                  existingReviewerIds={
+                    new Set(reviewers.flatMap((reviewer) => (reviewer.id ? [reviewer.id] : [])))
+                  }
+                  canAddMe={!reviewers.some((reviewer) => reviewer.isMe)}
+                  busy={reviewerActionsBusy}
+                  onAdd={onAddReviewer}
                 />
-                {reviewer.id && onToggleReviewerRequired && onRemoveReviewer ? (
-                  <>
-                    <button
-                      type="button"
-                      disabled={reviewerActionsBusy}
-                      onClick={() => onToggleReviewerRequired(reviewer)}
-                      title={reviewer.isRequired ? "Make optional" : "Make required"}
-                      aria-label={`${reviewer.isRequired ? "Make optional" : "Make required"}: ${reviewer.displayName}`}
-                      className="rounded px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-50"
-                    >
-                      {reviewer.isRequired ? "Req" : "Opt"}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={reviewerActionsBusy}
-                      onClick={() => onRemoveReviewer(reviewer)}
-                      aria-label={`Remove reviewer ${reviewer.displayName}`}
-                      title="Remove reviewer"
-                      className="rounded p-0.5 text-muted-foreground hover:bg-background hover:text-destructive disabled:opacity-50"
-                    >
-                      <X className="h-3 w-3" aria-hidden="true" />
-                    </button>
-                  </>
-                ) : null}
-              </span>
-            ))}
-            {onAddReviewer ? (
-              <PrReviewerAdder
-                organizationId={selectedPr.organizationId}
-                existingReviewerIds={
-                  new Set(reviewers.flatMap((reviewer) => (reviewer.id ? [reviewer.id] : [])))
-                }
-                canAddMe={!reviewers.some((reviewer) => reviewer.isMe)}
-                busy={reviewerActionsBusy}
-                onAdd={onAddReviewer}
-              />
-            ) : null}
+              ) : null}
+            </div>
           </div>
         ) : null}
         {onAddLabel && onRemoveLabel ? (

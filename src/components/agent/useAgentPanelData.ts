@@ -16,7 +16,8 @@ import {
   type AgentNoteItem,
 } from "@/lib/azdoCommands";
 import { agentNoteSummariesKey } from "@/components/agent-notes/useAgentNoteSummaries";
-import { contextLine, noteItemOf, type AgentQuote, type AgentSubject } from "./agentSubject";
+import type { AgentListScope } from "./agentListScope";
+import { contextIsAbout, contextLine, noteItemOf, type AgentQuote, type AgentSubject } from "./agentSubject";
 import { buildContextDocument } from "./contextDocument";
 
 export const AGENT_ASKS_KEY = ["agentAsks"];
@@ -49,7 +50,7 @@ function newAskId(): number {
 }
 
 /** Conversations for the Agent panel and the action that sends to the agent. */
-export function useAgentPanelData(subject: AgentSubject | null, enabled: boolean) {
+export function useAgentPanelData(subject: AgentSubject | null, enabled: boolean, list: AgentListScope | null = null) {
   const queryClient = useQueryClient();
   const item = noteItemOf(subject);
   const settingsQuery = useQuery({ queryKey: ["appSettings"], queryFn: getAppSettings, staleTime: 5 * 60_000 });
@@ -72,8 +73,9 @@ export function useAgentPanelData(subject: AgentSubject | null, enabled: boolean
     // Drafts (left in the Result panel by older versions) stay visible until sent.
     ...(item ? (itemNotesQuery.data ?? []) : [])
       .map((note) => ({ key: `${item!.target}:${item!.itemId}:${note.id}`, note, item: item!, section: "item" as const })),
-    ...(asksQuery.data ?? []).flatMap((ask) =>
-      ask.notes.map((note) => ({
+    // Requests (anything but a PR / work item) show only while their subject is the current one.
+    ...(item ? [] : (asksQuery.data ?? [])).flatMap((ask) =>
+      ask.notes.filter((note) => contextIsAbout(note.context, subject)).map((note) => ({
         key: `ask:${ask.itemId}:${note.id}`,
         note,
         item: { target: "ask" as const, itemId: ask.itemId },
@@ -145,8 +147,8 @@ export function useAgentPanelData(subject: AgentSubject | null, enabled: boolean
           quoteOffset: quoted?.offset ?? null,
           resultFile: quoted?.resultFile ?? null,
           resultHash: quoted?.resultHash ?? null,
-          context: subject ? contextLine(subject) : null,
-          contextDocument: subject ? await buildContextDocument(subject) : null,
+          context: subject || list ? contextLine(subject, list) : null,
+          contextDocument: subject || list ? await buildContextDocument(subject, list) : null,
         });
       }
       refresh(target);

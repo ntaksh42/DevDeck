@@ -283,7 +283,8 @@ export function WorkItemViewsPanel({
     if (isEditableTarget(event.target) || views.length === 0) return;
     // Ctrl+B is handled by the panel wrapper so it also works from the grid.
     if (event.ctrlKey || event.metaKey || event.altKey) return;
-    const columnCount = viewCardColumnCount(event.currentTarget);
+    // The chip row is a single line, so Up/Down step like Left/Right.
+    const columnCount = listCollapsed ? 1 : viewCardColumnCount(event.currentTarget);
     if (event.shiftKey && (event.key === "ArrowLeft" || event.key === "ArrowUp")) {
       event.preventDefault();
       moveSelectedView(-1);
@@ -466,6 +467,11 @@ export function WorkItemViewsPanel({
               }}
               onExtraColumnsChange={(extraColumns) => updateSelectedView({ extraColumns })}
               snoozeOrganizationId={selectedOrganizationId}
+              agentList={{
+                id: `work-item-view:${selectedView.id}`,
+                title: `Work item view: ${selectedView.name}`,
+                notes: [`WIQL: ${selectedView.wiql}`, filter.trim() && `Text filter: ${filter.trim()}`],
+              }}
             />
           )}
         </div>

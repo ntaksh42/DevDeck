@@ -18,7 +18,6 @@ import {
   type DockviewReadyEvent,
   type IDockviewHeaderActionsProps,
   type IDockviewPanel,
-  type IDockviewPanelProps,
   type SerializedDockview,
 } from "dockview-react";
 import "dockview-react/dist/styles/dockview.css";
@@ -27,6 +26,8 @@ import { readStoredJson, writeStoredJson } from "@/lib/storage";
 import { useIsDarkMode } from "@/lib/useIsDarkMode";
 import { createHeaderSlotStore, useCollapsedGroups, type HeaderSlotStore } from "./dockableWorkspaceSlots";
 import { minRowWidth } from "./dockableWorkspaceLayout";
+import { resizeAdjacentBoundary } from "./dockableWorkspaceResize";
+import { PanelContent, type PanelContentParams } from "./DockablePanelContent";
 
 export interface DockablePanelSpec {
   id: string;
@@ -53,18 +54,6 @@ export interface DockablePanelSpec {
   maxHeight?: number;
   /** Rendered in the group's tab strip (left of the move menu) while this panel is active. */
   headerActions?: ReactNode;
-}
-
-interface PanelContentParams {
-  content: ReactNode;
-}
-
-function PanelContent(props: IDockviewPanelProps<PanelContentParams>) {
-  return (
-    <div style={{ display: "grid", height: "100%", minHeight: 0, minWidth: 0, width: "100%" }}>
-      {props.params.content}
-    </div>
-  );
 }
 
 const PANEL_COMPONENTS = { content: PanelContent };
@@ -240,7 +229,7 @@ interface ResizeSpec {
   title: string;
 }
 
-type ResizePlacement = { axis: "x" | "y"; direction: -1; edge: "leading" };
+type ResizePlacement = { axis: "x" | "y"; direction: -1; edge: "leading"; previousView: Element };
 
 /**
  * The shared boundaries this group should carry a resize handle for: the
@@ -271,7 +260,8 @@ function groupResizePlacements(group: IDockviewHeaderActionsProps["group"]): Res
     if (!seen.has(axis)) {
       seen.add(axis);
       const views = Array.from(viewContainer.children).filter((child) => child.classList.contains("dv-view"));
-      if (views.indexOf(view) > 0) placements.push({ axis, direction: -1, edge: "leading" });
+      const index = views.indexOf(view);
+      if (index > 0) placements.push({ axis, direction: -1, edge: "leading", previousView: views[index - 1] });
     }
     view = split.parentElement?.closest<HTMLElement>(".dv-view") ?? null;
   }
@@ -302,6 +292,7 @@ function GroupResizeOverlay({
   labelSuffix,
   resizeSpec,
   dimensions,
+  containerApi,
 }: {
   group: IDockviewHeaderActionsProps["group"];
   placement: ResizePlacement;
@@ -309,6 +300,7 @@ function GroupResizeOverlay({
   labelSuffix: string;
   resizeSpec: ResizeSpec;
   dimensions: { width: number; height: number };
+  containerApi: DockviewApi;
 }) {
   const vertical = placement.axis === "y";
   const [initialSize] = useState(() => (vertical ? group.api.height : group.api.width));
@@ -334,6 +326,9 @@ function GroupResizeOverlay({
     ? resizeSpec.defaultHeight ?? initialSize
     : resizeSpec.defaultWidth ?? initialSize;
 
+  const resizeBoundary = (next: number) =>
+    resizeAdjacentBoundary(group, placement.previousView, containerApi, vertical, next);
+
   return createPortal(
     <ResizeHandle
       ariaLabel={`Resize ${resizeSpec.title}${labelSuffix}`}
@@ -350,17 +345,8 @@ function GroupResizeOverlay({
       // `onDidDimensionsChange`. Handing the handle the real size lets it
       // re-anchor on the limit instead of accumulating a request that runs
       // away past it.
-      onChange={(next) => {
-        if (vertical) {
-          group.api.setSize({ height: next });
-          return group.api.height;
-        }
-        group.api.setSize({ width: next });
-        return group.api.width;
-      }}
-      onReset={() =>
-        group.api.setSize(vertical ? { height: defaultSize } : { width: defaultSize })
-      }
+      onChange={resizeBoundary}
+      onReset={() => resizeBoundary(defaultSize)}
       className="absolute left-0 top-0 z-20"
       style={vertical ? { width: crossLength } : { height: crossLength }}
     />,
@@ -416,6 +402,7 @@ function createHeaderActions(
             labelSuffix={index === 0 ? "" : placement.axis === "x" ? " width" : " height"}
             resizeSpec={resizeSpec}
             dimensions={dimensions}
+            containerApi={containerApi}
           />
         ))}
       </div>

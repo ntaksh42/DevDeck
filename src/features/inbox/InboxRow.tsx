@@ -2,6 +2,7 @@ import { forwardRef } from "react";
 import { ExternalLink } from "lucide-react";
 import { formatDate, formatRelativeDate } from "@/lib/utils";
 import { openExternalUrl } from "@/lib/openExternal";
+import { gridRowStateClass } from "@/lib/gridRowState";
 import {
   formatSnoozeUntil,
   inboxKindClass,
@@ -47,13 +48,12 @@ export const InboxRow = forwardRef<
       ref={ref}
       id={domId}
       role="option"
+      tabIndex={selected ? 0 : -1}
       aria-selected={selected}
       onClick={onSelect}
       onDoubleClick={onOpen}
       style={{ height: INBOX_ROW_HEIGHT }}
-      className={`group flex cursor-pointer select-none items-center gap-2 border-b border-l-[3px] border-border px-2 text-sm ${
-        selected ? "border-l-primary bg-secondary" : "border-l-transparent hover:bg-muted/50"
-      }`}
+      className={`group flex cursor-pointer select-none items-center gap-2 border-b border-border px-2 text-sm outline-none focus:ring-2 focus:ring-inset focus:ring-ring ${gridRowStateClass({ selected })}`}
     >
       <span className={`w-16 shrink-0 text-xs font-semibold ${inboxKindClass(item.kind)}`}>
         {inboxKindLabel(item.kind)}
@@ -83,7 +83,7 @@ export const InboxRow = forwardRef<
           type="button"
           tabIndex={-1}
           aria-label="Open in Azure DevOps"
-          title="Open in Azure DevOps (O)"
+          title="Open in Azure DevOps (O / Ctrl+Enter)"
           onClick={(event) => {
             event.stopPropagation();
             void openExternalUrl(item.webUrl as string);

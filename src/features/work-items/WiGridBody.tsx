@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useRef } from 'react';
+import { memo, useCallback, useMemo, useRef, type ReactNode } from 'react';
 import { LoadingState, PreviewEmptyState, SEARCH_EMPTY_HINT } from '@/components/StateDisplay';
 import type { WorkItemSummary } from '@/lib/azdoCommands';
 import { matchRowColorClass, type RowColorRule } from '@/lib/rowColorRules';
@@ -7,6 +7,7 @@ import { WorkItemGridRow } from './WorkItemGridRow';
 import { workItemSummaryKey, type WiSortKey } from './workItemsGridHelpers';
 
 export function WiGridBody({
+  paneWidth,
   showBlockingLoading,
   searched,
   sorted,
@@ -32,6 +33,8 @@ export function WiGridBody({
   onCtrlToggleSelect,
   onClearSelection,
 }: {
+  /** Visible width of the scroller: empty states centre within it, not within the wider column grid. */
+  paneWidth: number;
   showBlockingLoading: boolean;
   searched: boolean;
   sorted: WorkItemSummary[];
@@ -63,26 +66,31 @@ export function WiGridBody({
   const focusedIndexRef = useRef(selectedIndex);
   focusedIndexRef.current = selectedIndex;
 
+  const inPane = (node: ReactNode) => (
+    <div className="sticky left-0 flex flex-col" style={{ width: paneWidth || undefined }}>
+      {node}
+    </div>
+  );
   if (showBlockingLoading) {
-    return <LoadingState />;
+    return inPane(<LoadingState />);
   }
   if (!searched) {
-    return (
+    return inPane(
       <PreviewEmptyState
         message={emptyMessage ?? "Run a search to load work items."}
         hint={emptyMessage ? undefined : SEARCH_EMPTY_HINT}
-      />
+      />,
     );
   }
   if (sorted.length === 0) {
-    return (
+    return inPane(
       <div className="flex min-h-24 items-center justify-center text-sm text-muted-foreground">
         No work items matched.
-      </div>
+      </div>,
     );
   }
   if (displayed.length === 0) {
-    return (
+    return inPane(
       <div className="flex min-h-24 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
         <span>No items match the active filters.</span>
         <button
@@ -92,7 +100,7 @@ export function WiGridBody({
         >
           Clear filters
         </button>
-      </div>
+      </div>,
     );
   }
   return (

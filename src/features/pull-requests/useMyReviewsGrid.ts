@@ -16,6 +16,7 @@ import { useExperimentalFlags } from '@/features/settings/useExperimentalFlags';
 import { matchesAllSearchTerms, splitSearchTerms } from '@/lib/utils';
 import { useGridColumns } from '@/lib/useGridColumns';
 import { useColumnVisibility } from '@/lib/useColumnVisibility';
+import { useSnoozedCount } from '@/lib/useSnoozedCount';
 import { useGridVirtualizer } from '@/lib/useGridVirtualizer';
 import { isTauriRuntime } from '@/lib/runtime';
 import {
@@ -109,6 +110,7 @@ export function useMyReviewsGrid({
   const staleThresholdDays =
     settingsQuery.data?.reviewStaleThresholdDays ?? DEFAULT_REVIEW_STALE_THRESHOLD_DAYS;
   const queryClient = useQueryClient();
+  const snoozedCount = useSnoozedCount('pull_request', organizationId);
   const experimental = useExperimentalFlags();
   const voteMutation = useMutation({
     mutationFn: submitPullRequestVote,
@@ -398,6 +400,13 @@ export function useMyReviewsGrid({
     setFilterAnchorRect(null);
   }
 
+  /** Back from the Done / Snoozed list to the open one, keeping keyboard focus in the grid. */
+  function leaveStateView() {
+    setShowDone(false);
+    setShowSnoozed(false);
+    window.setTimeout(() => selection.focusRow(selection.selectedIndex), 0);
+  }
+
   function applySort(column: SortKey) {
     setSort((current) => {
       if (current.key !== column) {
@@ -430,7 +439,7 @@ export function useMyReviewsGrid({
     openFilterCol, setOpenFilterCol,
     filterAnchorRect, setFilterAnchorRect,
     filterButtonRef, filterInputRef,
-    showDone, setShowDone, showSnoozed, setShowSnoozed,
+    showDone, setShowDone, showSnoozed, setShowSnoozed, snoozedCount, leaveStateView,
     // columns
     visibleColumns, toggleColumn, resetColumns,
     // data

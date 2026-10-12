@@ -127,7 +127,7 @@ describe("PipelineRunDetailPanel", () => {
     await waitFor(() => expect(screen.queryByRole("treeitem", { name: /Checkout/ })).toBeNull());
   });
 
-  it("asks inline before re-running and returns focus to the Re-run button on Escape", async () => {
+  it("asks inline before re-running and returns focus to the View options button on Escape", async () => {
     renderPanel();
     const tree = await screen.findByRole("tree", { name: "Run timeline" });
 
@@ -141,13 +141,16 @@ describe("PipelineRunDetailPanel", () => {
 
     fireEvent.keyDown(bar, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Re-run" })));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "View options" })),
+    );
     expect(rerunPipelineRun).not.toHaveBeenCalled();
   });
 
   it("re-runs only after the inline confirmation", async () => {
     renderPanel();
-    fireEvent.click(await screen.findByRole("button", { name: "Re-run" }));
+    fireEvent.click(await screen.findByRole("button", { name: "View options" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Re-run/ }));
 
     const bar = await screen.findByRole("alertdialog");
     fireEvent.click(within(bar).getByRole("button", { name: "Re-run" }));
@@ -161,14 +164,15 @@ describe("PipelineRunDetailPanel", () => {
 
   it("offers Cancel only while the run is in progress", async () => {
     renderPanel();
-    await screen.findByRole("button", { name: "Re-run" });
-    expect(screen.queryByRole("button", { name: "Cancel run" })).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "View options" }));
+    expect(screen.getByRole("menuitem", { name: /^Re-run/ })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: /^Cancel run/ })).toBeNull();
     cleanup();
 
     getPipelineRun.mockResolvedValue(detail("inProgress", null));
     renderPanel();
-    const cancel = await screen.findByRole("button", { name: "Cancel run" });
-    fireEvent.click(cancel);
+    fireEvent.click(await screen.findByRole("button", { name: "View options" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /^Cancel run/ }));
     const bar = await screen.findByRole("alertdialog");
     expect(within(bar).getByText("Cancel this run?")).toBeTruthy();
     fireEvent.click(within(bar).getByRole("button", { name: "Cancel run" }));

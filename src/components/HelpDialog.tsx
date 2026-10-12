@@ -1,15 +1,22 @@
 import { useEffect, useRef } from "react";
 import { Keyboard, X } from "lucide-react";
 import { resolveKeybindings, type KeybindingId } from "@/lib/keybindings";
+import type { HelpSection } from "@/lib/helpEvents";
 
-export function HelpDialog({ onClose }: { onClose: () => void }) {
+export function HelpDialog({ onClose, section: targetSection }: { onClose: () => void; section?: HelpSection }) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   // Focus the close button on open so the dialog is keyboard-operable from the
   // start; Escape closes (App returns focus to the opener). (#443)
   useEffect(() => {
     closeButtonRef.current?.focus();
-  }, []);
+    // Opened from a view's `?` button: bring that view's key section into view.
+    if (targetSection) {
+      document
+        .querySelector(`[data-help-section="${targetSection}"]`)
+        ?.scrollIntoView?.({ block: "start" });
+    }
+  }, [targetSection]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -24,6 +31,11 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
   }, [onClose]);
 
   const section = "text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2";
+  // The section a view's `?` button asked for is drawn in the accent colour.
+  const sectionProps = (id: HelpSection) => ({
+    "data-help-section": id,
+    className: id === targetSection ? "mb-2 text-xs font-semibold uppercase tracking-wider text-primary" : section,
+  });
   // Spacing sits on the section wrapper: each heading is its own wrapper's
   // first child, so a `first:` margin on the heading never separated sections.
   const group = "break-inside-avoid mt-4 first:mt-0";
@@ -94,12 +106,13 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Command palette</span><kbd className={kbd}>{combo("commandPalette")}</kbd></div>
           <div className={row}><span>Focus grid</span><kbd className={kbd}>{combo("focusGrid")}</kbd></div>
           <div className={row}><span>Focus preview</span><kbd className={kbd}>{combo("focusPreview")}</kbd></div>
+          <div className={row}><span>Adjacent grid / editable pane (from rows / preview body)</span><kbd className={kbd}>← →</kbd></div>
           <div className={row}><span>Grid → preview / back to grid</span><kbd className={kbd}>Enter / → · Esc / ←</kbd></div>
           <div className={row}><span>Focus views panel</span><kbd className={kbd}>{combo("focusViewsPanel")}</kbd></div>
 
         </div>
         <div className={group}>
-          <p className={section}>My Reviews</p>
+          <p {...sectionProps("reviews")}>My Reviews</p>
           <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>
           <div className={row}><span>Open / focus preview</span><kbd className={kbd}>Enter / →</kbd></div>
           <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>O / Ctrl+Enter</kbd></div>
@@ -112,12 +125,13 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Copy as Markdown link</span><kbd className={kbd}>L</kbd></div>
           <div className={row}><span>Snooze selected row</span><kbd className={kbd}>Z</kbd></div>
           <div className={row}><span>Comment on the review result (Result tab, also PR Search)</span><kbd className={kbd}>R</kbd></div>
+          <div className={row}><span>Focus PR comment</span><kbd className={kbd}>{combo("focusComment")} / M</kbd></div>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ PgUp PgDn Home End</kbd></div>
           <div className={row}><span>Select multiple (check file-overlap conflict risk)</span><kbd className={kbd}>Shift+↑ ↓ · Shift+click · Ctrl+click</kbd></div>
 
         </div>
         <div className={group}>
-          <p className={section}>PR Search / WI Search</p>
+          <p {...sectionProps("pr-search")}>PR Search / WI Search</p>
           <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>
           <div className={row}><span>Open / focus preview</span><kbd className={kbd}>Enter / →</kbd></div>
           <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>O / Ctrl+Enter</kbd></div>
@@ -131,7 +145,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
 
         </div>
         <div className={group}>
-          <p className={section}>Work Items</p>
+          <p {...sectionProps("work-items")}>Work Items</p>
           <div className={row}><span>Focus search</span><kbd className={kbd}>/</kbd></div>
           <div className={row}><span>Open detail preview</span><kbd className={kbd}>Enter / →</kbd></div>
           <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>Ctrl+Enter / O</kbd></div>
@@ -173,14 +187,14 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Find file by name (fuzzy)</span><kbd className={kbd}>T</kbd></div>
           <div className={row}><span>Move in tree / type-ahead</span><kbd className={kbd}>↑ ↓ · Home / End · type</kbd></div>
 
-          <p className={section}>Pipelines</p>
+          <p {...sectionProps("pipelines")}>Pipelines</p>
           <div className={row}><span>Move run row</span><kbd className={kbd}>J/K ↑ ↓ Home End</kbd></div>
           <div className={row}><span>Open run preview</span><kbd className={kbd}>Enter</kbd></div>
           <div className={row}><span>Open run in browser</span><kbd className={kbd}>Ctrl+Enter</kbd></div>
 
         </div>
         <div className={group}>
-          <p className={section}>Inbox</p>
+          <p {...sectionProps("inbox")}>Inbox</p>
           <div className={row}><span>Move row</span><kbd className={kbd}>J/K ↑ ↓ Home End PgUp PgDn</kbd></div>
           <div className={row}><span>Focus the preview</span><kbd className={kbd}>Enter / →</kbd></div>
           <div className={row}><span>Open in DevDeck</span><kbd className={kbd}>Shift+Enter</kbd></div>
@@ -204,6 +218,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <p className={section}>General</p>
           <div className={row}><span>Go to view</span><kbd className={kbd}>{combo("gotoLeader")} then {gotoKeys}</kbd></div>
           <div className={row}><span>Apply pending work item changes</span><kbd className={kbd}>{combo("applyStaged")}</kbd></div>
+          <div className={row}><span>Back from the Done / Snoozed list to the open list (Inbox, My Reviews, Work Items)</span><kbd className={kbd}>Esc</kbd></div>
           <div className={row}><span>Show this help</span><kbd className={kbd}>F1 / {combo("help")}</kbd></div>
           <div className={row}><span>Close dialog</span><kbd className={kbd}>Esc</kbd></div>
         </div>

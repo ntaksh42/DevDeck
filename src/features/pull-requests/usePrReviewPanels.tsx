@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { usePublishAgentListScope, type AgentListScope } from "@/components/agent/agentListScope";
 import { usePublishAgentSubject } from "@/components/agent/agentSubject";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
@@ -23,6 +24,8 @@ import { ReviewTab } from "./PrReviewTabContents";
 import { ResultTab } from "./PrSecondaryTabs";
 import { LINKED_WORK_ITEMS_PANEL_ID, LinkedWorkItemsPanel } from "./LinkedWorkItemsPanel";
 import { ConfirmDialog, useConfirm } from "@/components/ConfirmDialog";
+
+export { columnFilterNotes, prAgentList } from "./prAgentList";
 
 /**
  * Builds the PR review tabs (Conversation/Result) as
@@ -50,8 +53,11 @@ export function usePrReviewPanels({
   onToggleMaximize,
   onOpenLinkedWorkItems,
   resultCommentRequest = 0,
+  agentList,
 }: {
   selectedPr: ReviewPullRequestSummary | null;
+  /** The visible list, offered to the Agent panel as "This list". */
+  agentList?: AgentListScope;
   maximized?: boolean;
   onToggleMaximize?: () => void;
   /** When set, adds the linked Work Items tab and its header button. */
@@ -60,6 +66,7 @@ export function usePrReviewPanels({
   resultCommentRequest?: number;
 }): { anchor: DockablePanelSpec; secondary: DockablePanelSpec[] } {
   const { canZoomIn, canZoomOut, resetZoom, zoom, zoomIn, zoomOut } = usePreviewZoom();
+  usePublishAgentListScope(agentList);
   usePublishAgentSubject(
     selectedPr
       ? {

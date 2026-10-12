@@ -7,7 +7,7 @@ import type {
   WorkItemPreview,
 } from "@/lib/azdoCommands";
 import type { SelectedMention } from "@/features/work-items/workItemMentions";
-import { formatRelativeDate } from "@/lib/utils";
+import { focusPrimaryPreview, formatRelativeDate } from "@/lib/utils";
 import { CommentComposer } from "@/features/pull-requests/CommentComposer";
 import { PrThreadCard } from "@/features/pull-requests/PrThreadCard";
 import { RichHtmlFrame } from "@/features/work-items/RichHtmlFrame";
@@ -64,6 +64,7 @@ export function ThreadPanel({
         thread={thread}
         busy={busy || readOnly}
         showFilePath
+        showReply={false}
         mentionSearch={mentionSearch}
         resolveImageSource={resolveImageSource}
         baseUrl={item.webUrl}
@@ -74,7 +75,18 @@ export function ThreadPanel({
         <p className="mt-1 text-[11px] text-muted-foreground">
           Read-only validation mode: replies and status changes are disabled.
         </p>
-      ) : null}
+      ) : (
+        <div data-inbox-composer="true" className="sticky bottom-0 z-10 mt-1 border-t border-border bg-card pt-1">
+          <CommentComposer
+            placeholder="Reply…"
+            submitLabel="Reply"
+            busy={busy}
+            mentionSearch={mentionSearch}
+            onSubmit={onReply}
+            onCancel={focusPrimaryPreview}
+          />
+        </div>
+      )}
     </>
   );
 }

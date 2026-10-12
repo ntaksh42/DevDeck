@@ -4,6 +4,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { WorkItemQueryCountPoint } from "@/lib/azdoCommands";
 import { AnalyzeView } from "./AnalyzeView";
 import { saveAnalyzeGroups, type AnalyzeGroup } from "./analyzeGroupsStorage";
+import { useAgentSubject } from "@/components/agent/agentSubject";
+import { buildContextDocument } from "@/components/agent/contextDocument";
 
 const countWorkItemQueryHistory = vi.fn();
 const listWorkItemProjects = vi.fn();
@@ -44,11 +46,17 @@ function points(counts: (number | null)[]): WorkItemQueryCountPoint[] {
   }));
 }
 
+function SubjectProbe() {
+  const subject = useAgentSubject();
+  return <output data-testid="agent-subject">{subject ? `${subject.kind}:${subject.title}` : ""}</output>;
+}
+
 function renderView() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
       <AnalyzeView />
+      <SubjectProbe />
     </QueryClientProvider>,
   );
 }
@@ -67,14 +75,14 @@ afterEach(() => {
 describe("AnalyzeView", () => {
   it("invites the user to add a group when none exist", async () => {
     renderView();
-    expect(await screen.findByText(/グループを追加すると/)).toBeTruthy();
+    expect(await screen.findByText(/Add a group to track/)).toBeTruthy();
   });
 
   it("shows the queries of the selected group", async () => {
     saveAnalyzeGroups([group()]);
     renderView();
 
-    expect(await screen.findByText("クエリの推移")).toBeTruthy();
+    expect(await screen.findByText("Query trends")).toBeTruthy();
     expect(screen.getByText("Bugs — Core")).toBeTruthy();
     await waitFor(() => expect(screen.getByText("15")).toBeTruthy());
   });
@@ -93,14 +101,14 @@ describe("AnalyzeView", () => {
     saveAnalyzeGroups([group()]);
     renderView();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Bugs — Core の明細を開く" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open details for Bugs — Core" }));
 
-    expect(await screen.findByText("前期比")).toBeTruthy();
+    expect(await screen.findByText("Change")).toBeTruthy();
     // The header keeps the group name as a breadcrumb while drilled in.
     expect(screen.getByText(/Payments ›/)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "一覧へ" }));
-    await waitFor(() => expect(screen.getByText("クエリの推移")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Back to list" }));
+    await waitFor(() => expect(screen.getByText("Query trends")).toBeTruthy());
   });
 
   it("marks a point Azure DevOps could not answer instead of showing zero", async () => {
@@ -108,7 +116,7 @@ describe("AnalyzeView", () => {
     saveAnalyzeGroups([group()]);
     renderView();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Bugs — Core の明細を開く" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open details for Bugs — Core" }));
     expect(await screen.findByText("no snapshot")).toBeTruthy();
   });
 
@@ -147,7 +155,7 @@ describe("AnalyzeView", () => {
     const row = await screen.findByRole("button", { name: /Payments/ });
     fireEvent.keyDown(row, { key: "Delete" });
 
-    await waitFor(() => expect(screen.getByText(/グループを追加すると/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/Add a group to track/)).toBeTruthy());
     expect(window.localStorage.getItem("azdodeck:analyze:groups")).toBe("[]");
   });
 
@@ -160,7 +168,7 @@ describe("AnalyzeView", () => {
 
     const dialog = await screen.findByRole("dialog");
     // N opens a blank group; E is the one that edits the selected group.
-    expect(within(dialog).getByText("グループを追加")).toBeTruthy();
+    expect(within(dialog).getByText("Add group")).toBeTruthy();
 
     fireEvent.keyDown(dialog, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
@@ -174,7 +182,7 @@ describe("AnalyzeView", () => {
     fireEvent.keyDown(row, { key: "e" });
 
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText("グループを編集")).toBeTruthy();
+    expect(within(dialog).getByText("Edit group")).toBeTruthy();
     // Pre-filled with the selected group's members rather than a blank form.
     expect(within(dialog).getByText("Bugs — Core")).toBeTruthy();
   });
@@ -183,16 +191,45 @@ describe("AnalyzeView", () => {
     saveAnalyzeGroups([group()]);
     renderView();
 
-    fireEvent.click(await screen.findByRole("button", { name: "グループを編集" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit group" }));
     const dialog = await screen.findByRole("dialog");
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "WIQL を直接書く" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Write WIQL" }));
     const textarea = within(dialog).getByPlaceholderText(/SELECT \[System.Id\] FROM WorkItems/);
     fireEvent.change(textarea, {
       target: { value: "SELECT [System.Id] FROM WorkItems ASOF '2026-01-01T00:00:00Z'" },
     });
-    fireEvent.click(within(dialog).getByRole("button", { name: "クエリを追加" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add query" }));
 
-    expect(await within(dialog).findByText(/ASOF は Analyze 側で付与する/)).toBeTruthy();
+    expect(await within(dialog).findByText(/Analyze adds ASOF itself/)).toBeTruthy();
+  });
+
+  it("counts the groups in the list's status bar", async () => {
+    saveAnalyzeGroups([group(), group({ id: "g2", name: "Portal" })]);
+    renderView();
+
+    expect(await screen.findByText("2 items")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Show keyboard shortcuts for this view" })).toBeTruthy();
+  });
+
+  it("publishes the selected group to the Agent panel with its numbers", async () => {
+    saveAnalyzeGroups([group()]);
+    renderView();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("agent-subject").textContent).toBe("analyze-group:Payments"),
+    );
+    await waitFor(() => expect(screen.getByText("15")).toBeTruthy());
+
+    const document = await buildContextDocument({
+      kind: "analyze-group",
+      id: "g1",
+      title: "Payments",
+      webUrl: null,
+    });
+    expect(document).toContain("# Analyze group: Payments");
+    expect(document).toContain("### Bugs — Core");
+    expect(document).toContain("SELECT [System.Id] FROM WorkItems");
+    expect(document).toMatch(/\| 10 \|[\s\S]*\| 12 \|[\s\S]*\| 15 \|/);
   });
 });

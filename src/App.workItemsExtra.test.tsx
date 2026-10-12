@@ -320,6 +320,8 @@ describe("App — Work Items (extra)", () => {
     expect((await screen.findAllByText("Fix view query workflow")).length).toBeGreaterThan(0);
     expect(await screen.findByLabelText("Comment")).toBeTruthy();
     expect(screen.getByRole("option", { name: /Active Bugs/ })).toBeTruthy();
+    // Views default to one row of chips; the grid-like arrow navigation is the card display.
+    fireEvent.click(screen.getByRole("button", { name: /Show view cards/ }));
     const viewListbox = screen.getByRole("listbox", { name: "Saved work item views" });
     expect(viewListbox).toBeTruthy();
     Object.defineProperty(viewListbox, "clientWidth", {

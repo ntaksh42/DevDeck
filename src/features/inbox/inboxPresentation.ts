@@ -1,5 +1,5 @@
 import type { AgentNoteTarget, InboxItem } from "@/lib/azdoCommands";
-import type { OpenAgentPanelDetail } from "@/components/agent/agentSubject";
+import type { AgentSubject, OpenAgentPanelDetail } from "@/components/agent/agentSubject";
 
 export type InboxTab = "open" | "snoozed" | "done";
 
@@ -22,15 +22,22 @@ export function agentRequestOf(entry: InboxEntry): OpenAgentPanelDetail {
   if (target === "ask") return { subject: null, askId: entry.subjectId, reply };
   const base = {
     id: entry.subjectId,
-    // An agent reply row's title is only a label ("Work item #3").
-    title: reply ? "" : entry.title,
+    // Unresolved agent summaries have only a label, not the subject's title.
+    title: reply && !entry.webUrl ? "" : entry.title,
     organizationId: entry.organizationId,
     projectId: entry.projectId,
     webUrl: entry.webUrl,
   };
   if (target === "pull-request" || (!target && entry.kind.startsWith("pr_"))) {
     return {
-      subject: { kind: "pull-request", ...base, repositoryId: entry.repositoryId, repositoryName: entry.repositoryName },
+      subject: {
+        kind: "pull-request",
+        ...base,
+        repositoryId: entry.repositoryId,
+        repositoryName: entry.repositoryName,
+        // A mention / reply is about its thread; the material puts it first.
+        ...(!target && isThreadItem(entry) && entry.threadId > 0 ? { threadId: entry.threadId } : {}),
+      },
       reply,
     };
   }
@@ -40,16 +47,19 @@ export function agentRequestOf(entry: InboxEntry): OpenAgentPanelDetail {
   return { subject: null };
 }
 
+/**
+ * What the Agent panel follows while this entry is selected: its pull request
+ * (with the target thread) or work item. Pipeline approvals carry no run id
+ * and an agent request has no item, so those have none.
+ */
+export function inboxAgentSubject(entry: InboxEntry): AgentSubject | null {
+  return agentRequestOf(entry).subject ?? null;
+}
+
 /** Derived entries cannot be finished or snoozed; acting on them removes them. */
 export function isDerivedEntry(item: InboxEntry): boolean {
   return item.extra !== undefined;
 }
-
-export const INBOX_TABS: { id: InboxTab; label: string }[] = [
-  { id: "open", label: "Inbox" },
-  { id: "snoozed", label: "Snoozed" },
-  { id: "done", label: "Done" },
-];
 
 const KIND_LABELS: Record<string, string> = {
   pr_mention: "Mention",
@@ -101,7 +111,9 @@ export function isWorkItemItem(item: Pick<InboxItem, "kind">): boolean {
 }
 
 /** `!42 api-gateway` / `#3120 Platform` — what the item is about, in one token. */
-export function inboxSubjectLabel(item: InboxItem): string {
+export function inboxSubjectLabel(item: InboxEntry): string {
+  if (item.extra?.agentTarget === "pull-request") return `!${item.subjectId} ${item.repositoryName}`.trim();
+  if (item.extra?.agentTarget === "work-item") return `#${item.subjectId} ${item.projectName}`.trim();
   if (isPullRequestItem(item)) return `!${item.subjectId} ${item.repositoryName}`;
   if (isWorkItemItem(item)) return `#${item.subjectId} ${item.projectName}`;
   return item.projectName ? `${item.projectName}` : item.title;

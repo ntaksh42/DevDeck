@@ -22,7 +22,7 @@ test.describe("browser preview", () => {
     await expect(
       reviewGrid.getByText("Add rate limiting middleware to all endpoints"),
     ).toBeVisible();
-    await expect(main.getByText(/6 total,\s*2 not voted/)).toBeVisible();
+    await expect(main.getByText(/6 items\s*·\s*2 not voted/)).toBeVisible();
     await expect(main.getByRole("tab", { name: "Rejected" })).toHaveCount(0);
 
     // The PR review panel shows the selected PR with vote actions and comments.
@@ -200,11 +200,11 @@ test("snoozes a Work Item View row with Z and lists it under Snoozed", async ({ 
     .poll(() => grid.evaluate((node) => node.contains(document.activeElement)))
     .toBe(true);
 
-  await main.getByRole("button", { name: "Snoozed" }).click();
+  await main.getByRole("button", { name: /^Snoozed \d+$/ }).click();
   const unsnooze = main.getByRole("button", { name: "Unsnooze" });
   await expect(unsnooze).toHaveCount(1);
   await unsnooze.click();
-  await main.getByRole("button", { name: "Back to inbox" }).click();
+  await main.getByRole("button", { name: /^Snoozed \d+$/ }).click();
   await expect(grid.getByRole("row")).toHaveCount(rowCount);
 });
 

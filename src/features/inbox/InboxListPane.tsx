@@ -1,11 +1,11 @@
 import type { KeyboardEvent, RefObject } from "react";
-import { DockFilterBar, DockFilterInput } from "@/components/DockFilterBar";
 import { ErrorState, LoadingState } from "@/components/StateDisplay";
-import type { Organization } from "@/lib/azdoCommands";
-import type { useDockFilter } from "@/components/DockFilterBar";
+import { itemCount, ListStatusBar } from "@/components/ListStatusBar";
+import { isEditableTarget } from "@/lib/utils";
 import type { useGridVirtualizer } from "@/lib/useGridVirtualizer";
+import type { useInboxListFocus } from "./useInboxListFocus";
 import { InboxRow } from "./InboxRow";
-import { INBOX_TABS, type InboxEntry, type InboxTab } from "./inboxPresentation";
+import type { InboxEntry, InboxTab } from "./inboxPresentation";
 
 const EMPTY_MESSAGE: Record<InboxTab, string> = {
   open: "Nothing needs your response.",
@@ -13,19 +13,19 @@ const EMPTY_MESSAGE: Record<InboxTab, string> = {
   done: "No finished items yet.",
 };
 
-/** The left pane: tabs with counts, the folded filter, and the virtualized list. */
+/**
+ * The left pane: the virtualized list and its status bar. The Done / Snoozed
+ * buttons there switch the list to that state; the filter and the state chip
+ * live in the dock tab band (see `InboxListHeader`).
+ */
 export function InboxListPane({
   tab,
   tabCounts,
   onTabChange,
-  organizations,
-  organizationId,
-  onOrganizationChange,
   filterText,
-  onFilterTextChange,
-  filterBar,
-  filterInputRef,
   listRef,
+  focusHandlers,
+  onFocusList,
   rowRefs,
   virtual,
   entries,
@@ -40,14 +40,10 @@ export function InboxListPane({
   tab: InboxTab;
   tabCounts: Record<InboxTab, number>;
   onTabChange: (tab: InboxTab) => void;
-  organizations: Organization[];
-  organizationId: string;
-  onOrganizationChange: (id: string) => void;
   filterText: string;
-  onFilterTextChange: (value: string) => void;
-  filterBar: ReturnType<typeof useDockFilter>;
-  filterInputRef: RefObject<HTMLInputElement | null>;
   listRef: RefObject<HTMLDivElement | null>;
+  focusHandlers: ReturnType<typeof useInboxListFocus>;
+  onFocusList: () => void;
   rowRefs: RefObject<(HTMLDivElement | null)[]>;
   virtual: ReturnType<typeof useGridVirtualizer>;
   entries: InboxEntry[];
@@ -62,91 +58,20 @@ export function InboxListPane({
   const selected = entries[selectedIndex];
   const virtualRows = entries.slice(virtual.firstRow, virtual.lastRow);
 
-  function handleTabKeyDown(event: KeyboardEvent) {
-    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+  // Escape from the Done / Snoozed list (rows or status bar) returns to the open list.
+  function handleSectionKeyDown(event: KeyboardEvent) {
+    if (event.key !== "Escape" || tab === "open" || isEditableTarget(event.target)) return;
     event.preventDefault();
-    const position = INBOX_TABS.findIndex((candidate) => candidate.id === tab);
-    const delta = event.key === "ArrowRight" ? 1 : -1;
-    const next = INBOX_TABS[(position + delta + INBOX_TABS.length) % INBOX_TABS.length];
-    onTabChange(next.id);
-    window.setTimeout(() => document.getElementById(`inbox-tab-${next.id}`)?.focus(), 0);
+    onTabChange("open");
+    window.setTimeout(() => listRef.current?.focus(), 0);
   }
 
   return (
     <section
       aria-label="Inbox"
+      onKeyDown={handleSectionKeyDown}
       className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-card"
     >
-      <div
-        role="tablist"
-        aria-label="Inbox lists"
-        onKeyDown={handleTabKeyDown}
-        className="flex h-8 shrink-0 items-stretch border-b border-border bg-muted"
-      >
-        {INBOX_TABS.map((candidate) => {
-          const active = candidate.id === tab;
-          return (
-            <button
-              key={candidate.id}
-              id={`inbox-tab-${candidate.id}`}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              tabIndex={active ? 0 : -1}
-              onClick={() => onTabChange(candidate.id)}
-              className={`flex items-center gap-1.5 px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
-                active
-                  ? "bg-background font-semibold text-foreground shadow-[inset_0_-2px_0_hsl(var(--primary))]"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {candidate.label}
-              <span className="rounded-full border border-border bg-background px-1.5 text-[11px] font-medium">
-                {tabCounts[candidate.id]}
-              </span>
-            </button>
-          );
-        })}
-        <div className="ml-auto flex items-center gap-2 pr-2">
-          {organizations.length > 1 ? (
-            <select
-              value={organizationId}
-              onChange={(event) => onOrganizationChange(event.target.value)}
-              aria-label="Filter by organization"
-              className="h-5 rounded border border-input bg-background px-1 text-[11px] outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option value="">All organizations</option>
-              {organizations.map((org) => (
-                <option key={org.id} value={org.id}>
-                  {org.name}
-                </option>
-              ))}
-            </select>
-          ) : null}
-          <DockFilterBar
-            label="Filter inbox"
-            open={filterBar.open}
-            onOpen={filterBar.onOpen}
-            onClose={filterBar.onClose}
-            inputRef={filterInputRef}
-            hasValue={filterText.trim().length > 0}
-            chips={
-              filterText.trim()
-                ? [{ label: filterText.trim(), onClear: () => onFilterTextChange("") }]
-                : []
-            }
-          >
-            <DockFilterInput
-              inputRef={filterInputRef}
-              value={filterText}
-              onChange={onFilterTextChange}
-              placeholder="Filter by title, author, repo…"
-              ariaLabel="Filter inbox items"
-            />
-          </DockFilterBar>
-        </div>
-      </div>
-
       {error ? (
         <ErrorState message={error} onRetry={onRetry} />
       ) : isLoading ? (
@@ -158,8 +83,13 @@ export function InboxListPane({
           aria-label="Inbox items"
           aria-activedescendant={selected ? `inbox-row-${selected.id}` : undefined}
           data-primary-grid="true"
-          tabIndex={0}
+          tabIndex={entries.length > 0 ? -1 : 0}
           onKeyDown={onKeyDown}
+          onFocusCapture={focusHandlers.onFocusCapture}
+          onBlurCapture={focusHandlers.onBlurCapture}
+          onFocus={(event) => {
+            if (event.target === event.currentTarget) onFocusList();
+          }}
           className="flex min-h-0 flex-1 flex-col outline-none"
         >
           {entries.length === 0 ? (
@@ -192,15 +122,16 @@ export function InboxListPane({
         </div>
       )}
 
-      <div className="flex shrink-0 flex-wrap items-center gap-x-3 border-t border-border bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-        <span>
-          Open {tabCounts.open} · Snoozed {tabCounts.snoozed} · Done {tabCounts.done}
-        </span>
-        <span className="ml-auto">
-          E done · Z snooze · R reply · Q agent · A/S/W/X vote · Shift+Enter open in DevDeck · O browser · 1-9
-          links
-        </span>
-      </div>
+      <ListStatusBar
+        summary={[itemCount(entries.length)]}
+        done={{ count: tabCounts.done, active: tab === "done", onToggle: () => onTabChange(tab === "done" ? "open" : "done") }}
+        snoozed={{
+          count: tabCounts.snoozed,
+          active: tab === "snoozed",
+          onToggle: () => onTabChange(tab === "snoozed" ? "open" : "snoozed"),
+        }}
+        helpSection="inbox"
+      />
     </section>
   );
 }

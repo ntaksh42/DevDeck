@@ -126,6 +126,11 @@ export function MyWorkItemsPanel() {
         triageScope={`${scope === 'assigned' ? 'myWorkItems' : 'followedWorkItems'}:${selectedOrganizationId}`}
         snoozeOrganizationId={selectedOrganizationId}
         filterBar={<WorkItemFilterBar value={filter} onChange={setFilter} />}
+        agentList={{
+          id: scope === 'assigned' ? 'my-work-items' : 'followed-work-items',
+          title: scope === 'assigned' ? 'My work items (assigned to me)' : 'Followed work items',
+          notes: [filter.trim() && `Text filter: ${filter.trim()}`],
+        }}
       />
 
       {createDraft ? (

@@ -1,10 +1,32 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   formatRelativeDate,
+  focusPrimaryGrid,
   handleSearchInputEscape,
   isImeComposing,
   markdownLink,
 } from "./utils";
+
+describe("focusPrimaryGrid", () => {
+  it.each(["row", "option"])("focuses the selected %s before other tabbable controls", (role) => {
+    const grid = document.createElement("div");
+    grid.dataset.primaryGrid = "true";
+    const button = document.createElement("button");
+    button.tabIndex = 0;
+    const selected = document.createElement("div");
+    selected.setAttribute("role", role);
+    selected.setAttribute("aria-selected", "true");
+    selected.tabIndex = -1;
+    grid.append(button, selected);
+    document.body.appendChild(grid);
+    try {
+      expect(focusPrimaryGrid()).toBe(true);
+      expect(document.activeElement).toBe(selected);
+    } finally {
+      grid.remove();
+    }
+  });
+});
 
 describe("markdownLink", () => {
   it("wraps the text and url in Markdown link syntax", () => {
