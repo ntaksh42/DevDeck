@@ -6,11 +6,13 @@ test("keeps the Agent composer next to short conversations", async ({ page }) =>
   await expect(page.getByRole("grid", { name: "My review pull requests" })).toBeVisible();
   await page.keyboard.press("Control+j");
   const panel = page.getByRole("complementary", { name: "Agent", exact: true });
-  const input = panel.getByRole("textbox", { name: "Ask the agent… (M)", exact: true });
+  // The input names the subject when one is selected ("Ask about …").
+  const askName = /^Ask (about .+|the agent)… \(M\)$/;
+  const input = panel.getByRole("textbox", { name: askName });
   await expect(input).toBeFocused();
   await page.keyboard.press("Escape");
   const composer = panel.locator("[data-agent-composer]");
-  await expect(composer.getByRole("button", { name: "Ask the agent… (M)" })).toBeVisible();
+  await expect(composer.getByRole("button", { name: askName })).toBeVisible();
 
   const measure = () => panel.evaluate((element) => {
     const list = element.querySelector('[aria-label="Agent conversations"]')!;

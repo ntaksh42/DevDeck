@@ -8,7 +8,8 @@
   `quote_prefix` / `quote_suffix` は前後の文脈。
 - `kind` は指示の種類: `fix`（直す）、`question`（質問。返信だけでよく、結果 HTML の作り直しは不要）、
   `redo`（{kind}をやり直す）、`investigate`（{kind}して結果 HTML を作る / 作り直す）、
-  `summarize`（要約を返信する。結果 HTML は変えない）。無ければ `fix`。
+  `summarize`（要約を返信する。結果 HTML は変えない）。無ければ、`quote` があれば `fix`、無ければ本文から判断する:
+  結果の修正・調査やレビューのやり直しを求めていれば `fix` として結果 HTML を作り直し、質問・要約なら `question` として返信だけにする。
 - `context` があれば依頼の対象 (タイトル・URL)。
 - Azure DevOps には書き込まない。`az` CLI は使えない (DevDeck が未ログインの状態で起動する)。
   `git push` もしない (DevDeck が push 先を無効にして起動する)。fetch や手元での commit はしてよい。

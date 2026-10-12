@@ -7,13 +7,13 @@ import {
   setAgentNoteStatus,
   submitAgentNoteDrafts,
   getAppSettings,
+  noteNeedsYou,
   listAgentAsks,
   listAgentNotes,
   replyAgentNote,
   runAgent,
   type AgentNote,
   type AgentNoteItem,
-  type AgentNoteKind,
 } from "@/lib/azdoCommands";
 import { agentNoteSummariesKey } from "@/components/agent-notes/useAgentNoteSummaries";
 import { contextLine, noteItemOf, type AgentQuote, type AgentSubject } from "./agentSubject";
@@ -30,11 +30,14 @@ export type Conversation = {
 
 export type SendInput = {
   body: string;
-  kind: AgentNoteKind;
   replyTo: Conversation | null;
   /** Result text the new note is about (subject item notes only). */
   quote?: AgentQuote | null;
 };
+
+/** List order: waiting for the user first, then open, then done; newest first within each. */
+const urgency = (note: AgentNote) => (noteNeedsYou(note) ? 0 : note.status === "done" ? 2 : 1);
+const activityTime = (note: AgentNote) => Date.parse(note.replies[note.replies.length - 1]?.createdAt ?? note.createdAt) || 0;
 
 /** A new request's id: its local timestamp, `yyyyMMddHHmmss`. */
 function newAskId(): number {
@@ -77,7 +80,7 @@ export function useAgentPanelData(subject: AgentSubject | null, enabled: boolean
         section: "ask" as const,
       })),
     ),
-  ];
+  ].sort((a, b) => urgency(a.note) - urgency(b.note) || activityTime(b.note) - activityTime(a.note));
 
   const refresh = (target: AgentNoteItem) => {
     void queryClient.invalidateQueries({ queryKey: ["agentNotes", target.target, target.itemId] });
@@ -123,7 +126,7 @@ export function useAgentPanelData(subject: AgentSubject | null, enabled: boolean
   });
 
   const send = useMutation({
-    mutationFn: async ({ body, kind, replyTo, quote }: SendInput) => {
+    mutationFn: async ({ body, replyTo, quote }: SendInput) => {
       let target: AgentNoteItem;
       if (replyTo) {
         target = replyTo.item;
@@ -134,7 +137,8 @@ export function useAgentPanelData(subject: AgentSubject | null, enabled: boolean
         await createAgentNote({
           ...target,
           body,
-          kind: kind === "fix" ? null : kind,
+          // No kind: the agent judges from the text (see the notes guide).
+          kind: null,
           quote: quoted?.quote ?? null,
           quotePrefix: quoted?.prefix ?? null,
           quoteSuffix: quoted?.suffix ?? null,

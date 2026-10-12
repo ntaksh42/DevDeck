@@ -225,13 +225,12 @@ test("asks the agent about selected result text with R then C", async ({ page })
   await closeHelp.click();
   await frame.focus();
 
-  // C on a block opens the Agent panel with the block quoted, as a Fix.
+  // C on a block opens the Agent panel with the block quoted.
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("c");
   const panel = page.getByRole("complementary", { name: "Agent" });
   await expect(panel.getByText("Quoting")).toBeVisible();
-  await expect(panel.getByRole("radio", { name: "Fix" })).toHaveAttribute("aria-checked", "true");
-  const input = panel.getByPlaceholder(/Ask the agent/);
+  const input = panel.getByPlaceholder(/^Ask (about|the agent)/);
   await expect(input).toBeFocused();
   await input.fill("Please re-check this paragraph.");
   await page.keyboard.press("Control+Enter");

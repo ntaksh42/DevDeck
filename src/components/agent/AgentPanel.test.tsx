@@ -137,12 +137,11 @@ describe("Agent panel", () => {
   it("sends a request without a subject as a new ask and starts the agent", async () => {
     renderHost();
     const panel = await openPanel();
-    fireEvent.click(within(panel).getByRole("radio", { name: "Summarize" }));
     fireEvent.change(within(panel).getByPlaceholderText(/Ask the agent/), { target: { value: "Summarize today" } });
     fireEvent.click(within(panel).getByRole("button", { name: "Ask" }));
     await waitFor(() => expect(runAgent).toHaveBeenCalled());
     expect(createAgentNote).toHaveBeenCalledWith(
-      expect.objectContaining({ target: "ask", body: "Summarize today", kind: "summarize", contextDocument: null }),
+      expect.objectContaining({ target: "ask", body: "Summarize today", kind: null, contextDocument: null }),
     );
   });
 
@@ -150,14 +149,17 @@ describe("Agent panel", () => {
     renderHost();
     act(() => publishAgentSubject(pr));
     const panel = await openPanel();
-    expect(within(panel).getByText("!68 Add ToDo API")).toBeTruthy();
+    // Following the selection shows no chip; the subject is in the input's placeholder.
+    expect(within(panel).getByPlaceholderText("Ask about !68 Add ToDo API… (M)")).toBeTruthy();
+    expect(within(panel).queryByText("!68 Add ToDo API")).toBeNull();
     expect((await within(panel).findAllByText("Check the retry logic")).length).toBeGreaterThan(0);
 
+    fireEvent.click(within(panel).getByRole("button", { name: "Show keys and subject options" }));
     fireEvent.click(within(panel).getByRole("button", { name: "Pin the subject" }));
     act(() => publishAgentSubject(null));
     expect(within(panel).getByText("!68 Add ToDo API")).toBeTruthy();
 
-    fireEvent.change(within(panel).getByPlaceholderText(/Ask the agent/), { target: { value: "Review this" } });
+    fireEvent.change(within(panel).getByPlaceholderText(/Ask about/), { target: { value: "Review this" } });
     fireEvent.click(within(panel).getByRole("button", { name: "Ask" }));
     await waitFor(() => expect(runAgent).toHaveBeenCalledWith(expect.objectContaining({ repositoryName: "TestRepos" })));
     expect(createAgentNote).toHaveBeenCalledWith(
@@ -165,7 +167,9 @@ describe("Agent panel", () => {
     );
 
     fireEvent.click(within(panel).getByRole("button", { name: "Remove the subject" }));
-    expect(within(panel).getByText(/nothing in particular/)).toBeTruthy();
+    expect(within(panel).getByText(/No subject/)).toBeTruthy();
+    // The input is folded after sending; its button carries the placeholder.
+    expect(within(panel).getByRole("button", { name: /Ask the agent/ })).toBeTruthy();
   });
 
   it("replies to the selected conversation with r", async () => {
@@ -182,6 +186,32 @@ describe("Agent panel", () => {
       expect.objectContaining({ target: "ask", itemId: 20261011090000, noteId: "a.md", body: "Pin en-US" }),
     ));
     expect(runAgent).toHaveBeenCalled();
+  });
+});
+
+describe("Agent panel keys", () => {
+  it("lists urgent conversations first and shows no kind, count or time on a row", async () => {
+    renderHost();
+    const panel = await openPanel();
+    const [waiting, done] = within(panel).getAllByRole("button").filter((b) => b.hasAttribute("aria-expanded"));
+    expect(waiting.textContent).toContain("Why did run 412 fail?");
+    // Status (screen-reader label) and first line only: no kind, reply count or time.
+    expect(done.textContent).toBe("DoneSummarize last week");
+  });
+
+  it("pins with p and runs the agent now with Shift+Enter", async () => {
+    renderHost();
+    act(() => publishAgentSubject(pr));
+    const panel = await openPanel();
+    const [first] = within(panel).getAllByRole("button").filter((b) => b.hasAttribute("aria-expanded"));
+    first.focus();
+    fireEvent.keyDown(first, { key: "p" });
+    act(() => publishAgentSubject(null));
+    expect(within(panel).getByRole("button", { name: "Unpin the subject" })).toBeTruthy();
+
+    fireEvent.keyDown(first, { key: "Enter", shiftKey: true });
+    await waitFor(() => expect(runAgent).toHaveBeenCalled());
+    expect(createAgentNote).not.toHaveBeenCalled();
   });
 });
 
@@ -226,8 +256,7 @@ describe("Agent panel with the Result panel", () => {
     );
     const panel = await screen.findByRole("complementary", { name: "Agent" });
     expect(within(panel).getByText("接続文字列")).toBeTruthy();
-    expect(within(panel).getByRole("radio", { name: "Fix" }).getAttribute("aria-checked")).toBe("true");
-    fireEvent.change(await within(panel).findByPlaceholderText(/Ask the agent/), { target: { value: "直して" } });
+    fireEvent.change(await within(panel).findByPlaceholderText(/Ask about/), { target: { value: "直して" } });
     fireEvent.click(within(panel).getByRole("button", { name: "Ask" }));
     await waitFor(() =>
       expect(createAgentNote).toHaveBeenCalledWith(
