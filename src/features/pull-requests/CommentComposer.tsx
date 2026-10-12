@@ -33,6 +33,7 @@ export function CommentComposer({
   onSubmitted,
   mentionSearch,
   collapsible = false,
+  onCollapse,
 }: {
   placeholder: string;
   submitLabel?: string;
@@ -47,6 +48,8 @@ export function CommentComposer({
   mentionSearch?: (query: string) => Promise<MentionCandidate[]>;
   /** Folds to a one-line button while empty and unfocused; Esc folds it back. */
   collapsible?: boolean;
+  /** Where focus goes after Esc folds it (default: the owning preview). */
+  onCollapse?: () => void;
 }) {
   const [text, setText] = useState(initialValue);
   const [expanded, setExpanded] = useState(!collapsible);
@@ -189,6 +192,10 @@ export function CommentComposer({
     } else if (event.key === "Escape" && collapsible && !text.trim()) {
       event.stopPropagation();
       setExpanded(false);
+      if (onCollapse) {
+        onCollapse();
+        return;
+      }
       // Back to this PR's own preview, not the first one on the page
       // (the linked work item preview can come earlier in the DOM).
       const preview = event.currentTarget

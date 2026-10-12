@@ -1,9 +1,10 @@
 use tauri::State;
 
 use crate::agent_notes::{
-    AgentNote, AgentNoteSummary, CreateAgentNoteInput, DeleteAgentNoteInput, ListAgentNotesInput,
-    ReplyAgentNoteInput, RestoreAgentNoteInput, RunAgentInput, SetAgentNoteStatusInput,
-    SubmitAgentNoteDraftsInput, SummarizeAgentNotesInput, UpdateAgentNoteInput,
+    AgentAsk, AgentNote, AgentNoteSummary, CreateAgentNoteInput, DeleteAgentNoteInput,
+    ListAgentNotesInput, ReplyAgentNoteInput, RestoreAgentNoteInput, RunAgentInput,
+    SetAgentNoteStatusInput, SubmitAgentNoteDraftsInput, SummarizeAgentNotesInput,
+    UpdateAgentNoteInput,
 };
 use crate::app_state::{run_blocking, AppState};
 use crate::error::Result;
@@ -103,4 +104,11 @@ pub async fn summarize_agent_notes(
 pub async fn run_agent(input: RunAgentInput, state: State<'_, AppState>) -> Result<()> {
     let service = state.agent_notes.clone();
     run_blocking(move || service.run_agent(input)).await
+}
+
+#[tauri::command]
+#[tracing::instrument(skip(state))]
+pub async fn list_agent_asks(state: State<'_, AppState>) -> Result<Vec<AgentAsk>> {
+    let service = state.agent_notes.clone();
+    run_blocking(move || service.list_asks()).await
 }

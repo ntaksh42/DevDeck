@@ -1,4 +1,5 @@
 import type { AgentNoteTarget, InboxItem } from "@/lib/azdoCommands";
+import type { OpenAgentPanelDetail } from "@/components/agent/agentSubject";
 
 export type InboxTab = "open" | "snoozed" | "done";
 
@@ -11,16 +12,32 @@ export type InboxEntry = InboxItem & {
   extra?: { approvalId?: string; agentTarget?: AgentNoteTarget };
 };
 
-/** The agent-notes item (target + id) a pull request / work item entry maps to. */
-export function agentItemOf(
-  entry: InboxEntry,
-): { target: AgentNoteTarget; itemId: number } | null {
-  if (entry.extra?.agentTarget) {
-    return { target: entry.extra.agentTarget, itemId: entry.subjectId };
+/**
+ * How Q opens the Agent panel for an entry: on its pull request / work item,
+ * or, for an agent reply, on the conversation waiting for an answer.
+ */
+export function agentRequestOf(entry: InboxEntry): OpenAgentPanelDetail {
+  const target = entry.extra?.agentTarget;
+  const reply = target !== undefined;
+  if (target === "ask") return { subject: null, askId: entry.subjectId, reply };
+  const base = {
+    id: entry.subjectId,
+    // An agent reply row's title is only a label ("Work item #3").
+    title: reply ? "" : entry.title,
+    organizationId: entry.organizationId,
+    projectId: entry.projectId,
+    webUrl: entry.webUrl,
+  };
+  if (target === "pull-request" || (!target && entry.kind.startsWith("pr_"))) {
+    return {
+      subject: { kind: "pull-request", ...base, repositoryId: entry.repositoryId, repositoryName: entry.repositoryName },
+      reply,
+    };
   }
-  if (entry.kind.startsWith("pr_")) return { target: "pull-request", itemId: entry.subjectId };
-  if (entry.kind.startsWith("wi_")) return { target: "work-item", itemId: entry.subjectId };
-  return null;
+  if (target === "work-item" || (!target && entry.kind.startsWith("wi_"))) {
+    return { subject: { kind: "work-item", ...base }, reply };
+  }
+  return { subject: null };
 }
 
 /** Derived entries cannot be finished or snoozed; acting on them removes them. */

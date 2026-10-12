@@ -1,11 +1,13 @@
 //! Notes the user leaves for an external AI agent about a work item's
 //! investigation result (or, for pull requests, a review result). Each note is
 //! one Markdown file with a small front-matter block under
-//! `{result_folder}/.to-agent-msg/{wi|pr}-{id}/`, where the result folder is the
-//! work item or review result folder from Settings; the agent reads the open
-//! notes, acts on them, and moves each file into the `_done/` subfolder. The
-//! files are the source of truth -- nothing is stored in SQLite -- so the agent
-//! needs no access to DevDeck.
+//! `{app_data}/agent-notes/{wi|pr}-{id}/`, outside the result folders so they
+//! stay free of DevDeck's bookkeeping; the `AGENTS.md` guide in each result
+//! folder points the agent there. The agent reads the open notes, acts on them,
+//! and moves each file into the `_done/` subfolder. The files are the source of
+//! truth -- nothing is stored in SQLite -- so the agent needs no access to
+//! DevDeck. Notes still require the target's result folder to be set, since
+//! they are about the result HTML in it.
 //!
 //! Besides the open folder and `_done/`, DevDeck keeps unsent drafts in
 //! `_draft/` and deleted notes in `_trash/` (so a delete can be undone). The
@@ -20,14 +22,19 @@ use serde::{Deserialize, Serialize};
 use crate::db::AppDatabase;
 use crate::error::{AppError, Result};
 
+mod asks;
+mod create;
 mod format;
 mod guide;
 mod launch;
+mod migrate;
 mod ops;
 mod replies;
 mod summary;
 
+pub use asks::AgentAsk;
 pub(crate) use guide::ensure_guide;
+pub(crate) use migrate::migrate_legacy_notes;
 pub use ops::{
     RestoreAgentNoteInput, SetAgentNoteStatusInput, SubmitAgentNoteDraftsInput,
     UpdateAgentNoteInput,
@@ -35,23 +42,30 @@ pub use ops::{
 pub use replies::{NoteReply, ReplyAgentNoteInput};
 pub use summary::{AgentNoteSummary, SummarizeAgentNotesInput};
 
-use format::{parse_note, write_atomic};
+use create::clean_body;
+pub(crate) use create::create_note;
+use format::parse_note;
 
-const NOTES_DIR: &str = ".to-agent-msg";
+/// Folder under the app data directory holding every item's notes.
+const NOTES_ROOT: &str = "agent-notes";
 const DONE_DIR: &str = "_done";
 const DRAFT_DIR: &str = "_draft";
 const TRASH_DIR: &str = "_trash";
 const MAX_BODY_CHARS: usize = 20_000;
 const MAX_QUOTE_CHARS: usize = 2_000;
-const KINDS: [&str; 3] = ["fix", "question", "redo"];
+const KINDS: [&str; 5] = ["fix", "question", "redo", "investigate", "summarize"];
 
 /// What a note is about. Selects the result folder and the `wi-` / `pr-`
-/// subfolder, and is written to the note's `target` front-matter field.
+/// subfolder, and is written to the note's `target` front-matter field. `Ask`
+/// is a free-standing request (from any view, about a pipeline run, a wiki
+/// page or nothing in particular): its "item id" is a timestamp the frontend
+/// picks, and it needs no result folder.
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum NoteTarget {
     WorkItem,
     PullRequest,
+    Ask,
 }
 
 impl NoteTarget {
@@ -59,6 +73,7 @@ impl NoteTarget {
         match self {
             Self::WorkItem => "work-item",
             Self::PullRequest => "pull-request",
+            Self::Ask => "ask",
         }
     }
 
@@ -66,6 +81,7 @@ impl NoteTarget {
         match self {
             Self::WorkItem => "wi",
             Self::PullRequest => "pr",
+            Self::Ask => "ask",
         }
     }
 }
@@ -94,9 +110,17 @@ pub struct CreateAgentNoteInput {
     /// Fingerprint of the result HTML the note was written against.
     #[serde(default)]
     pub result_hash: Option<String>,
-    /// `fix`, `question` or `redo`.
+    /// `fix`, `question`, `redo`, `investigate` or `summarize`.
     #[serde(default)]
     pub kind: Option<String>,
+    /// One line telling the agent what the request is about (title, URL),
+    /// for requests made outside a result.
+    #[serde(default)]
+    pub context: Option<String>,
+    /// Markdown material DevDeck gathered about the subject (fields,
+    /// comments, logs), saved under `_context/` for the agent to read.
+    #[serde(default)]
+    pub context_document: Option<String>,
     /// Saved to `_draft/` until the drafts are submitted together.
     #[serde(default)]
     pub draft: bool,
@@ -139,6 +163,9 @@ pub struct AgentNote {
     pub result_file: Option<String>,
     pub result_hash: Option<String>,
     pub kind: Option<String>,
+    pub context: Option<String>,
+    /// Absolute path of the material saved with the note, if any.
+    pub context_file: Option<String>,
     /// What the agent reported when it handled the note.
     pub resolved: Option<String>,
     /// Agent and user replies appended after the body, oldest first.
@@ -159,58 +186,68 @@ impl AgentNoteService {
     pub fn list(&self, input: ListAgentNotesInput) -> Result<Vec<AgentNote>> {
         validate_id(input.item_id)?;
         match self.result_folder(input.target)? {
-            Some(folder) => list_notes(&folder, input.target, input.item_id),
+            Some(_) => list_notes(&self.notes_root(), input.target, input.item_id),
             None => Ok(Vec::new()),
         }
     }
 
     pub fn create(&self, input: CreateAgentNoteInput) -> Result<AgentNote> {
         validate_id(input.item_id)?;
-        let folder = self.require_folder(input.target)?;
-        create_note(&folder, input, Local::now())
+        self.require_folder(input.target)?;
+        create_note(&self.notes_root(), input, Local::now())
     }
 
     pub fn delete(&self, input: DeleteAgentNoteInput) -> Result<()> {
         validate_id(input.item_id)?;
-        let Some(folder) = self.result_folder(input.target)? else {
+        if self.result_folder(input.target)?.is_none() {
             return Ok(());
-        };
-        ops::trash_note(&folder, input.target, input.item_id, &input.note_id)
+        }
+        ops::trash_note(
+            &self.notes_root(),
+            input.target,
+            input.item_id,
+            &input.note_id,
+        )
     }
 
     pub fn restore(&self, input: RestoreAgentNoteInput) -> Result<()> {
         validate_id(input.item_id)?;
-        let folder = self.require_folder(input.target)?;
-        ops::restore_note(&folder, input)
+        self.require_folder(input.target)?;
+        ops::restore_note(&self.notes_root(), input)
     }
 
     pub fn reply(&self, input: ReplyAgentNoteInput) -> Result<AgentNote> {
         validate_id(input.item_id)?;
-        let folder = self.require_folder(input.target)?;
-        replies::reply_note(&folder, input, Local::now())
+        self.require_folder(input.target)?;
+        replies::reply_note(&self.notes_root(), input, Local::now())
     }
 
     pub fn update(&self, input: UpdateAgentNoteInput) -> Result<AgentNote> {
         validate_id(input.item_id)?;
-        let folder = self.require_folder(input.target)?;
-        ops::update_note(&folder, input)
+        self.require_folder(input.target)?;
+        ops::update_note(&self.notes_root(), input)
     }
 
     pub fn set_status(&self, input: SetAgentNoteStatusInput) -> Result<AgentNote> {
         validate_id(input.item_id)?;
-        let folder = self.require_folder(input.target)?;
-        ops::set_status(&folder, input)
+        self.require_folder(input.target)?;
+        ops::set_status(&self.notes_root(), input)
     }
 
     pub fn submit_drafts(&self, input: SubmitAgentNoteDraftsInput) -> Result<usize> {
         validate_id(input.item_id)?;
-        let folder = self.require_folder(input.target)?;
-        ops::submit_drafts(&folder, input.target, input.item_id)
+        self.require_folder(input.target)?;
+        ops::submit_drafts(&self.notes_root(), input.target, input.item_id)
+    }
+
+    /// Free-standing requests, most recently touched first.
+    pub fn list_asks(&self) -> Result<Vec<AgentAsk>> {
+        asks::list_asks(&self.notes_root())
     }
 
     pub fn summarize(&self, input: SummarizeAgentNotesInput) -> Result<Vec<AgentNoteSummary>> {
         match self.result_folder(input.target)? {
-            Some(folder) => summary::summarize(&folder, input.target),
+            Some(_) => summary::summarize(&self.notes_root(), input.target),
             None => Ok(Vec::new()),
         }
     }
@@ -233,8 +270,13 @@ impl AgentNoteService {
             }
             None => None,
         };
+        let notes_root = self.notes_root();
+        if input.target == NoteTarget::Ask {
+            ensure_guide(&folder, NoteTarget::Ask, &notes_root)?;
+        }
         let context = launch::AgentLaunch {
             result_folder: &folder,
+            notes_root: &notes_root,
             workspace: workspace.as_deref(),
             repository: input.repository_name.as_deref(),
         };
@@ -246,6 +288,10 @@ impl AgentNoteService {
         )
     }
 
+    fn notes_root(&self) -> PathBuf {
+        notes_root(&self.db)
+    }
+
     fn require_folder(&self, target: NoteTarget) -> Result<PathBuf> {
         self.result_folder(target)?.ok_or_else(|| {
             AppError::InvalidInput(
@@ -254,13 +300,19 @@ impl AgentNoteService {
         })
     }
 
-    /// Work item notes live beside the investigation results, pull request
-    /// notes beside the review results.
+    /// Work item notes are about the investigation results, pull request
+    /// notes about the review results.
+    /// Free-standing requests use the notes root itself.
     fn result_folder(&self, target: NoteTarget) -> Result<Option<PathBuf>> {
         let settings = self.db.get_app_settings()?;
         let path = match target {
             NoteTarget::WorkItem => settings.work_item_result_folder_path,
             NoteTarget::PullRequest => settings.review_result_folder_path,
+            NoteTarget::Ask => {
+                let root = self.notes_root();
+                fs::create_dir_all(&root)?;
+                return Ok(Some(root));
+            }
         };
         let Some(path) = path else {
             return Ok(None);
@@ -285,10 +337,13 @@ fn validate_id(item_id: i64) -> Result<()> {
     Ok(())
 }
 
-fn notes_dir(folder: &Path, target: NoteTarget, item_id: i64) -> PathBuf {
-    folder
-        .join(NOTES_DIR)
-        .join(format!("{}-{item_id}", target.dir_prefix()))
+/// Where every item's notes live: beside the app's database.
+pub(crate) fn notes_root(db: &AppDatabase) -> PathBuf {
+    db.data_dir().join(NOTES_ROOT)
+}
+
+fn notes_dir(root: &Path, target: NoteTarget, item_id: i64) -> PathBuf {
+    root.join(format!("{}-{item_id}", target.dir_prefix()))
 }
 
 pub(crate) fn list_notes(
@@ -337,90 +392,6 @@ fn is_note_file(path: &Path) -> bool {
         && path
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("md"))
-}
-
-pub(crate) fn create_note(
-    folder: &Path,
-    input: CreateAgentNoteInput,
-    now: DateTime<Local>,
-) -> Result<AgentNote> {
-    let body = clean_body(&input.body)?;
-    let clean = |value: Option<String>, max: usize| {
-        value
-            .map(|value| value.trim().chars().take(max).collect::<String>())
-            .filter(|value| !value.is_empty())
-    };
-    let quote = clean(input.quote, MAX_QUOTE_CHARS);
-    let (quote_prefix, quote_suffix, quote_offset) = if quote.is_some() {
-        (
-            clean(input.quote_prefix, 64),
-            clean(input.quote_suffix, 64),
-            input.quote_offset.filter(|offset| *offset >= 0),
-        )
-    } else {
-        (None, None, None)
-    };
-    let result_file = clean(input.result_file, 260);
-    let result_hash = clean(input.result_hash, 64);
-    let kind = validate_kind(input.kind)?;
-
-    let mut dir = notes_dir(folder, input.target, input.item_id);
-    if input.draft {
-        dir = dir.join(DRAFT_DIR);
-    }
-    fs::create_dir_all(&dir)?;
-    let stamp = now.format("%Y%m%d-%H%M%S").to_string();
-    let path = ops::unique_path(&dir, &stamp)?;
-
-    let created_at = now.to_rfc3339_opts(chrono::SecondsFormat::Secs, false);
-    let json = |value: &str| serde_json::to_string(value).unwrap_or_default();
-    let mut text = format!(
-        "---\ntarget: {}\nid: {}\ncreated: {created_at}\n",
-        input.target.as_str(),
-        input.item_id
-    );
-    if let Some(kind) = &kind {
-        text.push_str(&format!("kind: {kind}\n"));
-    }
-    for (key, value) in [
-        ("result_file", &result_file),
-        ("result_hash", &result_hash),
-        ("quote", &quote),
-        ("quote_prefix", &quote_prefix),
-        ("quote_suffix", &quote_suffix),
-    ] {
-        if let Some(value) = value {
-            text.push_str(&format!("{key}: {}\n", json(value)));
-        }
-    }
-    if let Some(offset) = quote_offset {
-        text.push_str(&format!("quote_offset: {offset}\n"));
-    }
-    text.push_str(&format!("---\n{body}\n"));
-    write_atomic(&path, &text)?;
-
-    let status = if input.draft { "draft" } else { "open" };
-    Ok(parse_note(&path, status, &text, Some(created_at)))
-}
-
-fn clean_body(body: &str) -> Result<&str> {
-    let body = body.trim();
-    if body.is_empty() {
-        return Err(AppError::InvalidInput("note body is empty".to_string()));
-    }
-    if body.chars().count() > MAX_BODY_CHARS {
-        return Err(AppError::InvalidInput("note body is too long".to_string()));
-    }
-    replies::reject_markers(body)?;
-    Ok(body)
-}
-
-fn validate_kind(kind: Option<String>) -> Result<Option<String>> {
-    match kind.as_deref().map(str::trim) {
-        None | Some("") => Ok(None),
-        Some(kind) if KINDS.contains(&kind) => Ok(Some(kind.to_string())),
-        Some(kind) => Err(AppError::InvalidInput(format!("unknown note kind: {kind}"))),
-    }
 }
 
 /// Note ids are bare file names; reject anything that could leave the folder.

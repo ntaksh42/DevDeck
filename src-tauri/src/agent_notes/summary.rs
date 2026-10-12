@@ -1,4 +1,4 @@
-//! Per-item note counts across one result folder, for grid badges, change
+//! Per-item note counts across one target's notes, for grid badges, change
 //! detection and desktop notifications.
 
 use std::fs;
@@ -6,7 +6,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use super::{list_notes, AgentNote, NoteTarget, NOTES_DIR};
+use super::{list_notes, AgentNote, NoteTarget};
 use crate::error::Result;
 
 #[derive(Debug, Deserialize)]
@@ -41,9 +41,8 @@ pub(crate) fn needs_you(note: &AgentNote) -> bool {
             .is_some_and(|reply| reply.author != "user")
 }
 
-pub(crate) fn summarize(folder: &Path, target: NoteTarget) -> Result<Vec<AgentNoteSummary>> {
-    let root = folder.join(NOTES_DIR);
-    let Ok(entries) = fs::read_dir(&root) else {
+pub(crate) fn summarize(root: &Path, target: NoteTarget) -> Result<Vec<AgentNoteSummary>> {
+    let Ok(entries) = fs::read_dir(root) else {
         return Ok(Vec::new());
     };
     let prefix = format!("{}-", target.dir_prefix());
@@ -58,7 +57,7 @@ pub(crate) fn summarize(folder: &Path, target: NoteTarget) -> Result<Vec<AgentNo
         else {
             continue;
         };
-        let notes = list_notes(folder, target, item_id)?;
+        let notes = list_notes(root, target, item_id)?;
         if notes.is_empty() {
             continue;
         }

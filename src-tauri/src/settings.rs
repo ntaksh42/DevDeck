@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use chrono::Utc;
 
-use crate::agent_notes::{ensure_guide, NoteTarget};
+use crate::agent_notes::{ensure_guide, migrate_legacy_notes, notes_root, NoteTarget};
 
 use crate::db::{
     AppDatabase, AppSettings, NotificationRule, DEFAULT_QUIET_HOURS_END, DEFAULT_QUIET_HOURS_START,
@@ -115,7 +115,7 @@ impl SettingsService {
 
     pub fn update_normalized(&self, settings: AppSettings) -> Result<AppSettings> {
         let saved = self.db.update_app_settings(settings)?;
-        place_agent_guides(&saved);
+        prepare_agent_notes(&saved, &notes_root(&self.db));
         Ok(saved)
     }
 
@@ -177,16 +177,20 @@ impl SettingsService {
     }
 }
 
-/// Places or refreshes the agent notes guide in both result folders. Best
-/// effort: a folder that cannot take the guide must not block saving the rest
-/// of the settings or starting the app.
-pub(crate) fn place_agent_guides(settings: &AppSettings) {
+/// Moves notes left in both result folders by older versions into
+/// `notes_root`, then places or refreshes the agent notes guide there. Best
+/// effort: a folder that cannot take either must not block saving the rest of
+/// the settings or starting the app.
+pub(crate) fn prepare_agent_notes(settings: &AppSettings, notes_root: &Path) {
     for (folder, target) in [
         (&settings.work_item_result_folder_path, NoteTarget::WorkItem),
         (&settings.review_result_folder_path, NoteTarget::PullRequest),
     ] {
         if let Some(folder) = folder {
-            if let Err(err) = ensure_guide(Path::new(folder), target) {
+            if let Err(err) = migrate_legacy_notes(Path::new(folder), target, notes_root) {
+                tracing::warn!(%folder, error = %err, "could not move legacy agent notes");
+            }
+            if let Err(err) = ensure_guide(Path::new(folder), target, notes_root) {
                 tracing::warn!(%folder, error = %err, "could not place agent notes guide");
             }
         }

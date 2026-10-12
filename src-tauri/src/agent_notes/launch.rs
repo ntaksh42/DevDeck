@@ -10,12 +10,33 @@ use super::{notes_dir, NoteTarget};
 use crate::error::{AppError, Result};
 
 const GUIDE_FILE: &str = "AGENTS.md";
+/// Used when Settings has no agent command, so the agent works out of the box:
+/// Claude Code in the background, allowed into the notes folder (outside the
+/// folder it starts in) and without permission prompts, which nobody could
+/// answer. The prompt comes before `--add-dir`, which takes several values.
+const DEFAULT_AGENT_COMMAND: &str = "claude -p \"Read {guide} and handle the open notes in {notes}\" --add-dir \"{notes}\" --disallowedTools \"Bash(az:*)\" \"Bash(git push:*)\" --dangerously-skip-permissions";
+/// Empty Azure CLI config folder (under the notes root) the agent starts with,
+/// so `az` is signed out: the agent reads what DevDeck gathered instead of
+/// reaching Azure DevOps with the user's credentials.
+const ISOLATED_AZ_DIR: &str = ".az-signed-out";
+/// Variables through which Azure DevOps tooling picks up a token.
+/// Remote URL prefixes whose pushes are rewritten (`url.<x>.pushInsteadOf`)
+/// to a transport git does not have, so `git push` fails while fetching with
+/// the user's stored credentials still works for reading a clone.
+const BLOCKED_PUSH_PREFIXES: [&str; 3] = ["https://", "ssh://", "git@"];
+const BLOCKED_PUSH_URL: &str = "devdeck-push-blocked://";
+const AZURE_TOKEN_VARS: [&str; 3] = [
+    "AZURE_DEVOPS_EXT_PAT",
+    "SYSTEM_ACCESSTOKEN",
+    "AZURE_DEVOPS_EXT_AZURE_RM_SERVICE_PRINCIPAL_KEY",
+];
 
 /// Where the agent runs and what the command placeholders resolve to.
 pub(crate) struct AgentLaunch<'a> {
-    /// The result folder of the item's target (holds `.to-agent-msg` and the
-    /// guide).
+    /// The result folder of the item's target (holds the guide).
     pub result_folder: &'a Path,
+    /// Where every item's notes live (see [`super::notes_root`]).
+    pub notes_root: &'a Path,
     /// The single folder holding repository clones, when configured.
     pub workspace: Option<&'a Path>,
     /// Name of the pull request's repository, to pick its clone.
@@ -86,7 +107,23 @@ pub(crate) fn run_agent(
         }
     }
 
-    let spawned = shell_command(&command)
+    let az_dir = launch.notes_root.join(ISOLATED_AZ_DIR);
+    std::fs::create_dir_all(&az_dir)?;
+    let mut cmd = shell_command(&command);
+    cmd.env("AZURE_CONFIG_DIR", &az_dir);
+    // Git config entries given to this process only (GIT_CONFIG_COUNT/KEY/VALUE).
+    cmd.env("GIT_CONFIG_COUNT", BLOCKED_PUSH_PREFIXES.len().to_string());
+    for (index, prefix) in BLOCKED_PUSH_PREFIXES.iter().enumerate() {
+        cmd.env(
+            format!("GIT_CONFIG_KEY_{index}"),
+            format!("url.{BLOCKED_PUSH_URL}.pushInsteadOf"),
+        );
+        cmd.env(format!("GIT_CONFIG_VALUE_{index}"), prefix);
+    }
+    for var in AZURE_TOKEN_VARS {
+        cmd.env_remove(var);
+    }
+    let spawned = cmd
         .current_dir(&work_dir)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -145,10 +182,8 @@ fn expand(
     let command = command
         .map(str::trim)
         .filter(|c| !c.is_empty())
-        .ok_or_else(|| {
-            AppError::InvalidInput("Set an agent command in Settings to run the agent".to_string())
-        })?;
-    let notes = notes_dir(launch.result_folder, target, item_id);
+        .unwrap_or(DEFAULT_AGENT_COMMAND);
+    let notes = notes_dir(launch.notes_root, target, item_id);
     let guide = launch.result_folder.join(GUIDE_FILE);
     let workspace = launch
         .workspace
@@ -180,6 +215,7 @@ mod tests {
     ) -> AgentLaunch<'a> {
         AgentLaunch {
             result_folder: result,
+            notes_root: Path::new("C:/data/agent-notes"),
             workspace,
             repository,
         }
@@ -198,7 +234,7 @@ mod tests {
     }
 
     #[test]
-    fn expands_placeholders_and_requires_a_command() {
+    fn expands_placeholders_and_falls_back_to_the_default_command() {
         let folder = Path::new("C:/r");
         let ctx = launch(folder, None, None);
         let cmd = expand(
@@ -208,10 +244,16 @@ mod tests {
             7,
         )
         .unwrap();
-        assert!(cmd.starts_with("claude -p \"handle pull-request 7 in C:/r"));
+        assert!(cmd.starts_with("claude -p \"handle pull-request 7 in C:/data/agent-notes"));
         assert!(cmd.contains("pr-7"));
-        assert!(expand(Some("  "), &ctx, NoteTarget::WorkItem, 1).is_err());
-        assert!(expand(None, &ctx, NoteTarget::WorkItem, 1).is_err());
+        let default = expand(None, &ctx, NoteTarget::WorkItem, 1).unwrap();
+        assert!(default.starts_with("claude -p \"Read C:/r"));
+        assert!(default.contains("--add-dir \"C:/data/agent-notes"));
+        assert!(!default.contains('{'));
+        assert_eq!(
+            expand(Some("  "), &ctx, NoteTarget::WorkItem, 1).unwrap(),
+            default
+        );
     }
 
     #[test]
@@ -286,6 +328,68 @@ mod tests {
             let cmd = expand(Some("run {repo}"), &ctx, NoteTarget::WorkItem, 1).unwrap();
             assert_eq!(cmd, "run ", "name {name:?}");
         }
+    }
+
+    #[test]
+    fn the_agent_starts_signed_out_of_azure() {
+        let root = tempfile::tempdir().unwrap();
+        let result = root.path().join("results");
+        std::fs::create_dir_all(&result).unwrap();
+        let out = result.join("env.txt");
+        let mut ctx = launch(&result, None, None);
+        ctx.notes_root = root.path();
+        #[cfg(windows)]
+        let command = format!("echo %AZURE_CONFIG_DIR%> \"{}\"", out.display());
+        #[cfg(not(windows))]
+        let command = format!("echo \"$AZURE_CONFIG_DIR\" > '{}'", out.display());
+        run_agent(&ctx, Some(&command), NoteTarget::WorkItem, 9).unwrap();
+        for _ in 0..50 {
+            if out.exists() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        let written = std::fs::read_to_string(&out).unwrap();
+        assert_eq!(Path::new(written.trim()), root.path().join(ISOLATED_AZ_DIR));
+    }
+
+    #[test]
+    fn the_agent_cannot_push_with_git() {
+        let root = tempfile::tempdir().unwrap();
+        let repo = root.path().join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&repo)
+                .output()
+                .unwrap()
+        };
+        if git(&["init", "-q"]).status.code().is_none() {
+            return;
+        }
+        git(&[
+            "remote",
+            "add",
+            "origin",
+            "https://dev.azure.com/org/p/_git/r",
+        ]);
+        let out = repo.join("push.txt");
+        let mut ctx = launch(&repo, None, None);
+        ctx.notes_root = root.path();
+        let command = format!("git remote get-url --push origin > \"{}\"", out.display());
+        run_agent(&ctx, Some(&command), NoteTarget::WorkItem, 11).unwrap();
+        for _ in 0..50 {
+            if out.exists() && !std::fs::read_to_string(&out).unwrap().is_empty() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        let push_url = std::fs::read_to_string(&out).unwrap();
+        assert!(
+            push_url.trim().starts_with(BLOCKED_PUSH_URL),
+            "push url: {push_url}"
+        );
     }
 
     #[test]

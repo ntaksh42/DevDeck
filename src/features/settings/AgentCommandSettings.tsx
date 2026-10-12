@@ -9,6 +9,11 @@ import {
 import { settingsInput } from './settingsHelpers';
 
 // The shell command behind "Run agent" on a result's agent notes.
+
+// Mirrors `DEFAULT_AGENT_COMMAND` in src-tauri/src/agent_notes/launch.rs, used
+// when the setting is empty.
+const DEFAULT_AGENT_COMMAND =
+  'claude -p "Read {guide} and handle the open notes in {notes}" --add-dir "{notes}" --dangerously-skip-permissions';
 export function AgentCommandSettings() {
   const queryClient = useQueryClient();
   const settingsQuery = useQuery({
@@ -65,14 +70,17 @@ export function AgentCommandSettings() {
           <input
             value={command}
             onChange={(event) => setCommand(event.target.value)}
-            placeholder='claude -p "Handle the open notes in {notes}"'
+            placeholder={DEFAULT_AGENT_COMMAND}
             className="h-9 rounded-md border border-input bg-background px-3 font-mono text-sm outline-none focus:ring-2 focus:ring-ring"
           />
           <span className="text-xs text-muted-foreground">
             Placeholders: <code>{"{target}"}</code> (work-item / pull-request), <code>{"{id}"}</code>,{" "}
             <code>{"{notes}"}</code> (the item's notes folder), <code>{"{workspace}"}</code>,{" "}
             <code>{"{repo}"}</code> (the pull request's repository), <code>{"{guide}"}</code> (the
-            agent guide). Leave empty to hide Run agent.
+            agent guide). Notes are kept in the app data folder, outside the folder the agent
+            starts in, so allow the agent to use it (e.g. <code>--add-dir {"{notes}"}</code> for
+            Claude Code). Leave empty to use the default shown above, which runs Claude Code in the
+            background without permission prompts.
           </span>
         </label>
 

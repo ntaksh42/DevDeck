@@ -17,13 +17,14 @@ const LEGACY_HEADING: &str = "# 申し送りの読み方";
 /// Places or refreshes the agent-facing instructions for notes in a result
 /// folder, so an agent working there can find them without knowing DevDeck.
 /// DevDeck owns only the marked block: a user-written `AGENTS.md` without it
-/// is left alone.
-pub(crate) fn ensure_guide(folder: &Path, target: NoteTarget) -> Result<()> {
+/// is left alone. `notes_root` is written into the guide as an absolute path,
+/// since the notes live outside the result folder.
+pub(crate) fn ensure_guide(folder: &Path, target: NoteTarget, notes_root: &Path) -> Result<()> {
     if !folder.is_dir() {
         return Ok(());
     }
     let path = folder.join(GUIDE_FILE);
-    let block = format!("{START}\n{}{END}\n", render(target));
+    let block = format!("{START}\n{}{END}\n", render(target, notes_root));
     let next = match fs::read_to_string(&path) {
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => block,
         Err(err) => return Err(err.into()),
@@ -48,14 +49,17 @@ pub(crate) fn ensure_guide(folder: &Path, target: NoteTarget) -> Result<()> {
     Ok(())
 }
 
-fn render(target: NoteTarget) -> String {
-    let (kind, report, keep) = match target {
-        NoteTarget::WorkItem => ("調査", "WI にコメントとして追記する", "WI のフィールド"),
-        NoteTarget::PullRequest => ("レビュー", "PR にコメントとして投稿する", "投票"),
+fn render(target: NoteTarget, notes_root: &Path) -> String {
+    let kind = match target {
+        NoteTarget::Ask => {
+            return include_str!("guide_ask.md")
+                .replace("{notes_root}", &notes_root.display().to_string());
+        }
+        NoteTarget::WorkItem => "調査",
+        NoteTarget::PullRequest => "レビュー",
     };
     include_str!("guide.md")
         .replace("{kind}", kind)
+        .replace("{notes_root}", &notes_root.display().to_string())
         .replace("{prefix}", target.dir_prefix())
-        .replace("{report}", report)
-        .replace("{keep}", keep)
 }

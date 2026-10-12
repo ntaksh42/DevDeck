@@ -17,6 +17,8 @@ fn note(folder: &Path, body: &str, draft: bool, m: u32) -> AgentNote {
         result_file: None,
         result_hash: Some("abc123".to_string()),
         kind: Some("question".to_string()),
+        context: None,
+        context_document: None,
         draft,
     };
     create_note(folder, input, at(m)).unwrap()
@@ -51,6 +53,8 @@ fn new_front_matter_fields_round_trip() {
         result_file: None,
         result_hash: None,
         kind: Some("later".to_string()),
+        context: None,
+        context_document: None,
         draft: false,
     };
     assert!(create_note(temp.path(), bad.clone(), at(1)).is_err());
@@ -212,8 +216,8 @@ fn summary_counts_states_per_item() {
 答え
 ",
     );
-    fs::create_dir_all(temp.path().join(NOTES_DIR).join("pr-3")).unwrap();
-    fs::create_dir_all(temp.path().join(NOTES_DIR).join("wi-x")).unwrap();
+    fs::create_dir_all(temp.path().join("pr-3")).unwrap();
+    fs::create_dir_all(temp.path().join("wi-x")).unwrap();
 
     let summaries = summary::summarize(temp.path(), NoteTarget::WorkItem).unwrap();
     assert_eq!(summaries.len(), 1);

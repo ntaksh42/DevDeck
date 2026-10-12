@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useAgentDock } from "@/components/agent/useAgentDock";
 import { createPortal } from "react-dom";
 import {
   ArrowDownToLine,
@@ -141,8 +142,12 @@ function PanelMoveMenu({
   }
 
   function move(targetId: string, direction: (typeof MOVE_DIRECTIONS)[number]["direction"]) {
-    const spec = panelsRef.current.find((entry) => entry.id === panel.id);
-    if (!spec) return;
+    // A panel added from outside the view (the app-wide Agent panel) keeps
+    // the content it was added with.
+    const spec =
+      panelsRef.current.find((entry) => entry.id === panel.id) ??
+      ({ id: panel.id, title: panel.title ?? panel.id, content: (panel.params as PanelContentParams | undefined)?.content } as DockablePanelSpec);
+    if (!spec.content) return;
     containerApi.removePanel(panel);
     containerApi.addPanel<PanelContentParams>({
       id: spec.id,
@@ -718,6 +723,9 @@ export function DockableWorkspace({
     headerSlots.set(new Map(panels.map((panel) => [panel.id, panel.headerActions])));
   });
 
+  // The app-wide Agent panel joins this workspace while it is open (Ctrl+J).
+  const agentWidth = useAgentDock(apiRef, dockReady, layoutStorageKey);
+
   useCollapsedGroups(apiRef, panelsRef, dockReady ? collapsedIds : undefined, (api) =>
     applyGroupConstraints(api, panelsRef.current),
   );
@@ -749,7 +757,7 @@ export function DockableWorkspace({
     // Below the panels' combined floor dockview overflows its container and the
     // right pane is clipped with no way to reach it; scroll instead.
     <div className="flex min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-hidden">
-      <div className="flex min-w-0 flex-1" style={{ minWidth: minRowWidth(panels) }}>
+      <div className="flex min-w-0 flex-1" style={{ minWidth: minRowWidth(panels) + agentWidth }}>
       <DockviewReact
         key={layoutStorageKey}
         ref={dockviewElementRef}

@@ -2,12 +2,18 @@
 
 このフォルダの{kind}結果 HTML に対して、人が DevDeck から指示を残します。作業前に必ず確認すること。
 
-- 場所: `.to-agent-msg/{prefix}-{番号}/*.md`（1 件 1 ファイル）。**フォルダ直下の `.md` だけが未対応**。
+- 場所: `{notes_root}\{prefix}-{番号}\*.md`（1 件 1 ファイル。このフォルダの外にある）。**フォルダ直下の `.md` だけが未対応**。
   `_done/`（対応済み）・`_draft/`（人の下書き）・`_trash/`（削除済み）と `.` で始まるファイルは読まない。
 - front-matter に `quote` があれば結果 HTML のその箇所への指示、無ければ全体への指示。
   `quote_prefix` / `quote_suffix` は前後の文脈。
 - `kind` は指示の種類: `fix`（直す）、`question`（質問。返信だけでよく、結果 HTML の作り直しは不要）、
-  `redo`（{kind}をやり直す）。無ければ `fix`。
+  `redo`（{kind}をやり直す）、`investigate`（{kind}して結果 HTML を作る / 作り直す）、
+  `summarize`（要約を返信する。結果 HTML は変えない）。無ければ `fix`。
+- `context` があれば依頼の対象 (タイトル・URL)。
+- Azure DevOps には書き込まない。`az` CLI は使えない (DevDeck が未ログインの状態で起動する)。
+  `git push` もしない (DevDeck が push 先を無効にして起動する)。fetch や手元での commit はしてよい。
+  必要な情報は front-matter の `context_file` (DevDeck が取得した資料。読み取り専用) と手元のファイルから得る。
+  足りなければ、何が要るかを質問として返信する。
 - 本文の後ろの `<!-- reply user {時刻} -->` 以降は人の返信。最後の返信が新しい指示。
   `user` 以外の名前 (`claude` / `codex` など) の返信はエージェントによるもの。
 
@@ -15,7 +21,7 @@
 
 1. 指示を反映して結果 HTML を作り直す。直した要素には `data-agent-note="{メモのファイル名}"` 属性を付ける
    （DevDeck が「直した箇所」として表示する）。
-2. 対応内容は {report}。{keep}は変更しない。
+2. 対応内容はメモへの返信で報告する (WI / PR へのコメント投稿は人が DevDeck から行う)。
    メモへの返信・質問はファイル末尾に `<!-- reply {自分の名前} {ISO 時刻} -->` の行と本文を追記する (既存部分は書き換えない)。
    名前は英小文字 1 語 (例: `claude`, `codex`)。DevDeck では `@Claude` のように表示される。
 3. 対応したファイルは front-matter に `resolved: 一行要約` を追記して `_done/` へ移す。本文は書き換えない。

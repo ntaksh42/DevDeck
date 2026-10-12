@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
 
@@ -60,6 +60,12 @@ pub struct AppDatabase {
 impl AppDatabase {
     pub fn new(path: PathBuf) -> Self {
         Self { path }
+    }
+
+    /// The folder holding the database file, where other app-private files
+    /// live too.
+    pub(crate) fn data_dir(&self) -> &Path {
+        self.path.parent().unwrap_or(Path::new("."))
     }
 
     /// Identifies this database file, for process-wide caches that must not

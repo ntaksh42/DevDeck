@@ -121,9 +121,10 @@ pub fn run() {
                 .inspect_err(|e| {
                     eprintln!("DevDeck setup failed (configure_show_window_hotkey): {e}");
                 })?;
-            // Refresh the agent notes guide so existing result folders pick up
-            // format changes without re-saving Settings.
-            settings::place_agent_guides(&settings);
+            // Move notes older versions kept in the result folders and refresh
+            // the agent notes guide so existing result folders pick up format
+            // changes without re-saving Settings.
+            settings::prepare_agent_notes(&settings, &agent_notes::notes_root(&db));
             let (sync_tx, sync_rx) = SyncRunner::channel();
             app.manage(AppState {
                 db: db.clone(),
@@ -162,6 +163,7 @@ pub fn run() {
             commands::agent_notes::submit_agent_note_drafts,
             commands::agent_notes::summarize_agent_notes,
             commands::agent_notes::run_agent,
+            commands::agent_notes::list_agent_asks,
             commands::settings::list_sync_states,
             commands::settings::export_diagnostics,
             commands::snooze::snooze_item,

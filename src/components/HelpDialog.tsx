@@ -80,6 +80,9 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Settings</span><kbd className={kbd}>{combo("openSettings")}</kbd></div>
           <div className={row}><span>Focus left navigation</span><kbd className={kbd}>{combo("focusNavigation")}</kbd></div>
           <div className={row}><span>Collapse / expand left navigation</span><kbd className={kbd}>{combo("toggleSidebar")}</kbd></div>
+          <div className={row}><span>Open / close the Agent panel (ask about the selected item from any view)</span><kbd className={kbd}>{combo("toggleAgent")}</kbd></div>
+          <div className={row}><span>Agent panel: move / fold-unfold conversation / reply / new request / close</span><kbd className={kbd}>↑↓ / → ← / R / M / Esc</kbd></div>
+          <div className={row}><span>Agent panel: show in result / re-attach / resolve-reopen / delete / undo delete</span><kbd className={kbd}>Enter / L / X / Del / Ctrl+Z</kbd></div>
           <div className={row}><span>Move in left navigation</span><kbd className={kbd}>↑ ↓ Home End</kbd></div>
           <div className={row}><span>Reorder navigation entry</span><kbd className={kbd}>Alt+↑ / Alt+↓</kbd></div>
           <div className={row}><span>Expand / collapse section</span><kbd className={kbd}>← →</kbd></div>
@@ -153,9 +156,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Comment on the investigation result (Result panel)</span><kbd className={kbd}>R</kbd></div>
           <div className={row}><span>Result: move block / extend</span><kbd className={kbd}>↑ ↓ / Shift+↑ ↓</kbd></div>
           <div className={row}><span>Result: comment / open note / next-prev note</span><kbd className={kbd}>C / Enter / ] [</kbd></div>
-          <div className={row}><span>Agent notes: expand / collapse note and thread, reply</span><kbd className={kbd}>→ ← / R</kbd></div>
-          <div className={row}><span>Agent notes: resolve-reopen / edit / re-attach / delete</span><kbd className={kbd}>X / E / L / Del</kbd></div>
-          <div className={row}><span>Agent notes: new note / undo delete / run agent</span><kbd className={kbd}>C / Ctrl+Z / A</kbd></div>
+          <div className={row}><span>Result: ask the agent about the selected text / open Agent panel / open in browser</span><kbd className={kbd}>C / A / O</kbd></div>
           <div className={row}><span>Note box: send / add to drafts / send all drafts</span><kbd className={kbd}>Ctrl+Enter / Alt+Enter / Ctrl+Shift+Enter</kbd></div>
 
         </div>
@@ -188,7 +189,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
           <div className={row}><span>Snooze / Unsnooze</span><kbd className={kbd}>Z</kbd></div>
           <div className={row}><span>Reply</span><kbd className={kbd}>R</kbd></div>
           <div className={row}><span>Vote (review items) / approve, reject</span><kbd className={kbd}>A S W X 0 · A X</kbd></div>
-          <div className={row}><span>Ask the agent</span><kbd className={kbd}>Q</kbd></div>
+          <div className={row}><span>Ask the agent (opens the Agent panel)</span><kbd className={kbd}>Q</kbd></div>
           <div className={row}><span>Open the nth link</span><kbd className={kbd}>1-9</kbd></div>
           <div className={row}><span>Filter</span><kbd className={kbd}>/ · Ctrl+F</kbd></div>
 

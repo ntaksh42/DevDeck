@@ -2,13 +2,14 @@ import { z } from "zod";
 import { invokeCommand } from "./runtime";
 
 // Notes for the external AI agent that investigates work items and reviews
-// pull requests. The backend stores each note as a Markdown file under
-// the matching result folder (`.to-agent-msg/wi-{id}/` or `pr-{id}/`); the agent
+// pull requests, plus free-standing requests from any view (`ask`). The
+// backend stores each note as a Markdown file under the app data folder
+// (`agent-notes/wi-{id}/`, `pr-{id}/` or `ask-{id}/`); the agent
 // moves handled notes into `_done/`. Unsent drafts live in `_draft/`.
 
-export type AgentNoteTarget = "work-item" | "pull-request";
+export type AgentNoteTarget = "work-item" | "pull-request" | "ask";
 
-export type AgentNoteKind = "fix" | "question" | "redo";
+export type AgentNoteKind = "fix" | "question" | "redo" | "investigate" | "summarize";
 
 const noteReplySchema = z.object({
   author: z.string(),
@@ -29,6 +30,8 @@ const agentNoteSchema = z.object({
   resultFile: z.string().nullable(),
   resultHash: z.string().nullable().optional().default(null),
   kind: z.string().nullable().optional().default(null),
+  context: z.string().nullable().optional().default(null),
+  contextFile: z.string().nullable().optional().default(null),
   resolved: z.string().nullable(),
   replies: z.array(noteReplySchema),
   filePath: z.string(),
@@ -53,6 +56,10 @@ export type CreateAgentNoteInput = AgentNoteItem & {
   resultFile?: string | null;
   resultHash?: string | null;
   kind?: AgentNoteKind | null;
+  /** One line naming the subject (title, URL). */
+  context?: string | null;
+  /** Material DevDeck gathered for the agent, which has no Azure DevOps access. */
+  contextDocument?: string | null;
   draft?: boolean;
 };
 
@@ -150,4 +157,18 @@ export async function runAgent(
   input: AgentNoteItem & { repositoryName?: string | null },
 ): Promise<void> {
   await invokeCommand("run_agent", { input });
+}
+
+const agentAskSchema = z.object({
+  itemId: z.number(),
+  lastModifiedAt: z.string().nullable(),
+  notes: z.array(agentNoteSchema),
+});
+
+export type AgentAsk = z.infer<typeof agentAskSchema>;
+
+/** Free-standing requests (`ask` target), most recently touched first. */
+export async function listAgentAsks(): Promise<AgentAsk[]> {
+  const result = await invokeCommand("list_agent_asks", {});
+  return z.array(agentAskSchema).parse(result);
 }

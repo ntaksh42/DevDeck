@@ -23,6 +23,7 @@ export type KeybindingId =
   | "focusViewsPanel"
   | "focusComment"
   | "toggleSidebar"
+  | "toggleAgent"
   | "syncNow"
   | "openSettings"
   | "gotoLeader"
@@ -75,6 +76,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
   { id: "focusComment", label: "Focus work item comment", group: "Focus & navigation", defaultCombo: "Ctrl+M", scope: "global" },
   { id: "focusFilter", label: "Focus filter", group: "Focus & navigation", defaultCombo: "Ctrl+F", scope: "global" },
   { id: "toggleSidebar", label: "Collapse / expand left navigation", group: "Focus & navigation", defaultCombo: "Ctrl+\\", scope: "global" },
+  { id: "toggleAgent", label: "Open / close the Agent panel", group: "Focus & navigation", defaultCombo: "Ctrl+J", scope: "global" },
 
   { id: "gotoLeader", label: "Go to view (leader key, then a letter below)", group: "Go to view", defaultCombo: "G", scope: "global", reserved: true },
   { id: "gotoMyReviews", label: "My Reviews", group: "Go to view", defaultCombo: "R", scope: "goto" },

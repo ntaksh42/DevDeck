@@ -11,9 +11,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getAppSettings,
   getProviderCapabilities,
-  getUnreadNotificationsCount,
-  listMyReviewPullRequests,
-  listMyWorkItems,
   listOrganizations,
   recordNotification,
   rerunPipelineRun,
@@ -65,6 +62,8 @@ import { useCommandActions } from "./app/useCommandActions";
 import { useNotificationEvents } from "./app/useNotificationEvents";
 import { useSyncManager } from "./app/useSyncManager";
 import { useKeyboardShortcuts } from "./app/useKeyboardShortcuts";
+import { useSidebarBadges } from "./app/useSidebarBadges";
+import { AgentPanelHost } from "@/components/agent/AgentPanelHost";
 import {
   DEFAULT_SIDEBAR_WIDTH,
   SIDEBAR_WIDTH_STORAGE_KEY,
@@ -145,32 +144,7 @@ function AppShell() {
 
   // Sidebar count badges follow the active connection, matching the grids.
   const badgeOrganizationId = useActiveOrganizationId();
-  const myReviewsCountQuery = useQuery({
-    queryKey: ["myReviews", badgeOrganizationId],
-    queryFn: () => listMyReviewPullRequests({ organizationId: badgeOrganizationId }),
-    enabled: !!badgeOrganizationId,
-    staleTime: 5 * 60_000,
-  });
-  const myWorkItemsCountQuery = useQuery({
-    queryKey: ["myWorkItems", badgeOrganizationId],
-    queryFn: () => listMyWorkItems({ organizationId: badgeOrganizationId }),
-    enabled: !!badgeOrganizationId,
-    staleTime: 5 * 60_000,
-  });
-  // My Reviews badge counts PRs still awaiting my vote (the actionable inbox).
-  const myReviewsBadge = myReviewsCountQuery.data
-    ? myReviewsCountQuery.data.filter((pr) => pr.myVote === 0 && !pr.isDraft).length
-    : null;
-  const myWorkItemsBadge = myWorkItemsCountQuery.data?.length ?? null;
-
-  // The notifications badge is cross-org, so it stays enabled independent of
-  // the active connection (unlike the badges above).
-  const notificationsUnreadQuery = useQuery({
-    queryKey: ["notifications", "unreadCount"],
-    queryFn: getUnreadNotificationsCount,
-    staleTime: 30_000,
-  });
-  const notificationsBadge = notificationsUnreadQuery.data ?? null;
+  const { myReviewsBadge, myWorkItemsBadge, notificationsBadge } = useSidebarBadges(badgeOrganizationId);
 
   // Everything the Inbox tab lists: stored items (kept current by
   // `action-inbox:updated`), pending approvals and agent replies.
@@ -456,6 +430,8 @@ function AppShell() {
           onToggleSidebar={() => setSidebarCollapsed((c) => !c)}
           onSync={() => syncMutation.mutate({ scope: "all", force: true })}
         />
+        <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <AppContent
           activeView={activeView}
           organizations={organizations}
@@ -474,6 +450,9 @@ function AppShell() {
           onOpenPullRequest={openPullRequestSearch}
           onOpenView={setView}
         />
+        </div>
+        <AgentPanelHost />
+        </div>
       </main>
       <ToastHost />
       <WikiPreviewHost />

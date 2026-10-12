@@ -19,12 +19,12 @@ import { useDockFilter } from "@/components/DockFilterBar";
 import { DockableWorkspace, type DockablePanelSpec } from "@/components/DockableWorkspace";
 import { PreviewEmptyState } from "@/components/StateDisplay";
 import { SnoozeMenu } from "@/components/SnoozeMenu";
-import { InboxAgentPanel } from "./InboxAgentPanel";
+import { openAgentPanel } from "@/components/agent/agentSubject";
 import { InboxListPane } from "./InboxListPane";
 import { INBOX_ROW_HEIGHT } from "./InboxRow";
 import { InboxPreview } from "./InboxPreview";
 import {
-  agentItemOf,
+  agentRequestOf,
   isDerivedEntry,
   isPullRequestItem,
   isVoteItem,
@@ -52,7 +52,6 @@ export function InboxView({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [snoozeAnchor, setSnoozeAnchor] = useState<DOMRect | null>(null);
   const [activateRequest, setActivateRequest] = useState<{ id: string; key: number }>();
-  const [askRequest, setAskRequest] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
   const filterInputRef = useRef<HTMLInputElement | null>(null);
@@ -99,15 +98,13 @@ export function InboxView({
 
   // A reply from the agent has no conversation of its own to show.
   const agentOnly = selected?.kind === "agent_reply";
-  const canAskAgent = !!selected && agentItemOf(selected) !== null;
 
   /** Brings a dock panel to the front of its group (a no-op when it is already visible). */
-  function activatePanel(id: "conversation" | "agent") {
+  function activatePanel(id: "conversation") {
     setActivateRequest((current) => ({ id, key: (current?.key ?? 0) + 1 }));
   }
   useEffect(() => {
-    // Each item opens on its conversation; the agent thread is one key away.
-    if (selected) activatePanel(agentOnly ? "agent" : "conversation");
+    if (selected) activatePanel("conversation");
   }, [selected?.id, agentOnly]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const mentionSearch = useCallback(
@@ -301,10 +298,7 @@ export function InboxView({
       }, 0);
     } else if (lower === "q") {
       event.preventDefault();
-      if (canAskAgent) {
-        activatePanel("agent");
-        setAskRequest(true);
-      }
+      openAgentPanel(agentRequestOf(selected));
     } else if (lower === "c") {
       event.preventDefault();
       if (selected.webUrl) void navigator.clipboard?.writeText(selected.webUrl);
@@ -402,7 +396,7 @@ export function InboxView({
         <div className="flex h-full min-h-0 flex-col bg-card" onKeyDown={returnToList}>
           {agentOnly ? (
             <div ref={previewRef} data-primary-preview="true" tabIndex={-1} className="min-h-0 flex-1 outline-none">
-              <PreviewEmptyState message="This is the agent's reply. Read and answer it in the Agent panel (Q)." />
+              <PreviewEmptyState message="This is the agent's reply. Press Q to read and answer it in the Agent panel." />
             </div>
           ) : (
             <InboxPreview
@@ -426,24 +420,6 @@ export function InboxView({
               onOpenLink={openLink}
             />
           )}
-        </div>
-      ),
-    },
-    {
-      // Starts as a tab beside the conversation; move it below or beside to see both at once.
-      id: "agent",
-      title: "Agent",
-      position: { relativeTo: "conversation", direction: "within" },
-      minWidth: 280,
-      content: (
-        <div className="flex h-full min-h-0 flex-col bg-card" onKeyDown={returnToList}>
-          <InboxAgentPanel
-            entry={selected}
-            readOnly={readOnly}
-            askRequest={askRequest}
-            onAskHandled={() => setAskRequest(false)}
-            onReturnToList={() => listRef.current?.focus()}
-          />
         </div>
       ),
     },

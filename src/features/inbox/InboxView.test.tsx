@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { OPEN_AGENT_PANEL_EVENT, type OpenAgentPanelDetail } from "@/components/agent/agentSubject";
+import { closeAgentPanel, resetAgentPanelState } from "@/components/agent/agentPanelStore";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { openExternalUrl } from "@/lib/openExternal";
 import { NAVIGATE_PULL_REQUEST_EVENT } from "@/lib/crossLinks";
@@ -20,6 +22,8 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  // The Agent panel's open state is app-wide; a test that opens it must not leak.
+  resetAgentPanelState();
 });
 
 function renderView(props: { onOpenView?: (view: "pipelines") => void } = {}) {
@@ -252,22 +256,25 @@ describe("InboxView", () => {
     expect(((await screen.findByPlaceholderText("Comment…")) as HTMLTextAreaElement).value).toBe("");
   });
 
-  it("asks the agent about the selected item from its own tab with q", async () => {
+  it("opens the shared Agent panel on the selected pull request with q", async () => {
+    const opened: OpenAgentPanelDetail[] = [];
+    const listener = (event: Event) => opened.push((event as CustomEvent<OpenAgentPanelDetail>).detail);
+    window.addEventListener(OPEN_AGENT_PANEL_EVENT, listener);
     renderView();
     const list = await openList();
     fireEvent.click(rowFor(list, "!42"));
 
     fireEvent.keyDown(list, { key: "q" });
-    const input = await screen.findByPlaceholderText(/the agent…/);
-    expect(screen.getByRole("tab", { name: "Agent" }).getAttribute("aria-selected")).toBe("true");
-
-    // The demo cannot launch a process; the failure is shown, not swallowed.
-    fireEvent.change(input, { target: { value: "Is this null really impossible?" } });
-    fireEvent.click(screen.getByRole("button", { name: /^(Ask|Answer)$/ }));
-    expect(await screen.findByText(/only available in the desktop app/)).toBeTruthy();
+    window.removeEventListener(OPEN_AGENT_PANEL_EVENT, listener);
+    expect(opened).toHaveLength(1);
+    expect(opened[0].subject).toMatchObject({ kind: "pull-request", id: 42 });
+    expect(opened[0].reply).toBe(false);
+    // The shared panel docks into the Inbox workspace as its own tab.
+    expect(await screen.findByRole("complementary", { name: "Agent" })).toBeTruthy();
+    act(() => closeAgentPanel());
   });
 
-  it("opens the agent thread directly for an agent reply row", async () => {
+  it("opens the waiting agent conversation with q from an agent reply row", async () => {
     renderView();
     const list = await openList();
     await waitFor(() => {
@@ -278,10 +285,14 @@ describe("InboxView", () => {
       .find((row) => row.textContent?.startsWith("Agent")) as HTMLElement;
     fireEvent.click(agentRow);
 
-    expect(await screen.findByRole("heading", { name: /Agent ·/ })).toBeTruthy();
-    // The row only exists to carry the agent's reply; the conversation points there.
-    fireEvent.pointerDown(screen.getByRole("tab", { name: "Conversation" }), { button: 0 });
+    // The row only exists to carry the agent's reply; the conversation points to Q.
     expect(await screen.findByText(/answer it in the Agent panel/)).toBeTruthy();
+    const opened: OpenAgentPanelDetail[] = [];
+    const listener = (event: Event) => opened.push((event as CustomEvent<OpenAgentPanelDetail>).detail);
+    window.addEventListener(OPEN_AGENT_PANEL_EVENT, listener);
+    fireEvent.keyDown(list, { key: "q" });
+    window.removeEventListener(OPEN_AGENT_PANEL_EVENT, listener);
+    expect(opened[0]?.reply).toBe(true);
   });
 
   it("does not offer Done or Snooze for a derived approval entry", async () => {

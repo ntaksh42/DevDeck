@@ -29,6 +29,7 @@ import { WiFieldColumnsSection } from './WiFieldColumnsSection';
 import { useWiGridState } from './useWiGridState';
 import { useWiGridLogic } from './useWiGridLogic';
 import type { WorkItemSummary } from '@/lib/azdoCommands';
+import { usePublishAgentSubject } from '@/components/agent/agentSubject';
 
 // Re-export so existing importers (e.g. bulkSelectionSummary.test.ts) keep working.
 export { summarizeBy } from './BulkActionBar';
@@ -94,6 +95,19 @@ export function WorkItemsGrid({
   const g = useWiGridLogic(
     { results, loading, triageScope, extraColumns, activeExternalFilterCount, onClearExternalFilters, autoFocus },
     state,
+  );
+  const selectedForAgent = g.selectedItem;
+  usePublishAgentSubject(
+    selectedForAgent
+      ? {
+          kind: 'work-item',
+          id: selectedForAgent.id,
+          title: selectedForAgent.title,
+          organizationId: selectedForAgent.organizationId,
+          projectId: selectedForAgent.projectId,
+          webUrl: selectedForAgent.webUrl,
+        }
+      : null,
   );
 
   // Duplicate flow: the preview panel hands over a prefilled draft (D key or

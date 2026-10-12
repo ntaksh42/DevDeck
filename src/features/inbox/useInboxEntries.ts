@@ -63,7 +63,12 @@ function agentEntry(
   target: AgentNoteTarget,
   summary: AgentNoteSummary,
 ): InboxEntry {
-  const label = target === "pull-request" ? `PR !${summary.itemId}` : `Work item #${summary.itemId}`;
+  const label =
+    target === "pull-request"
+      ? `PR !${summary.itemId}`
+      : target === "ask"
+        ? "Agent request"
+        : `Work item #${summary.itemId}`;
   return {
     id: derivedId(`agent:${target}:${summary.itemId}`),
     organizationId,
@@ -157,8 +162,9 @@ export function useInboxBadge({
   });
   const pullRequestSummaries = useAgentNoteSummaries("pull-request");
   const workItemSummaries = useAgentNoteSummaries("work-item");
+  const askSummaries = useAgentNoteSummaries("ask");
   if (!counts.data) return null;
-  const agentReplies = [pullRequestSummaries.data, workItemSummaries.data]
+  const agentReplies = [pullRequestSummaries.data, workItemSummaries.data, askSummaries.data]
     .flatMap((summaries) => summaries ?? [])
     .filter((summary) => summary.needsYou > 0).length;
   return counts.data.open + (approvals.data?.length ?? 0) + agentReplies;
@@ -215,6 +221,13 @@ export function useInboxEntries({
     retry: false,
     enabled: tab === "open",
   });
+  const askSummaries = useQuery({
+    queryKey: agentNoteSummariesKey("ask"),
+    queryFn: () => summarizeAgentNotes({ target: "ask" }),
+    refetchInterval: 5_000,
+    retry: false,
+    enabled: tab === "open",
+  });
   const agentEntries = useMemo<InboxEntry[]>(() => {
     const organization = organizationId || activeOrganizationQuery.data?.id || "";
     const build = (target: AgentNoteTarget, data: AgentNoteSummary[] | undefined) =>
@@ -224,12 +237,14 @@ export function useInboxEntries({
     return [
       ...build("pull-request", pullRequestSummaries.data),
       ...build("work-item", workItemSummaries.data),
+      ...build("ask", askSummaries.data),
     ];
   }, [
     organizationId,
     activeOrganizationQuery.data?.id,
     pullRequestSummaries.data,
     workItemSummaries.data,
+    askSummaries.data,
   ]);
 
   const entries = useMemo(() => {

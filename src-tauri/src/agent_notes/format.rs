@@ -43,6 +43,8 @@ pub(crate) fn parse_note(
         result_file: get("result_file"),
         result_hash: get("result_hash"),
         kind: get("kind"),
+        context: get("context"),
+        context_file: get("context_file"),
         resolved: get("resolved"),
         replies,
         file_path: path.display().to_string(),

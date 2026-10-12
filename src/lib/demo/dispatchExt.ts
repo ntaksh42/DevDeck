@@ -42,6 +42,7 @@ import {
 import {
   demoCreateAgentNote,
   demoDeleteAgentNote,
+  demoListAgentAsks,
   demoListAgentNotes,
   demoReplyAgentNote,
   demoRestoreAgentNote,
@@ -249,6 +250,8 @@ export function dispatchExt(command: string, args: unknown): unknown {
       const input = (args as { input?: { target: AgentNoteTarget } } | undefined)?.input;
       return input ? demoSummarizeAgentNotes(input.target) : [];
     }
+    case "list_agent_asks":
+      return demoListAgentAsks();
     case "run_agent":
       throw new Error("Running an agent is only available in the desktop app");
     default:

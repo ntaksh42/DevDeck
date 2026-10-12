@@ -1,20 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Bot, ExternalLink } from "lucide-react";
 import {
-  commandErrorMessage,
-  getAppSettings,
-  noteNeedsYou,
-  type AgentNoteItem,
-  type AgentNoteKind,
-} from "@/lib/azdoCommands";
+  openAgentPanel,
+  REATTACH_NOTE_EVENT,
+  REVEAL_NOTE_EVENT,
+  type NoteRequestDetail,
+} from "@/components/agent/agentSubject";
+import { commandErrorMessage, noteNeedsYou, type AgentNoteItem } from "@/lib/azdoCommands";
 import { openLocalPath } from "@/lib/openExternal";
 import { matchesCombo, resolveKeybindings } from "@/lib/keybindings";
 import { focusPrimaryGrid, isEditableTarget } from "@/lib/utils";
 import { LoadingState, PreviewEmptyState } from "@/components/StateDisplay";
-import { AgentNotesPane } from "./AgentNotesPane";
-import { PaneSplitter, useNotesSize } from "./PaneSplitter";
 import { ResultFrame } from "./ResultFrame";
 import { lastAgentReplyAt, markItemSeen } from "./noteSeen";
 import { buildTextIndex, hashResult, listBlocks, locateQuote } from "./resultAnchoring";
@@ -27,9 +24,10 @@ const headerButton =
   "shrink-0 rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring";
 
 // A locally generated result HTML (work item investigation or PR review) with
-// agent notes alongside it: comments for the AI agent that produced the report,
-// anchored to quoted text in it. Callers own the result/settings queries; this
-// component owns the notes.
+// pins for the agent notes anchored to quoted text in it. The notes themselves
+// are listed and written in the app-wide Agent panel: selecting text here (C)
+// starts a note there, and a pin selects its note there. Callers own the
+// result/settings queries.
 export function AgentResultPanel({
   item,
   hasFolder,
@@ -56,29 +54,19 @@ export function AgentResultPanel({
 }) {
   const { target, itemId } = item;
   const actions = useAgentNoteActions(item, hasFolder);
-  const settingsQuery = useQuery({ queryKey: ["appSettings"], queryFn: getAppSettings, staleTime: 5 * 60_000 });
-  const canRunAgent = !!settingsQuery.data?.agentCommand;
 
   const frameRef = useRef<HTMLIFrameElement>(null);
-  const composerRef = useRef<HTMLTextAreaElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const [frame, setFrame] = useState<FrameState | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [pending, setPending] = useState<CommentRequest | null>(null);
   const [changeRange, setChangeRange] = useState<Range | null>(null);
   const [reattachId, setReattachId] = useState<string | null>(null);
-  const [wide, setWide] = useState(true);
-  const [bodySize, setBodySize] = useState({ width: 0, height: 0 });
-  const [notesSize, setNotesSize] = useNotesSize(wide);
   const [openError, setOpenError] = useState<string | null>(null);
-  const returnToRef = useRef<"block" | "grid">("grid");
   const resultHash = useMemo(() => (preview && !preview.tooLarge ? hashResult(preview.html) : null), [preview]);
 
   useEffect(() => {
     setFrame(null);
     setActiveId(null);
-    setPending(null);
     setChangeRange(null);
     setReattachId(null);
     setOpenError(null);
@@ -104,20 +92,6 @@ export function AgentResultPanel({
       handledCommentRequestRef.current = commentModeRequest;
     }
   }, [commentModeRequest, frame, hasFolder, loading, showsBody, preview]);
-
-  useEffect(() => {
-    const el = bodyRef.current;
-    if (!el) return;
-    // Side-by-side unless the panel is clearly portrait: a short panel docked
-    // under the grid (common in Views) would otherwise leave the result a sliver.
-    const observer = new ResizeObserver(([entry]) => {
-      const { width, height } = entry.contentRect;
-      setWide(width >= 640 || width >= height * 1.2);
-      setBodySize({ width, height });
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [showsBody]);
 
   const notes = useMemo(() => actions.notesQuery.data ?? [], [actions.notesQuery.data]);
   const anchors: NoteAnchor[] = useMemo(() => {
@@ -184,14 +158,43 @@ export function AgentResultPanel({
     el.scrollIntoView({ block: "center", behavior: "smooth" });
   }
 
-  function focusNote(id: string) {
-    listRef.current?.querySelector<HTMLElement>(`[data-agent-note-id="${CSS.escape(id)}"]`)?.focus();
+  function focusFrame() {
+    bodyRef.current?.querySelector<HTMLElement>("[data-agent-result-frame='true']")?.focus();
   }
 
+  /** A pin: show its quote here and its note in the Agent panel. */
   function openNote(id: string) {
     reveal(id);
-    focusNote(id);
+    openAgentPanel({ noteId: id });
   }
+
+  // The Agent panel asks to show a note here, or to pick a new quote for it.
+  const latest = useRef({ anchors, changeIds, reveal, showChange, focusFrame });
+  latest.current = { anchors, changeIds, reveal, showChange, focusFrame };
+  useEffect(() => {
+    const mine = (event: Event) => {
+      const detail = (event as CustomEvent<NoteRequestDetail>).detail;
+      return detail.target === target && detail.itemId === itemId ? detail.noteId : null;
+    };
+    function onReveal(event: Event) {
+      const id = mine(event);
+      if (!id) return;
+      if (latest.current.changeIds.has(id)) latest.current.showChange(id);
+      else latest.current.reveal(id);
+    }
+    function onReattach(event: Event) {
+      const id = mine(event);
+      if (!id) return;
+      setReattachId(id);
+      latest.current.focusFrame();
+    }
+    window.addEventListener(REVEAL_NOTE_EVENT, onReveal);
+    window.addEventListener(REATTACH_NOTE_EVENT, onReattach);
+    return () => {
+      window.removeEventListener(REVEAL_NOTE_EVENT, onReveal);
+      window.removeEventListener(REATTACH_NOTE_EVENT, onReattach);
+    };
+  }, [target, itemId]);
 
   function startComment(request: CommentRequest) {
     if (reattachId) {
@@ -209,42 +212,20 @@ export function AgentResultPanel({
           resultHash,
         },
       });
-      focusNote(noteId);
+      openAgentPanel({ noteId });
       return;
     }
-    returnToRef.current = request.origin === "block" ? "block" : "grid";
-    setPending(request);
-    window.setTimeout(() => composerRef.current?.focus(), 0);
-  }
-
-  function returnFocus() {
-    const frameEl = bodyRef.current?.querySelector<HTMLElement>("[data-agent-result-frame='true']");
-    if (returnToRef.current === "block" && frameEl) frameEl.focus();
-    else focusPrimaryGrid();
-    returnToRef.current = "grid";
-  }
-
-  async function send(body: string, kind: AgentNoteKind, draft: boolean): Promise<boolean> {
-    try {
-      await actions.create.mutateAsync({
-        target,
-        itemId,
-        body,
-        quote: pending?.quote ?? null,
-        quotePrefix: pending?.prefix ?? null,
-        quoteSuffix: pending?.suffix ?? null,
-        quoteOffset: pending?.offset ?? null,
+    // The note is written in the Agent panel, quoting the selection.
+    openAgentPanel({
+      quote: {
+        quote: request.quote,
+        prefix: request.prefix,
+        suffix: request.suffix,
+        offset: request.offset,
         resultFile: preview?.fileName ?? null,
         resultHash,
-        kind: kind === "fix" ? null : kind,
-        draft,
-      });
-    } catch {
-      return false;
-    }
-    setPending(null);
-    returnFocus();
-    return true;
+      },
+    });
   }
 
   function openInBrowser() {
@@ -253,19 +234,13 @@ export function AgentResultPanel({
     openLocalPath(preview.filePath).catch((err) => setOpenError(commandErrorMessage(err)));
   }
 
-  // Plain keys inside the result/notes must not also drive the grid underneath
+  // Plain keys inside the result must not also drive the grid underneath
   // (j/k, c, a, ...). Modified chords still reach the app-level shortcuts.
   // Outside text fields: `o` opens the result file in the default browser,
-  // `a` runs the agent, Ctrl+Z undoes a note delete. Escape on the panel
-  // itself (focused from the grid) returns to the grid. The help key (F1 / `?` by default) still reaches the app-level handler.
+  // `a` opens the Agent panel on this item. Escape on the panel itself
+  // (focused from the grid) returns to the grid. The help key (F1 / `?` by default) still reaches the app-level handler.
   function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     const editable = isEditableTarget(event.target);
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && !editable && actions.deleted) {
-      event.preventDefault();
-      event.stopPropagation();
-      actions.undoDelete();
-      return;
-    }
     if (event.ctrlKey || event.metaKey || event.altKey || event.key === "Tab") return;
     if (event.key === "F1" || matchesCombo(resolveKeybindings().help, event)) return;
     event.stopPropagation();
@@ -278,9 +253,9 @@ export function AgentResultPanel({
     if ((event.key === "o" || event.key === "O") && preview) {
       event.preventDefault();
       openInBrowser();
-    } else if ((event.key === "a" || event.key === "A") && canRunAgent) {
+    } else if ((event.key === "a" || event.key === "A")) {
       event.preventDefault();
-      actions.run.mutate();
+      openAgentPanel();
     }
   }
 
@@ -306,8 +281,8 @@ export function AgentResultPanel({
     );
   }
 
-  const maxNotes = Math.max(180, (wide ? bodySize.width : bodySize.height) - 220);
-  const shownSize = Math.min(notesSize, maxNotes);
+  const open = anchors.filter((a) => a.note.status !== "draft").length;
+  const needs = anchors.filter((a) => a.tone === "needs").length;
   return (
     <div
       className="flex h-full min-h-0 flex-col gap-2 p-3 outline-none"
@@ -319,7 +294,7 @@ export function AgentResultPanel({
         event.stopPropagation();
         const id = reattachId;
         setReattachId(null);
-        focusNote(id);
+        openAgentPanel({ noteId: id });
       }}
       {...(primaryPreview
         ? { "data-primary-preview": "true", "aria-keyshortcuts": "Control+P", tabIndex: -1 }
@@ -327,7 +302,36 @@ export function AgentResultPanel({
     >
       {openError ? <p className="shrink-0 text-[11px] leading-4 text-destructive">{openError}</p> : null}
       {preview?.warning ? <p role="status" className="text-[11px] text-amber-600">{preview.warning}</p> : null}
-      <div ref={bodyRef} className={`flex min-h-0 flex-1 gap-1 ${wide ? "flex-row" : "flex-col"}`}>
+      <div className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+        <span>
+          Select text and press C (or the Comment button) to ask the agent about it.
+          {reattachId ? " Re-attach: select the new text for the note (Esc cancels)." : ""}
+        </span>
+        <span className="flex-1" />
+        {needs ? <span className="rounded-full bg-red-500 px-1.5 text-[10px] text-white">{needs} needs you</span> : null}
+        {open ? <span className="rounded-full bg-yellow-400 px-1.5 text-[10px] text-gray-900">{open} open</span> : null}
+        <button
+          type="button"
+          onClick={() => openAgentPanel()}
+          title="Open the Agent panel on this item (a)"
+          aria-label="Open the Agent panel"
+          className={headerButton}
+        >
+          <Bot className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+        {preview ? (
+          <button
+            type="button"
+            onClick={openInBrowser}
+            title={`Open ${preview.fileName} in your browser (o)`}
+            aria-label="Open the result in your browser"
+            className={headerButton}
+          >
+            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        ) : null}
+      </div>
+      <div ref={bodyRef} className="flex min-h-0 flex-1">
         {preview?.tooLarge ? (
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 rounded border border-border p-4">
             <p className="text-[11px]">ファイルが大きすぎます（上限 5 MiB）。</p>
@@ -344,77 +348,16 @@ export function AgentResultPanel({
             onFrameLoad={handleFrameLoad}
             anchors={anchors}
             activeId={activeId}
-            pendingRange={pending?.range ?? changeRange}
+            pendingRange={changeRange}
             onComment={startComment}
             onRevealNote={reveal}
             onOpenNote={openNote}
           />
         ) : (
           <div className="flex min-h-0 flex-1 items-center justify-center rounded border border-border p-4">
-            <PreviewEmptyState message={`${noMatchMessage} You can still leave a note for the agent.`} />
+            <PreviewEmptyState message={`${noMatchMessage} You can still ask the agent in the Agent panel (a).`} />
           </div>
         )}
-        <PaneSplitter wide={wide} size={shownSize} max={maxNotes} onResize={setNotesSize} />
-        <div
-          className="flex min-h-0 shrink-0 rounded border border-border bg-card"
-          style={wide ? { width: shownSize } : { height: shownSize }}
-        >
-          <AgentNotesPane
-            key={`${target}:${itemId}`}
-            item={item}
-            folderName={`${target === "pull-request" ? "pr" : "wi"}-${itemId}`}
-            anchors={anchors}
-            done={done}
-            hasResult={!!preview && !preview.tooLarge}
-            resultHash={resultHash}
-            activeId={activeId}
-            pendingQuote={pending?.quote ?? null}
-            reattachId={reattachId}
-            changeIds={changeIds}
-            actions={actions}
-            composerRef={composerRef}
-            listRef={listRef}
-            onReveal={reveal}
-            onShowChange={showChange}
-            onReattach={(id) => {
-              setReattachId(id);
-              if (id) bodyRef.current?.querySelector<HTMLElement>("[data-agent-result-frame='true']")?.focus();
-            }}
-            onSend={send}
-            onClearQuote={() => setPending(null)}
-            onCancel={() => {
-              setPending(null);
-              returnFocus();
-            }}
-            headerActions={
-              <>
-                {canRunAgent ? (
-                  <button
-                    type="button"
-                    onClick={() => actions.run.mutate()}
-                    disabled={actions.run.isPending}
-                    title="Run the agent on these notes (a)"
-                    aria-label="Run the agent"
-                    className={headerButton}
-                  >
-                    <Bot className="h-3.5 w-3.5" aria-hidden="true" />
-                  </button>
-                ) : null}
-                {preview ? (
-                  <button
-                    type="button"
-                    onClick={openInBrowser}
-                    title={`Open ${preview.fileName} in your browser (o)`}
-                    aria-label="Open the result in your browser"
-                    className={headerButton}
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                  </button>
-                ) : null}
-              </>
-            }
-          />
-        </div>
       </div>
     </div>
   );

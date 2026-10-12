@@ -18,6 +18,8 @@ fn input(body: &str, quote: Option<&str>) -> CreateAgentNoteInput {
         result_file: Some("1234-result.html".to_string()),
         result_hash: None,
         kind: None,
+        context: None,
+        context_document: None,
         draft: false,
     }
 }
@@ -46,10 +48,7 @@ fn create_then_list_round_trips_all_fields() {
     assert_eq!(note.body, "設定値も確認して。\n2 行目");
     assert_eq!(note.quote.as_deref(), Some("リトライは最大 3 回"));
     assert_eq!(note.quote_suffix.as_deref(), Some("後ろの\"文脈\""));
-    assert!(temp
-        .path()
-        .join(".to-agent-msg/wi-1234/20260926-101200.md")
-        .is_file());
+    assert!(temp.path().join("wi-1234/20260926-101200.md").is_file());
 }
 
 #[test]
@@ -85,7 +84,7 @@ fn rejects_empty_body() {
 #[test]
 fn lists_agent_written_done_notes_with_bare_values() {
     let temp = tempfile::tempdir().unwrap();
-    let done = temp.path().join(".to-agent-msg/wi-1234/_done");
+    let done = temp.path().join("wi-1234/_done");
     fs::create_dir_all(&done).unwrap();
     fs::write(
         done.join("20260925-174000.md"),
@@ -105,7 +104,7 @@ fn lists_agent_written_done_notes_with_bare_values() {
 #[test]
 fn file_without_front_matter_is_all_body() {
     let temp = tempfile::tempdir().unwrap();
-    let dir = temp.path().join(".to-agent-msg/wi-1234");
+    let dir = temp.path().join("wi-1234");
     fs::create_dir_all(&dir).unwrap();
     fs::write(dir.join("memo.md"), "ただのメモ").unwrap();
     let notes = list_notes(temp.path(), NoteTarget::WorkItem, 1234).unwrap();
@@ -152,7 +151,7 @@ fn pull_request_notes_use_pr_folder_and_target() {
     req.item_id = 57;
     let note = create_note(temp.path(), req, at(9, 0, 0)).unwrap();
     let text = fs::read_to_string(&note.file_path).unwrap();
-    assert!(temp.path().join(".to-agent-msg/pr-57").is_dir());
+    assert!(temp.path().join("pr-57").is_dir());
     assert!(text.starts_with("---\ntarget: pull-request\nid: 57\n"));
     assert_eq!(
         list_notes(temp.path(), NoteTarget::PullRequest, 57)
@@ -169,15 +168,26 @@ fn pull_request_notes_use_pr_folder_and_target() {
 fn ensure_guide_owns_only_its_marked_block() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("AGENTS.md");
-    ensure_guide(temp.path(), NoteTarget::PullRequest).unwrap();
+    ensure_guide(
+        temp.path(),
+        NoteTarget::PullRequest,
+        Path::new("C:/data/agent-notes"),
+    )
+    .unwrap();
     let guide = fs::read_to_string(&path).unwrap();
-    assert!(guide.contains(".to-agent-msg/pr-{番号}/"));
-    assert!(guide.contains("PR にコメントとして投稿する"));
+    assert!(guide.contains("C:/data/agent-notes\\pr-{番号}\\*.md"));
+    assert!(guide.contains("Azure DevOps には書き込まない"));
+    assert!(!guide.contains("{report}"));
     assert!(!guide.contains("{kind}"));
 
     // A user file without the block is left alone.
     fs::write(&path, "user edited").unwrap();
-    ensure_guide(temp.path(), NoteTarget::PullRequest).unwrap();
+    ensure_guide(
+        temp.path(),
+        NoteTarget::PullRequest,
+        Path::new("C:/data/agent-notes"),
+    )
+    .unwrap();
     assert_eq!(fs::read_to_string(&path).unwrap(), "user edited");
 
     // Text around the block survives a refresh; the block is rewritten.
@@ -193,7 +203,12 @@ after
         ),
     )
     .unwrap();
-    ensure_guide(temp.path(), NoteTarget::PullRequest).unwrap();
+    ensure_guide(
+        temp.path(),
+        NoteTarget::PullRequest,
+        Path::new("C:/data/agent-notes"),
+    )
+    .unwrap();
     let text = fs::read_to_string(&path).unwrap();
     assert!(text.starts_with(
         "# mine
@@ -214,7 +229,12 @@ after
 古い版",
     )
     .unwrap();
-    ensure_guide(temp.path(), NoteTarget::PullRequest).unwrap();
+    ensure_guide(
+        temp.path(),
+        NoteTarget::PullRequest,
+        Path::new("C:/data/agent-notes"),
+    )
+    .unwrap();
     assert_eq!(fs::read_to_string(&path).unwrap(), guide);
 }
 
@@ -222,14 +242,14 @@ after
 fn ensure_guide_skips_missing_folder() {
     let temp = tempfile::tempdir().unwrap();
     let missing = temp.path().join("missing");
-    ensure_guide(&missing, NoteTarget::WorkItem).unwrap();
+    ensure_guide(&missing, NoteTarget::WorkItem, temp.path()).unwrap();
     assert!(!missing.exists());
 }
 
 #[test]
 fn replies_are_split_from_the_body() {
     let temp = tempfile::tempdir().unwrap();
-    let dir = temp.path().join(".to-agent-msg").join("wi-1234");
+    let dir = temp.path().join("wi-1234");
     fs::create_dir_all(&dir).unwrap();
     fs::write(
         dir.join("a.md"),
@@ -259,7 +279,7 @@ fn replies_are_split_from_the_body() {
 #[test]
 fn reply_appends_and_reopens_a_done_note() {
     let temp = tempfile::tempdir().unwrap();
-    let dir = temp.path().join(".to-agent-msg").join("wi-1234");
+    let dir = temp.path().join("wi-1234");
     fs::create_dir_all(dir.join("_done")).unwrap();
     fs::write(
         dir.join("_done").join("a.md"),
@@ -301,11 +321,7 @@ fn rejects_body_with_a_reply_marker() {
 #[test]
 fn latest_resolved_wins_after_a_reopened_note_is_done_again() {
     let temp = tempfile::tempdir().unwrap();
-    let done = temp
-        .path()
-        .join(".to-agent-msg")
-        .join("wi-1234")
-        .join("_done");
+    let done = temp.path().join("wi-1234").join("_done");
     fs::create_dir_all(&done).unwrap();
     fs::write(
         done.join("a.md"),
@@ -314,4 +330,19 @@ fn latest_resolved_wins_after_a_reopened_note_is_done_again() {
     .unwrap();
     let notes = list_notes(temp.path(), NoteTarget::WorkItem, 1234).unwrap();
     assert_eq!(notes[0].resolved.as_deref(), Some("2 回目"));
+}
+
+#[test]
+fn ask_guide_points_at_the_notes_root() {
+    let temp = tempfile::tempdir().unwrap();
+    ensure_guide(
+        temp.path(),
+        NoteTarget::Ask,
+        Path::new("C:/data/agent-notes"),
+    )
+    .unwrap();
+    let guide = fs::read_to_string(temp.path().join("AGENTS.md")).unwrap();
+    assert!(guide.contains(r"C:/data/agent-notes\ask-{番号}\*.md"));
+    assert!(guide.contains("`summarize`"));
+    assert!(!guide.contains("{notes_root}"));
 }

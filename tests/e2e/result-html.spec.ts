@@ -14,9 +14,12 @@ test("large result HTML has a keyboard path to external opening without an ifram
     const open = page.getByRole("button", { name: "外部ブラウザで開く (o)" });
     const panel = open.locator("xpath=ancestor::*[@data-primary-preview='true']");
     await expect(panel.locator("iframe")).toHaveCount(0);
-    // Reach the explicit open action through the panel's normal tab order.
+    // Reach the explicit open action through the panel's normal tab order
+    // (past the toolbar's Agent and browser buttons).
     await panel.focus();
-    await page.keyboard.press("Tab");
+    for (let i = 0; i < 4 && !(await open.evaluate((el) => el === document.activeElement)); i += 1) {
+      await page.keyboard.press("Tab");
+    }
     await expect(open).toBeFocused();
     await page.keyboard.press(key);
     // Browser preview cannot open local paths; this error proves the action

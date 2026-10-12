@@ -1,4 +1,5 @@
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { usePublishAgentSubject } from "@/components/agent/agentSubject";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ExternalLink, Loader2, Play, Square } from "lucide-react";
 import {
@@ -89,6 +90,18 @@ export function PipelineRunDetailPanel({
   });
   const detail = runQuery.data ?? null;
   const run = detail?.run ?? null;
+  usePublishAgentSubject(
+    run
+      ? {
+          kind: "pipeline-run",
+          id: run.buildId,
+          title: `${run.buildNumber ?? run.buildId} (${run.definitionName ?? "pipeline"}${run.result ? `, ${run.result}` : ""})`,
+          organizationId,
+          projectId,
+          webUrl: run.webUrl,
+        }
+      : null,
+  );
   const inProgress = !!run && isInProgressStatus(run.status);
 
   const tree = useMemo(() => (detail ? buildTimelineTree(detail.timeline) : []), [detail]);

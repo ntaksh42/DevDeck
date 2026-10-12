@@ -11,6 +11,7 @@ import {
 } from "@/lib/utils";
 import { dispatchWorkItemCommand, gotoViewMapFromKeybindings } from "./appHelpers";
 import { GOTO_CHAIN_TIMEOUT_MS } from "./types";
+import { toggleAgentPanel } from "@/components/agent/agentSubject";
 import type { View } from "./types";
 
 export interface UseKeyboardShortcutsParams {
@@ -231,6 +232,12 @@ export function useKeyboardShortcuts({
       if (matchesCombo(keybindings.toggleSidebar, event)) {
         event.preventDefault();
         setSidebarCollapsed((collapsed) => !collapsed);
+        return;
+      }
+
+      if (matchesCombo(keybindings.toggleAgent, event)) {
+        event.preventDefault();
+        toggleAgentPanel();
         return;
       }
 

@@ -9,6 +9,7 @@ import {
 import { navigateToPullRequest, navigateToWorkItem } from "@/lib/crossLinks";
 import { showAgentNoteNotification } from "@/lib/desktopNotifications";
 import { SEEN_CHANGED_EVENT } from "./noteSeen";
+import { openAgentPanel } from "@/components/agent/agentSubject";
 
 // Per-item note counts for one result folder. The files change outside
 // DevDeck (the agent edits them), so the summary is polled; it is a cheap
@@ -61,6 +62,7 @@ export function useAgentNoteWatcher(settings: AppSettings | null) {
   const queryClient = useQueryClient();
   const workItems = useSummaries("work-item");
   const pullRequests = useSummaries("pull-request");
+  const asks = useSummaries("ask");
   const previous = useRef(new Map<string, AgentNoteSummary>());
   const baselined = useRef(new Set<AgentNoteTarget>());
   const notify = !!settings?.desktopNotificationsEnabled;
@@ -69,6 +71,7 @@ export function useAgentNoteWatcher(settings: AppSettings | null) {
     for (const [target, data] of [
       ["work-item", workItems.data],
       ["pull-request", pullRequests.data],
+      ["ask", asks.data],
     ] as const) {
       if (!data) continue;
       const first = !baselined.current.has(target);
@@ -79,13 +82,15 @@ export function useAgentNoteWatcher(settings: AppSettings | null) {
         previous.current.set(key, summary);
         if (before && before.lastModifiedAt !== summary.lastModifiedAt) {
           void queryClient.invalidateQueries({ queryKey: ["agentNotes", target, summary.itemId] });
+          if (target === "ask") void queryClient.invalidateQueries({ queryKey: ["agentAsks"] });
         }
         if (first || !notify) continue;
         const replied =
           !!summary.lastAgentReplyAt && summary.lastAgentReplyAt !== (before?.lastAgentReplyAt ?? null);
         const finished = summary.done > (before?.done ?? 0);
         if (!replied && !finished) continue;
-        const label = target === "pull-request" ? `PR !${summary.itemId}` : `#${summary.itemId}`;
+        const label =
+          target === "pull-request" ? `PR !${summary.itemId}` : target === "ask" ? "your request" : `#${summary.itemId}`;
         void showAgentNoteNotification({
           title: replied ? `Agent replied on ${label}` : `Agent finished a note on ${label}`,
           body: summary.needsYou
@@ -94,9 +99,11 @@ export function useAgentNoteWatcher(settings: AppSettings | null) {
           onClick: () =>
             target === "pull-request"
               ? navigateToPullRequest({ pullRequestId: summary.itemId })
-              : navigateToWorkItem({ workItemId: summary.itemId }),
+              : target === "ask"
+                ? openAgentPanel({ subject: null, askId: summary.itemId })
+                : navigateToWorkItem({ workItemId: summary.itemId }),
         });
       }
     }
-  }, [workItems.data, pullRequests.data, notify, queryClient]);
+  }, [workItems.data, pullRequests.data, asks.data, notify, queryClient]);
 }

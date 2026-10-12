@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { usePublishAgentSubject } from "@/components/agent/agentSubject";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import {
@@ -59,6 +60,20 @@ export function usePrReviewPanels({
   resultCommentRequest?: number;
 }): { anchor: DockablePanelSpec; secondary: DockablePanelSpec[] } {
   const { canZoomIn, canZoomOut, resetZoom, zoom, zoomIn, zoomOut } = usePreviewZoom();
+  usePublishAgentSubject(
+    selectedPr
+      ? {
+          kind: "pull-request",
+          id: selectedPr.pullRequestId,
+          title: selectedPr.title,
+          organizationId: selectedPr.organizationId,
+          projectId: selectedPr.projectId,
+          repositoryId: selectedPr.repositoryId,
+          repositoryName: selectedPr.repositoryName,
+          webUrl: selectedPr.webUrl,
+        }
+      : null,
+  );
 
   const reviewQuery = useQuery({
     queryKey: [

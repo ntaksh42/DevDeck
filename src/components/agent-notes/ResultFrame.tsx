@@ -4,8 +4,7 @@ import { MessageSquarePlus } from "lucide-react";
 import { useLatestRef } from "@/lib/useLatestRef";
 import { focusPrimaryGrid } from "@/lib/utils";
 import { anchorFromRange, blockSpanRange, collapseWhitespace } from "./resultAnchoring";
-import { PIN_CLASS } from "./NoteCard";
-import type { CommentRequest, FrameState, NoteAnchor, NoteTone } from "./types";
+import { PIN_CLASS, type CommentRequest, type FrameState, type NoteAnchor, type NoteTone } from "./types";
 
 // Renders the investigation result in a script-less sandboxed iframe and layers
 // the agent-note UI on top from the parent document: highlights via the CSS
