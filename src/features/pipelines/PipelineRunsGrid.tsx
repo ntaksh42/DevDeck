@@ -2,7 +2,7 @@ import { ExternalLink } from "lucide-react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { PipelineRunSummary } from "@/lib/azdoCommands";
 import { openExternalUrl } from "@/lib/openExternal";
-import { formatDate, formatRelativeDate } from "@/lib/utils";
+import { focusPrimaryPreview, formatDate, formatRelativeDate } from "@/lib/utils";
 import { reasonLabel } from "./pipelineBoard";
 import { RunBadge } from "./PipelineRunBadge";
 import { formatDuration, pipelineRunVisual, shortBranch } from "./pipelineStatus";
@@ -82,9 +82,13 @@ export function PipelineRunsGrid({
     } else if (event.key === "End") {
       nextIndex = rowEls.length - 1;
     } else if (event.key === "Enter" && current >= 0) {
+      // Open the run and move focus to its preview, as the footer hint promises.
+      // (→ keeps skipping the read-only preview, like every other pane move.)
       event.preventDefault();
       event.stopPropagation();
       select(runs[current]);
+      // The preview may only mount once the selection has rendered.
+      queueMicrotask(focusPrimaryPreview);
       return;
     } else {
       return;

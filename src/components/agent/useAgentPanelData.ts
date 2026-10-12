@@ -12,6 +12,7 @@ import {
   listAgentNotes,
   replyAgentNote,
   runAgent,
+  type AgentKind,
   type AgentNote,
   type AgentNoteItem,
 } from "@/lib/azdoCommands";
@@ -19,6 +20,7 @@ import { agentNoteSummariesKey } from "@/components/agent-notes/useAgentNoteSumm
 import type { AgentListScope } from "./agentListScope";
 import { contextIsAbout, contextLine, noteItemOf, type AgentQuote, type AgentSubject } from "./agentSubject";
 import { buildContextDocument } from "./contextDocument";
+import { modelChoices, settingsModel } from "./agentModels";
 
 export const AGENT_ASKS_KEY = ["agentAsks"];
 
@@ -49,12 +51,27 @@ function newAskId(): number {
   );
 }
 
-/** Conversations for the Agent panel and the action that sends to the agent. */
-export function useAgentPanelData(subject: AgentSubject | null, enabled: boolean, list: AgentListScope | null = null) {
+/** Agent and model picked in the panel; null follows Settings. */
+export type AgentChoice = { agent: AgentKind | null; model: string | null };
+
+/**
+ * Conversations for the Agent panel and the action that sends to the agent.
+ * `choice` overrides the agent and model chosen in Settings for what this
+ * panel starts.
+ */
+export function useAgentPanelData(
+  subject: AgentSubject | null,
+  enabled: boolean,
+  list: AgentListScope | null = null,
+  choice: AgentChoice = { agent: null, model: null },
+) {
   const queryClient = useQueryClient();
   const item = noteItemOf(subject);
   const settingsQuery = useQuery({ queryKey: ["appSettings"], queryFn: getAppSettings, staleTime: 5 * 60_000 });
   const readOnly = settingsQuery.data?.readOnlyValidationModeEnabled ?? false;
+  const defaultAgent: AgentKind = settingsQuery.data?.defaultAgent === "codex" ? "codex" : "claude";
+  const runWith = choice.agent ?? defaultAgent;
+  const model = choice.model ?? settingsModel(settingsQuery.data, runWith);
 
   const itemNotesQuery = useQuery({
     queryKey: ["agentNotes", item?.target, item?.itemId],
@@ -123,7 +140,7 @@ export function useAgentPanelData(subject: AgentSubject | null, enabled: boolean
       await submitAgentNoteDrafts(item);
       refresh(item);
       if (readOnly) return;
-      await runAgent({ ...item, repositoryName: subject?.kind === "pull-request" ? subject.repositoryName : null });
+      await runAgent({ ...item, repositoryName: subject?.kind === "pull-request" ? subject.repositoryName : null, agent: runWith, model });
     },
   });
 
@@ -156,6 +173,8 @@ export function useAgentPanelData(subject: AgentSubject | null, enabled: boolean
       await runAgent({
         ...target,
         repositoryName: subject?.kind === "pull-request" && target.target === "pull-request" ? subject.repositoryName : null,
+        agent: runWith,
+        model,
       });
     },
   });
@@ -167,6 +186,8 @@ export function useAgentPanelData(subject: AgentSubject | null, enabled: boolean
       runAgent({
         ...target,
         repositoryName: subject?.kind === "pull-request" && target.target === "pull-request" ? subject.repositoryName : null,
+        agent: runWith,
+        model,
       }),
   });
 
@@ -183,5 +204,9 @@ export function useAgentPanelData(subject: AgentSubject | null, enabled: boolean
       itemNotesQuery.error ?? asksQuery.error ?? setStatus.error ?? remove.error ?? undoDelete.error ?? submitDrafts.error ?? null,
     send,
     readOnly,
+    defaultAgent,
+    agent: runWith,
+    model,
+    modelChoices: modelChoices(settingsQuery.data, runWith),
   };
 }

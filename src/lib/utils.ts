@@ -92,9 +92,10 @@ export function isEditableTarget(target: EventTarget | null): boolean {
 /**
  * Escape moves focus out of a search/filter input. Pass `onClear` for live
  * filters so Escape also resets the filter text; omit it for submitted search
- * queries where the typed text should survive the focus-out. Grid screens rely
- * on `useGridFocusRestoration` to send focus back to the selected row after the
- * blur; plain search forms simply release focus to the document body.
+ * queries where the typed text should survive the focus-out. After the blur,
+ * focus goes to the screen's results grid (its selected row), or to the grid's
+ * placeholder pane while there are no results yet, so row navigation and the
+ * "/" shortcut keep working instead of focus being stranded on <body>.
  */
 export function handleSearchInputEscape(
   event: KeyboardEvent<HTMLInputElement>,
@@ -104,6 +105,9 @@ export function handleSearchInputEscape(
   event.preventDefault();
   onClear?.();
   event.currentTarget.blur();
+  if (!focusPrimaryGrid()) {
+    document.querySelector<HTMLElement>("[data-grid-focus-fallback='true']")?.focus();
+  }
 }
 
 export function focusWorkItemCommentInput(): boolean {
@@ -130,8 +134,9 @@ export function focusPullRequestCommentInput(): boolean {
   return true;
 }
 
-export function focusPrimaryGrid(): boolean {
-  const grid = document.querySelector<HTMLElement>("[data-primary-grid='true']");
+export function focusPrimaryGrid(
+  grid = document.querySelector<HTMLElement>("[data-primary-grid='true']"),
+): boolean {
   if (!grid) return false;
   const selectedRow = grid.querySelector<HTMLElement>("[role='row'][aria-selected='true'], [role='option'][aria-selected='true']");
   const focusTarget =
@@ -140,8 +145,32 @@ export function focusPrimaryGrid(): boolean {
   return true;
 }
 
+// True when some part of the element is actually on screen: it has a box and
+// is not clipped away by an overflow-hiding ancestor (e.g. a collapsed dock
+// group) or by the viewport.
+function isOnScreen(element: HTMLElement): boolean {
+  const box = element.getBoundingClientRect();
+  let left = Math.max(box.left, 0);
+  let top = Math.max(box.top, 0);
+  let right = Math.min(box.right, window.innerWidth);
+  let bottom = Math.min(box.bottom, window.innerHeight);
+  for (let ancestor = element.parentElement; ancestor; ancestor = ancestor.parentElement) {
+    const style = getComputedStyle(ancestor);
+    if (style.overflowX === "visible" && style.overflowY === "visible") continue;
+    const clip = ancestor.getBoundingClientRect();
+    left = Math.max(left, clip.left);
+    top = Math.max(top, clip.top);
+    right = Math.min(right, clip.right);
+    bottom = Math.min(bottom, clip.bottom);
+  }
+  return right > left && bottom > top && getComputedStyle(element).visibility !== "hidden";
+}
+
 export function focusPrimaryPreview(): boolean {
-  const preview = document.querySelector<HTMLElement>("[data-primary-preview='true']");
+  // Stacked dock groups can keep a collapsed preview earlier in the DOM than
+  // the one the user sees, so prefer the first preview that is on screen.
+  const previews = Array.from(document.querySelectorAll<HTMLElement>("[data-primary-preview='true']"));
+  const preview = previews.find(isOnScreen) ?? previews[0];
   if (!preview) return false;
   preview.focus();
   return true;

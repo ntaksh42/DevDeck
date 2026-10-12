@@ -9,8 +9,8 @@ import { openExternalUrl } from '@/lib/openExternal';
 
 // ─── Grid layout constants ────────────────────────────────────────────────────
 
-export const DEFAULT_WI_COLUMN_WIDTHS = [46, 64, 68, 180, 82, 92, 140, 72];
-export const WI_COLUMN_MIN_WIDTHS = [44, 58, 68, 150, 70, 92, 60, 72];
+export const DEFAULT_WI_COLUMN_WIDTHS = [46, 64, 68, 240, 82, 92, 140, 72];
+export const WI_COLUMN_MIN_WIDTHS = [44, 58, 68, 240, 70, 92, 60, 72];
 export const WI_COLUMN_MAX_WIDTHS = [120, 200, 180, 720, 300, 260, 400, 160];
 export const WI_COLUMN_WIDTHS_STORAGE_KEY = storageKey("azdodeck:layout:wiSearchGridColumnWidths", 3);
 export const WI_VISIBLE_COLUMNS_STORAGE_KEY = storageKey("azdodeck:layout:wiSearchGridVisibleColumns", 2);
@@ -196,7 +196,8 @@ export function workItemCellValue(item: WorkItemSummary, column: WiSortKey): Rea
             if (item.webUrl) openExternalUrl(item.webUrl);
           }}
           className="truncate text-left font-mono text-xs text-link hover:underline"
-          title={`#${item.id}`}
+          title={`#${item.id} (Ctrl+Enter)`}
+          tabIndex={-1}
         >
           #{item.id}
         </button>

@@ -82,6 +82,8 @@ export const WorkItemGridRow = forwardRef<
         type="checkbox"
         checked={checked}
         aria-label={`Select #${item.id}`}
+        // Rows select with Shift+↑ ↓; keep the grid a single tab stop.
+        tabIndex={-1}
         onChange={() => {}}
         onClick={(e) => {
           e.stopPropagation();

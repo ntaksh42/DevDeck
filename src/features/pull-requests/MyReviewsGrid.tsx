@@ -101,7 +101,7 @@ export function MyReviewsGrid({
         e.preventDefault();
         g.setTextFilter('');
         (e.target as HTMLElement).blur();
-      } else if (e.key === 'ArrowDown' && g.visibleSortedIndexes.length > 0) {
+      } else if (e.key === 'ArrowDown' && !(e.target instanceof HTMLSelectElement) && g.visibleSortedIndexes.length > 0) {
         e.preventDefault();
         const position = g.visibleSortedIndexes.indexOf(g.selectedIndex);
         g.selectVisiblePosition(position < 0 ? 0 : position);

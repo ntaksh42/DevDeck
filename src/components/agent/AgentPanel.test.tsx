@@ -1,108 +1,41 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AgentAsk, AgentNote } from "@/lib/azdoCommands";
-import { AgentPanelHost } from "./AgentPanelHost";
-import { buildContextDocument } from "./contextDocument";
-import { publishAgentListScope, type AgentListScope } from "./agentListScope";
 import { closeAgentPanel, registerDrawerHost, resetAgentPanelState } from "./agentPanelStore";
-import { openAgentPanel, publishAgentSubject, toggleAgentPanel, type AgentSubject } from "./agentSubject";
+import { openAgentPanel, publishAgentSubject, toggleAgentPanel } from "./agentSubject";
+import { AgentPanelHost } from "./AgentPanelHost";
+import {
+  asks,
+  createAgentNote,
+  deleteAgentNote,
+  note,
+  openPanel,
+  pr,
+  renderHost,
+  replyAgentNote,
+  resetFixtures,
+  runAgent,
+  setAgentNoteStatus,
+  state,
+} from "./agentPanelTestFixtures";
 
-function note(id: string, body: string, extra: Partial<AgentNote> = {}): AgentNote {
+vi.mock("@/lib/azdoCommands", async (importOriginal) => {
+  const m = await import("./agentPanelTestMocks");
   return {
-    id,
-    status: "open",
-    createdAt: "2026-10-11T09:00:00+09:00",
-    modifiedAt: null,
-    body,
-    quote: null,
-    quotePrefix: null,
-    quoteSuffix: null,
-    quoteOffset: null,
-    resultFile: null,
-    resultHash: null,
-    kind: "investigate",
-    context: null,
-    contextFile: null,
-    resolved: null,
-    replies: [],
-    filePath: `C:/notes/${id}`,
-    ...extra,
+    ...(await importOriginal<typeof import("@/lib/azdoCommands")>()),
+    getAppSettings: vi.fn(async () => ({ readOnlyValidationModeEnabled: false })),
+    listAgentAsks: vi.fn(async () => m.state.asks),
+    deleteAgentNote: (input: unknown) => m.deleteAgentNote(input),
+    listAgentNotes: vi.fn(async () => [m.note("pr.md", "Check the retry logic")]),
+    createAgentNote: (input: unknown) => m.createAgentNote(input),
+    replyAgentNote: (input: unknown) => m.replyAgentNote(input),
+    runAgent: (input: unknown) => m.runAgent(input),
+    setAgentNoteStatus: (input: unknown) => m.setAgentNoteStatus(input),
   };
-}
-
-const asks: AgentAsk[] = [
-  {
-    itemId: 20261011090000,
-    lastModifiedAt: "2026-10-11T09:06:00+09:00",
-    notes: [
-      note("a.md", "Why did run 412 fail?", {
-        replies: [{ author: "claude", createdAt: "2026-10-11T09:06:00+09:00", body: "Which culture should the test pin?" }],
-      }),
-    ],
-  },
-  {
-    itemId: 20261010080000,
-    lastModifiedAt: "2026-10-10T08:00:00+09:00",
-    notes: [note("b.md", "Summarize last week", { status: "done", kind: "summarize", resolved: "Summarized" })],
-  },
-];
-
-const createAgentNote = vi.fn(async (input: unknown) => note("new.md", (input as { body: string }).body));
-const runAgent = vi.fn(async (_input: unknown) => {});
-const replyAgentNote = vi.fn(async (_input: unknown) => note("a.md", "x"));
-const setAgentNoteStatus = vi.fn(async (_input: unknown) => note("a.md", "x"));
-
-vi.mock("@/lib/azdoCommands", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/azdoCommands")>()),
-  getAppSettings: vi.fn(async () => ({ readOnlyValidationModeEnabled: false })),
-  listAgentAsks: vi.fn(async () => asks),
-  listAgentNotes: vi.fn(async () => [note("pr.md", "Check the retry logic")]),
-  createAgentNote: (input: unknown) => createAgentNote(input),
-  replyAgentNote: (input: unknown) => replyAgentNote(input),
-  runAgent: (input: unknown) => runAgent(input),
-  setAgentNoteStatus: (input: unknown) => setAgentNoteStatus(input),
-}));
+});
 vi.mock("./contextDocument", () => ({ buildContextDocument: vi.fn(async () => "# material") }));
 
-afterEach(() => {
-  cleanup();
-  resetAgentPanelState();
-  publishAgentSubject(null);
-  publishAgentListScope(null);
-  vi.mocked(buildContextDocument).mockClear();
-  createAgentNote.mockClear();
-  runAgent.mockClear();
-  replyAgentNote.mockClear();
-});
-
-const pr: AgentSubject = {
-  kind: "pull-request",
-  id: 68,
-  title: "Add ToDo API",
-  projectId: "p",
-  repositoryId: "r",
-  repositoryName: "TestRepos",
-  webUrl: null,
-};
-
-function renderHost() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <button type="button">grid</button>
-      <AgentPanelHost />
-    </QueryClientProvider>,
-  );
-}
-
-/** Opens the panel and waits for a conversation: an ask without a subject, or the PR's own note. */
-async function openPanel(conversation = "Why did run 412 fail?") {
-  act(() => toggleAgentPanel());
-  const panel = await screen.findByRole("complementary", { name: "Agent" });
-  await within(panel).findAllByText(conversation);
-  return panel;
-}
+afterEach(resetFixtures);
 
 describe("Agent panel", () => {
   it("opens focused on the input; Esc folds it, then closes and returns focus", async () => {
@@ -148,6 +81,40 @@ describe("Agent panel", () => {
     expect(createAgentNote).toHaveBeenCalledWith(
       expect.objectContaining({ target: "ask", body: "Summarize today", kind: null, contextDocument: null }),
     );
+  });
+
+  it("sends one request to the agent picked with the keyboard, then returns to the default", async () => {
+    renderHost();
+    const panel = await openPanel();
+    const claude = within(panel).getByRole("radio", { name: "Claude" });
+    expect(claude.getAttribute("aria-checked")).toBe("true");
+    claude.focus();
+    fireEvent.keyDown(claude, { key: "ArrowRight" });
+    const codex = within(panel).getByRole("radio", { name: "Codex" });
+    expect(document.activeElement).toBe(codex);
+    expect(codex.getAttribute("aria-checked")).toBe("true");
+    // Picking another agent starts from its Settings model (none here: the CLI's own).
+    const model = within(panel).getByRole("combobox", { name: "Model" }) as HTMLSelectElement;
+    expect(model.value).toBe("");
+    expect(within(model).queryByRole("option", { name: "opus" })).toBeNull();
+    // Esc goes back to the input.
+    fireEvent.keyDown(codex, { key: "Escape" });
+    await waitFor(() => expect(document.activeElement?.tagName).toBe("TEXTAREA"));
+    fireEvent.change(within(panel).getByPlaceholderText(/Ask the agent/), { target: { value: "Summarize today" } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Ask" }));
+    await waitFor(() => expect(runAgent).toHaveBeenCalledWith(expect.objectContaining({ agent: "codex", model: "" })));
+    await waitFor(() => expect(claude.getAttribute("aria-checked")).toBe("true"));
+  });
+
+  it("sends one request with the model picked for it", async () => {
+    renderHost();
+    const panel = await openPanel();
+    const model = within(panel).getByRole("combobox", { name: "Model" });
+    fireEvent.change(model, { target: { value: "opus" } });
+    fireEvent.change(within(panel).getByPlaceholderText(/Ask the agent/), { target: { value: "Summarize today" } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Ask" }));
+    await waitFor(() => expect(runAgent).toHaveBeenCalledWith(expect.objectContaining({ agent: "claude", model: "opus" })));
+    await waitFor(() => expect((model as HTMLSelectElement).value).toBe(""));
   });
 
   it("follows the selection, attaches its material, and keeps a pinned subject", async () => {
@@ -212,6 +179,64 @@ describe("Agent panel", () => {
     fireEvent.keyDown(input, { key: "Escape" });
     await waitFor(() => expect(document.activeElement).toBe(waiting));
   });
+
+  it("Esc on the folded reply button returns to its conversation header and keeps the panel", async () => {
+    renderHost();
+    const panel = await openPanel();
+    const [waiting] = within(panel).getAllByRole("button").filter((b) => b.hasAttribute("aria-expanded"));
+    const replyButton = within(waiting.closest("[data-agent-conversation]") as HTMLElement).getByRole("button", { name: /^Reply…/ });
+    replyButton.focus();
+    fireEvent.keyDown(replyButton, { key: "Escape" });
+    expect(document.activeElement).toBe(waiting);
+    expect(screen.getByRole("complementary", { name: "Agent" })).toBeTruthy();
+  });
+
+  it("Esc on a header closes a panel shown by default and lands on the view's grid, not <body>", async () => {
+    resetAgentPanelState();
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <div data-primary-grid="true">
+          <div role="row" aria-selected="true" tabIndex={0} data-testid="row" />
+        </div>
+        <AgentPanelHost />
+      </QueryClientProvider>,
+    );
+    let unregister = () => {};
+    act(() => {
+      unregister = registerDrawerHost("notifications");
+    });
+    const panel = await screen.findByRole("complementary", { name: "Agent" });
+    await within(panel).findAllByText("Why did run 412 fail?");
+    const [waiting] = within(panel).getAllByRole("button").filter((b) => b.hasAttribute("aria-expanded"));
+    waiting.focus();
+    fireEvent.keyDown(waiting, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("complementary", { name: "Agent" })).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId("row")));
+    act(() => unregister());
+  });
+
+  it("Delete on a header moves focus to the next conversation, then to the input when none are left", async () => {
+    renderHost();
+    const panel = await openPanel();
+    const headers = () => within(panel).getAllByRole("button").filter((b) => b.hasAttribute("aria-expanded") && b.closest("[data-agent-conversation]"));
+    const [waiting, done] = headers();
+    waiting.focus();
+    fireEvent.keyDown(waiting, { key: "Delete" });
+    await waitFor(() => expect(deleteAgentNote).toHaveBeenCalledWith(expect.objectContaining({ noteId: "a.md" })));
+    await waitFor(() => expect(headers()).toHaveLength(1));
+    await waitFor(() => expect(document.activeElement).toBe(done));
+
+    // The last open conversation: nothing is left to focus, so the input takes it.
+    state.asks = [{ ...asks[0], notes: [note("c.md", "Only one")] }];
+    cleanup();
+    const second = renderHost();
+    const only = await second.findByText("Only one");
+    const header = only.closest("[data-agent-conversation]")!.querySelector("button")!;
+    header.focus();
+    fireEvent.keyDown(header, { key: "Delete" });
+    await waitFor(() => expect(second.queryByText("Only one")).toBeNull());
+    await waitFor(() => expect(document.activeElement?.closest("[data-agent-composer]")).not.toBeNull());
+  });
 });
 
 describe("Agent panel keys", () => {
@@ -223,8 +248,8 @@ describe("Agent panel keys", () => {
     expect(waiting.getAttribute("aria-expanded")).toBe("true");
     expect(waiting.textContent).toContain("You · ");
     expect(within(panel).getAllByText("Why did run 412 fail?")).toHaveLength(1);
-    // Folded: status (screen-reader label) and first line only: no kind, reply count or time.
-    expect(done.textContent).toBe("DoneSummarize last week");
+    // Folded like a PR thread: avatar, first line and state pill; no kind or time.
+    expect(done.textContent).toBe("YOSummarize last weekDone");
   });
 
   it("pins with p and runs the agent now with Shift+Enter", async () => {
@@ -304,148 +329,5 @@ describe("Agent panel with the Result panel", () => {
         expect.objectContaining({ target: "ask", itemId: 20261011090000, noteId: "a.md", status: "done" }),
       ),
     );
-  });
-});
-
-const list: AgentListScope = { id: "my-reviews", label: "This list", count: 3, markdown: () => "## My Reviews (3)" };
-
-describe("Agent panel context chips", () => {
-  it("offers the view's list as a dashed chip and attaches it with Space", async () => {
-    renderHost();
-    act(() => publishAgentSubject(pr));
-    act(() => publishAgentListScope(list));
-    const panel = await openPanel("Check the retry logic");
-    const toolbar = within(panel).getByRole("toolbar", { name: "Agent context" });
-    expect(within(toolbar).getByText("Context")).toBeTruthy();
-    const subjectChip = within(toolbar).getByRole("button", { name: "Attached: !68 Add ToDo API" });
-    const listChip = within(toolbar).getByRole("button", { name: "Attach: This list (3)" });
-    expect(listChip.textContent).toBe("+ This list (3)");
-    expect(listChip.getAttribute("aria-pressed")).toBe("false");
-    // One tab stop for the whole row.
-    expect(subjectChip.tabIndex).toBe(0);
-    expect(listChip.tabIndex).toBe(-1);
-
-    subjectChip.focus();
-    fireEvent.keyDown(subjectChip, { key: "ArrowRight" });
-    expect(document.activeElement).toBe(listChip);
-    expect(listChip.tabIndex).toBe(0);
-    fireEvent.keyDown(listChip, { key: " " });
-    const attached = within(toolbar).getByRole("button", { name: "Attached: This list (3)" });
-    // The same element keeps the focus when it flips between dashed and solid.
-    expect(attached).toBe(listChip);
-    expect(document.activeElement).toBe(listChip);
-    expect(listChip.getAttribute("aria-pressed")).toBe("true");
-    // Not pinnable.
-    fireEvent.keyDown(listChip, { key: "p" });
-    expect(within(toolbar).getAllByRole("button", { name: "Pin the subject" })).toHaveLength(1);
-
-    fireEvent.keyDown(listChip, { key: "ArrowLeft" });
-    expect(document.activeElement).toBe(subjectChip);
-    fireEvent.keyDown(subjectChip, { key: "ArrowLeft" });
-    expect(document.activeElement).toBe(subjectChip);
-  });
-
-  it("pins with p, detaches and re-attaches the subject with Enter, and Esc returns to the input", async () => {
-    renderHost();
-    act(() => publishAgentSubject(pr));
-    const panel = await openPanel("Check the retry logic");
-    const chip = within(panel).getByRole("button", { name: "Attached: !68 Add ToDo API" });
-    chip.focus();
-    fireEvent.keyDown(chip, { key: "p" });
-    expect(within(panel).getByRole("button", { name: "Unpin the subject" })).toBeTruthy();
-
-    fireEvent.keyDown(chip, { key: "Enter" });
-    const dashed = within(panel).getByRole("button", { name: "Attach: !68 Add ToDo API" });
-    expect(dashed).toBe(chip);
-    expect(dashed.textContent).toBe("+ !68 Add ToDo API");
-    // Without a subject the request is a plain ask.
-    expect(within(panel).getByRole("button", { name: /Ask the agent/ })).toBeTruthy();
-    fireEvent.keyDown(dashed, { key: "Enter" });
-    expect(within(panel).getByRole("button", { name: "Attached: !68 Add ToDo API" })).toBeTruthy();
-
-    fireEvent.keyDown(chip, { key: "Escape" });
-    await waitFor(() => expect(document.activeElement?.tagName).toBe("TEXTAREA"));
-    // The panel stays open: Esc in the chips only goes back to the input.
-    expect(screen.getByRole("complementary", { name: "Agent" })).toBeTruthy();
-  });
-
-  it("truncates a long subject title instead of widening the row", async () => {
-    renderHost();
-    act(() => publishAgentSubject({ ...pr, title: "A very long pull request title ".repeat(8) }));
-    const panel = await openPanel("Check the retry logic");
-    const chip = within(panel).getByRole("button", { name: /^Attached: !68 A very long/ });
-    expect(chip.className).toContain("truncate");
-    expect(chip.title).toContain("A very long pull request title");
-  });
-
-  it("sends the list with the request only when it is attached", async () => {
-    renderHost();
-    act(() => publishAgentSubject(pr));
-    act(() => publishAgentListScope(list));
-    const panel = await openPanel("Check the retry logic");
-
-    fireEvent.change(within(panel).getByPlaceholderText(/Ask about/), { target: { value: "first" } });
-    fireEvent.click(within(panel).getByRole("button", { name: "Ask" }));
-    await waitFor(() => expect(createAgentNote).toHaveBeenCalledTimes(1));
-    expect(buildContextDocument).toHaveBeenLastCalledWith(expect.objectContaining({ id: 68 }), null);
-
-    fireEvent.click(within(panel).getByRole("button", { name: "Attach: This list (3)" }));
-    fireEvent.click(await within(panel).findByRole("button", { name: /Ask about/ }));
-    fireEvent.change(await within(panel).findByPlaceholderText(/Ask about/), { target: { value: "second" } });
-    fireEvent.click(within(panel).getByRole("button", { name: "Ask" }));
-    await waitFor(() => expect(createAgentNote).toHaveBeenCalledTimes(2));
-    expect(buildContextDocument).toHaveBeenLastCalledWith(
-      expect.objectContaining({ id: 68 }),
-      expect.objectContaining({ id: "my-reviews", count: 3 }),
-    );
-    expect(createAgentNote).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        target: "pull-request",
-        context: expect.stringContaining("This list (3)"),
-        contextDocument: "# material",
-      }),
-    );
-  });
-
-  it("asks about the list alone when there is no subject", async () => {
-    renderHost();
-    act(() => publishAgentListScope(list));
-    const panel = await openPanel();
-    fireEvent.click(within(panel).getByRole("button", { name: "Attach: This list (3)" }));
-    fireEvent.change(await within(panel).findByPlaceholderText(/Ask the agent/), { target: { value: "Which are stale?" } });
-    fireEvent.click(within(panel).getByRole("button", { name: "Ask" }));
-    await waitFor(() => expect(createAgentNote).toHaveBeenCalled());
-    expect(buildContextDocument).toHaveBeenLastCalledWith(null, expect.objectContaining({ id: "my-reviews" }));
-    expect(createAgentNote).toHaveBeenLastCalledWith(
-      expect.objectContaining({ target: "ask", context: "This list (3)", contextDocument: "# material" }),
-    );
-  });
-
-  it("drops the attachment when another list takes over", async () => {
-    renderHost();
-    act(() => publishAgentListScope(list));
-    const panel = await openPanel();
-    fireEvent.click(within(panel).getByRole("button", { name: "Attach: This list (3)" }));
-    expect(within(panel).getByRole("button", { name: "Attached: This list (3)" })).toBeTruthy();
-    act(() => publishAgentListScope({ ...list, id: "inbox", count: 5 }));
-    expect(within(panel).getByRole("button", { name: "Attach: This list (5)" })).toBeTruthy();
-  });
-});
-
-describe("Agent drawer default", () => {
-  it("shows the drawer for a view without a dock until the user closes it", async () => {
-    // The test setup closes the panel before each test; start from the app's initial state.
-    resetAgentPanelState();
-    renderHost();
-    expect(screen.queryByRole("complementary", { name: "Agent" })).toBeNull();
-    let unregister = () => {};
-    act(() => {
-      unregister = registerDrawerHost("notifications");
-    });
-    expect(await screen.findByRole("complementary", { name: "Agent" })).toBeTruthy();
-    // Shown by default, not opened: the first Ctrl+J closes it and it stays closed for the view.
-    act(() => toggleAgentPanel());
-    await waitFor(() => expect(screen.queryByRole("complementary", { name: "Agent" })).toBeNull());
-    act(() => unregister());
   });
 });

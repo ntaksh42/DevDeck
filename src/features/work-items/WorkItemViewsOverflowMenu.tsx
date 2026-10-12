@@ -72,7 +72,7 @@ export function WorkItemViewsOverflowMenu({
         aria-label="More view actions"
         title="More view actions"
         onClick={() => (open ? closeMenu() : setOpen(true))}
-        className={`inline-flex items-center justify-center rounded-md border border-border hover:bg-secondary ${viewActions ? "h-8 w-8" : "h-7 w-7"}`}
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border hover:bg-secondary"
       >
         <MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
       </button>

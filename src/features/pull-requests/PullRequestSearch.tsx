@@ -242,7 +242,7 @@ export function PullRequestSearch({
           />
           <div className="w-36">
             <MultiSelectFilter
-              className="h-8"
+              className="h-7"
               options={PR_SEARCH_STATUS_OPTIONS}
               selected={statuses}
               onChange={(next) => setStatuses(next as PrSearchStatus[])}
@@ -253,7 +253,7 @@ export function PullRequestSearch({
           </div>
           <div className="w-44">
             <MultiSelectFilter
-              className="h-8"
+              className="h-7"
               options={projects.map((p) => ({ value: p.id, label: p.name }))}
               selected={projectIds}
               onChange={onProjectsChange}
@@ -265,7 +265,7 @@ export function PullRequestSearch({
           </div>
           <div className="w-52">
             <MultiSelectFilter
-              className="h-8"
+              className="h-7"
               options={filteredRepositories.map((r) => ({
                 value: r.repositoryId,
                 label: r.repositoryName,
@@ -278,7 +278,7 @@ export function PullRequestSearch({
               disabled={repositoriesQuery.isLoading}
             />
           </div>
-          <label className="flex h-8 shrink-0 items-center gap-2">
+          <label className="flex h-7 shrink-0 items-center gap-2">
             <input
               type="checkbox"
               checked={excludeDrafts}
@@ -308,7 +308,7 @@ export function PullRequestSearch({
             <div className="grid w-64 gap-0.5">
               <span className="text-[11px] font-medium text-muted-foreground">Target branches</span>
               <MultiSelectFilter
-                className="h-8"
+                className="h-7"
                 options={branchSuggestions.map((branch) => ({ value: branch, label: branch }))}
                 selected={targetBranches}
                 onChange={setTargetBranches}

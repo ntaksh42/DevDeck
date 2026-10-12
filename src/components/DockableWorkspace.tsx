@@ -25,7 +25,7 @@ import { ResizeHandle } from "@/components/ResizeHandle";
 import { readStoredJson, writeStoredJson } from "@/lib/storage";
 import { useIsDarkMode } from "@/lib/useIsDarkMode";
 import { createHeaderSlotStore, useCollapsedGroups, type HeaderSlotStore } from "./dockableWorkspaceSlots";
-import { minRowWidth } from "./dockableWorkspaceLayout";
+import { balanceListAndPreview, minRowWidth } from "./dockableWorkspaceLayout";
 import { resizeAdjacentBoundary } from "./dockableWorkspaceResize";
 import { PanelContent, type PanelContentParams } from "./DockablePanelContent";
 
@@ -556,6 +556,8 @@ export function DockableWorkspace({
   // Set once dockview has built or restored the layout, so effects that need
   // the api (collapsing a group) re-run then instead of missing it at mount.
   const [dockReady, setDockReady] = useState(false);
+  // True when this mount built the default arrangement rather than restoring one.
+  const freshLayoutRef = useRef(false);
 
   // Frozen at first render: dockview reads `rightHeaderActionsComponent` only
   // once, at mount, the same as `onReady` below.
@@ -679,6 +681,7 @@ export function DockableWorkspace({
           });
         }
         applyGroupConstraints(api, initialPanels);
+        freshLayoutRef.current = true;
       }
 
       // `onDidLayoutChange` covers structural changes (panels added/removed/
@@ -743,7 +746,10 @@ export function DockableWorkspace({
   });
 
   // The app-wide Agent panel joins this workspace while it is open (Ctrl+J).
-  const agentWidth = useAgentDock(apiRef, dockReady, layoutStorageKey);
+  // Docking the Agent carves its column out of the list, so re-split a fresh layout afterwards.
+  const agentWidth = useAgentDock(apiRef, dockReady, layoutStorageKey, (api) => {
+    if (freshLayoutRef.current) balanceListAndPreview(api, panelsRef.current);
+  });
 
   useCollapsedGroups(apiRef, panelsRef, dockReady ? collapsedIds : undefined, (api) =>
     applyGroupConstraints(api, panelsRef.current),

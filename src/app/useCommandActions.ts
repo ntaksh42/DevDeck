@@ -44,6 +44,14 @@ export function useCommandActions({
     {
       disabled: organizationsLength === 0,
       group: "Navigation",
+      id: "nav.inbox",
+      keywords: ["mention", "reply", "action", "todo"],
+      label: "Go to Inbox",
+      run: () => setView("inbox"),
+    },
+    {
+      disabled: organizationsLength === 0,
+      group: "Navigation",
       id: "nav.myReviews",
       keywords: ["pull request", "review"],
       label: "Go to My Reviews",
@@ -56,6 +64,14 @@ export function useCommandActions({
       keywords: ["pull request", "search"],
       label: "Go to Pull Request Search",
       run: () => setView("pullRequestSearch"),
+    },
+    {
+      disabled: organizationsLength === 0,
+      group: "Navigation",
+      id: "nav.myPullRequests",
+      keywords: ["pull request", "authored", "mine"],
+      label: "Go to My Pull Requests",
+      run: () => setView("myPullRequests"),
     },
     {
       disabled: organizationsLength === 0,
@@ -88,6 +104,21 @@ export function useCommandActions({
       keywords: ["build", "ci", "pipeline"],
       label: "Go to Pipelines",
       run: () => setView("pipelines"),
+    },
+    {
+      disabled: organizationsLength === 0,
+      group: "Navigation",
+      id: "nav.analyze",
+      keywords: ["trend", "chart", "query"],
+      label: "Go to Analyze",
+      run: () => setView("analyze"),
+    },
+    {
+      group: "Navigation",
+      id: "nav.notifications",
+      keywords: ["history", "unread"],
+      label: "Go to Notifications",
+      run: () => setView("notifications"),
     },
     {
       group: "Navigation",

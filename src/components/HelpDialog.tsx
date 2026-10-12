@@ -117,7 +117,7 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
           <div className={row}><span>Open / focus preview</span><kbd className={kbd}>Enter / →</kbd></div>
           <div className={row}><span>Open in Azure DevOps</span><kbd className={kbd}>O / Ctrl+Enter</kbd></div>
           <div className={row}><span>Vote: Approve / Suggestions / Wait / Reject / None</span><kbd className={kbd}>A / S / W / X / 0</kbd></div>
-          <div className={row}><span>Collapse / expand section</span><kbd className={kbd}>click header</kbd></div>
+          <div className={row}><span>Collapse / expand section</span><kbd className={kbd}>Tab to header · Enter</kbd></div>
           <div className={row}><span>Maximize preview</span><kbd className={kbd}>\</kbd></div>
           <div className={row}><span>Show drafts</span><kbd className={kbd}>D</kbd></div>
           <div className={row}><span>Copy URL</span><kbd className={kbd}>C</kbd></div>
@@ -188,6 +188,8 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
           <div className={row}><span>Move in tree / type-ahead</span><kbd className={kbd}>↑ ↓ · Home / End · type</kbd></div>
 
           <p {...sectionProps("pipelines")}>Pipelines</p>
+          <div className={row}><span>Move between watched pipelines</span><kbd className={kbd}>J/K ↑ ↓ Home End</kbd></div>
+          <div className={row}><span>Expand / collapse runs · unwatch</span><kbd className={kbd}>Enter · Delete</kbd></div>
           <div className={row}><span>Move run row</span><kbd className={kbd}>J/K ↑ ↓ Home End</kbd></div>
           <div className={row}><span>Open run preview</span><kbd className={kbd}>Enter</kbd></div>
           <div className={row}><span>Open run in browser</span><kbd className={kbd}>Ctrl+Enter</kbd></div>

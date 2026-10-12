@@ -25,7 +25,7 @@ function authorInitials(name: string | null | undefined): string {
 
 /** Initials avatar; background color is picked from a small fixed palette by
  * hashing the author's name, so the same person always gets the same color. */
-function CommentAvatar({ name }: { name: string | null | undefined }) {
+export function CommentAvatar({ name }: { name: string | null | undefined }) {
   let hash = 0;
   for (const char of name ?? "?") hash = (hash * 31 + (char.codePointAt(0) ?? 0)) >>> 0;
   const colorClass = AVATAR_PALETTE[hash % AVATAR_PALETTE.length];

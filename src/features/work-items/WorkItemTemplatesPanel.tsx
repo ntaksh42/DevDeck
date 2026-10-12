@@ -211,7 +211,7 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
               restoreFocusRef.current = createButtonRef.current;
               setCreateMenuOpen((open) => !open);
             }}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary"
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary"
           >
             <FileText className="h-3.5 w-3.5" aria-hidden="true" />
             Create from template
@@ -264,7 +264,7 @@ export function WorkItemTemplatesPanel({ onApplyTemplate }: WorkItemTemplatesPan
           openManagerForNew();
         }}
         title="Manage work item templates"
-        className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary"
+        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium hover:bg-secondary"
       >
         <Plus className="h-3.5 w-3.5" aria-hidden="true" />
         Templates

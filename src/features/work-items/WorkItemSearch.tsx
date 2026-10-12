@@ -93,7 +93,7 @@ export function WorkItemSearch({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <form className="flex shrink-0 flex-wrap items-center gap-2" onSubmit={onSubmit}>
-        <div className="flex h-8 min-w-[180px] flex-1 items-center rounded-md border border-input bg-background px-2 focus-within:ring-2 focus-within:ring-ring">
+        <div className="flex h-7 min-w-[180px] flex-1 items-center rounded-md border border-input bg-background px-2 focus-within:ring-2 focus-within:ring-ring">
           <Search className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
           <input
             value={query}
@@ -114,7 +114,7 @@ export function WorkItemSearch({
             ariaLabel="Filter by project"
             searchable
             disabled={projectsQuery.isLoading}
-            className="h-8"
+            className="h-7"
           />
         </div>
         <div className="w-36">
@@ -124,7 +124,7 @@ export function WorkItemSearch({
             onChange={setStates}
             placeholder="All states"
             ariaLabel="Filter by state"
-            className="h-8"
+            className="h-7"
           />
         </div>
         <div className="w-36">
@@ -134,13 +134,13 @@ export function WorkItemSearch({
             onChange={setWorkItemTypes}
             placeholder="Any type"
             ariaLabel="Filter by type"
-            className="h-8"
+            className="h-7"
           />
         </div>
         <button
           type="submit"
           disabled={mutation.isPending || !organizationId}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex h-7 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {mutation.isPending ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />

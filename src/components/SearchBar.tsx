@@ -27,7 +27,7 @@ export function SearchInput({
   autoFocus?: boolean;
 }) {
   return (
-    <div className="flex h-8 min-w-[200px] flex-1 items-center rounded-md border border-input bg-background px-2 focus-within:ring-2 focus-within:ring-ring">
+    <div className="flex h-7 min-w-[200px] flex-1 items-center rounded-md border border-input bg-background px-2 focus-within:ring-2 focus-within:ring-ring">
       <Search className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
       <input
         value={value}
@@ -35,6 +35,7 @@ export function SearchInput({
         onKeyDown={onKeyDown}
         placeholder={placeholder}
         aria-label={ariaLabel}
+        data-filter-input="true"
         autoFocus={autoFocus}
         className="min-w-0 flex-1 bg-transparent text-sm outline-none"
       />
@@ -61,7 +62,7 @@ export function FiltersToggle({
       onClick={onToggle}
       aria-expanded={open}
       aria-controls={controls}
-      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-input bg-background px-2.5 text-sm hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+      className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-input bg-background px-2.5 text-sm hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
     >
       <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
       Filters
@@ -79,11 +80,18 @@ export function FiltersToggle({
 }
 
 export function SearchSubmitButton({ pending, disabled }: { pending: boolean; disabled?: boolean }) {
+  // While pending the button is only aria-disabled and swallows clicks (which
+  // also covers Enter in the search input): a truly disabled button would drop
+  // keyboard focus to <body> the moment a search starts.
   return (
     <button
       type="submit"
-      disabled={pending || disabled}
-      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+      disabled={disabled}
+      aria-disabled={pending || undefined}
+      onClick={(event) => {
+        if (pending) event.preventDefault();
+      }}
+      className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
     >
       {pending ? (
         <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
@@ -106,7 +114,7 @@ export function FilterField({ label, children, className = "" }: { label: string
 }
 
 export const filterInputClass =
-  "h-8 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring";
+  "h-7 rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring";
 
 /**
  * Native `<select>` drawn like the custom MultiSelectFilter trigger (same
@@ -126,7 +134,7 @@ export function NativeSelect({
       <select
         {...props}
         className={`w-full min-w-0 appearance-none rounded-md border border-input bg-background pl-2 pr-7 outline-none focus:ring-2 focus:ring-ring disabled:opacity-60 ${
-          compact ? "h-7 text-xs" : "h-8 text-sm"
+          compact ? "h-7 text-xs" : "h-7 text-sm"
         }`}
       >
         {children}

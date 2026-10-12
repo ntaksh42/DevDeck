@@ -172,7 +172,7 @@ function AppShell() {
 
   useNotificationEvents(appSettingsQuery.data, (target) => setView(target));
 
-  const navigateFromPalette = usePaletteNavigation(setView);
+  const navigateFromPalette = usePaletteNavigation(setView, activeView);
 
   const {
     setPaletteSearchText,
@@ -397,7 +397,7 @@ function AppShell() {
     openHelp,
     closeHelp,
     closeCommandPalette,
-    setView,
+    setView: navigateFromPalette,
     setSidebarCollapsed: setSidebarCollapsed as Dispatch<SetStateAction<boolean>>,
     refreshCurrentView,
     focusNavigation: () => sidebarRef.current?.focusNavigation(),

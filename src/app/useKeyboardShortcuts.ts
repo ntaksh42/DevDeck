@@ -95,7 +95,6 @@ export function useKeyboardShortcuts({
           event.preventDefault();
           event.stopPropagation();
           setView(view);
-          window.setTimeout(() => focusPrimaryGrid(), 0);
         }
         return;
       }

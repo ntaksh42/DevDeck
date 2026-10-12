@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { Plus, Trash2, X } from "lucide-react";
 import type { WorkItemProjectOption } from "@/lib/azdoCommands";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 import { loadWorkItemQueryViews } from "@/features/work-items/workItemViewsStorage";
 import {
   createAnalyzeMemberId,
@@ -37,6 +38,8 @@ export function AnalyzeGroupDialog({
   const [wiqlDraft, setWiqlDraft] = useState("");
   const [wiqlName, setWiqlName] = useState("");
   const [showWiqlEditor, setShowWiqlEditor] = useState(false);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  useFocusTrap(dialogRef);
   const restoreFocusRef = useRef<HTMLElement | null>(
     document.activeElement instanceof HTMLElement ? document.activeElement : null,
   );
@@ -134,6 +137,7 @@ export function AnalyzeGroupDialog({
       onClick={close}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="analyze-group-dialog-title"

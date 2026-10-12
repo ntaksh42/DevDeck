@@ -316,7 +316,19 @@ export function PullRequestResults({
   });
 
   const gridPane = (
-      <div data-grid-focus-fallback="true" tabIndex={-1} className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card">
+      <div
+        data-grid-focus-fallback="true"
+        tabIndex={-1}
+        className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card"
+        onKeyDown={(event) => {
+          // Before any result exists there is no grid handler, so the pane itself
+          // answers "/" (the empty state advertises it).
+          if (event.target !== event.currentTarget || event.key !== "/") return;
+          if (event.ctrlKey || event.metaKey || event.altKey) return;
+          event.preventDefault();
+          focusFilterInput();
+        }}
+      >
       {!searched && !loading ? (
         <PreviewEmptyState message="Run a search to load pull requests." hint={SEARCH_EMPTY_HINT} />
       ) : results.length === 0 && !loading ? (

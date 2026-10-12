@@ -167,7 +167,7 @@ export function FilterableSelect({
             if (!open) setOpen(true);
           }}
           onKeyDown={handleKeyDown}
-          className="h-8 w-full rounded-md border border-input bg-background pl-3 pr-8 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+          className="h-7 w-full rounded-md border border-input bg-background pl-3 pr-8 text-sm outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
         />
         <ChevronDown
           className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"

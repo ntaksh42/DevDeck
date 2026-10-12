@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { minRowWidth } from "./dockableWorkspaceLayout";
+import { describe, expect, it, vi } from "vitest";
+import type { DockviewApi } from "dockview-react";
+import { balanceListAndPreview, minRowWidth } from "./dockableWorkspaceLayout";
 
 describe("minRowWidth", () => {
   it("sums the minimum widths of panels split side by side", () => {
@@ -33,5 +34,30 @@ describe("minRowWidth", () => {
 
   it("treats panels without a minWidth as zero", () => {
     expect(minRowWidth([{ id: "only", title: "Only", content: null }])).toBe(0);
+  });
+});
+
+describe("balanceListAndPreview", () => {
+  const panels = [
+    { id: "grid", title: "Grid", content: null },
+    { id: "preview", title: "Preview", content: null, position: { relativeTo: "grid", direction: "right" as const } },
+  ];
+  function fakeApi(widths: Record<string, number>, setSize = vi.fn()) {
+    const groups = Object.fromEntries(
+      Object.entries(widths).map(([id, width]) => [id, { api: { width, setSize: id === "grid" ? setSize : vi.fn() } }]),
+    );
+    return { getPanel: (id: string) => (groups[id] ? { group: groups[id] } : undefined) } as unknown as DockviewApi;
+  }
+
+  it("gives the list 55% of the row it shares with the preview", () => {
+    const setSize = vi.fn();
+    balanceListAndPreview(fakeApi({ grid: 480, preview: 520 }, setSize), panels);
+    expect(setSize).toHaveBeenCalledWith({ width: 550 });
+  });
+
+  it("does nothing without a right-hand preview", () => {
+    const setSize = vi.fn();
+    balanceListAndPreview(fakeApi({ grid: 480 }, setSize), [panels[0]]);
+    expect(setSize).not.toHaveBeenCalled();
   });
 });

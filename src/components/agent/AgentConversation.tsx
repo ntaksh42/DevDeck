@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { noteNeedsYou, type AgentNote } from "@/lib/azdoCommands";
 import { NoteMarkdown } from "@/components/agent-notes/NoteMarkdown";
 import { CommentComposer } from "@/features/pull-requests/CommentComposer";
+import { CommentAvatar } from "@/features/pull-requests/PrThreadCard";
 import { formatRelativeDate } from "@/lib/utils";
 
 const KIND_LABELS: Record<string, string> = {
@@ -14,8 +15,9 @@ const KIND_LABELS: Record<string, string> = {
 };
 
 /**
- * One message of a conversation: the user's request or a reply. No box of
- * its own; the agent's replies are marked by a thin line on the left.
+ * One message of a conversation: the user's request or a reply, laid out like
+ * a PR comment (avatar, author, time, then the body indented under them). The
+ * agent's name stays violet so its replies are told apart at a glance.
  */
 export function AgentMessage({
   author,
@@ -32,41 +34,38 @@ export function AgentMessage({
   hideMeta?: boolean;
 }) {
   const mine = author === "user";
+  const name = mine ? "You" : `@${author}`;
   return (
-    <div className={`pl-2 ${mine ? "border-l-2 border-transparent" : "border-l-2 border-violet-400 dark:border-violet-700"}`}>
+    <div className="text-xs">
       {hideMeta ? null : (
-        <div className="flex items-baseline gap-1.5 text-[11px] text-muted-foreground">
-          <span className={`font-medium ${mine ? "text-foreground" : "text-violet-700 dark:text-violet-300"}`}>
-            {mine ? "You" : `@${author}`}
-          </span>
-          <span>{formatRelativeDate(when)}</span>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <CommentAvatar name={mine ? "You" : author} />
+          <span className={`truncate font-medium ${mine ? "text-foreground" : "text-violet-700 dark:text-violet-300"}`}>{name}</span>
+          <span className="shrink-0 text-[11px] text-muted-foreground">{formatRelativeDate(when)}</span>
         </div>
       )}
-      {quote ? (
-        <p className="line-clamp-2 break-words text-[11px] text-muted-foreground" title={quote}>
-          “{quote}”
-        </p>
-      ) : null}
-      <NoteMarkdown text={text} className="text-[13px] leading-5 text-foreground" />
+      <div className="pl-[26px]">
+        {quote ? (
+          <p className="line-clamp-2 break-words border-l-2 border-border pl-1.5 text-[11px] text-muted-foreground" title={quote}>
+            {quote}
+          </p>
+        ) : null}
+        <NoteMarkdown text={text} className="text-[13px] leading-5 text-foreground" />
+      </div>
     </div>
   );
 }
 
-/** A small dot instead of a badge; red when the agent waits for the user. */
+/** The conversation's state as a pill, where a PR thread shows Active / Resolved. */
 function Status({ note }: { note: AgentNote }) {
-  const [dot, label] = noteNeedsYou(note)
-    ? ["bg-red-500", "Needs you"]
+  const [tone, label] = noteNeedsYou(note)
+    ? ["border-red-300 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300", "Needs you"]
     : note.status === "draft"
-      ? ["border border-dashed border-gray-500", "Draft"]
+      ? ["border-dashed border-border text-muted-foreground", "Draft"]
       : note.status === "done"
-        ? ["bg-gray-400", "Done"]
-        : ["bg-amber-400", "Open"];
-  return (
-    <span className="flex shrink-0 items-center" title={label}>
-      <span className={`h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden="true" />
-      <span className="sr-only">{label}</span>
-    </span>
-  );
+        ? ["border-border bg-muted text-muted-foreground", "Done"]
+        : ["border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300", "Open"];
+  return <span className={`shrink-0 rounded border px-1.5 text-[11px] leading-4 ${tone}`}>{label}</span>;
 }
 
 function lastActivity(note: AgentNote): string {
@@ -74,11 +73,12 @@ function lastActivity(note: AgentNote): string {
 }
 
 /**
- * A conversation (one note and its replies) that folds to a single line:
- * status dot and first line (bold while it waits for the user). The header is
- * the keyboard target; the list moves focus between headers. Each conversation
- * is its own bordered card (expanded: shaded header band), so threads read as
- * separate; the selected one gets an accent border and shows its actions.
+ * A conversation (one note and its replies), styled like a PR comment thread:
+ * open ones carry the amber left bar of an unresolved thread, done ones are
+ * greyed. Folded, it is one line: avatar, first line (bold while it waits for
+ * the user), reply count and state. The header is the keyboard target; the
+ * list moves focus between headers. The selected one gets an accent ring and
+ * shows its actions.
  */
 export const AgentConversation = forwardRef<
   HTMLButtonElement,
@@ -113,7 +113,9 @@ export const AgentConversation = forwardRef<
   const done = note.status === "done";
   return (
     <div
-      className={`overflow-hidden rounded-md border ${selected ? "border-primary/60 bg-accent/30" : "border-border"}`}
+      className={`overflow-hidden rounded-md border ${
+        done ? "border-border bg-muted/60" : "border-border border-l-[3px] border-l-amber-400 bg-card dark:border-l-amber-500"
+      } ${selected ? "ring-1 ring-primary/60" : ""}`}
       data-agent-conversation={note.id}
     >
       <button
@@ -123,27 +125,38 @@ export const AgentConversation = forwardRef<
         tabIndex={selected ? 0 : -1}
         onClick={onToggle}
         onFocus={onFocus}
-        className={`flex w-full min-w-0 items-center gap-1.5 px-2 py-1 text-left text-xs outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring ${expanded ? "border-b border-border bg-muted/60" : ""} ${done ? "text-muted-foreground" : ""}`}
+        className={`flex w-full min-w-0 items-center gap-1.5 px-2 py-1 text-left text-xs outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring ${done ? "text-muted-foreground" : ""}`}
       >
         <Chevron className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <Status note={note} />
+        <CommentAvatar name="You" />
         {expanded ? (
           <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground" title={meta}>
-            {meta}
+            <span className="font-medium text-foreground">You</span>
+            {meta.slice("You".length)}
           </span>
         ) : (
-          <span className={`min-w-0 flex-1 truncate ${noteNeedsYou(note) ? "font-semibold" : ""}`}>{firstLine}</span>
+          <>
+            <span className={`min-w-0 flex-1 truncate ${noteNeedsYou(note) ? "font-semibold text-foreground" : ""}`} title={note.body}>
+              {firstLine}
+            </span>
+            {note.replies.length ? (
+              <span className="shrink-0 text-[11px] text-muted-foreground" title={`${note.replies.length} replies`}>
+                {note.replies.length}
+              </span>
+            ) : null}
+          </>
         )}
+        <Status note={note} />
       </button>
       {expanded ? (
-        <div className="space-y-2 py-2 pl-6 pr-2">
+        <div className="space-y-1.5 px-2 pb-2">
           <AgentMessage author="user" when={note.createdAt} text={note.body} quote={note.quote} hideMeta />
           {note.replies.map((reply, index) => (
             <AgentMessage key={`${note.id}-${index}`} author={reply.author} when={reply.createdAt} text={reply.body} />
           ))}
-          {done && note.resolved ? <p className="text-[11px] text-muted-foreground">✓ {note.resolved}</p> : null}
+          {done && note.resolved ? <p className="pl-[26px] text-[11px] text-muted-foreground">✓ {note.resolved}</p> : null}
           {selected && actions.length ? (
-            <div className="flex flex-wrap gap-x-3 text-[11px]">
+            <div className="flex flex-wrap gap-x-3 pl-[26px] text-[11px]">
               {actions.map((action) => (
                 <button
                   key={action.label}
@@ -158,7 +171,7 @@ export const AgentConversation = forwardRef<
               ))}
             </div>
           ) : null}
-          <div ref={replyRef} data-agent-reply={note.id}>
+          <div ref={replyRef} data-agent-reply={note.id} className="pl-[26px]">
             <CommentComposer
               placeholder="Reply… (R)"
               submitLabel="Reply"

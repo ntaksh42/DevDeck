@@ -62,6 +62,19 @@ describe("ReviewFilterBar", () => {
     expect(onClose).toHaveBeenCalledWith(true);
   });
 
+  it("folds on the first Escape even while the suggestion dropdown is open", () => {
+    const onClose = vi.fn();
+    render(<Harness open textFilter="api" filterSuggestionPool={["api-gateway"]} onClose={onClose} />);
+
+    const input = screen.getByRole("combobox", { name: "Filter" });
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "api" } });
+    expect(screen.getByRole("listbox")).toBeTruthy();
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledWith(true);
+  });
+
   it("folds without stealing focus when an empty filter loses focus", () => {
     const onClose = vi.fn();
     render(

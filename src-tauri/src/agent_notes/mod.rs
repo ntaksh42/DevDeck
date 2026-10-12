@@ -145,6 +145,13 @@ pub struct RunAgentInput {
     /// the workspace folder.
     #[serde(default)]
     pub repository_name: Option<String>,
+    /// Agent picked in the composer; unset, the one chosen in Settings.
+    #[serde(default)]
+    pub agent: Option<launch::AgentKind>,
+    /// Model picked in the composer (empty: the agent's own setting); unset,
+    /// the agent's model from Settings.
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -276,15 +283,25 @@ impl AgentNoteService {
         if input.target == NoteTarget::Ask {
             ensure_guide(&folder, NoteTarget::Ask, &notes_root)?;
         }
+        let agent = input
+            .agent
+            .unwrap_or_else(|| launch::AgentKind::from_setting(settings.default_agent.as_deref()));
+        let (command, model) = match agent {
+            launch::AgentKind::Claude => (&settings.agent_command, &settings.claude_model),
+            launch::AgentKind::Codex => (&settings.codex_command, &settings.codex_model),
+        };
+        let model = input.model.as_deref().or(model.as_deref()).map(str::trim);
         let context = launch::AgentLaunch {
             result_folder: &folder,
             notes_root: &notes_root,
             workspace: workspace.as_deref(),
             repository: input.repository_name.as_deref(),
+            model: model.filter(|m| !m.is_empty()),
         };
         launch::run_agent(
             &context,
-            settings.agent_command.as_deref(),
+            agent,
+            command.as_deref(),
             input.target,
             input.item_id,
         )

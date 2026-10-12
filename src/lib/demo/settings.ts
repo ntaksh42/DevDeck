@@ -67,6 +67,12 @@ export const DEFAULT_DEMO_SETTINGS: AppSettings = {
   workItemResultFolderPath: "C:\\reports\\azdo-work-items",
   showWindowHotkey: null,
   agentCommand: null,
+  codexCommand: null,
+  defaultAgent: null,
+  claudeModel: null,
+  codexModel: null,
+  claudeModelChoices: null,
+  codexModelChoices: null,
   agentWorkspacePath: null,
   readOnlyValidationModeEnabled: false,
   desktopNotificationsEnabled: false,
@@ -131,6 +137,30 @@ export function applyDemoSettingsUpdate(
       input && "agentCommand" in input
         ? input.agentCommand?.trim() || null
         : current.agentCommand,
+    codexCommand:
+      input && "codexCommand" in input
+        ? input.codexCommand?.trim() || null
+        : current.codexCommand,
+    defaultAgent:
+      input && "defaultAgent" in input
+        ? input.defaultAgent === "codex" ? "codex" : null
+        : current.defaultAgent,
+    claudeModel:
+      input && "claudeModel" in input
+        ? input.claudeModel?.trim() || null
+        : current.claudeModel,
+    codexModel:
+      input && "codexModel" in input
+        ? input.codexModel?.trim() || null
+        : current.codexModel,
+    claudeModelChoices:
+      input && "claudeModelChoices" in input
+        ? input.claudeModelChoices?.trim() || null
+        : current.claudeModelChoices,
+    codexModelChoices:
+      input && "codexModelChoices" in input
+        ? input.codexModelChoices?.trim() || null
+        : current.codexModelChoices,
     agentWorkspacePath:
       input && "agentWorkspacePath" in input
         ? input.agentWorkspacePath?.trim() || null

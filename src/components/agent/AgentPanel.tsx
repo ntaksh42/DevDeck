@@ -6,8 +6,10 @@ import { ErrorState, LoadingState } from "@/components/StateDisplay";
 import { RowShortcutHints } from "@/components/RowShortcutHints";
 import { AgentConversation, lastActivity } from "./AgentConversation";
 import { AgentContextChips } from "./AgentContextChips";
+import { AgentPicker } from "./AgentPicker";
 import { useAgentListScope } from "./agentListScope";
 import { handlePaneFocusKey } from "@/lib/paneFocus";
+import { focusPrimaryGrid } from "@/lib/utils";
 import {
   noteItemOf,
   requestNoteReattach,
@@ -18,7 +20,7 @@ import {
   type AgentQuote,
 } from "./agentSubject";
 import { consumeAgentFocusRequest, focusAgentComposer, type SubjectOverride } from "./agentPanelStore";
-import { useAgentPanelData, type Conversation } from "./useAgentPanelData";
+import { useAgentPanelData, type AgentChoice, type Conversation } from "./useAgentPanelData";
 
 /**
  * The app-wide Agent panel (Ctrl+J): asks the external agent to investigate,
@@ -62,7 +64,10 @@ export function AgentPanel({
   const subject = override ? override.subject : live;
   const liveList = useAgentListScope();
   const attachedList = liveList && listAttached === liveList.id ? liveList : null;
-  const data = useAgentPanelData(subject, true, attachedList);
+  // The agent and model picked for the next send; null follows Settings.
+  const [choice, setChoice] = useState<AgentChoice>({ agent: null, model: null });
+  const resetChoice = () => setChoice({ agent: null, model: null });
+  const data = useAgentPanelData(subject, true, attachedList, choice);
   const { conversations } = data;
 
   const [help, setHelp] = useState(false);
@@ -165,8 +170,34 @@ export function AgentPanel({
       ...(c.note.status !== "draft"
         ? [{ label: c.note.status === "done" ? "Reopen" : "Resolve", keys: "X", run: () => data.setStatus.mutate(c) }]
         : []),
-      ...(c.note.status !== "done" ? [{ label: "Delete", keys: "Del", run: () => data.remove.mutate(c) }] : []),
+      ...(c.note.status !== "done" ? [{ label: "Delete", keys: "Del", run: () => deleteConversation(c) }] : []),
     ];
+  }
+
+  // After a delete, focus moves to the neighbouring header (or the composer
+  // when none is left) once the deleted conversation has left the list.
+  const afterDelete = useRef<{ gone: string; next: string | null } | null>(null);
+  useEffect(() => {
+    const pending = afterDelete.current;
+    if (!pending || conversations.some((c) => c.key === pending.gone)) return;
+    afterDelete.current = null;
+    const target = pending.next ?? conversations[0]?.key ?? null;
+    if (target) {
+      setSelectedKey(target);
+      headerRefs.current.get(target)?.focus();
+    } else {
+      focusComposer();
+    }
+  }, [conversations]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function deleteConversation(c: Conversation): void {
+    const index = conversations.indexOf(c);
+    afterDelete.current = { gone: c.key, next: (conversations[index + 1] ?? conversations[index - 1])?.key ?? null };
+    data.remove.mutate(c, {
+      onError: () => {
+        afterDelete.current = null;
+      },
+    });
   }
 
   // Answer the waiting conversation once it has loaded.
@@ -253,7 +284,22 @@ export function AgentPanel({
     } else if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
+      // The collapsed reply button: back to its conversation header.
+      const ownHeader =
+        event.target instanceof HTMLElement && event.target.closest("[data-agent-reply]")
+          ? event.target.closest("[data-agent-conversation]")?.querySelector<HTMLElement>(":scope > button")
+          : null;
+      if (ownHeader) {
+        ownHeader.focus();
+        return;
+      }
       onClose();
+      // Closing hands focus back to where the panel was opened from. A panel
+      // shown by default has no such place; land on the view's grid, not <body>.
+      window.setTimeout(() => {
+        const active = document.activeElement;
+        if (!active || active === document.body) focusPrimaryGrid();
+      }, 0);
     }
   }
 
@@ -321,6 +367,7 @@ export function AgentPanel({
             replyBusy={data.send.isPending && data.send.variables?.replyTo?.key === c.key}
             onReply={async (body) => {
               await data.send.mutateAsync({ body, replyTo: c, quote: null });
+              resetChoice();
             }}
             onReplyCollapse={() => headerRefs.current.get(c.key)?.focus()}
           />
@@ -337,37 +384,39 @@ export function AgentPanel({
           <p className="py-2 text-muted-foreground">No conversations yet. Ask below; the agent replies here.</p>
         ) : null}
       </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 border-t border-border px-2 py-0.5 text-[11px] text-muted-foreground">
-        {help ? (
-          <RowShortcutHints
-            hints={[
-              { keys: "↑↓", label: "move" },
-              { keys: "→←", label: "fold" },
-              { keys: "R", label: "reply" },
-              { keys: "M", label: "ask" },
-              { keys: "X", label: "resolve" },
-              { keys: "⇧Enter", label: "run now" },
-              { keys: "P", label: "pin" },
-              { keys: "⇧Tab", label: "context (from the input)" },
-              { keys: "Esc", label: "close" },
-            ]}
-          />
-        ) : null}
-        {starting ? <span>Starting…</span> : null}
-        <span className="flex-1" />
+      {help || starting ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-0.5 border-t border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+          {help ? (
+            <RowShortcutHints
+              hints={[
+                { keys: "↑↓", label: "move" },
+                { keys: "→←", label: "fold" },
+                { keys: "R", label: "reply" },
+                { keys: "M", label: "ask" },
+                { keys: "X", label: "resolve" },
+                { keys: "⇧Enter", label: "run now" },
+                { keys: "P", label: "pin" },
+                { keys: "⇧Tab", label: "agent / context (from the input)" },
+                { keys: "Esc", label: "close" },
+              ]}
+            />
+          ) : null}
+          {starting ? <span>Starting…</span> : null}
+        </div>
+      ) : null}
+
+      {/* The keys toggle sits in the composer's corner instead of taking a row of its own. */}
+      <div className="relative shrink-0 border-t border-border py-1.5 pl-2 pr-6">
         <button
           type="button"
           onClick={() => setHelp((open) => !open)}
           aria-expanded={help}
           aria-label="Show keys and subject options"
           title="Keys and subject options (?)"
-          className="rounded px-1 hover:bg-accent"
+          className="absolute right-1 top-1 rounded px-1 text-[11px] text-muted-foreground hover:bg-accent"
         >
           ?
         </button>
-      </div>
-
-      <div className="shrink-0 border-t border-border px-2 py-1.5">
         {drafts ? (
           <p className="mb-1 flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-[11px] text-amber-900 dark:bg-amber-950 dark:text-amber-200">
             <span className="flex-1">{drafts} {drafts === 1 ? "draft" : "drafts"} not sent</span>
@@ -407,6 +456,17 @@ export function AgentPanel({
           onListAttachedChange={(attach) => onListAttachedChange(attach && liveList ? liveList.id : null)}
           onEscape={focusComposer}
         />
+        {data.readOnly ? null : (
+          <AgentPicker
+            value={data.agent}
+            defaultAgent={data.defaultAgent}
+            onChange={(agent) => setChoice({ agent, model: null })}
+            model={data.model}
+            models={data.modelChoices}
+            onModelChange={(model) => setChoice((prev) => ({ ...prev, model }))}
+            onEscape={focusComposer}
+          />
+        )}
         <div ref={composerRef} data-agent-composer="true">
           <CommentComposer
             placeholder={subject ? `Ask about ${subjectLabel(subject)}… (M)` : "Ask the agent… (M)"}
@@ -417,6 +477,7 @@ export function AgentPanel({
             onSubmit={async (body) => {
               await data.send.mutateAsync({ body, replyTo: null, quote });
               onClearQuote();
+              resetChoice();
             }}
           />
         </div>

@@ -174,6 +174,20 @@ describe("AnalyzeView", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
+  it("opens the editor with N on the empty list and returns focus on Escape", async () => {
+    renderView();
+
+    await screen.findByText("No groups yet.");
+    const list = document.querySelector<HTMLElement>('[data-primary-grid="true"]')!;
+    list.focus();
+    fireEvent.keyDown(list, { key: "n" });
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(list));
+  });
+
   it("opens the editor for the selected group with E", async () => {
     saveAnalyzeGroups([group()]);
     renderView();
