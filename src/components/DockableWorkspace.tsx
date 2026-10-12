@@ -368,8 +368,40 @@ function createHeaderActions(
   return function HeaderActions({ api, group, containerApi, activePanel }: IDockviewHeaderActionsProps) {
     const slot = useSyncExternalStore(headerSlots.subscribe, () => headerSlots.get(activePanel?.id));
     const resizablePanel = group.panels.find((panel) => resizeSpecs.has(panel.id));
-    const [placements] = useState(() => groupResizePlacements(group));
+    const [placements, setPlacements] = useState(() => groupResizePlacements(group));
     const [dimensions, setDimensions] = useState(() => ({ width: api.width, height: api.height }));
+
+    // A group keeps its HeaderActions while the layout around it changes (a
+    // sibling moved next to it, a restore, the Agent docking), so the boundary
+    // it owns has to be re-derived; a stale list leaves a boundary with no
+    // handle on either side, and the native sash is pointer-events: none.
+    useEffect(() => {
+      const refresh = () =>
+        setPlacements((current) => {
+          const next = groupResizePlacements(group);
+          const same =
+            next.length === current.length &&
+            next.every(
+              (placement, index) =>
+                placement.axis === current[index].axis &&
+                placement.previousView === current[index].previousView,
+            );
+          return same ? current : next;
+        });
+      let frame = 0;
+      // Layout events can fire before dockview has put the views in their new
+      // split, so read the DOM once it has settled.
+      const refreshSoon = () => {
+        cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(refresh);
+      };
+      refresh();
+      const disposable = containerApi.onDidLayoutChange(refreshSoon);
+      return () => {
+        cancelAnimationFrame(frame);
+        disposable.dispose();
+      };
+    }, [containerApi, group]);
 
     useEffect(() => {
       const disposable = api.onDidDimensionsChange((event) =>
