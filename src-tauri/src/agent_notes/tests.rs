@@ -2,6 +2,8 @@ use super::*;
 
 use chrono::TimeZone;
 
+use super::skill::ensure_skill;
+
 fn at(h: u32, m: u32, s: u32) -> DateTime<Local> {
     Local.with_ymd_and_hms(2026, 9, 26, h, m, s).unwrap()
 }
@@ -345,4 +347,30 @@ fn ask_guide_points_at_the_notes_root() {
     assert!(guide.contains(r"C:/data/agent-notes\ask-{番号}\*.md"));
     assert!(guide.contains("`summarize`"));
     assert!(!guide.contains("{notes_root}"));
+}
+
+#[test]
+fn skill_shares_the_guide_text_and_leaves_user_skills_alone() {
+    let temp = tempfile::tempdir().unwrap();
+    let notes_root = Path::new("C:/data/agent-notes");
+    ensure_skill(temp.path(), notes_root).unwrap();
+    let path = temp.path().join("devdeck-notes").join("SKILL.md");
+    let skill = fs::read_to_string(&path).unwrap();
+    assert!(skill.starts_with("---\nname: devdeck-notes\n"));
+    assert!(skill.contains("<!-- reply {名前}"));
+    assert!(!skill.contains("{notes_root}"));
+
+    // The AGENTS.md guide carries the same body.
+    ensure_guide(temp.path(), NoteTarget::WorkItem, notes_root).unwrap();
+    let guide = fs::read_to_string(temp.path().join("AGENTS.md")).unwrap();
+    let body = skill.split_once("# DevDeck の Agent notes").unwrap().1;
+    assert!(guide.contains(body));
+
+    // An outdated managed skill is refreshed; a user-written one is kept.
+    fs::write(&path, skill.replace("data-agent-note", "OLD")).unwrap();
+    ensure_skill(temp.path(), notes_root).unwrap();
+    assert_eq!(fs::read_to_string(&path).unwrap(), skill);
+    fs::write(&path, "user skill").unwrap();
+    ensure_skill(temp.path(), notes_root).unwrap();
+    assert_eq!(fs::read_to_string(&path).unwrap(), "user skill");
 }

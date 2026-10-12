@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 
 use chrono::Utc;
 
-use crate::agent_notes::{ensure_guide, migrate_legacy_notes, notes_root, NoteTarget};
+use crate::agent_notes::{
+    ensure_guide, ensure_skills, migrate_legacy_notes, notes_root, NoteTarget,
+};
 
 use crate::db::{
     AppDatabase, AppSettings, NotificationRule, DEFAULT_QUIET_HOURS_END, DEFAULT_QUIET_HOURS_START,
@@ -178,7 +180,8 @@ impl SettingsService {
 }
 
 /// Moves notes left in both result folders by older versions into
-/// `notes_root`, then places or refreshes the agent notes guide there. Best
+/// `notes_root`, then places or refreshes the agent notes guide there and the
+/// `devdeck-notes` skill for the installed agents. Best
 /// effort: a folder that cannot take either must not block saving the rest of
 /// the settings or starting the app.
 pub(crate) fn prepare_agent_notes(settings: &AppSettings, notes_root: &Path) {
@@ -195,6 +198,7 @@ pub(crate) fn prepare_agent_notes(settings: &AppSettings, notes_root: &Path) {
             }
         }
     }
+    ensure_skills(notes_root);
 }
 
 pub fn normalize_app_settings(input: UpdateAppSettingsInput) -> AppSettings {
