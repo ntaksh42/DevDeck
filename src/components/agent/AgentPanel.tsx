@@ -338,7 +338,7 @@ export function AgentPanel({
         ref={listRef}
         tabIndex={-1}
         aria-label="Agent conversations"
-        className="min-h-0 flex-1 space-y-2 overflow-y-auto px-2 py-1 outline-none"
+        className="min-h-0 shrink space-y-2 overflow-y-auto px-2 py-1 outline-none"
         onKeyDown={onListKeyDown}
       >
         {data.loading ? <LoadingState /> : null}
