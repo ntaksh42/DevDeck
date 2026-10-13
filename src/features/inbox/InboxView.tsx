@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   commandErrorMessage,
   getActionInboxCounts,
   getAppSettings,
   listOrganizations,
   searchPullRequestMentions,
-  setActionInboxItemState,
   type MentionCandidate,
 } from "@/lib/azdoCommands";
 import { navigateToPullRequest, navigateToWorkItem } from "@/lib/crossLinks";
@@ -32,6 +31,7 @@ import {
   inboxAgentSubject,
   isDerivedEntry,
   isPullRequestItem,
+  isThreadItem,
   isVoteItem,
   isWorkItemItem,
   type InboxEntry,
@@ -41,6 +41,7 @@ import {
 import { useInboxDetail, type VoteValue } from "./useInboxDetail";
 import { useInboxEntries } from "./useInboxEntries";
 import { useInboxListFocus } from "./useInboxListFocus";
+import { useInboxStateChanges } from "./useInboxStateChanges";
 
 const OVERSCAN = 8;
 const LAYOUT_STORAGE_KEY = "azdodeck:layout:inbox:dockview:v1";
@@ -51,7 +52,6 @@ export function InboxView({
 }: {
   onOpenView?: (view: "pipelines") => void;
 }) {
-  const queryClient = useQueryClient();
   const [tab, setTab] = useState<InboxTab>("open");
   const [organizationId, setOrganizationId] = useState("");
   const [filterText, setFilterText] = useState("");
@@ -78,11 +78,17 @@ export function InboxView({
   });
   const readOnly = settingsQuery.data?.readOnlyValidationModeEnabled ?? false;
 
-  const { entries, derivedCount, isLoading, error, refetch } = useInboxEntries({
+  const { entries: fetchedEntries, derivedCount, isLoading, error, refetch } = useInboxEntries({
     tab,
     organizationId,
     filterText,
   });
+  const stateChanges = useInboxStateChanges({
+    entries: fetchedEntries,
+    tab,
+    onReselect: (target) => moveSelectionTo(target),
+  });
+  const entries = stateChanges.visibleEntries;
   const countsQuery = useQuery({
     queryKey: ["actionInbox", "counts", organizationId],
     queryFn: () => getActionInboxCounts(organizationId || undefined),
@@ -128,13 +134,6 @@ export function InboxView({
     [selected?.organizationId],
   );
 
-  const stateMutation = useMutation({
-    mutationFn: setActionInboxItemState,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["actionInbox"] });
-    },
-  });
-
   const virtual = useGridVirtualizer({
     rowCount: entries.length,
     rowHeight: INBOX_ROW_HEIGHT,
@@ -151,11 +150,17 @@ export function InboxView({
     window.setTimeout(() => focusRow(target), 0);
   }
 
-  /** Stored items change state locally; derived entries have none and are skipped. */
-  function changeState(entry: InboxEntry, state: InboxTab, snoozedUntil?: string) {
-    if (isDerivedEntry(entry)) return;
-    stateMutation.mutate({ ids: [entry.id], state, snoozedUntil });
+  /** The item leaves the list at once, so the next row is selected and the list keeps focus. */
+  function changeState(entry: InboxEntry, state: InboxTab, snoozedUntil?: string, resolved = false) {
+    stateChanges.changeState(entry, state, snoozedUntil, { resolved });
     focusList();
+  }
+
+  /** Scrolls the preview by about a page without moving focus off the list. */
+  function scrollPreview(direction: 1 | -1) {
+    const preview = previewRef.current;
+    if (!preview) return;
+    preview.scrollBy({ top: direction * Math.max(preview.clientHeight * 0.9, 40) });
   }
 
   function openInApp(entry: InboxEntry) {
@@ -204,7 +209,7 @@ export function InboxView({
     const resolving = !detail.thread.isResolved;
     await detail.setResolved(resolving);
     // Resolving handles the item; reactivating a thread leaves it where it is.
-    if (resolving) changeState(entry, "done");
+    if (resolving) changeState(entry, "done", undefined, true);
   }
 
   async function vote(value: VoteValue) {
@@ -254,6 +259,11 @@ export function InboxView({
       filterBar.onOpen();
       return;
     }
+    if (key.toLowerCase() === "u" && !event.shiftKey) {
+      // Works on an emptied list too: undoing the last item brings it back.
+      if (stateChanges.undoLast()) event.preventDefault();
+      return;
+    }
     if (entries.length === 0) return;
     if (event.shiftKey && key === "Enter") {
       event.preventDefault();
@@ -287,9 +297,18 @@ export function InboxView({
     } else if (lower === "o") {
       event.preventDefault();
       openInBrowser(selected);
+    } else if (lower === "e" && event.shiftKey) {
+      // Resolve + Done, the same as the preview's button.
+      if (tab === "open" && isThreadItem(selected) && detail.thread && !detail.thread.isResolved && !readOnly) {
+        event.preventDefault();
+        void toggleThreadStatus();
+      }
     } else if (lower === "e") {
       event.preventDefault();
       changeState(selected, tab === "done" ? "open" : "done");
+    } else if (key === " ") {
+      event.preventDefault();
+      scrollPreview(event.shiftKey ? -1 : 1);
     } else if (lower === "z") {
       event.preventDefault();
       if (tab === "snoozed") changeState(selected, "open");
@@ -386,6 +405,11 @@ export function InboxView({
           }}
           onOpen={openInApp}
           onKeyDown={handleListKeyDown}
+          undo={stateChanges.undo}
+          onUndo={() => {
+            stateChanges.undoLast();
+            focusList();
+          }}
         />
       ),
     },

@@ -18,7 +18,7 @@ test("replies and resolves PR threads in Inbox using the keyboard", async ({ pag
 
   const next = list.getByRole("option").filter({ hasText: "!189 android-app" });
   await next.click();
-  const resolve = page.getByRole("button", { name: "Resolve + Done", exact: true });
+  const resolve = page.getByRole("button", { name: /^Resolve \+ Done/ });
   await resolve.focus();
   await page.keyboard.press("Enter");
   await expect(next).toHaveCount(0);
@@ -69,4 +69,36 @@ test("Ctrl+Enter opens the PR from an agent reply row", async ({ page }) => {
   await expect.poll(() => page.evaluate(() => (window as Window & { openedUrls: string[] }).openedUrls)).toEqual([
     "https://dev.azure.com/contoso/Platform/_git/api-gateway/pullrequest/101",
   ]);
+});
+
+test("finishes, undoes and snoozes Inbox items with the keyboard alone", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("complementary").first().getByRole("button", { name: /^Inbox/ }).click();
+  const list = page.getByRole("listbox", { name: "Inbox items" });
+  // Pipeline approvals are fetched live and join the list later; wait for them
+  // so the rows (and the index-based selection) stay put during the flow.
+  await expect(list.getByRole("option").filter({ hasText: /^Approval/ }).first()).toBeVisible();
+  const first = list.getByRole("option").filter({ hasText: "!42 azdo-dashboard" });
+  await first.click();
+  const selected = list.getByRole("option", { selected: true });
+
+  // E finishes the item; the next row is selected and keeps focus.
+  await page.keyboard.press("e");
+  await expect(first).toHaveCount(0);
+  await expect(selected).toBeFocused();
+  await expect(page.getByRole("status").filter({ hasText: "Marked done" })).toBeVisible();
+
+  // U puts it back and selects it again.
+  await page.keyboard.press("u");
+  await expect(selected).toContainText("!42 azdo-dashboard");
+  await expect(selected).toBeFocused();
+
+  // Z opens the snooze menu; a number picks a preset and focus returns to the list.
+  await page.keyboard.press("z");
+  await expect(page.getByRole("menu", { name: "Snooze until" })).toBeVisible();
+  await page.keyboard.press("2");
+  await expect(page.getByRole("menu", { name: "Snooze until" })).toHaveCount(0);
+  await expect(first).toHaveCount(0);
+  await expect(selected).toBeFocused();
+  await expect(page.getByRole("button", { name: "Snoozed 1" })).toBeVisible();
 });

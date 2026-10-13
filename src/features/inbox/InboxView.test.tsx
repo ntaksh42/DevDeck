@@ -8,6 +8,7 @@ import { openExternalUrl } from "@/lib/openExternal";
 import { NAVIGATE_PULL_REQUEST_EVENT } from "@/lib/crossLinks";
 import { resetDemoInbox } from "@/lib/demo/actionInbox";
 import { InboxView } from "./InboxView";
+import { approvalRows, isAgentRow, isDerived, openList, renderView, rowFor, storedRows } from "./inboxViewTestUtils";
 
 vi.mock("@/lib/openExternal", () => ({ openExternalUrl: vi.fn() }));
 
@@ -26,51 +27,6 @@ afterEach(() => {
   // The Agent panel's open state is app-wide; a test that opens it must not leak.
   resetAgentPanelState();
 });
-
-function renderView(props: { onOpenView?: (view: "pipelines") => void } = {}) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
-    <QueryClientProvider client={client}>
-      <InboxView {...props} />
-    </QueryClientProvider>,
-  );
-}
-
-const isApproval = (row: HTMLElement) => row.textContent?.startsWith("Approval") ?? false;
-/** Derived rows: live pipeline approvals and agent replies waiting for the user. */
-const isAgentRow = (row: HTMLElement) => /agent: \d+ notes? waiting/.test(row.textContent ?? "");
-const isDerived = (row: HTMLElement) => isApproval(row) || isAgentRow(row);
-
-/** Rows of stored items (everything except the derived rows). */
-function storedRows(list: HTMLElement): HTMLElement[] {
-  return within(list)
-    .queryAllByRole("option")
-    .filter((row) => !isDerived(row));
-}
-
-async function openList() {
-  const list = await screen.findByRole("listbox", { name: "Inbox items" });
-  await waitFor(() => {
-    expect(storedRows(list)).toHaveLength(6);
-  });
-  return list;
-}
-
-/** Approvals are fetched live after the stored items, so wait for them. */
-async function approvalRows(list: HTMLElement): Promise<HTMLElement[]> {
-  await waitFor(() => {
-    expect(within(list).queryAllByRole("option").filter(isApproval).length).toBeGreaterThan(0);
-  });
-  return within(list).getAllByRole("option").filter(isApproval);
-}
-
-function rowFor(list: HTMLElement, text: string): HTMLElement {
-  const row = within(list)
-    .getAllByRole("option")
-    .find((candidate) => candidate.textContent?.includes(text));
-  if (!row) throw new Error(`no row containing ${text}`);
-  return row;
-}
 
 describe("InboxView", () => {
   it("lists stored items newest first with their kind labels", async () => {
@@ -277,6 +233,8 @@ describe("InboxView", () => {
     });
     expect(openExternalUrl).not.toHaveBeenCalled();
     await waitFor(() => expect(document.activeElement).toBe(within(list).getByRole("option", { selected: true })));
+    // The row leaves at once; the stored state lands with the refetch.
+    expect(await screen.findByRole("button", { name: "Done 1" })).toBeTruthy();
   });
 
   it("clears the reply draft when selecting another inbox thread", async () => {
@@ -293,11 +251,12 @@ describe("InboxView", () => {
     renderView();
     const list = await openList();
     fireEvent.click(rowFor(list, "!42"));
-    fireEvent.click(await screen.findByRole("button", { name: "Resolve + Done" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Resolve \+ Done/ }));
     await waitFor(() => {
       expect(storedRows(list).some((row) => row.textContent?.includes("!42"))).toBe(false);
     });
     expect(openExternalUrl).not.toHaveBeenCalled();
+    expect(await screen.findByRole("button", { name: "Done 1" })).toBeTruthy();
   });
 
   it("votes on a review request with a and finishes the item", async () => {
@@ -331,6 +290,7 @@ describe("InboxView", () => {
     await waitFor(() => {
       expect(storedRows(list).some((row) => row.textContent?.includes("#123"))).toBe(false);
     });
+    expect(await screen.findByRole("button", { name: "Done 1" })).toBeTruthy();
   });
 
   it("replies to a work item comment by quoting it and mentioning its author", async () => {

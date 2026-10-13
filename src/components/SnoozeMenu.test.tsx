@@ -99,3 +99,22 @@ describe("SnoozeMenu custom date", () => {
     expect(onSnooze).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("SnoozeMenu number keys", () => {
+  it("picks the preset with that number", () => {
+    const { onSnooze } = renderWithGrid();
+    fireEvent.keyDown(screen.getAllByRole("menuitem")[0], { key: "3" });
+    expect(onSnooze).toHaveBeenCalledTimes(1);
+    const until = new Date(onSnooze.mock.calls[0][0] as string);
+    const expected = new Date();
+    expected.setDate(expected.getDate() + 3);
+    expect(until.getDate()).toBe(expected.getDate());
+  });
+
+  it("leaves digits alone while typing a custom date", () => {
+    const { onSnooze } = renderWithGrid();
+    const input = document.querySelector('input[type="datetime-local"]') as HTMLInputElement;
+    fireEvent.keyDown(input, { key: "2" });
+    expect(onSnooze).not.toHaveBeenCalled();
+  });
+});

@@ -72,6 +72,16 @@ export function SnoozeMenu({
         onClose();
         return;
       }
+      // 1-9 pick a preset, except while typing in the custom date field.
+      const preset = /^[1-9]$/.test(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey
+        ? SNOOZE_PRESETS[Number(e.key) - 1]
+        : undefined;
+      if (preset && !(e.target instanceof HTMLInputElement)) {
+        e.preventDefault();
+        e.stopPropagation();
+        onSnooze(presetToIso(preset));
+        return;
+      }
       if (menuRef.current?.contains(e.target as Node)) return;
       e.preventDefault();
       e.stopPropagation();
@@ -83,7 +93,7 @@ export function SnoozeMenu({
     }
     document.addEventListener("keydown", onKeyDown, true);
     return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [onClose]);
+  }, [onClose, onSnooze]);
 
   // Up/Down move focus between the focusable controls (presets, the custom
   // input, the confirm button), wrapping at the ends.
@@ -131,16 +141,18 @@ export function SnoozeMenu({
         Snooze until
       </div>
       <div className="p-1">
-        {SNOOZE_PRESETS.map((preset) => (
+        {SNOOZE_PRESETS.map((preset, presetIndex) => (
           <button
             key={preset.id}
             type="button"
             role="menuitem"
             data-snooze-item="true"
             onClick={() => onSnooze(presetToIso(preset))}
-            className="w-full rounded px-2 py-1 text-left text-sm hover:bg-secondary focus:outline-none focus:ring-1 focus:ring-ring focus:bg-secondary"
+            aria-keyshortcuts={String(presetIndex + 1)}
+            className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-secondary focus:outline-none focus:ring-1 focus:ring-ring focus:bg-secondary"
           >
-            {preset.label}
+            <kbd className="w-3 shrink-0 font-mono text-[11px] text-muted-foreground">{presetIndex + 1}</kbd>
+            <span className="min-w-0 flex-1">{preset.label}</span>
           </button>
         ))}
       </div>

@@ -6,6 +6,7 @@ import type { useGridVirtualizer } from "@/lib/useGridVirtualizer";
 import type { useInboxListFocus } from "./useInboxListFocus";
 import { InboxRow } from "./InboxRow";
 import type { InboxEntry, InboxTab } from "./inboxPresentation";
+import type { InboxUndo } from "./useInboxStateChanges";
 
 const EMPTY_MESSAGE: Record<InboxTab, string> = {
   open: "Nothing needs your response.",
@@ -36,6 +37,8 @@ export function InboxListPane({
   onSelect,
   onOpen,
   onKeyDown,
+  undo,
+  onUndo,
 }: {
   tab: InboxTab;
   tabCounts: Record<InboxTab, number>;
@@ -54,6 +57,8 @@ export function InboxListPane({
   onSelect: (index: number) => void;
   onOpen: (entry: InboxEntry) => void;
   onKeyDown: (event: KeyboardEvent) => void;
+  undo: InboxUndo | null;
+  onUndo: () => void;
 }) {
   const selected = entries[selectedIndex];
   const virtualRows = entries.slice(virtual.firstRow, virtual.lastRow);
@@ -131,7 +136,21 @@ export function InboxListPane({
           onToggle: () => onTabChange(tab === "snoozed" ? "open" : "snoozed"),
         }}
         helpSection="inbox"
-      />
+      >
+        {undo ? (
+          <span role="status" className="flex shrink-0 items-center gap-1.5">
+            <span>{undo.label}</span>
+            <button
+              type="button"
+              onClick={onUndo}
+              title="Undo (U)"
+              className="rounded border border-border bg-card px-2 py-0.5 text-xs hover:bg-secondary focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              Undo <kbd className="font-mono text-[10px]">U</kbd>
+            </button>
+          </span>
+        ) : null}
+      </ListStatusBar>
     </section>
   );
 }

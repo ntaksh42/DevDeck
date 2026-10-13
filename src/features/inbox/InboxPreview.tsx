@@ -174,7 +174,7 @@ export function InboxPreview({
                   disabled={detail.busy}
                   onClick={onResolveAndDone}
                 >
-                  Resolve + Done
+                  Resolve + Done <Kbd>Shift+E</Kbd>
                 </button>
               ) : null}
               <button type="button" className={ACTION_BUTTON} onClick={onDone}>
