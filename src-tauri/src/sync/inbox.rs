@@ -35,6 +35,8 @@ fn review_item(
         author: pr.created_by.clone(),
         snippet: None,
         web_url: pr.web_url.clone(),
+        file_path: None,
+        line: None,
     }
 }
 
@@ -148,6 +150,8 @@ pub(super) fn update_assigned_work_item_items(
                 )
                 .filter(|text| !text.is_empty()),
                 web_url: item.web_url.clone(),
+                file_path: None,
+                line: None,
             })
             .collect();
         match db.insert_inbox_items(&new_items) {

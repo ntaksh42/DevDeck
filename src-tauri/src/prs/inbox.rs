@@ -66,6 +66,20 @@ fn summarize(content: &str, me: &str) -> String {
     out
 }
 
+/// Where a thread sits in the code: its file and the first line on the new
+/// side (the old side for a comment on a deleted line). `None` for PR-wide
+/// threads.
+pub(crate) fn thread_location(thread: &GitThread) -> Option<(String, Option<i64>)> {
+    let context = thread.thread_context.as_ref()?;
+    let file_path = context.file_path.clone().filter(|path| !path.is_empty())?;
+    let line = context
+        .right_file_start
+        .as_ref()
+        .or(context.left_file_start.as_ref())
+        .map(|position| position.line);
+    Some((file_path, line))
+}
+
 /// Ids of open items whose thread no longer needs the user: the thread was
 /// resolved or deleted, the comment was deleted, or the user answered after it.
 pub(crate) fn resolved_inbox_ids(
@@ -134,27 +148,36 @@ pub(crate) fn update_action_inbox(
             .get_inbox_comment_cursor(&org.id, &pr.repository_id, pr.pull_request_id)
             .unwrap_or(None);
         let (hits, max_id) = pr_comment_hits(threads, me, last_seen, *authored);
+        let locations: HashMap<i64, (String, Option<i64>)> = threads
+            .iter()
+            .filter_map(|thread| thread_location(thread).map(|location| (thread.id, location)))
+            .collect();
         let new_items: Vec<NewInboxItem> = hits
             .into_iter()
-            .map(|hit| NewInboxItem {
-                organization_id: org.id.clone(),
-                kind: if hit.mentions_me {
-                    KIND_PR_MENTION
-                } else {
-                    KIND_PR_REPLY
+            .map(|hit| {
+                let location = locations.get(&hit.thread_id).cloned();
+                NewInboxItem {
+                    organization_id: org.id.clone(),
+                    kind: if hit.mentions_me {
+                        KIND_PR_MENTION
+                    } else {
+                        KIND_PR_REPLY
+                    }
+                    .to_string(),
+                    subject_id: pr.pull_request_id,
+                    project_id: pr.project_id.clone(),
+                    project_name: pr.project_name.clone(),
+                    repository_id: pr.repository_id.clone(),
+                    repository_name: pr.repository_name.clone(),
+                    thread_id: hit.thread_id,
+                    comment_id: hit.comment_id,
+                    title: pr.title.clone(),
+                    author: hit.author,
+                    snippet: Some(summarize(&hit.content, me.unwrap_or_default())),
+                    web_url: pr.web_url.clone(),
+                    line: location.as_ref().and_then(|(_, line)| *line),
+                    file_path: location.map(|(path, _)| path),
                 }
-                .to_string(),
-                subject_id: pr.pull_request_id,
-                project_id: pr.project_id.clone(),
-                project_name: pr.project_name.clone(),
-                repository_id: pr.repository_id.clone(),
-                repository_name: pr.repository_name.clone(),
-                thread_id: hit.thread_id,
-                comment_id: hit.comment_id,
-                title: pr.title.clone(),
-                author: hit.author,
-                snippet: Some(summarize(&hit.content, me.unwrap_or_default())),
-                web_url: pr.web_url.clone(),
             })
             .collect();
         match db.insert_inbox_items(&new_items) {
@@ -172,6 +195,13 @@ pub(crate) fn update_action_inbox(
         }
         match db.open_inbox_refs_for_pr(&org.id, &pr.repository_id, pr.pull_request_id) {
             Ok(open) => {
+                for item in &open {
+                    if let Some((path, line)) = locations.get(&item.thread_id) {
+                        if let Err(e) = db.backfill_inbox_location(item.id, path, *line) {
+                            tracing::warn!(org = %org.name, pr = pr.pull_request_id, error = ?e, "inbox: failed to store a thread location");
+                        }
+                    }
+                }
                 let done = resolved_inbox_ids(threads, me, &open);
                 if done.is_empty() {
                     continue;

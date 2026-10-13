@@ -28,6 +28,8 @@ export function demoPipelineApprovals(): PipelineApprovalSummary[] {
       executionOrder: "anyOrder",
       createdOn: "2026-05-27T07:30:00Z",
       assignedApprovers: ["Demo User"],
+      pipelineName: "web-deploy",
+      runName: "20260527.3",
     },
     {
       id: "demo-approval-2",
@@ -37,6 +39,8 @@ export function demoPipelineApprovals(): PipelineApprovalSummary[] {
       executionOrder: "inSequence",
       createdOn: "2026-05-27T06:10:00Z",
       assignedApprovers: ["Demo User", "Grace Chen"],
+      pipelineName: null,
+      runName: null,
     },
   ];
 }

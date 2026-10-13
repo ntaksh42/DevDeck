@@ -1,4 +1,4 @@
-use azdo_client::{GitThread, GitThreadComment, IdentityRef};
+use azdo_client::{GitFilePosition, GitThread, GitThreadComment, GitThreadContext, IdentityRef};
 use tempfile::NamedTempFile;
 
 use super::*;
@@ -320,4 +320,83 @@ fn without_a_known_user_nothing_is_detected() {
         update_action_inbox(&db, &org, &scan(5, threads)),
         InboxUpdate::default()
     );
+}
+
+fn on_line(mut thread: GitThread, path: &str, right: Option<i64>, left: Option<i64>) -> GitThread {
+    thread.thread_context = Some(GitThreadContext {
+        file_path: Some(path.into()),
+        right_file_start: right.map(|line| GitFilePosition { line }),
+        left_file_start: left.map(|line| GitFilePosition { line }),
+    });
+    thread
+}
+
+#[test]
+fn thread_location_prefers_the_new_side_and_skips_pr_wide_threads() {
+    let base = || thread(1, "active", vec![]);
+    assert_eq!(
+        thread_location(&on_line(base(), "/src/a.rs", Some(42), Some(40))),
+        Some(("/src/a.rs".to_string(), Some(42)))
+    );
+    assert_eq!(
+        thread_location(&on_line(base(), "/src/a.rs", None, Some(7))),
+        Some(("/src/a.rs".to_string(), Some(7)))
+    );
+    assert_eq!(thread_location(&base()), None);
+    assert_eq!(thread_location(&on_line(base(), "", Some(1), None)), None);
+}
+
+#[test]
+fn a_new_item_keeps_its_thread_location_and_older_open_items_are_backfilled() {
+    let (_tf, db, org) = setup();
+    db.set_inbox_comment_cursor("org1", "repo", 5, 10).unwrap();
+    // An item stored before v25 recorded locations.
+    db.insert_inbox_items(&[crate::db::NewInboxItem {
+        organization_id: "org1".into(),
+        kind: KIND_PR_MENTION.into(),
+        subject_id: 5,
+        project_id: "proj".into(),
+        project_name: "Project".into(),
+        repository_id: "repo".into(),
+        repository_name: "api".into(),
+        thread_id: 2,
+        comment_id: 9,
+        title: "PR 5".into(),
+        author: None,
+        snippet: None,
+        web_url: None,
+        file_path: None,
+        line: None,
+    }])
+    .unwrap();
+    let threads = vec![
+        on_line(
+            thread(
+                1,
+                "active",
+                vec![comment(20, "tanaka", &format!("@<{ME}> null?"))],
+            ),
+            "/src/Retry.cs",
+            Some(42),
+            None,
+        ),
+        on_line(
+            thread(
+                2,
+                "active",
+                vec![comment(9, "sato", &format!("@<{ME}> old"))],
+            ),
+            "/src/Old.cs",
+            Some(3),
+            None,
+        ),
+    ];
+    update_action_inbox(&db, &org, &scan(5, threads));
+    let items = db.list_inbox_items(None, InboxListState::Open, 50).unwrap();
+    let new_item = items.iter().find(|item| item.comment_id == 20).unwrap();
+    assert_eq!(new_item.file_path.as_deref(), Some("/src/Retry.cs"));
+    assert_eq!(new_item.line, Some(42));
+    let old_item = items.iter().find(|item| item.comment_id == 9).unwrap();
+    assert_eq!(old_item.file_path.as_deref(), Some("/src/Old.cs"));
+    assert_eq!(old_item.line, Some(3));
 }

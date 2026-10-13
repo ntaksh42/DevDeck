@@ -438,7 +438,12 @@ async fn list_pipeline_approvals_filters_by_state_and_user() {
                     "status": "pending",
                     "order": 1,
                     "assignedApprover": { "id": "user-1", "displayName": "Test User" }
-                }]
+                }],
+                "pipeline": {
+                    "id": "34",
+                    "name": "web-deploy",
+                    "owner": { "id": 1234, "name": "20260513.1" }
+                }
             }]
         })))
         .mount(&server)
@@ -452,6 +457,15 @@ async fn list_pipeline_approvals_filters_by_state_and_user() {
     assert_eq!(approvals.len(), 1);
     assert_eq!(approvals[0].status.as_deref(), Some("pending"));
     assert_eq!(approvals[0].steps.len(), 1);
+    let pipeline = approvals[0].pipeline.as_ref().unwrap();
+    assert_eq!(pipeline.name.as_deref(), Some("web-deploy"));
+    assert_eq!(
+        pipeline
+            .owner
+            .as_ref()
+            .and_then(|owner| owner.name.as_deref()),
+        Some("20260513.1")
+    );
 }
 
 #[tokio::test]

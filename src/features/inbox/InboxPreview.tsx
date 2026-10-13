@@ -25,6 +25,7 @@ import {
   WorkItemPanel,
 } from "./InboxPreviewPanels";
 import type { InboxDetail, VoteValue } from "./useInboxDetail";
+import { InboxContext } from "./InboxContext";
 
 function bandTitle(item: InboxEntry): string {
   if (isThreadItem(item)) return "Thread";
@@ -54,6 +55,8 @@ export function InboxPreview({
   onSnooze,
   onWake,
   onOpenLink,
+  contextExpanded,
+  onToggleContext,
 }: {
   item: InboxEntry | null;
   tab: InboxTab;
@@ -74,6 +77,8 @@ export function InboxPreview({
   onSnooze: (anchor: DOMRect) => void;
   onWake: () => void;
   onOpenLink: (link: InboxLink) => void;
+  contextExpanded: boolean;
+  onToggleContext: () => void;
 }) {
   if (!item) {
     return (
@@ -121,6 +126,18 @@ export function InboxPreview({
           {formatRelativeDate(item.detectedAt)}
         </span>
       </div>
+
+      {!detail.isLoading && !detail.error ? (
+        <InboxContext
+          item={item}
+          review={review}
+          thread={thread}
+          workItem={workItem}
+          expanded={contextExpanded}
+          onToggleExpanded={onToggleContext}
+          resolveImageSource={resolveImageSource}
+        />
+      ) : null}
 
       <div className="-mx-2 mt-1">
         <PreviewBand>{bandTitle(item)}</PreviewBand>
@@ -214,6 +231,11 @@ export function InboxPreview({
               className="inline-flex items-center gap-1 rounded text-link hover:underline focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <Kbd>{String(index + 1)}</Kbd>
+              {link.kind !== "external" ? (
+                <span className="text-[10px] font-semibold text-muted-foreground">
+                  {link.kind === "workItem" ? "WI" : "PR"}
+                </span>
+              ) : null}
               {link.label}
               {link.kind === "external" ? <span aria-hidden="true">↗</span> : null}
             </button>

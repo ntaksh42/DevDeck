@@ -8,8 +8,6 @@ import {
   searchPullRequestMentions,
   type MentionCandidate,
 } from "@/lib/azdoCommands";
-import { navigateToPullRequest, navigateToWorkItem } from "@/lib/crossLinks";
-import { openExternalUrl } from "@/lib/openExternal";
 import { fetchWorkItemImageCached } from "@/lib/workItemImageCache";
 import { clamp, focusPrimaryPreview, isEditableTarget } from "@/lib/utils";
 import { useGridVirtualizer } from "@/lib/useGridVirtualizer";
@@ -30,14 +28,13 @@ import {
   agentRequestOf,
   inboxAgentSubject,
   isDerivedEntry,
-  isPullRequestItem,
   isThreadItem,
   isVoteItem,
-  isWorkItemItem,
   type InboxEntry,
   type InboxLink,
   type InboxTab,
 } from "./inboxPresentation";
+import { openInboxEntryInApp, openInboxEntryInBrowser, openInboxLink } from "./inboxNavigation";
 import { useInboxDetail, type VoteValue } from "./useInboxDetail";
 import { useInboxEntries } from "./useInboxEntries";
 import { useInboxListFocus } from "./useInboxListFocus";
@@ -58,6 +55,8 @@ export function InboxView({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [snoozeAnchor, setSnoozeAnchor] = useState<DOMRect | null>(null);
   const [activateRequest, setActivateRequest] = useState<{ id: string; key: number }>();
+  // D: the description / work item body in the preview's Context, collapsed per item.
+  const [contextExpanded, setContextExpanded] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
   const filterInputRef = useRef<HTMLInputElement | null>(null);
@@ -121,6 +120,7 @@ export function InboxView({
   }
   useEffect(() => {
     if (selected) activatePanel("conversation");
+    setContextExpanded(false);
   }, [selected?.id, agentOnly]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const mentionSearch = useCallback(
@@ -163,38 +163,9 @@ export function InboxView({
     preview.scrollBy({ top: direction * Math.max(preview.clientHeight * 0.9, 40) });
   }
 
-  function openInApp(entry: InboxEntry) {
-    if (isPullRequestItem(entry)) {
-      navigateToPullRequest({
-        organizationId: entry.organizationId,
-        repositoryId: entry.repositoryId,
-        pullRequestId: entry.subjectId,
-      });
-    } else if (isWorkItemItem(entry)) {
-      navigateToWorkItem({ workItemId: entry.subjectId, organizationId: entry.organizationId });
-    } else if (entry.kind === "pipeline_approval") {
-      onOpenView?.("pipelines");
-    } else if (entry.extra?.agentTarget === "pull-request") {
-      navigateToPullRequest({ pullRequestId: entry.subjectId });
-    } else if (entry.extra?.agentTarget === "work-item") {
-      navigateToWorkItem({ workItemId: entry.subjectId, organizationId: entry.organizationId });
-    }
-  }
-
-  function openInBrowser(entry: InboxEntry) {
-    if (entry.webUrl) void openExternalUrl(entry.webUrl);
-  }
-
-  function openLink(link: InboxLink) {
-    if (!selected) return;
-    if (link.kind === "workItem") {
-      navigateToWorkItem({ workItemId: link.id, organizationId: selected.organizationId });
-    } else if (link.kind === "pullRequest") {
-      navigateToPullRequest({ organizationId: selected.organizationId, pullRequestId: link.id });
-    } else {
-      void openExternalUrl(link.url);
-    }
-  }
+  const openInApp = (entry: InboxEntry) => openInboxEntryInApp(entry, () => onOpenView?.("pipelines"));
+  const openInBrowser = openInboxEntryInBrowser;
+  const openLink = (link: InboxLink) => selected && openInboxLink(link, selected.organizationId);
 
   async function replyAndFinish(content: string) {
     if (!selected) return;
@@ -306,6 +277,9 @@ export function InboxView({
     } else if (lower === "e") {
       event.preventDefault();
       changeState(selected, tab === "done" ? "open" : "done");
+    } else if (lower === "d") {
+      event.preventDefault();
+      setContextExpanded((value) => !value);
     } else if (key === " ") {
       event.preventDefault();
       scrollPreview(event.shiftKey ? -1 : 1);
@@ -459,6 +433,8 @@ export function InboxView({
               onSnooze={(anchor) => setSnoozeAnchor(anchor)}
               onWake={() => selected && changeState(selected, "open")}
               onOpenLink={openLink}
+              contextExpanded={contextExpanded}
+              onToggleContext={() => setContextExpanded((value) => !value)}
             />
           )}
         </div>

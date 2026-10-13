@@ -4,6 +4,7 @@ import {
   extractInboxLinks,
   inboxEntryKindLabel,
   inboxKindLabel,
+  inboxLocationLabel,
   inboxRowTitle,
   matchesInboxFilter,
   shortRefName,
@@ -29,6 +30,8 @@ function item(overrides: Partial<InboxItem> = {}): InboxItem {
     snoozedUntil: null,
     detectedAt: "2026-10-10T00:00:00Z",
     doneAt: null,
+    filePath: null,
+    line: null,
     ...overrides,
   };
 }
@@ -104,5 +107,13 @@ describe("inbox presentation helpers", () => {
     expect(matchesInboxFilter(target, "gateway")).toBe(true);
     expect(matchesInboxFilter(target, "!42")).toBe(true);
     expect(matchesInboxFilter(target, "billing")).toBe(false);
+  });
+});
+
+describe("inboxLocationLabel", () => {
+  it("names the file and line of a code comment", () => {
+    expect(inboxLocationLabel({ filePath: "/src/app/dashboard.ts", line: 7 })).toBe("dashboard.ts:7");
+    expect(inboxLocationLabel({ filePath: "/README.md", line: null })).toBe("README.md");
+    expect(inboxLocationLabel({ filePath: null, line: null })).toBeNull();
   });
 });

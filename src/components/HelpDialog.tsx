@@ -206,6 +206,7 @@ export function HelpDialog({ onClose, section: targetSection }: { onClose: () =>
           <div className={row}><span>Snooze / Unsnooze (presets: 1-5 in the menu)</span><kbd className={kbd}>Z</kbd></div>
           <div className={row}><span>Undo the last Done / Snooze / Reopen</span><kbd className={kbd}>U</kbd></div>
           <div className={row}><span>Scroll the preview from the list</span><kbd className={kbd}>Space / Shift+Space</kbd></div>
+          <div className={row}><span>Expand / collapse the description in Context</span><kbd className={kbd}>D</kbd></div>
           <div className={row}><span>Reply</span><kbd className={kbd}>R</kbd></div>
           <div className={row}><span>Vote (review items) / approve, reject</span><kbd className={kbd}>A S W X 0 · A X</kbd></div>
           <div className={row}><span>Ask the agent (opens the Agent panel)</span><kbd className={kbd}>Q</kbd></div>

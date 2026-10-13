@@ -102,3 +102,15 @@ test("finishes, undoes and snoozes Inbox items with the keyboard alone", async (
   await expect(selected).toBeFocused();
   await expect(page.getByRole("button", { name: "Snoozed 1" })).toBeVisible();
 });
+
+test("shows the commented code and the PR summary without leaving Inbox", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("complementary").first().getByRole("button", { name: /^Inbox/ }).click();
+  const list = page.getByRole("listbox", { name: "Inbox items" });
+  const row = list.getByRole("option").filter({ hasText: "!42 azdo-dashboard" });
+  await expect(row).toContainText("dashboard.ts:7");
+  await row.click();
+  const context = page.getByRole("region", { name: "Context" });
+  await expect(context.locator('[data-commented-line="true"]')).toContainText("options.refreshIntervalMs ?? 30000");
+  await expect(context).toContainText("open conversation");
+});

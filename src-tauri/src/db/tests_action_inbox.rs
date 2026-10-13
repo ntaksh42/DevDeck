@@ -32,6 +32,8 @@ fn item(org: &str, pr: i64, comment: i64) -> NewInboxItem {
         web_url: Some(format!(
             "https://dev.azure.com/org1/Project/_git/api/pullrequest/{pr}"
         )),
+        file_path: None,
+        line: None,
     }
 }
 

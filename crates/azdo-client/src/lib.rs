@@ -24,10 +24,10 @@ pub use git::{
 };
 pub use identity::{AuthenticatedUser, ConnectionData, Identity, IdentityPickerIdentity};
 pub use pipelines::{
-    Approval, ApprovalStep, Build, BuildDefinitionDetail, BuildDefinitionRef,
-    BuildDefinitionRepository, BuildIdentityRef, BuildListCriteria, BuildLogTail,
-    DefinitionTrigger, DefinitionVariable, TestCaseResult, TestRun, TestRunStatistic, Timeline,
-    TimelineLogRef, TimelineRecord,
+    Approval, ApprovalPipeline, ApprovalPipelineOwner, ApprovalStep, Build, BuildDefinitionDetail,
+    BuildDefinitionRef, BuildDefinitionRepository, BuildIdentityRef, BuildListCriteria,
+    BuildLogTail, DefinitionTrigger, DefinitionVariable, TestCaseResult, TestRun, TestRunStatistic,
+    Timeline, TimelineLogRef, TimelineRecord,
 };
 pub use policy::{PolicyConfiguration, PolicyType};
 pub use pr_review::{

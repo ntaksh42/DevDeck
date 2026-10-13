@@ -55,7 +55,17 @@ function approvalEntry(
     snoozedUntil: null,
     detectedAt: approval.createdOn ?? new Date().toISOString(),
     doneAt: null,
-    extra: { approvalId: approval.id },
+    filePath: null,
+    line: null,
+    extra: {
+      approvalId: approval.id,
+      approval: {
+        pipelineName: approval.pipelineName,
+        runName: approval.runName,
+        assignedApprovers: approval.assignedApprovers,
+        minRequiredApprovers: approval.minRequiredApprovers,
+      },
+    },
   };
 }
 
@@ -89,6 +99,8 @@ function agentEntry(
     snoozedUntil: null,
     detectedAt: summary.lastAgentReplyAt ?? summary.lastModifiedAt ?? new Date().toISOString(),
     doneAt: null,
+    filePath: null,
+    line: null,
     extra: { agentTarget: target },
   };
 }
