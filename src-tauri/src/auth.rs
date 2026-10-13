@@ -39,7 +39,9 @@ pub fn client_for_organization(
         }
     };
 
-    Ok(AdoClient::new(&organization.name, auth)?)
+    // Shared HTTP pool: commands build a client per call, and a fresh pool would
+    // redo the TCP/TLS handshake every time.
+    Ok(AdoClient::new_shared(&organization.name, auth)?)
 }
 
 /// Builds a GitHub client for a GitHub-kind connection, reading the stored PAT

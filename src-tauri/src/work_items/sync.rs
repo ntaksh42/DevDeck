@@ -10,6 +10,7 @@ use super::*;
 use azdo_client::TeamProject;
 use tokio::task::JoinSet;
 
+use crate::app_state::run_blocking;
 use crate::shared_cache;
 use crate::sync::SyncBudget;
 
@@ -329,6 +330,37 @@ pub(super) async fn do_sync_work_items(
         }
     }
 
+    // Bulk SQLite writes run off the async workers.
+    let db = db.clone();
+    let org_id = org.id.clone();
+    run_blocking(move || {
+        write_synced_work_items(
+            &db,
+            &org_id,
+            was_full_sync,
+            &synced_project_ids,
+            &capped_project_ids,
+            all_cached,
+            my_cached,
+        )
+    })
+    .await?;
+
+    Ok(SyncWorkItemsResult {
+        warning: sync_warning(&skipped_projects, capped_query_count),
+        was_full_sync,
+    })
+}
+
+fn write_synced_work_items(
+    db: &AppDatabase,
+    org_id: &str,
+    was_full_sync: bool,
+    synced_project_ids: &[String],
+    capped_project_ids: &[String],
+    all_cached: Vec<CachedWorkItem>,
+    my_cached: Vec<CachedWorkItem>,
+) -> Result<()> {
     let synced_ids: Vec<&str> = synced_project_ids.iter().map(String::as_str).collect();
     if was_full_sync {
         // A full sync replaces a project's rows, deleting any that are missing
@@ -346,19 +378,15 @@ pub(super) async fn do_sync_work_items(
             .copied()
             .filter(|id| !capped_project_ids.iter().any(|capped| capped == id))
             .collect();
-        db.replace_work_items(&org.id, &replace_ids, &full_all, &full_my)?;
+        db.replace_work_items(org_id, &replace_ids, &full_all, &full_my)?;
         if !capped_project_ids.is_empty() {
             let capped_ids: Vec<&str> = capped_project_ids.iter().map(String::as_str).collect();
-            db.apply_work_items_delta(&org.id, &capped_ids, &capped_all, &capped_my)?;
+            db.apply_work_items_delta(org_id, &capped_ids, &capped_all, &capped_my)?;
         }
     } else {
-        db.apply_work_items_delta(&org.id, &synced_ids, &all_cached, &my_cached)?;
+        db.apply_work_items_delta(org_id, &synced_ids, &all_cached, &my_cached)?;
     }
-
-    Ok(SyncWorkItemsResult {
-        warning: sync_warning(&skipped_projects, capped_query_count),
-        was_full_sync,
-    })
+    Ok(())
 }
 
 /// The sync-health warning: projects that failed and were skipped, and query

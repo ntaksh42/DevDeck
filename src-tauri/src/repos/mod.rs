@@ -12,6 +12,7 @@ use tokio::task::JoinSet;
 use crate::auth::client_for_organization;
 use crate::db::AppDatabase;
 use crate::error::Result;
+use crate::projects::ProjectDirectory;
 use crate::secrets::SecretStore;
 
 #[derive(Debug, Deserialize)]
@@ -67,7 +68,9 @@ impl RepoService {
             .db
             .resolve_organization(input.organization_id.as_deref())?;
         let client = client_for_organization(&organization, &self.secrets)?;
-        let projects = client.list_projects().await?;
+        let projects = ProjectDirectory::shared()
+            .list(&client, &organization.id)
+            .await?;
 
         let mut tasks: JoinSet<(TeamProject, Result<Vec<GitRepository>>)> = JoinSet::new();
         for project in projects {

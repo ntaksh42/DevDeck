@@ -84,7 +84,7 @@ impl PullRequestService {
         };
 
         let client = client_for_organization(&organization, &self.secrets)?;
-        let projects = project_id_name_pairs(&client).await?;
+        let projects = project_id_name_pairs(&client, &organization.id).await?;
 
         let mut tasks: JoinSet<(String, Result<Vec<MyCreatedPullRequestSummary>>)> = JoinSet::new();
         for (project_id, project_name) in projects {
@@ -257,7 +257,7 @@ impl PullRequestService {
         // Scope the live query to the relevant projects to limit API calls:
         // the selected projects, or the projects owning the selected
         // repositories, or every project when nothing is scoped.
-        let all_pairs = project_id_name_pairs(&client).await?;
+        let all_pairs = project_id_name_pairs(&client, &organization.id).await?;
         let projects: Vec<(String, String)> = if let Some(set) = project_set {
             all_pairs
                 .into_iter()

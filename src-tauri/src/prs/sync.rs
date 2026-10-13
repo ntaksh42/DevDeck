@@ -3,6 +3,7 @@ use chrono::Utc;
 use tokio::task::JoinSet;
 
 use super::*;
+use crate::app_state::run_blocking;
 use crate::db::{AppDatabase, CachedPr, CachedReviewPr, Organization};
 use crate::error::{AppError, Result};
 use crate::shared_cache::SharedReviewer;
@@ -132,12 +133,19 @@ pub(crate) async fn do_sync_prs(
         }
     }
 
-    let synced_ids: Vec<&str> = active
-        .synced_project_ids
-        .iter()
-        .map(String::as_str)
-        .collect();
-    db.replace_pull_requests_for_projects(&org.id, &synced_ids, &active.cached_prs)?;
+    // Bulk SQLite writes run off the async workers; the data is handed back
+    // because the review pass below still reads it.
+    let (active_project_ids, active_prs) = {
+        let db = db.clone();
+        let org_id = org.id.clone();
+        let (ids, prs) = (active.synced_project_ids, active.cached_prs);
+        run_blocking(move || {
+            let synced_ids: Vec<&str> = ids.iter().map(String::as_str).collect();
+            db.replace_pull_requests_for_projects(&org_id, &synced_ids, &prs)?;
+            Ok((ids, prs))
+        })
+        .await?
+    };
 
     let mut warning_parts: Vec<String> = Vec::new();
     warning_parts.extend(group_warning);
@@ -164,9 +172,9 @@ pub(crate) async fn do_sync_prs(
                 // Group reviews come from the active list, so a project is only
                 // replaced when that list was complete for it too; otherwise its
                 // previous rows (including group reviews) are kept.
-                synced.retain(|id| active.synced_project_ids.contains(id));
+                synced.retain(|id| active_project_ids.contains(id));
                 let extra = group_review_prs(
-                    &active.cached_prs,
+                    &active_prs,
                     &active.reviewers,
                     &group_ids,
                     &review.cached_reviews,
@@ -187,12 +195,14 @@ pub(crate) async fn do_sync_prs(
                 ));
             }
             enrich_review_ci_status(client, &mut review.cached_reviews, budget).await;
-            let synced_ids: Vec<&str> = synced.iter().map(String::as_str).collect();
-            db.replace_review_pull_requests_for_projects(
-                &org.id,
-                &synced_ids,
-                &review.cached_reviews,
-            )?;
+            let db = db.clone();
+            let org_id = org.id.clone();
+            let reviews = review.cached_reviews;
+            run_blocking(move || {
+                let synced_ids: Vec<&str> = synced.iter().map(String::as_str).collect();
+                db.replace_review_pull_requests_for_projects(&org_id, &synced_ids, &reviews)
+            })
+            .await?;
         }
         None => {
             // Without an authenticated user id we cannot compute "my reviews".

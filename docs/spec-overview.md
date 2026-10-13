@@ -260,7 +260,8 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
   - **グリッドと通知**: My Reviews / My Work Items の行のタイトル横に open メモ数のバッジ (Needs you があれば赤、
     未読のエージェント返信があれば太字)。App 直下の `useAgentNoteWatcher` が `summarize_agent_notes` を 5 秒ごとに取得し、
     変化した項目のメモ一覧を即時再取得、エージェントの返信・完了をデスクトップ通知する (`desktop_notifications_enabled` に従い、
-    初回取得は基準のみ)。メモ一覧自体の定期再取得は 60 秒 (保険)。
+    初回取得は基準のみ)。メモ一覧自体の定期再取得は 60 秒 (保険)。バックエンドはメモファイルの解析結果を
+    (パス, 更新時刻, サイズ) をキーにメモリ上へキャッシュし、変化したファイルだけを読み直す。
   - **ガイド**: 起動時と設定保存時、結果フォルダの `AGENTS.md` に DevDeck 管理区間
     (`<!-- devdeck:agent-notes:start ... -->` 〜 `end`、メモの場所は
     `agent-notes` の絶対パスで書く) を置く / 更新する。
@@ -382,7 +383,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
 - 主なテーブル: 組織、アクティブ/レビュー対象 PR、作業項目、My Work Items スナップショット、
   各種 FTS インデックス、同期状態、スヌーズ、
   フォロー中の作業項目 (`followed_work_items`)、PR コメント既読、メンション/割当先履歴、通知履歴 (`notifications`)、Inbox (`action_inbox_items` / `action_inbox_cursor`)、アプリ設定。
-- ジャーナル: WAL、`synchronous=NORMAL`、外部キー ON。
+- ジャーナル: WAL (起動時の `initialize()` で設定。WAL はファイルに永続する)、`synchronous=NORMAL`、外部キー ON。
 - **共有キャッシュ (`shared_cache/`)**: `azdodeck.sqlite3` 自体は DevDeck 専用で、外部からは
   読まれない。別アプリ waypoint (`C:\Users\<user>\source\repos\waypoint`) が同じ Azure
   DevOps 組織を独立にポーリングするのを避けるため、Active PR (+レビュアー一覧) と
@@ -404,6 +405,8 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
 - 間隔: フル同期は約 5 分間隔。起動時とウィンドウ復帰時は Hot 同期 (復帰はスロットル)。手動トリガは間隔を無視。
 - 並列実行: 1 パス内で全組織を並列処理し、各組織の PR / 作業項目同期も並列に走らせる。
   プロジェクト一覧 (`_apis/projects`) は組織ごとに 1 回だけ取得して両種別で共有する。
+  一覧はプロセス全体で共有する `ProjectDirectory` (TTL 5 分) から取り、同期・作業項目・パイプライン・
+  PR 検索・リポジトリ一覧のコマンドが同じキャッシュを使う。手動リフレッシュ (`force`) の同期は再取得する。
   PR コメント通知のスレッド取得も同じ共有セマフォを通る。
   同時実行中の Azure DevOps リクエスト総数は共有セマフォ (`SyncBudget`, 既定 12) で上限を設け、
   ファンアウトが広がっても 429 圧力を一定に保つ (429 は `Retry-After` で吸収)。
@@ -455,6 +458,7 @@ PR 検索の `search_pull_requests` は `{ pullRequests, total, truncated, warni
 ### REST クライアントの信頼性 (`azdo-client`)
 
 - HTTP は `AdoClient::get_json` / `post_json` 経由に統一 (リトライ・401・429・5xx 挙動を一貫させる)。
+  アプリ側の `client_for_organization()` は `AdoClient::new_shared` で 1 つの `reqwest::Client` (接続プール) を共有し、コマンドごとに TCP/TLS 接続を張り直さない。
 - 既定: 3 回試行、ベース遅延 250ms の指数バックオフ。
 - 1 ページで打ち切られる一覧 (プロジェクト一覧 `_apis/projects`、ブランチ一覧 refs) は `$top=1000` を明示し、
   `x-ms-continuationtoken` ヘッダーの継続トークンを辿って最後まで取得する (`list_all_pages`)。

@@ -23,7 +23,7 @@ pub struct ReplyAgentNoteInput {
     pub body: String,
 }
 
-#[derive(Debug, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct NoteReply {
     /// `agent` or `user` as written in the marker; anything else is kept as is.

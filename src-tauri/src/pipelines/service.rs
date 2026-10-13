@@ -31,7 +31,7 @@ impl PipelineService {
         Self {
             db,
             secrets,
-            projects: ProjectDirectory::new(),
+            projects: ProjectDirectory::shared(),
         }
     }
 

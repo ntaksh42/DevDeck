@@ -28,7 +28,7 @@ fn open_applies_connection_pragmas() {
 }
 
 #[test]
-fn open_upgrades_existing_non_wal_db_to_wal() {
+fn initialize_upgrades_existing_non_wal_db_to_wal() {
     let db_file = tempfile::NamedTempFile::new().unwrap();
     let path = db_file.path().to_path_buf();
 
@@ -45,11 +45,12 @@ fn open_upgrades_existing_non_wal_db_to_wal() {
     }
 
     let db = AppDatabase::new(path);
+    db.initialize().unwrap();
     let conn = db.open().unwrap();
     let journal_mode: String = conn
         .query_row("PRAGMA journal_mode", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(journal_mode, "wal", "open() should re-apply WAL");
+    assert_eq!(journal_mode, "wal", "initialize() should apply WAL");
 }
 
 #[test]

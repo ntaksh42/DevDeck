@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use url::Url;
@@ -80,11 +80,30 @@ pub struct BinaryResponse {
 
 impl AdoClient {
     pub fn new(organization: &str, auth: Arc<dyn AdoCredentialProvider>) -> Result<Self> {
-        let http = reqwest::Client::builder()
-            .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(30))
-            .user_agent(format!("DevDeck/{}", env!("CARGO_PKG_VERSION")))
-            .build()?;
+        Self::with_http(organization, auth, build_http()?)
+    }
+
+    /// Like [`AdoClient::new`], but reuses one process-wide HTTP client so its
+    /// connection pool (and TLS sessions) survive across short-lived clients.
+    /// Use it only from a single long-lived async runtime: pooled connections
+    /// are bound to the runtime that opened them.
+    pub fn new_shared(organization: &str, auth: Arc<dyn AdoCredentialProvider>) -> Result<Self> {
+        static HTTP: OnceLock<reqwest::Client> = OnceLock::new();
+        let http = match HTTP.get() {
+            Some(http) => http.clone(),
+            None => {
+                let built = build_http()?;
+                HTTP.get_or_init(|| built).clone()
+            }
+        };
+        Self::with_http(organization, auth, http)
+    }
+
+    fn with_http(
+        organization: &str,
+        auth: Arc<dyn AdoCredentialProvider>,
+        http: reqwest::Client,
+    ) -> Result<Self> {
         let base_url = Url::parse(&format!("https://dev.azure.com/{organization}/"))
             .map_err(|e| AdoError::Auth(format!("invalid organization: {e}")))?;
         Ok(Self {
@@ -104,4 +123,12 @@ impl AdoClient {
         self.retry_policy = retry_policy;
         self
     }
+}
+
+fn build_http() -> Result<reqwest::Client> {
+    Ok(reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(30))
+        .user_agent(format!("DevDeck/{}", env!("CARGO_PKG_VERSION")))
+        .build()?)
 }

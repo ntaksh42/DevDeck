@@ -1,5 +1,5 @@
 use super::*;
-use chrono::TimeZone;
+use chrono::{DateTime, TimeZone};
 
 fn at(m: u32) -> DateTime<Local> {
     Local.with_ymd_and_hms(2026, 9, 27, 10, m, 0).unwrap()

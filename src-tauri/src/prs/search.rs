@@ -6,6 +6,7 @@ use chrono::{DateTime, NaiveDate, NaiveTime, TimeZone, Utc};
 use super::*;
 use crate::db::{CachedPr, Organization};
 use crate::error::{AppError, Result};
+use crate::projects::ProjectDirectory;
 use crate::repos::encode_path_segment;
 
 /// Resolves the requested search status into either the cached-active fast path
@@ -166,9 +167,12 @@ pub(crate) fn within_window(value: &str, from: Option<&str>, to: Option<&str>) -
         && to.and_then(instant).is_none_or(|t| value <= t)
 }
 
-pub(crate) async fn project_id_name_pairs(client: &AdoClient) -> Result<Vec<(String, String)>> {
-    Ok(client
-        .list_projects()
+pub(crate) async fn project_id_name_pairs(
+    client: &AdoClient,
+    org_id: &str,
+) -> Result<Vec<(String, String)>> {
+    Ok(ProjectDirectory::shared()
+        .list(client, org_id)
         .await?
         .into_iter()
         .map(|project| (project.id, project.name))

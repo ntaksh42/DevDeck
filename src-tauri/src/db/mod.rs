@@ -80,6 +80,10 @@ impl AppDatabase {
             fs::create_dir_all(parent)?;
         }
         let conn = self.open()?;
+        // WAL is persistent in the file, so setting it once at startup also
+        // upgrades a pre-existing rollback-journal DB, where synchronous=NORMAL
+        // would weaken crash durability.
+        conn.pragma_update_and_check(None, "journal_mode", "WAL", |_| Ok(()))?;
         migrate(&conn)?;
         Ok(())
     }
@@ -91,10 +95,6 @@ impl AppDatabase {
         // Wait instead of failing with SQLITE_BUSY when a sync write overlaps
         // a UI read; NORMAL is durable enough under WAL and much faster.
         conn.busy_timeout(std::time::Duration::from_secs(3))?;
-        // Ensure WAL is applied on every open, not just first-run migration, so
-        // a pre-existing non-WAL DB is upgraded rather than left on a rollback
-        // journal where synchronous=NORMAL weakens crash durability.
-        conn.pragma_update_and_check(None, "journal_mode", "WAL", |_| Ok(()))?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         Ok(conn)
     }

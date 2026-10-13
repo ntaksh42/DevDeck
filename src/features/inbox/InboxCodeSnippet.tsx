@@ -83,7 +83,8 @@ export function InboxCodeSnippet({ item, thread }: { item: InboxEntry; thread: P
         targetCommitId: changes?.targetCommitId,
       }),
     enabled: !!changes && !!filePath && line != null,
-    staleTime: 5 * 60_000,
+    // Keyed by both commit ids, so the content never changes.
+    staleTime: Infinity,
     retry: false,
   });
 

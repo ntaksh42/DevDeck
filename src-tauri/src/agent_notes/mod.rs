@@ -16,13 +16,14 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use chrono::{DateTime, Local};
+use chrono::Local;
 use serde::{Deserialize, Serialize};
 
 use crate::db::AppDatabase;
 use crate::error::{AppError, Result};
 
 mod asks;
+mod cache;
 mod create;
 mod format;
 mod guide;
@@ -46,7 +47,6 @@ pub use summary::{AgentNoteSummary, SummarizeAgentNotesInput};
 
 use create::clean_body;
 pub(crate) use create::create_note;
-use format::parse_note;
 
 /// Folder under the app data directory holding every item's notes.
 const NOTES_ROOT: &str = "agent-notes";
@@ -154,7 +154,7 @@ pub struct RunAgentInput {
     pub model: Option<String>,
 }
 
-#[derive(Debug, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentNote {
     /// File name; unique within the item's folder.
@@ -391,17 +391,12 @@ fn read_notes_in(dir: &Path, status: &str) -> Result<Vec<AgentNote>> {
         }
         // The agent moves handled notes into `_done/` while DevDeck polls, so a
         // file listed a moment ago may be gone; skip it instead of failing the
-        // whole listing. Hand-written notes may also not be valid UTF-8.
-        let (bytes, metadata) = match fs::read(&path).and_then(|b| Ok((b, fs::metadata(&path)?))) {
-            Ok(read) => read,
+        // whole listing.
+        match cache::read_note(&path, status) {
+            Ok(note) => notes.push(note),
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
             Err(err) => return Err(err.into()),
-        };
-        let text = String::from_utf8_lossy(&bytes);
-        let modified = metadata.modified().ok().map(|time| {
-            DateTime::<Local>::from(time).to_rfc3339_opts(chrono::SecondsFormat::Secs, false)
-        });
-        notes.push(parse_note(&path, status, &text, modified));
+        }
     }
     Ok(notes)
 }

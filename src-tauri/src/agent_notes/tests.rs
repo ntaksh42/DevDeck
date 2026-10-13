@@ -1,6 +1,6 @@
 use super::*;
 
-use chrono::TimeZone;
+use chrono::{DateTime, TimeZone};
 
 use super::skill::ensure_skill;
 

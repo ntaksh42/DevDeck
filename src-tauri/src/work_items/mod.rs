@@ -65,7 +65,7 @@ impl WorkItemService {
         Self {
             db,
             secrets,
-            projects: ProjectDirectory::new(),
+            projects: ProjectDirectory::shared(),
             update_candidates: UpdateCandidatesCache::default(),
         }
     }

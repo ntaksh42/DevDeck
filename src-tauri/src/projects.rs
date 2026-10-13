@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 use azdo_client::{AdoClient, TeamProject};
@@ -13,8 +13,10 @@ const PROJECT_CACHE_TTL: Duration = Duration::from_secs(300);
 ///
 /// Almost every work item command needs `GET _apis/projects` only to resolve
 /// a project id to its name; the list changes rarely, so paying a REST round
-/// trip per command is wasted latency. Sync paths keep calling the API
-/// directly because they want a fresh list.
+/// trip per command is wasted latency. One process-wide instance
+/// ([`ProjectDirectory::shared`]) is filled by background sync too, so
+/// commands reuse the list sync just fetched; an explicit user refresh
+/// refetches it.
 ///
 /// The lock is held across the fetch on purpose: concurrent commands for the
 /// same organization then share one request instead of racing.
@@ -32,6 +34,12 @@ struct CachedProjects {
 impl ProjectDirectory {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// The app-wide directory shared by sync and the command services.
+    pub fn shared() -> Self {
+        static SHARED: OnceLock<ProjectDirectory> = OnceLock::new();
+        SHARED.get_or_init(Self::new).clone()
     }
 
     /// Lists the organization's projects, served from cache when fresh.
@@ -90,7 +98,8 @@ impl ProjectDirectory {
         Ok((projects, false))
     }
 
-    async fn refresh(&self, client: &AdoClient, org_id: &str) -> Result<Vec<TeamProject>> {
+    /// Refetches the list regardless of age, replacing the cached entry.
+    pub async fn refresh(&self, client: &AdoClient, org_id: &str) -> Result<Vec<TeamProject>> {
         let mut cache = self.cache.lock().await;
         let projects = client.list_projects().await?;
         cache.insert(

@@ -6,6 +6,7 @@ use tauri::{AppHandle, Emitter};
 
 use crate::auth::client_for_organization;
 use crate::db::{AppSettings, NewNotification, Organization};
+use crate::projects::ProjectDirectory;
 use crate::prs::sync_prs_for_org;
 use crate::secrets::SecretStore;
 use crate::snooze::SnoozeService;
@@ -53,8 +54,15 @@ pub(super) async fn sync_org(
         }
     };
     // One project listing feeds PRs and work items, instead of each
-    // sync kind issuing its own identical request.
-    let projects = match client.list_projects().await {
+    // sync kind issuing its own identical request. Automatic passes reuse a
+    // recent listing; an explicit refresh refetches it.
+    let directory = ProjectDirectory::shared();
+    let projects = if force_refresh {
+        directory.refresh(&client, &org.id).await
+    } else {
+        directory.list(&client, &org.id).await
+    };
+    let projects = match projects {
         Ok(projects) => projects,
         Err(e) => {
             tracing::error!(org = %org.name, error = ?e, "sync: failed to list projects");
