@@ -65,12 +65,12 @@ describe("DockableWorkspace", () => {
     );
   });
 
-  it("sizes the split panel to its initialWidth and renders every panel", () => {
+  it("splits a fresh layout half and half between the list and its preview and renders every panel", () => {
     renderWorkspace();
     expect(screen.getByText("grid content")).toBeTruthy();
     expect(screen.getByText("preview content")).toBeTruthy();
     expect(screen.getByRole("separator", { name: "Resize Preview" }).getAttribute("aria-valuenow")).toBe(
-      "420",
+      "600",
     );
   });
 
@@ -89,12 +89,12 @@ describe("DockableWorkspace", () => {
     const resize = renderWorkspace(storageKey);
 
     fireEvent.keyDown(resize, { key: "ArrowLeft" });
-    expect(resize.getAttribute("aria-valuenow")).toBe("436");
+    expect(resize.getAttribute("aria-valuenow")).toBe("616");
     act(() => vi.advanceTimersByTime(100));
     expect(window.localStorage.getItem(`${storageKey}:schema:v3`)).toBeTruthy();
 
     fireEvent.doubleClick(resize);
-    expect(resize.getAttribute("aria-valuenow")).toBe("420");
+    expect(resize.getAttribute("aria-valuenow")).toBe("600");
   });
 
   it("coalesces repeated resize events into one persisted layout", () => {
@@ -137,20 +137,20 @@ describe("DockableWorkspace", () => {
       key: "ArrowLeft",
     });
     expect(screen.getByRole("separator", { name: "Resize Preview" }).getAttribute("aria-valuenow")).toBe(
-      "436",
+      "616",
     );
 
     rerender(<DockableWorkspace storageKey="test:dockable-workspace:key-b" panels={twoPanels()} />);
 
     expect(screen.getByRole("separator", { name: "Resize Preview" }).getAttribute("aria-valuenow")).toBe(
-      "420",
+      "600",
     );
   });
 
   it("clamps keyboard resize to minWidth, and to the space left by the anchor's minimum width", () => {
     const resize = renderWorkspace("test:dockable-workspace:clamp");
 
-    for (let i = 0; i < 10; i += 1) {
+    for (let i = 0; i < 30; i += 1) {
       fireEvent.keyDown(resize, { key: "ArrowRight" });
     }
     expect(Number(resize.getAttribute("aria-valuenow"))).toBe(280);
@@ -169,7 +169,7 @@ describe("DockableWorkspace", () => {
     const { unmount } = render(<DockableWorkspace storageKey={storageKey} panels={twoPanels()} />);
     fireEvent.keyDown(screen.getByRole("separator", { name: "Resize Preview" }), { key: "ArrowLeft" });
     expect(screen.getByRole("separator", { name: "Resize Preview" }).getAttribute("aria-valuenow")).toBe(
-      "436",
+      "616",
     );
     act(() => vi.advanceTimersByTime(100));
     expect(window.localStorage.getItem(`${storageKey}:schema:v3`)).toBeTruthy();
@@ -177,7 +177,7 @@ describe("DockableWorkspace", () => {
 
     render(<DockableWorkspace storageKey={storageKey} panels={twoPanels()} />);
     expect(screen.getByRole("separator", { name: "Resize Preview" }).getAttribute("aria-valuenow")).toBe(
-      "436",
+      "616",
     );
   });
 
@@ -198,7 +198,7 @@ describe("DockableWorkspace", () => {
     render(<DockableWorkspace storageKey={storageKey} panels={twoPanels()} />);
 
     expect(screen.getByRole("separator", { name: "Resize Preview" }).getAttribute("aria-valuenow")).toBe(
-      "420",
+      "600",
     );
   });
 
@@ -222,7 +222,7 @@ describe("DockableWorkspace", () => {
     render(<DockableWorkspace storageKey={storageKey} panels={twoPanels()} />);
     expect(screen.queryByText("Removed")).toBeNull();
     expect(screen.getByRole("separator", { name: "Resize Preview" }).getAttribute("aria-valuenow")).toBe(
-      "436",
+      "616",
     );
   });
 
@@ -231,7 +231,7 @@ describe("DockableWorkspace", () => {
     window.localStorage.setItem(`${storageKey}:schema:v3`, "not valid json");
 
     const resize = renderWorkspace(storageKey);
-    expect(resize.getAttribute("aria-valuenow")).toBe("420");
+    expect(resize.getAttribute("aria-valuenow")).toBe("600");
     expect(screen.getByText("grid content")).toBeTruthy();
     expect(screen.getByText("preview content")).toBeTruthy();
   });
@@ -266,17 +266,16 @@ describe("DockableWorkspace", () => {
 
     const previewResize = screen.getByRole("separator", { name: "Resize Preview" });
     const resultResize = screen.getByRole("separator", { name: "Resize Result" });
-    // Splitting Result out of Preview carves Result's initialWidth directly
-    // out of Preview's own space (dockview splits the referenced panel, not
-    // the row's free space), so Preview lands at its floor here rather than
-    // its own initialWidth -- both panels remain independently resizable.
-    expect(previewResize.getAttribute("aria-valuenow")).toBe("280");
+    // Result keeps its initialWidth; the list and Preview split the rest
+    // (1200 - 320), but the list keeps its 480px minimum -- both panels remain
+    // independently resizable.
+    expect(previewResize.getAttribute("aria-valuenow")).toBe("400");
     expect(resultResize.getAttribute("aria-valuenow")).toBe("320");
 
     fireEvent.keyDown(resultResize, { key: "ArrowRight" });
     expect(resultResize.getAttribute("aria-valuenow")).toBe("304");
     // The adjacent Preview takes the space released by Result.
-    expect(previewResize.getAttribute("aria-valuenow")).toBe("296");
+    expect(previewResize.getAttribute("aria-valuenow")).toBe("416");
   });
 
   it("moves the Grid/Preview boundary without moving the Agent boundary", () => {
@@ -288,13 +287,14 @@ describe("DockableWorkspace", () => {
     const agent = screen.getByRole("separator", { name: "Resize Agent" });
     const previewWidth = Number(preview.getAttribute("aria-valuenow"));
     const agentWidth = agent.getAttribute("aria-valuenow");
+    // The list starts at its minimum width, so move the boundary towards the preview.
     fireEvent.pointerDown(preview, { clientX: 600, pointerId: 1 });
-    fireEvent.pointerMove(window, { clientX: 560, pointerId: 1 });
-    fireEvent.pointerUp(window, { clientX: 560, pointerId: 1 });
-    expect(Number(preview.getAttribute("aria-valuenow"))).toBe(previewWidth + 40);
+    fireEvent.pointerMove(window, { clientX: 640, pointerId: 1 });
+    fireEvent.pointerUp(window, { clientX: 640, pointerId: 1 });
+    expect(Number(preview.getAttribute("aria-valuenow"))).toBe(previewWidth - 40);
     expect(agent.getAttribute("aria-valuenow")).toBe(agentWidth);
     fireEvent.keyDown(preview, { key: "ArrowRight" });
-    expect(Number(preview.getAttribute("aria-valuenow"))).toBe(previewWidth + 24);
+    expect(Number(preview.getAttribute("aria-valuenow"))).toBe(previewWidth - 56);
     expect(agent.getAttribute("aria-valuenow")).toBe(agentWidth);
   });
 

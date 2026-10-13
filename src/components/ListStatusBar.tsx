@@ -6,6 +6,12 @@ import { focusPrimaryGrid } from "@/lib/utils";
 const BUTTON = "rounded border px-2 py-0.5 text-xs";
 const IDLE = "border-border bg-card hover:bg-secondary";
 const PRESSED = "border-primary bg-primary/10 text-primary";
+/** A toggle with nothing behind it: no frame, so the bar reads as text until there is something to look at. */
+const EMPTY = "border-transparent text-muted-foreground/70 hover:bg-secondary";
+
+function toggleClass(toggle: StateToggle): string {
+  return toggle.active ? PRESSED : toggle.count === 0 ? EMPTY : IDLE;
+}
 
 /** `1 item` / `4 items`; `qualifier` gives e.g. `2 snoozed items`. */
 export function itemCount(count: number, qualifier = ""): string {
@@ -63,7 +69,7 @@ export function ListStatusBar({
             aria-pressed={done.active}
             title="Toggle done view (E marks the selected row done)"
             onClick={done.onToggle}
-            className={`${BUTTON} ${done.active ? PRESSED : IDLE}`}
+            className={`${BUTTON} ${toggleClass(done)}`}
           >
             Done {done.count}
           </button>
@@ -74,7 +80,7 @@ export function ListStatusBar({
             aria-pressed={snoozed.active}
             title="Toggle snoozed view (Z snoozes the selected row)"
             onClick={snoozed.onToggle}
-            className={`${BUTTON} ${snoozed.active ? PRESSED : IDLE}`}
+            className={`${BUTTON} ${toggleClass(snoozed)}`}
           >
             Snoozed {snoozed.count}
           </button>
@@ -88,7 +94,7 @@ export function ListStatusBar({
             className={`inline-flex items-center gap-1 ${BUTTON} ${
               stale.active
                 ? "border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-300"
-                : IDLE
+                : toggleClass(stale)
             }`}
           >
             <AlertTriangle className="h-3 w-3" aria-hidden="true" />

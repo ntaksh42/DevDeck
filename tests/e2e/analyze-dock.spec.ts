@@ -37,8 +37,11 @@ test("Analyze sits on the dock with the Agent panel and keyboard flows", async (
   await expect(page.getByRole("button", { name: "Add group" })).toBeVisible();
   await expect(page.getByText("2 items")).toBeVisible();
   await expect(page.getByRole("button", { name: "Week", exact: true })).toBeVisible();
+  await page.keyboard.press("Control+j");
   const panel = page.getByRole("complementary", { name: "Agent", exact: true });
   await expect(panel).toBeVisible();
+  // Ctrl+J focuses the input; Esc returns to the collapsed composer.
+  await page.keyboard.press("Escape");
   await expect(
     panel.locator("[data-agent-composer]").getByRole("button", { name: "Ask about Release blockers…" }),
   ).toBeVisible();

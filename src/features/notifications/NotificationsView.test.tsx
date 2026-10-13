@@ -180,9 +180,10 @@ describe("NotificationsView Agent context", () => {
     await waitFor(() => expect(subject()).toBe(""));
   });
 
-  it("shows the Agent drawer by default", async () => {
+  it("keeps the Agent drawer closed until the user opens it", async () => {
     resetAgentPanelState();
     renderWithAgent();
-    expect(await screen.findByRole("complementary", { name: "Agent" })).toBeTruthy();
+    await screen.findByRole("grid", { name: "Notifications" });
+    expect(screen.queryByRole("complementary", { name: "Agent" })).toBeNull();
   });
 });

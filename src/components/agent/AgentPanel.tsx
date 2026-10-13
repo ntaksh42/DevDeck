@@ -105,8 +105,8 @@ export function AgentPanel({
     else listRef.current?.focus();
   }
 
-  // Focus after the render: replying swaps in a fresh composer. A panel shown
-  // by default (not opened by the user) leaves the focus where it is.
+  // Focus after the render: replying swaps in a fresh composer. A panel that
+  // was already open when it remounts (moved to another view) leaves the focus where it is.
   const [composerFocus, setComposerFocus] = useState(0);
   useEffect(() => {
     if (composerFocus) focusComposer();
@@ -294,8 +294,8 @@ export function AgentPanel({
         return;
       }
       onClose();
-      // Closing hands focus back to where the panel was opened from. A panel
-      // shown by default has no such place; land on the view's grid, not <body>.
+      // Closing hands focus back to where the panel was opened from. When that
+      // place is gone (or was <body>), land on the view's grid, not <body>.
       window.setTimeout(() => {
         const active = document.activeElement;
         if (!active || active === document.body) focusPrimaryGrid();

@@ -9,6 +9,9 @@ test("a pane boundary keeps working after the neighbouring panes are re-docked",
     .getByText("Add rate limiting middleware to all endpoints")
     .click();
 
+  await page.keyboard.press("Control+j");
+  await expect(page.getByRole("complementary", { name: "Agent", exact: true })).toBeVisible();
+
   const groupWidth = (title: string) =>
     page.evaluate(
       (name) =>

@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { closeAgentPanel, registerDrawerHost, resetAgentPanelState } from "./agentPanelStore";
+import { closeAgentPanel, resetAgentPanelState } from "./agentPanelStore";
 import { openAgentPanel, publishAgentSubject, toggleAgentPanel } from "./agentSubject";
 import { AgentPanelHost } from "./AgentPanelHost";
 import {
@@ -191,7 +191,7 @@ describe("Agent panel", () => {
     expect(screen.getByRole("complementary", { name: "Agent" })).toBeTruthy();
   });
 
-  it("Esc on a header closes a panel shown by default and lands on the view's grid, not <body>", async () => {
+  it("Esc on a header closes a panel opened from <body> and lands on the view's grid", async () => {
     resetAgentPanelState();
     render(
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
@@ -201,10 +201,7 @@ describe("Agent panel", () => {
         <AgentPanelHost />
       </QueryClientProvider>,
     );
-    let unregister = () => {};
-    act(() => {
-      unregister = registerDrawerHost("notifications");
-    });
+    act(() => toggleAgentPanel());
     const panel = await screen.findByRole("complementary", { name: "Agent" });
     await within(panel).findAllByText("Why did run 412 fail?");
     const [waiting] = within(panel).getAllByRole("button").filter((b) => b.hasAttribute("aria-expanded"));
@@ -212,7 +209,6 @@ describe("Agent panel", () => {
     fireEvent.keyDown(waiting, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("complementary", { name: "Agent" })).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId("row")));
-    act(() => unregister());
   });
 
   it("Delete on a header moves focus to the next conversation, then to the input when none are left", async () => {

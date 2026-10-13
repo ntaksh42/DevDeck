@@ -125,14 +125,14 @@ describe("App — Layout", () => {
 
     expect(await screen.findByRole("heading", { name: "Pull Requests My Reviews" })).toBeTruthy();
     const previewResize = screen.getByRole("separator", { name: "Resize Conversation" });
-    expect(previewResize.getAttribute("aria-valuenow")).toBe("420");
+    expect(previewResize.getAttribute("aria-valuenow")).toBe("600");
     fireEvent.keyDown(previewResize, { key: "ArrowLeft" });
-    expect(previewResize.getAttribute("aria-valuenow")).toBe("436");
+    expect(previewResize.getAttribute("aria-valuenow")).toBe("616");
     // Layout persistence itself is covered directly and reliably in
     // DockableWorkspace.test.tsx; asserting it here too is flaky under this
     // test's full-app remount/Suspense timing.
     fireEvent.doubleClick(previewResize);
-    expect(previewResize.getAttribute("aria-valuenow")).toBe("420");
+    expect(previewResize.getAttribute("aria-valuenow")).toBe("600");
   });
 
   it("stops review preview pointer resizing when the pointer is canceled", async () => {
@@ -180,11 +180,11 @@ describe("App — Layout", () => {
 
     fireEvent.pointerDown(previewResize, { clientX: 100, pointerId: 1 });
     fireEvent.pointerMove(window, { clientX: 84, pointerId: 1 });
-    expect(previewResize.getAttribute("aria-valuenow")).toBe("436");
+    expect(previewResize.getAttribute("aria-valuenow")).toBe("616");
 
     fireEvent.pointerCancel(window, { pointerId: 1 });
     fireEvent.pointerMove(window, { clientX: 60, pointerId: 1 });
-    expect(previewResize.getAttribute("aria-valuenow")).toBe("436");
+    expect(previewResize.getAttribute("aria-valuenow")).toBe("616");
   });
 
   it("runs in browser preview mode without Tauri internals", async () => {

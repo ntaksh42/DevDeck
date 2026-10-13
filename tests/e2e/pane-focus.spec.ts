@@ -10,6 +10,12 @@ async function start(page: Page, key: string) {
   await page.keyboard.press(key);
 }
 
+// The Agent panel starts closed; Ctrl+J opens it (and focuses its input).
+async function openAgent(page: Page) {
+  await page.keyboard.press("Control+j");
+  await page.getByLabel("Agent conversations").waitFor();
+}
+
 for (const view of [
   { name: "My Reviews", key: "r" },
   { name: "My Work Items", key: "w" },
@@ -58,6 +64,7 @@ test("My Pull Requests uses the same arrow navigation", async ({ page }) => {
 
 test("PR preview and Agent body support a complete left/right round trip", async ({ page }) => {
   await start(page, "r");
+  await openAgent(page);
   const row = page.getByRole("grid", { name: "My review pull requests" }).getByRole("row", { selected: true }).first();
   const preview = page.locator("[data-focus-pane='review'] [data-primary-preview='true']");
   const agent = page.getByLabel("Agent conversations");
@@ -78,6 +85,7 @@ test("PR preview and Agent body support a complete left/right round trip", async
 
 test("moving Conversation to the left changes arrow focus direction", async ({ page }) => {
   await start(page, "r");
+  await openAgent(page);
   await page.getByRole("button", { name: "Move Conversation panel", exact: true }).click();
   await page.getByRole("menuitem", { name: "Split left of Reviews", exact: true }).click();
   const row = page.getByRole("grid", { name: "My review pull requests" }).getByRole("row", { selected: true }).first();
@@ -120,6 +128,7 @@ test("Work Item preview columns and iframe body follow pane focus", async ({ pag
 
 test("Notifications and the Agent drawer support arrows without a dock", async ({ page }) => {
   await start(page, "n");
+  await openAgent(page);
   const row = page.getByRole("grid", { name: "Notifications" }).getByRole("row", { selected: true }).first();
   const agent = page.getByLabel("Agent conversations");
   await row.focus();
@@ -133,6 +142,7 @@ test("Notifications and the Agent drawer support arrows without a dock", async (
 
 test("Pipelines skips the read-only Preview while tree arrows stay local", async ({ page }) => {
   await start(page, "p");
+  await openAgent(page);
   const pane = page.locator("[data-focus-pane='grid']");
   await pane.getByRole("button", { expanded: false }).filter({ hasText: "CI" }).first().click();
   const row = pane.getByRole("row").first();
@@ -160,6 +170,7 @@ test("Analyze group rows skip the read-only Trend pane", async ({ page }) => {
     granularity: "week", rangeCount: 12,
   }])));
   await start(page, "a");
+  await openAgent(page);
   const row = page.locator("[data-pane-focus-row='true']").first();
   await row.focus();
   await page.keyboard.press("ArrowRight");
@@ -172,6 +183,7 @@ test("Analyze group rows skip the read-only Trend pane", async ({ page }) => {
 
 test("reply inputs and Agent conversation folding keep their arrow behavior", async ({ page }) => {
   await start(page, "r");
+  await openAgent(page);
   const preview = page.locator("[data-focus-pane='review']");
   await preview.getByRole("button", { name: "Reply", exact: true }).click();
   const reply = preview.getByPlaceholder("Reply…", { exact: true });
@@ -206,6 +218,7 @@ test("Settings body can reach the Agent drawer without stealing control arrows",
 
 test("Result HTML is skipped between editable Conversation and Agent panes", async ({ page }) => {
   await start(page, "r");
+  await openAgent(page);
   await page.getByRole("tab", { name: "Result", exact: true }).click();
   await page.getByRole("button", { name: "Move Result panel", exact: true }).click();
   await page.getByRole("menuitem", { name: "Split right of Conversation", exact: true }).click();

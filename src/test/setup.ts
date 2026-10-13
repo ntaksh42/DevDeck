@@ -18,5 +18,5 @@ if (typeof globalThis.ResizeObserver === "undefined") {
   };
 }
 
-// The Agent panel is shown by default in docked views; tests opt in explicitly.
+// The Agent panel store is app-wide; each test starts with it closed.
 beforeEach(() => closeAgentPanel());

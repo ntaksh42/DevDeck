@@ -25,7 +25,6 @@ import { NotificationRow, NOTIFICATION_ROW_HEIGHT } from "./NotificationRow";
 import { NOTIFICATION_KIND_OPTIONS } from "./notificationKinds";
 import { notificationWebUrl, resolveNotificationAgentSubject, resolveNotificationJump } from "./notificationJump";
 import { usePublishAgentSubject } from "@/components/agent/agentSubject";
-import { useAgentDrawerDefault } from "@/components/agent/useAgentDrawerDefault";
 import { ListStatusBar, itemCount } from "@/components/ListStatusBar";
 
 const PAGE_SIZE = 100;
@@ -109,7 +108,6 @@ export function NotificationsView({
   const virtualRows = items.slice(firstVirtualRow, lastVirtualRow);
 
   // The Agent panel (the drawer; this view has no dock) follows the selected notification's PR / work item.
-  useAgentDrawerDefault();
   const selectedRecord = items[selectedIndex];
   usePublishAgentSubject(selectedRecord ? resolveNotificationAgentSubject(selectedRecord) : null);
 

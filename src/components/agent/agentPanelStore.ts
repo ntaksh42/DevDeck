@@ -25,12 +25,8 @@ export type AgentPanelState = {
   focusNoteId: string | null;
   /** Docked workspaces currently mounted, newest last; the last one hosts the panel. */
   dockHosts: string[];
-  /** Views without a dock that still show the panel (as the drawer) until the user opens or closes it. */
-  drawerHosts: string[];
   /** Id of the view list attached as context ("This list"); follows the list, so another view starts unattached. */
   listAttached: string | null;
-  /** Until the user opens or closes the panel, a docked workspace shows it by default. */
-  dockDefault: boolean;
 };
 
 // One shared store even when this module is hot-reloaded in development:
@@ -45,7 +41,7 @@ type Store = {
 };
 const holder = globalThis as { __devdeckAgentPanel?: Store };
 const store: Store = (holder.__devdeckAgentPanel ??= {
-  state: { open: false, override: null, focusAskId: null, replyRequest: 0, quote: null, focusNoteId: null, dockHosts: [], drawerHosts: [], listAttached: null, dockDefault: true },
+  state: { open: false, override: null, focusAskId: null, replyRequest: 0, quote: null, focusNoteId: null, dockHosts: [], listAttached: null },
   returnFocus: null,
   focusPending: false,
   listeners: new Set(),
@@ -67,12 +63,12 @@ export function useAgentPanelState(): AgentPanelState {
   );
 }
 
-/** Whether the panel shows: opened by the user, or still on its default in a docked / drawer-default view. */
+/** Whether the panel shows. It starts closed; `Ctrl+J` opens it. */
 export function isAgentPanelShown(state: AgentPanelState): boolean {
-  return state.open || (state.dockDefault && (state.dockHosts.length > 0 || state.drawerHosts.length > 0));
+  return state.open;
 }
 
-/** True once per explicit open, so a panel shown by default does not take focus. */
+/** True once per explicit open, so a panel remounting in another view does not take focus again. */
 export function consumeAgentFocusRequest(): boolean {
   const pending = store.focusPending;
   store.focusPending = false;
@@ -97,7 +93,7 @@ export function focusAgentComposer(): void {
 export function closeAgentPanel(): void {
   // A pending reply request must not carry over to the next opening.
   store.focusPending = false;
-  set({ open: false, dockDefault: false, focusAskId: null, replyRequest: 0, quote: null, focusNoteId: null });
+  set({ open: false, focusAskId: null, replyRequest: 0, quote: null, focusNoteId: null });
   const target = store.returnFocus;
   store.returnFocus = null;
   window.setTimeout(() => {
@@ -120,7 +116,6 @@ function onOpen(event: Event): void {
   store.focusPending = !isAgentPanelShown(store.state);
   set({
     open: true,
-    dockDefault: false,
     // No subject given: follow the selection (the caller's own item).
     override: detail.subject !== undefined ? { subject: detail.subject } : null,
     focusAskId: detail.askId ?? null,
@@ -140,7 +135,7 @@ function onToggle(): void {
   remember();
   store.focusPending = true;
   // A fresh open follows the selection again.
-  set({ open: true, dockDefault: false, override: null, focusAskId: null, replyRequest: 0, quote: null, focusNoteId: null });
+  set({ open: true, override: null, focusAskId: null, replyRequest: 0, quote: null, focusNoteId: null });
 }
 
 if (typeof window !== "undefined" && !store.windowListeners) {
@@ -153,12 +148,6 @@ if (typeof window !== "undefined" && !store.windowListeners) {
 export function registerDockHost(id: string): () => void {
   set({ dockHosts: [...store.state.dockHosts.filter((host) => host !== id), id] });
   return () => set({ dockHosts: store.state.dockHosts.filter((host) => host !== id) });
-}
-
-/** A view without a dock asks for the drawer to show by default while it is mounted. */
-export function registerDrawerHost(id: string): () => void {
-  set({ drawerHosts: [...store.state.drawerHosts.filter((host) => host !== id), id] });
-  return () => set({ drawerHosts: store.state.drawerHosts.filter((host) => host !== id) });
 }
 
 /** Attach (the list's id) or detach (`null`) the view's list as context. */
@@ -178,8 +167,6 @@ export function resetAgentPanelState(): void {
     quote: null,
     focusNoteId: null,
     dockHosts: [],
-    drawerHosts: [],
     listAttached: null,
-    dockDefault: true,
   });
 }

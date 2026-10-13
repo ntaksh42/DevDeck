@@ -244,11 +244,13 @@ test("replies to, deletes and resolves notes from the Agent panel keyboard", asy
   await page.getByRole("button", { name: /^My Items/ }).click();
   const main = page.getByRole("main");
   await main.getByText("Validate onboarding with PAT credentials").first().click();
-  // The Agent panel is shown by default in a docked view.
+  // The Agent panel starts closed; Ctrl+J opens it.
+  await page.keyboard.press("Control+j");
   const panel = page.getByRole("complementary", { name: "Agent" });
   await expect(panel).toBeVisible();
+  // An expanded conversation's header shows who/when, not the note text, so find it via its card.
   const header = (text: string) =>
-    panel.locator("button[aria-expanded]").filter({ hasText: text });
+    panel.locator("[data-agent-conversation]").filter({ hasText: text }).locator("button[aria-expanded]").first();
 
   // Fold and unfold one conversation.
   const open = header("Include the batch tenants too");
@@ -262,7 +264,7 @@ test("replies to, deletes and resolves notes from the Agent panel keyboard", asy
   const done = header("Check the rollout against the main branch");
   await done.focus();
   await page.keyboard.press("r");
-  const reply = panel.getByPlaceholder(/Reply to the agent/);
+  const reply = panel.getByPlaceholder(/^Reply…/);
   await expect(reply).toBeFocused();
   await reply.fill("Please also check release.");
   await page.keyboard.press("Control+Enter");

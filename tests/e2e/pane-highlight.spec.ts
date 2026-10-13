@@ -10,6 +10,8 @@ test("pane highlight follows grid, comment input and Agent focus", async ({ page
     panes.filter((pane) => getComputedStyle(pane, "::after").boxShadow !== "none")
       .map((pane) => pane.getAttribute("data-focus-pane")),
   );
+  await page.keyboard.press("Control+j");
+  await expect(page.getByRole("complementary", { name: "Agent", exact: true })).toBeVisible();
   await grid.focus();
   await expect.poll(highlighted).toEqual(["grid"]);
   await page.keyboard.press("m");

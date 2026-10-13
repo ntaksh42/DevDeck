@@ -49,10 +49,10 @@ describe("balanceListAndPreview", () => {
     return { getPanel: (id: string) => (groups[id] ? { group: groups[id] } : undefined) } as unknown as DockviewApi;
   }
 
-  it("gives the list 55% of the row it shares with the preview", () => {
+  it("gives the list half of the row it shares with the preview", () => {
     const setSize = vi.fn();
     balanceListAndPreview(fakeApi({ grid: 480, preview: 520 }, setSize), panels);
-    expect(setSize).toHaveBeenCalledWith({ width: 550 });
+    expect(setSize).toHaveBeenCalledWith({ width: 500 });
   });
 
   it("does nothing without a right-hand preview", () => {

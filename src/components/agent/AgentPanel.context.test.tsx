@@ -2,7 +2,7 @@ import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildContextDocument } from "./contextDocument";
 import { publishAgentListScope, type AgentListScope } from "./agentListScope";
-import { resetAgentPanelState, registerDrawerHost } from "./agentPanelStore";
+import { resetAgentPanelState } from "./agentPanelStore";
 import { publishAgentSubject, toggleAgentPanel } from "./agentSubject";
 import { createAgentNote, openPanel, pr, renderHost, resetFixtures } from "./agentPanelTestFixtures";
 
@@ -151,19 +151,11 @@ describe("Agent panel context chips", () => {
 });
 
 describe("Agent drawer default", () => {
-  it("shows the drawer for a view without a dock until the user closes it", async () => {
-    // The test setup closes the panel before each test; start from the app's initial state.
+  it("starts closed and opens on Ctrl+J", async () => {
     resetAgentPanelState();
     renderHost();
     expect(screen.queryByRole("complementary", { name: "Agent" })).toBeNull();
-    let unregister = () => {};
-    act(() => {
-      unregister = registerDrawerHost("notifications");
-    });
-    expect(await screen.findByRole("complementary", { name: "Agent" })).toBeTruthy();
-    // Shown by default, not opened: the first Ctrl+J closes it and it stays closed for the view.
     act(() => toggleAgentPanel());
-    await waitFor(() => expect(screen.queryByRole("complementary", { name: "Agent" })).toBeNull());
-    act(() => unregister());
+    expect(await screen.findByRole("complementary", { name: "Agent" })).toBeTruthy();
   });
 });

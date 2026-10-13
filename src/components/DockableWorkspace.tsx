@@ -25,7 +25,7 @@ import { ResizeHandle } from "@/components/ResizeHandle";
 import { readStoredJson, writeStoredJson } from "@/lib/storage";
 import { useIsDarkMode } from "@/lib/useIsDarkMode";
 import { createHeaderSlotStore, useCollapsedGroups, type HeaderSlotStore } from "./dockableWorkspaceSlots";
-import { balanceListAndPreview, minRowWidth } from "./dockableWorkspaceLayout";
+import { balanceListAndPreview, DEFAULT_LIST_SHARE, minRowWidth } from "./dockableWorkspaceLayout";
 import { resizeAdjacentBoundary } from "./dockableWorkspaceResize";
 import { PanelContent, type PanelContentParams } from "./DockablePanelContent";
 
@@ -171,7 +171,8 @@ function PanelMoveMenu({
         aria-label={`Move ${panel.title ?? panel.id} panel`}
         title="Move panel"
         onClick={() => setOpen((value) => !value)}
-        className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        // Only while the pointer is over the panel, it has focus, or its menu is open.
+        className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-secondary hover:text-foreground focus:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring aria-expanded:opacity-100 [.dv-groupview:hover_&]:opacity-100"
       >
         <Move className="h-3.5 w-3.5" aria-hidden="true" />
       </button>
@@ -226,6 +227,8 @@ interface ResizeSpec {
   minHeight?: number;
   maxHeight?: number;
   defaultHeight?: number;
+  /** The preview right of the view's list: its default width is the list's share split (`DEFAULT_LIST_SHARE`), not a fixed size. */
+  splitsWithList?: boolean;
   title: string;
 }
 
@@ -346,7 +349,14 @@ function GroupResizeOverlay({
       // re-anchor on the limit instead of accumulating a request that runs
       // away past it.
       onChange={resizeBoundary}
-      onReset={() => resizeBoundary(defaultSize)}
+      onReset={() => {
+        const list = resizeSpec.splitsWithList && !vertical
+          ? containerApi.groups.find((candidate) => placement.previousView.contains(candidate.element))
+          : undefined;
+        resizeBoundary(
+          list ? Math.round((list.api.width + group.api.width) * (1 - DEFAULT_LIST_SHARE)) : defaultSize,
+        );
+      }}
       className="absolute left-0 top-0 z-20"
       style={vertical ? { width: crossLength } : { height: crossLength }}
     />,
@@ -582,6 +592,9 @@ export function DockableWorkspace({
               minHeight: panel.minHeight,
               maxHeight: panel.maxHeight,
               defaultHeight: panel.initialHeight ?? panel.minHeight!,
+              splitsWithList:
+                panel.position?.direction === "right" &&
+                panel.position.relativeTo === panels.find((candidate) => !candidate.position)?.id,
               title: panel.title,
             },
           ]),
@@ -682,6 +695,7 @@ export function DockableWorkspace({
         }
         applyGroupConstraints(api, initialPanels);
         freshLayoutRef.current = true;
+        balanceListAndPreview(api, initialPanels);
       }
 
       // `onDidLayoutChange` covers structural changes (panels added/removed/
