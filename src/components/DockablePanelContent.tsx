@@ -12,7 +12,7 @@ export function PanelContent(props: IDockviewPanelProps<PanelContentParams>) {
       data-focus-pane={props.api.id}
       tabIndex={-1}
       onKeyDownCapture={handlePaneFocusKey}
-      className="outline-none focus:ring-2 focus:ring-inset focus:ring-ring"
+      className="outline-none focus:ring-2 focus:ring-inset focus:ring-ring has-[[data-primary-grid]]:focus:ring-0"
       style={{ display: "grid", height: "100%", minHeight: 0, minWidth: 0, width: "100%" }}
     >
       {props.params.content}
