@@ -23,6 +23,8 @@ function buildSeed(): InboxItem[] {
     state: "open",
     snoozedUntil: null,
     doneAt: null,
+    filePath: null,
+    line: null,
   };
   const seed: InboxItem[] = [
     {
@@ -33,6 +35,8 @@ function buildSeed(): InboxItem[] {
       repositoryId: "azdo-dashboard",
       repositoryName: "azdo-dashboard",
       threadId: 1,
+      filePath: "/src/app/dashboard.ts",
+      line: 7,
       commentId: 5011,
       title: "Add pull request search dashboard",
       author: "Frank Lee",
@@ -95,6 +99,8 @@ function buildSeed(): InboxItem[] {
       repositoryId: "android-app",
       repositoryName: "android-app",
       threadId: 1,
+      filePath: "/src/app/dashboard.ts",
+      line: 7,
       commentId: 3103,
       title: "Fix crash on back press during payment flow",
       author: "Frank Lee",

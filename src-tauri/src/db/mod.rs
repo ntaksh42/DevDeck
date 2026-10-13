@@ -49,7 +49,7 @@ pub use work_items::*;
 
 pub(crate) use work_items_query::*;
 
-pub(crate) const SCHEMA_VERSION: i64 = 24;
+pub(crate) const SCHEMA_VERSION: i64 = 25;
 
 // ── AppDatabase ───────────────────────────────────────────────────────────────
 

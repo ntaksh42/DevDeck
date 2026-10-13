@@ -278,6 +278,8 @@ pub(super) async fn update_work_item_mentions(
                 author: hit.author,
                 snippet: Some(hit.snippet),
                 web_url: Some(web_url.clone()),
+                file_path: None,
+                line: None,
             })
             .collect();
         match db.insert_inbox_items(&new_items) {

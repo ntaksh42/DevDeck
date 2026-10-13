@@ -34,6 +34,10 @@ pub struct NewInboxItem {
     pub author: Option<String>,
     pub snippet: Option<String>,
     pub web_url: Option<String>,
+    /// Where a PR comment thread sits in the code (`None` for PR-wide threads
+    /// and non-thread items).
+    pub file_path: Option<String>,
+    pub line: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -57,6 +61,8 @@ pub struct InboxItem {
     pub snoozed_until: Option<String>,
     pub detected_at: String,
     pub done_at: Option<String>,
+    pub file_path: Option<String>,
+    pub line: Option<i64>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Default)]
@@ -148,6 +154,23 @@ impl AppDatabase {
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
+    /// Fills in the code location of items stored before v25 recorded it.
+    /// Rows that already have one are left alone.
+    pub fn backfill_inbox_location(
+        &self,
+        id: i64,
+        file_path: &str,
+        line: Option<i64>,
+    ) -> Result<()> {
+        let conn = self.open()?;
+        conn.execute(
+            "UPDATE action_inbox_items SET file_path = ?2, line = ?3 \
+             WHERE id = ?1 AND file_path IS NULL",
+            params![id, file_path, line],
+        )?;
+        Ok(())
+    }
+
     pub fn get_inbox_comment_cursor(
         &self,
         organization_id: &str,
@@ -205,8 +228,8 @@ fn insert_inbox_items(
             "INSERT OR IGNORE INTO action_inbox_items( \
                  org_id, kind, subject_id, project_id, project_name, repository_id, \
                  repository_name, thread_id, comment_id, title, author, snippet, web_url, \
-                 state, detected_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 'open', ?14)",
+                 state, detected_at, file_path, line) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 'open', ?14, ?15, ?16)",
         )?;
         for item in items {
             inserted += stmt.execute(params![
@@ -224,6 +247,8 @@ fn insert_inbox_items(
                 item.snippet,
                 item.web_url,
                 detected_at,
+                item.file_path,
+                item.line,
             ])?;
         }
     }
@@ -252,7 +277,7 @@ fn list_inbox_items(
     let mut sql = format!(
         "SELECT id, org_id, kind, subject_id, project_id, project_name, repository_id, \
                 repository_name, thread_id, comment_id, title, author, snippet, web_url, \
-                state, snoozed_until, detected_at, done_at \
+                state, snoozed_until, detected_at, done_at, file_path, line \
          FROM action_inbox_items WHERE {state_clause}"
     );
     let mut bind: Vec<String> = vec![format_time(now)];
@@ -367,6 +392,8 @@ fn map_inbox_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<InboxItem> {
         snoozed_until: row.get(15)?,
         detected_at: row.get(16)?,
         done_at: row.get(17)?,
+        file_path: row.get(18)?,
+        line: row.get(19)?,
     })
 }
 

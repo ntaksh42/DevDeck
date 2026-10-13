@@ -9,7 +9,17 @@ export type InboxTab = "open" | "snoozed" | "done";
  * need in `extra` and have no local state to change.
  */
 export type InboxEntry = InboxItem & {
-  extra?: { approvalId?: string; agentTarget?: AgentNoteTarget };
+  extra?: {
+    approvalId?: string;
+    agentTarget?: AgentNoteTarget;
+    /** What a pipeline approval is for (derived entries only). */
+    approval?: {
+      pipelineName: string | null;
+      runName: string | null;
+      assignedApprovers: string[];
+      minRequiredApprovers: number;
+    };
+  };
 };
 
 /**
@@ -224,4 +234,11 @@ export function formatSnoozeUntil(iso: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+/** `dashboard.ts:7` for a comment on a line of code; null for PR-wide threads and other kinds. */
+export function inboxLocationLabel(item: Pick<InboxEntry, "filePath" | "line">): string | null {
+  if (!item.filePath) return null;
+  const name = item.filePath.split("/").filter(Boolean).pop() ?? item.filePath;
+  return item.line ? `${name}:${item.line}` : name;
 }

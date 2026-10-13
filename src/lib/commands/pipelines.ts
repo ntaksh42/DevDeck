@@ -44,6 +44,9 @@ const pipelineApprovalSummarySchema = z.object({
   executionOrder: z.string().nullable(),
   createdOn: z.string().nullable(),
   assignedApprovers: z.array(z.string()),
+  /** The pipeline and its waiting run's build number, when the service sends them. */
+  pipelineName: z.string().nullable().default(null),
+  runName: z.string().nullable().default(null),
 });
 const pipelineApprovalSummariesSchema = z.array(pipelineApprovalSummarySchema);
 export type PipelineApprovalSummary = z.infer<typeof pipelineApprovalSummarySchema>;

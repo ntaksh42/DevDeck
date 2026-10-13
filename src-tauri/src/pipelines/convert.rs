@@ -71,6 +71,15 @@ pub(super) fn approval_to_summary(approval: Approval) -> PipelineApprovalSummary
                 .or_else(|| approver.unique_name.clone())
         })
         .collect();
+    let pipeline_name = approval
+        .pipeline
+        .as_ref()
+        .and_then(|pipeline| pipeline.name.clone());
+    let run_name = approval
+        .pipeline
+        .as_ref()
+        .and_then(|pipeline| pipeline.owner.as_ref())
+        .and_then(|owner| owner.name.clone());
     PipelineApprovalSummary {
         id: approval.id,
         status: approval.status.unwrap_or_default(),
@@ -79,6 +88,8 @@ pub(super) fn approval_to_summary(approval: Approval) -> PipelineApprovalSummary
         execution_order: approval.execution_order,
         created_on: approval.created_on.map(|date| date.to_rfc3339()),
         assigned_approvers,
+        pipeline_name,
+        run_name,
     }
 }
 

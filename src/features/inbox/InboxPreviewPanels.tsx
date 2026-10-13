@@ -7,7 +7,7 @@ import type {
   WorkItemPreview,
 } from "@/lib/azdoCommands";
 import type { SelectedMention } from "@/features/work-items/workItemMentions";
-import { focusPrimaryPreview, formatRelativeDate } from "@/lib/utils";
+import { focusPrimaryPreview, formatDate, formatRelativeDate } from "@/lib/utils";
 import { CommentComposer } from "@/features/pull-requests/CommentComposer";
 import { PrThreadCard } from "@/features/pull-requests/PrThreadCard";
 import { RichHtmlFrame } from "@/features/work-items/RichHtmlFrame";
@@ -303,8 +303,29 @@ export function ApprovalPanel({
   onDecide: (status: "approved" | "rejected", comment?: string) => void;
 }) {
   const [comment, setComment] = useState("");
+  const approval = item.extra?.approval;
+  const run = [approval?.pipelineName, approval?.runName].filter(Boolean).join(" · ");
   return (
     <div className="space-y-1.5 py-1">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+        {run ? (
+          <>
+            <dt className="text-muted-foreground">Run</dt>
+            <dd className="min-w-0 truncate font-medium">{run}</dd>
+          </>
+        ) : null}
+        <dt className="text-muted-foreground">Requested</dt>
+        <dd title={formatDate(item.detectedAt)}>{formatRelativeDate(item.detectedAt)}</dd>
+        {approval && approval.assignedApprovers.length > 0 ? (
+          <>
+            <dt className="text-muted-foreground">Approvers</dt>
+            <dd className="min-w-0">
+              {approval.assignedApprovers.join(", ")}
+              {approval.minRequiredApprovers > 1 ? ` (${approval.minRequiredApprovers} required)` : ""}
+            </dd>
+          </>
+        ) : null}
+      </dl>
       <p className="whitespace-pre-line text-xs">{item.snippet}</p>
       <label className="block text-[11px] text-muted-foreground">
         Comment (optional)

@@ -28,6 +28,9 @@ const inboxItemSchema = z.object({
   snoozedUntil: z.string().nullable(),
   detectedAt: z.string(),
   doneAt: z.string().nullable(),
+  /** Where a PR comment thread sits in the code; null for PR-wide threads and other kinds. */
+  filePath: z.string().nullable().default(null),
+  line: z.number().nullable().default(null),
 });
 
 export type InboxItem = z.infer<typeof inboxItemSchema>;

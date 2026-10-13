@@ -7,6 +7,7 @@ import {
   formatSnoozeUntil,
   inboxEntryKindLabel,
   inboxKindClass,
+  inboxLocationLabel,
   inboxRowTitle,
   inboxSubjectLabel,
   type InboxEntry,
@@ -42,6 +43,7 @@ export const InboxRow = forwardRef<
   );
 
   const rowTitle = inboxRowTitle(item);
+  const location = inboxLocationLabel(item);
 
   return (
     <div
@@ -62,6 +64,11 @@ export const InboxRow = forwardRef<
         <span className="shrink-0 whitespace-nowrap font-medium" title={item.title}>
           {inboxSubjectLabel(item)}
         </span>
+        {location ? (
+          <span className="shrink-0 whitespace-nowrap font-mono text-[11px] text-muted-foreground" title={item.filePath ?? undefined}>
+            {location}
+          </span>
+        ) : null}
         <span className="min-w-0 shrink truncate text-muted-foreground" title={item.snippet ?? undefined}>
           {item.author ? `${item.author}: ` : ""}
           {item.snippet ?? item.title}

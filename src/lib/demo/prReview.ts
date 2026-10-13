@@ -36,8 +36,9 @@ export function demoThreadsFor(pullRequestId: number): PrThread[] {
       id: 1,
       status: "active",
       isResolved: false,
-      filePath: null,
-      rightLine: null,
+      // On the `??` default in DEMO_DIFF_TARGET, so the Inbox shows real code.
+      filePath: "/src/app/dashboard.ts",
+      rightLine: 7,
       leftLine: null,
       comments: [
         {

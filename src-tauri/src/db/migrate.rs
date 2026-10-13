@@ -661,5 +661,18 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             "#,
         )?;
     }
+    if current < 25 {
+        // Inbox: where a PR comment thread sits in the code, so a row can say
+        // `File.cs:42` without loading the PR. Older rows are filled in by the
+        // next PR sync while they are still open.
+        for (column, kind) in [("file_path", "TEXT"), ("line", "INTEGER")] {
+            if !table_column_exists(conn, "action_inbox_items", column)? {
+                conn.execute_batch(&format!(
+                    "ALTER TABLE action_inbox_items ADD COLUMN {column} {kind};"
+                ))?;
+            }
+        }
+        conn.execute_batch("PRAGMA user_version = 25;")?;
+    }
     Ok(())
 }
